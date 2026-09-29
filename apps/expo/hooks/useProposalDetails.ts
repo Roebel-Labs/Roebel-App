@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { readContract } from 'thirdweb';
 import { governorContract } from '@/constants/thirdweb';
 import { Proposal, ProposalState, UserVoteStatus, mapSupabaseToProposal } from '@/lib/governance-types';
@@ -27,6 +27,10 @@ export function useProposalDetails(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
+  // Which proposal id is already on screen. A refetch of the same id keeps
+  // the page (no skeleton flash, no chain-fresh state overwritten by the
+  // cached Supabase snapshot); a new id starts from the skeleton again.
+  const shownIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -37,8 +41,14 @@ export function useProposalDetails(
         return;
       }
 
+      const isFirstLoad = shownIdRef.current !== proposalId;
+
       try {
-        setLoading(true);
+        if (isFirstLoad) {
+          setProposal(null);
+          setUserVoteStatus(null);
+          setLoading(true);
+        }
         setError(null);
 
         // Step 1: Fetch proposal from Supabase by UUID
@@ -48,6 +58,16 @@ export function useProposalDetails(
 
         // Step 2: Map to app Proposal type
         const mappedProposal = mapSupabaseToProposal(supabaseProposal);
+
+        // Fast path: title/summary/body come from Supabase, so the page can
+        // render its text right now. Chain reads below only refine state and
+        // votes; the vote/stats/timeline widgets fetch their own chain data
+        // and show their own loading states.
+        if (isFirstLoad && !isCancelled) {
+          shownIdRef.current = proposalId;
+          setProposal(mappedProposal);
+          setLoading(false);
+        }
 
         // Step 3: Enrich with real-time blockchain data
         const blockchainProposalId = BigInt(supabaseProposal.blockchain_proposal_id);
@@ -126,7 +146,11 @@ export function useProposalDetails(
       } catch (err) {
         if (!isCancelled) {
           console.error('Error fetching proposal details:', err);
-          setError(err instanceof Error ? err.message : 'Failed to fetch proposal');
+          // Only surface the error when nothing is on screen yet; a failed
+          // refresh keeps the proposal the user is already reading.
+          if (shownIdRef.current !== proposalId) {
+            setError(err instanceof Error ? err.message : 'Failed to fetch proposal');
+          }
           setLoading(false);
         }
       }

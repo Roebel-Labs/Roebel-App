@@ -9,6 +9,7 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import { citizenNFTContract } from '@/constants/thirdweb';
 import { useProposalDetails } from '@/hooks/useProposalDetails';
 import { useProposalContent } from '@/hooks/useProposalContent';
+import { needsIrysFallback, pickProposalBody, pickProposalTitle } from '@/lib/proposal-display';
 import { shortenAddress, calculateReadingTime } from '@/lib/governance-utils';
 import { useTheme } from '@/context/ThemeContext';
 import ProposalStateBadge from '@/components/ProposalStateBadge';
@@ -58,9 +59,13 @@ export default function ProposalDetailScreen() {
     return () => { cancelled = true; };
   }, [proposal?.gemeinschaftskasseSnapshot]);
 
-  // Fetch Irys content if available
+  // Body text: Supabase `content.markdown` is the source of truth (admins can
+  // correct it; the Irys upload is immutable) and is already in `proposal`.
+  // Irys is only fetched when the Supabase row has no body — passing '' makes
+  // the hook skip the gateway entirely.
+  const irysFallback = !!proposal && needsIrysFallback(proposal.contentMarkdown);
   const proposalContent = useProposalContent(
-    proposal?.irysUrl || proposal?.summary || proposal?.description || ''
+    irysFallback ? proposal?.irysUrl || proposal?.summary || proposal?.description || '' : ''
   );
 
   // Check if user is a citizen
@@ -101,10 +106,11 @@ export default function ProposalDetailScreen() {
   const handleShare = async () => {
     if (!proposal) return;
 
+    const shareTitle = pickProposalTitle(proposal);
     try {
       await Share.share({
-        message: `${proposal.title}\n\nAbstimmen: https://www.roebel.app/proposals/${proposalId}`,
-        title: proposal.title,
+        message: `${shareTitle}\n\nAbstimmen: https://www.roebel.app/proposals/${proposalId}`,
+        title: shareTitle,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -163,7 +169,13 @@ export default function ProposalDetailScreen() {
     );
   }
 
-  const content = proposalContent.markdownContent || proposal.summary || proposal.description;
+  const content = pickProposalBody({
+    contentMarkdown: proposal.contentMarkdown,
+    irysMarkdown: irysFallback ? proposalContent.markdownContent : null,
+    summary: proposal.summary,
+    description: proposal.description,
+  });
+  const displayTitle = pickProposalTitle(proposal);
   const readingTime = calculateReadingTime(content);
 
   return (
@@ -174,7 +186,7 @@ export default function ProposalDetailScreen() {
           <ArrowLeftIcon size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {proposal.title || 'Vorschlag'}
+          {displayTitle || 'Vorschlag'}
         </Text>
         <Pressable onPress={handleShare} style={styles.shareButton}>
           <Text style={[styles.shareIcon, { color: colors.textPrimary }]}>&#x2197;</Text>
@@ -203,7 +215,7 @@ export default function ProposalDetailScreen() {
         </View>
 
         {/* Title */}
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{proposal.title || proposal.description}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{displayTitle}</Text>
 
         {/* Metadata */}
         <View style={styles.metadataRow}>
@@ -227,7 +239,7 @@ export default function ProposalDetailScreen() {
         {/* Proposal Content */}
         <ProposalContent
           content={content}
-          isLoading={proposalContent.loading}
+          isLoading={irysFallback && proposalContent.loading}
         />
 
         {/* LIVE Gemeinschaftskasse balance (opt-in card by the proposer) —

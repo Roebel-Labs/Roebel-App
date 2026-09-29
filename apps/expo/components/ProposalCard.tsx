@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Proposal } from '@/lib/governance-types';
 import { shortenAddress, calculateVotePercentages, calculateReadingTime } from '@/lib/governance-utils';
 import { useTheme } from '@/context/ThemeContext';
+import { pickProposalTitle } from '@/lib/proposal-display';
 import ProposalStateBadge from './ProposalStateBadge';
 
 interface ProposalCardProps {
@@ -46,7 +47,7 @@ export default function ProposalCard({ proposal }: ProposalCardProps) {
 
       {/* Title */}
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-        {proposal.title || proposal.description}
+        {pickProposalTitle(proposal)}
       </Text>
 
       {/* Metadata Row */}
