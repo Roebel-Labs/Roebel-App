@@ -1,0 +1,96 @@
+{
+  "_comment": "Shared curation vector. Run by apps/expo/lib/__tests__/treasury-history.test.ts (jest) AND apps/web/src/lib/treasury/curation.test.ts (node:test) so the app and the /api/treasury route curate identically. Each case: raw app_settings values in, curated rows + signed cent sum out.",
+  "cases": [
+    {
+      "name": "hides, then balances against the remaining rows",
+      "rows": [
+        { "txHash": "0xhide", "direction": "in", "amount": 1000 },
+        { "txHash": "0x1", "direction": "out", "amount": 10 },
+        { "txHash": "0xbal", "direction": "in", "amount": 1 }
+      ],
+      "hiddenRaw": "[\"0xHIDE\"]",
+      "balancingRaw": "0xBAL",
+      "liveTotal": 40,
+      "expected": [
+        { "txHash": "0x1", "direction": "out", "amount": 10 },
+        { "txHash": "0xbal", "direction": "in", "amount": 50 }
+      ],
+      "expectedSumCents": 4000
+    },
+    {
+      "name": "rounds to cents and balances exactly",
+      "rows": [
+        { "txHash": "0x1", "direction": "in", "amount": 100.004 },
+        { "txHash": "0x2", "direction": "out", "amount": 20.333 },
+        { "txHash": "0xBAL", "direction": "in", "amount": 50 }
+      ],
+      "hiddenRaw": null,
+      "balancingRaw": "\"0xbal\"",
+      "liveTotal": 150.117,
+      "expected": [
+        { "txHash": "0x1", "direction": "in", "amount": 100 },
+        { "txHash": "0x2", "direction": "out", "amount": 20.33 },
+        { "txHash": "0xBAL", "direction": "in", "amount": 70.45 }
+      ],
+      "expectedSumCents": 15012
+    },
+    {
+      "name": "negative balance becomes an outflow",
+      "rows": [
+        { "txHash": "0x1", "direction": "in", "amount": 300 },
+        { "txHash": "0xbal", "direction": "in", "amount": 10 }
+      ],
+      "hiddenRaw": "not json",
+      "balancingRaw": "0xBAL",
+      "liveTotal": 250,
+      "expected": [
+        { "txHash": "0x1", "direction": "in", "amount": 300 },
+        { "txHash": "0xbal", "direction": "out", "amount": 50 }
+      ],
+      "expectedSumCents": 25000
+    },
+    {
+      "name": "folds a multi-leg balancing tx into one row",
+      "rows": [
+        { "txHash": "0xBAL", "direction": "in", "amount": 5 },
+        { "txHash": "0x1", "direction": "in", "amount": 10 },
+        { "txHash": "0xbal", "direction": "out", "amount": 2 }
+      ],
+      "hiddenRaw": "[]",
+      "balancingRaw": "0xbal",
+      "liveTotal": 12.5,
+      "expected": [
+        { "txHash": "0xBAL", "direction": "in", "amount": 2.5 },
+        { "txHash": "0x1", "direction": "in", "amount": 10 }
+      ],
+      "expectedSumCents": 1250
+    },
+    {
+      "name": "no balancing when the balancing tx itself is hidden",
+      "rows": [
+        { "txHash": "0xbal", "direction": "in", "amount": 1 },
+        { "txHash": "0x1", "direction": "in", "amount": 2 }
+      ],
+      "hiddenRaw": "[\"0xbal\", 5, null, \" 0xBAL \"]",
+      "balancingRaw": "0xbal",
+      "liveTotal": 99,
+      "expected": [
+        { "txHash": "0x1", "direction": "in", "amount": 2 }
+      ],
+      "expectedSumCents": 200
+    },
+    {
+      "name": "no live total (snapshot) leaves rows untouched",
+      "rows": [
+        { "txHash": "0xbal", "direction": "in", "amount": 1.234 }
+      ],
+      "hiddenRaw": null,
+      "balancingRaw": "0xbal",
+      "liveTotal": null,
+      "expected": [
+        { "txHash": "0xbal", "direction": "in", "amount": 1.234 }
+      ],
+      "expectedSumCents": 123
+    }
+  ]
+}

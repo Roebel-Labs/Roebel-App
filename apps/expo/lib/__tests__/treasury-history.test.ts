@@ -128,3 +128,32 @@ describe("curateTreasuryHistory", () => {
 		expect(out).toEqual([row("0x1", "in", 2)]);
 	});
 });
+
+// Shared with apps/web/src/lib/treasury/curation.test.ts: the /api/treasury
+// route must curate exactly like the app.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const vector = require("./treasury-history.vector.json") as {
+	cases: {
+		name: string;
+		rows: CuratableRow[];
+		hiddenRaw: string | null;
+		balancingRaw: string | null;
+		liveTotal: number | null;
+		expected: CuratableRow[];
+		expectedSumCents: number;
+	}[];
+};
+
+describe("shared curation vector", () => {
+	for (const c of vector.cases) {
+		it(c.name, () => {
+			const out = curateTreasuryHistory(c.rows, {
+				hidden: parseHiddenTxs(c.hiddenRaw),
+				balancingTx: parseBalancingTx(c.balancingRaw),
+				liveTotal: c.liveTotal,
+			});
+			expect(out).toEqual(c.expected);
+			expect(sumSignedCents(out)).toBe(c.expectedSumCents);
+		});
+	}
+});
