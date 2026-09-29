@@ -42,7 +42,9 @@ export default function ProposalDetailScreen() {
     account?.address
   );
 
-  const [isCitizen, setIsCitizen] = useState<boolean>(false);
+  // null = CitizenNFT check in flight (the vote sheet waits instead of
+  // briefly showing the "only citizens" step to a citizen).
+  const [isCitizen, setIsCitizen] = useState<boolean | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Live Gemeinschaftskasse balance for the piggy-bank card (see below).
@@ -69,6 +71,7 @@ export default function ProposalDetailScreen() {
         return;
       }
 
+      setIsCitizen(null);
       try {
         const balance = await balanceOf({
           contract: citizenNFTContract,
@@ -271,7 +274,7 @@ export default function ProposalDetailScreen() {
         {proposalId && (
           <ProposalCommentSection
             proposalId={proposalId}
-            isCitizen={isCitizen}
+            isCitizen={isCitizen === true}
             highlightCommentId={commentId}
             scrollViewRef={scrollRef}
           />
