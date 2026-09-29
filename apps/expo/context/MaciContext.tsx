@@ -29,39 +29,25 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "@/lib/storage/secureStorage";
-import { getContract, getContractEvents, prepareEvent, readContract } from "thirdweb";
-import { base } from "thirdweb/chains";
-import { getRpcClient, eth_blockNumber } from "thirdweb/rpc";
 import { useActiveAccount } from "thirdweb/react";
-import { inAppWallet } from "thirdweb/wallets/in-app";
-import { citizenNFTContract, client, MACI_DEPLOY_BLOCK, maciReadContract } from "@/constants/thirdweb";
-import { gnosisRead } from "@/constants/gnosis";
-import { redirectUrl } from "@/constants/wallets";
+import type { Account } from "thirdweb/wallets";
+import { resolveSignUpWithRecovery } from "@/lib/maci-signup-lookup";
 import {
-  findSignUpStateIndex,
-  lookupSignUpViaExplorer,
-  lookupSignUpViaRpcScan,
-  resolveSignUpWithRecovery,
-  type LookupResult,
-} from "@/lib/maci-signup-lookup";
-import {
-  buildLegacySignatureCandidates,
-  connectLegacyBaseSigner,
-  seedFromSignature,
-} from "@/lib/maci-legacy-key";
+  deriveLegacyMaciKeypairs,
+  isCitizenTokenRegistered,
+  lookupMaciSignUp,
+} from "@/lib/maci-signup-runtime";
 import {
   deserializeKeypair,
-  deriveMaciKeypairFromSeed,
   type SerializedKeypair,
   Keypair,
 } from "@/lib/maci";
 import { passkeySessionOf } from "@/lib/passkey/active";
-import { loadDerivedKeysRuntime } from "@/lib/passkey/load-derived-keys";
+import { loadMaciKeyRuntime } from "@/lib/passkey/load-derived-keys";
 import { MACI_KEYPAIR_STORE_KEY } from "@/lib/passkey/derived-keys";
-import {
-  deriveMaciKeypairFromWalletSignature,
-  MACI_KEY_DERIVATION_MESSAGE,
-} from "@/lib/maci-key-derivation";
+import { MaciThirdwebNeededError } from "@/lib/passkey/maci-key-resolver";
+import type { PasskeySession } from "@/lib/passkey/session";
+import { deriveMaciKeypairFromWalletSignature } from "@/lib/maci-key-derivation";
 
 const SECURE_KEY = MACI_KEYPAIR_STORE_KEY; // "roebel.maci.keypair.v1"
 const VOTES_KEY = "roebel.maci.votes.v1";
@@ -89,31 +75,9 @@ interface LegacyCandidate {
   keypair: SerializedKeypair;
 }
 
-// SignUpTokenGatekeeper (→CitizenNFTv2) — read-only, for registeredTokenIds.
-const MACI_GATEKEEPER_ADDRESS =
-  process.env.EXPO_PUBLIC_MACI_GATEKEEPER || "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277";
-const maciGatekeeperReadContract = getContract({
-  client,
-  address: MACI_GATEKEEPER_ADDRESS,
-  chain: gnosisRead,
-});
-
-/** Separate in-app wallet on BASE with the same auth options as
- *  constants/wallets.ts. Only ever autoConnect()ed (reuses the stored session)
- *  and NEVER made active — used solely to re-derive the July voting key. */
-let legacyBaseWallet: ReturnType<typeof inAppWallet> | null = null;
-function getLegacyBaseWallet() {
-  if (!legacyBaseWallet) {
-    legacyBaseWallet = inAppWallet({
-      auth: {
-        options: ["email", "google", "facebook", "apple"],
-        redirectUrl,
-      },
-      smartAccount: { chain: base, sponsorGas: true },
-    });
-  }
-  return legacyBaseWallet;
-}
+// The SignUp lookup, the gatekeeper read and the separate (never active) Base
+// in-app wallet for the July key live in lib/maci-signup-runtime.ts, shared with
+// the passkey key resolver (lib/passkey/maci-key-resolver.ts).
 
 /**
  * Locally-cached record of the citizen's most recent vote on a poll.
@@ -139,7 +103,9 @@ interface MaciContextShape {
   serializedKeypair: SerializedKeypair | null;
   keypairLoading: boolean;
   signUpState: SignUpState;
-  generateAndStoreKeypair: () => Promise<SerializedKeypair>;
+  /** Passkey session: `thirdwebAccount` from ThirdwebConfirm ("Einmal mit Google/E-Mail
+   *  bestätigen") after a MaciThirdwebNeededError. Ignored for thirdweb sessions. */
+  generateAndStoreKeypair: (opts?: { thirdwebAccount?: Account | null }) => Promise<SerializedKeypair>;
   clearKeypair: () => Promise<void>;
   /** Re-resolve sign-up state and return the resolved value, so callers can act
    *  on the *actual* result rather than the stale closure `signUpState`. */
@@ -177,69 +143,15 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
   }, [account?.address]);
 
   /** SignUp stateIndex for a pubkey: explorer first, RPC window scan fallback. */
-  const lookupSignUp = useCallback(
-    (pubX: bigint, pubY: bigint): Promise<LookupResult> =>
-      findSignUpStateIndex(pubX, pubY, {
-        explorer: (x, y) =>
-          lookupSignUpViaExplorer({
-            pubX: x,
-            pubY: y,
-            maciAddress: maciReadContract.address,
-            fromBlock: MACI_DEPLOY_BLOCK,
-          }),
-        rpcScan: (x, y) => {
-          const signUpEvent = prepareEvent({
-            signature:
-              "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
-            filters: { _userPubKeyX: x, _userPubKeyY: y },
-          });
-          return lookupSignUpViaRpcScan({
-            fromBlock: MACI_DEPLOY_BLOCK,
-            getLatestBlock: () => eth_blockNumber(getRpcClient({ client, chain: gnosisRead })),
-            getSignUpInWindow: async (from, to) => {
-              const events = await getContractEvents({
-                contract: maciReadContract,
-                events: [signUpEvent],
-                fromBlock: from,
-                toBlock: to,
-              });
-              if (events.length === 0) return null;
-              const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
-              return ev.args._stateIndex ?? 0n;
-            },
-          });
-        },
-        log: (msg) => console.warn(`[MaciContext] ${msg}`),
-      }),
-    [],
-  );
+  const lookupSignUp = lookupMaciSignUp;
 
   /** Re-derive the July (Base-signed) voting key candidates. One wallet
-   *  signature; both raw and ERC-6492 variants (see lib/maci-legacy-key.ts). */
+   *  signature; both raw and ERC-6492 variants (see lib/maci-legacy-key.ts).
+   *  The Base smart account must be this account (on a passkey session the
+   *  active address is the identity = the legacy thirdweb account). */
   const deriveLegacyKeyCandidates = useCallback(async (): Promise<LegacyCandidate[]> => {
-    const { admin, smartAccountAddress } = await connectLegacyBaseSigner({
-      client,
-      createWallet: getLegacyBaseWallet,
-    });
-    // On a passkey session the active address is the passkey Safe, not the
-    // thirdweb smart account that signed in July — skip the equality check.
-    if (
-      account?.address &&
-      !passkeySessionOf(account) &&
-      smartAccountAddress.toLowerCase() !== account.address.toLowerCase()
-    ) {
-      throw new Error("legacy Base account address mismatch");
-    }
-    const signatures = await buildLegacySignatureCandidates({
-      client,
-      admin,
-      smartAccountAddress,
-      message: MACI_KEY_DERIVATION_MESSAGE,
-    });
-    return signatures.map((sig) => {
-      const keypair = deriveMaciKeypairFromSeed(seedFromSignature(sig));
-      return { pubX: BigInt(keypair.pubX), pubY: BigInt(keypair.pubY), keypair };
-    });
+    const keypairs = await deriveLegacyMaciKeypairs(account?.address ?? null);
+    return keypairs.map((keypair) => ({ pubX: BigInt(keypair.pubX), pubY: BigInt(keypair.pubY), keypair }));
   }, [account?.address]);
 
   // Load keypair + votes from secure store on mount.
@@ -324,24 +236,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       current: { pubX, pubY },
       lookup: lookupSignUp,
       alreadyRegistered: opts?.alreadyRegistered,
-      isTokenRegistered: async () => {
-        if (!account?.address) return null;
-        let tokenId: bigint;
-        try {
-          tokenId = (await readContract({
-            contract: citizenNFTContract,
-            method: "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-            params: [account.address, 0n],
-          })) as bigint;
-        } catch {
-          return null; // no CitizenNFT → a plain needs-signup
-        }
-        return (await readContract({
-          contract: maciGatekeeperReadContract,
-          method: "function registeredTokenIds(uint256) view returns (bool)",
-          params: [tokenId],
-        })) as boolean;
-      },
+      isTokenRegistered: async () => (account?.address ? isCitizenTokenRegistered(account.address) : null),
       deriveLegacyCandidates: () => {
         if (!legacyCandidatesRef.current) {
           legacyCandidatesRef.current = deriveLegacyKeyCandidates().catch((err) => {
@@ -410,7 +305,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     [serializedKeypair, persistKeypair],
   );
 
-  const generateAndStoreKeypair = useCallback(async () => {
+  const generateAndStoreKeypair = useCallback(async (opts?: { thirdwebAccount?: Account | null }) => {
     // Migration shim: if this device already has a key, keep it. Older installs
     // minted a RANDOM key that may already be registered on-chain — overwriting
     // it would orphan that registration. New installs fall through to the
@@ -422,25 +317,29 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Passkey session: a WebAuthn signature is randomized, so deriving from it would mint a NEW
-    // key every time (= unusable votes). Resolve the key instead: this device's key → the
-    // PRF-wrapped blob (device or server backup) → a random key for a passkey-only person →
-    // otherwise a German "needs your old device / key backup" error. lib/passkey/derived-keys.ts
-    if (passkeySessionOf(account)) {
-      const rt = await loadDerivedKeysRuntime();
-      let restored = null as SerializedKeypair | null;
-      const res = await rt.resolveSecretForAccount(account, "maci", {
-        load: async () => {
-          const raw = await SecureStore.getItemAsync(SECURE_KEY);
-          return raw ? new TextEncoder().encode(raw) : null;
-        },
-        save: async (secret) => {
-          restored = await persistKeypair(JSON.parse(rt.decodeMaciSecret(secret)) as SerializedKeypair);
-        },
+    // key every time (= unusable votes). Resolve the key instead (lib/passkey/maci-key-resolver.ts):
+    // this device's key → the PRF-wrapped blob (device or server backup) → a random key for a
+    // passkey-only person → for a migrated person the thirdweb in-app account (dormant session,
+    // silent; else MaciThirdwebNeededError → VoteButtons shows "Einmal mit Google/E-Mail
+    // bestätigen" and calls this again with `thirdwebAccount`): Gnosis + July (Base) keys, the one
+    // with a SignUp wins; persisted here and backed up under the passkey PRF.
+    const session = passkeySessionOf<PasskeySession>(account);
+    if (session) {
+      const rt = await loadMaciKeyRuntime();
+      const res = await rt.resolveMaciKeyForSession(session, {
+        activeAccount: account,
+        thirdwebAccount: opts?.thirdwebAccount ?? null,
       });
-      const kp = restored ?? (JSON.parse(rt.decodeMaciSecret(res.secret)) as SerializedKeypair);
-      if (!restored) setSerializedKeypair(kp);
-      if (res.source === "generated") {
-        setSignUpState({ status: "needs-signup", pubKeyHash: deserializeKeypair(kp).pubKey.hash() as bigint });
+      if (res.status === "needsThirdweb") throw new MaciThirdwebNeededError();
+      if (res.backupError) console.warn("[MaciContext] MACI key saved, backup failed:", res.backupError);
+      const kp = res.keypair; // already persisted in secure-store by the resolver
+      setSerializedKeypair(kp);
+      const pubKeyHash = deserializeKeypair(kp).pubKey.hash() as bigint;
+      if (res.stateIndex !== undefined) {
+        lastCheckedHash.current = pubKeyHash;
+        setSignUpState({ status: "signed-up", pubKeyHash, stateIndex: res.stateIndex });
+      } else if (res.source === "generated" || res.source === "thirdweb") {
+        setSignUpState({ status: "needs-signup", pubKeyHash });
       }
       return kp;
     }

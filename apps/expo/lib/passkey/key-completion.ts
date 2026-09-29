@@ -12,8 +12,9 @@
  *   2. the server backup already has it                    → nothing to do
  *   3. neither: a thirdweb session for THIS identity is available (the device's stored inApp
  *      session, auto-connected silently without touching the active wallet, or the active
- *      thirdweb account)                                    → derive with the EXISTING thirdweb
- *      derivation, persist locally like today, wrap under the PRF, back up
+ *      thirdweb account)                                    → derive with the thirdweb account
+ *      (MACI: the shared resolver, maci-key-resolver.ts, which also tries the July Base key),
+ *      persist locally like today, wrap under the PRF, back up
  *   4. neither and no thirdweb session                     → `needsThirdweb`: the UI offers
  *      "Einmal mit Google/E-Mail bestätigen" and calls this again with that session.
  *
@@ -29,8 +30,9 @@ import { isAddressEqual, type Address, type Hex } from 'viem';
 import { backupDeviceSecrets, type BackupReport, type BackupSource, type ResolveDeps } from './derived-keys';
 import { KEY_BACKUP_SLOTS, type KeyBackupSlot, type RemoteBackup, type RemoteRead } from './key-backup';
 
-export const THIRDWEB_OTHER_ACCOUNT_MESSAGE =
-  'Diese Google-/E-Mail-Anmeldung gehört zu einem anderen Konto. Bitte melde dich mit dem Konto an, mit dem du bisher die App genutzt hast.';
+import { THIRDWEB_OTHER_ACCOUNT_MESSAGE } from './maci-key-resolver';
+
+export { THIRDWEB_OTHER_ACCOUNT_MESSAGE };
 
 /** Slots a complete backup must hold: MACI + Nostr always, the salt only with a commitment. */
 export function requiredKeySlots(hasCommitment: boolean): KeyBackupSlot[] {
@@ -40,7 +42,11 @@ export function requiredKeySlots(hasCommitment: boolean): KeyBackupSlot[] {
 /** A thirdweb account that can re-run the existing deterministic derivation for a slot. */
 export type ThirdwebKeySource = {
   address: string;
-  /** Existing thirdweb derivation for `slot`; persists locally as today; returns the slot's stored bytes. */
+  /**
+   * Derivation for `slot`; persists locally as today; returns the slot's stored bytes. `maci` goes
+   * through the shared resolver (maci-key-resolver.deriveMaciSlotFromThirdweb): Gnosis + July (Base)
+   * candidates, the one with a SignUp wins — never blindly today's Gnosis key.
+   */
   derive: (slot: KeyBackupSlot) => Promise<Uint8Array>;
 };
 

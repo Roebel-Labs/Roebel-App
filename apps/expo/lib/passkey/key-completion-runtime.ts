@@ -14,19 +14,23 @@ import * as SecureStore from '@/lib/storage/secureStorage';
 import { client } from '@/constants/thirdweb';
 import { redirectUrl, wallets } from '@/constants/wallets';
 import { supabase } from '@/lib/supabase';
-import { deriveMaciKeypairFromWalletSignature } from '@/lib/maci-key-derivation';
+import { deserializeKeypair, type SerializedKeypair } from '@/lib/maci';
+import { isCitizenTokenRegistered, lookupMaciSignUp, thirdwebMaciSource } from '@/lib/maci-signup-runtime';
 import { deriveCommitmentSalt, loadCitizenPreimage } from '@/lib/citizen-commitment';
 import { deriveAndStoreIdentity } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
 import { deviceSecretSources, keyBackupFor } from './derived-keys-runtime';
 import { MACI_KEYPAIR_STORE_KEY } from './derived-keys';
 import { completeKeyBackup, type CompletionResult, type ThirdwebKeySource } from './key-completion';
+import { deriveMaciSlotFromThirdweb } from './maci-key-resolver';
 import type { KeyBackupSlot } from './key-backup';
 import { unwrapSecret, wrapSecret } from './prf-vault';
 import type { PasskeySession } from './session';
 import { getPrfSecret } from './webauthn';
 
 const enc = new TextEncoder();
+
+export const maciPubKeyHashOf = (kp: SerializedKeypair) => (deserializeKeypair(kp).pubKey.hash() as bigint).toString();
 const THIRDWEB_TIMEOUT_MS = 20_000;
 
 const storage = {
@@ -57,12 +61,16 @@ export function thirdwebKeySource(account: Account): ThirdwebKeySource {
     address: account.address,
     derive: async (slot: KeyBackupSlot) => {
       if (slot === 'maci') {
-        const existing = await SecureStore.getItemAsync(MACI_KEYPAIR_STORE_KEY);
-        if (existing) return enc.encode(existing); // never overwrite a device key
-        const kp = await deriveMaciKeypairFromWalletSignature(account);
-        const raw = JSON.stringify(kp);
-        await SecureStore.setItemAsync(MACI_KEYPAIR_STORE_KEY, raw); // as MaciContext.persistKeypair
-        return enc.encode(raw);
+        // The shared resolver: Gnosis + July (Base) candidates, the one with a SignUp wins (a July
+        // registrant's key is the Base one). Never overwrites a device key; persists like
+        // MaciContext.persistKeypair (with the stateIndex when found).
+        return deriveMaciSlotFromThirdweb(thirdwebMaciSource(account), {
+          loadLocal: () => SecureStore.getItemAsync(MACI_KEYPAIR_STORE_KEY),
+          saveLocal: (raw) => SecureStore.setItemAsync(MACI_KEYPAIR_STORE_KEY, raw),
+          lookup: lookupMaciSignUp,
+          isTokenRegistered: () => isCitizenTokenRegistered(account.address),
+          pubKeyHashOf: maciPubKeyHashOf,
+        });
       }
       if (slot === 'nostr') return (await deriveAndStoreIdentity(account)).secretKey;
       // salt: the preimage (which carries it) only exists after enrolment; the PRF device blob

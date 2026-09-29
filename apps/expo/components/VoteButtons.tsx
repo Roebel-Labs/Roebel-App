@@ -32,6 +32,9 @@ import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { claimReward } from '@/lib/rewards-claim';
 import { rememberPollId } from '@/lib/passkey/poll-hints';
 import { passkeySessionOf } from '@/lib/passkey/active';
+import { MaciThirdwebNeededError } from '@/lib/passkey/maci-key-resolver';
+import ThirdwebConfirm from '@/components/passkey/ThirdwebConfirm';
+import type { Account } from 'thirdweb/wallets';
 import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { Events, track } from '@/lib/analytics';
@@ -182,6 +185,9 @@ export default function VoteButtons({
   const [birthdateSheetVisible, setBirthdateSheetVisible] = useState(false);
   const [savingBirthdate, setSavingBirthdate] = useState(false);
   const [pendingVote, setPendingVote] = useState<VoteType | null>(null);
+  // Passkey session without a key anywhere and without a dormant thirdweb session: show
+  // "Einmal mit Google/E-Mail bestätigen" inline; the key then comes from that login.
+  const [needsThirdweb, setNeedsThirdweb] = useState(false);
 
   // Resolve the per-proposal Poll address + deadline from the Governor.
   useEffect(() => {
@@ -306,18 +312,29 @@ export default function VoteButtons({
   };
 
   // ----- Step 1: generate keypair locally -----
-  const handleGenerateKey = async () => {
+  // Passkey session: generateAndStoreKeypair resolves the existing key (device → backup → the
+  // thirdweb in-app account: Gnosis + July Base key, the one with a SignUp wins) instead of the
+  // old "braucht deinen Schlüssel vom bisherigen Gerät" error. `thirdwebAccount` comes from
+  // ThirdwebConfirm when the device has no dormant thirdweb session.
+  const handleGenerateKey = async (thirdwebAccount?: Account) => {
     if (phase !== 'idle') return;
     try {
       setPhase('creating-key');
-      await generateAndStoreKeypair();
+      const kp = await generateAndStoreKeypair(thirdwebAccount ? { thirdwebAccount } : undefined);
+      setNeedsThirdweb(false);
       setSuccessDrawer({
         visible: true,
         message:
-          'Dein Wahlschlüssel ist erstellt und sicher auf deinem Gerät gespeichert. Jetzt noch einmalig zur Bürgerumfrage anmelden — dann kannst du geheim abstimmen.',
+          kp.stateIndex !== undefined
+            ? 'Dein Wahlschlüssel ist wiederhergestellt und du bist bereits für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen.'
+            : 'Dein Wahlschlüssel ist erstellt und sicher auf deinem Gerät gespeichert. Jetzt noch einmalig zur Bürgerumfrage anmelden — dann kannst du geheim abstimmen.',
         action: null,
       });
     } catch (err) {
+      if (err instanceof MaciThirdwebNeededError) {
+        setNeedsThirdweb(true);
+        return;
+      }
       console.error('[VoteButtons] generate key failed:', err);
       setErrorDrawer({
         visible: true,
@@ -798,16 +815,32 @@ export default function VoteButtons({
             allein öffnen kann. Nicht die Stadt, nicht die App. Niemand.
           </Text>
         </View>
-        <Pressable
-          style={[styles.primaryButton, phase !== 'idle' && styles.disabled]}
-          onPress={handleGenerateKey}
-          disabled={phase !== 'idle'}
-        >
-          <PrimaryButtonContent
-            label={phase === 'creating-key' ? 'Schlüssel wird erstellt…' : 'Schlüssel erstellen'}
-            isLoading={phase === 'creating-key'}
-          />
-        </Pressable>
+        {needsThirdweb ? (
+          <View style={styles.thirdwebConfirm}>
+            <Text style={[styles.stepBody, { color: colors.textSecondary }]}>
+              Dein Wahlschlüssel entsteht aus deiner bisherigen Google-/E-Mail-Anmeldung. Bestätige
+              sie einmal – danach bleibst du mit deinem Passkey angemeldet.
+            </Text>
+            {phase === 'creating-key' ? (
+              <View style={[styles.primaryButton, styles.disabled]}>
+                <PrimaryButtonContent label="Schlüssel wird wiederhergestellt…" isLoading />
+              </View>
+            ) : (
+              <ThirdwebConfirm disabled={phase !== 'idle'} onConfirmed={(tw) => void handleGenerateKey(tw)} />
+            )}
+          </View>
+        ) : (
+          <Pressable
+            style={[styles.primaryButton, phase !== 'idle' && styles.disabled]}
+            onPress={() => void handleGenerateKey()}
+            disabled={phase !== 'idle'}
+          >
+            <PrimaryButtonContent
+              label={phase === 'creating-key' ? 'Schlüssel wird erstellt…' : 'Schlüssel erstellen'}
+              isLoading={phase === 'creating-key'}
+            />
+          </Pressable>
+        )}
         {renderDrawers()}
       </View>
     );
@@ -1068,6 +1101,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
+  },
+  thirdwebConfirm: {
+    gap: 12,
   },
   stepBody: {
     fontSize: 14,

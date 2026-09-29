@@ -4,3 +4,5 @@
  * Its own module so tests can mock the loader (jest here cannot run a dynamic import()).
  */
 export const loadDerivedKeysRuntime = () => import('./derived-keys-runtime');
+/** Lazy loader for maci-key-runtime (the passkey MACI key resolver; native passkey code). */
+export const loadMaciKeyRuntime = () => import('./maci-key-runtime');
