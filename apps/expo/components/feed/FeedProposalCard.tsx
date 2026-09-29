@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import ProposalStateBadge from '@/components/ProposalStateBadge';
 import CompactVotingBars from '@/components/proposals/CompactVotingBars';
 import { shortenAddress } from '@/lib/governance-utils';
+import { pickProposalTitle } from '@/lib/proposal-display';
 import type { ProposalFeedRecord } from '@/lib/types/feed';
 import type { ProposalState } from '@/lib/governance-types';
 
@@ -64,7 +65,7 @@ export default function FeedProposalCard({ proposal }: Props) {
       </View>
 
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-        {proposal.title}
+        {pickProposalTitle(proposal)}
       </Text>
 
       <View style={styles.metaRow}>

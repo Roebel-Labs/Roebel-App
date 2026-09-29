@@ -34,18 +34,25 @@ export function extractProposalTitle(description: string): string | null {
   return null;
 }
 
+// RN fetch never times out on its own; a stuck gateway would otherwise keep
+// the proposal body spinner up forever instead of falling back to the summary.
+const IRYS_FETCH_TIMEOUT_MS = 10_000;
+
 /**
  * Fetch markdown content from Irys gateway
  * @param irysUrl - Full Irys gateway URL (e.g., https://gateway.irys.xyz/abc123)
  * @returns Promise resolving to markdown content string
  */
 export async function fetchMarkdownFromIrys(irysUrl: string): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IRYS_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(irysUrl, {
       method: 'GET',
       headers: {
         'Accept': 'text/markdown, text/plain, */*',
       },
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -61,6 +68,8 @@ export async function fetchMarkdownFromIrys(irysUrl: string): Promise<string> {
         ? error.message
         : 'Failed to fetch content from Irys gateway'
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
 

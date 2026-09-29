@@ -57,6 +57,10 @@ export type Proposal = {
   // (from content.metadata.gemeinschaftskasse_snapshot). Absent → no card.
   gemeinschaftskasseSnapshot?: { euro: number; captured_at: string };
 
+  // Body from proposals.content.markdown (HTML-ish). Source of truth for the
+  // displayed text; null → the page falls back to the Irys document.
+  contentMarkdown?: string | null;
+
   // Flags
   blockchainUnavailable?: boolean; // True if blockchain data fetch failed
 };
@@ -106,6 +110,7 @@ export type ProposalContent = {
  * Converts string bigints to BigInt and adds enriched metadata
  */
 import type { SupabaseProposal } from './supabase-proposals';
+import { supabaseContentMarkdown } from './proposal-display';
 
 export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Proposal {
   // Frozen Gemeinschaftskasse snapshot rides in content.metadata (jsonb, untyped).
@@ -139,6 +144,7 @@ export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Propo
     blockchainProposalId: supabaseProposal.blockchain_proposal_id,
     transactionHash: supabaseProposal.transaction_hash,
     gemeinschaftskasseSnapshot,
+    contentMarkdown: supabaseContentMarkdown(supabaseProposal.content),
 
     // Flags
     blockchainUnavailable: false, // Will be set to true if blockchain fetch fails

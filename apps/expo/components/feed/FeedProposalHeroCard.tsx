@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
+import { pickProposalTitle } from '@/lib/proposal-display';
 import { useProposalTally } from '@/hooks/useProposalTally';
 import { shortenAddress } from '@/lib/governance-utils';
 import AnimatedGradientBorder from './AnimatedGradientBorder';
@@ -183,7 +184,7 @@ function HeroProposalCard({
             </View>
 
             <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-              {proposal.title}
+              {pickProposalTitle(proposal)}
             </Text>
 
             <Text style={[styles.creator, { color: colors.textSecondary }]} numberOfLines={1}>
