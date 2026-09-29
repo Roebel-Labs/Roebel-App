@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import CircleArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
 import CircleArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
@@ -18,6 +18,10 @@ export interface TxHistoryItem {
   txHash?: string;
   /** 'eur' renders a € badge instead of the coin/avatar image (treasury list). */
   iconKind?: 'coin' | 'eur';
+  /** Optional secondary link line, e.g. "Zur Bürgerumfrage ›" (treasury list). */
+  link?: { label: string; accessibilityLabel?: string; onPress: () => void };
+  /** Optional explorer URL; renders a small "Beleg ↗" link (treasury list). */
+  proofUrl?: string;
 }
 
 /** Day-group header label: "Heute" / "Gestern" / a full de-DE date. */
@@ -115,6 +119,35 @@ export default function TxHistoryList({ items, loading, onPressTx, emptyText }: 
                   <Text style={[styles.txTime, { color: colors.textSecondary }]} numberOfLines={1}>
                     {new Date(tx.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
+                  {tx.link || tx.proofUrl ? (
+                    <View style={styles.txLinks}>
+                      {tx.link ? (
+                        <Pressable
+                          onPress={tx.link.onPress}
+                          hitSlop={6}
+                          accessibilityRole="link"
+                          accessibilityLabel={tx.link.accessibilityLabel ?? tx.link.label}
+                        >
+                          <Text style={[styles.txLinkText, { color: colors.primary }]} numberOfLines={1}>
+                            {tx.link.label}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {tx.proofUrl ? (
+                        <Pressable
+                          onPress={() => {
+                            const url = tx.proofUrl;
+                            if (url) Linking.openURL(url);
+                          }}
+                          hitSlop={6}
+                          accessibilityRole="link"
+                          accessibilityLabel="Beleg der Transaktion öffnen"
+                        >
+                          <Text style={[styles.txProofText, { color: colors.textSecondary }]}>Beleg ↗</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
                 <Text style={[styles.txAmount, { color: colors.textPrimary }]}>
                   {tx.amountText}
@@ -181,6 +214,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 13,
     marginTop: 2,
+  },
+  txLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 3,
+  },
+  txLinkText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+  },
+  txProofText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
   txAmount: {
     fontFamily: 'Inter-SemiBold',

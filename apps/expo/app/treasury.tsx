@@ -2,13 +2,13 @@
 // with the balance + history in a white rounded sheet. EUR figures exclude Röbel
 // Münzen (not redeemable). Counterparty addresses are never shown.
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
 import {
 	getTreasuryAssets,
-	getTreasuryTransactions,
+	getTreasuryHistory,
 	treasuryAssetsFallback,
 	type TreasuryAssets,
 	type TreasuryTx,
@@ -26,7 +26,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import TxHistoryList, { type TxHistoryItem } from "@/components/rewards/TxHistoryList";
 
 /** Give up on the chain after this and show the snapshot rather than a spinner. */
-const LOAD_TIMEOUT_MS = 12000;
+const LOAD_TIMEOUT_MS = 20000;
 
 const fmtEur = (n: number) => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtEurUnit = (n: number) => `${fmtEur(n)}€`;
@@ -36,6 +36,8 @@ export default function TreasuryScreen() {
 	const router = useRouter();
 	const [assets, setAssets] = useState<TreasuryAssets | null>(null);
 	const [txs, setTxs] = useState<TreasuryTx[] | null>(null);
+	// true = rows came from /api/treasury, already curated + balanced server-side.
+	const [serverCurated, setServerCurated] = useState(false);
 	const [curation, setCuration] = useState<{ hidden: string[]; balancingTx: string | null }>({
 		hidden: [],
 		balancingTx: null,
@@ -54,17 +56,25 @@ export default function TreasuryScreen() {
 
 		deadline(getTreasuryAssets(attesterSafeGnosisAddress), treasuryAssetsFallback())
 			.then((a) => { if (!cancelled) setAssets(a); });
-		// History curation settings load in parallel with Blockscout under the
-		// same deadline; a failed/slow read just means no curation.
-		Promise.all([
-			deadline(getTreasuryTransactions(attesterSafeGnosisAddress), [] as TreasuryTx[]),
-			deadline(fetchTreasuryHistoryHiddenTxs(), [] as string[]),
-			deadline(fetchTreasuryHistoryBalancingTx(), null as string | null),
-		]).then(([t, hidden, balancingTx]) => {
-			if (cancelled) return;
-			setCuration({ hidden, balancingTx });
-			setTxs(t);
-		});
+		// History: /api/treasury rows are final. Only the on-device fallback
+		// needs the curation settings, read under the same deadline; a
+		// failed/slow read just means no curation.
+		deadline(getTreasuryHistory(attesterSafeGnosisAddress), { rows: [] as TreasuryTx[], curated: false })
+			.then(async (h) => {
+				if (cancelled) return;
+				if (h.curated) {
+					setServerCurated(true);
+					setTxs(h.rows);
+					return;
+				}
+				const [hidden, balancingTx] = await Promise.all([
+					deadline(fetchTreasuryHistoryHiddenTxs(), [] as string[]),
+					deadline(fetchTreasuryHistoryBalancingTx(), null as string | null),
+				]);
+				if (cancelled) return;
+				setCuration({ hidden, balancingTx });
+				setTxs(h.rows);
+			});
 		return () => { cancelled = true; };
 	}, []);
 
@@ -82,23 +92,41 @@ export default function TreasuryScreen() {
 		(t): t is TreasuryTx & { direction: "in" | "out" } => t.direction !== "admin" && t.amount > 0,
 	);
 	const liveTotal = assets && !assets.fromSnapshot ? assets.euroTotal : null;
-	const historyItems: TxHistoryItem[] = curateTreasuryHistory(baseRows, {
-		hidden: curation.hidden,
-		balancingTx: curation.balancingTx,
-		liveTotal,
-	})
-		.map((t, i): TxHistoryItem => {
-			const isIn = t.direction === "in";
-			return {
-				id: `${t.txHash || "tx"}-${i}`,
-				direction: isIn ? "in" : "out",
-				title: t.label,
-				timestamp: t.timestamp,
-				amountText: `${isIn ? "+ " : "− "}${fmtEur(t.amount)} €`,
-				iconKind: "eur",
-				txHash: t.txHash,
-			};
-		});
+	const shownRows = serverCurated
+		? baseRows
+		: curateTreasuryHistory(baseRows, {
+				hidden: curation.hidden,
+				balancingTx: curation.balancingTx,
+				liveTotal,
+			});
+	const historyItems: TxHistoryItem[] = shownRows.map((t, i): TxHistoryItem => {
+		const isIn = t.direction === "in";
+		const link = t.link ?? null;
+		return {
+			id: `${t.txHash || "tx"}-${i}`,
+			direction: isIn ? "in" : "out",
+			title: t.label,
+			timestamp: t.timestamp,
+			amountText: `${isIn ? "+ " : "− "}${fmtEur(t.amount)} €`,
+			iconKind: "eur",
+			txHash: t.txHash,
+			// Outflows → the Bürgerumfrage that decided them; inflows → the post
+			// that announced them (treasury_tx_links, server-side).
+			link: link
+				? {
+						label: link.type === "proposal" ? "Zur Bürgerumfrage ›" : "Zum Beitrag ›",
+						accessibilityLabel: `${link.type === "proposal" ? "Zur Bürgerumfrage" : "Zum Beitrag"}: ${link.title}`,
+						onPress: () =>
+							router.push(
+								(link.type === "proposal"
+									? `/proposal/${encodeURIComponent(link.id)}`
+									: `/post/${encodeURIComponent(link.id)}`) as any,
+							),
+					}
+				: undefined,
+			proofUrl: t.txHash ? `https://gnosisscan.io/tx/${t.txHash}` : undefined,
+		};
+	});
 
 	return (
 		<View style={styles.root}>
@@ -147,6 +175,19 @@ export default function TreasuryScreen() {
 						>
 							<Text style={styles.donateBtnText}>Unterstützen</Text>
 						</Pressable>
+						{/* Onchain-Nachweis: the Safe on the explorer (balance + every tx).
+						    Never print the address itself — only the link. */}
+						<View style={styles.proof}>
+							<Text style={styles.proofLabel}>Onchain-Nachweis</Text>
+							<Pressable
+								onPress={() => Linking.openURL(`https://gnosisscan.io/address/${attesterSafeGnosisAddress}`)}
+								hitSlop={8}
+								accessibilityRole="link"
+								accessibilityLabel="Konto und Guthaben öffentlich prüfen"
+							>
+								<Text style={styles.proofLink}>Konto & Guthaben öffentlich prüfen ↗</Text>
+							</Pressable>
+						</View>
 					</View>
 
 					{/* White sheet — balance + history */}
@@ -236,6 +277,9 @@ function makeStyles(colors: any, isDark: boolean) {
 			paddingVertical: 12,
 		},
 		donateBtnText: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
+		proof: { marginTop: 18, alignItems: "center", gap: 2 },
+		proofLabel: { fontFamily: "Inter-Medium", fontSize: 12, color: colors.textTertiary ?? colors.textSecondary, letterSpacing: 0.3 },
+		proofLink: { fontFamily: "Inter-Regular", fontSize: 13, color: colors.textSecondary, textDecorationLine: "underline" },
 		heroLabel: { fontFamily: "Inter-Medium", fontSize: 16, color: colors.textSecondary },
 		heroNote: { fontFamily: "Inter-Regular", fontSize: 13, color: colors.textSecondary, marginTop: 6 },
 		heroValue: {

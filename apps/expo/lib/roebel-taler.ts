@@ -23,7 +23,9 @@ import {
 	gnosisRead,
 	circlesHubAddress,
 	roebeltalerGroupAddress,
+	attesterSafeGnosisAddress,
 } from "@/constants/gnosis";
+import { fetchTreasuryApi, readRememberedRate, rememberRate, type TreasuryApiLink } from "@/lib/treasury-api";
 
 const hubRead = getContract({ client, chain: gnosisRead, address: circlesHubAddress });
 const hubWrite = getContract({ client, chain: gnosis, address: circlesHubAddress });
@@ -172,79 +174,37 @@ async function fetchJson(url: string, init?: RequestInit, timeoutMs = 12_000): P
 	}
 }
 
-// xDAI is USD-pegged, so its € value moves with EUR/USD. Fetch the live rate
-// (10-min in-memory cache) so treasury figures match what a payout actually
-// costs; fall back to the last known / an approximate rate when offline.
-const XDAI_EUR_FALLBACK = 0.92;
+// xDAI is USD-pegged, so its € value is the USD→EUR rate. The server route
+// (/api/treasury) is the source of truth; this on-device rate only serves the
+// fallback when that route is unreachable. There is NO hard-coded rate: when
+// every source fails the last good rate (AsyncStorage) is used, and without
+// one the caller shows the dated snapshot rather than a wrong figure.
 let xdaiEurCache: { rate: number; at: number } | null = null;
-async function getXdaiEurRate(): Promise<number> {
+const RATE_SOURCES: { url: string; pick: (j: any) => number }[] = [
+	// ECB fixing (frankfurter.app 301s to .dev; fetch follows).
+	{ url: "https://api.frankfurter.app/latest?from=USD&to=EUR", pick: (j) => Number(j?.rates?.EUR) },
+	{ url: "https://open.er-api.com/v6/latest/USD", pick: (j) => Number(j?.rates?.EUR) },
+	{ url: "https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur", pick: (j) => Number(j?.xdai?.eur) },
+];
+async function getXdaiEurRate(): Promise<number | null> {
 	if (xdaiEurCache && Date.now() - xdaiEurCache.at < 10 * 60 * 1000) return xdaiEurCache.rate;
-	try {
-		const j = await fetchJson("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
-		const rate = Number(j?.xdai?.eur);
-		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
-			xdaiEurCache = { rate, at: Date.now() };
-			return rate;
+	for (const src of RATE_SOURCES) {
+		try {
+			const rate = src.pick(await fetchJson(src.url, undefined, 8000));
+			if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
+				xdaiEurCache = { rate, at: Date.now() };
+				void rememberRate(rate);
+				return rate;
+			}
+		} catch {
+			/* next source */
 		}
-	} catch {
-		/* ignore — fall back */
 	}
-	return xdaiEurCache?.rate ?? XDAI_EUR_FALLBACK;
+	return xdaiEurCache?.rate ?? (await readRememberedRate());
 }
 
 // Monerium EURe V2 on Gnosis (V1 0xcB444e90… is deprecated; IBAN mints target V2).
 const EURE_ADDRESS = "0x420CA0f9B9b604cE0fd9C18EF134C705e5Fa3430";
-
-/**
- * Historical xDAI→€ rate for the UTC day of `tsMs`.
- *
- * All callers of the same day share ONE in-flight promise, and fetches are
- * serialized with a short gap + one retry: Coingecko's free tier rate-limits
- * bursts, which previously made random rows fall back to 0.92 while others
- * used the real rate — mixed-basis rows that didn't sum to the total. A
- * fallback resolution is evicted after 60 s so a temporary rate-limit doesn't
- * pin a wrong rate for the whole session.
- */
-const histRatePromises = new Map<string, Promise<number>>();
-let histQueue: Promise<unknown> = Promise.resolve();
-async function fetchHistRate(key: string): Promise<number | null> {
-	try {
-		const j = await fetchJson(
-			`https://api.coingecko.com/api/v3/coins/xdai/history?date=${key}&localization=false`
-		);
-		const rate = Number(j?.market_data?.current_price?.eur);
-		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) return rate;
-	} catch {
-		/* fall through */
-	}
-	return null;
-}
-function getXdaiEurRateOn(tsMs: number): Promise<number> {
-	const d = new Date(tsMs || Date.now());
-	const key = `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
-	const hit = histRatePromises.get(key);
-	if (hit) return hit;
-	const prev = histQueue;
-	const p = (async () => {
-		await prev.catch(() => {});
-		await new Promise((r) => setTimeout(r, 300));
-		let rate = await fetchHistRate(key);
-		if (rate == null) {
-			await new Promise((r) => setTimeout(r, 1500));
-			rate = await fetchHistRate(key);
-		}
-		if (rate == null) {
-			setTimeout(() => {
-				if (histRatePromises.get(key) === p) histRatePromises.delete(key);
-			}, 60_000);
-			return getXdaiEurRate();
-		}
-		return rate;
-	})();
-	histRatePromises.set(key, p);
-	histQueue = p.catch(() => {});
-	return p;
-}
 
 /** A real native-xDAI movement of the treasury (phantom frames excluded). */
 type NativeFlow = { direction: "in" | "out"; xdai: number; timestamp: number; txHash: string };
@@ -319,6 +279,11 @@ async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> 
 	});
 }
 
+/** /api/treasury serves exactly one address: the Gemeinschaftskasse Safe. */
+function isTreasurySafe(address: string): boolean {
+	return address.toLowerCase() === attesterSafeGnosisAddress.toLowerCase();
+}
+
 /**
  * Live on-chain € value of the treasury: native xDAI × today's xDAI/EUR rate +
  * EURe (1:1). Röbel Münzen are deliberately EXCLUDED — they are not
@@ -352,6 +317,8 @@ async function readTreasuryLive(
 	}
 	if (xdai === null) return { xdai: 0, eure, liveEuro: null };
 	const rate = await getXdaiEurRate();
+	// No rate anywhere (first launch, every source down): unknowable, not 0 €.
+	if (rate === null) return { xdai, eure, liveEuro: null };
 	return { xdai, eure, liveEuro: xdai * rate + eure };
 }
 
@@ -360,6 +327,10 @@ async function readTreasuryLive(
  * excluded). Every surface shows the same figure as the treasury details page.
  */
 export async function getTreasuryEuro(address: string): Promise<number> {
+	if (isTreasurySafe(address)) {
+		const api = await fetchTreasuryApi();
+		if (api) return resolveTreasuryEuro(api.euroTotal).euro;
+	}
 	const { liveEuro } = await readTreasuryLive(address);
 	// Never surface 0 € while the treasury is mid-move: fall back to the dated
 	// snapshot (see constants/treasury-snapshot.ts).
@@ -381,10 +352,19 @@ export interface TreasuryAssets {
 
 /** Real per-asset breakdown of a treasury address (Röbel Münzen + xDAI + EURe). */
 export async function getTreasuryAssets(address: string): Promise<TreasuryAssets> {
-	const [{ xdai, eure, liveEuro }, roebelRaw] = await Promise.all([
-		readTreasuryLive(address),
-		getRoebelTalerBalance(address).catch(() => 0n),
-	]);
+	const roebelP = getRoebelTalerBalance(address).catch(() => 0n);
+	const api = isTreasurySafe(address) ? await fetchTreasuryApi() : null;
+	if (api) {
+		const resolved = resolveTreasuryEuro(api.euroTotal);
+		return {
+			roebel: Number(formatTaler(await roebelP)),
+			xdai: resolved.fromSnapshot ? TREASURY_SNAPSHOT.xdai : api.xdai,
+			eure: resolved.fromSnapshot ? TREASURY_SNAPSHOT.eure : api.eure,
+			euroTotal: resolved.euro,
+			fromSnapshot: resolved.fromSnapshot,
+		};
+	}
+	const [{ xdai, eure, liveEuro }, roebelRaw] = await Promise.all([readTreasuryLive(address), roebelP]);
 	const roebel = Number(formatTaler(roebelRaw));
 	const resolved = resolveTreasuryEuro(liveEuro);
 	return {
@@ -423,6 +403,37 @@ export interface TreasuryTx {
 	label: string;
 	/** On-chain transaction hash (for the detail screen / explorer link). */
 	txHash: string;
+	/** Where the tx was decided (proposal) or announced (post); server rows only. */
+	link?: TreasuryApiLink | null;
+}
+
+/**
+ * The treasury history for the screen. `curated: true` = rows straight from
+ * /api/treasury (hidden txs removed, balancing row applied, each row valued at
+ * its own day's rate, sums to the server total): render them as they are.
+ * `curated: false` = the on-device fallback, which the screen still curates.
+ */
+export async function getTreasuryHistory(
+	address: string,
+): Promise<{ rows: TreasuryTx[]; curated: boolean }> {
+	if (isTreasurySafe(address)) {
+		const api = await fetchTreasuryApi();
+		if (api && api.historyAvailable) {
+			return {
+				curated: true,
+				rows: api.history.map((h) => ({
+					direction: h.direction,
+					amount: h.euro,
+					currency: "eur" as const,
+					timestamp: h.timestamp,
+					label: h.label,
+					txHash: h.txHash,
+					link: h.link,
+				})),
+			};
+		}
+	}
+	return { rows: await getTreasuryTransactions(address), curated: false };
 }
 
 /**
@@ -435,22 +446,24 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 	const self = address.toLowerCase();
 	const eureToken = EURE_ADDRESS.toLowerCase();
 
-	// Real native flows (regular + internal CALL frames, phantoms excluded),
-	// each valued at ITS OWN day's rate. The hero is marked to market today;
-	// the screen's balancing row (lib/treasury-history.ts) closes the gap.
+	// Real native flows (regular + internal CALL frames, phantoms excluded).
+	// FALLBACK ONLY (the server values each row at its own day's rate): here
+	// every row uses today's rate — one lookup, not one per row, so the list
+	// can't hang on a rate-limited history API. The screen's balancing row
+	// closes the gap to the hero. Without any rate the xDAI rows are left out
+	// rather than shown with an invented value.
 	const native = (async (): Promise<TreasuryTx[]> => {
 		try {
-			const flows = await fetchNativeFlows(address);
-			return await Promise.all(
-				flows.map(async (f) => ({
-					direction: f.direction,
-					amount: f.xdai * (await getXdaiEurRateOn(f.timestamp)),
-					currency: "eur" as const,
-					timestamp: f.timestamp,
-					label: f.direction === "in" ? "Eingang" : "Ausgang",
-					txHash: f.txHash,
-				})),
-			);
+			const [flows, rate] = await Promise.all([fetchNativeFlows(address), getXdaiEurRate()]);
+			if (rate === null) return [];
+			return flows.map((f) => ({
+				direction: f.direction,
+				amount: f.xdai * rate,
+				currency: "eur" as const,
+				timestamp: f.timestamp,
+				label: f.direction === "in" ? "Eingang" : "Ausgang",
+				txHash: f.txHash,
+			}));
 		} catch {
 			return [];
 		}
