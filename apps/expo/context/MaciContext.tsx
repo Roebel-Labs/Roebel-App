@@ -18,27 +18,50 @@
  *   - We resolve `signUpState` in three layers (fastest first):
  *       1. Local cache: serializedKeypair.stateIndex matches the current
  *          pubKeyHash → use it directly. No network.
- *       2. Event scan: query MACI's SignUp logs filtered by the indexed
- *          pubX/pubY topics. If we find one, persist its stateIndex into
- *          secure-store so future sessions hit the cache.
- *       3. Otherwise: needs-signup.
+ *       2. Lookup: MACI's SignUp log filtered by the indexed pubX/pubY
+ *          topics — one explorer request, RPC window scan as fallback
+ *          (lib/maci-signup-lookup.ts). If we find one, persist its stateIndex
+ *          into secure-store so future sessions hit the cache.
+ *       3. July-key recovery: no SignUp for this key but the CitizenNFT token
+ *          is already registered → re-derive the Base-signed July key
+ *          (lib/maci-legacy-key.ts) and adopt it if it has a SignUp.
+ *       4. Otherwise: needs-signup (legacyKeyLost when step 3 found nothing).
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "@/lib/storage/secureStorage";
-import { getContractEvents, prepareEvent } from "thirdweb";
+import { getContract, getContractEvents, prepareEvent, readContract } from "thirdweb";
+import { base } from "thirdweb/chains";
 import { getRpcClient, eth_blockNumber } from "thirdweb/rpc";
 import { useActiveAccount } from "thirdweb/react";
-import { client, MACI_DEPLOY_BLOCK, maciReadContract } from "@/constants/thirdweb";
+import { inAppWallet } from "thirdweb/wallets/in-app";
+import { citizenNFTContract, client, MACI_DEPLOY_BLOCK, maciReadContract } from "@/constants/thirdweb";
 import { gnosisRead } from "@/constants/gnosis";
+import { redirectUrl } from "@/constants/wallets";
+import {
+  findSignUpStateIndex,
+  lookupSignUpViaExplorer,
+  lookupSignUpViaRpcScan,
+  resolveSignUpWithRecovery,
+  type LookupResult,
+} from "@/lib/maci-signup-lookup";
+import {
+  buildLegacySignatureCandidates,
+  connectLegacyBaseSigner,
+  seedFromSignature,
+} from "@/lib/maci-legacy-key";
 import {
   deserializeKeypair,
+  deriveMaciKeypairFromSeed,
   type SerializedKeypair,
   Keypair,
 } from "@/lib/maci";
 import { passkeySessionOf } from "@/lib/passkey/active";
 import { loadDerivedKeysRuntime } from "@/lib/passkey/load-derived-keys";
 import { MACI_KEYPAIR_STORE_KEY } from "@/lib/passkey/derived-keys";
-import { deriveMaciKeypairFromWalletSignature } from "@/lib/maci-key-derivation";
+import {
+  deriveMaciKeypairFromWalletSignature,
+  MACI_KEY_DERIVATION_MESSAGE,
+} from "@/lib/maci-key-derivation";
 
 const SECURE_KEY = MACI_KEYPAIR_STORE_KEY; // "roebel.maci.keypair.v1"
 const VOTES_KEY = "roebel.maci.votes.v1";
@@ -49,8 +72,48 @@ const VOTES_KEY = "roebel.maci.votes.v1";
 type SignUpState =
   | { status: "unknown" } // not yet checked
   | { status: "needs-keypair" } // no keypair generated yet
-  | { status: "needs-signup"; pubKeyHash: bigint } // keypair exists, MACI doesn't know it
+  // keypair exists, MACI doesn't know it. `legacyKeyLost`: the citizen's token
+  // is already registered but neither this key nor the re-derived July (Base)
+  // key has a SignUp → the original key is gone; support has to help.
+  | { status: "needs-signup"; pubKeyHash: bigint; legacyKeyLost?: boolean }
   | { status: "signed-up"; pubKeyHash: bigint; stateIndex: bigint };
+
+interface RefreshSignUpOptions {
+  /** signUp just reverted AlreadyRegistered → go straight to key recovery. */
+  alreadyRegistered?: boolean;
+}
+
+interface LegacyCandidate {
+  pubX: bigint;
+  pubY: bigint;
+  keypair: SerializedKeypair;
+}
+
+// SignUpTokenGatekeeper (→CitizenNFTv2) — read-only, for registeredTokenIds.
+const MACI_GATEKEEPER_ADDRESS =
+  process.env.EXPO_PUBLIC_MACI_GATEKEEPER || "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277";
+const maciGatekeeperReadContract = getContract({
+  client,
+  address: MACI_GATEKEEPER_ADDRESS,
+  chain: gnosisRead,
+});
+
+/** Separate in-app wallet on BASE with the same auth options as
+ *  constants/wallets.ts. Only ever autoConnect()ed (reuses the stored session)
+ *  and NEVER made active — used solely to re-derive the July voting key. */
+let legacyBaseWallet: ReturnType<typeof inAppWallet> | null = null;
+function getLegacyBaseWallet() {
+  if (!legacyBaseWallet) {
+    legacyBaseWallet = inAppWallet({
+      auth: {
+        options: ["email", "google", "facebook", "apple"],
+        redirectUrl,
+      },
+      smartAccount: { chain: base, sponsorGas: true },
+    });
+  }
+  return legacyBaseWallet;
+}
 
 /**
  * Locally-cached record of the citizen's most recent vote on a poll.
@@ -80,7 +143,7 @@ interface MaciContextShape {
   clearKeypair: () => Promise<void>;
   /** Re-resolve sign-up state and return the resolved value, so callers can act
    *  on the *actual* result rather than the stale closure `signUpState`. */
-  refreshSignUp: () => Promise<SignUpState>;
+  refreshSignUp: (opts?: RefreshSignUpOptions) => Promise<SignUpState>;
   /** Optimistically promote state to `signed-up` after a confirmed signUp tx,
    *  using the stateIndex parsed from the SignUp event log. Also persists
    *  the stateIndex to secure-store so cold-starts can skip the chain. */
@@ -106,6 +169,78 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
   const [signUpState, setSignUpState] = useState<SignUpState>({ status: "unknown" });
   const [votes, setVotes] = useState<VotesMap>({});
   const lastCheckedHash = useRef<bigint | null>(null);
+  const legacyCandidatesRef = useRef<Promise<LegacyCandidate[]> | null>(null);
+
+  // Drop the cached July-key candidates when the login changes.
+  useEffect(() => {
+    legacyCandidatesRef.current = null;
+  }, [account?.address]);
+
+  /** SignUp stateIndex for a pubkey: explorer first, RPC window scan fallback. */
+  const lookupSignUp = useCallback(
+    (pubX: bigint, pubY: bigint): Promise<LookupResult> =>
+      findSignUpStateIndex(pubX, pubY, {
+        explorer: (x, y) =>
+          lookupSignUpViaExplorer({
+            pubX: x,
+            pubY: y,
+            maciAddress: maciReadContract.address,
+            fromBlock: MACI_DEPLOY_BLOCK,
+          }),
+        rpcScan: (x, y) => {
+          const signUpEvent = prepareEvent({
+            signature:
+              "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
+            filters: { _userPubKeyX: x, _userPubKeyY: y },
+          });
+          return lookupSignUpViaRpcScan({
+            fromBlock: MACI_DEPLOY_BLOCK,
+            getLatestBlock: () => eth_blockNumber(getRpcClient({ client, chain: gnosisRead })),
+            getSignUpInWindow: async (from, to) => {
+              const events = await getContractEvents({
+                contract: maciReadContract,
+                events: [signUpEvent],
+                fromBlock: from,
+                toBlock: to,
+              });
+              if (events.length === 0) return null;
+              const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
+              return ev.args._stateIndex ?? 0n;
+            },
+          });
+        },
+        log: (msg) => console.warn(`[MaciContext] ${msg}`),
+      }),
+    [],
+  );
+
+  /** Re-derive the July (Base-signed) voting key candidates. One wallet
+   *  signature; both raw and ERC-6492 variants (see lib/maci-legacy-key.ts). */
+  const deriveLegacyKeyCandidates = useCallback(async (): Promise<LegacyCandidate[]> => {
+    const { admin, smartAccountAddress } = await connectLegacyBaseSigner({
+      client,
+      createWallet: getLegacyBaseWallet,
+    });
+    // On a passkey session the active address is the passkey Safe, not the
+    // thirdweb smart account that signed in July — skip the equality check.
+    if (
+      account?.address &&
+      !passkeySessionOf(account) &&
+      smartAccountAddress.toLowerCase() !== account.address.toLowerCase()
+    ) {
+      throw new Error("legacy Base account address mismatch");
+    }
+    const signatures = await buildLegacySignatureCandidates({
+      client,
+      admin,
+      smartAccountAddress,
+      message: MACI_KEY_DERIVATION_MESSAGE,
+    });
+    return signatures.map((sig) => {
+      const keypair = deriveMaciKeypairFromSeed(seedFromSignature(sig));
+      return { pubX: BigInt(keypair.pubX), pubY: BigInt(keypair.pubY), keypair };
+    });
+  }, [account?.address]);
 
   // Load keypair + votes from secure store on mount.
   useEffect(() => {
@@ -148,7 +283,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     return next;
   }, []);
 
-  const refreshSignUp = useCallback(async (): Promise<SignUpState> => {
+  const refreshSignUp = useCallback(async (opts?: RefreshSignUpOptions): Promise<SignUpState> => {
     if (!serializedKeypair) {
       const s: SignUpState = { status: "needs-keypair" };
       setSignUpState(s);
@@ -174,118 +309,84 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       return s;
     }
 
-    // Layer 2 — event scan. MACI v2 has no getStateIndex(pubKeyHash) view, so
-    // we filter SignUp logs by the indexed pubX/pubY topics. Each pubkey can
-    // appear at most once (the gatekeeper enforces uniqueness).
+    // Layer 2 — on-chain lookup. MACI v2 has no getStateIndex(pubKeyHash)
+    // view, so we look for this pubkey's SignUp log (the gatekeeper enforces
+    // one SignUp per token). One explorer request first; the RPC window scan
+    // (MACI_DEPLOY_BLOCK → latest, ~180 windows by now) only as a fallback.
+    // CRITICAL: a failed lookup is `unknown` (retryable), never needs-signup.
     //
-    // The Gnosis read RPC caps eth_getLogs at a ~10k-block range, and the live
-    // range (MACI_DEPLOY_BLOCK → latest) is hundreds of thousands of blocks. We
-    // split it into <10k windows and scan them with bounded concurrency against the
-    // reliable read RPC (maciReadContract), returning on the first window that
-    // contains this pubkey's SignUp. Parallel + direction-agnostic, so an early
-    // signup near the deploy block resolves in seconds instead of dozens of
-    // serial round-trips. On a hit we persist the stateIndex (Layer 1) so this
-    // scan runs at most once per device.
-    //
-    // CRITICAL: distinguish "scanned the whole range, no event" (→ needs-signup)
-    // from "a window errored" (→ unknown, retryable) — a transient failure must
-    // NOT be reported as needs-signup.
-    const signUpEvent = prepareEvent({
-      signature:
-        "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
-      filters: { _userPubKeyX: pubX, _userPubKeyY: pubY },
+    // Layer 3 — July-key recovery. If this key has no SignUp but the citizen's
+    // token is already registered (or signUp just reverted AlreadyRegistered),
+    // the citizen signed up in July with the Base-derived key and lost it
+    // since. Re-derive that key (lib/maci-legacy-key.ts) and adopt it if it has
+    // a SignUp. Otherwise report `legacyKeyLost` (no endless retry).
+    const outcome = await resolveSignUpWithRecovery<LegacyCandidate>({
+      current: { pubX, pubY },
+      lookup: lookupSignUp,
+      alreadyRegistered: opts?.alreadyRegistered,
+      isTokenRegistered: async () => {
+        if (!account?.address) return null;
+        let tokenId: bigint;
+        try {
+          tokenId = (await readContract({
+            contract: citizenNFTContract,
+            method: "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+            params: [account.address, 0n],
+          })) as bigint;
+        } catch {
+          return null; // no CitizenNFT → a plain needs-signup
+        }
+        return (await readContract({
+          contract: maciGatekeeperReadContract,
+          method: "function registeredTokenIds(uint256) view returns (bool)",
+          params: [tokenId],
+        })) as boolean;
+      },
+      deriveLegacyCandidates: () => {
+        if (!legacyCandidatesRef.current) {
+          legacyCandidatesRef.current = deriveLegacyKeyCandidates().catch((err) => {
+            legacyCandidatesRef.current = null; // allow a retry after a transient failure
+            throw err;
+          });
+        }
+        return legacyCandidatesRef.current;
+      },
     });
 
-    let latest: bigint;
-    try {
-      latest = await eth_blockNumber(getRpcClient({ client, chain: gnosisRead }));
-    } catch (err) {
-      console.warn("[MaciContext] refreshSignUp: eth_blockNumber failed", err);
-      const s: SignUpState = { status: "unknown" };
-      setSignUpState(s);
-      return s;
-    }
-
-    const WINDOW = 9_000n; // under Gnosis's ~10k eth_getLogs cap
-    const CONCURRENCY = 6;
-    const ranges: { from: bigint; to: bigint }[] = [];
-    for (let to = latest; to >= MACI_DEPLOY_BLOCK; ) {
-      const from = to - WINDOW + 1n > MACI_DEPLOY_BLOCK ? to - WINDOW + 1n : MACI_DEPLOY_BLOCK;
-      ranges.push({ from, to });
-      if (from === MACI_DEPLOY_BLOCK) break;
-      to = from - 1n;
-    }
-    console.log(
-      `[MaciContext] refreshSignUp: scanning ${ranges.length} windows [${MACI_DEPLOY_BLOCK}-${latest}] @${CONCURRENCY}x`,
-    );
-
-    let hitStateIndex: bigint | null = null;
-    let anyError = false;
-    let cursor = 0;
-
-    const scanWindow = async (r: { from: bigint; to: bigint }): Promise<"hit" | "empty" | "error"> => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const events = await getContractEvents({
-            contract: maciReadContract,
-            events: [signUpEvent],
-            fromBlock: r.from,
-            toBlock: r.to,
-          });
-          if (events.length > 0) {
-            const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
-            if (hitStateIndex === null) hitStateIndex = ev.args._stateIndex ?? 0n;
-            console.log(`[MaciContext] refreshSignUp: hit in window ${r.from}-${r.to}`);
-            return "hit";
-          }
-          return "empty";
-        } catch (err) {
-          console.warn(`[MaciContext] refreshSignUp: window ${r.from}-${r.to} attempt ${attempt + 1}/2 failed`, err);
-          await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
-        }
-      }
-      return "error";
-    };
-
-    const worker = async () => {
-      while (hitStateIndex === null && cursor < ranges.length) {
-        const r = ranges[cursor++];
-        const res = await scanWindow(r);
-        if (res === "error") anyError = true;
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, ranges.length) }, () => worker()),
-    );
-
-    if (hitStateIndex !== null) {
-      const stateIndex = hitStateIndex;
+    if (outcome.kind === "current" || outcome.kind === "legacy") {
+      const stateIndex = outcome.stateIndex;
+      const keypair = outcome.kind === "legacy" ? outcome.key.keypair : serializedKeypair;
+      const hash =
+        outcome.kind === "legacy"
+          ? (deserializeKeypair(keypair).pubKey.hash() as bigint)
+          : pubKeyHash;
       await persistKeypair({
-        ...serializedKeypair,
+        ...keypair,
         stateIndex: stateIndex.toString(),
-        pubKeyHash: pubKeyHash.toString(),
+        pubKeyHash: hash.toString(),
       });
-      lastCheckedHash.current = pubKeyHash;
-      const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
+      lastCheckedHash.current = hash;
+      const s: SignUpState = { status: "signed-up", pubKeyHash: hash, stateIndex };
       setSignUpState(s);
-      console.log("[MaciContext] refreshSignUp: signed-up", { stateIndex: stateIndex.toString() });
+      console.log(`[MaciContext] refreshSignUp: signed-up (${outcome.kind} key)`, {
+        stateIndex: stateIndex.toString(),
+      });
       return s;
     }
-
-    // No hit. Only trust "not registered" if every window scanned cleanly;
-    // otherwise stay `unknown` so the UI offers a retry.
-    if (anyError) {
-      console.warn(`[MaciContext] refreshSignUp: scan incomplete (window errors) across ${ranges.length} windows`);
+    if (outcome.kind === "unknown") {
+      console.warn(`[MaciContext] refreshSignUp: lookup incomplete (${outcome.reason})`);
       const s: SignUpState = { status: "unknown" };
       setSignUpState(s);
       return s;
     }
-    const s: SignUpState = { status: "needs-signup", pubKeyHash };
+    const s: SignUpState =
+      outcome.kind === "lost-key"
+        ? { status: "needs-signup", pubKeyHash, legacyKeyLost: true }
+        : { status: "needs-signup", pubKeyHash };
     setSignUpState(s);
-    console.log(`[MaciContext] refreshSignUp: no SignUp across ${ranges.length} windows → needs-signup`);
+    console.log(`[MaciContext] refreshSignUp: ${outcome.kind} → needs-signup`);
     return s;
-  }, [serializedKeypair, persistKeypair]);
+  }, [serializedKeypair, persistKeypair, account?.address, lookupSignUp, deriveLegacyKeyCandidates]);
 
   // Refresh signup whenever the keypair changes or wallet reconnects.
   useEffect(() => {

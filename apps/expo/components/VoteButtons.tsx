@@ -277,9 +277,17 @@ export default function VoteButtons({
   // actually reached `signed-up` (so the vote buttons are about to appear).
   // Otherwise tell the user to retry instead of a misleading success.
   const showSignUpResult = (
-    recovered: { status: string },
+    recovered: { status: string; legacyKeyLost?: boolean },
     alreadyRegistered = false,
   ) => {
+    if (recovered.status === 'needs-signup' && recovered.legacyKeyLost) {
+      setErrorDrawer({
+        visible: true,
+        message:
+          'Dein Abstimmungsschlüssel von der ersten Anmeldung ist auf diesem Gerät nicht mehr vorhanden. Bitte melde dich bei uns — wir helfen dir.',
+      });
+      return;
+    }
     if (recovered.status === 'signed-up') {
       setSuccessDrawer({
         visible: true,
@@ -334,6 +342,12 @@ export default function VoteButtons({
     }
     if (!gnosisAccount) {
       setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      return;
+    }
+    // Token already registered with a key that can't be recovered — a signUp
+    // tx would only revert AlreadyRegistered.
+    if (signUpState.status === 'needs-signup' && signUpState.legacyKeyLost) {
+      showSignUpResult(signUpState);
       return;
     }
     try {
@@ -419,7 +433,9 @@ export default function VoteButtons({
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
         setTxSubstate('recovering');
-        const recovered = await refreshSignUp();
+        // Also recovers the July (Base-signed) key if this device re-derived
+        // a different one (see MaciContext Layer 3).
+        const recovered = await refreshSignUp({ alreadyRegistered: true });
         showSignUpResult(recovered, /* alreadyRegistered */ true);
       } else {
         setErrorDrawer({
