@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useActiveAccount } from 'thirdweb/react';
@@ -18,15 +18,30 @@ import { isProposalActive, toBigInt, getStateMessage } from '@/lib/governance-ut
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
 import LastVoteCard from './LastVoteCard';
-import StoryProgress from './StoryProgress';
-import BirthdatePromptSheet from './rewards/BirthdatePromptSheet';
-import { loadCitizenPreimage, setCitizenBirthdate } from '@/lib/citizen-commitment';
+import VoteFlowSheet, { type VoteFlowError } from './VoteFlowSheet';
+import { loadCitizenPreimage } from '@/lib/citizen-commitment';
+import * as SecureStore from '@/lib/storage/secureStorage';
+import {
+  AGE_CONFIRMED_VALUE,
+  ageConfirmedKey,
+  applyAgeAnswer,
+  buildPlan,
+  canVoteDirectly,
+  currentStep,
+  isAgeConfirmed,
+  parsePendingChoice,
+  pendingChoiceKey,
+  serializePendingChoice,
+  stepPosition,
+  type AgeAnswer,
+  type VoteFlowState,
+  type VoteFlowStep,
+} from '@/lib/vote-flow';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useVerificationContext } from '@/context/VerificationContext';
-import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
 import { SUPPORT_ACCOUNT_ID } from '@/lib/support-contact';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { claimReward } from '@/lib/rewards-claim';
@@ -53,11 +68,22 @@ const VOTE_REWARD_SUBTITLE =
 const VOTE_PRIVACY_MESSAGE =
   'Versiegelt und eingeworfen. Deine Stimme ist ab jetzt für niemanden sichtbar — nicht für die Stadt, nicht für uns. Erst nach Ablauf der Frist öffnen mehrere Schlüsselhalter:innen die digitale Wahlurne gemeinsam. Bis dahin kannst du deine Wahl jederzeit ändern.';
 
+// Shown when the citizen's original (July) voting key cannot be recovered.
+const LOST_KEY_MESSAGE =
+  'Dein Abstimmungsschlüssel von der ersten Anmeldung ist auf diesem Gerät nicht mehr vorhanden. Bitte melde dich bei uns — wir helfen dir.';
+
+const VOTE_LABELS: Record<VoteType, string> = {
+  [VoteType.For]: 'Dafür',
+  [VoteType.Against]: 'Dagegen',
+  [VoteType.Abstain]: 'Enthalten',
+};
+
 interface VoteButtonsProps {
   proposalId: bigint;
   proposalState: ProposalState;
   hasVoted: boolean;
-  isCitizen: boolean;
+  /** null = the CitizenNFT check is still in flight. */
+  isCitizen: boolean | null;
   onVoteSuccess: () => void;
 }
 
@@ -107,15 +133,14 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 /**
  * MACI-aware vote buttons.
  *
- * UX principle: surface every state explicitly.
- *
- *   1. No wallet                  → "Connect to vote"
- *   2. Not a citizen              → "Bürger-Pass erforderlich"
- *   3. Voting closed              → "Abstimmung geschlossen"
- *   4. No MACI keypair yet        → "Schritt 1: privaten Schlüssel erstellen"
- *   5. Keypair OK, not signed up  → "Schritt 2: einmalige Anmeldung bei MACI"
- *   6. Signed up + active         → 3 buttons (Dafür / Dagegen / Enthalten)
- *      (re-voting allowed; we increment a per-poll nonce)
+ * While the poll is open the 3 options (Dafür / Dagegen / Enthalten) are
+ * ALWAYS visible — logged out, non-citizen, not signed up or signed up. A tap
+ * remembers the choice (state + SecureStore per poll) and, unless everything
+ * is already done, opens ONE multi-step sheet (VoteFlowSheet) that walks
+ * through only the missing prerequisites, in order:
+ *   login → citizenship → age (16+) → voting key → signup → cast the vote.
+ * Step logic: lib/vote-flow.ts. Re-voting until the deadline stays possible
+ * (per-poll nonce).
  *
  * Voting happens on the per-proposal Poll contract, NOT the Governor.
  * Governor.proposalPolls(proposalId) tells us where the Poll lives.
@@ -179,14 +204,23 @@ export default function VoteButtons({
     message: '',
     action: null as (() => void) | null,
   });
-  // Just-in-time birthdate gate. When a citizen votes without an on-device
-  // birthdate, we stash the chosen option here, open the sheet, and only run
-  // the actual vote once they've saved it (or cancel cleanly on close).
-  const [birthdateSheetVisible, setBirthdateSheetVisible] = useState(false);
-  const [savingBirthdate, setSavingBirthdate] = useState(false);
-  const [pendingVote, setPendingVote] = useState<VoteType | null>(null);
+  // ----- Vote flow sheet -----
+  // The remembered option (also persisted per poll, see pendingChoiceKey).
+  const [choice, setChoice] = useState<VoteType | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // Steps finished in this run of the sheet — keeps "Schritt x von y" stable.
+  const [completedSteps, setCompletedSteps] = useState<VoteFlowStep[]>([]);
+  // "Jünger als 16" answered in THIS run. Never persisted.
+  const [underAgeBlocked, setUnderAgeBlocked] = useState(false);
+  const [flowError, setFlowError] = useState<VoteFlowError | null>(null);
+  // null = still reading the age flag / legacy birthdate from the device.
+  const [ageConfirmed, setAgeConfirmed] = useState<boolean | null>(null);
+  const [refreshingSignUp, setRefreshingSignUp] = useState(false);
+  const signUpRefreshTried = useRef(false);
+  const requireAuth = useRequireAuth();
   // Passkey session without a key anywhere and without a dormant thirdweb session: show
-  // "Einmal mit Google/E-Mail bestätigen" inline; the key then comes from that login.
+  // "Einmal mit Google/E-Mail bestätigen" inline in the sheet's key step; the key then
+  // comes from that login.
   const [needsThirdweb, setNeedsThirdweb] = useState(false);
 
   // Resolve the per-proposal Poll address + deadline from the Governor.
@@ -269,7 +303,7 @@ export default function VoteButtons({
   // OZ Pending/Active flag — which lags by 1-2 seconds at proposal start.
   const isVotingOpen = !!pollAddress && pollDeadline !== null && nowSec <= pollDeadline;
   const isVotingClosed = !!pollAddress && pollDeadline !== null && nowSec > pollDeadline;
-  const canVote = !!account && isCitizen && isVotingOpen && signUpState.status === 'signed-up';
+  const canVote = !!account && isCitizen === true && isVotingOpen && signUpState.status === 'signed-up';
 
   // Ensure refreshSignUp is called when prerequisites change.
   useEffect(() => {
@@ -279,36 +313,198 @@ export default function VoteButtons({
     }
   }, [serializedKeypair, signUpState.status, refreshSignUp]);
 
-  // Decide what to show after a signup attempt resolves: celebrate only when we
-  // actually reached `signed-up` (so the vote buttons are about to appear).
-  // Otherwise tell the user to retry instead of a misleading success.
-  const showSignUpResult = (
-    recovered: { status: string; legacyKeyLost?: boolean },
-    alreadyRegistered = false,
-  ) => {
+  // Age confirmation: the new "16 oder älter" flag OR a legacy on-device
+  // birthdate (old date picker / verification form). Per account.
+  useEffect(() => {
+    const address = account?.address;
+    if (!address) {
+      setAgeConfirmed(null);
+      return;
+    }
+    let cancelled = false;
+    setAgeConfirmed(null);
+    (async () => {
+      let flag: string | null = null;
+      let birthdate: string | null = null;
+      try {
+        flag = await SecureStore.getItemAsync(ageConfirmedKey(address));
+      } catch (err) {
+        console.warn('[VoteButtons] age flag read failed:', err);
+      }
+      if (flag !== AGE_CONFIRMED_VALUE) {
+        try {
+          birthdate = (await loadCitizenPreimage(address))?.birthdate ?? null;
+        } catch (err) {
+          console.warn('[VoteButtons] birthdate read failed:', err);
+        }
+      }
+      if (!cancelled) setAgeConfirmed(isAgeConfirmed(flag, birthdate));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.address]);
+
+  // Restore a remembered choice for this poll (app restart mid-flow).
+  useEffect(() => {
+    if (!pollAddress) return;
+    let cancelled = false;
+    SecureStore.getItemAsync(pendingChoiceKey(pollAddress))
+      .then((raw) => {
+        if (cancelled) return;
+        const nowS = Math.floor(Date.now() / 1000);
+        const restored = parsePendingChoice(
+          raw,
+          pollAddress,
+          nowS,
+          pollDeadline !== null ? Number(pollDeadline) : undefined,
+        );
+        if (restored !== null) setChoice((prev) => (prev === null ? (restored as VoteType) : prev));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [pollAddress, pollDeadline]);
+
+  const flowState: VoteFlowState = {
+    loggedIn: !!account,
+    isCitizen: account ? isCitizen : null,
+    ageConfirmed: ageConfirmed === true,
+    loading: !!account && (keypairLoading || ageConfirmed === null || refreshingSignUp),
+    hasKey: !!serializedKeypair,
+    signedUp: signUpState.status === 'signed-up',
+  };
+  const flowStep = currentStep(flowState);
+  const flowPlan = buildPlan(completedSteps, flowState);
+  const flowPosition = stepPosition(flowPlan, flowStep);
+
+  const markStepDone = (step: VoteFlowStep) =>
+    setCompletedSteps((prev) => (prev.includes(step) ? prev : [...prev, step]));
+
+  // While the sheet is open, resolve a still-unknown signup once before
+  // offering the signup button (shows "Einen Moment…" meanwhile).
+  useEffect(() => {
+    if (!sheetOpen || !account || !serializedKeypair) return;
+    if (signUpState.status !== 'unknown' || signUpRefreshTried.current) return;
+    signUpRefreshTried.current = true;
+    setRefreshingSignUp(true);
+    refreshSignUp()
+      .catch(() => undefined)
+      .finally(() => setRefreshingSignUp(false));
+  }, [sheetOpen, account, serializedKeypair, signUpState.status, refreshSignUp]);
+
+  const persistChoice = (support: VoteType) => {
+    if (!pollAddress) return;
+    SecureStore.setItemAsync(
+      pendingChoiceKey(pollAddress),
+      serializePendingChoice(pollAddress, support, Math.floor(Date.now() / 1000)),
+    ).catch((err) => console.warn('[VoteButtons] persist choice failed:', err));
+  };
+
+  const clearPersistedChoice = (pollAddr: string) => {
+    SecureStore.deleteItemAsync(pendingChoiceKey(pollAddr)).catch(() => undefined);
+  };
+
+  const openFlow = () => {
+    setCompletedSteps([]);
+    setUnderAgeBlocked(false);
+    setFlowError(null);
+    signUpRefreshTried.current = false;
+    setSheetOpen(true);
+  };
+
+  const closeFlow = () => {
+    if (phase !== 'idle') return;
+    setSheetOpen(false);
+    setFlowError(null);
+  };
+
+  // Decide what to show after a signup attempt resolves: advance only when we
+  // actually reached `signed-up`. Otherwise tell the user (inside the sheet)
+  // to retry — or, for a lost July key, to contact support.
+  const showSignUpResult = (recovered: { status: string; legacyKeyLost?: boolean }) => {
     if (recovered.status === 'needs-signup' && recovered.legacyKeyLost) {
-      setErrorDrawer({
-        visible: true,
-        message:
-          'Dein Abstimmungsschlüssel von der ersten Anmeldung ist auf diesem Gerät nicht mehr vorhanden. Bitte melde dich bei uns — wir helfen dir.',
+      setFlowError({
+        lostKey: true,
+        message: LOST_KEY_MESSAGE,
       });
       return;
     }
     if (recovered.status === 'signed-up') {
-      setSuccessDrawer({
-        visible: true,
-        message: alreadyRegistered
-          ? 'Du bist bereits für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen.'
-          : 'Du bist für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen — und deine Stimme bis zum Ende der Frist beliebig oft ändern.',
-        action: null,
-      });
+      setFlowError(null);
+      markStepDone('signup');
     } else {
-      setErrorDrawer({
-        visible: true,
+      setFlowError({
         message:
           'Deine Anmeldung ließ sich gerade nicht bestätigen. Bitte versuche es in einem Moment erneut.',
       });
     }
+  };
+
+  // ----- Tap on an option: remember it, then vote directly or open the sheet -----
+  const handleOptionTap = (support: VoteType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (phase !== 'idle') return;
+    setChoice(support);
+    persistChoice(support);
+    if (canVoteDirectly(flowState) && canVote && gnosisAccount) {
+      castVote(support);
+      return;
+    }
+    openFlow();
+  };
+
+  // ----- Sheet step actions -----
+  const handleFlowLogin = () => {
+    markStepDone('login');
+    setSheetOpen(false);
+    // Let the sheet's Modal dismiss before the login drawer presents; the
+    // sheet reopens (same remembered choice) once the login lands.
+    setTimeout(() => requireAuth(() => setSheetOpen(true)), 350);
+  };
+
+  const handleFlowCitizen = () => {
+    setSheetOpen(false);
+    router.push(
+      (activePendingRequest ? '/verification/my-request' : '/verification/request-citizen') as any,
+    );
+  };
+
+  const handleFlowAge = async (answer: AgeAnswer) => {
+    const { persist, blocked } = applyAgeAnswer(answer);
+    if (blocked) {
+      // Not stored: the person can reopen the flow and answer again.
+      setUnderAgeBlocked(true);
+      return;
+    }
+    if (persist && account?.address) {
+      try {
+        await SecureStore.setItemAsync(ageConfirmedKey(account.address), AGE_CONFIRMED_VALUE);
+      } catch (err) {
+        // Keep going for this session even if the device store failed.
+        console.warn('[VoteButtons] persist age flag failed:', err);
+      }
+    }
+    setAgeConfirmed(true);
+    markStepDone('age');
+  };
+
+  const handleFlowHelp = () => {
+    setSheetOpen(false);
+    router.push(
+      (SUPPORT_ACCOUNT_ID ? `/messages/new?accountId=${SUPPORT_ACCOUNT_ID}` : '/help') as any,
+    );
+  };
+
+  const handleFlowVote = () => {
+    if (choice === null) return;
+    const support = choice;
+    setSheetOpen(false);
+    // Let the sheet dismiss before the vote celebration / privacy sheet.
+    setTimeout(() => {
+      castVote(support);
+    }, 350);
   };
 
   // ----- Step 1: generate keypair locally -----
@@ -319,25 +515,20 @@ export default function VoteButtons({
   const handleGenerateKey = async (thirdwebAccount?: Account) => {
     if (phase !== 'idle') return;
     try {
+      setFlowError(null);
       setPhase('creating-key');
       const kp = await generateAndStoreKeypair(thirdwebAccount ? { thirdwebAccount } : undefined);
       setNeedsThirdweb(false);
-      setSuccessDrawer({
-        visible: true,
-        message:
-          kp.stateIndex !== undefined
-            ? 'Dein Wahlschlüssel ist wiederhergestellt und du bist bereits für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen.'
-            : 'Dein Wahlschlüssel ist erstellt und sicher auf deinem Gerät gespeichert. Jetzt noch einmalig zur Bürgerumfrage anmelden — dann kannst du geheim abstimmen.',
-        action: null,
-      });
+      markStepDone('key');
+      // A recovered key that already has a SignUp skips the signup step.
+      if (kp.stateIndex !== undefined) markStepDone('signup');
     } catch (err) {
       if (err instanceof MaciThirdwebNeededError) {
         setNeedsThirdweb(true);
         return;
       }
       console.error('[VoteButtons] generate key failed:', err);
-      setErrorDrawer({
-        visible: true,
+      setFlowError({
         message: extractErrorMessage(err, 'Schlüssel konnte nicht erstellt werden.'),
       });
     } finally {
@@ -350,15 +541,15 @@ export default function VoteButtons({
   const handleSignUp = async () => {
     if (phase !== 'idle') return;
     if (!account) {
-      setErrorDrawer({ visible: true, message: 'Bitte verbinde zuerst dein Wallet.' });
+      setFlowError({ message: 'Bitte melde dich zuerst an.' });
       return;
     }
     if (!serializedKeypair) {
-      setErrorDrawer({ visible: true, message: 'Bitte erstelle zuerst deinen Abstimmungsschlüssel.' });
+      setFlowError({ message: 'Bitte erstelle zuerst deinen Abstimmungsschlüssel.' });
       return;
     }
     if (!gnosisAccount) {
-      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      setFlowError({ message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
       return;
     }
     // Token already registered with a key that can't be recovered — a signUp
@@ -368,6 +559,7 @@ export default function VoteButtons({
       return;
     }
     try {
+      setFlowError(null);
       setPhase('signing-up');
       setTxSubstate('wallet-prompt');
 
@@ -427,12 +619,7 @@ export default function VoteButtons({
         const kp = getKeypair();
         const pubKeyHash = kp ? (kp.pubKey.hash() as bigint) : 0n;
         await markSignedUp(pubKeyHash, stateIndex);
-        setSuccessDrawer({
-          visible: true,
-          message:
-            'Du bist für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen — und deine Stimme bis zum Ende der Frist beliebig oft ändern.',
-          action: null,
-        });
+        markStepDone('signup');
       } else {
         // Log couldn't be matched — recover the state index via the event scan
         // and only celebrate if we actually reached `signed-up`.
@@ -453,10 +640,9 @@ export default function VoteButtons({
         // Also recovers the July (Base-signed) key if this device re-derived
         // a different one (see MaciContext Layer 3).
         const recovered = await refreshSignUp({ alreadyRegistered: true });
-        showSignUpResult(recovered, /* alreadyRegistered */ true);
+        showSignUpResult(recovered);
       } else {
-        setErrorDrawer({
-          visible: true,
+        setFlowError({
           message: extractErrorMessage(
             err,
             'Anmeldung für die Bürgerumfrage ist fehlgeschlagen.',
@@ -470,68 +656,6 @@ export default function VoteButtons({
   };
 
   // ----- Step 3: cast (or change) vote -----
-  // Entry point for the 3 vote buttons. Gates on the on-device birthdate
-  // (part of the private citizen-commitment preimage) before the vote runs —
-  // a valid ballot needs it. If it's missing we stash the choice and open the
-  // birthdate sheet; `handleBirthdateSubmit` resumes the vote once saved.
-  const handleVote = async (support: VoteType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    if (!canVote || !account || !pollAddress || pollId === null) return;
-    if (signUpState.status !== 'signed-up') return;
-    if (!gnosisAccount) {
-      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
-      return;
-    }
-
-    try {
-      const pre = await loadCitizenPreimage(account.address);
-      if (!pre?.birthdate) {
-        setPendingVote(support);
-        setBirthdateSheetVisible(true);
-        return;
-      }
-    } catch (err) {
-      // If the secure-store read fails, fall through to the prompt rather than
-      // casting a ballot that might be invalid for lack of a birthdate.
-      console.warn('[VoteButtons] birthdate preflight read failed:', err);
-      setPendingVote(support);
-      setBirthdateSheetVisible(true);
-      return;
-    }
-
-    await castVote(support);
-  };
-
-  // Persist the birthdate on-device, then resume the stashed vote.
-  const handleBirthdateSubmit = async (isoDate: string) => {
-    if (!account) return;
-    const support = pendingVote;
-    try {
-      setSavingBirthdate(true);
-      await setCitizenBirthdate(account, isoDate);
-      setBirthdateSheetVisible(false);
-      setPendingVote(null);
-      if (support !== null) await castVote(support);
-    } catch (err) {
-      console.error('[VoteButtons] save birthdate failed:', err);
-      setBirthdateSheetVisible(false);
-      setPendingVote(null);
-      setErrorDrawer({
-        visible: true,
-        message: extractErrorMessage(err, 'Geburtsdatum konnte nicht gespeichert werden.'),
-      });
-    } finally {
-      setSavingBirthdate(false);
-    }
-  };
-
-  // Close = cancel the vote cleanly (no error, no ballot).
-  const handleBirthdateClose = () => {
-    if (savingBirthdate) return;
-    setBirthdateSheetVisible(false);
-    setPendingVote(null);
-  };
-
   const castVote = async (support: VoteType) => {
     if (!canVote || !account || !pollAddress || pollId === null) return;
     if (signUpState.status !== 'signed-up') return;
@@ -637,6 +761,10 @@ export default function VoteButtons({
         await claimReward(voterAddress, 'proposal_vote', proposalId.toString()).catch(() => {});
       };
 
+      // The ballot is committed — the remembered choice has done its job.
+      clearPersistedChoice(pollAddr);
+      setChoice(null);
+
       if (isChangingVote) {
         // A changed vote earns no reward — settle quietly, show the privacy sheet.
         enqueueSettlement({ label: 'Stimme', amount: 0, settle, ...(attempts ? { attempts } : {}) });
@@ -671,51 +799,6 @@ export default function VoteButtons({
   };
 
   // ============== Rendering ==============
-
-  if (!account) {
-    return (
-      <Container colors={colors}>
-        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          Verbinde dein Wallet, um abzustimmen.
-        </Text>
-      </Container>
-    );
-  }
-
-  if (!isCitizen) {
-    return (
-      <View style={styles.gateWrap}>
-        <Text style={[styles.gateIntro, { color: colors.textSecondary }]}>
-          Nur verifizierte Bürger:innen können bei Bürgerumfragen abstimmen.
-        </Text>
-
-        {/* Reuse the profile aspiring-citizen banner: "Jetzt beantragen" when no
-            request exists, "Status ansehen" while a request is pending. */}
-        <CitizenVerificationBanner pending={!!activePendingRequest} />
-
-        <Pressable
-          onPress={() =>
-            router.push(
-              (SUPPORT_ACCOUNT_ID
-                ? `/messages/new?accountId=${SUPPORT_ACCOUNT_ID}`
-                : '/help') as any,
-            )
-          }
-          style={({ pressed }) => [
-            styles.gateHelpButton,
-            { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Weitere Hilfe"
-        >
-          <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
-          <Text style={[styles.gateHelpButtonText, { color: colors.primary }]}>
-            Weitere Hilfe
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
 
   // Lookup in flight — brief loader while we resolve proposalPolls(id).
   if (pollLookupState === 'pending') {
@@ -792,92 +875,14 @@ export default function VoteButtons({
     );
   }
 
-  if (keypairLoading) {
-    return (
-      <Container colors={colors}>
-        <ActivityIndicator color={colors.textSecondary} />
-        <Text style={[styles.messageText, { color: colors.textSecondary, marginTop: 8 }]}>
-          Schlüssel wird geladen…
-        </Text>
-      </Container>
-    );
-  }
-
-  if (signUpState.status === 'needs-keypair') {
-    return (
-      <View style={styles.container}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Geheim abstimmen</Text>
-        <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
-          <StoryProgress step={1} totalSteps={2} />
-          <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Erstelle deinen persönlichen Wahlschlüssel. Er bleibt auf deinem Gerät
-            und versiegelt jede deiner Stimmen — wie ein Briefumschlag, den niemand
-            allein öffnen kann. Nicht die Stadt, nicht die App. Niemand.
-          </Text>
-        </View>
-        {needsThirdweb ? (
-          <View style={styles.thirdwebConfirm}>
-            <Text style={[styles.stepBody, { color: colors.textSecondary }]}>
-              Dein Wahlschlüssel entsteht aus deiner bisherigen Google-/E-Mail-Anmeldung. Bestätige
-              sie einmal – danach bleibst du mit deinem Passkey angemeldet.
-            </Text>
-            {phase === 'creating-key' ? (
-              <View style={[styles.primaryButton, styles.disabled]}>
-                <PrimaryButtonContent label="Schlüssel wird wiederhergestellt…" isLoading />
-              </View>
-            ) : (
-              <ThirdwebConfirm disabled={phase !== 'idle'} onConfirmed={(tw) => void handleGenerateKey(tw)} />
-            )}
-          </View>
-        ) : (
-          <Pressable
-            style={[styles.primaryButton, phase !== 'idle' && styles.disabled]}
-            onPress={() => void handleGenerateKey()}
-            disabled={phase !== 'idle'}
-          >
-            <PrimaryButtonContent
-              label={phase === 'creating-key' ? 'Schlüssel wird erstellt…' : 'Schlüssel erstellen'}
-              isLoading={phase === 'creating-key'}
-            />
-          </Pressable>
-        )}
-        {renderDrawers()}
-      </View>
-    );
-  }
-
-  if (signUpState.status === 'needs-signup' || signUpState.status === 'unknown') {
-    return (
-      <View style={styles.container}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Geheim abstimmen</Text>
-        <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
-          <StoryProgress step={2} totalSteps={2} />
-          <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Melde dich einmalig zur Bürgerumfrage an. Danach gilt: ein Mensch,
-            eine Stimme — egal wie viele Geräte du nutzt. Keine Bots, keine
-            Doppelten, keine gekauften Meinungen.
-          </Text>
-        </View>
-        <Pressable
-          style={[styles.primaryButton, phase !== 'idle' && styles.disabled]}
-          onPress={handleSignUp}
-          disabled={phase !== 'idle'}
-        >
-          <PrimaryButtonContent
-            label={getSignUpButtonLabel(phase, txSubstate)}
-            isLoading={phase === 'signing-up'}
-          />
-        </Pressable>
-        {renderDrawers()}
-      </View>
-    );
-  }
-
-  // signed-up & active: full vote UI
-  const lastVote = pollAddress ? getLastVote(pollAddress) : null;
+  // Open poll: the 3 options are ALWAYS visible (logged out, non-citizen,
+  // not signed up, signed up). Prerequisites run in VoteFlowSheet.
+  // The vote cache is device-local — only show it for a logged-in session.
+  const lastVote = account && pollAddress ? getLastVote(pollAddress) : null;
   // Show the 3-button row when the user has no recorded vote OR they tapped
   // "Stimme ändern". Otherwise show the LastVoteCard alone.
   const showButtons = !lastVote || changing;
+  const choiceLabel = choice !== null ? VOTE_LABELS[choice] : '';
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: colors.textPrimary }]}>Abstimmen</Text>
@@ -888,7 +893,6 @@ export default function VoteButtons({
           onChangeVote={() => setChanging(true)}
         />
       ) : null}
-      {!showButtons ? renderDrawers() : null}
       {showButtons ? (
       <>
       <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary }]}>
@@ -903,11 +907,14 @@ export default function VoteButtons({
           style={({ pressed }) => [
             styles.voteButton,
             styles.voteButtonFor,
+            choice === VoteType.For && [styles.selected, { borderColor: colors.textPrimary }],
             phase !== 'idle' && styles.disabled,
             pressed && styles.pressed,
           ]}
-          onPress={() => handleVote(VoteType.For)}
+          onPress={() => handleOptionTap(VoteType.For)}
           disabled={phase !== 'idle'}
+          accessibilityRole="button"
+          accessibilityState={{ selected: choice === VoteType.For }}
         >
           <VoteButtonContent
             label={getVoteButtonLabel('Dafür', VoteType.For, phase, txSubstate, votingFor)}
@@ -920,11 +927,14 @@ export default function VoteButtons({
           style={({ pressed }) => [
             styles.voteButton,
             styles.voteButtonAgainst,
+            choice === VoteType.Against && [styles.selected, { borderColor: colors.textPrimary }],
             phase !== 'idle' && styles.disabled,
             pressed && styles.pressed,
           ]}
-          onPress={() => handleVote(VoteType.Against)}
+          onPress={() => handleOptionTap(VoteType.Against)}
           disabled={phase !== 'idle'}
+          accessibilityRole="button"
+          accessibilityState={{ selected: choice === VoteType.Against }}
         >
           <VoteButtonContent
             label={getVoteButtonLabel('Dagegen', VoteType.Against, phase, txSubstate, votingFor)}
@@ -937,11 +947,14 @@ export default function VoteButtons({
           style={({ pressed }) => [
             styles.voteButton,
             { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.disabled },
+            choice === VoteType.Abstain && [styles.selected, { borderColor: colors.textPrimary }],
             phase !== 'idle' && styles.disabled,
             pressed && styles.pressed,
           ]}
-          onPress={() => handleVote(VoteType.Abstain)}
+          onPress={() => handleOptionTap(VoteType.Abstain)}
           disabled={phase !== 'idle'}
+          accessibilityRole="button"
+          accessibilityState={{ selected: choice === VoteType.Abstain }}
         >
           <VoteButtonContent
             label={getVoteButtonLabel('Enthalten', VoteType.Abstain, phase, txSubstate, votingFor)}
@@ -951,9 +964,14 @@ export default function VoteButtons({
           />
         </Pressable>
       </View>
-      {renderDrawers()}
+      {choice !== null && !sheetOpen && phase === 'idle' ? (
+        <Text style={[styles.statusLine, { color: colors.textSecondary }]}>
+          {`Deine Auswahl: ${choiceLabel}. Tippe darauf, um fortzufahren.`}
+        </Text>
+      ) : null}
       </>
       ) : null}
+      {renderDrawers()}
     </View>
   );
 
@@ -978,12 +996,61 @@ export default function VoteButtons({
             if (successDrawer.action) successDrawer.action();
           }}
         />
-        <BirthdatePromptSheet
-          visible={birthdateSheetVisible}
-          onClose={handleBirthdateClose}
-          onSubmit={handleBirthdateSubmit}
-          saving={savingBirthdate}
-        />
+        <VoteFlowSheet
+          visible={sheetOpen}
+          onClose={closeFlow}
+          step={flowStep}
+          position={flowPosition}
+          choiceLabel={choiceLabel}
+          underAgeBlocked={underAgeBlocked}
+          citizenPending={!!activePendingRequest}
+          busy={phase !== 'idle'}
+          busyLabel={
+            phase === 'creating-key'
+              ? 'Schlüssel wird erstellt…'
+              : phase === 'signing-up'
+                ? getSignUpButtonLabel(phase, txSubstate)
+                : undefined
+          }
+          error={
+            flowError ??
+            (flowStep === 'signup' &&
+            signUpState.status === 'needs-signup' &&
+            signUpState.legacyKeyLost
+              ? { lostKey: true, message: LOST_KEY_MESSAGE }
+              : null)
+          }
+          onLogin={handleFlowLogin}
+          onCitizen={handleFlowCitizen}
+          onAge={handleFlowAge}
+          onGenerateKey={() => void handleGenerateKey()}
+          onSignUp={handleSignUp}
+          onVote={handleFlowVote}
+          onHelp={handleFlowHelp}
+          hidePrimary={flowStep === 'key' && needsThirdweb}
+        >
+          {flowStep === 'key' && needsThirdweb ? (
+            <View style={styles.thirdwebConfirm}>
+              <Text style={[styles.stepBody, { color: colors.textSecondary, textAlign: 'center' }]}>
+                Dein Wahlschlüssel entsteht aus deiner bisherigen Google-/E-Mail-Anmeldung. Bestätige
+                sie einmal – danach bleibst du mit deinem Passkey angemeldet.
+              </Text>
+              {phase === 'creating-key' ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color={colors.textSecondary} />
+                  <Text style={[styles.stepBody, { color: colors.textSecondary }]}>
+                    Schlüssel wird wiederhergestellt…
+                  </Text>
+                </View>
+              ) : (
+                <ThirdwebConfirm
+                  disabled={phase !== 'idle'}
+                  onConfirmed={(tw) => void handleGenerateKey(tw)}
+                />
+              )}
+            </View>
+          ) : null}
+        </VoteFlowSheet>
       </>
     );
   }
@@ -1041,26 +1108,6 @@ function getVoteButtonLabel(
     return 'Abstimmen läuft…';
   }
   return idleLabel;
-}
-
-function PrimaryButtonContent({
-  label,
-  isLoading,
-}: {
-  label: string;
-  isLoading: boolean;
-}) {
-  if (!isLoading) {
-    return <Text style={styles.primaryButtonText}>{label}</Text>;
-  }
-  return (
-    <View style={styles.loadingRow}>
-      <ActivityIndicator color="#ffffff" />
-      <Text style={[styles.primaryButtonText, styles.loadingLabel]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
 }
 
 function VoteButtonContent({
@@ -1156,6 +1203,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  selected: {
+    borderWidth: 3,
   },
   voteButtonText: {
     fontSize: 16,

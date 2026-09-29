@@ -49,7 +49,6 @@ import HomeStoryBar from './HomeStoryBar';
 import ForumCategoryChips from '../forum/ForumCategoryChips';
 import BuergerratTrackerCard from '../forum/BuergerratTrackerCard';
 import { HeaderWeather } from './HeaderWeather';
-import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useFeedTabSeen } from '@/hooks/useFeedTabSeen';
@@ -320,19 +319,12 @@ export default function FeedHome() {
     [walletAddress, isOwnerOf],
   );
 
-  // Onboarding "Bürger:in" gate for the pinned proposal hero card. Distinct
-  // from isCitizen (NFT-verified) — driven by the role picked in onboarding.
-  const isBuerger = user?.preferred_role === 'buerger';
-  const { isBusinessOwner } = useIsBusinessOwner();
-
-  // Audience gates. `canSeeProposals` shows the proposal hero card to
-  // self-selected Bürger AND shop/business owners even before they hold the
-  // Citizen NFT. `canAccessCityTabs` additionally unlocks the 'Umfragen' and
-  // 'App' tabs for verified citizens and business owners. Voting itself stays
-  // gated on the real `isCitizen` NFT (see VoteButtons) — a non-verified viewer
-  // gets the "verify to vote" state with a verification CTA.
-  const canSeeProposals = isBuerger || isBusinessOwner;
-  const canAccessCityTabs = isCitizen || isBusinessOwner;
+  // Audience: the tabs (Umfragen / App) and the pinned open Bürgerumfrage
+  // hero are shown to EVERYONE — logged out, non-citizen, citizen. It is all
+  // read-only data; voting itself goes through VoteButtons' step sheet
+  // (login → citizenship → age → key → signup → vote).
+  const canSeeProposals = true;
+  const canAccessCityTabs = true;
 
   // "New content" dots on the Stadt/App tabs. Each FeedList reports its newest
   // item timestamp; we compare against the persisted last-seen time.
