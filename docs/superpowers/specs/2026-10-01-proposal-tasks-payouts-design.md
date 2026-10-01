@@ -46,8 +46,8 @@ The broader program has four parts:
 - Proposal #3 shows a stage stepper, its task(s), its Wahlhelfer, and a contract with every line and proof.
 - All current Attesters receive the push + profile card when voting on #3 ends, can co-sign, and receive
   Münzen within a minute of signing.
-- A citizen can apply, get assigned, report progress, submit, be approved and get paid without anyone
-  touching SQL.
+- Any app user can apply, get assigned, report progress, submit, be approved and get paid without anyone
+  touching SQL (the only manual step is the Safe owners signing the queued payout).
 - No payout line can ever be sent twice.
 
 ## 2. Approach
