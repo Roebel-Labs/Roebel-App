@@ -1,4 +1,4 @@
-import { formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone } from '../vorhaben-labels';
+import { formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone, contractPurpose } from '../vorhaben-labels';
 
 describe('vorhaben labels', () => {
   test('amounts in German format, Münzen never as euro', () => {
@@ -56,5 +56,16 @@ describe('task board helpers', () => {
     expect(taskTone('eingereicht')).toBe('warning');
     expect(taskTone('ausgezahlt')).toBe('success');
     expect(taskTone('abgebrochen')).toBe('error');
+  });
+});
+
+describe('contractPurpose', () => {
+  const titles = new Map([['t1', 'Banner aufhängen']]);
+  test('describes what each line is for', () => {
+    expect(contractPurpose({ role: 'aufgabe', referenceId: 't1' }, titles, 'Verein X')).toBe('Banner aufhängen');
+    expect(contractPurpose({ role: 'aufgabe', referenceId: 'zz' }, titles, 'Verein X')).toBe('Aufgabe');
+    expect(contractPurpose({ role: 'wahlhelfer', referenceId: 'w' }, titles, 'Verein X')).toBe('Bestätigung der Auszählung');
+    expect(contractPurpose({ role: 'empfaenger', referenceId: 'p' }, titles, 'Verein X')).toBe('Verein X');
+    expect(contractPurpose({ role: 'plattform', referenceId: 'p' }, titles, 'Verein X')).toBe('Plattformanteil');
   });
 });

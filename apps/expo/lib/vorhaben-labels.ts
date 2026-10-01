@@ -77,3 +77,17 @@ export function taskTone(status: TaskStatus): ChipTone {
 }
 
 export const FINAL_TASK_STATUSES: TaskStatus[] = ['abgenommen', 'ausgezahlt', 'abgebrochen'];
+
+/** Subtitle for a contract line: what the money is for. */
+export function contractPurpose(
+  line: { role: keyof typeof ROLE_LABELS; referenceId: string },
+  taskTitles: Map<string, string>,
+  beneficiary: string,
+): string {
+  switch (line.role) {
+    case 'aufgabe': return taskTitles.get(line.referenceId) || 'Aufgabe';
+    case 'wahlhelfer': return 'Bestätigung der Auszählung';
+    case 'empfaenger': return beneficiary || 'Empfänger';
+    case 'plattform': return 'Plattformanteil';
+  }
+}

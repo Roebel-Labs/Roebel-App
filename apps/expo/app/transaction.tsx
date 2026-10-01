@@ -25,8 +25,9 @@ export default function TransactionScreen() {
   const isIn = direction === 'in';
   const title = first(params.title) || (isIn ? 'Erhalten' : 'Gesendet');
   const amountText = first(params.amountText);
-  const currency = first(params.currency) === 'eur' ? 'eur' : 'muenzen';
-  const currencyLabel = currency === 'eur' ? 'EURO' : 'Röbel Münzen';
+  const currencyParam = first(params.currency);
+  const currencyLabel = currencyParam === 'eur' ? 'EURO' : currencyParam === 'xdai' ? 'xDAI' : 'Röbel Münzen';
+  const context = first(params.context);
   const tsRaw = Number(first(params.timestamp));
   const timestamp = Number.isFinite(tsRaw) && tsRaw > 0 ? tsRaw : 0;
   const txHash = first(params.txHash);
@@ -80,6 +81,12 @@ export default function TransactionScreen() {
           <Text style={styles.currencyCaption}>{currencyLabel}</Text>
         </View>
 
+        {context ? (
+          <View style={[styles.contextBanner, { backgroundColor: colors.infoBackground }]}>
+            <Text style={[styles.contextText, { color: colors.info }]}>{context}</Text>
+          </View>
+        ) : null}
+
         {/* Info card */}
         <View style={styles.card}>
           {rows.map((r, i) => (
@@ -127,6 +134,8 @@ function makeStyles(colors: any, isDark: boolean) {
     badge: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
     amount: { fontFamily: 'Inter-Bold', fontSize: 36, letterSpacing: -0.5 },
     currencyCaption: { fontFamily: 'Inter-Medium', fontSize: 14, color: colors.textSecondary },
+    contextBanner: { marginTop: 12, marginBottom: 12, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+    contextText: { fontFamily: 'Inter-Medium', fontSize: 14 },
     card: {
       backgroundColor: colors.card,
       borderRadius: 16,

@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 import {
   getApiBaseUrl, postSigned, signQueued, VORHABEN_SCOPE, type ApiResult, type SigningAccount, type VorhabenAction,
 } from './signed-request';
-import type { Asset, Stage, TaskStatus } from './vorhaben-labels';
+import { contractPurpose, type Asset, type LineStatus, type Stage, type TaskStatus } from './vorhaben-labels';
 
 export interface TallyDuty { proposalUuid: string; proposalKey: string; proposalNumber: number; title: string; until: string }
 export interface TallyView {
@@ -244,4 +244,57 @@ export function vorhabenAction(
   account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>,
 ): Promise<ApiResult<{ status?: string; id?: string }>> {
   return postSigned<{ status?: string; id?: string }>('/api/vorhaben/tasks', account, action, payload, VORHABEN_SCOPE);
+}
+
+// ---- Contract ("Vertrag") ----------------------------------------------------------------------
+
+export type LineRole = 'empfaenger' | 'aufgabe' | 'wahlhelfer' | 'plattform';
+export interface ContractLine {
+  id: string; role: LineRole; recipientName: string; recipientWallet: string | null; amount: string; asset: Asset;
+  status: LineStatus; txHash: string | null; referenceType: string; referenceId: string; createdAt: string;
+  rail: string; purpose: string;
+}
+export interface ContractView {
+  proposalKey: string; proposalNumber: number; title: string; stage: Stage; feeBps: number;
+  lines: ContractLine[]; totals: { asset: Asset; amount: number }[];
+}
+
+/** Public payout contract of a proposal; null when the proposal does not exist. Throws on a read failure. */
+export async function fetchContract(proposalKey: string): Promise<ContractView | null> {
+  const p = await timed((signal) => supabase.from('proposals')
+    .select('id, proposal_id, proposal_number, title, lifecycle_stage, beneficiary_name')
+    .eq('proposal_id', proposalKey).abortSignal(signal).maybeSingle());
+  if (p.error) throw new Error(p.error.message);
+  const proposal = p.data as any;
+  if (!proposal) return null;
+  const [l, c, t] = await timed((signal) => Promise.all([
+    supabase.from('proposal_payout_lines')
+      .select('id, role, recipient_wallet, recipient_label, amount, asset, rail, reference_type, reference_id, status, tx_hash, created_at')
+      .eq('proposal_id', proposal.id).order('created_at', { ascending: true }).abortSignal(signal),
+    supabase.from('proposal_contracts').select('platform_fee_bps').eq('proposal_id', proposal.id).abortSignal(signal).maybeSingle(),
+    supabase.from('proposal_tasks').select('id, title').eq('proposal_id', proposal.id).abortSignal(signal),
+  ]));
+  if (l.error) throw new Error(l.error.message);
+  const rows = (l.data ?? []) as any[];
+  const taskTitles = new Map<string, string>(((t.data ?? []) as { id: string; title: string }[]).map((r) => [r.id, r.title]));
+  const names = await displayNames(rows.filter((r) => r.role !== 'plattform' && r.role !== 'empfaenger').map((r) => r.recipient_wallet ?? ''));
+  const beneficiary: string = proposal.beneficiary_name ?? '';
+  const lines: ContractLine[] = rows.map((r) => {
+    const wallet: string | null = r.recipient_wallet ?? null;
+    const recipientName = r.role === 'plattform' ? 'Plattform (Röbel App)'
+      : r.role === 'empfaenger' ? (r.recipient_label || beneficiary || 'Unbekannt')
+      : (wallet && names.get(wallet.toLowerCase()) !== 'Unbekannt' ? names.get(wallet.toLowerCase()) : null) || r.recipient_label || 'Unbekannt';
+    return {
+      id: r.id, role: r.role, recipientName, recipientWallet: wallet, amount: String(r.amount), asset: r.asset, status: r.status,
+      txHash: r.tx_hash ?? null, referenceType: r.reference_type ?? '', referenceId: r.reference_id ?? '', createdAt: r.created_at ?? '',
+      rail: r.rail ?? '', purpose: contractPurpose(r, taskTitles, beneficiary),
+    };
+  });
+  const sums = new Map<Asset, number>();
+  for (const x of lines) sums.set(x.asset, (sums.get(x.asset) ?? 0) + Number(x.amount));
+  return {
+    proposalKey: proposal.proposal_id, proposalNumber: proposal.proposal_number, title: proposal.title ?? '', stage: proposal.lifecycle_stage,
+    feeBps: Number((c.data as any)?.platform_fee_bps ?? 500), lines,
+    totals: [...sums.entries()].map(([asset, amount]) => ({ asset, amount })),
+  };
 }
