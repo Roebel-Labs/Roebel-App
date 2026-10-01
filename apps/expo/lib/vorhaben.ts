@@ -1,8 +1,10 @@
 // Proposal lifecycle data for the app. Reads go straight to Supabase (public tables);
 // writes go to the web API (apps/web/src/app/api/vorhaben/*).
 import { supabase } from './supabase';
-import { getApiBaseUrl, signQueued, type ApiResult, type SigningAccount } from './signed-request';
-import type { Asset } from './vorhaben-labels';
+import {
+  getApiBaseUrl, postSigned, signQueued, VORHABEN_SCOPE, type ApiResult, type SigningAccount, type VorhabenAction,
+} from './signed-request';
+import type { Asset, Stage, TaskStatus } from './vorhaben-labels';
 
 export interface TallyDuty { proposalUuid: string; proposalKey: string; proposalNumber: number; title: string; until: string }
 export interface TallyView {
@@ -68,4 +70,146 @@ export async function submitTally(account: SigningAccount, proposalUuid: string,
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ---- Tasks ("Aufgaben") ------------------------------------------------------------------------
+
+export interface TaskRow {
+  id: string; proposal_id: string; title: string; description: string;
+  acceptance_criteria: { id: string; text: string }[]; reward_amount: string; reward_asset: 'EURe' | 'EURC';
+  deadline: string | null; status: TaskStatus; assignee_wallet: string | null; created_by_wallet: string; updated_at: string;
+}
+export interface ApplicationRow { id: string; applicant_wallet: string; note: string; status: string; created_at: string }
+export type TaskAttachment = { type: 'image' | 'pdf' | 'tx'; url?: string; hash?: string };
+export interface ActivityRow {
+  id: string; actor_wallet: string; kind: string; body: string | null;
+  attachments: TaskAttachment[]; from_status: string | null; to_status: string | null; created_at: string;
+}
+export interface VorhabenOverview {
+  proposalUuid: string; stage: Stage; tasks: TaskRow[];
+  wahlhelfer: { wallet: string; confirmed: boolean }[]; lineCount: number; totals: { asset: Asset; amount: number }[];
+}
+export interface TaskProposal { key: string; number: number; title: string; proposer: string; stage: Stage }
+export interface TaskDetail { task: TaskRow; proposal: TaskProposal; applications: ApplicationRow[]; activity: ActivityRow[] }
+export interface BoardGroup { proposal: { key: string; number: number; title: string; stage: Stage }; tasks: TaskRow[] }
+
+const TASK_COLS = 'id, proposal_id, title, description, acceptance_criteria, reward_amount, reward_asset, deadline, status, assignee_wallet, created_by_wallet, updated_at';
+// proposal_tasks has a single FK to proposals; pinned anyway so a later 2nd FK cannot break the embed (PGRST201).
+const PROPOSAL_EMBED = 'proposals!proposal_tasks_proposal_id_fkey';
+
+function toTask(r: any): TaskRow {
+  const criteria = Array.isArray(r.acceptance_criteria) ? r.acceptance_criteria : [];
+  return {
+    id: r.id, proposal_id: r.proposal_id, title: r.title ?? '', description: r.description ?? '',
+    acceptance_criteria: criteria
+      .filter((c: any) => c && typeof c.text === 'string')
+      .map((c: any, i: number) => ({ id: String(c.id ?? `k${i + 1}`), text: c.text })),
+    reward_amount: String(r.reward_amount ?? '0'), reward_asset: r.reward_asset === 'EURC' ? 'EURC' : 'EURe',
+    deadline: r.deadline ?? null, status: r.status, assignee_wallet: r.assignee_wallet ?? null,
+    created_by_wallet: r.created_by_wallet ?? '', updated_at: r.updated_at ?? '',
+  };
+}
+
+/** null when the proposal does not exist, has no Vorhaben, or the read fails. */
+export async function fetchVorhabenOverview(proposalKey: string): Promise<VorhabenOverview | null> {
+  const p = await supabase.from('proposals').select('id, lifecycle_stage, vorhaben_enabled').eq('proposal_id', proposalKey).maybeSingle();
+  const proposal = p.data as { id: string; lifecycle_stage: Stage; vorhaben_enabled: boolean } | null;
+  if (p.error || !proposal || !proposal.vorhaben_enabled) return null;
+  const [t, w, l] = await Promise.all([
+    supabase.from('proposal_tasks').select(TASK_COLS).eq('proposal_id', proposal.id).order('created_at', { ascending: true }),
+    supabase.from('proposal_wahlhelfer').select('attester_wallet, confirmed_at').eq('proposal_id', proposal.id),
+    supabase.from('proposal_payout_lines').select('amount, asset').eq('proposal_id', proposal.id),
+  ]);
+  if (t.error) return null;
+  const sums = new Map<Asset, number>();
+  for (const line of (l.data ?? []) as { amount: string | number; asset: Asset }[]) {
+    sums.set(line.asset, (sums.get(line.asset) ?? 0) + Number(line.amount));
+  }
+  return {
+    proposalUuid: proposal.id,
+    stage: proposal.lifecycle_stage,
+    tasks: ((t.data ?? []) as any[]).map(toTask),
+    wahlhelfer: ((w.data ?? []) as { attester_wallet: string; confirmed_at: string | null }[])
+      .map((r) => ({ wallet: r.attester_wallet, confirmed: !!r.confirmed_at })),
+    lineCount: (l.data ?? []).length,
+    totals: [...sums.entries()].map(([asset, amount]) => ({ asset, amount })),
+  };
+}
+
+export async function fetchTaskDetail(taskId: string): Promise<TaskDetail | null> {
+  const t = await supabase.from('proposal_tasks')
+    .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_id, proposal_number, title, proposer_address, lifecycle_stage)`)
+    .eq('id', taskId).maybeSingle();
+  if (t.error) throw new Error(t.error.message);
+  const row = t.data as any;
+  if (!row || !row.proposals) return null;
+  const [a, act] = await Promise.all([
+    supabase.from('task_applications').select('id, applicant_wallet, note, status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }),
+    supabase.from('task_activity').select('id, actor_wallet, kind, body, attachments, from_status, to_status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }),
+  ]);
+  if (a.error) throw new Error(a.error.message);
+  if (act.error) throw new Error(act.error.message);
+  const p = row.proposals;
+  return {
+    task: toTask(row),
+    proposal: { key: p.proposal_id, number: p.proposal_number, title: p.title ?? '', proposer: (p.proposer_address ?? '').toLowerCase(), stage: p.lifecycle_stage },
+    applications: (a.data ?? []) as ApplicationRow[],
+    activity: ((act.data ?? []) as any[]).map((r) => ({ ...r, attachments: Array.isArray(r.attachments) ? r.attachments : [] })),
+  };
+}
+
+/** Tasks assigned to `wallet` that still need something (not paid out, not cancelled). */
+export async function fetchMyTasks(wallet: string): Promise<(TaskRow & { proposalNumber: number })[]> {
+  const { data, error } = await supabase.from('proposal_tasks')
+    .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_number)`)
+    .eq('assignee_wallet', wallet.toLowerCase())
+    .not('status', 'in', '(ausgezahlt,abgebrochen)')
+    .order('updated_at', { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map((r) => ({ ...toTask(r), proposalNumber: r.proposals?.proposal_number ?? 0 }));
+}
+
+/** Every task, grouped by proposal (newest proposal first). Throws on a read failure. */
+export async function fetchBoard(): Promise<BoardGroup[]> {
+  const { data, error } = await supabase.from('proposal_tasks')
+    .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_id, proposal_number, title, lifecycle_stage)`)
+    .order('created_at', { ascending: true })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  const groups = new Map<string, BoardGroup>();
+  for (const r of (data ?? []) as any[]) {
+    const p = r.proposals;
+    if (!p) continue;
+    const g: BoardGroup = groups.get(r.proposal_id) ?? {
+      proposal: { key: p.proposal_id, number: p.proposal_number, title: p.title ?? '', stage: p.lifecycle_stage }, tasks: [],
+    };
+    g.tasks.push(toTask(r));
+    groups.set(r.proposal_id, g);
+  }
+  return [...groups.values()].sort((a, b) => b.proposal.number - a.proposal.number);
+}
+
+/** wallet (lowercase) → display name; "Unbekannt" when there is none. Never returns an address. */
+export async function displayNames(wallets: string[]): Promise<Map<string, string>> {
+  const uniq = [...new Set(wallets.filter(Boolean).map((w) => w.toLowerCase()))];
+  const out = new Map(uniq.map((w) => [w, 'Unbekannt']));
+  const valid = uniq.filter((w) => /^0x[0-9a-f]{40}$/.test(w));
+  // users.wallet_address is not guaranteed lowercase (a few checksummed rows), so match case-insensitively.
+  for (let i = 0; i < valid.length; i += 50) {
+    const chunk = valid.slice(i, i + 50);
+    const { data, error } = await supabase.from('users').select('wallet_address, display_name, username')
+      .or(chunk.map((w) => `wallet_address.ilike.${w}`).join(','));
+    if (error) continue;
+    for (const u of (data ?? []) as { wallet_address: string; display_name: string | null; username: string | null }[]) {
+      const name = u.display_name || u.username;
+      if (name) out.set(u.wallet_address.toLowerCase(), name);
+    }
+  }
+  return out;
+}
+
+export function vorhabenAction(
+  account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>,
+): Promise<ApiResult<{ status?: string; id?: string }>> {
+  return postSigned<{ status?: string; id?: string }>('/api/vorhaben/tasks', account, action, payload, VORHABEN_SCOPE);
 }

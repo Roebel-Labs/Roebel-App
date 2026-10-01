@@ -94,14 +94,16 @@ export async function uploadForumFileFromBase64(
   mimeType: string,
   fileName: string,
   sizeBytes: number | null,
+  bucket: string = FORUM_ATTACHMENTS_BUCKET,
+  folder: string = 'files',
 ): Promise<PendingAttachment | null> {
   try {
     const mime = mimeType.toLowerCase();
     if (!isAllowedAttachmentMime(mime)) return null;
     const bytes = decode(base64);
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_BYTES) return null;
-    const path = `files/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(fileName, mime)}`;
-    const { error } = await supabase.storage.from(FORUM_ATTACHMENTS_BUCKET).upload(path, bytes, {
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(fileName, mime)}`;
+    const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
       contentType: mime,
       cacheControl: '31536000',
       upsert: false,
@@ -110,7 +112,7 @@ export async function uploadForumFileFromBase64(
       console.error('[forum-attachments] upload error', error);
       return null;
     }
-    const { data } = supabase.storage.from(FORUM_ATTACHMENTS_BUCKET).getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return {
       kind: kindForMime(mime),
       url: data.publicUrl,

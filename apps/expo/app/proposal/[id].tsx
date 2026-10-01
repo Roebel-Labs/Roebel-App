@@ -22,6 +22,7 @@ import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
+import VorhabenSection from '@/components/vorhaben/VorhabenSection';
 import { watchTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
@@ -278,6 +279,13 @@ export default function ProposalDetailScreen() {
             createdAt={proposal.createdAt}
           />
         </InlineErrorBoundary>
+
+        {/* Lifecycle after the vote: tasks, Wahlhelfer, contract. Renders nothing without a Vorhaben. */}
+        {proposalId && (
+          <InlineErrorBoundary label="VorhabenSection">
+            <VorhabenSection proposalKey={proposalId} proposerWallet={proposal.proposer} />
+          </InlineErrorBoundary>
+        )}
 
         {/* Discussion */}
         {proposalId && (

@@ -38,6 +38,7 @@ import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supaba
 import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
+import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 
@@ -190,6 +191,7 @@ export default function ProfileScreen() {
                   />
                   <ProfileCompletionCard user={user} />
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
+                  <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (
                     <View style={styles.bannerWrap}>
                       <CitizenVerificationBanner pending={!!activePendingRequest} />

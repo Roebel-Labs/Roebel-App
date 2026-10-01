@@ -48,3 +48,32 @@ export function timeLeft(untilIso: string, nowMs: number): string {
   const hours = Math.max(1, Math.floor(ms / 3_600_000));
   return hours === 1 ? 'noch 1 Stunde' : `noch ${hours} Stunden`;
 }
+
+export type BoardTab = 'offen' | 'in_arbeit' | 'erledigt';
+export function boardTabFor(status: TaskStatus): BoardTab {
+  if (status === 'offen') return 'offen';
+  if (status === 'ausgezahlt' || status === 'abgebrochen') return 'erledigt';
+  return 'in_arbeit';
+}
+
+export function progressOf(statuses: TaskStatus[]): { done: number; total: number } {
+  return { done: statuses.filter((s) => s === 'ausgezahlt' || s === 'abgebrochen').length, total: statuses.length };
+}
+
+/** "5,50" → "5.50"; null when not a positive amount with at most 2 decimals (server max 9.999.999,99). */
+export function parseEuroInput(raw: string): string | null {
+  const s = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (!/^\d{1,7}(\.\d{1,2})?$/.test(s) || Number(s) <= 0) return null;
+  return s;
+}
+
+export type ChipTone = 'neutral' | 'info' | 'warning' | 'success' | 'error';
+const TASK_TONES: Record<TaskStatus, ChipTone> = {
+  offen: 'info', vergeben: 'neutral', in_arbeit: 'neutral', eingereicht: 'warning',
+  abgenommen: 'success', ausgezahlt: 'success', abgebrochen: 'error',
+};
+export function taskTone(status: TaskStatus): ChipTone {
+  return TASK_TONES[status] ?? 'neutral';
+}
+
+export const FINAL_TASK_STATUSES: TaskStatus[] = ['abgenommen', 'ausgezahlt', 'abgebrochen'];

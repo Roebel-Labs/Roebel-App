@@ -9,6 +9,7 @@ import ProposalSkeleton from '@/components/ProposalSkeleton';
 import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
+import { fontFamily } from '@/constants/theme';
 
 export default function GovernanceScreen() {
   const router = useRouter();
@@ -59,6 +60,19 @@ export default function GovernanceScreen() {
           />
         }
       >
+        {/* Entry to the task board for accepted proposals. */}
+        <Pressable
+          onPress={() => router.push('/aufgaben' as any)}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.boardRow, { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.8 : 1 }]}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[styles.boardTitle, { color: colors.textPrimary }]}>Aufgabenbörse</Text>
+            <Text style={[styles.boardText, { color: colors.textSecondary }]}>Hilf mit, beschlossene Vorschläge umzusetzen</Text>
+          </View>
+          <Text style={[styles.boardChevron, { color: colors.textSecondary }]}>›</Text>
+        </Pressable>
+
         {loading ? (
           // Loading state - show skeleton loaders
           <View style={styles.proposalsList}>
@@ -106,6 +120,19 @@ export default function GovernanceScreen() {
 }
 
 const styles = StyleSheet.create({
+  boardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+  },
+  boardTitle: { fontFamily: fontFamily.semiBold, fontSize: 16 },
+  boardText: { fontFamily: fontFamily.regular, fontSize: 13 },
+  boardChevron: { fontFamily: fontFamily.regular, fontSize: 24, lineHeight: 26 },
   navOverlay: {
     position: 'absolute',
     left: 0,
