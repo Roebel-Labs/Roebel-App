@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dispatchLines, reconcile, UNKLAR_AFTER_MS, type DispatchDeps } from "../src/lib/vorhaben/dispatch";
+import { dispatchLines, reconcile, settleIfMined, UNKLAR_AFTER_MS, type DispatchDeps } from "../src/lib/vorhaben/dispatch";
 import type { LineRow } from "../src/lib/vorhaben/repo";
 
 function line(p: Partial<LineRow>): LineRow {
@@ -9,22 +9,39 @@ function line(p: Partial<LineRow>): LineRow {
     error: null, attempt_started_at: null, safe_tx_hash: null, safe_nonce: null, tx_hash: null, ...p };
 }
 
-/** Minimal chainable fake covering update().eq() and select().eq().maybeSingle(). */
+/** Chainable fake honouring eq/in filters on proposal_payout_lines updates (first CAS wins). */
 function fakeDb(rows: LineRow[]) {
   const updates: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const inserts: Array<{ table: string; rows: unknown }> = [];
   const db = {
-    updates,
-    from(_table: string) {
+    updates, inserts,
+    from(table: string) {
       return {
         update(patch: Record<string, unknown>) {
-          // Thenable that also allows a second .eq() (afterLineSettled filters by id AND status).
-          return { eq: (_c: string, id: string) => {
-            const done = Promise.resolve().then(() => { updates.push({ id, patch }); const r = rows.find((x) => x.id === id); if (r) Object.assign(r, patch); return { error: null }; });
-            return Object.assign(done, { eq: () => done });
-          } };
+          const filters: Array<(r: LineRow) => boolean> = [];
+          let id = "";
+          const b: any = {
+            eq(c: string, v: string) { if (c === "id") id = v; filters.push((r: any) => r[c] === v); return b; },
+            in(c: string, v: string[]) { filters.push((r: any) => v.includes(r[c])); return b; },
+            select() { return b; },
+            then(res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) {
+              let matched: LineRow[] = [];
+              if (table === "proposal_payout_lines") matched = rows.filter((r) => filters.every((f) => f(r)));
+              else updates.push({ id, patch });
+              for (const r of matched) { updates.push({ id: r.id, patch }); Object.assign(r, patch); }
+              return Promise.resolve({ data: matched.map((r) => ({ id: r.id })), error: null }).then(res, rej);
+            },
+          };
+          return b;
         },
-        select() { return { eq: () => ({ maybeSingle: async () => ({ data: { proposal_id: "0xkey" }, error: null }) }), neq: () => ({ order: async () => ({ data: rows.filter((r) => r.status !== "bestaetigt"), error: null }) }) }; },
-        insert: async () => ({ error: null }),
+        select() {
+          return {
+            eq: () => ({ maybeSingle: async () => ({ data: { proposal_id: "0xkey" }, error: null }) }),
+            in: (_c: string, v: string[]) => ({ order: async () => ({ data: rows.filter((r) => v.includes(r.status)), error: null }) }),
+          };
+        },
+        insert: async (r: unknown) => { inserts.push({ table, rows: r }); return { error: null }; },
+        upsert: async () => ({ error: null }),
       };
     },
   };
@@ -122,4 +139,28 @@ test("reconcile never calls sendFunder", async () => {
   const calls: string[] = [];
   await reconcile(deps(fakeDb(rows), { sendFunder: async (id) => { calls.push(id); return { status: "x" }; }, receiptStatus: async () => "pending" }));
   assert.deepEqual(calls, []);
+});
+
+test("two concurrent settleIfMined calls on the same line settle and notify once", async () => {
+  const rows = [line({ id: "g", status: "gesendet", tx_hash: "0x1" })];
+  const db = fakeDb(rows);
+  const d = deps(db);
+  const res = await Promise.all([settleIfMined(d, rows[0]), settleIfMined(d, { ...rows[0] })]);
+  assert.deepEqual(res.slice().sort(), ["settled", "skipped"]);
+  assert.equal(db.inserts.filter((i) => i.table === "notifications").length, 1);
+});
+
+test("dispatchLines: edge returns gesendet + receipt success -> bestaetigt and one notification", async () => {
+  const rows = [line({})];
+  const db = fakeDb(rows);
+  await dispatchLines(deps(db, { sendFunder: async () => { rows[0].status = "gesendet"; return { status: "gesendet", txHash: "0xh" }; } }), [line({})]);
+  assert.equal(rows[0].status, "bestaetigt");
+  assert.equal(db.inserts.filter((i) => i.table === "notifications").length, 1);
+});
+
+test("reconcile continues past a line whose receiptStatus throws", async () => {
+  const rows = [line({ id: "x", status: "gesendet", tx_hash: "0xbad" }), line({ id: "y", status: "gesendet", tx_hash: "0xok" })];
+  await reconcile(deps(fakeDb(rows), { receiptStatus: async (h) => { if (h === "0xbad") throw new Error("rpc down"); return "success"; } }));
+  assert.equal(rows[0].status, "gesendet");
+  assert.equal(rows[1].status, "bestaetigt");
 });

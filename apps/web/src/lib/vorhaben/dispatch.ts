@@ -16,8 +16,29 @@ export const NOT_MINED_AFTER_MS = 30 * 60 * 1000;
 const FUNDER = new Set(["funder_muenzen", "funder_xdai"]);
 const IN_FLIGHT = new Set(["sendend", "gesendet", "unklar"]);
 
-async function setStatus(db: Db, id: string, patch: Record<string, unknown>) {
-  await db.from("proposal_payout_lines").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+const OPEN_STATUSES = ["sendend", "gesendet", "unklar", "vorgeschlagen"];
+
+/** Compare-and-set status write; true only if this call changed the row. */
+async function casStatus(db: Db, id: string, from: string[], patch: Record<string, unknown>): Promise<boolean> {
+  const { data, error } = await db.from("proposal_payout_lines")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id).in("status", from).select("id");
+  if (error) throw new Error(`cas ${id}: ${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** The ONLY path that moves a line to bestaetigt / runs afterLineSettled. */
+export async function settleIfMined(deps: DispatchDeps, line: LineRow): Promise<"settled" | "reverted" | "pending" | "skipped"> {
+  if (!line.tx_hash) return "skipped";
+  const s = await deps.receiptStatus(line.tx_hash);
+  if (s === "pending") return "pending";
+  if (s === "success") {
+    if (!(await casStatus(deps.db, line.id, OPEN_STATUSES, { status: "bestaetigt", error: null }))) return "skipped";
+    await afterLineSettled(deps.db, { ...line, status: "bestaetigt" });
+    return "settled";
+  }
+  if (!(await casStatus(deps.db, line.id, OPEN_STATUSES, { status: "fehlgeschlagen", error: "reverted" }))) return "skipped";
+  return "reverted";
 }
 
 export async function dispatchLines(deps: DispatchDeps, lines: LineRow[]): Promise<void> {
@@ -25,7 +46,9 @@ export async function dispatchLines(deps: DispatchDeps, lines: LineRow[]): Promi
   // Funder rail: one at a time keeps the funder nonce sane.
   for (const l of todo.filter((x) => FUNDER.has(x.rail))) {
     const r = await deps.sendFunder(l.id);
-    if (r.status === "bestaetigt") await afterLineSettled(deps.db, { ...l, status: "bestaetigt", tx_hash: r.txHash ?? null });
+    if ((r.status === "gesendet" || r.status === "bestaetigt") && r.txHash) {
+      await settleIfMined(deps, { ...l, status: "gesendet", tx_hash: r.txHash }); // pending is fine; the cron finishes it
+    }
   }
   // Safe rail: one batched Safe tx per reference (task line + its platform fee).
   const safe = todo.filter((x) => x.rail === "safe_eure");
@@ -40,29 +63,29 @@ export async function dispatchLines(deps: DispatchDeps, lines: LineRow[]): Promi
 
 /** Reconcile never re-sends: funder lines are only ever resolved by their receipt or flagged unklar. */
 export async function reconcile(deps: DispatchDeps): Promise<void> {
-  const { data } = await deps.db.from("proposal_payout_lines").select("*").neq("status", "bestaetigt").order("created_at");
+  const { data, error } = await deps.db.from("proposal_payout_lines").select("*")
+    .in("status", OPEN_STATUSES).order("created_at");
+  if (error) throw new Error(`reconcile query: ${error.message}`);
   const lines = (data ?? []) as LineRow[];
   for (const l of lines) {
-    const started = l.attempt_started_at ? new Date(l.attempt_started_at).getTime() : 0;
-    if (FUNDER.has(l.rail) && l.tx_hash && IN_FLIGHT.has(l.status)) {
-      const s = await deps.receiptStatus(l.tx_hash);
-      if (s === "success") {
-        await setStatus(deps.db, l.id, { status: "bestaetigt", error: null });
-        l.status = "bestaetigt";
-        await afterLineSettled(deps.db, l);
-      } else if (s === "reverted") {
-        await setStatus(deps.db, l.id, { status: "fehlgeschlagen", error: "reverted" });
-      } else if (l.status !== "unklar" && deps.nowMs() - started > NOT_MINED_AFTER_MS) {
-        await setStatus(deps.db, l.id, { status: "unklar", error: "not mined after 30 min — check funder history" });
-        console.error(`[vorhaben] payout line ${l.id} is unklar (not mined); resolve manually`);
+    try {
+      const started = l.attempt_started_at ? new Date(l.attempt_started_at).getTime() : 0;
+      if (FUNDER.has(l.rail) && l.tx_hash && IN_FLIGHT.has(l.status)) {
+        const r = await settleIfMined(deps, l);
+        if (r === "pending" && l.status !== "unklar" && deps.nowMs() - started > NOT_MINED_AFTER_MS) {
+          if (await casStatus(deps.db, l.id, ["sendend", "gesendet"], { status: "unklar", error: "not mined after 30 min — check funder history" }))
+            console.error(`[vorhaben] payout line ${l.id} is unklar (not mined); resolve manually`);
+        }
+      } else if (l.status === "sendend" && FUNDER.has(l.rail) && !l.tx_hash) {
+        if (deps.nowMs() - started > UNKLAR_AFTER_MS) {
+          if (await casStatus(deps.db, l.id, ["sendend"], { status: "unklar", error: "no tx hash after send attempt — check the funder history before resolving" }))
+            console.error(`[vorhaben] payout line ${l.id} is unklar; resolve manually`);
+        }
+      } else if ((l.status === "sendend" || l.status === "vorgeschlagen") && l.rail === "safe_eure") {
+        await deps.pollSafe(l);
       }
-    } else if (l.status === "sendend" && FUNDER.has(l.rail) && !l.tx_hash) {
-      if (deps.nowMs() - started > UNKLAR_AFTER_MS) {
-        await setStatus(deps.db, l.id, { status: "unklar", error: "no tx hash after send attempt — check the funder history before resolving" });
-        console.error(`[vorhaben] payout line ${l.id} is unklar; resolve manually`);
-      }
-    } else if ((l.status === "sendend" || l.status === "vorgeschlagen") && l.rail === "safe_eure") {
-      await deps.pollSafe(l);
+    } catch (e) {
+      console.error(`[vorhaben] reconcile failed for line ${l.id}`, e);
     }
   }
 }
