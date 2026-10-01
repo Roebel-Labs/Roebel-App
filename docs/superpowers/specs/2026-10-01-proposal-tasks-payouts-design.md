@@ -311,3 +311,26 @@ One-time setup by Max: register the proposer delegate on the Attester Safe (Safe
 Platform lines on Münzen work lines (0.5 Münzen per Wahlhelfer) stay on `funder_muenzen`; the Safe must
 accept ERC-1155 (Safe fallback handler) — verify with a 0-risk transfer first. On 2026-10-01 the funder held
 ~2 xDAI (gas float), so it needs a top-up of ≥ 8 xDAI before #3 passes, or the line waits as `float_low`.
+
+## Implementation notes (2026-10-01, from the plan)
+
+- The engine runs in the **web app** (API routes + Vercel cron), not in edge functions: the Safe kit,
+  signature verification and crons already live there. Only Münzen/xDAI sends run in the edge function
+  `vorhaben-payout-send`, because `FUNDER_PRIVKEY` must never leave Supabase.
+- Identity is the **wallet** (lowercase) everywhere instead of account ids; names come from `users`.
+- `tally_confirmations` is merged into `proposal_wahlhelfer` (eligibility snapshot + co-signature).
+- Eligible Wahlhelfer = current AttesterNFTv2 holders **when the tally is first seen on-chain** (historical
+  balance reads would need an archive RPC).
+- The co-signed text names the **Tally contract address**, not the tally tx hash (no log scan needed).
+- Settings live in `vorhaben_settings` (service-role write only) — `app_settings` is anon-writable.
+- Kill switch `vorhaben_settings.dispatch_enabled` (default false) gates every automatic payout.
+- `unklar` funder lines are resolved by hand (admin alert), not by automatic log scanning.
+- Only proposals with `proposals.vorhaben_enabled` take part (#3 backfilled; all new proposals on).
+- The sync cron also fixes the proposals mirror (`state`, vote counts), which was never updated before.
+- Funder payouts sign first, persist keccak(serialized tx) as tx_hash, then broadcast; a broadcast error marks the line 'unklar' and it is never released or resent. The edge function stops at 'gesendet'.
+- Exactly one code path (web `settleIfMined`, compare-and-set on status) moves a line to 'bestaetigt'/'fehlgeschlagen' and sends the payout push.
+- Reconcile marks funder lines not mined after 30 min (manual lines: 30 min after recording) as 'unklar' for manual resolution; nothing is ever re-sent automatically.
+- Safe rail: a line is marked 'replaced' only when the Safe service shows a different executed tx at its nonce; indexing lag never fails a paid line.
+- Manual payout records must be mined after the line was created and not be linked to another proposal.
+- Proposer inactivity for Attester assignment counts from the first application; Canceled proposals are 'abgelehnt' even during voting.
+- New proposals set vorhaben_enabled (and budget_amount/budget_asset/beneficiary_name) only once `VORHABEN_COLUMNS_LIVE=1` is set on Vercel (after the migration); before that `createProposal` omits these keys so inserts keep working.

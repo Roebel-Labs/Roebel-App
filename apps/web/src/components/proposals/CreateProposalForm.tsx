@@ -7,6 +7,7 @@ import { prepareContractCall, toWei, waitForReceipt } from "thirdweb";
 import { ethers } from "ethers";
 import { hasHighGasBundler, sendViaHighGasBundler } from "@/lib/highgas-bundler";
 import { useState } from "react";
+import { parseBudgetInput } from "@/lib/vorhaben/budget-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
@@ -60,6 +61,8 @@ export function CreateProposalForm({
   const [value, setValue] = useState("");
   const [calldata, setCalldata] = useState("");
   const [attachTreasurySnapshot, setAttachTreasurySnapshot] = useState(false);
+  const [budgetAmount, setBudgetAmount] = useState("");
+  const [beneficiaryName, setBeneficiaryName] = useState("");
   // Voting duration in DAYS (presets 3/5/7 or a custom 1–30). Converted to
   // seconds for proposeWithPeriod; the contract enforces a 1h–30d range.
   const [periodDays, setPeriodDays] = useState(7);
@@ -152,6 +155,8 @@ export function CreateProposalForm({
             deadlineBlock: Number(voteEnd),
             category: "general",
             attachTreasurySnapshot,
+            budgetAmount: budgetAmount.trim() || undefined,
+            beneficiaryName: beneficiaryName.trim() || undefined,
           }),
         });
         if (!storeResponse.ok) {
@@ -177,6 +182,11 @@ export function CreateProposalForm({
     if (!account) return;
 
     setError("");
+    const budgetCheck = parseBudgetInput(budgetAmount, beneficiaryName);
+    if (!budgetCheck.ok) {
+      setError(budgetCheck.error);
+      return;
+    }
     console.log("🚀 Starting proposal creation process...");
 
     try {
@@ -453,6 +463,47 @@ export function CreateProposalForm({
               </span>
             </span>
           </label>
+
+          {/* Optional budget: what the Gemeinschaftskasse should pay out if the proposal passes */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <span className="block font-medium text-foreground mb-1">Budget (optional)</span>
+            <p className="text-sm text-muted-foreground mb-3">
+              Wenn der Vorschlag Geld aus der Gemeinschaftskasse braucht, gib hier Betrag und
+              Empfänger an.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="budgetAmount" className="block text-sm font-medium mb-1">
+                  Betrag in €
+                </label>
+                <input
+                  id="budgetAmount"
+                  type="text"
+                  inputMode="decimal"
+                  value={budgetAmount}
+                  onChange={(e) => setBudgetAmount(e.target.value)}
+                  disabled={isProcessing}
+                  placeholder="z. B. 150,00"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label htmlFor="beneficiaryName" className="block text-sm font-medium mb-1">
+                  Empfänger
+                </label>
+                <input
+                  id="beneficiaryName"
+                  type="text"
+                  maxLength={140}
+                  value={beneficiaryName}
+                  onChange={(e) => setBeneficiaryName(e.target.value)}
+                  disabled={isProcessing}
+                  placeholder="z. B. Name des Vereins"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Voting duration: 3/5/7-day presets or a custom 1–30 days. */}
           <div className="rounded-lg border border-border bg-card p-4">

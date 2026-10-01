@@ -3,6 +3,7 @@ import { createProposal, getLatestProposalNumber } from "@/lib/supabase";
 import type { CreateProposalInput, ProposalContent } from "@/lib/proposal-types";
 import { calculateReadingTime, extractSummary } from "@/lib/proposal-types";
 import { createAppNotification } from "@/app/actions/app-notifications";
+import { parseBudgetInput } from "@/lib/vorhaben/budget-input";
 import { treasuryEuro } from "@/lib/muenzen/gnosis";
 
 /**
@@ -31,6 +32,8 @@ export async function POST(request: NextRequest) {
       deadlineBlock,
       category,
       attachTreasurySnapshot,
+      budgetAmount,
+      beneficiaryName,
     } = body;
 
     console.log("🔍 [API] Proposal details:");
@@ -63,6 +66,14 @@ export async function POST(request: NextRequest) {
         { error: "Missing blockchain data" },
         { status: 400 }
       );
+    }
+
+    const budget = parseBudgetInput(
+      typeof budgetAmount === "string" ? budgetAmount : undefined,
+      typeof beneficiaryName === "string" ? beneficiaryName : undefined,
+    );
+    if (!budget.ok) {
+      return NextResponse.json({ error: budget.error }, { status: 400 });
     }
 
     // Get next proposal number
@@ -124,11 +135,18 @@ export async function POST(request: NextRequest) {
       block_number: BigInt(blockNumber || 0),
       snapshot_block: BigInt(snapshotBlock || 0),
       deadline_block: BigInt(deadlineBlock || 0),
+      budget_amount: budget.amount,
+      beneficiary_name: budget.beneficiary,
     };
 
     // Store in Supabase
     console.log("💾 [API] Storing proposal in Supabase...");
-    const result = await createProposal(proposalInput);
+    const result = await createProposal(
+      proposalInput,
+      // Set VORHABEN_COLUMNS_LIVE=1 on Vercel only after the vorhaben migration
+      // is applied; before that the new columns do not exist.
+      process.env.VORHABEN_COLUMNS_LIVE === "1",
+    );
 
     if (!result.success) {
       console.error("❌ [API] Failed to store proposal:", result.error);

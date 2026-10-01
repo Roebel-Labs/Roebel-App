@@ -70,7 +70,11 @@ export interface Database {
  * Create a new proposal in Supabase
  */
 export async function createProposal(
-  input: CreateProposalInput
+  input: CreateProposalInput,
+  // The vorhaben_* / budget_* / beneficiary_name columns only exist after the
+  // vorhaben migration is applied. Inserting an unknown column fails the whole
+  // insert, so these keys are written only when VORHABEN_COLUMNS_LIVE=1.
+  vorhabenColumnsLive = false
 ): Promise<{ success: boolean; data?: Proposal; error?: string }> {
   console.log("📝 [Supabase] Creating proposal:", input.proposal_id);
 
@@ -96,6 +100,14 @@ export async function createProposal(
         for_votes: "0",
         against_votes: "0",
         abstain_votes: "0",
+        ...(vorhabenColumnsLive
+          ? {
+              vorhaben_enabled: true,
+              budget_amount: input.budget_amount ?? null,
+              budget_asset: input.budget_amount ? "EURe" : null,
+              beneficiary_name: input.beneficiary_name ?? null,
+            }
+          : {}),
       })
       .select()
       .single();

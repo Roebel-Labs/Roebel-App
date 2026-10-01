@@ -102,6 +102,9 @@ export interface CreateProposalInput {
   block_number: bigint;
   snapshot_block: bigint;
   deadline_block: bigint;
+  /** Vorhaben fields; only written when createProposal's `vorhabenColumnsLive` is true. */
+  budget_amount?: string | null;
+  beneficiary_name?: string | null;
 }
 
 /**
