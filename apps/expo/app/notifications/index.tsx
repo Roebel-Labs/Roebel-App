@@ -178,6 +178,14 @@ export default function NotificationsInboxScreen() {
 
   const handleUserNotifPress = (notification: UserNotification) => {
     if (!notification.is_read) userNotifs.markAsRead(notification.id);
+    if (notification.type.startsWith('vorhaben_')) {
+      const m = (notification.metadata ?? {}) as { screen?: string; proposal_id?: string; task_id?: string };
+      if (m.screen === 'auszaehlung') router.push(`/auszaehlung/${m.proposal_id}` as any);
+      else if (m.screen === 'aufgabe' && m.task_id) router.push(`/aufgabe/${m.task_id}` as any);
+      else if (m.screen === 'vertrag') router.push(`/vertrag/${m.proposal_id}` as any);
+      else if (m.proposal_id) router.push(`/proposal/${m.proposal_id}` as any);
+      return;
+    }
     const metadata = notification.metadata as { post_id?: string; thread_id?: string } | undefined;
     const postId = metadata?.post_id;
     const threadId = metadata?.thread_id;

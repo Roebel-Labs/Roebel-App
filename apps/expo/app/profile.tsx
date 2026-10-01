@@ -37,6 +37,7 @@ import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
 import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
+import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 
@@ -188,6 +189,7 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
+                  {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   {isAspiringCitizen && (
                     <View style={styles.bannerWrap}>
                       <CitizenVerificationBanner pending={!!activePendingRequest} />

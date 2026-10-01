@@ -71,6 +71,13 @@ if (Platform.OS !== 'web') {
 /**
  * Component to handle notification deep linking (native only)
  */
+function vorhabenRoute(data: { screen?: string; proposalId?: string; taskId?: string }): string {
+  if (data.screen === 'auszaehlung') return `/auszaehlung/${data.proposalId}`;
+  if (data.screen === 'aufgabe' && data.taskId) return `/aufgabe/${data.taskId}`;
+  if (data.screen === 'vertrag') return `/vertrag/${data.proposalId}`;
+  return `/proposal/${data.proposalId}`;
+}
+
 function NotificationHandler() {
   const router = useRouter();
 
@@ -95,6 +102,8 @@ function NotificationHandler() {
         router.push(`/messages/${data.conversationId}` as any);
       } else if (data?.type === 'chat_thread' && data?.threadId) {
         router.push(`/chat/${data.threadId}` as any);
+      } else if (data?.type === 'vorhaben' && data?.proposalId) {
+        router.push(vorhabenRoute(data as any) as any);
       } else if (data?.type === 'org_invite') {
         router.push('/notifications' as any);
       } else if (data?.type === 'reward') {
@@ -130,6 +139,10 @@ function NotificationHandler() {
         } else if (data?.type === 'chat_thread' && data?.threadId) {
           setTimeout(() => {
             router.push(`/chat/${data.threadId}` as any);
+          }, 100);
+        } else if (data?.type === 'vorhaben' && data?.proposalId) {
+          setTimeout(() => {
+            router.push(vorhabenRoute(data as any) as any);
           }, 100);
         } else if (data?.type === 'org_invite') {
           setTimeout(() => {
