@@ -69,3 +69,23 @@ test("comments: anyone, but not empty", () => {
   ok(decideTaskAction("comment", { ...base, comment: "Frage" }), "offen");
   no(decideTaskAction("comment", base), "COMMENT_REQUIRED");
 });
+
+test("withdraw: applicant removes themselves, others and non-offen status fail", () => {
+  ok(decideTaskAction("withdraw", { ...base, applicants: ["0xcitizen"], actor: "0xcitizen" }), "offen");
+  no(decideTaskAction("withdraw", { ...base, actor: "0xcitizen" }), "NOT_AN_APPLICANT");
+  no(decideTaskAction("withdraw", { ...base, status: "vergeben" }), "BAD_STATUS");
+});
+
+test("assign gated when proposal is rejected", () => {
+  no(decideTaskAction("assign", { ...base, actor: "0xproposer", applicants: ["0xa"], target: "0xa", proposalStage: "abgelehnt" }), "PROPOSAL_CLOSED");
+});
+
+test("proof: non-assignee forbidden, eingereicht state rejected", () => {
+  const c = { ...base, status: "vergeben" as const, assignee: "0xa" };
+  no(decideTaskAction("proof", { ...c, actor: "0xb" }), "FORBIDDEN");
+  no(decideTaskAction("proof", { ...c, status: "eingereicht", actor: "0xa" }), "BAD_STATUS");
+});
+
+test("cancel by Attester (not proposer) with comment", () => {
+  ok(decideTaskAction("cancel", { ...base, actor: "0xattester", actorIsAttester: true, comment: "Widerspruch" }), "abgebrochen");
+});

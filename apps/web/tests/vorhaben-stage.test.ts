@@ -8,8 +8,6 @@ const base: StageInput = { chainState: 1, nowSec: 100, deadlineSec: 200, tallyPu
 test("voting and counting", () => {
   assert.equal(deriveStage(base), "abstimmung");
   assert.equal(deriveStage({ ...base, nowSec: 300 }), "auszaehlung");
-  // Governor reports Active until the tally lands; still counting.
-  assert.equal(deriveStage({ ...base, nowSec: 300, chainState: 1, tallyPublished: false }), "auszaehlung");
 });
 
 test("rejected outcomes", () => {
@@ -31,4 +29,13 @@ test("accepted, in progress, done", () => {
 test("a failed line keeps the proposal in progress", () => {
   const won = { ...base, nowSec: 300, tallyPublished: true, chainState: 4 };
   assert.equal(deriveStage({ ...won, taskStatuses: ["ausgezahlt"], lineStatuses: ["fehlgeschlagen"] }), "in_umsetzung");
+});
+
+test("canceled proposal during voting window is rejected", () => {
+  assert.equal(deriveStage({ ...base, chainState: 2 }), "abgelehnt");
+});
+
+test("defeated without tally after deadline stays counting; expired without tally is rejected", () => {
+  assert.equal(deriveStage({ ...base, nowSec: 300, chainState: 3, tallyPublished: false }), "auszaehlung");
+  assert.equal(deriveStage({ ...base, nowSec: 300, chainState: 6, tallyPublished: false }), "abgelehnt");
 });

@@ -16,6 +16,7 @@ const ACCEPTED = new Set([4, 5, 7]); // Succeeded, Queued, Executed
 const TASK_DONE = new Set(["ausgezahlt", "abgebrochen"]);
 
 export function deriveStage(i: StageInput): Stage {
+  if (i.chainState === 2) return "abgelehnt";
   if (i.nowSec < i.deadlineSec) return "abstimmung";
   if (REJECTED.has(i.chainState) && (i.tallyPublished || i.chainState !== 3)) return "abgelehnt";
   if (!i.tallyPublished || !ACCEPTED.has(i.chainState)) return "auszaehlung";

@@ -43,6 +43,7 @@ export function decideTaskAction(action: TaskAction, c: TaskCtx): Decision {
       return allow(c.status);
 
     case "assign": {
+      if (c.proposalStage === "abgelehnt") return deny("PROPOSAL_CLOSED", "Der Vorschlag wurde abgelehnt.");
       if (c.status !== "offen") return deny("BAD_STATUS", "Diese Aufgabe ist schon vergeben.");
       if (!c.target || !c.applicants.includes(c.target)) return deny("NOT_AN_APPLICANT", "Nur Bewerber:innen können ausgewählt werden.");
       const proposerApplied = c.applicants.includes(c.proposer);
@@ -62,8 +63,7 @@ export function decideTaskAction(action: TaskAction, c: TaskCtx): Decision {
 
     case "proof":
       if (!isAssignee) return deny("FORBIDDEN", "Nur die zuständige Person kann Nachweise anhängen.");
-      if (c.status === "vergeben") return allow("in_arbeit");
-      if (c.status === "in_arbeit") return allow("in_arbeit");
+      if (c.status === "vergeben" || c.status === "in_arbeit") return allow("in_arbeit");
       return deny("BAD_STATUS", "Für diese Aufgabe können keine Nachweise mehr angehängt werden.");
 
     case "comment":
