@@ -122,7 +122,7 @@ All amounts are `numeric(38,18)` in the asset's display unit; `asset` is `'EURe'
 **`proposal_payout_lines`**
 - `id`, `contract_id`, `role` (`empfaenger`, `aufgabe`, `wahlhelfer`, `plattform`),
   `recipient_account_id null`, `recipient_address`, `recipient_label` (display name; never shown as 0x),
-  `amount`, `asset`, `rail` (`funder_muenzen`, `manual_safe`, `safe_eurc_base`),
+  `amount`, `asset`, `rail` (`funder_muenzen`, `funder_xdai`, `manual_safe`, `safe_eurc_base`),
   `reference_type` (`proposal`, `task`, `tally_confirmation`, `payout_line`), `reference_id`,
   `status` (`geplant`, `sendend`, `gesendet`, `bestaetigt`, `unklar`, `fehlgeschlagen`),
   `attempt_started_at`, `tx_hash`, `error`, timestamps.
@@ -135,9 +135,10 @@ All amounts are `numeric(38,18)` in the asset's display unit; `asset` is `'EURe'
 through edge functions with the service role. Every new SQL function gets
 `REVOKE EXECUTE … FROM anon, authenticated` explicitly.
 
-**Settings (`app_settings`):** `platform_fee_bps` (default 500 = 5 %, Max to confirm),
-`platform_safe_address` (placeholder until the platform Safe exists — if unset, platform lines stay
-`geplant`), `wahlhelfer_reward_muenzen` (default 10, Max to confirm), `tally_confirm_window_days` (7).
+**Settings (`app_settings`):** `platform_fee_bps` = 500 (5 %, confirmed),
+`platform_safe_address` = `0xbCAbbAA26420e0A4771808F9639D4176355E5d4B` (Gnosis Safe, confirmed 2026-10-01;
+if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (confirmed),
+`tally_confirm_window_days` = 7.
 
 ## 5. Rules (server-enforced)
 
@@ -179,6 +180,8 @@ through edge functions with the service role. Every new SQL function gets
 **Rail adapters** (`apps/expo/supabase/functions/_shared/payout-rails.ts`):
 - `funder_muenzen`: server signs from the funder hot wallet `0x5ac8…9D9B` with `FUNDER_PRIVKEY`, reusing
   the transfer code path of `claim-reward` (already pays citizens' smart accounts).
+- `funder_xdai`: native xDAI transfer from the same funder wallet (first-run platform fee on the budget;
+  keeps ≥ 0.5 xDAI back for gas).
 - `manual_safe`: never sends. An admin pastes the tx hash; the line goes to `gesendet` and is verified
   like any other.
 - `safe_eurc_base`: not implemented in this spec; the interface is defined so it can propose a Safe tx later.
@@ -251,7 +254,7 @@ contract, and seeds one task:
 - **"Spende an den Seglerverein überweisen und Quittung hochladen"**
 - Criteria: Überweisung von 150 € aus der Gemeinschaftskasse ausgelöst · Zahlungsnachweis (Tx-Hash)
   angehängt · Spendenquittung des Vereins hochgeladen.
-- Reward in Münzen (amount set by Max).
+- Reward in Münzen (amount: see §12).
 - Status `offen`, created by the proposer's account.
 
 Max's manual Safe transfer becomes the `empfaenger` line (`manual_safe`) once he pastes the tx hash on the
@@ -278,5 +281,13 @@ contract screen (admin-only action).
 
 ## 12. Open values for Max
 
-- `platform_fee_bps` (draft 5 %), `wahlhelfer_reward_muenzen` (draft 10), the reward for the #3 task.
-- The platform Safe address.
+Confirmed 2026-10-01: fee 5 %, Wahlhelfer reward 10 Münzen, platform Safe
+`0xbCAbbAA26420e0A4771808F9639D4176355E5d4B` (Gnosis).
+
+Still open: the Münzen reward for the #3 transfer task.
+
+**First-run platform fee on the budget:** the platform line on #3's 150 € budget is paid on the
+`funder_xdai` rail (native xDAI from the funder hot wallet, 5 % × 150 = 7.5 xDAI) to the platform Safe.
+Platform lines on Münzen work lines (0.5 Münzen per Wahlhelfer) stay on `funder_muenzen`; the Safe must
+accept ERC-1155 (Safe fallback handler) — verify with a 0-risk transfer first. On 2026-10-01 the funder held
+~2 xDAI (gas float), so it needs a top-up of ≥ 8 xDAI before #3 passes, or the line waits as `float_low`.
