@@ -8,6 +8,12 @@ export const SIGNED_SCOPE = 'roebel-tickets-v1';
 export type TicketAction =
   | 'connect_onboard' | 'connect_session' | 'connect_status' | 'ticket_types_upsert' | 'ticket_types_list' | 'checkout'
   | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order';
+/** Proposal-task actions (apps/web/src/lib/signed-request/message.ts); signed under VORHABEN_SCOPE. */
+export const VORHABEN_SCOPE = 'roebel-vorhaben-v1';
+export type VorhabenAction =
+  | 'task_create' | 'task_apply' | 'task_withdraw' | 'task_assign' | 'task_start' | 'task_comment'
+  | 'task_proof' | 'task_submit' | 'task_approve' | 'task_request_changes' | 'task_cancel' | 'payout_record_manual';
+export type SignedAction = TicketAction | VorhabenAction;
 
 export interface SigningAccount {
   address: string;
@@ -26,8 +32,10 @@ async function hashPayload(payload: Record<string, unknown>): Promise<string> {
   return digestStringAsync(CryptoDigestAlgorithm.SHA256, JSON.stringify(sorted));
 }
 
-export async function buildSignedMessage(action: TicketAction, wallet: string, timestampSec: number, payload: Record<string, unknown>): Promise<string> {
-  return `${SIGNED_SCOPE}:${action}:${wallet.toLowerCase()}:${timestampSec}:${await hashPayload(payload)}`;
+export async function buildSignedMessage(
+  action: SignedAction, wallet: string, timestampSec: number, payload: Record<string, unknown>, scope: string = SIGNED_SCOPE,
+): Promise<string> {
+  return `${scope}:${action}:${wallet.toLowerCase()}:${timestampSec}:${await hashPayload(payload)}`;
 }
 
 // Signatures are produced one at a time. The thirdweb smart account does not reliably handle
@@ -80,7 +88,9 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
   }
 }
 
-async function postWithSignature<T>(path: string, account: SigningAccount, action: TicketAction, payload: Record<string, unknown>): Promise<ApiResult<T>> {
+async function postWithSignature<T>(
+  path: string, account: SigningAccount, action: SignedAction, payload: Record<string, unknown>, scope: string,
+): Promise<ApiResult<T>> {
   const wallet = account.address.toLowerCase();
   let timestampSec: number;
   let signature: string;
@@ -89,7 +99,7 @@ async function postWithSignature<T>(path: string, account: SigningAccount, actio
       // Timestamp taken inside the queue, so a request that waited for others is not stale.
       const ts = Math.floor(Date.now() / 1000);
       const sig = await withTimeout(
-        account.signMessage({ message: await buildSignedMessage(action, wallet, ts, payload) }),
+        account.signMessage({ message: await buildSignedMessage(action, wallet, ts, payload, scope) }),
         SIGN_TIMEOUT_MS,
         'Signatur hat zu lange gedauert. Bitte versuche es erneut.',
       );
@@ -98,17 +108,21 @@ async function postWithSignature<T>(path: string, account: SigningAccount, actio
   } catch (err) {
     return { ok: false, code: 'SIGN_FAILED', message: err instanceof Error ? err.message : 'Signatur fehlgeschlagen' };
   }
-  return (await postJson<T>(path, { scope: SIGNED_SCOPE, action, wallet, timestampSec, payload, signature })).json;
+  return (await postJson<T>(path, { scope, action, wallet, timestampSec, payload, signature })).json;
 }
 
 /**
  * One signed request. thirdweb session: a fresh wallet signature, as always. Passkey session:
  * the passkey API session token (one fingerprint per device session, lib/passkey/api-session.ts);
  * without a token (server off, refused) it falls back to the per-request signature.
- * `refund_order` always signs (the server requires a fresh signature for refunds).
+ * `refund_order`, `task_approve` and `payout_record_manual` always sign (the server requires a fresh signature).
  */
-export async function postSigned<T>(path: string, account: SigningAccount, action: TicketAction, payload: Record<string, unknown>): Promise<ApiResult<T>> {
-  if (action === 'refund_order' || !passkeySessionOf(account)) return postWithSignature<T>(path, account, action, payload);
+const ALWAYS_SIGN: readonly SignedAction[] = ['refund_order', 'task_approve', 'payout_record_manual'];
+
+export async function postSigned<T>(
+  path: string, account: SigningAccount, action: SignedAction, payload: Record<string, unknown>, scope: string = SIGNED_SCOPE,
+): Promise<ApiResult<T>> {
+  if (ALWAYS_SIGN.includes(action) || !passkeySessionOf(account)) return postWithSignature<T>(path, account, action, payload, scope);
   const wallet = account.address.toLowerCase();
   // The one session signature also waits its turn in the signature queue (one prompt at a time).
   // No 30 s timeout here: it is a biometric prompt (WebAuthn allows 120 s), and parallel requests
@@ -119,10 +133,10 @@ export async function postSigned<T>(path: string, account: SigningAccount, actio
       kind: 'web',
       endpoint: `web:${path}`,
       withToken: async (headers) => {
-        const r = await postJson<T>(path, { scope: SIGNED_SCOPE, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
+        const r = await postJson<T>(path, { scope, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
         return { status: r.status, code: r.json.ok ? undefined : r.json.code, value: r.json };
       },
-      withSignature: () => postWithSignature<T>(path, account, action, payload),
+      withSignature: () => postWithSignature<T>(path, account, action, payload, scope),
     });
   } catch (err) {
     // The session signature itself failed or was cancelled.

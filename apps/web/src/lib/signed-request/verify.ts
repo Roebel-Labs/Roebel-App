@@ -8,7 +8,7 @@ type HeaderBag = { get(name: string): string | null };
 /** Session-token auth (null = no token on the request / tokens off). Injected in tests. */
 export type BearerAuth = (headers: HeaderBag | null | undefined, wallet: string) => Promise<PasskeySessionAuth | null>;
 
-export type VerifyOk = { ok: true; wallet: string; action: TicketAction; payload: Record<string, unknown> };
+export type VerifyOk<A extends string = TicketAction> = { ok: true; wallet: string; action: A; payload: Record<string, unknown> };
 export type VerifyFail = { ok: false; status: number; code: string; message: string };
 
 const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -21,13 +21,14 @@ const SIG_RE = /^0x[a-fA-F0-9]{130,}$/;
  * A request that carries a token is decided by the token alone (a bad token is 401, never a
  * silent fall-through to the signature).
  */
-export async function verifySignedRequest(
+export async function verifySignedRequest<A extends string = TicketAction>(
   body: unknown,
-  opts: { actions: readonly TicketAction[]; headers?: HeaderBag | null; bearerAuth?: BearerAuth; requireSignature?: boolean },
-): Promise<VerifyOk | VerifyFail> {
+  opts: { actions: readonly A[]; scope?: string; headers?: HeaderBag | null; bearerAuth?: BearerAuth; requireSignature?: boolean },
+): Promise<VerifyOk<A> | VerifyFail> {
+  const expectedScope = opts.scope ?? SIGNED_SCOPE;
   const b = (body ?? {}) as Record<string, unknown>;
   const { scope, action, wallet, timestampSec, payload, signature } = b;
-  if (scope !== SIGNED_SCOPE || typeof action !== "string" || !opts.actions.includes(action as TicketAction)) {
+  if (scope !== expectedScope || typeof action !== "string" || !opts.actions.includes(action as A)) {
     return { ok: false, status: 400, code: "BAD_REQUEST", message: "unknown scope or action" };
   }
   if (typeof wallet !== "string" || !WALLET_RE.test(wallet)) return { ok: false, status: 400, code: "BAD_REQUEST", message: "wallet malformed" };
@@ -40,7 +41,7 @@ export async function verifySignedRequest(
         ? { ok: false, status: 503, code: "SESSION_UNAVAILABLE", message: "could not check the session" }
         : { ok: false, status: 401, code: "SESSION_INVALID", message: "session invalid or expired" };
     }
-    return { ok: true, wallet: wallet.toLowerCase(), action: action as TicketAction, payload: payloadObjEarly };
+    return { ok: true, wallet: wallet.toLowerCase(), action: action as A, payload: payloadObjEarly };
   }
   if (typeof signature !== "string" || !SIG_RE.test(signature)) return { ok: false, status: 401, code: "BAD_SIGNATURE", message: "signature malformed" };
   const ts = Number(timestampSec);
@@ -48,7 +49,7 @@ export async function verifySignedRequest(
     return { ok: false, status: 400, code: "STALE", message: "message expired" };
   }
   const payloadObj = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
-  const message = buildSignedMessage(SIGNED_SCOPE, action, wallet, ts, payloadObj);
+  const message = buildSignedMessage(expectedScope, action, wallet, ts, payloadObj);
   const claimed = wallet.toLowerCase();
 
   let verified = false;
@@ -59,7 +60,7 @@ export async function verifySignedRequest(
     return { ok: false, status: 503, code: "VERIFY_UNAVAILABLE", message: "could not reach verification RPC" };
   }
   if (!verified) return { ok: false, status: 401, code: "BAD_SIGNATURE", message: "signer does not match wallet" };
-  return { ok: true, wallet: claimed, action: action as TicketAction, payload: payloadObj };
+  return { ok: true, wallet: claimed, action: action as A, payload: payloadObj };
 }
 
 export function jsonOk(data: unknown = null) {

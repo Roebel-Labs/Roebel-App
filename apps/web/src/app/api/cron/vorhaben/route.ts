@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { gnosis } from "viem/chains";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gnosisReader, listAttesters } from "@/lib/vorhaben/chain";
-import { dispatchLines, reconcile, type DispatchDeps } from "@/lib/vorhaben/dispatch";
-import { sendViaFunder } from "@/lib/vorhaben/rails/funder";
-import { safeRailFromEnv } from "@/lib/vorhaben/rails/safe";
+import { dispatchLines, reconcile } from "@/lib/vorhaben/dispatch";
+import { buildDispatchDeps } from "@/lib/vorhaben/runtime";
 import { listActiveProposals, openLines } from "@/lib/vorhaben/repo";
 import { loadSettings } from "@/lib/vorhaben/settings";
 import { syncProposal } from "@/lib/vorhaben/sync";
@@ -43,16 +40,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (settings.dispatchEnabled) {
-    const pub = createPublicClient({ chain: gnosis, transport: http(process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com", { batch: false }) });
-    const receiptStatus: DispatchDeps["receiptStatus"] = async (hash) => {
-      const r = await pub.getTransactionReceipt({ hash: hash as `0x${string}` }).catch(() => null);
-      return !r ? "pending" : r.status === "success" ? "success" : "reverted";
-    };
-    const safeRail = safeRailFromEnv(db, receiptStatus);
-    const deps: DispatchDeps = {
-      db, sendFunder: sendViaFunder, nowMs: Date.now, receiptStatus,
-      proposeSafe: safeRail?.proposeSafe ?? (async () => {}), pollSafe: safeRail?.pollSafe ?? (async () => {}),
-    };
+    const deps = buildDispatchDeps(db);
     try {
       await dispatchLines(deps, await openLines(db));
     } catch (e) {

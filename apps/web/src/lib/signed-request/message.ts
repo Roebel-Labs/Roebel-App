@@ -7,6 +7,12 @@ import { hashPayload } from "../org-membership/message";
 
 export const SIGNED_SCOPE = "roebel-tickets-v1" as const;
 export const MAX_SIGNED_AGE_SECONDS = 300;
+/** Proposal-task actions get their own scope so a ticket signature never replays as a task action. */
+export const VORHABEN_SCOPE = "roebel-vorhaben-v1" as const;
+
+export type VorhabenAction =
+  | "task_create" | "task_apply" | "task_withdraw" | "task_assign" | "task_start" | "task_comment"
+  | "task_proof" | "task_submit" | "task_approve" | "task_request_changes" | "task_cancel" | "payout_record_manual";
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"

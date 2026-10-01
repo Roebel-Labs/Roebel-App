@@ -1,0 +1,321 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { handleVorhabenAction, type TaskDeps } from "../src/lib/vorhaben/task-service";
+import type { LineRow } from "../src/lib/vorhaben/repo";
+
+type Row = Record<string, any>;
+type Op = { table: string; op: string; payload?: unknown };
+
+const NOW = 2_000_000_000_000;
+const PROPOSER = "0x" + "1".repeat(40);
+const APPLICANT = "0x" + "2".repeat(40);
+const ATTESTER = "0x" + "3".repeat(40);
+const OTHER = "0x" + "4".repeat(40);
+const P_ID = "11111111-1111-4111-8111-111111111111";
+const T_ID = "22222222-2222-4222-8222-222222222222";
+const L_ID = "33333333-3333-4333-8333-333333333333";
+const TX = "0x" + "ab".repeat(32);
+const PREFIX = "https://proj.supabase.co/storage/v1/object/public/";
+const PLATFORM = "0xbcabbaa26420e0a4771808f9639d4176355e5d4b";
+
+/** In-memory Supabase fake that honours eq/neq/in/is/limit filters and records every op. */
+function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[] } = {}) {
+  const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
+  const ops: Op[] = [];
+  let n = 0;
+  const from = (table: string) => {
+    const builder = (op: string, payload?: unknown, upsertOpts?: { onConflict?: string }) => {
+      ops.push({ table, op, payload });
+      const filters: Array<(r: Row) => boolean> = [];
+      let limit = Infinity;
+      let selected = false;
+      const run = (): { data: unknown; error: { message: string; code?: string } | null } => {
+        const list = (tables[table] ??= []);
+        const match = (r: Row) => filters.every((f) => f(r));
+        if (op === "select") return { data: list.filter(match).slice(0, limit).map((r) => ({ ...r })), error: null };
+        if (op === "insert") {
+          const arr = (Array.isArray(payload) ? payload : [payload]) as Row[];
+          if (table === "task_applications" && arr.some((r) => list.some((x) => x.task_id === r.task_id && x.applicant_wallet === r.applicant_wallet))) {
+            return { data: null, error: { message: "duplicate key", code: "23505" } };
+          }
+          const added = arr.map((r) => ({ id: `${table}-${++n}`, created_at: new Date(NOW).toISOString(), status: "offen", ...r }));
+          list.push(...added);
+          return { data: added, error: null };
+        }
+        if (op === "upsert") {
+          const keys = (upsertOpts?.onConflict ?? "id").split(",");
+          for (const r of (Array.isArray(payload) ? payload : [payload]) as Row[]) {
+            if (!list.some((x) => keys.every((k) => x[k] === r[k]))) list.push({ id: `${table}-${++n}`, status: "geplant", ...r });
+          }
+          return { data: null, error: null };
+        }
+        // update
+        if (selected && opts.casMiss?.includes(table)) return { data: [], error: null };
+        const hit = list.filter(match);
+        for (const r of hit) Object.assign(r, payload as Row);
+        return { data: hit.map((r) => ({ id: r.id })), error: null };
+      };
+      const b: any = {
+        eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return b; },
+        neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return b; },
+        in: (c: string, v: unknown[]) => { filters.push((r) => v.includes(r[c])); return b; },
+        is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return b; },
+        or: () => b, order: () => b,
+        limit: (k: number) => { limit = k; return b; },
+        select: () => { selected = true; return b; },
+        single: async () => { const r = run(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
+        maybeSingle: async () => { const r = run(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
+        then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(run()).then(res, rej),
+      };
+      return b;
+    };
+    return {
+      select: () => builder("select"),
+      insert: (p: unknown) => builder("insert", p),
+      update: (p: unknown) => builder("update", p),
+      upsert: (p: unknown, o?: { onConflict?: string }) => builder("upsert", p, o),
+    };
+  };
+  return { tables, ops, from };
+}
+
+const proposal = (over: Row = {}): Row => ({
+  id: P_ID, proposal_id: "0xkey", proposal_number: 3, title: "Spende", proposer_address: PROPOSER, blockchain_proposal_id: "42",
+  vorhaben_enabled: true, budget_amount: null, budget_asset: null, beneficiary_name: null, lifecycle_stage: "abstimmung",
+  tally_confirm_opened_at: null, tally_confirm_until: null, tally_address: null, ...over,
+});
+const task = (over: Row = {}): Row => ({
+  id: T_ID, proposal_id: P_ID, title: "Überweisung ausführen", status: "offen", assignee_wallet: null,
+  created_by_wallet: PROPOSER, reward_amount: "5", reward_asset: "EURe", ...over,
+});
+const application = (wallet: string, at = NOW - 1000): Row => ({
+  id: `app-${wallet.slice(2, 4)}`, task_id: T_ID, applicant_wallet: wallet, note: "", status: "offen", created_at: new Date(at).toISOString(),
+});
+const seed = (over: Record<string, Row[]> = {}): Record<string, Row[]> => ({
+  proposals: [proposal()], proposal_tasks: [task()], task_applications: [], task_activity: [], notifications: [],
+  proposal_contracts: [{ id: "c1", proposal_id: P_ID, platform_fee_bps: 500, platform_safe_address: PLATFORM }],
+  proposal_payout_lines: [], users: [], ...over,
+});
+
+const settings = { platformFeeBps: 500, platformSafe: PLATFORM, wahlhelferAsset: "MUENZEN" as const, wahlhelferAmount: "10",
+  budgetFeeRail: "funder_xdai" as const, windowDays: 7, dispatchEnabled: true };
+
+function deps(db: ReturnType<typeof fakeDb>, over: Partial<TaskDeps> = {}): TaskDeps & { dispatched: string[][]; settled: LineRow[] } {
+  const dispatched: string[][] = [];
+  const settled: LineRow[] = [];
+  return {
+    db: db as never, settings, nowMs: () => NOW,
+    isAttester: async (w) => w === ATTESTER,
+    listAttesters: async () => [ATTESTER, APPLICANT],
+    verifyManualTx: async () => true,
+    dispatch: async (ids) => { dispatched.push(ids); },
+    settle: async (l) => { settled.push(l); return "settled"; },
+    storagePublicPrefix: PREFIX,
+    dispatched, settled,
+    ...over,
+  };
+}
+const updatesOf = (db: ReturnType<typeof fakeDb>, table: string) => db.ops.filter((o) => o.table === table && o.op === "update");
+
+test("task_apply by a fresh wallet inserts one application and notifies the proposer", async () => {
+  const db = fakeDb(seed());
+  const r = await handleVorhabenAction(deps(db), APPLICANT, "task_apply", { taskId: T_ID, note: "  Mach ich gern  " });
+  assert.equal(r.ok, true);
+  const ins = db.ops.filter((o) => o.table === "task_applications" && o.op === "insert");
+  assert.equal(ins.length, 1);
+  assert.deepEqual(ins[0].payload, { task_id: T_ID, applicant_wallet: APPLICANT, note: "Mach ich gern" });
+  assert.equal(db.tables.notifications.length, 1);
+  assert.equal(db.tables.notifications[0].recipient_wallet, PROPOSER);
+  assert.equal(db.tables.notifications[0].type, "vorhaben_task");
+  assert.equal(db.tables.notifications[0].title, "Neue Bewerbung");
+});
+
+test("task_apply twice is ALREADY_APPLIED", async () => {
+  const db = fakeDb(seed({ task_applications: [application(APPLICANT)] }));
+  const r = await handleVorhabenAction(deps(db), APPLICANT, "task_apply", { taskId: T_ID });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "ALREADY_APPLIED"); assert.equal(r.status, 409); }
+});
+
+test("task_assign by the proposer for a wallet that did not apply is NOT_AN_APPLICANT, no update", async () => {
+  const db = fakeDb(seed({ task_applications: [application(APPLICANT)] }));
+  const r = await handleVorhabenAction(deps(db), PROPOSER, "task_assign", { taskId: T_ID, applicant: OTHER });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "NOT_AN_APPLICANT");
+  assert.equal(db.ops.some((o) => o.op === "update"), false);
+});
+
+test("task_assign when the proposer applied: proposer is FORBIDDEN, an Attester may assign", async () => {
+  const apps = () => [application(PROPOSER), application(APPLICANT)];
+  const db1 = fakeDb(seed({ task_applications: apps() }));
+  const r1 = await handleVorhabenAction(deps(db1), PROPOSER, "task_assign", { taskId: T_ID, applicant: APPLICANT });
+  assert.equal(r1.ok, false);
+  if (!r1.ok) { assert.equal(r1.code, "FORBIDDEN"); assert.equal(r1.status, 403); }
+  assert.equal(db1.ops.some((o) => o.op === "update"), false);
+
+  const db2 = fakeDb(seed({ task_applications: apps() }));
+  const r2 = await handleVorhabenAction(deps(db2), ATTESTER, "task_assign", { taskId: T_ID, applicant: APPLICANT.toUpperCase().replace("0X", "0x") });
+  assert.equal(r2.ok, true);
+  const up = updatesOf(db2, "proposal_tasks")[0].payload as Row;
+  assert.equal(up.status, "vergeben");
+  assert.equal(up.assignee_wallet, APPLICANT);
+  assert.equal(up.assigned_by_wallet, ATTESTER);
+  const byWallet = Object.fromEntries(db2.tables.task_applications.map((a) => [a.applicant_wallet, a.status]));
+  assert.deepEqual(byWallet, { [PROPOSER]: "abgelehnt", [APPLICANT]: "angenommen" });
+  const act = db2.tables.task_activity[0];
+  assert.deepEqual([act.kind, act.from_status, act.to_status], ["status_change", "offen", "vergeben"]);
+  assert.equal(db2.tables.notifications[0].recipient_wallet, APPLICANT);
+  assert.equal(db2.tables.notifications[0].title, "Aufgabe an dich vergeben");
+});
+
+test("task_approve by the assignee who is also an Attester is SELF_APPROVE", async () => {
+  const db = fakeDb(seed({ proposal_tasks: [task({ status: "eingereicht", assignee_wallet: ATTESTER })] }));
+  const r = await handleVorhabenAction(deps(db), ATTESTER, "task_approve", { taskId: T_ID });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "SELF_APPROVE"); assert.equal(r.status, 403); }
+  assert.equal(db.ops.some((o) => o.op === "update"), false);
+});
+
+test("task_approve on an accepted proposal inserts the task + platform lines and dispatches them", async () => {
+  const db = fakeDb(seed({
+    proposals: [proposal({ lifecycle_stage: "angenommen" })],
+    proposal_tasks: [task({ status: "eingereicht", assignee_wallet: APPLICANT })],
+  }));
+  const d = deps(db);
+  const r = await handleVorhabenAction(d, ATTESTER, "task_approve", { taskId: T_ID });
+  assert.equal(r.ok, true);
+  const up = updatesOf(db, "proposal_tasks")[0].payload as Row;
+  assert.equal(up.status, "abgenommen");
+  assert.equal(up.approved_by_wallet, ATTESTER);
+  const lines = db.ops.find((o) => o.table === "proposal_payout_lines" && o.op === "upsert")!.payload as Row[];
+  assert.equal(lines.length, 2);
+  assert.deepEqual(lines.map((l) => [l.role, l.amount, l.asset, l.rail]),
+    [["aufgabe", "5", "EURe", "safe_eure"], ["plattform", "0.25", "EURe", "safe_eure"]]);
+  assert.equal(lines[0].recipient_wallet, APPLICANT);
+  assert.equal(d.dispatched.length, 1);
+  assert.equal(d.dispatched[0].length, 2);
+  assert.equal(db.tables.notifications[0].recipient_wallet, APPLICANT);
+  assert.equal(db.tables.notifications[0].title, "Aufgabe abgenommen");
+});
+
+test("task_approve before acceptance creates no lines (the cron creates them later)", async () => {
+  const db = fakeDb(seed({ proposal_tasks: [task({ status: "eingereicht", assignee_wallet: APPLICANT })] }));
+  const d = deps(db);
+  const r = await handleVorhabenAction(d, ATTESTER, "task_approve", { taskId: T_ID });
+  assert.equal(r.ok, true);
+  assert.equal(db.ops.some((o) => o.table === "proposal_payout_lines"), false);
+  assert.equal(d.dispatched.length, 0);
+});
+
+test("task_create rejects more than 2 decimals; a valid create returns id + status", async () => {
+  const base = { proposalId: P_ID, title: "Überweisung", description: "", criteria: ["Beleg hochgeladen"], rewardAsset: "EURe" };
+  const db1 = fakeDb(seed());
+  const r1 = await handleVorhabenAction(deps(db1), PROPOSER, "task_create", { ...base, rewardAmount: "5.123" });
+  assert.equal(r1.ok, false);
+  if (!r1.ok) { assert.equal(r1.code, "BAD_REQUEST"); assert.equal(r1.status, 400); }
+  assert.equal(db1.ops.length, 0);
+
+  const db2 = fakeDb(seed({ proposal_tasks: [] }));
+  const r2 = await handleVorhabenAction(deps(db2), PROPOSER, "task_create", { ...base, rewardAmount: "5" });
+  assert.equal(r2.ok, true);
+  if (r2.ok) {
+    const data = r2.data as { id: string; status: string };
+    assert.equal(data.status, "offen");
+    assert.equal(data.id, db2.tables.proposal_tasks[0].id);
+  }
+  assert.deepEqual(db2.tables.proposal_tasks[0].acceptance_criteria, [{ id: "k1", text: "Beleg hochgeladen", done: false }]);
+
+  const db3 = fakeDb(seed());
+  const r3 = await handleVorhabenAction(deps(db3), OTHER, "task_create", { ...base, rewardAmount: "5" });
+  assert.equal(r3.ok, false);
+  if (!r3.ok) assert.equal(r3.code, "FORBIDDEN");
+});
+
+test("a lost conditional status update returns CONFLICT and writes no activity", async () => {
+  const db = fakeDb(seed({ proposal_tasks: [task({ status: "vergeben", assignee_wallet: APPLICANT })] }), { casMiss: ["proposal_tasks"] });
+  const r = await handleVorhabenAction(deps(db), APPLICANT, "task_start", { taskId: T_ID });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "CONFLICT"); assert.equal(r.status, 409); }
+  assert.equal(db.tables.task_activity.length, 0);
+});
+
+test("task_proof rejects attachment URLs outside the project's storage", async () => {
+  const seeded = () => seed({ proposal_tasks: [task({ status: "vergeben", assignee_wallet: APPLICANT })] });
+  const db1 = fakeDb(seeded());
+  const r1 = await handleVorhabenAction(deps(db1), APPLICANT, "task_proof",
+    { taskId: T_ID, attachments: [{ type: "image", url: "https://evil.example/storage/v1/object/public/x.png" }] });
+  assert.equal(r1.ok, false);
+  if (!r1.ok) assert.equal(r1.code, "BAD_REQUEST");
+  assert.equal(db1.ops.length, 0);
+
+  const db2 = fakeDb(seeded());
+  const r2 = await handleVorhabenAction(deps(db2), APPLICANT, "task_proof",
+    { taskId: T_ID, body: "Erledigt", attachments: [{ type: "image", url: `${PREFIX}images/beleg.png` }, { type: "tx", hash: TX.toUpperCase().replace("0X", "0x") }] });
+  assert.equal(r2.ok, true);
+  const act = db2.tables.task_activity[0];
+  assert.equal(act.kind, "proof");
+  assert.deepEqual(act.attachments, [{ type: "image", url: `${PREFIX}images/beleg.png` }, { type: "tx", hash: TX }]);
+  assert.equal(db2.tables.proposal_tasks[0].status, "in_arbeit");
+});
+
+test("task_submit still succeeds when the Attester list cannot be read", async () => {
+  const db = fakeDb(seed({
+    proposal_tasks: [task({ status: "in_arbeit", assignee_wallet: APPLICANT })],
+    task_activity: [{ id: "a1", task_id: T_ID, kind: "proof" }],
+  }));
+  const r = await handleVorhabenAction(deps(db, { listAttesters: async () => { throw new Error("rpc down"); } }), APPLICANT, "task_submit", { taskId: T_ID });
+  assert.equal(r.ok, true);
+  assert.equal(db.tables.proposal_tasks[0].status, "eingereicht");
+  assert.equal(db.tables.notifications.length, 0);
+
+  const db2 = fakeDb(seed({
+    proposal_tasks: [task({ status: "in_arbeit", assignee_wallet: APPLICANT })],
+    task_activity: [{ id: "a1", task_id: T_ID, kind: "proof" }],
+  }));
+  await handleVorhabenAction(deps(db2), APPLICANT, "task_submit", { taskId: T_ID });
+  assert.deepEqual(db2.tables.notifications.map((x) => x.recipient_wallet), [ATTESTER]); // assignee excluded
+});
+
+const manualLine = (over: Row = {}): Row => ({
+  id: L_ID, contract_id: "c1", proposal_id: P_ID, role: "empfaenger", recipient_wallet: null, recipient_label: "Verein",
+  amount: "150", asset: "EURe", rail: "manual_safe", reference_type: "proposal", reference_id: P_ID, status: "geplant",
+  error: null, attempt_started_at: null, safe_tx_hash: null, safe_nonce: null, tx_hash: null, ...over,
+});
+
+test("payout_record_manual with an unverified tx is BAD_TX and leaves the line unchanged", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
+  const d = deps(db, { verifyManualTx: async () => false });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "BAD_TX");
+  assert.equal(updatesOf(db, "proposal_payout_lines").length, 0);
+  assert.deepEqual(db.tables.proposal_payout_lines[0], manualLine());
+  assert.equal(d.settled.length, 0);
+});
+
+test("payout_record_manual moves the line to gesendet with the hash and settles once", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
+  let checked: [string, string] | null = null;
+  const d = deps(db, { verifyManualTx: async (h, a) => { checked = [h, a]; return true; } });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX.toUpperCase().replace("0X", "0x") });
+  assert.equal(r.ok, true);
+  assert.deepEqual(checked, [TX, "150"]);
+  const line = db.tables.proposal_payout_lines[0];
+  assert.equal(line.status, "gesendet");
+  assert.equal(line.tx_hash, TX);
+  assert.equal(d.settled.length, 1);
+  assert.equal(d.settled[0].status, "gesendet");
+  assert.equal(d.settled[0].tx_hash, TX);
+});
+
+test("payout_record_manual: non-Attester, wrong rail and malformed hash are refused", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
+  const r1 = await handleVorhabenAction(deps(db), OTHER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r1.ok, false); if (!r1.ok) assert.equal(r1.code, "FORBIDDEN");
+  const r2 = await handleVorhabenAction(deps(db), ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: "0x1234" });
+  assert.equal(r2.ok, false); if (!r2.ok) assert.equal(r2.code, "BAD_REQUEST");
+  const db3 = fakeDb(seed({ proposal_payout_lines: [manualLine({ rail: "safe_eure", role: "aufgabe" })] }));
+  const r3 = await handleVorhabenAction(deps(db3), ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r3.ok, false); if (!r3.ok) assert.equal(r3.code, "BAD_LINE");
+  assert.equal(updatesOf(db, "proposal_payout_lines").length + updatesOf(db3, "proposal_payout_lines").length, 0);
+});

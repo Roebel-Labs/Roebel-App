@@ -77,7 +77,8 @@ export async function reconcile(deps: DispatchDeps): Promise<void> {
   for (const l of lines) {
     try {
       const started = l.attempt_started_at ? new Date(l.attempt_started_at).getTime() : 0;
-      if (FUNDER.has(l.rail) && l.tx_hash && IN_FLIGHT.has(l.status)) {
+      // manual_safe lines get their hash from payout_record_manual; settle them here if that request did not.
+      if ((FUNDER.has(l.rail) || l.rail === "manual_safe") && l.tx_hash && IN_FLIGHT.has(l.status)) {
         const r = await settleIfMined(deps, l);
         if (r === "pending" && l.status !== "unklar" && deps.nowMs() - started > NOT_MINED_AFTER_MS) {
           if (await casStatus(deps.db, l.id, ["sendend", "gesendet"], { status: "unklar", error: "not mined after 30 min — check funder history" }))

@@ -4,7 +4,7 @@ jest.mock('expo-crypto', () => ({
     require('node:crypto').createHash('sha256').update(s).digest('hex'),
 }));
 
-import { buildSignedMessage, postSigned, SIGN_TIMEOUT_MS } from '../signed-request';
+import { buildSignedMessage, postSigned, SIGN_TIMEOUT_MS, VORHABEN_SCOPE } from '../signed-request';
 
 describe('signed-request', () => {
   it('builds the roebel-tickets-v1 message with sorted payload hash', async () => {
@@ -24,6 +24,21 @@ describe('signed-request', () => {
     const body = JSON.parse(init.body);
     expect(body).toMatchObject({ scope: 'roebel-tickets-v1', action: 'order_status', wallet: '0xabc', payload: { order_id: 'o1' } });
     expect(body.signature).toMatch(/^0x/);
+  });
+});
+
+describe('vorhaben scope', () => {
+  it('signs and posts under roebel-vorhaben-v1', async () => {
+    const msg = await buildSignedMessage('task_apply', '0xABC', 1700000000, {}, VORHABEN_SCOPE);
+    expect(msg.startsWith('roebel-vorhaben-v1:task_apply:0xabc:1700000000:')).toBe(true);
+    const account = { address: '0xABC', signMessage: jest.fn(async () => '0x' + 'ab'.repeat(65)) };
+    const fetchMock = jest.fn(async () => ({ json: async () => ({ ok: true, data: null }) }));
+    (global as any).fetch = fetchMock;
+    await postSigned('/api/vorhaben/tasks', account, 'task_apply', { taskId: 't1' }, VORHABEN_SCOPE);
+    const body = JSON.parse((fetchMock.mock.calls[0] as any)[1].body);
+    expect(body.scope).toBe('roebel-vorhaben-v1');
+    const signed = (account.signMessage.mock.calls[0] as any)[0].message as string;
+    expect(signed.startsWith('roebel-vorhaben-v1:task_apply:0xabc:')).toBe(true);
   });
 });
 

@@ -164,3 +164,10 @@ test("reconcile continues past a line whose receiptStatus throws", async () => {
   assert.equal(rows[0].status, "gesendet");
   assert.equal(rows[1].status, "bestaetigt");
 });
+
+test("reconcile: a manual_safe line with a recorded hash settles through the receipt path", async () => {
+  const rows = [line({ id: "m", role: "empfaenger", rail: "manual_safe", asset: "EURe", recipient_wallet: null, status: "gesendet", tx_hash: "0x9" })];
+  const db = fakeDb(rows);
+  await reconcile(deps(db));
+  assert.equal(rows[0].status, "bestaetigt");
+});
