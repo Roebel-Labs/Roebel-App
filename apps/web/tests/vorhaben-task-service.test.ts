@@ -279,7 +279,8 @@ test("task_submit still succeeds when the Attester list cannot be read", async (
 const manualLine = (over: Row = {}): Row => ({
   id: L_ID, contract_id: "c1", proposal_id: P_ID, role: "empfaenger", recipient_wallet: null, recipient_label: "Verein",
   amount: "150", asset: "EURe", rail: "manual_safe", reference_type: "proposal", reference_id: P_ID, status: "geplant",
-  error: null, attempt_started_at: null, safe_tx_hash: null, safe_nonce: null, tx_hash: null, ...over,
+  error: null, attempt_started_at: null, safe_tx_hash: null, safe_nonce: null, tx_hash: null,
+  created_at: new Date(NOW - 3600_000).toISOString(), ...over,
 });
 
 test("payout_record_manual with an unverified tx is BAD_TX and leaves the line unchanged", async () => {
@@ -295,11 +296,12 @@ test("payout_record_manual with an unverified tx is BAD_TX and leaves the line u
 
 test("payout_record_manual moves the line to gesendet with the hash and settles once", async () => {
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
-  let checked: [string, string] | null = null;
-  const d = deps(db, { verifyManualTx: async (h, a) => { checked = [h, a]; return true; } });
+  let checked: [string, string, number] | null = null;
+  const d = deps(db, { verifyManualTx: async (h, a, nb) => { checked = [h, a, nb]; return true; } });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX.toUpperCase().replace("0X", "0x") });
   assert.equal(r.ok, true);
-  assert.deepEqual(checked, [TX, "150"]);
+  // The tx must be mined at or after the line was created.
+  assert.deepEqual(checked, [TX, "150", Math.floor((NOW - 3600_000) / 1000)]);
   const line = db.tables.proposal_payout_lines[0];
   assert.equal(line.status, "gesendet");
   assert.equal(line.tx_hash, TX);
@@ -318,4 +320,51 @@ test("payout_record_manual: non-Attester, wrong rail and malformed hash are refu
   const r3 = await handleVorhabenAction(deps(db3), ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r3.ok, false); if (!r3.ok) assert.equal(r3.code, "BAD_LINE");
   assert.equal(updatesOf(db, "proposal_payout_lines").length + updatesOf(db3, "proposal_payout_lines").length, 0);
+});
+
+test("payout_record_manual: a tx already linked to another proposal is TX_USED; same proposal is fine", async () => {
+  const OTHER_P = "44444444-4444-4444-8444-444444444444";
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()], treasury_tx_links: [{ tx_hash: TX, proposal_id: OTHER_P }] }));
+  let verified = 0;
+  const d = deps(db, { verifyManualTx: async () => { verified++; return true; } });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
+  assert.equal(verified, 0);
+  assert.equal(db.tables.proposal_payout_lines[0].status, "geplant");
+
+  const db2 = fakeDb(seed({ proposal_payout_lines: [manualLine()], treasury_tx_links: [{ tx_hash: TX, proposal_id: P_ID }] }));
+  const r2 = await handleVorhabenAction(deps(db2), ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r2.ok, true);
+});
+
+test("task_create bounds the reward at 9.999.999,99", async () => {
+  const base = { proposalId: P_ID, title: "Überweisung", criteria: ["Beleg"], rewardAsset: "EURe" };
+  for (const bad of ["10000000", "0", "0.00", "12345678.5", "-1", "1e3"]) {
+    const db = fakeDb(seed());
+    const r = await handleVorhabenAction(deps(db), PROPOSER, "task_create", { ...base, rewardAmount: bad });
+    assert.equal(r.ok, false, bad);
+    if (!r.ok) { assert.equal(r.code, "BAD_REQUEST"); assert.match(r.message, /9\.999\.999,99/); }
+  }
+  const db = fakeDb(seed({ proposal_tasks: [] }));
+  const ok = await handleVorhabenAction(deps(db), PROPOSER, "task_create", { ...base, rewardAmount: "9999999.99" });
+  assert.equal(ok.ok, true);
+});
+
+test("task_approve: when line creation fails the notice does not promise a payout underway", async () => {
+  const db = fakeDb(seed({
+    proposals: [proposal({ lifecycle_stage: "angenommen" })],
+    proposal_tasks: [task({ status: "eingereicht", assignee_wallet: APPLICANT })],
+    proposal_contracts: [],
+  }));
+  // Break ensureContract's read so createTaskLines throws.
+  const realFrom = db.from;
+  (db as any).from = (t: string) => {
+    if (t !== "proposal_contracts") return realFrom(t);
+    return { upsert: async () => ({ error: { message: "boom" } }), select: () => realFrom(t).select() };
+  };
+  const r = await handleVorhabenAction(deps(db), ATTESTER, "task_approve", { taskId: T_ID });
+  assert.equal(r.ok, true);
+  assert.equal(db.tables.proposal_tasks[0].status, "abgenommen");
+  assert.equal(db.tables.notifications[0].body, "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet.");
 });

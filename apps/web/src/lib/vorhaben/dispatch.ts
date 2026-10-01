@@ -76,12 +76,16 @@ export async function reconcile(deps: DispatchDeps): Promise<void> {
   const lines = (data ?? []) as LineRow[];
   for (const l of lines) {
     try {
-      const started = l.attempt_started_at ? new Date(l.attempt_started_at).getTime() : 0;
+      const manual = l.rail === "manual_safe";
+      // manual_safe lines have no send attempt: their clock starts when the hash was recorded (updated_at).
+      const startIso = manual ? l.updated_at : l.attempt_started_at;
+      const started = startIso ? new Date(startIso).getTime() : 0;
       // manual_safe lines get their hash from payout_record_manual; settle them here if that request did not.
-      if ((FUNDER.has(l.rail) || l.rail === "manual_safe") && l.tx_hash && IN_FLIGHT.has(l.status)) {
+      if ((FUNDER.has(l.rail) || manual) && l.tx_hash && IN_FLIGHT.has(l.status)) {
         const r = await settleIfMined(deps, l);
         if (r === "pending" && l.status !== "unklar" && deps.nowMs() - started > NOT_MINED_AFTER_MS) {
-          if (await casStatus(deps.db, l.id, ["sendend", "gesendet"], { status: "unklar", error: "not mined after 30 min — check funder history" }))
+          const error = manual ? "not confirmed after 30 min — check the Safe transaction" : "not mined after 30 min — check funder history";
+          if (await casStatus(deps.db, l.id, ["sendend", "gesendet"], { status: "unklar", error }))
             console.error(`[vorhaben] payout line ${l.id} is unklar (not mined); resolve manually`);
         }
       } else if (l.status === "sendend" && FUNDER.has(l.rail) && !l.tx_hash) {

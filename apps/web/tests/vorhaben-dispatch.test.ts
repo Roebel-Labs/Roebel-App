@@ -171,3 +171,17 @@ test("reconcile: a manual_safe line with a recorded hash settles through the rec
   await reconcile(deps(db));
   assert.equal(rows[0].status, "bestaetigt");
 });
+
+test("reconcile: a pending manual_safe line times out from updated_at with a Safe-specific error", async () => {
+  const now = 1_000_000_000;
+  const fresh = line({ id: "f", role: "empfaenger", rail: "manual_safe", asset: "EURe", recipient_wallet: null, status: "gesendet", tx_hash: "0x8",
+    attempt_started_at: null, updated_at: new Date(now - 60_000).toISOString() });
+  const stale = line({ id: "s", role: "empfaenger", rail: "manual_safe", asset: "EURe", recipient_wallet: null, status: "gesendet", tx_hash: "0x7",
+    attempt_started_at: null, updated_at: new Date(now - 31 * 60_000).toISOString() });
+  const rows = [fresh, stale];
+  const db = fakeDb(rows);
+  await reconcile(deps(db, { receiptStatus: async () => "pending" }));
+  assert.equal(rows[0].status, "gesendet");
+  assert.equal(rows[1].status, "unklar");
+  assert.equal(rows[1].error, "not confirmed after 30 min — check the Safe transaction");
+});

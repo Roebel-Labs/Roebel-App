@@ -12,7 +12,7 @@ export type LineRow = {
   id: string; contract_id: string; proposal_id: string; role: LineRole; recipient_wallet: string | null;
   recipient_label: string; amount: string; asset: Asset; rail: Rail; reference_type: string; reference_id: string;
   status: LineStatus; error: string | null; attempt_started_at: string | null; safe_tx_hash: string | null;
-  safe_nonce: number | null; tx_hash: string | null;
+  safe_nonce: number | null; tx_hash: string | null; updated_at?: string | null;
 };
 
 const PROPOSAL_COLS =
@@ -20,7 +20,7 @@ const PROPOSAL_COLS =
   "budget_asset, beneficiary_name, lifecycle_stage, tally_confirm_opened_at, tally_confirm_until, tally_address";
 const LINE_COLS =
   "id, contract_id, proposal_id, role, recipient_wallet, recipient_label, amount, asset, rail, reference_type, reference_id, " +
-  "status, error, attempt_started_at, safe_tx_hash, safe_nonce, tx_hash";
+  "status, error, attempt_started_at, safe_tx_hash, safe_nonce, tx_hash, updated_at";
 
 function must<T>(r: { data: T | null; error: { message: string } | null }, what: string): T {
   if (r.error) throw new Error(`${what}: ${r.error.message}`);

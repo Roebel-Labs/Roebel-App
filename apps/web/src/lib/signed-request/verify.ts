@@ -23,7 +23,7 @@ const SIG_RE = /^0x[a-fA-F0-9]{130,}$/;
  */
 export async function verifySignedRequest<A extends string = TicketAction>(
   body: unknown,
-  opts: { actions: readonly A[]; scope?: string; headers?: HeaderBag | null; bearerAuth?: BearerAuth; requireSignature?: boolean },
+  opts: { actions: readonly NoInfer<A>[]; scope?: string; headers?: HeaderBag | null; bearerAuth?: BearerAuth; requireSignature?: boolean },
 ): Promise<VerifyOk<A> | VerifyFail> {
   const expectedScope = opts.scope ?? SIGNED_SCOPE;
   const b = (body ?? {}) as Record<string, unknown>;

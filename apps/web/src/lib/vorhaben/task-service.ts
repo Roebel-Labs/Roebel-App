@@ -15,7 +15,8 @@ export interface TaskDeps {
   isAttester: (wallet: string) => Promise<boolean>;
   nowMs: () => number;
   settings: VorhabenSettings;
-  verifyManualTx: (txHash: string, amount: string) => Promise<boolean>;
+  /** EURe transfer from the Attester Safe for `amount`, mined at or after `notBeforeSec`. */
+  verifyManualTx: (txHash: string, amount: string, notBeforeSec: number) => Promise<boolean>;
   dispatch: (lineIds: string[]) => Promise<void>;
   /** Current Attester wallets (lowercase); only used for the "wartet auf Abnahme" notice. */
   listAttesters: () => Promise<string[]>;
@@ -37,7 +38,7 @@ const TASK_COLS = "id, proposal_id, title, status, assignee_wallet, created_by_w
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WALLET_RE = /^0x[0-9a-f]{40}$/;
 const TX_RE = /^0x[0-9a-f]{64}$/i;
-const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
+const AMOUNT_RE = /^\d{1,7}(\.\d{1,2})?$/; // max 9.999.999,99 €
 const ACCEPTED_STAGES: Stage[] = ["angenommen", "in_umsetzung"];
 
 const fail = (status: number, code: string, message: string): Fail => ({ ok: false, status, code, message });
@@ -118,7 +119,7 @@ async function createTask(deps: TaskDeps, wallet: string, p: Record<string, unkn
     criteria.push(t);
   }
   const amount = typeof p.rewardAmount === "string" ? p.rewardAmount.trim() : "";
-  if (!AMOUNT_RE.test(amount) || toAtto(amount) <= 0n) return bad("Die Vergütung muss ein Betrag über 0 mit höchstens 2 Nachkommastellen sein.");
+  if (!AMOUNT_RE.test(amount) || toAtto(amount) <= 0n) return bad("Die Vergütung muss zwischen 0,01 und 9.999.999,99 € liegen, mit höchstens 2 Nachkommastellen.");
   if (p.rewardAsset !== "EURe") return bad("Als Währung ist nur EURe möglich.");
   let deadline: string | null = null;
   if (p.deadline !== undefined && p.deadline !== null && p.deadline !== "") {
@@ -314,19 +315,23 @@ async function runTaskAction(deps: TaskDeps, wallet: string, action: TaskAction,
       if (!(await cas({ approved_by_wallet: wallet }))) return conflict();
       await statusLog();
       let lineIds: string[] = [];
+      let linesFailed = false;
       const accepted = ACCEPTED_STAGES.includes(proposal.lifecycle_stage);
       if (accepted && ctx.assignee) {
         try {
           lineIds = await createTaskLines(deps, proposal, task, ctx.assignee);
         } catch (e) {
+          linesFailed = true;
           // The approval is stored; the cron creates missing lines for every abgenommen task of an accepted proposal.
           console.error(`[vorhaben/tasks] payout lines for task ${taskId} failed; cron will retry`, e);
         }
       }
       if (ctx.assignee) {
-        await notify(db, [notice(ctx.assignee, "Aufgabe abgenommen", accepted
-          ? `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung ist unterwegs.`
-          : `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung folgt, sobald der Vorschlag angenommen ist.`)]);
+        await notify(db, [notice(ctx.assignee, "Aufgabe abgenommen", !accepted
+          ? `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung folgt, sobald der Vorschlag angenommen ist.`
+          : linesFailed
+            ? "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet."
+            : `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung ist unterwegs.`)]);
       }
       return { ok: true, data: { status: d.next, lineIds } };
     }
@@ -384,8 +389,15 @@ async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<stri
 
   const used = rows(await db.from("proposal_payout_lines").select("id").eq("tx_hash", hash).limit(1), "tx reuse read");
   if (used.length > 0) return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  const links = rows<{ proposal_id: string | null }>(
+    await db.from("treasury_tx_links").select("proposal_id").eq("tx_hash", hash), "tx link read");
+  if (links.some((l) => l.proposal_id && l.proposal_id !== line.proposal_id)) {
+    return fail(409, "TX_USED", "Diese Transaktion gehört schon zu einem anderen Vorschlag.");
+  }
 
-  if (!(await deps.verifyManualTx(hash, String(line.amount)))) {
+  const createdMs = new Date((line as LineRow & { created_at?: string }).created_at ?? "").getTime();
+  if (!Number.isFinite(createdMs)) throw new Error(`line ${line.id} has no created_at`);
+  if (!(await deps.verifyManualTx(hash, String(line.amount), Math.floor(createdMs / 1000)))) {
     return fail(400, "BAD_TX", "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag.");
   }
   const up = await db.from("proposal_payout_lines")
