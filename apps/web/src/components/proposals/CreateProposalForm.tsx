@@ -8,6 +8,7 @@ import { ethers } from "ethers";
 import { hasHighGasBundler, sendViaHighGasBundler } from "@/lib/highgas-bundler";
 import { useState } from "react";
 import { parseBudgetInput } from "@/lib/vorhaben/budget-input";
+import { buildProposalStoreMessage } from "@/lib/proposal-store-auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
@@ -103,8 +104,6 @@ export function CreateProposalForm({
       if (!decodedEvent) throw new Error("Failed to decode ProposalCreated event");
 
       const numericProposalId = decodedEvent.args.proposalId.toString();
-      const voteStart = decodedEvent.args.voteStart.toString();
-      const voteEnd = decodedEvent.args.voteEnd.toString();
 
       // MACI-specific: decode PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)
       try {
@@ -136,31 +135,44 @@ export function CreateProposalForm({
         console.warn("PollLinked decode failed (proposal still on-chain):", pollErr);
       }
 
-      // Store in Supabase for fast retrieval (non-fatal if it fails).
+      // Store in Supabase for fast retrieval (non-fatal if it fails). The server only accepts the
+      // row when the tx's ProposalCreated names this account AND this account signed the content.
       try {
-        const storeResponse = await fetch("/api/proposals/store", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            proposalId: transactionHash, // Transaction hash for URL routing
-            blockchainProposalId: numericProposalId, // Numeric ID for blockchain calls
-            title,
-            markdown: description,
-            irysContentId: irysReceipt.id,
-            irysUrl: irysReceipt.url,
-            transactionHash,
-            proposerAddress: account?.address,
-            blockNumber: Number(receipt.blockNumber),
-            snapshotBlock: Number(voteStart),
-            deadlineBlock: Number(voteEnd),
-            category: "general",
-            attachTreasurySnapshot,
-            budgetAmount: budgetAmount.trim() || undefined,
-            beneficiaryName: beneficiaryName.trim() || undefined,
-          }),
+        if (!account) throw new Error("no active account to sign the stored proposal");
+        const storeContent = {
+          title,
+          markdown: description,
+          category: "general",
+          budgetAmount: budgetAmount.trim() || undefined,
+          beneficiaryName: beneficiaryName.trim() || undefined,
+        };
+        const signature = await account.signMessage({
+          message: buildProposalStoreMessage(numericProposalId, storeContent),
         });
-        if (!storeResponse.ok) {
-          console.warn("⚠️ Failed to store in Supabase, but proposal is on-chain");
+        const storeBody = JSON.stringify({
+          proposalId: transactionHash, // Transaction hash for URL routing
+          blockchainProposalId: numericProposalId, // Numeric ID for blockchain calls
+          ...storeContent,
+          irysContentId: irysReceipt.id,
+          irysUrl: irysReceipt.url,
+          transactionHash,
+          proposerAddress: account.address,
+          attachTreasurySnapshot,
+          signature,
+        });
+        // 503 = the server's RPC has not seen the tx/receipt yet: retry briefly.
+        let storeResponse: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          storeResponse = await fetch("/api/proposals/store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: storeBody,
+          });
+          if (storeResponse.status !== 503) break;
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        if (!storeResponse?.ok) {
+          console.warn("⚠️ Failed to store in Supabase, but proposal is on-chain", storeResponse?.status);
         }
       } catch (supabaseError) {
         console.error("❌ Supabase storage error:", supabaseError);

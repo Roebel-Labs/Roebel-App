@@ -5,12 +5,36 @@ import { calculateReadingTime, extractSummary } from "@/lib/proposal-types";
 import { createAppNotification } from "@/app/actions/app-notifications";
 import { parseBudgetInput } from "@/lib/vorhaben/budget-input";
 import { treasuryEuro } from "@/lib/muenzen/gnosis";
+import { authorizeProposalStore, type StoreAuthDeps } from "@/lib/proposal-store-auth";
+import { verifyWalletSignature } from "@/lib/signed-request/signature";
+import { createPublicClient, http, TransactionReceiptNotFoundError } from "viem";
+import { gnosis } from "viem/chains";
+
+export const runtime = "nodejs";
+
+function storeAuthDeps(): StoreAuthDeps {
+  // batch:false — publicnode/gnosischain RPCs have returned null for batched calls before.
+  const pub = createPublicClient({ chain: gnosis, transport: http(process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com", { batch: false }) });
+  return {
+    getReceipt: async (hash) => {
+      try {
+        const r = await pub.getTransactionReceipt({ hash });
+        return { status: r.status, blockNumber: r.blockNumber, logs: r.logs };
+      } catch (e) {
+        if (e instanceof TransactionReceiptNotFoundError) return null;
+        throw e;
+      }
+    },
+    verifySignature: verifyWalletSignature,
+  };
+}
 
 /**
  * POST /api/proposals/store
  *
- * Store a proposal in Supabase after it's been created on-chain
- * This ensures fast retrieval and rich querying capabilities
+ * Store a proposal in Supabase after it's been created on-chain.
+ * Only accepted when the tx emitted ProposalCreated on the governor for this proposer and the
+ * proposer signed the stored content (lib/proposal-store-auth). Writes with the service role.
  */
 export async function POST(request: NextRequest) {
   console.log("📝 [API] Proposal store request received");
@@ -27,9 +51,6 @@ export async function POST(request: NextRequest) {
       irysUrl,
       transactionHash,
       proposerAddress,
-      blockNumber,
-      snapshotBlock,
-      deadlineBlock,
       category,
       attachTreasurySnapshot,
       budgetAmount,
@@ -66,6 +87,13 @@ export async function POST(request: NextRequest) {
         { error: "Missing blockchain data" },
         { status: 400 }
       );
+    }
+
+    // Bind the row to the on-chain proposer: ProposalCreated in the tx + signature over the content.
+    const auth = await authorizeProposalStore(storeAuthDeps(), body);
+    if (!auth.ok) {
+      console.warn("⛔ [API] Proposal store refused:", auth.status, auth.error);
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const budget = parseBudgetInput(
@@ -131,10 +159,11 @@ export async function POST(request: NextRequest) {
       irys_content_id: irysContentId,
       irys_url: irysUrl,
       transaction_hash: transactionHash,
-      proposer_address: proposerAddress,
-      block_number: BigInt(blockNumber || 0),
-      snapshot_block: BigInt(snapshotBlock || 0),
-      deadline_block: BigInt(deadlineBlock || 0),
+      proposer_address: auth.proposer,
+      // From the verified receipt/event, never from the request body.
+      block_number: auth.blockNumber,
+      snapshot_block: auth.voteStart,
+      deadline_block: auth.voteEnd,
       budget_amount: budget.amount,
       beneficiary_name: budget.beneficiary,
     };
@@ -148,6 +177,9 @@ export async function POST(request: NextRequest) {
       process.env.VORHABEN_COLUMNS_LIVE === "1",
     );
 
+    if (!result.success && result.code === "23505") {
+      return NextResponse.json({ error: "Proposal already stored" }, { status: 409 });
+    }
     if (!result.success) {
       console.error("❌ [API] Failed to store proposal:", result.error);
       return NextResponse.json(

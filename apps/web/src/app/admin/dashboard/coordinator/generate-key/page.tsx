@@ -35,6 +35,7 @@ import {
 } from "@/lib/shamir/canonical-payload";
 import { buildRotationProposalCalldata } from "@/lib/shamir/coordinator-proposal";
 import { uploadToIrys } from "@/lib/irys";
+import { buildProposalStoreMessage } from "@/lib/proposal-store-auth";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -252,24 +253,26 @@ export default function GenerateKeyPage() {
                 { name: "Title", value: title },
                 { name: "Kind", value: "coordinator-rotation" },
               ]);
-              await fetch("/api/proposals/store", {
+              // The store route requires the proposer's signature over the stored content.
+              const storeContent = { title, markdown: description, category: "governance" };
+              const storeSig = await account.signMessage({
+                message: buildProposalStoreMessage(pId, storeContent),
+              });
+              const storeRes = await fetch("/api/proposals/store", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   proposalId: result.transactionHash,
                   blockchainProposalId: pId,
-                  title,
-                  markdown: description,
+                  ...storeContent,
                   irysContentId: irysReceipt.id,
                   irysUrl: irysReceipt.url,
                   transactionHash: result.transactionHash,
                   proposerAddress: account.address,
-                  blockNumber: Number(receipt.blockNumber),
-                  snapshotBlock: 0,
-                  deadlineBlock: 0,
-                  category: "governance",
+                  signature: storeSig,
                 }),
               });
+              if (!storeRes.ok) throw new Error(`store HTTP ${storeRes.status}`);
             } catch (storeErr) {
               console.warn(
                 "[generate-key] /api/proposals/store mirror failed — on-chain proposal still exists, may need manual backfill",

@@ -75,11 +75,15 @@ export async function createProposal(
   // vorhaben migration is applied. Inserting an unknown column fails the whole
   // insert, so these keys are written only when VORHABEN_COLUMNS_LIVE=1.
   vorhabenColumnsLive = false
-): Promise<{ success: boolean; data?: Proposal; error?: string }> {
+): Promise<{ success: boolean; data?: Proposal; error?: string; code?: string }> {
   console.log("📝 [Supabase] Creating proposal:", input.proposal_id);
 
+  // proposals is service-role-write-only (anon/authenticated hold SELECT only), so this is server-only.
+  if (typeof window !== "undefined") return { success: false, error: "createProposal is server-only" };
+
   try {
-    const { data, error } = await supabase
+    const { createAdminClient } = await import("./supabase/admin");
+    const { data, error } = await createAdminClient()
       .from("proposals")
       .insert({
         proposal_id: input.proposal_id,
@@ -114,7 +118,7 @@ export async function createProposal(
 
     if (error) {
       console.error("❌ [Supabase] Error creating proposal:", error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, code: error.code };
     }
 
     console.log("✅ [Supabase] Proposal created successfully");
@@ -347,8 +351,12 @@ export async function updateProposalVotes(
 ): Promise<{ success: boolean; data?: Proposal; error?: string }> {
   console.log("🔄 [Supabase] Updating proposal votes:", input.proposal_id);
 
+  // proposals is service-role-write-only, so this is server-only.
+  if (typeof window !== "undefined") return { success: false, error: "updateProposalVotes is server-only" };
+
   try {
-    const { data, error } = await supabase
+    const { createAdminClient } = await import("./supabase/admin");
+    const { data, error } = await createAdminClient()
       .from("proposals")
       .update({
         state: input.state,
