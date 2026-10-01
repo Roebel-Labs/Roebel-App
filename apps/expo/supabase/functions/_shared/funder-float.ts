@@ -8,3 +8,8 @@ export function floatDecision(
   if (rail === "funder_muenzen") return muenzenBal >= amountAtto && xdaiBal >= XDAI_GAS_RESERVE_ATTO ? "ok" : "float_low";
   return xdaiBal >= amountAtto + XDAI_GAS_RESERVE_ATTO ? "ok" : "float_low";
 }
+
+// A funder rail may only pay out its own asset.
+export function assetMatchesRail(rail: "funder_muenzen" | "funder_xdai", asset: string): boolean {
+  return rail === "funder_muenzen" ? asset === "MUENZEN" : asset === "XDAI";
+}

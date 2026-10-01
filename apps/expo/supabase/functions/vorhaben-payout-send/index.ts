@@ -7,12 +7,12 @@
 //
 // Secrets: FUNDER_PRIVKEY (shared with claim-reward), optional GNOSIS_RPC_URL.
 // Auto: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
-import { createPublicClient, createWalletClient, http, getAddress } from "https://esm.sh/viem@2.21.0";
+import { createPublicClient, createWalletClient, http, getAddress, encodeFunctionData, keccak256 } from "https://esm.sh/viem@2.21.0";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.21.0/accounts";
 import { gnosis } from "https://esm.sh/viem@2.21.0/chains";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { toAtto } from "../_shared/payout-amount.ts";
-import { floatDecision } from "../_shared/funder-float.ts";
+import { assetMatchesRail, floatDecision } from "../_shared/funder-float.ts";
 
 const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
 const GROUP_TOKEN_ID = BigInt("0xAc2CeCdBead594F97358a0d3132454f24F3E470c");
@@ -33,7 +33,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(Deno.env.get("SUPABASE_URL")!, SERVICE_KEY, { auth: { persistSession: false } });
 
 async function release(lineId: string, reason: string) {
-  await db.rpc("release_payout_line", { p_line_id: lineId, p_error: reason });
+  const { error } = await db.rpc("release_payout_line", { p_line_id: lineId, p_error: reason });
+  if (error) console.error(`release_payout_line failed for ${lineId}: ${error.message}`);
 }
 
 Deno.serve(async (req) => {
@@ -55,9 +56,20 @@ Deno.serve(async (req) => {
     return json({ status: "failed", reason: "wrong rail" }, 400);
   }
 
+  if (!assetMatchesRail(rail, String(line.asset))) {
+    await release(lineId, "asset_rail_mismatch");
+    return json({ status: "failed", reason: "asset_rail_mismatch" }, 400);
+  }
+
   const pk = Deno.env.get("FUNDER_PRIVKEY");
   if (!pk) { await release(lineId, "funder_not_configured"); return json({ status: "failed", reason: "funder not configured" }, 500); }
-  const account = privateKeyToAccount(pk.startsWith("0x") ? pk : `0x${pk}`);
+  let account: ReturnType<typeof privateKeyToAccount>;
+  try {
+    account = privateKeyToAccount(pk.startsWith("0x") ? pk : `0x${pk}`);
+  } catch (e) {
+    await release(lineId, `rpc_error: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+    return json({ status: "failed", reason: "rpc_error" }, 503);
+  }
 
   let recipient: `0x${string}`;
   let amountAtto: bigint;
@@ -71,31 +83,74 @@ Deno.serve(async (req) => {
 
   const rpc = Deno.env.get("GNOSIS_RPC_URL") || "https://rpc.gnosischain.com";
   const pub = createPublicClient({ chain: gnosis, transport: http(rpc) });
-  const [muenzenBal, xdaiBal] = await Promise.all([
-    pub.readContract({ address: HUB, abi: hubAbi, functionName: "balanceOf", args: [account.address, GROUP_TOKEN_ID] }) as Promise<bigint>,
-    pub.getBalance({ address: account.address }),
-  ]);
+  let muenzenBal: bigint;
+  let xdaiBal: bigint;
+  try {
+    [muenzenBal, xdaiBal] = await Promise.all([
+      pub.readContract({ address: HUB, abi: hubAbi, functionName: "balanceOf", args: [account.address, GROUP_TOKEN_ID] }) as Promise<bigint>,
+      pub.getBalance({ address: account.address }),
+    ]);
+  } catch (e) {
+    await release(lineId, `rpc_error: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+    return json({ status: "failed", reason: "rpc_error" }, 503);
+  }
   if (floatDecision(rail, amountAtto, muenzenBal, xdaiBal) === "float_low") {
     await release(lineId, "float_low");
     return json({ status: "float_low" });
   }
 
+  // Sign-persist-broadcast: the hash is known and stored BEFORE anything is broadcast,
+  // so an uncertain broadcast can never be released and re-sent (no double payment).
   const wallet = createWalletClient({ account, chain: gnosis, transport: http(rpc) });
+  let serialized: `0x${string}`;
   let hash: `0x${string}`;
   try {
-    hash = rail === "funder_muenzen"
-      ? await wallet.writeContract({ address: HUB, abi: hubAbi, functionName: "safeTransferFrom",
-          args: [account.address, recipient, GROUP_TOKEN_ID, amountAtto, "0x"] })
-      : await wallet.sendTransaction({ to: recipient, value: amountAtto });
+    const request = await wallet.prepareTransactionRequest(
+      rail === "funder_muenzen"
+        ? {
+            account, chain: gnosis, to: HUB, value: 0n,
+            data: encodeFunctionData({ abi: hubAbi, functionName: "safeTransferFrom",
+              args: [account.address, recipient, GROUP_TOKEN_ID, amountAtto, "0x"] }),
+          }
+        : { account, chain: gnosis, to: recipient, value: amountAtto },
+    );
+    serialized = await account.signTransaction(request as never);
+    hash = keccak256(serialized);
   } catch (e) {
-    // Nothing was broadcast (viem throws before returning a hash) → safe to put back.
-    await release(lineId, `send failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
-    return json({ status: "failed", reason: "send failed" }, 502);
+    // Nothing was broadcast yet → safe to put back.
+    await release(lineId, `sign failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+    return json({ status: "failed", reason: "sign failed" }, 502);
   }
 
-  // Store the hash before anything else can fail.
-  await db.from("proposal_payout_lines").update({ status: "gesendet", tx_hash: hash, updated_at: new Date().toISOString() }).eq("id", lineId);
-  await db.from("funder_ledger").insert({ direction: "payout", wallet: recipient, amount_atto: amountAtto.toString(), ref: `vorhaben:${lineId}`, tx_hash: hash });
+  // Persist the hash (status stays 'sendend') before broadcasting.
+  const { error: persistErr } = await db.from("proposal_payout_lines")
+    .update({ tx_hash: hash, updated_at: new Date().toISOString() }).eq("id", lineId);
+  if (persistErr) {
+    await release(lineId, `persist failed: ${persistErr.message.slice(0, 200)}`);
+    return json({ status: "failed", reason: "persist failed" }, 500);
+  }
+
+  try {
+    await pub.sendRawTransaction({ serializedTransaction: serialized });
+  } catch (e) {
+    // The node may have accepted the tx despite the error. NEVER release here.
+    const msg = e instanceof Error ? e.message.slice(0, 200) : String(e);
+    const { error: unklarErr } = await db.from("proposal_payout_lines")
+      .update({ status: "unklar", error: `broadcast_uncertain: ${msg}`, updated_at: new Date().toISOString() }).eq("id", lineId);
+    if (unklarErr) console.error(`payout ${lineId} unklar update failed (tx ${hash}): ${unklarErr.message}`);
+    return json({ status: "unklar", txHash: hash });
+  }
+
+  const { error: sentErr } = await db.from("proposal_payout_lines")
+    .update({ status: "gesendet", updated_at: new Date().toISOString() }).eq("id", lineId);
+  if (sentErr) console.error(`payout ${lineId} gesendet update failed, tx ${hash} already broadcast: ${sentErr.message}`);
+
+  if (rail === "funder_muenzen") {
+    const { error: ledgerErr } = await db.from("funder_ledger").insert({
+      direction: "payout", wallet: recipient, amount_atto: amountAtto.toString(), ref: `vorhaben:${lineId}`, tx_hash: hash,
+    });
+    if (ledgerErr) console.error(`funder_ledger insert failed for ${lineId} (tx ${hash}): ${ledgerErr.message}`);
+  }
 
   try {
     const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 45_000 });
