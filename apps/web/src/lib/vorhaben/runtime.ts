@@ -5,7 +5,7 @@ import { gnosis } from "viem/chains";
 import { dispatchLines, settleIfMined, type DispatchDeps } from "./dispatch";
 import { sendViaFunder } from "./rails/funder";
 import { safeRailFromEnv } from "./rails/safe";
-import type { LineRow } from "./repo";
+import { toLineRows, type LineRow } from "./repo";
 import type { Db } from "./settings";
 
 const RPC = () => process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com";
@@ -35,7 +35,7 @@ export function buildDispatch(db: Db): (lineIds: string[]) => Promise<void> {
     if (lineIds.length === 0) return;
     const { data, error } = await db.from("proposal_payout_lines").select("*").in("id", lineIds);
     if (error) throw new Error(`dispatch lines read: ${error.message}`);
-    await dispatchLines(buildDispatchDeps(db), (data ?? []) as LineRow[]);
+    await dispatchLines(buildDispatchDeps(db), toLineRows(data));
   };
 }
 

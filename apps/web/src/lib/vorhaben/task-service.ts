@@ -6,7 +6,7 @@ import type { Stage } from "./constants";
 import { toAtto } from "./money";
 import { notify, type VorhabenNotice } from "./notify";
 import { planTaskLines } from "./payout-plan";
-import { displayNames, ensureContract, getProposal, insertLines, type LineRow, type ProposalRow } from "./repo";
+import { displayNames, ensureContract, getProposal, insertLines, toLineRow, type LineRow, type ProposalRow } from "./repo";
 import type { Db, VorhabenSettings } from "./settings";
 import { decideTaskAction, type TaskAction, type TaskCtx, type TaskStatus } from "./task-machine";
 
@@ -315,23 +315,18 @@ async function runTaskAction(deps: TaskDeps, wallet: string, action: TaskAction,
       if (!(await cas({ approved_by_wallet: wallet }))) return conflict();
       await statusLog();
       let lineIds: string[] = [];
-      let linesFailed = false;
       const accepted = ACCEPTED_STAGES.includes(proposal.lifecycle_stage);
       if (accepted && ctx.assignee) {
         try {
           lineIds = await createTaskLines(deps, proposal, task, ctx.assignee);
         } catch (e) {
-          linesFailed = true;
           // The approval is stored; the cron creates missing lines for every abgenommen task of an accepted proposal.
           console.error(`[vorhaben/tasks] payout lines for task ${taskId} failed; cron will retry`, e);
         }
       }
       if (ctx.assignee) {
-        await notify(db, [notice(ctx.assignee, "Aufgabe abgenommen", !accepted
-          ? `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung folgt, sobald der Vorschlag angenommen ist.`
-          : linesFailed
-            ? "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet."
-            : `Die Aufgabe „${task.title}" wurde abgenommen. Die Auszahlung ist unterwegs.`)]);
+        // One wording for every case: payouts may be paused (dispatch_enabled) or waiting for the vote.
+        await notify(db, [notice(ctx.assignee, "Aufgabe abgenommen", "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet.")]);
       }
       return { ok: true, data: { status: d.next, lineIds } };
     }
@@ -382,12 +377,13 @@ async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<stri
 
   const lr = await db.from("proposal_payout_lines").select("*").eq("id", lineId).maybeSingle();
   check(lr, "line read");
-  const line = lr.data as LineRow | null;
+  const line = lr.data ? (toLineRow(lr.data) as LineRow & { created_at?: string }) : null;
   if (!line) return fail(404, "NOT_FOUND", "Auszahlung nicht gefunden.");
   if (line.role !== "empfaenger" || line.rail !== "manual_safe") return fail(400, "BAD_LINE", "Diese Auszahlung wird nicht manuell eingetragen.");
   if (line.status !== "geplant") return fail(409, "BAD_STATUS", "Für diese Auszahlung ist schon eine Transaktion eingetragen.");
 
-  const used = rows(await db.from("proposal_payout_lines").select("id").eq("tx_hash", hash).limit(1), "tx reuse read");
+  // Case-insensitive: Safe-service execution hashes (safe_eure lines) are not guaranteed lowercase.
+  const used = rows(await db.from("proposal_payout_lines").select("id").ilike("tx_hash", hash).limit(1), "tx reuse read");
   if (used.length > 0) return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
   const links = rows<{ proposal_id: string | null }>(
     await db.from("treasury_tx_links").select("proposal_id").eq("tx_hash", hash), "tx link read");
@@ -395,14 +391,18 @@ async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<stri
     return fail(409, "TX_USED", "Diese Transaktion gehört schon zu einem anderen Vorschlag.");
   }
 
-  const createdMs = new Date((line as LineRow & { created_at?: string }).created_at ?? "").getTime();
+  const createdMs = new Date(line.created_at ?? "").getTime();
   if (!Number.isFinite(createdMs)) throw new Error(`line ${line.id} has no created_at`);
-  if (!(await deps.verifyManualTx(hash, String(line.amount), Math.floor(createdMs / 1000)))) {
+  if (!(await deps.verifyManualTx(hash, line.amount, Math.floor(createdMs / 1000)))) {
     return fail(400, "BAD_TX", "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag.");
   }
   const up = await db.from("proposal_payout_lines")
     .update({ status: "gesendet", tx_hash: hash, error: null, updated_at: new Date(deps.nowMs()).toISOString() })
     .eq("id", lineId).eq("status", "geplant").select("id");
+  // proposal_payout_lines_manual_tx_key: a concurrent request recorded the same tx on another line.
+  if ((up.error as { code?: string } | null)?.code === "23505") {
+    return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  }
   check(up, "line update");
   if (!Array.isArray(up.data) || up.data.length === 0) return conflict();
   // The single settle path moves it to bestaetigt and runs afterLineSettled.

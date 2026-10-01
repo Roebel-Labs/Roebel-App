@@ -138,3 +138,33 @@ test("reminder mark error → no notify", async () => {
     tally_confirm_until: new Date(opened + 7 * 86400_000).toISOString() }), /markfail/);
   assert.equal(notified(db), 0);
 });
+
+const upserted = (db: ReturnType<typeof recordingDb>) => db.ops
+  .filter((o) => o.table === "proposal_payout_lines" && o.op === "upsert")
+  .flatMap((o) => o.payload as { role: string; reference_type: string; amount: string; rail: string }[]);
+
+test("accepted budget: sync plans only the empfaenger line, never the fee before the transfer is confirmed", async () => {
+  const db = recordingDb(contracts);
+  await syncProposal(mk(db), proposal);
+  const lines = upserted(db);
+  assert.deepEqual(lines.map((l) => l.role), ["empfaenger"]);
+});
+
+test("accepted budget already confirmed but fee line missing: sync backfills the fee (idempotent upsert)", async () => {
+  const db = recordingDb({ ...contracts, proposal_payout_lines: [{ role: "empfaenger", status: "bestaetigt", reference_type: "proposal" }] });
+  await syncProposal(mk(db), proposal);
+  const fee = upserted(db).filter((l) => l.role === "plattform");
+  assert.equal(fee.length, 1);
+  assert.equal(fee[0].reference_type, "proposal");
+  assert.equal(fee[0].amount, "7.5");
+  assert.equal(fee[0].rail, "funder_xdai");
+});
+
+test("budget fee already planned: sync does not add another", async () => {
+  const db = recordingDb({ ...contracts, proposal_payout_lines: [
+    { role: "empfaenger", status: "bestaetigt", reference_type: "proposal" },
+    { role: "plattform", status: "geplant", reference_type: "proposal" },
+  ] });
+  await syncProposal(mk(db), proposal);
+  assert.equal(upserted(db).filter((l) => l.role === "plattform").length, 0);
+});

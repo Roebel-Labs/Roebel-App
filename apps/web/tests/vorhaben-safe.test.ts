@@ -159,12 +159,19 @@ test("sendend + service knows the hash → vorgeschlagen", async () => {
   assert.equal(rows[0].status, "vorgeschlagen");
 });
 
-test("sendend, unknown to the service and stale → reset to geplant", async () => {
+test("sendend, unknown to the service and stale → unklar, hash kept, never re-proposed", async () => {
   const rows = [line({ status: "sendend", attempt_started_at: new Date(1e12 - 11 * 60 * 1000).toISOString() })];
+  const before = rows[0].safe_tx_hash;
   await pollSafeLine(deps(null, 7, rows), rows[0]);
-  assert.equal(rows[0].status, "geplant");
-  assert.equal(rows[0].safe_tx_hash, null);
-  assert.equal(rows[0].error, "propose_failed");
+  assert.equal(rows[0].status, "unklar");
+  assert.equal(rows[0].safe_tx_hash, before);
+  assert.equal(rows[0].error, "safe tx unknown to service — check queue before re-proposing");
+});
+
+test("sendend, unknown to the service but fresh → unchanged", async () => {
+  const rows = [line({ status: "sendend", attempt_started_at: new Date(1e12 - 60 * 1000).toISOString() })];
+  await pollSafeLine(deps(null, 7, rows), rows[0]);
+  assert.equal(rows[0].status, "sendend");
 });
 
 test("proposeSafeBatch stores the hash, proposes, marks vorgeschlagen, notifies", async () => {

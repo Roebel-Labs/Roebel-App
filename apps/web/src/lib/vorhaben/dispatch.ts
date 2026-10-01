@@ -1,6 +1,7 @@
-import type { LineRow } from "./repo";
-import type { Db } from "./settings";
 import { notify } from "./notify";
+import { planBudgetFeeLine } from "./payout-plan";
+import { amountString, insertLines, toLineRows, type LineRow } from "./repo";
+import { loadSettings, type Db } from "./settings";
 
 export interface DispatchDeps {
   db: Db;
@@ -73,7 +74,7 @@ export async function reconcile(deps: DispatchDeps): Promise<void> {
   const { data, error } = await deps.db.from("proposal_payout_lines").select("*")
     .in("status", OPEN_STATUSES).order("created_at");
   if (error) throw new Error(`reconcile query: ${error.message}`);
-  const lines = (data ?? []) as LineRow[];
+  const lines = toLineRows(data);
   for (const l of lines) {
     try {
       const manual = l.rail === "manual_safe";
@@ -107,26 +108,61 @@ export async function reconcile(deps: DispatchDeps): Promise<void> {
   }
 }
 
-/** Side effects once a line is confirmed on-chain: task → ausgezahlt, recipient push. */
+/**
+ * Side effects once a line is confirmed on-chain: budget fee line, task → ausgezahlt, treasury link,
+ * recipient push. Runs AFTER the bestaetigt CAS, so it must never throw: each step logs its own failure.
+ * The cron backstops what matters for money (sync re-creates a missing budget fee line).
+ */
 export async function afterLineSettled(db: Db, line: LineRow, proposalKeyOverride?: string): Promise<void> {
-  if (line.role === "aufgabe") {
-    await db.from("proposal_tasks").update({ status: "ausgezahlt", updated_at: new Date().toISOString() })
-      .eq("id", line.reference_id).eq("status", "abgenommen");
+  const step = async (what: string, fn: () => Promise<void>) => {
+    try { await fn(); }
+    catch (e) { console.error(`[vorhaben] afterLineSettled ${what} failed for line ${line.id}`, e); }
+  };
+  const amount = amountString(line.amount);
+
+  if (line.role === "empfaenger" && line.reference_type === "proposal") {
+    // The platform fee on a budget exists only once the budget really left the Safe.
+    await step("budget fee", async () => {
+      const { data, error } = await db.from("proposal_contracts")
+        .select("platform_fee_bps, platform_safe_address").eq("id", line.contract_id).single();
+      if (error) throw new Error(`contract read: ${error.message}`);
+      const c = data as { platform_fee_bps: number; platform_safe_address: string };
+      const settings = await loadSettings(db);
+      await insertLines(db, line.contract_id, line.proposal_id, planBudgetFeeLine(
+        { proposalId: line.reference_id, amount, asset: line.asset },
+        { bps: c.platform_fee_bps, platformSafe: c.platform_safe_address, budgetFeeRail: settings.budgetFeeRail }));
+    });
   }
-  if (line.rail === "safe_eure" || line.rail === "manual_safe") {
-    if (line.tx_hash) await db.from("treasury_tx_links").upsert({ tx_hash: line.tx_hash.toLowerCase(), proposal_id: line.proposal_id }, { onConflict: "tx_hash", ignoreDuplicates: true });
+  if (line.role === "aufgabe") {
+    await step("task status", async () => {
+      const { error } = await db.from("proposal_tasks").update({ status: "ausgezahlt", updated_at: new Date().toISOString() })
+        .eq("id", line.reference_id).eq("status", "abgenommen");
+      if (error) throw new Error(error.message);
+    });
+  }
+  if ((line.rail === "safe_eure" || line.rail === "manual_safe") && line.tx_hash) {
+    const txHash = line.tx_hash.toLowerCase();
+    await step("treasury link", async () => {
+      const { error } = await db.from("treasury_tx_links")
+        .upsert({ tx_hash: txHash, proposal_id: line.proposal_id }, { onConflict: "tx_hash", ignoreDuplicates: true });
+      if (error) throw new Error(error.message);
+    });
   }
   if (!line.recipient_wallet || line.role === "plattform") return;
-  let proposalKey = proposalKeyOverride;
-  if (!proposalKey) {
-    const { data } = await db.from("proposals").select("proposal_id").eq("id", line.proposal_id).maybeSingle();
-    proposalKey = (data as { proposal_id: string } | null)?.proposal_id;
-  }
-  if (!proposalKey) return;
-  const unit = line.asset === "MUENZEN" ? "Röbel Münzen" : line.asset === "XDAI" ? "xDAI" : "€";
-  await notify(db, [{
-    wallet: line.recipient_wallet, kind: "vorhaben_payout", screen: "vertrag", proposalKey,
-    title: "Auszahlung angekommen",
-    body: `${line.amount.replace(".", ",")} ${unit} sind bei dir angekommen.`,
-  }]);
+  const wallet = line.recipient_wallet;
+  await step("push", async () => {
+    let proposalKey = proposalKeyOverride;
+    if (!proposalKey) {
+      const { data, error } = await db.from("proposals").select("proposal_id").eq("id", line.proposal_id).maybeSingle();
+      if (error) throw new Error(`proposal read: ${error.message}`);
+      proposalKey = (data as { proposal_id: string } | null)?.proposal_id;
+    }
+    if (!proposalKey) return;
+    const unit = line.asset === "MUENZEN" ? "Röbel Münzen" : line.asset === "XDAI" ? "xDAI" : "€";
+    await notify(db, [{
+      wallet, kind: "vorhaben_payout", screen: "vertrag", proposalKey,
+      title: "Auszahlung angekommen",
+      body: `${amount.replace(".", ",")} ${unit} sind bei dir angekommen.`,
+    }]);
+  });
 }

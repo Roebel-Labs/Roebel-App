@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { planBudgetLines, planTaskLines, planWahlhelferLines, railForAsset, type FeeConfig } from "../src/lib/vorhaben/payout-plan";
+import { planBudgetFeeLine, planBudgetLines, planTaskLines, planWahlhelferLines, railForAsset, type FeeConfig } from "../src/lib/vorhaben/payout-plan";
 
 const fee: FeeConfig = { bps: 500, platformSafe: "0xbcabbaa26420e0a4771808f9639d4176355e5d4b", budgetFeeRail: "funder_xdai" };
 
@@ -21,12 +21,22 @@ test("task: 5 EURe + 0.25 EURe fee, both on the Safe rail", () => {
   assert.deepEqual(lines.map((l) => [l.role, l.amount, l.rail]), [["aufgabe", "5", "safe_eure"], ["plattform", "0.25", "safe_eure"]]);
 });
 
-test("budget: manual Safe line in EURe + fee in xDAI on the funder", () => {
-  const lines = planBudgetLines({ proposalId: "p1", beneficiary: "Seglerverein", amount: "150", asset: "EURe" }, fee);
+test("budget: only the manual Safe line in EURe; no fee before the transfer is confirmed", () => {
+  const lines = planBudgetLines({ proposalId: "p1", beneficiary: "Seglerverein", amount: "150", asset: "EURe" });
   assert.deepEqual(lines.map((l) => [l.role, l.amount, l.asset, l.rail, l.recipient_wallet]), [
     ["empfaenger", "150", "EURe", "manual_safe", null],
-    ["plattform", "7.5", "XDAI", "funder_xdai", fee.platformSafe],
   ]);
+});
+
+test("budget fee: 7.5 xDAI on the funder rail, referencing the proposal", () => {
+  const lines = planBudgetFeeLine({ proposalId: "p1", amount: "150", asset: "EURe" }, fee);
+  assert.deepEqual(lines.map((l) => [l.role, l.amount, l.asset, l.rail, l.recipient_wallet, l.recipient_label, l.reference_type, l.reference_id]), [
+    ["plattform", "7.5", "XDAI", "funder_xdai", fee.platformSafe, "Plattform", "proposal", "p1"],
+  ]);
+});
+
+test("budget fee: zero bps produces no line", () => {
+  assert.deepEqual(planBudgetFeeLine({ proposalId: "p1", amount: "150", asset: "EURe" }, { ...fee, bps: 0 }), []);
 });
 
 test("zero fee produces no platform line", () => {

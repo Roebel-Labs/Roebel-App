@@ -113,7 +113,7 @@ export default function TallyConfirmScreen() {
         ) : confirmed ? (
           <>
             <Text style={[styles.success, { color: colors.success }]}>
-              {done ? `Danke, Wahlhelfer:in. ${formatAmount(view.reward.amount, view.reward.asset)} sind unterwegs.` : 'Danke, du hast das Ergebnis bestätigt.'}
+              {done ? `Danke, Wahlhelfer:in. Deine ${formatAmount(view.reward.amount, view.reward.asset)} werden dir in Kürze überwiesen.` : 'Danke, du hast das Ergebnis bestätigt.'}
             </Text>
             <Pressable style={[styles.secondary, { borderColor: colors.border }]} onPress={() => router.replace(`/vertrag/${proposalKey}` as any)}>
               <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Zum Vertrag</Text>

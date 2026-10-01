@@ -19,7 +19,7 @@ const PREFIX = "https://proj.supabase.co/storage/v1/object/public/";
 const PLATFORM = "0xbcabbaa26420e0a4771808f9639d4176355e5d4b";
 
 /** In-memory Supabase fake that honours eq/neq/in/is/limit filters and records every op. */
-function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[] } = {}) {
+function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[]; updateError?: Record<string, { message: string; code?: string }> } = {}) {
   const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
   const ops: Op[] = [];
   let n = 0;
@@ -50,6 +50,7 @@ function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[] } = {}) 
           return { data: null, error: null };
         }
         // update
+        if (opts.updateError?.[table]) return { data: null, error: opts.updateError[table] };
         if (selected && opts.casMiss?.includes(table)) return { data: [], error: null };
         const hit = list.filter(match);
         for (const r of hit) Object.assign(r, payload as Row);
@@ -58,6 +59,7 @@ function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[] } = {}) 
       const b: any = {
         eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return b; },
         neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return b; },
+        ilike: (c: string, v: string) => { filters.push((r) => typeof r[c] === "string" && r[c].toLowerCase() === v.toLowerCase()); return b; },
         in: (c: string, v: unknown[]) => { filters.push((r) => v.includes(r[c])); return b; },
         is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return b; },
         or: () => b, order: () => b,
@@ -196,6 +198,8 @@ test("task_approve on an accepted proposal inserts the task + platform lines and
   assert.equal(d.dispatched[0].length, 2);
   assert.equal(db.tables.notifications[0].recipient_wallet, APPLICANT);
   assert.equal(db.tables.notifications[0].title, "Aufgabe abgenommen");
+  // Payouts may be paused: never promise "unterwegs".
+  assert.equal(db.tables.notifications[0].body, "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet.");
 });
 
 test("task_approve before acceptance creates no lines (the cron creates them later)", async () => {
@@ -336,6 +340,39 @@ test("payout_record_manual: a tx already linked to another proposal is TX_USED; 
   const db2 = fakeDb(seed({ proposal_payout_lines: [manualLine()], treasury_tx_links: [{ tx_hash: TX, proposal_id: P_ID }] }));
   const r2 = await handleVorhabenAction(deps(db2), ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r2.ok, true);
+});
+
+test("payout_record_manual: the execution hash of a safe_eure line (any case) is TX_USED", async () => {
+  const safeLine = manualLine({ id: "55555555-5555-4555-8555-555555555555", role: "aufgabe", rail: "safe_eure", reference_type: "task",
+    reference_id: T_ID, status: "bestaetigt", tx_hash: "0x" + "AB".repeat(32) });
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine(), safeLine] }));
+  let verified = 0;
+  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return true; } }), ATTESTER,
+    "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
+  assert.equal(verified, 0);
+  assert.equal(db.tables.proposal_payout_lines[0].status, "geplant");
+});
+
+test("payout_record_manual: a unique violation on the CAS (concurrent claim of the same tx) is TX_USED 409", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }),
+    { updateError: { proposal_payout_lines: { message: "duplicate key value violates unique constraint \"proposal_payout_lines_manual_tx_key\"", code: "23505" } } });
+  const d = deps(db);
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
+  assert.equal(d.settled.length, 0);
+});
+
+test("payout_record_manual: a numeric amount from PostgREST reaches the verifier as a string", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine({ amount: 150 })] }));
+  let amount: unknown = null;
+  const d = deps(db, { verifyManualTx: async (_h, a) => { amount = a; return true; } });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  assert.equal(amount, "150");
+  assert.equal(d.settled[0].amount, "150");
 });
 
 test("task_create bounds the reward at 9.999.999,99", async () => {

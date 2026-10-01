@@ -156,7 +156,10 @@ export async function pollSafeLine(deps: SafeRailDeps, line: LineRow): Promise<v
   if (!tx) {
     const started = line.attempt_started_at ? new Date(line.attempt_started_at).getTime() : 0;
     if (line.status === "sendend" && deps.nowMs() - started > STALE_MS) {
-      await casStatus(deps.db, line.id, ["sendend"], { status: "geplant", safe_tx_hash: null, safe_nonce: null, error: "propose_failed" });
+      // Never auto-reset to geplant: the propose may have landed (or be signed off-service), and a
+      // second proposal would pay twice. A human checks the Safe queue and resolves the line.
+      if (await casStatus(deps.db, line.id, ["sendend"], { status: "unklar", error: "safe tx unknown to service — check queue before re-proposing" }))
+        console.error(`[vorhaben] Safe tx ${line.safe_tx_hash} unknown to the service; line ${line.id} is unklar`);
     }
     return;
   }

@@ -21,3 +21,13 @@ test("abgelehnt with window still open is active", () => {
 test("abgelehnt with expired window is inactive", () => {
   assert.equal(isActiveProposal({ lifecycle_stage: "abgelehnt", tally_confirm_until: past }, false, now), false);
 });
+
+test("toLineRow normalises PostgREST numeric amounts to decimal strings", async () => {
+  const { amountString, toLineRow } = await import("../src/lib/vorhaben/repo");
+  assert.equal(amountString(150), "150");
+  assert.equal(amountString(0.5), "0.5");
+  assert.equal(amountString(1e-7), "0.0000001");
+  assert.equal(amountString("7.5"), "7.5");
+  assert.throws(() => amountString(null));
+  assert.equal(toLineRow({ id: "x", amount: 12.25 }).amount, "12.25");
+});

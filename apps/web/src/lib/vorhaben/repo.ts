@@ -10,10 +10,35 @@ export type ProposalRow = {
 };
 export type LineRow = {
   id: string; contract_id: string; proposal_id: string; role: LineRole; recipient_wallet: string | null;
-  recipient_label: string; amount: string; asset: Asset; rail: Rail; reference_type: string; reference_id: string;
+  recipient_label: string;
+  /** Decimal string — always normalised by toLineRow (PostgREST sends numeric as a JSON number). */
+  amount: string; asset: Asset; rail: Rail; reference_type: string; reference_id: string;
   status: LineStatus; error: string | null; attempt_started_at: string | null; safe_tx_hash: string | null;
   safe_nonce: number | null; tx_hash: string | null; updated_at?: string | null;
 };
+
+/**
+ * PostgREST returns `numeric` columns as JSON numbers. Every money amount is handled as a decimal
+ * string downstream, so normalise once here (no exponent notation, at most 18 decimals).
+ */
+export function amountString(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const s = String(v);
+    return /e/i.test(s) ? v.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : s;
+  }
+  if (typeof v === "bigint") return v.toString();
+  throw new Error(`invalid amount: ${String(v)}`);
+}
+
+/** The single mapper for every proposal_payout_lines read typed as LineRow. */
+export function toLineRow(raw: unknown): LineRow {
+  const r = raw as LineRow;
+  return { ...r, amount: amountString((raw as { amount: unknown }).amount) };
+}
+export function toLineRows(data: unknown): LineRow[] {
+  return ((data ?? []) as unknown[]).map(toLineRow);
+}
 
 const PROPOSAL_COLS =
   "id, proposal_id, proposal_number, title, proposer_address, blockchain_proposal_id, vorhaben_enabled, budget_amount, " +
@@ -66,11 +91,11 @@ export async function insertLines(db: Db, contractId: string, proposalId: string
 }
 
 export async function linesForProposal(db: Db, proposalId: string): Promise<LineRow[]> {
-  return must(await db.from("proposal_payout_lines").select(LINE_COLS).eq("proposal_id", proposalId), "lines") as unknown as LineRow[];
+  return toLineRows(must(await db.from("proposal_payout_lines").select(LINE_COLS).eq("proposal_id", proposalId), "lines"));
 }
 
 export async function openLines(db: Db): Promise<LineRow[]> {
-  return must(await db.from("proposal_payout_lines").select(LINE_COLS).neq("status", "bestaetigt").order("created_at"), "open lines") as unknown as LineRow[];
+  return toLineRows(must(await db.from("proposal_payout_lines").select(LINE_COLS).neq("status", "bestaetigt").order("created_at"), "open lines"));
 }
 
 export async function updateLine(db: Db, id: string, patch: Partial<LineRow>): Promise<void> {

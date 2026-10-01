@@ -35,13 +35,25 @@ function fakeDb(rows: LineRow[]) {
           return b;
         },
         select() {
+          const one = table === "proposal_contracts"
+            ? { platform_fee_bps: 500, platform_safe_address: "0xbcabbaa26420e0a4771808f9639d4176355e5d4b" }
+            : { proposal_id: "0xkey" };
+          const settingsRows = [
+            ["platform_fee_bps", "500"], ["platform_safe_address", "0xbcabbaa26420e0a4771808f9639d4176355e5d4b"],
+            ["wahlhelfer_reward_asset", "MUENZEN"], ["wahlhelfer_reward_amount", "10"], ["budget_fee_rail", "funder_xdai"],
+            ["tally_confirm_window_days", "7"], ["dispatch_enabled", "false"],
+          ].map(([key, value]) => ({ key, value }));
           return {
-            eq: () => ({ maybeSingle: async () => ({ data: { proposal_id: "0xkey" }, error: null }) }),
+            eq: () => ({
+              maybeSingle: async () => ({ data: one, error: null }),
+              single: async () => ({ data: one, error: null }),
+            }),
             in: (_c: string, v: string[]) => ({ order: async () => ({ data: rows.filter((r) => v.includes(r.status)), error: null }) }),
+            then: (res: (v: unknown) => unknown) => res({ data: table === "vorhaben_settings" ? settingsRows : [], error: null }),
           };
         },
         insert: async (r: unknown) => { inserts.push({ table, rows: r }); return { error: null }; },
-        upsert: async () => ({ error: null }),
+        upsert: async (r: unknown) => { inserts.push({ table: `${table}:upsert`, rows: r }); return { error: null }; },
       };
     },
   };
@@ -184,4 +196,34 @@ test("reconcile: a pending manual_safe line times out from updated_at with a Saf
   assert.equal(rows[0].status, "gesendet");
   assert.equal(rows[1].status, "unklar");
   assert.equal(rows[1].error, "not confirmed after 30 min — check the Safe transaction");
+});
+
+test("settle: a numeric amount from PostgREST still notifies with a German decimal (no TypeError after the CAS)", async () => {
+  const rows = [line({ id: "n", status: "gesendet", tx_hash: "0x1", amount: 0.5 as unknown as string })];
+  const db = fakeDb(rows);
+  assert.equal(await settleIfMined(deps(db), rows[0]), "settled");
+  const notes = db.inserts.filter((i) => i.table === "notifications").flatMap((i) => i.rows as { body: string }[]);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0].body, /^0,5 Röbel Münzen/);
+});
+
+test("settle: a confirmed budget (empfaenger) line creates its platform fee line, idempotently", async () => {
+  const rows = [line({ id: "b", role: "empfaenger", rail: "manual_safe", asset: "EURe", recipient_wallet: null, recipient_label: "Verein",
+    reference_type: "proposal", reference_id: "p1", status: "gesendet", tx_hash: "0x5", amount: 150 as unknown as string })];
+  const db = fakeDb(rows);
+  assert.equal(await settleIfMined(deps(db), rows[0]), "settled");
+  const fee = db.inserts.filter((i) => i.table === "proposal_payout_lines:upsert").flatMap((i) => i.rows as Record<string, unknown>[]);
+  assert.equal(fee.length, 1);
+  assert.deepEqual([fee[0].role, fee[0].amount, fee[0].asset, fee[0].rail, fee[0].reference_type, fee[0].reference_id, fee[0].contract_id, fee[0].proposal_id],
+    ["plattform", "7.5", "XDAI", "funder_xdai", "proposal", "p1", "c1", "p1"]);
+  assert.equal(fee[0].recipient_wallet, "0xbcabbaa26420e0a4771808f9639d4176355e5d4b");
+  // the empfaenger has no wallet → no push
+  assert.equal(db.inserts.filter((i) => i.table === "notifications").length, 0);
+});
+
+test("settle: non-budget lines never create a budget fee line", async () => {
+  const rows = [line({ id: "w", status: "gesendet", tx_hash: "0x1" })];
+  const db = fakeDb(rows);
+  await settleIfMined(deps(db), rows[0]);
+  assert.equal(db.inserts.filter((i) => i.table === "proposal_payout_lines:upsert").length, 0);
 });

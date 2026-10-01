@@ -63,13 +63,24 @@ export function planTaskLines(
   return [main, ...feeLine(main, fee, main.rail)];
 }
 
+/** The budget itself: one manual Safe line. Its platform fee is planned only after this line is confirmed. */
 export function planBudgetLines(
-  i: { proposalId: string; beneficiary: string; amount: string; asset: Asset }, fee: FeeConfig,
+  i: { proposalId: string; beneficiary: string; amount: string; asset: Asset },
 ): LineDraft[] {
-  const main: LineDraft = {
+  return [{
     role: "empfaenger", recipient_wallet: null, recipient_label: i.beneficiary,
     amount: fromAtto(toAtto(i.amount)), asset: i.asset, rail: "manual_safe",
     reference_type: "proposal", reference_id: i.proposalId,
-  };
-  return [main, ...feeLine(main, fee, fee.budgetFeeRail)];
+  }];
+}
+
+/**
+ * Platform fee on a budget, on `fee.budgetFeeRail`. Created only once the budget transfer itself is
+ * confirmed (real outflow), from the settle path; the unique (role, reference) key keeps it idempotent.
+ */
+export function planBudgetFeeLine(
+  i: { proposalId: string; amount: string; asset: Asset }, fee: FeeConfig,
+): LineDraft[] {
+  const [budget] = planBudgetLines({ ...i, beneficiary: "" });
+  return feeLine(budget, fee, fee.budgetFeeRail);
 }

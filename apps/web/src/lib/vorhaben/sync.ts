@@ -1,7 +1,7 @@
 import { readProposalOutcome, type ContractReader } from "./chain";
 import type { Stage } from "./constants";
 import { notify } from "./notify";
-import { planBudgetLines, planTaskLines } from "./payout-plan";
+import { planBudgetFeeLine, planBudgetLines, planTaskLines } from "./payout-plan";
 import { displayNames, ensureContract, insertLines, type ProposalRow } from "./repo";
 import type { Db, VorhabenSettings } from "./settings";
 import { deriveStage } from "./stage";
@@ -78,8 +78,9 @@ export async function syncProposal(deps: SyncDeps, p: ProposalRow): Promise<Sync
   // Budget + approved task lines once accepted
   if (o.tallyPublished && ACCEPTED.has(o.state)) {
     if (p.budget_amount && p.budget_asset) {
+      // Only the budget line here: its platform fee is created once the transfer is confirmed (settle path).
       await insertLines(db, contract.id, p.id, planBudgetLines(
-        { proposalId: p.id, beneficiary: p.beneficiary_name ?? "Empfänger", amount: String(p.budget_amount), asset: p.budget_asset }, fee));
+        { proposalId: p.id, beneficiary: p.beneficiary_name ?? "Empfänger", amount: String(p.budget_amount), asset: p.budget_asset }));
     }
     const tasks = rows<{ id: string; assignee_wallet: string; reward_amount: string; reward_asset: "EURe" | "EURC" }>(
       await db.from("proposal_tasks").select("id, assignee_wallet, reward_amount, reward_asset")
@@ -95,11 +96,23 @@ export async function syncProposal(deps: SyncDeps, p: ProposalRow): Promise<Sync
 
   // Stage
   const tasksNow = rows<{ id: string; status: string }>(await db.from("proposal_tasks").select("id, status").eq("proposal_id", p.id), "tasks read");
-  const linesNow = rows<{ role: string; status: string }>(await db.from("proposal_payout_lines").select("role, status").eq("proposal_id", p.id), "lines read");
+  const linesNow = rows<{ role: string; status: string; reference_type: string }>(
+    await db.from("proposal_payout_lines").select("role, status, reference_type").eq("proposal_id", p.id), "lines read");
+  const budgetLineConfirmed = linesNow.some((l) => l.role === "empfaenger" && l.status === "bestaetigt");
+
+  // Backstop for the settle path: the budget transfer is confirmed but its fee line was never created
+  // (e.g. afterLineSettled failed after the CAS). Idempotent via the (role, reference) unique key.
+  const lineStatuses = linesNow.map((l) => l.status);
+  if (budgetLineConfirmed && p.budget_amount && p.budget_asset
+    && !linesNow.some((l) => l.role === "plattform" && l.reference_type === "proposal")) {
+    const feeDrafts = planBudgetFeeLine({ proposalId: p.id, amount: String(p.budget_amount), asset: p.budget_asset }, fee);
+    await insertLines(db, contract.id, p.id, feeDrafts);
+    if (feeDrafts.length) lineStatuses.push("geplant"); // the new fee line keeps the stage in_umsetzung
+  }
   const stage = deriveStage({
     chainState: o.state, nowSec: Math.floor(now / 1000), deadlineSec: o.deadlineSec, tallyPublished: o.tallyPublished,
-    taskStatuses: tasksNow.map((t) => t.status), lineStatuses: linesNow.map((l) => l.status),
-    hasBudget: !!p.budget_amount, budgetLineConfirmed: linesNow.some((l) => l.role === "empfaenger" && l.status === "bestaetigt"),
+    taskStatuses: tasksNow.map((t) => t.status), lineStatuses,
+    hasBudget: !!p.budget_amount, budgetLineConfirmed,
   });
 
   if (stage === "abgelehnt") {

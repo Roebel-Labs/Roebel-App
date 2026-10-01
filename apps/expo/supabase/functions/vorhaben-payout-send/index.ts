@@ -136,13 +136,15 @@ Deno.serve(async (req) => {
     // The node may have accepted the tx despite the error. NEVER release here.
     const msg = e instanceof Error ? e.message.slice(0, 200) : String(e);
     const { error: unklarErr } = await db.from("proposal_payout_lines")
-      .update({ status: "unklar", error: `broadcast_uncertain: ${msg}`, updated_at: new Date().toISOString() }).eq("id", lineId);
+      .update({ status: "unklar", error: `broadcast_uncertain: ${msg}`, updated_at: new Date().toISOString() })
+      .eq("id", lineId).eq("status", "sendend"); // never flip a line a concurrent settle already moved on
     if (unklarErr) console.error(`payout ${lineId} unklar update failed (tx ${hash}): ${unklarErr.message}`);
     return json({ status: "unklar", txHash: hash });
   }
 
+  // Guarded: if the web side already settled this line (bestaetigt), it must never flip back to gesendet.
   const { error: sentErr } = await db.from("proposal_payout_lines")
-    .update({ status: "gesendet", updated_at: new Date().toISOString() }).eq("id", lineId);
+    .update({ status: "gesendet", updated_at: new Date().toISOString() }).eq("id", lineId).eq("status", "sendend");
   if (sentErr) console.error(`payout ${lineId} gesendet update failed, tx ${hash} already broadcast: ${sentErr.message}`);
 
   if (rail === "funder_muenzen") {
