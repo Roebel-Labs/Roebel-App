@@ -35,7 +35,7 @@ import {
 } from "@/lib/shamir/canonical-payload";
 import { buildRotationProposalCalldata } from "@/lib/shamir/coordinator-proposal";
 import { uploadToIrys } from "@/lib/irys";
-import { buildProposalStoreMessage } from "@/lib/proposal-store-auth";
+import { buildProposalStoreMessage, canonicalProposalIds } from "@/lib/proposal-store-auth";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -255,19 +255,20 @@ export default function GenerateKeyPage() {
               ]);
               // The store route requires the proposer's signature over the stored content.
               const storeContent = { title, markdown: description, category: "governance" };
+              const canon = canonicalProposalIds({ blockchainProposalId: pId, proposalId: result.transactionHash });
               const storeSig = await account.signMessage({
-                message: buildProposalStoreMessage(pId, storeContent),
+                message: buildProposalStoreMessage(canon.blockchainProposalId, storeContent),
               });
               const storeRes = await fetch("/api/proposals/store", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  proposalId: result.transactionHash,
-                  blockchainProposalId: pId,
+                  proposalId: canon.proposalId,
+                  blockchainProposalId: canon.blockchainProposalId,
                   ...storeContent,
                   irysContentId: irysReceipt.id,
                   irysUrl: irysReceipt.url,
-                  transactionHash: result.transactionHash,
+                  transactionHash: canon.proposalId,
                   proposerAddress: account.address,
                   signature: storeSig,
                 }),

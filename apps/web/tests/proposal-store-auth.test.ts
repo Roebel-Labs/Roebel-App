@@ -4,7 +4,7 @@ import { encodeAbiParameters, encodeEventTopics, parseAbi, parseAbiParameters } 
 import { privateKeyToAccount } from "viem/accounts";
 import { recoverMessageAddress } from "viem";
 import {
-  authorizeProposalStore, buildProposalStoreMessage, canonicalStorePayload, type StoreAuthDeps, type StoreReceipt,
+  authorizeProposalStore, buildProposalStoreMessage, canonicalProposalIds, canonicalStorePayload, type StoreAuthDeps, type StoreReceipt,
 } from "../src/lib/proposal-store-auth";
 import { GOVERNOR } from "../src/lib/vorhaben/constants";
 
@@ -102,4 +102,25 @@ test("unknown tx or RPC/verifier down → 503 (retryable), never ok", async () =
   const r2 = await authorizeProposalStore(deps({ getReceipt: async () => { throw new Error("down"); } }), await body());
   const r3 = await authorizeProposalStore(deps({ verifySignature: async () => { throw new Error("down"); } }), await body());
   for (const r of [r1, r2, r3]) { assert.equal(r.ok, false); if (!r.ok) assert.equal(r.status, 503); }
+});
+
+test("canonicalProposalIds strips leading zeros and lowercases the tx hash", () => {
+  assert.deepEqual(
+    canonicalProposalIds({ blockchainProposalId: "00123", proposalId: "0x" + "AB".repeat(32) }),
+    { blockchainProposalId: "123", proposalId: "0x" + "ab".repeat(32) },
+  );
+  assert.throws(() => canonicalProposalIds({ blockchainProposalId: "12x", proposalId: TX }));
+  assert.throws(() => canonicalProposalIds({ blockchainProposalId: "1", proposalId: "0x12" }));
+});
+
+test("store route check: canonical ids accepted, non-canonical rejected with 400", async () => {
+  const ok = await authorizeProposalStore(deps(), await body());
+  assert.equal(ok.ok, true);
+  const lead = await authorizeProposalStore(deps(), await body({ blockchainProposalId: "0" + ID }));
+  assert.equal(lead.ok, false);
+  if (!lead.ok) assert.equal(lead.status, 400);
+  const upper = "0x" + "CD".repeat(32);
+  const up = await authorizeProposalStore(deps(), await body({ proposalId: upper, transactionHash: upper }));
+  assert.equal(up.ok, false);
+  if (!up.ok) assert.equal(up.status, 400);
 });

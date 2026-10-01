@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare proposal input
     const proposalInput: CreateProposalInput = {
+      // Already verified canonical (lowercase tx hash, no leading zeros) by authorizeProposalStore.
       proposal_id: proposalId,
       blockchain_proposal_id: blockchainProposalId,
       proposal_number: proposalNumber,
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
       category: category || "general",
       irys_content_id: irysContentId,
       irys_url: irysUrl,
-      transaction_hash: transactionHash,
+      transaction_hash: String(transactionHash).toLowerCase(),
       proposer_address: auth.proposer,
       // From the verified receipt/event, never from the request body.
       block_number: auth.blockNumber,

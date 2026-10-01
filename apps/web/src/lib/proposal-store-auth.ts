@@ -62,6 +62,17 @@ const TX_RE = /^0x[0-9a-f]{64}$/i;
 const WALLET_RE = /^0x[0-9a-f]{40}$/i;
 const ID_RE = /^\d{1,80}$/;
 
+/**
+ * Canonical forms of the ids: decimal id without leading zeros, lowercase tx hash. Both client
+ * (before signing) and server (before storing) use this so one on-chain proposal can never map to
+ * two stored rows. Throws on malformed input.
+ */
+export function canonicalProposalIds(i: { blockchainProposalId: string; proposalId: string }): { blockchainProposalId: string; proposalId: string } {
+  if (!ID_RE.test(i.blockchainProposalId)) throw new Error("Invalid blockchainProposalId");
+  if (!TX_RE.test(i.proposalId)) throw new Error("Invalid proposalId (tx hash)");
+  return { blockchainProposalId: BigInt(i.blockchainProposalId).toString(), proposalId: i.proposalId.toLowerCase() };
+}
+
 export async function authorizeProposalStore(
   deps: StoreAuthDeps,
   body: StorePayloadInput & { proposalId?: unknown; transactionHash?: unknown; blockchainProposalId?: unknown; proposerAddress?: unknown; signature?: unknown },
@@ -75,6 +86,9 @@ export async function authorizeProposalStore(
     return { ok: false, status: 400, error: "transactionHash must equal proposalId" };
   }
   if (!id || !ID_RE.test(id)) return { ok: false, status: 400, error: "Invalid blockchainProposalId" };
+  const canon = canonicalProposalIds({ blockchainProposalId: id, proposalId: txHash });
+  if (canon.blockchainProposalId !== id) return { ok: false, status: 400, error: "blockchainProposalId must be canonical (no leading zeros)" };
+  if (canon.proposalId !== txHash) return { ok: false, status: 400, error: "proposalId must be a lowercase tx hash" };
   if (!proposer || !WALLET_RE.test(proposer)) return { ok: false, status: 400, error: "Invalid proposerAddress" };
   if (!signature || !/^0x[0-9a-f]+$/i.test(signature)) return { ok: false, status: 401, error: "Missing proposer signature" };
 

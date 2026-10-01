@@ -8,7 +8,7 @@ import { ethers } from "ethers";
 import { hasHighGasBundler, sendViaHighGasBundler } from "@/lib/highgas-bundler";
 import { useState } from "react";
 import { parseBudgetInput } from "@/lib/vorhaben/budget-input";
-import { buildProposalStoreMessage } from "@/lib/proposal-store-auth";
+import { buildProposalStoreMessage, canonicalProposalIds } from "@/lib/proposal-store-auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
@@ -146,16 +146,17 @@ export function CreateProposalForm({
           budgetAmount: budgetAmount.trim() || undefined,
           beneficiaryName: beneficiaryName.trim() || undefined,
         };
+        const canon = canonicalProposalIds({ blockchainProposalId: numericProposalId, proposalId: transactionHash });
         const signature = await account.signMessage({
-          message: buildProposalStoreMessage(numericProposalId, storeContent),
+          message: buildProposalStoreMessage(canon.blockchainProposalId, storeContent),
         });
         const storeBody = JSON.stringify({
-          proposalId: transactionHash, // Transaction hash for URL routing
-          blockchainProposalId: numericProposalId, // Numeric ID for blockchain calls
+          proposalId: canon.proposalId, // Transaction hash for URL routing
+          blockchainProposalId: canon.blockchainProposalId, // Numeric ID for blockchain calls
           ...storeContent,
           irysContentId: irysReceipt.id,
           irysUrl: irysReceipt.url,
-          transactionHash,
+          transactionHash: canon.proposalId,
           proposerAddress: account.address,
           attachTreasurySnapshot,
           signature,
