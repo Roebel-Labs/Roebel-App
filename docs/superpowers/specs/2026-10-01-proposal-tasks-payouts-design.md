@@ -1,6 +1,6 @@
 # Proposal tasks, Wahlhelfer co-signing and payout contracts — design
 
-Date: 2026-10-01 · Status: DRAFT, awaiting Max's review · Parts 1 + 2 of the proposal-lifecycle program
+Date: 2026-10-01 · Status: APPROVED by Max 2026-10-01 · Parts 1 + 2 of the proposal-lifecycle program
 
 ## 1. Context and intent
 
@@ -36,7 +36,7 @@ The broader program has four parts:
 | Everything else in this first run | Runs for real: Wahlhelfer pay on the Münzen rail, task pay in EURe from the treasury Safe, platform fees alongside. No "test" labelling in the UI. |
 | Payment rails | Pluggable per payout line: `funder_muenzen` (Wahlhelfer), `safe_eure` (tasks, auto-proposed Safe tx), `funder_xdai` (first-run budget fee), `manual_safe` (hand transfers), `safe_eurc_base` later. |
 | Wahlhelfer step | A **real** co-signature of the published tally result (EIP-191 via smart account, ERC-1271 verified). Not a simulated key-share submission. When the 3-of-5 ceremony runs, the same screen also collects the share and the payout trigger moves to share submission. |
-| Wahlhelfer reward currency | Röbel Münzen (civic thank-you, keeps EURe for community purposes). Configurable per line. |
+| Wahlhelfer reward currency | Röbel Münzen while the step is a result co-signature (civic thank-you). **Switches to stablecoin once the Attesters have run the 3-of-5 key ceremony** and the step includes real share submission — a settings change (`wahlhelfer_reward_asset`, `wahlhelfer_reward_amount`, rail), no schema change. |
 | Task done gate | One Attester who is not the task holder approves ("Abnehmen"); the payout is then proposed to the treasury Safe automatically and goes out once the Safe threshold signs. |
 | Task pay | Stablecoin (EURe on Gnosis now, EURC on Base later), amount set per task by the proposer. Task applicants need **not** be verified citizens or Münzen holders — any app account may apply. #3's transfer task pays 5 €. |
 | Who creates/assigns tasks | Proposer creates tasks and assigns. The proposer may apply to their own task; then an Attester assigns that task. |
@@ -138,7 +138,7 @@ through edge functions with the service role. Every new SQL function gets
 
 **Settings (`app_settings`):** `platform_fee_bps` = 500 (5 %, confirmed),
 `platform_safe_address` = `0xbCAbbAA26420e0A4771808F9639D4176355E5d4B` (Gnosis Safe, confirmed 2026-10-01;
-if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (confirmed),
+if unset, platform lines stay `geplant`), `wahlhelfer_reward_asset` = `MUENZEN`, `wahlhelfer_reward_amount` = 10 (confirmed),
 `tally_confirm_window_days` = 7.
 
 ## 5. Rules (server-enforced)
