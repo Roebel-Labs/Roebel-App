@@ -155,11 +155,3 @@ Deno.serve(async (req) => {
   // The web side (settleIfMined) confirms; this function never settles a line.
   return json({ status: "gesendet", txHash: hash });
 });
-    const status = receipt.status === "success" ? "bestaetigt" : "fehlgeschlagen";
-    await db.from("proposal_payout_lines").update({ status, error: status === "fehlgeschlagen" ? "reverted" : null, updated_at: new Date().toISOString() }).eq("id", lineId);
-    return json({ status, txHash: hash });
-  } catch {
-    // Receipt not seen yet; the web cron confirms gesendet lines later.
-    return json({ status: "gesendet", txHash: hash });
-  }
-});
