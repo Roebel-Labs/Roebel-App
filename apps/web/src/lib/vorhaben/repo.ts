@@ -31,7 +31,17 @@ export async function listActiveProposals(db: Db): Promise<ProposalRow[]> {
   const rows = must(await db.from("proposals").select(PROPOSAL_COLS).eq("vorhaben_enabled", true), "proposals") as unknown as ProposalRow[];
   const open = must(await db.from("proposal_payout_lines").select("proposal_id").neq("status", "bestaetigt"), "open lines") as { proposal_id: string }[];
   const withOpen = new Set(open.map((l) => l.proposal_id));
-  return rows.filter((p) => !["umgesetzt", "abgelehnt"].includes(p.lifecycle_stage) || withOpen.has(p.id) || !p.tally_confirm_until || new Date(p.tally_confirm_until).getTime() > Date.now());
+  const now = Date.now();
+  return rows.filter((p) => isActiveProposal(p, withOpen.has(p.id), now));
+}
+
+/** Active = still in progress, has open payout lines, or its confirmation window is still open. */
+export function isActiveProposal(
+  p: Pick<ProposalRow, "lifecycle_stage" | "tally_confirm_until">, hasOpenLines: boolean, nowMs: number,
+): boolean {
+  if (!["umgesetzt", "abgelehnt"].includes(p.lifecycle_stage)) return true;
+  if (hasOpenLines) return true;
+  return !!p.tally_confirm_until && new Date(p.tally_confirm_until).getTime() > nowMs;
 }
 
 export async function getProposal(db: Db, id: string): Promise<ProposalRow | null> {
@@ -39,10 +49,11 @@ export async function getProposal(db: Db, id: string): Promise<ProposalRow | nul
 }
 
 export async function ensureContract(db: Db, proposalId: string, s: VorhabenSettings) {
-  await db.from("proposal_contracts").upsert(
+  const { error } = await db.from("proposal_contracts").upsert(
     { proposal_id: proposalId, platform_fee_bps: s.platformFeeBps, platform_safe_address: s.platformSafe },
     { onConflict: "proposal_id", ignoreDuplicates: true },
   );
+  if (error) throw new Error(`ensure contract for ${proposalId}: ${error.message}`);
   return must(await db.from("proposal_contracts").select("id, platform_fee_bps, platform_safe_address").eq("proposal_id", proposalId).single(), "contract") as
     { id: string; platform_fee_bps: number; platform_safe_address: string };
 }
@@ -70,13 +81,17 @@ export async function updateLine(db: Db, id: string, patch: Partial<LineRow>): P
 export async function displayNames(db: Db, wallets: string[]): Promise<Map<string, string>> {
   const uniq = [...new Set(wallets.map((w) => w.toLowerCase()))];
   const out = new Map(uniq.map((w) => [w, "Unbekannt"]));
-  if (uniq.length === 0) return out;
+  const valid = uniq.filter((w) => /^0x[0-9a-f]{40}$/.test(w));
   // users.wallet_address is not guaranteed lowercase in prod (2 checksummed rows), so match case-insensitively.
-  const { data } = await db.from("users").select("wallet_address, display_name, username")
-    .or(uniq.map((w) => `wallet_address.ilike.${w}`).join(","));
-  for (const u of (data ?? []) as { wallet_address: string; display_name: string | null; username: string | null }[]) {
-    const name = u.display_name || u.username;
-    if (name) out.set(u.wallet_address.toLowerCase(), name);
+  for (let i = 0; i < valid.length; i += 50) {
+    const chunk = valid.slice(i, i + 50);
+    const { data, error } = await db.from("users").select("wallet_address, display_name, username")
+      .or(chunk.map((w) => `wallet_address.ilike.${w}`).join(","));
+    if (error) throw new Error(`display names: ${error.message}`);
+    for (const u of (data ?? []) as { wallet_address: string; display_name: string | null; username: string | null }[]) {
+      const name = u.display_name || u.username;
+      if (name) out.set(u.wallet_address.toLowerCase(), name);
+    }
   }
   return out;
 }
