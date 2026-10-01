@@ -53,6 +53,14 @@ function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** One queued, time-limited wallet signature over a plain message (for callers with their own message format). */
+export function signQueued(account: SigningAccount, message: string): Promise<string> {
+  return enqueueSignature(() => withTimeout(
+    account.signMessage({ message }),
+    SIGN_TIMEOUT_MS,
+    'Signatur hat zu lange gedauert. Bitte versuche es erneut.',
+  ));
+}
 
 async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: ApiResult<T> }> {
   const controller = new AbortController();

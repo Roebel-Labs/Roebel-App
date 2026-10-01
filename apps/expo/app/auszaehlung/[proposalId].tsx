@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,26 +22,48 @@ export default function TallyConfirmScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [noAccount, setNoAccount] = useState(false);
+  const busyRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!proposalKey || !account) return;
     setError(null);
-    const id = await resolveProposalUuid(proposalKey);
-    if (!id) { setError('Vorschlag nicht gefunden'); return; }
-    setUuid(id);
-    const r = await fetchTallyView(id, account.address);
-    if (r.ok) setView(r.data); else setError(r.message);
+    try {
+      const id = await resolveProposalUuid(proposalKey);
+      if (!id) { setError('Vorschlag nicht gefunden'); return; }
+      setUuid(id);
+      const r = await fetchTallyView(id, account.address);
+      if (r.ok) setView(r.data); else setError(r.message);
+    } catch {
+      setError('Verbindung fehlgeschlagen. Bitte später erneut versuchen.');
+    }
   }, [proposalKey, account]);
 
   useEffect(() => { load(); }, [load]);
 
+  // No account after a short grace period (logged out, or wallet still connecting).
+  useEffect(() => {
+    if (account) { setNoAccount(false); return; }
+    const t = setTimeout(() => setNoAccount(true), 4000);
+    return () => clearTimeout(t);
+  }, [account]);
+
   const confirm = async () => {
-    if (!account || !uuid || !view) return;
+    if (busyRef.current || !account || !uuid || !view) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
-    const r = await submitTally(account, uuid, view.message);
-    setBusy(false);
-    if (r.ok) setDone(true); else setError(r.message);
+    try {
+      const r = await submitTally(account, uuid, view.message);
+      if (r.ok) { setDone(true); return; }
+      if (r.code === 'NETWORK_ERROR') setError('Keine Verbindung. Bitte versuche es erneut.');
+      else if (r.code === 'SIGN_FAILED') setError('Signatur abgebrochen oder fehlgeschlagen.');
+      else setError(r.message);
+      if (r.code === 'ALREADY_CONFIRMED' || r.code === 'WINDOW_CLOSED') await load();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
 
   const header = (
@@ -56,6 +78,9 @@ export default function TallyConfirmScreen() {
 
   if (error && !view) {
     return <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>{header}<MeckyNotFound title={error} /></SafeAreaView>;
+  }
+  if (!view && !account && noAccount) {
+    return <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>{header}<Text style={[styles.body, { color: colors.textSecondary, padding: 20 }]}>Bitte melde dich an, um die Auszählung zu bestätigen.</Text></SafeAreaView>;
   }
   if (!view) {
     return <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>{header}<ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} /></SafeAreaView>;
