@@ -2,6 +2,8 @@
 // Safe Transaction Service. A delegate can QUEUE transactions only — never sign or execute.
 // Run by a Safe owner (Max) locally:
 //   OWNER_PRIVKEY=0x… DELEGATE_ADDRESS=0x… SAFE_API_KEY=… node apps/web/scripts/vorhaben-add-safe-delegate.mjs
+// Keep the key out of shell history: prefix the command with a space (needs HISTCONTROL=ignorespace),
+// or `read -s OWNER_PRIVKEY; export OWNER_PRIVKEY` first.
 // The owner key is read from the env of this one command and never written to disk.
 import SafeApiKit from "@safe-global/api-kit";
 import { privateKeyToAccount } from "viem/accounts";

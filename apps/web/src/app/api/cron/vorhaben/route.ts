@@ -55,9 +55,13 @@ export async function GET(req: NextRequest) {
     };
     try {
       await dispatchLines(deps, await openLines(db));
-      await reconcile(deps);
     } catch (e) {
       errors.push(`dispatch: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    try {
+      await reconcile(deps);
+    } catch (e) {
+      errors.push(`reconcile: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   if (errors.length) console.error("[cron/vorhaben]", errors);

@@ -70,7 +70,7 @@ type Tx = Awaited<ReturnType<SafeKit["getTx"]>>;
 function deps(tx: Tx, onchain: number, rows: LineRow[], over: Partial<SafeKit> = {}, receipt: "success" | "reverted" | "pending" = "success"): SafeRailDeps & { db: ReturnType<typeof fakeDb>; proposed: string[]; notified: string[] } {
   const proposed: string[] = []; const notified: string[] = [];
   const kit: SafeKit = { nextNonce: async () => 7, hashFor: async () => ({ safeTxHash: "0xsafe", safeTransactionData: {} }),
-    propose: async (h) => { proposed.push(h); }, getTx: async () => tx, ...over };
+    propose: async (h) => { proposed.push(h); }, executedAtNonce: async () => null, getTx: async () => tx, ...over };
   return { kit, nowMs: () => 1e12, onchainNonce: async () => onchain, notifyOwners: async (p: string) => { notified.push(p); },
     receiptStatus: async () => receipt, db: fakeDb(rows) as never, proposed, notified } as never;
 }
@@ -99,11 +99,52 @@ test("executed but unsuccessful → fehlgeschlagen", async () => {
   assert.equal(rows[0].status, "fehlgeschlagen");
 });
 
-test("nonce used by another tx → fehlgeschlagen (replaced)", async () => {
+const PENDING: Tx = { isExecuted: false, isSuccessful: null, transactionHash: null };
+
+test("nonce moved + a DIFFERENT executed tx at that nonce → fehlgeschlagen (replaced)", async () => {
   const rows = [line({})];
-  await pollSafeLine(deps({ isExecuted: false, isSuccessful: null, transactionHash: null }, 8, rows), rows[0]);
+  await pollSafeLine(deps(PENDING, 8, rows, { executedAtNonce: async () => ({ safeTxHash: "0xother" }) }), rows[0]);
   assert.equal(rows[0].status, "fehlgeschlagen");
   assert.equal(rows[0].error, "replaced");
+});
+
+test("nonce moved but service has not indexed it → unchanged", async () => {
+  const rows = [line({})];
+  await pollSafeLine(deps(PENDING, 8, rows), rows[0]);
+  assert.equal(rows[0].status, "vorgeschlagen");
+});
+
+test("nonce moved, executed tx at nonce is ours → unchanged", async () => {
+  const rows = [line({})];
+  await pollSafeLine(deps(PENDING, 8, rows, { executedAtNonce: async () => ({ safeTxHash: "0xsafe" }) }), rows[0]);
+  assert.equal(rows[0].status, "vorgeschlagen");
+});
+
+test("executed but success unknown (indexing lag) → unchanged", async () => {
+  const rows = [line({})];
+  await pollSafeLine(deps({ isExecuted: true, isSuccessful: null, transactionHash: null }, 8, rows), rows[0]);
+  assert.equal(rows[0].status, "vorgeschlagen");
+  assert.equal(rows[0].tx_hash, null);
+});
+
+test("sendend promotion notifies owners once", async () => {
+  const rows = [line({ status: "sendend" })];
+  const d = deps(PENDING, 7, rows);
+  await pollSafeLine(d, rows[0]);
+  assert.deepEqual(d.notified, ["p"]);
+});
+
+test("a batch with a bad wallet fails its lines and does not stop a good batch", async () => {
+  const rows = [
+    line({ id: "bad", status: "geplant", safe_tx_hash: null, safe_nonce: null, recipient_wallet: "0xnothex" }),
+    line({ id: "ok", status: "geplant", safe_tx_hash: null, safe_nonce: null }),
+  ];
+  const d = deps(null, 7, rows);
+  await proposeSafeBatch(d, [rows[0]]);
+  await proposeSafeBatch(d, [rows[1]]);
+  assert.equal(rows[0].status, "fehlgeschlagen");
+  assert.match(rows[0].error ?? "", /^invalid_line/);
+  assert.equal(rows[1].status, "vorgeschlagen");
 });
 
 test("still pending at the current nonce → unchanged", async () => {

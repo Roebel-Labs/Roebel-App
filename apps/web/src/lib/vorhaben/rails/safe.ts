@@ -15,6 +15,8 @@ export interface SafeKit {
   hashFor(txs: { to: string; value: string; data: string }[], nonce: number): Promise<{ safeTxHash: string; safeTransactionData: Record<string, unknown> }>;
   propose(safeTxHash: string, safeTransactionData: Record<string, unknown>): Promise<void>;
   /** null ONLY when the transaction service positively does not know the hash (404); other errors throw. */
+  /** The executed Safe tx at this nonce, if the service has indexed one. */
+  executedAtNonce(nonce: number): Promise<{ safeTxHash: string } | null>;
   getTx(safeTxHash: string): Promise<{ isExecuted: boolean; isSuccessful: boolean | null; transactionHash: string | null } | null>;
 }
 export interface SafeRailDeps {
@@ -48,6 +50,11 @@ export function realSafeKit(): SafeKit {
         senderAddress: privateKeyToAccount(signer as `0x${string}`).address, senderSignature: sig.data,
         origin: "Röbel App – Vorschlags-Auszahlung",
       });
+    },
+    executedAtNonce: async (nonce) => {
+      const r = await api.getMultisigTransactions(ATTESTER_SAFE, { executed: true, nonce: String(nonce) });
+      const t = r.results?.[0];
+      return t ? { safeTxHash: t.safeTxHash } : null;
     },
     getTx: async (safeTxHash) => {
       try {
@@ -87,33 +94,49 @@ export function safeRailFromEnv(db: Db, receiptStatus: DispatchDeps["receiptStat
   return { proposeSafe: (lines) => proposeSafeBatch(deps, lines), pollSafe: (line) => pollSafeLine(deps, line) };
 }
 
+async function releaseAll(db: Db, lines: LineRow[], reason: string): Promise<void> {
+  const failed: string[] = [];
+  for (const c of lines) {
+    const { error } = await db.rpc("release_payout_line", { p_line_id: c.id, p_error: reason });
+    if (error) { console.error(`[vorhaben] release ${c.id} failed: ${error.message}`); failed.push(c.id); }
+  }
+  if (failed.length) throw new Error(`release failed for lines ${failed.join(",")}`);
+}
+
 export async function proposeSafeBatch(deps: SafeRailDeps, lines: LineRow[]): Promise<void> {
   if (lines.length === 0) return;
   const claimed: LineRow[] = [];
   for (const l of lines) {
     const { data, error } = await deps.db.rpc("claim_payout_line", { p_line_id: l.id });
     if (error) {
-      for (const c of claimed) await deps.db.rpc("release_payout_line", { p_line_id: c.id, p_error: "batch_incomplete" });
+      await releaseAll(deps.db, claimed, "batch_incomplete");
       throw new Error(`claim ${l.id}: ${error.message}`);
     }
     if ((data as unknown[] | null)?.length) claimed.push(l);
     else break;
   }
   if (claimed.length !== lines.length) {
-    for (const c of claimed) {
-      const { error } = await deps.db.rpc("release_payout_line", { p_line_id: c.id, p_error: "batch_incomplete" });
-      if (error) throw new Error(`release ${c.id}: ${error.message}`);
-    }
+    await releaseAll(deps.db, claimed, "batch_incomplete");
+    return;
+  }
+  let transfers: ReturnType<typeof buildEureTransfers>;
+  try {
+    transfers = buildEureTransfers(lines);
+  } catch (e) {
+    // A malformed row never becomes valid by retrying: park it as failed instead of looping forever.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[vorhaben] invalid Safe payout lines ${lines.map((x) => x.id).join(",")}: ${msg}`);
+    for (const l of lines) await casStatus(deps.db, l.id, ["sendend"], { status: "fehlgeschlagen", error: `invalid_line: ${msg}`.slice(0, 200) });
     return;
   }
   let hash: { safeTxHash: string; safeTransactionData: Record<string, unknown> };
   let nonce: number;
   try {
     nonce = await deps.kit.nextNonce();
-    hash = await deps.kit.hashFor(buildEureTransfers(lines), nonce);
+    hash = await deps.kit.hashFor(transfers, nonce);
   } catch (e) {
     // Nothing is stored yet, so a release is safe.
-    for (const c of claimed) await deps.db.rpc("release_payout_line", { p_line_id: c.id, p_error: "batch_prepare_failed" });
+    await releaseAll(deps.db, claimed, "batch_prepare_failed");
     throw e;
   }
   // Store the hash BEFORE proposing, so a crash/timeout during propose stays resolvable by pollSafeLine.
@@ -138,19 +161,25 @@ export async function pollSafeLine(deps: SafeRailDeps, line: LineRow): Promise<v
     return;
   }
   if (tx.isExecuted) {
-    if (tx.isSuccessful && tx.transactionHash) {
+    if (tx.isSuccessful === false) {
+      await casStatus(deps.db, line.id, OPEN, { status: "fehlgeschlagen", error: "reverted" });
+    } else if (tx.isSuccessful && tx.transactionHash) {
       // Persist the execution hash first, then settle through the receipt-checked CAS path.
       if (!(await casStatus(deps.db, line.id, OPEN, { tx_hash: tx.transactionHash }))) return;
       await settleIfMined(deps, { ...line, tx_hash: tx.transactionHash });
-    } else {
-      await casStatus(deps.db, line.id, OPEN, { status: "fehlgeschlagen", error: "reverted" });
-    }
+    } // else: service has not finished indexing the execution; stay pending
     return;
   }
   if (line.safe_nonce !== null && (await deps.onchainNonce()) > line.safe_nonce) {
-    if (await casStatus(deps.db, line.id, OPEN, { status: "fehlgeschlagen", error: "replaced" }))
-      console.error(`[vorhaben] Safe tx ${line.safe_tx_hash} was replaced at nonce ${line.safe_nonce}; line ${line.id} needs manual review`);
+    // Only a DIFFERENT executed tx at this nonce proves replacement; indexing lag must never fail a possibly-paid line.
+    const other = await deps.kit.executedAtNonce(line.safe_nonce);
+    if (other && other.safeTxHash !== line.safe_tx_hash) {
+      if (await casStatus(deps.db, line.id, OPEN, { status: "fehlgeschlagen", error: "replaced" }))
+        console.error(`[vorhaben] Safe tx ${line.safe_tx_hash} was replaced at nonce ${line.safe_nonce}; line ${line.id} needs manual review`);
+    }
     return;
   }
-  if (line.status === "sendend") await casStatus(deps.db, line.id, ["sendend"], { status: "vorgeschlagen" });
+  if (line.status === "sendend") {
+    if (await casStatus(deps.db, line.id, ["sendend"], { status: "vorgeschlagen" })) await deps.notifyOwners(line.proposal_id);
+  }
 }

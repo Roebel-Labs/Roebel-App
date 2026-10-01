@@ -45,9 +45,13 @@ export async function dispatchLines(deps: DispatchDeps, lines: LineRow[]): Promi
   const todo = lines.filter((l) => l.status === "geplant");
   // Funder rail: one at a time keeps the funder nonce sane.
   for (const l of todo.filter((x) => FUNDER.has(x.rail))) {
-    const r = await deps.sendFunder(l.id);
-    if ((r.status === "gesendet" || r.status === "bestaetigt") && r.txHash) {
-      await settleIfMined(deps, { ...l, status: "gesendet", tx_hash: r.txHash }); // pending is fine; the cron finishes it
+    try {
+      const r = await deps.sendFunder(l.id);
+      if ((r.status === "gesendet" || r.status === "bestaetigt") && r.txHash) {
+        await settleIfMined(deps, { ...l, status: "gesendet", tx_hash: r.txHash }); // pending is fine; the cron finishes it
+      }
+    } catch (e) {
+      console.error(`[vorhaben] funder send failed for line ${l.id}`, e);
     }
   }
   // Safe rail: one batched Safe tx per reference (task line + its platform fee).
@@ -57,7 +61,10 @@ export async function dispatchLines(deps: DispatchDeps, lines: LineRow[]): Promi
     const k = `${l.reference_type}:${l.reference_id}`;
     groups.set(k, [...(groups.get(k) ?? []), l]);
   }
-  for (const g of groups.values()) await deps.proposeSafe(g);
+  for (const g of groups.values()) {
+    try { await deps.proposeSafe(g); }
+    catch (e) { console.error(`[vorhaben] Safe proposal failed for lines ${g.map((x) => x.id).join(",")}`, e); }
+  }
   // manual_safe waits for a recorded hash; safe_eurc_base is not implemented yet.
 }
 
@@ -80,6 +87,11 @@ export async function reconcile(deps: DispatchDeps): Promise<void> {
         if (deps.nowMs() - started > UNKLAR_AFTER_MS) {
           if (await casStatus(deps.db, l.id, ["sendend"], { status: "unklar", error: "no tx hash after send attempt — check the funder history before resolving" }))
             console.error(`[vorhaben] payout line ${l.id} is unklar; resolve manually`);
+        }
+      } else if (l.status === "sendend" && l.rail === "safe_eure" && !l.safe_tx_hash) {
+        if (deps.nowMs() - started > UNKLAR_AFTER_MS) {
+          if (await casStatus(deps.db, l.id, ["sendend"], { status: "unklar", error: "no safe hash after claim" }))
+            console.error(`[vorhaben] payout line ${l.id} is unklar (no safe hash after claim); resolve manually`);
         }
       } else if ((l.status === "sendend" || l.status === "vorgeschlagen") && l.rail === "safe_eure") {
         await deps.pollSafe(l);
