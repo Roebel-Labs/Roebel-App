@@ -307,9 +307,9 @@ export default function TaskTicketScreen() {
     );
   };
 
-  const input = (value: string, onChange: (s: string) => void, placeholder: string, multiline = true) => (
+  const input = (value: string, onChange: (s: string) => void, placeholder: string, multiline = true, maxLength = multiline ? 4000 : 66) => (
     <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={colors.textTertiary}
-      multiline={multiline} maxLength={multiline ? 4000 : 66} autoCapitalize={multiline ? 'sentences' : 'none'} autoCorrect={multiline}
+      multiline={multiline} maxLength={maxLength} autoCapitalize={multiline ? 'sentences' : 'none'} autoCorrect={multiline}
       style={[multiline ? styles.textArea : styles.textField, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]} />
   );
 
@@ -320,7 +320,7 @@ export default function TaskTicketScreen() {
     <BottomDrawer visible={drawer === which} onClose={closeDrawer}>
       <View style={styles.drawer}>
         <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>{title}</Text>
-        {input(value, onChange, placeholder)}
+        {input(value, onChange, placeholder, true, which === 'apply' ? 1000 : 4000)}
         {drawerError && <Text style={[styles.error, { color: colors.error }]}>{drawerError}</Text>}
         <Pressable disabled={busy || (required && !value.trim())} onPress={submit} accessibilityRole="button"
           style={({ pressed }) => [styles.primary, { backgroundColor: which === 'cancel' ? colors.error : colors.primary, opacity: busy || (required && !value.trim()) ? 0.5 : pressed ? 0.85 : 1 }]}>
@@ -390,6 +390,11 @@ export default function TaskTicketScreen() {
 
           {canProof && !hasProof && (
             <Text style={[styles.meta, { color: colors.textSecondary }]}>Hänge vor dem Einreichen mindestens einen Nachweis an.</Text>
+          )}
+          {loadError && (
+            <View style={[styles.banner, { backgroundColor: colors.errorBackground }]}>
+              <Text style={[styles.meta, { color: colors.error }]}>{loadError} Angezeigt wird der letzte Stand.</Text>
+            </View>
           )}
           {actionError && <Text style={[styles.error, { color: colors.error }]}>{actionError}</Text>}
           {actions.length > 0 && <View style={styles.actions}>{actions}</View>}
@@ -499,6 +504,7 @@ const styles = StyleSheet.create({
   smallButton: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
   smallButtonText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   error: { fontFamily: fontFamily.medium, fontSize: 14 },
+  banner: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   activity: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
   activityHead: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   activityName: { flexShrink: 1, fontFamily: fontFamily.semiBold, fontSize: 14 },

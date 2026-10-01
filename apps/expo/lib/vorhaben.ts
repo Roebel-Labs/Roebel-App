@@ -13,6 +13,22 @@ export interface TallyView {
   eligible: boolean; confirmedAt: string | null; reward: { amount: string; asset: Asset };
 }
 
+/** Supabase reads ride on RN fetch, which never times out: every read gets an abort deadline. */
+export const READ_TIMEOUT_MS = 15000;
+async function timed<T>(run: (signal: AbortSignal) => PromiseLike<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+/** Like `timed`, but a failed or aborted read resolves to `fallback` (for optional UI). */
+async function soft<T>(fallback: T, read: () => Promise<T>): Promise<T> {
+  try { return await read(); } catch { return fallback; }
+}
+
 async function getJson<T>(path: string): Promise<ApiResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
@@ -27,23 +43,26 @@ async function getJson<T>(path: string): Promise<ApiResult<T>> {
 }
 
 export async function resolveProposalUuid(proposalKey: string): Promise<string | null> {
-  const { data, error } = await supabase.from('proposals').select('id').eq('proposal_id', proposalKey).maybeSingle();
+  const { data, error } = await timed((signal) => supabase.from('proposals').select('id').eq('proposal_id', proposalKey).abortSignal(signal).maybeSingle());
   if (error) throw new Error(error.message);
   return (data as { id: string } | null)?.id ?? null;
 }
 
-export async function fetchOpenTallyDuties(wallet: string): Promise<TallyDuty[]> {
-  const { data, error } = await supabase
-    .from('proposal_wahlhelfer')
-    .select('proposal_id, proposals!inner(proposal_id, proposal_number, title, tally_confirm_until)')
-    .eq('attester_wallet', wallet.toLowerCase())
-    .is('confirmed_at', null);
-  if (error || !data) return [];
-  const now = Date.now();
-  return (data as any[])
-    .map((r) => ({ proposalUuid: r.proposal_id, proposalKey: r.proposals.proposal_id, proposalNumber: r.proposals.proposal_number,
-      title: r.proposals.title, until: r.proposals.tally_confirm_until }))
-    .filter((d) => d.until && new Date(d.until).getTime() > now);
+export function fetchOpenTallyDuties(wallet: string): Promise<TallyDuty[]> {
+  return soft([], async () => {
+    const { data, error } = await timed((signal) => supabase
+      .from('proposal_wahlhelfer')
+      .select('proposal_id, proposals!inner(proposal_id, proposal_number, title, tally_confirm_until)')
+      .eq('attester_wallet', wallet.toLowerCase())
+      .is('confirmed_at', null)
+      .abortSignal(signal));
+    if (error || !data) return [];
+    const now = Date.now();
+    return (data as any[])
+      .map((r) => ({ proposalUuid: r.proposal_id, proposalKey: r.proposals.proposal_id, proposalNumber: r.proposals.proposal_number,
+        title: r.proposals.title, until: r.proposals.tally_confirm_until }))
+      .filter((d) => d.until && new Date(d.until).getTime() > now);
+  });
 }
 
 export function fetchTallyView(proposalUuid: string, wallet: string): Promise<ApiResult<TallyView>> {
@@ -111,42 +130,44 @@ function toTask(r: any): TaskRow {
 }
 
 /** null when the proposal does not exist, has no Vorhaben, or the read fails. */
-export async function fetchVorhabenOverview(proposalKey: string): Promise<VorhabenOverview | null> {
-  const p = await supabase.from('proposals').select('id, lifecycle_stage, vorhaben_enabled').eq('proposal_id', proposalKey).maybeSingle();
-  const proposal = p.data as { id: string; lifecycle_stage: Stage; vorhaben_enabled: boolean } | null;
-  if (p.error || !proposal || !proposal.vorhaben_enabled) return null;
-  const [t, w, l] = await Promise.all([
-    supabase.from('proposal_tasks').select(TASK_COLS).eq('proposal_id', proposal.id).order('created_at', { ascending: true }),
-    supabase.from('proposal_wahlhelfer').select('attester_wallet, confirmed_at').eq('proposal_id', proposal.id),
-    supabase.from('proposal_payout_lines').select('amount, asset').eq('proposal_id', proposal.id),
-  ]);
-  if (t.error) return null;
-  const sums = new Map<Asset, number>();
-  for (const line of (l.data ?? []) as { amount: string | number; asset: Asset }[]) {
-    sums.set(line.asset, (sums.get(line.asset) ?? 0) + Number(line.amount));
-  }
-  return {
-    proposalUuid: proposal.id,
-    stage: proposal.lifecycle_stage,
-    tasks: ((t.data ?? []) as any[]).map(toTask),
-    wahlhelfer: ((w.data ?? []) as { attester_wallet: string; confirmed_at: string | null }[])
-      .map((r) => ({ wallet: r.attester_wallet, confirmed: !!r.confirmed_at })),
-    lineCount: (l.data ?? []).length,
-    totals: [...sums.entries()].map(([asset, amount]) => ({ asset, amount })),
-  };
+export function fetchVorhabenOverview(proposalKey: string): Promise<VorhabenOverview | null> {
+  return soft(null, async () => {
+    const p = await timed((signal) => supabase.from('proposals').select('id, lifecycle_stage, vorhaben_enabled').eq('proposal_id', proposalKey).abortSignal(signal).maybeSingle());
+    const proposal = p.data as { id: string; lifecycle_stage: Stage; vorhaben_enabled: boolean } | null;
+    if (p.error || !proposal || !proposal.vorhaben_enabled) return null;
+    const [t, w, l] = await timed((signal) => Promise.all([
+      supabase.from('proposal_tasks').select(TASK_COLS).eq('proposal_id', proposal.id).order('created_at', { ascending: true }).abortSignal(signal),
+      supabase.from('proposal_wahlhelfer').select('attester_wallet, confirmed_at').eq('proposal_id', proposal.id).abortSignal(signal),
+      supabase.from('proposal_payout_lines').select('amount, asset').eq('proposal_id', proposal.id).abortSignal(signal),
+    ]));
+    if (t.error) return null;
+    const sums = new Map<Asset, number>();
+    for (const line of (l.data ?? []) as { amount: string | number; asset: Asset }[]) {
+      sums.set(line.asset, (sums.get(line.asset) ?? 0) + Number(line.amount));
+    }
+    return {
+      proposalUuid: proposal.id,
+      stage: proposal.lifecycle_stage,
+      tasks: ((t.data ?? []) as any[]).map(toTask),
+      wahlhelfer: ((w.data ?? []) as { attester_wallet: string; confirmed_at: string | null }[])
+        .map((r) => ({ wallet: r.attester_wallet, confirmed: !!r.confirmed_at })),
+      lineCount: (l.data ?? []).length,
+      totals: [...sums.entries()].map(([asset, amount]) => ({ asset, amount })),
+    };
+  });
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<TaskDetail | null> {
-  const t = await supabase.from('proposal_tasks')
+  const t = await timed((signal) => supabase.from('proposal_tasks')
     .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_id, proposal_number, title, proposer_address, lifecycle_stage)`)
-    .eq('id', taskId).maybeSingle();
+    .eq('id', taskId).abortSignal(signal).maybeSingle());
   if (t.error) throw new Error(t.error.message);
   const row = t.data as any;
   if (!row || !row.proposals) return null;
-  const [a, act] = await Promise.all([
-    supabase.from('task_applications').select('id, applicant_wallet, note, status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }),
-    supabase.from('task_activity').select('id, actor_wallet, kind, body, attachments, from_status, to_status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }),
-  ]);
+  const [a, act] = await timed((signal) => Promise.all([
+    supabase.from('task_applications').select('id, applicant_wallet, note, status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }).abortSignal(signal),
+    supabase.from('task_activity').select('id, actor_wallet, kind, body, attachments, from_status, to_status, created_at').eq('task_id', taskId).order('created_at', { ascending: true }).abortSignal(signal),
+  ]));
   if (a.error) throw new Error(a.error.message);
   if (act.error) throw new Error(act.error.message);
   const p = row.proposals;
@@ -159,22 +180,26 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail | null
 }
 
 /** Tasks assigned to `wallet` that still need something (not paid out, not cancelled). */
-export async function fetchMyTasks(wallet: string): Promise<(TaskRow & { proposalNumber: number })[]> {
-  const { data, error } = await supabase.from('proposal_tasks')
-    .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_number)`)
-    .eq('assignee_wallet', wallet.toLowerCase())
-    .not('status', 'in', '(ausgezahlt,abgebrochen)')
-    .order('updated_at', { ascending: false });
-  if (error || !data) return [];
-  return (data as any[]).map((r) => ({ ...toTask(r), proposalNumber: r.proposals?.proposal_number ?? 0 }));
+export function fetchMyTasks(wallet: string): Promise<(TaskRow & { proposalNumber: number })[]> {
+  return soft([], async () => {
+    const { data, error } = await timed((signal) => supabase.from('proposal_tasks')
+      .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_number)`)
+      .eq('assignee_wallet', wallet.toLowerCase())
+      .not('status', 'in', '(ausgezahlt,abgebrochen)')
+      .order('updated_at', { ascending: false })
+      .abortSignal(signal));
+    if (error || !data) return [];
+    return (data as any[]).map((r) => ({ ...toTask(r), proposalNumber: r.proposals?.proposal_number ?? 0 }));
+  });
 }
 
 /** Every task, grouped by proposal (newest proposal first). Throws on a read failure. */
 export async function fetchBoard(): Promise<BoardGroup[]> {
-  const { data, error } = await supabase.from('proposal_tasks')
+  const { data, error } = await timed((signal) => supabase.from('proposal_tasks')
     .select(`${TASK_COLS}, ${PROPOSAL_EMBED}(proposal_id, proposal_number, title, lifecycle_stage)`)
     .order('created_at', { ascending: true })
-    .limit(500);
+    .limit(500)
+    .abortSignal(signal));
   if (error) throw new Error(error.message);
   const groups = new Map<string, BoardGroup>();
   for (const r of (data ?? []) as any[]) {
@@ -197,10 +222,17 @@ export async function displayNames(wallets: string[]): Promise<Map<string, strin
   // users.wallet_address is not guaranteed lowercase (a few checksummed rows), so match case-insensitively.
   for (let i = 0; i < valid.length; i += 50) {
     const chunk = valid.slice(i, i + 50);
-    const { data, error } = await supabase.from('users').select('wallet_address, display_name, username')
-      .or(chunk.map((w) => `wallet_address.ilike.${w}`).join(','));
-    if (error) continue;
-    for (const u of (data ?? []) as { wallet_address: string; display_name: string | null; username: string | null }[]) {
+    let rows: { wallet_address: string; display_name: string | null; username: string | null }[];
+    try {
+      const { data, error } = await timed((signal) => supabase.from('users').select('wallet_address, display_name, username')
+        .or(chunk.map((w) => `wallet_address.ilike.${w}`).join(','))
+        .abortSignal(signal));
+      if (error) continue;
+      rows = (data ?? []) as typeof rows;
+    } catch {
+      continue; // names fall back to "Unbekannt"
+    }
+    for (const u of rows) {
       const name = u.display_name || u.username;
       if (name) out.set(u.wallet_address.toLowerCase(), name);
     }
