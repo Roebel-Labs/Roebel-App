@@ -43,6 +43,10 @@
     {
       "path": "/api/chat/cron/tasks",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/vorhaben",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
