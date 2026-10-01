@@ -7,6 +7,7 @@ import { verifyWalletSignature, VerifierUnavailableError } from "@/lib/signed-re
 import { gnosisReader } from "@/lib/vorhaben/chain";
 import { dispatchLines } from "@/lib/vorhaben/dispatch";
 import { sendViaFunder } from "@/lib/vorhaben/rails/funder";
+import { safeRailFromEnv } from "@/lib/vorhaben/rails/safe";
 import { loadSettings } from "@/lib/vorhaben/settings";
 import { getTallyView, submitTallyConfirmation, type TallyDeps } from "@/lib/vorhaben/tally-service";
 import type { LineRow } from "@/lib/vorhaben/repo";
@@ -25,9 +26,11 @@ async function deps(): Promise<TallyDeps> {
     verify: (w, m, s) => verifyWalletSignature(w, m, s),
     dispatch: async (ids) => {
       const { data } = await db.from("proposal_payout_lines").select("*").in("id", ids);
+      const receiptStatus = async (h: string) => { const r = await pub.getTransactionReceipt({ hash: h as `0x${string}` }).catch(() => null); return !r ? "pending" as const : r.status === "success" ? "success" as const : "reverted" as const; };
+      const safeRail = safeRailFromEnv(db, receiptStatus);
       await dispatchLines({
-        db, sendFunder: sendViaFunder, nowMs: Date.now, proposeSafe: async () => {}, pollSafe: async () => {},
-        receiptStatus: async (h) => { const r = await pub.getTransactionReceipt({ hash: h as `0x${string}` }).catch(() => null); return !r ? "pending" : r.status === "success" ? "success" : "reverted"; },
+        db, sendFunder: sendViaFunder, nowMs: Date.now, receiptStatus,
+        proposeSafe: safeRail?.proposeSafe ?? (async () => {}), pollSafe: safeRail?.pollSafe ?? (async () => {}),
       }, (data ?? []) as LineRow[]);
     },
   };

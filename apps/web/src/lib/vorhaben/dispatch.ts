@@ -19,7 +19,7 @@ const IN_FLIGHT = new Set(["sendend", "gesendet", "unklar"]);
 const OPEN_STATUSES = ["sendend", "gesendet", "unklar", "vorgeschlagen"];
 
 /** Compare-and-set status write; true only if this call changed the row. */
-async function casStatus(db: Db, id: string, from: string[], patch: Record<string, unknown>): Promise<boolean> {
+export async function casStatus(db: Db, id: string, from: string[], patch: Record<string, unknown>): Promise<boolean> {
   const { data, error } = await db.from("proposal_payout_lines")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id).in("status", from).select("id");
@@ -28,7 +28,7 @@ async function casStatus(db: Db, id: string, from: string[], patch: Record<strin
 }
 
 /** The ONLY path that moves a line to bestaetigt / runs afterLineSettled. */
-export async function settleIfMined(deps: DispatchDeps, line: LineRow): Promise<"settled" | "reverted" | "pending" | "skipped"> {
+export async function settleIfMined(deps: Pick<DispatchDeps, "db" | "receiptStatus">, line: LineRow): Promise<"settled" | "reverted" | "pending" | "skipped"> {
   if (!line.tx_hash) return "skipped";
   const s = await deps.receiptStatus(line.tx_hash);
   if (s === "pending") return "pending";
