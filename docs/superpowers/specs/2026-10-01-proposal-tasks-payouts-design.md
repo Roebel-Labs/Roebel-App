@@ -33,13 +33,14 @@ The broader program has four parts:
 | Topic | Decision |
 |---|---|
 | Proposal #3 (150 € Seglerverein) real money | Max transfers it manually from the Attester Safe; it is recorded as a `manual_safe` line with its tx hash. |
-| Everything else in this first run | Runs for real on the Münzen rail (task pay, Wahlhelfer pay, platform fee). No "test" labelling in the UI. |
-| Payment rails | Pluggable per payout line: `funder_muenzen` now, `manual_safe` for hand transfers, `safe_eurc_base` later. |
+| Everything else in this first run | Runs for real: Wahlhelfer pay on the Münzen rail, task pay in EURe from the treasury Safe, platform fees alongside. No "test" labelling in the UI. |
+| Payment rails | Pluggable per payout line: `funder_muenzen` (Wahlhelfer), `safe_eure` (tasks, auto-proposed Safe tx), `funder_xdai` (first-run budget fee), `manual_safe` (hand transfers), `safe_eurc_base` later. |
 | Wahlhelfer step | A **real** co-signature of the published tally result (EIP-191 via smart account, ERC-1271 verified). Not a simulated key-share submission. When the 3-of-5 ceremony runs, the same screen also collects the share and the payout trigger moves to share submission. |
 | Wahlhelfer reward currency | Röbel Münzen (civic thank-you, keeps EURe for community purposes). Configurable per line. |
-| Task done gate | One Attester who is not the task holder approves ("Abnehmen"); payout then goes out automatically. |
+| Task done gate | One Attester who is not the task holder approves ("Abnehmen"); the payout is then proposed to the treasury Safe automatically and goes out once the Safe threshold signs. |
+| Task pay | Stablecoin (EURe on Gnosis now, EURC on Base later), amount set per task by the proposer. Task applicants need **not** be verified citizens or Münzen holders — any app account may apply. #3's transfer task pays 5 €. |
 | Who creates/assigns tasks | Proposer creates tasks and assigns. The proposer may apply to their own task; then an Attester assigns that task. |
-| Platform fee | `platform_fee_bps` charged **on top** of the proposal amount and on top of every work payout (task + Wahlhelfer). Recipient never loses anything. Paid to a separate platform Safe. |
+| Platform fee | `platform_fee_bps` charged **on top** of the proposal amount and on top of every work payout (task + Wahlhelfer), in the same asset as the line it is a fee on. Recipient never loses anything. Paid to a separate platform Safe. |
 
 **Success criteria:**
 - Proposal #3 shows a stage stepper, its task(s), its Wahlhelfer, and a contract with every line and proof.
@@ -122,10 +123,10 @@ All amounts are `numeric(38,18)` in the asset's display unit; `asset` is `'EURe'
 **`proposal_payout_lines`**
 - `id`, `contract_id`, `role` (`empfaenger`, `aufgabe`, `wahlhelfer`, `plattform`),
   `recipient_account_id null`, `recipient_address`, `recipient_label` (display name; never shown as 0x),
-  `amount`, `asset`, `rail` (`funder_muenzen`, `funder_xdai`, `manual_safe`, `safe_eurc_base`),
+  `amount`, `asset`, `rail` (`funder_muenzen`, `funder_xdai`, `safe_eure`, `manual_safe`, `safe_eurc_base`),
   `reference_type` (`proposal`, `task`, `tally_confirmation`, `payout_line`), `reference_id`,
-  `status` (`geplant`, `sendend`, `gesendet`, `bestaetigt`, `unklar`, `fehlgeschlagen`),
-  `attempt_started_at`, `tx_hash`, `error`, timestamps.
+  `status` (`geplant`, `sendend`, `vorgeschlagen`, `gesendet`, `bestaetigt`, `unklar`, `fehlgeschlagen`),
+  `attempt_started_at`, `safe_tx_hash null` (Safe rails), `tx_hash`, `error`, timestamps.
 - UNIQUE (role, reference_type, reference_id) — the idempotency key. A platform line references the
   payout line it is a fee on (`reference_type='payout_line'`).
 - Every `tx_hash` is also written to the existing `treasury_tx_links` with the proposal id, so the
@@ -156,8 +157,9 @@ if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (conf
 | any non-final | `abgebrochen` | proposer or Attester (comment required); automatic on `abgelehnt` |
 
 - Payout lines for a task are created at `abgenommen` and only if the proposal is `angenommen`.
-- Applying requires a verified citizen (`is_verified_citizen OR tier='citizen'`, see the
-  citizen-verified drift note).
+- Any signed-in app account with a smart account may apply — no citizen verification, no Münzen
+  needed (the pay is stablecoin). Creating tasks and assigning stay with proposer/Attesters.
+- `reward_asset` for tasks is a stablecoin (`EURe` now, `EURC` later); the proposer sets the amount.
 - If the proposer is inactive 7 days after applications open, any Attester may assign.
 
 **Wahlhelfer**
@@ -184,7 +186,22 @@ if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (conf
   keeps ≥ 0.5 xDAI back for gas).
 - `manual_safe`: never sends. An admin pastes the tx hash; the line goes to `gesendet` and is verified
   like any other.
-- `safe_eurc_base`: not implemented in this spec; the interface is defined so it can propose a Safe tx later.
+- `safe_eure`: proposes **one batched Safe tx** (MultiSend) on the Attester Safe `0x3A08…` that pays the
+  task line and its `plattform` line together (e.g. 5 EURe to the holder + 0.25 EURe to the platform Safe).
+  - Proposing uses a **proposer delegate**: a server key (`GK_PROPOSER_DELEGATE_PRIVKEY`, Vercel secret)
+    registered once by a Safe owner as delegate in the Safe Transaction Service. A delegate can only
+    queue transactions — it can never sign or execute them. Owners sign and execute in the existing
+    Gemeinschaftskasse dashboard (`/admin/dashboard/gemeinschaftskasse` → PendingQueue), where the
+    queued tx shows the proposal, task and recipient names.
+  - Runs in the web app (`apps/web`, next to `api/gemeinschaftskasse/*`, which already has `getApiKit`),
+    called by `payout-dispatch` via an internal authenticated route.
+  - Status: `geplant` → `sendend` (safeTxHash computed and stored *before* calling the service) →
+    `vorgeschlagen` → `gesendet` (execution tx hash, read from the Safe Transaction Service) → `bestaetigt`.
+  - Idempotency: before proposing, look up the stored `safe_tx_hash` in the service; if it already
+    exists, only advance the status. A rejected/replaced Safe tx (same nonce executed with other data)
+    → `fehlgeschlagen` + admin alert.
+  - Attester Safe owners get the push `payout_needs_signature` when a tx is queued.
+- `safe_eurc_base`: not implemented in this spec; same shape as `safe_eure` on Base.
 
 **`payout-dispatch` edge function** — called right after each trigger and by a cron every 5 minutes:
 1. Claim lines: `UPDATE … SET status='sendend', attempt_started_at=now() WHERE status='geplant' … FOR
@@ -193,6 +210,7 @@ if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (conf
    `error='float_low'`, alert the admin (existing admin notification path). The citizen sees
    "Wird ausgezahlt, sobald die Betriebskasse aufgefüllt ist."
 3. Send; store `tx_hash` immediately → `gesendet`; wait for the receipt → `bestaetigt`.
+   Safe rails stop at `vorgeschlagen`; the cron advances them by polling the Safe Transaction Service.
 4. A crash or timeout after broadcast leaves `sendend` with an `attempt_started_at` older than 10 minutes →
    `unklar`. `unklar` lines are **never retried blindly**: reconciliation looks up funder transfers to that
    recipient for that amount after `attempt_started_at`; found → `bestaetigt` with that hash; not found
@@ -207,7 +225,7 @@ if unset, platform lines stay `geplant`), `wahlhelfer_reward_muenzen` = 10 (conf
   confirmed yet; one reminder after 3 days.
 - New `send-notification` types: `tally_confirm_needed`, `task_application` (to proposer/Attesters),
   `task_assigned`, `task_submitted` (to Attesters), `task_changes_requested`, `task_approved`,
-  `payout_sent`. Deep links go to the screens below.
+  `payout_sent`, `payout_needs_signature` (to Attester Safe owners). Deep links go to the screens below.
 
 ## 8. Screens (Expo only — the web app has no citizen users)
 
@@ -254,7 +272,7 @@ contract, and seeds one task:
 - **"Spende an den Seglerverein überweisen und Quittung hochladen"**
 - Criteria: Überweisung von 150 € aus der Gemeinschaftskasse ausgelöst · Zahlungsnachweis (Tx-Hash)
   angehängt · Spendenquittung des Vereins hochgeladen.
-- Reward in Münzen (amount: see §12).
+- Reward: 5 EURe (+ 0.25 EURe platform fee), rail `safe_eure`.
 - Status `offen`, created by the proposer's account.
 
 Max's manual Safe transfer becomes the `empfaenger` line (`manual_safe`) once he pastes the tx hash on the
@@ -284,7 +302,9 @@ contract screen (admin-only action).
 Confirmed 2026-10-01: fee 5 %, Wahlhelfer reward 10 Münzen, platform Safe
 `0xbCAbbAA26420e0A4771808F9639D4176355E5d4B` (Gnosis).
 
-Still open: the Münzen reward for the #3 transfer task.
+#3 transfer task reward: 5 € (EURe), confirmed 2026-10-01.
+
+One-time setup by Max: register the proposer delegate on the Attester Safe (Safe owner signs once).
 
 **First-run platform fee on the budget:** the platform line on #3's 150 € budget is paid on the
 `funder_xdai` rail (native xDAI from the funder hot wallet, 5 % × 150 = 7.5 xDAI) to the platform Safe.
