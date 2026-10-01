@@ -25,7 +25,14 @@ import {
 	roebeltalerGroupAddress,
 	attesterSafeGnosisAddress,
 } from "@/constants/gnosis";
-import { fetchTreasuryApi, readRememberedRate, rememberRate, type TreasuryApiLink } from "@/lib/treasury-api";
+import {
+	fetchTreasuryApi,
+	loadTreasuryProgressive,
+	readRememberedRate,
+	rememberRate,
+	type TreasuryApiLink,
+	type TreasuryApiResponse,
+} from "@/lib/treasury-api";
 
 const hubRead = getContract({ client, chain: gnosisRead, address: circlesHubAddress });
 const hubWrite = getContract({ client, chain: gnosis, address: circlesHubAddress });
@@ -326,8 +333,8 @@ async function readTreasuryLive(
  * Stadtkasse fiat value in €: live xDAI × current rate + EURe (Röbel Münzen
  * excluded). Every surface shows the same figure as the treasury details page.
  */
-export async function getTreasuryEuro(address: string): Promise<number> {
-	if (isTreasurySafe(address)) {
+export async function getTreasuryEuro(address: string, opts: { skipApi?: boolean } = {}): Promise<number> {
+	if (isTreasurySafe(address) && !opts.skipApi) {
 		const api = await fetchTreasuryApi();
 		if (api) return resolveTreasuryEuro(api.euroTotal).euro;
 	}
@@ -351,9 +358,9 @@ export interface TreasuryAssets {
 }
 
 /** Real per-asset breakdown of a treasury address (Röbel Münzen + xDAI + EURe). */
-export async function getTreasuryAssets(address: string): Promise<TreasuryAssets> {
+export async function getTreasuryAssets(address: string, opts: { skipApi?: boolean } = {}): Promise<TreasuryAssets> {
 	const roebelP = getRoebelTalerBalance(address).catch(() => 0n);
-	const api = isTreasurySafe(address) ? await fetchTreasuryApi() : null;
+	const api = isTreasurySafe(address) && !opts.skipApi ? await fetchTreasuryApi() : null;
 	if (api) {
 		const resolved = resolveTreasuryEuro(api.euroTotal);
 		return {
@@ -415,25 +422,69 @@ export interface TreasuryTx {
  */
 export async function getTreasuryHistory(
 	address: string,
+	opts: { skipApi?: boolean } = {},
 ): Promise<{ rows: TreasuryTx[]; curated: boolean }> {
-	if (isTreasurySafe(address)) {
+	if (isTreasurySafe(address) && !opts.skipApi) {
 		const api = await fetchTreasuryApi();
-		if (api && api.historyAvailable) {
-			return {
-				curated: true,
-				rows: api.history.map((h) => ({
-					direction: h.direction,
-					amount: h.euro,
-					currency: "eur" as const,
-					timestamp: h.timestamp,
-					label: h.label,
-					txHash: h.txHash,
-					link: h.link,
-				})),
-			};
-		}
+		if (api && api.historyAvailable) return { curated: true, rows: treasuryHistoryFromApi(api) };
 	}
 	return { rows: await getTreasuryTransactions(address), curated: false };
+}
+
+// ── Server payload → screen shapes (route answer, Supabase snapshot, cache) ──
+
+/** € figure of a server payload (dated-snapshot floor, never 0 € mid-move). */
+export function treasuryEuroFromApi(api: TreasuryApiResponse): number {
+	return resolveTreasuryEuro(api.euroTotal).euro;
+}
+
+/** Asset breakdown of a server payload. `roebel` is not part of the payload. */
+export function treasuryAssetsFromApi(api: TreasuryApiResponse, roebel = 0): TreasuryAssets {
+	const resolved = resolveTreasuryEuro(api.euroTotal);
+	return {
+		roebel,
+		xdai: resolved.fromSnapshot ? TREASURY_SNAPSHOT.xdai : api.xdai,
+		eure: resolved.fromSnapshot ? TREASURY_SNAPSHOT.eure : api.eure,
+		euroTotal: resolved.euro,
+		fromSnapshot: resolved.fromSnapshot,
+	};
+}
+
+/** Curated history rows of a server payload (render as they are). */
+export function treasuryHistoryFromApi(api: TreasuryApiResponse): TreasuryTx[] {
+	return api.history.map((h) => ({
+		direction: h.direction,
+		amount: h.euro,
+		currency: "eur" as const,
+		timestamp: h.timestamp,
+		label: h.label,
+		txHash: h.txHash,
+		link: h.link,
+	}));
+}
+
+/**
+ * The Gemeinschaftskasse € figure, fast: `onEuro` fires with the on-device
+ * cache / Supabase snapshot first, then the route's figure when it differs,
+ * and — only when none of them answered — the on-device chain fallback.
+ * Never 0 € while loading (the caller keeps its skeleton until the first call).
+ * Returns a cancel function.
+ */
+export function watchTreasuryEuro(address: string, onEuro: (euro: number) => void): () => void {
+	let cancelled = false;
+	const emit = (e: number) => {
+		if (!cancelled) onEuro(e);
+	};
+	(async () => {
+		const final = isTreasurySafe(address)
+			? await loadTreasuryProgressive((api) => emit(treasuryEuroFromApi(api))).catch(() => null)
+			: null;
+		if (final || cancelled) return;
+		emit(await getTreasuryEuro(address, { skipApi: isTreasurySafe(address) }));
+	})().catch(() => undefined);
+	return () => {
+		cancelled = true;
+	};
 }
 
 /**

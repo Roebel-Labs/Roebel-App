@@ -48,6 +48,7 @@ import { MACI_KEYPAIR_STORE_KEY } from "@/lib/passkey/derived-keys";
 import { MaciThirdwebNeededError } from "@/lib/passkey/maci-key-resolver";
 import type { PasskeySession } from "@/lib/passkey/session";
 import { deriveMaciKeypairFromWalletSignature } from "@/lib/maci-key-derivation";
+import { chooseStoredKeypair, maciKeypairAccountKey, pickLastVote } from "@/lib/vote-flow";
 
 const SECURE_KEY = MACI_KEYPAIR_STORE_KEY; // "roebel.maci.keypair.v1"
 const VOTES_KEY = "roebel.maci.votes.v1";
@@ -118,8 +119,14 @@ interface MaciContextShape {
   /** Record the citizen's latest vote on a poll. Persisted to secure-store
    *  so re-opening the app shows "Du hast … gestimmt" without a chain read. */
   recordVote: (pollAddress: string, optionIndex: number, nonce: bigint, txHash: string) => Promise<void>;
-  /** Latest cached vote for this poll, or null if none recorded on this device. */
+  /** Latest cached vote for this poll, or null if none recorded on this device.
+   *  Includes a just-cast vote that is still being sent (txHash ''). */
   getLastVote: (pollAddress: string) => VoteRecord | null;
+  /** Show the just-cast choice right away (in memory, txHash ''), before the
+   *  ballot tx settles. Never feeds the nonce. Replaced by recordVote(). */
+  markVotePending: (pollAddress: string, optionIndex: number) => void;
+  /** Drop the optimistic record (the ballot was never sent). */
+  clearVotePending: (pollAddress: string) => void;
   /** Suggested nonce for the next publishMessage on this poll. Returns
    *  lastVote.nonce + 1 if a vote exists, else 1n — so re-voting bumps the
    *  nonce monotonically across cold-starts. */
@@ -134,6 +141,15 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
   const [keypairLoading, setKeypairLoading] = useState(true);
   const [signUpState, setSignUpState] = useState<SignUpState>({ status: "unknown" });
   const [votes, setVotes] = useState<VotesMap>({});
+  // Mirror of `votes` for recordVote: the ballot settles in a detached closure,
+  // so a state closure would be stale (a 2nd vote could overwrite the 1st).
+  const votesRef = useRef<VotesMap>({});
+  const votesLoaded = useRef(false);
+  const [pendingVotes, setPendingVotes] = useState<VotesMap>({});
+  const addressRef = useRef<string | null>(null);
+  addressRef.current = account?.address ?? null;
+  const keypairRef = useRef<SerializedKeypair | null>(null);
+  keypairRef.current = serializedKeypair;
   const lastCheckedHash = useRef<bigint | null>(null);
   const legacyCandidatesRef = useRef<Promise<LegacyCandidate[]> | null>(null);
 
@@ -154,31 +170,59 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     return keypairs.map((keypair) => ({ pubX: BigInt(keypair.pubX), pubY: BigInt(keypair.pubY), keypair }));
   }, [account?.address]);
 
-  // Load keypair + votes from secure store on mount.
+  // Load keypair + votes from secure store on mount, and the keypair again
+  // whenever the login changes. The keypair is per account (its SignUp is per
+  // MACI core, valid for EVERY poll): the account's own copy wins, else the
+  // device slot — the same key is reused for every proposal, never re-derived.
   useEffect(() => {
     let cancelled = false;
+    const address = account?.address ?? null;
+    setKeypairLoading(true);
     (async () => {
       try {
-        const [rawKeypair, rawVotes] = await Promise.all([
+        const [rawDevice, rawAccount, rawVotes] = await Promise.all([
           SecureStore.getItemAsync(SECURE_KEY),
-          SecureStore.getItemAsync(VOTES_KEY),
+          address
+            ? SecureStore.getItemAsync(maciKeypairAccountKey(address)).catch(() => null)
+            : Promise.resolve(null),
+          votesLoaded.current ? Promise.resolve(null) : SecureStore.getItemAsync(VOTES_KEY),
         ]);
         if (cancelled) return;
-        if (rawKeypair) {
-          setSerializedKeypair(JSON.parse(rawKeypair) as SerializedKeypair);
+        const chosen = chooseStoredKeypair(rawAccount, rawDevice);
+        if (chosen) {
+          const next = JSON.parse(chosen.raw) as SerializedKeypair;
+          const prev = keypairRef.current;
+          if (!prev || prev.pubKey !== next.pubKey || prev.stateIndex !== next.stateIndex) {
+            // A different key → its SignUp must be resolved again.
+            if (!prev || prev.pubKey !== next.pubKey) setSignUpState({ status: "unknown" });
+            keypairRef.current = next;
+            setSerializedKeypair(next);
+          }
+          // Keep the device slot on the active account's key (the passkey
+          // resolver reads that slot).
+          if (chosen.source === "account" && rawDevice !== chosen.raw) {
+            SecureStore.setItemAsync(SECURE_KEY, chosen.raw).catch(() => undefined);
+          }
         } else {
+          keypairRef.current = null;
+          setSerializedKeypair(null);
           setSignUpState({ status: "needs-keypair" });
         }
-        if (rawVotes) {
-          try {
-            setVotes(JSON.parse(rawVotes) as VotesMap);
-          } catch (err) {
-            console.warn("[MaciContext] failed to parse votes cache:", err);
+        if (!votesLoaded.current) {
+          votesLoaded.current = true;
+          if (rawVotes) {
+            try {
+              const parsed = JSON.parse(rawVotes) as VotesMap;
+              votesRef.current = { ...parsed, ...votesRef.current };
+              setVotes(votesRef.current);
+            } catch (err) {
+              console.warn("[MaciContext] failed to parse votes cache:", err);
+            }
           }
         }
       } catch (err) {
         console.warn("[MaciContext] failed to load keypair:", err);
-        setSignUpState({ status: "needs-keypair" });
+        if (!keypairRef.current) setSignUpState({ status: "needs-keypair" });
       } finally {
         if (!cancelled) setKeypairLoading(false);
       }
@@ -186,14 +230,24 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, [account?.address]);
+
+  /** Copy a keypair into the active account's own slot (best effort). */
+  const mirrorToAccount = useCallback((kp: SerializedKeypair) => {
+    const address = addressRef.current;
+    if (!address) return;
+    SecureStore.setItemAsync(maciKeypairAccountKey(address), JSON.stringify(kp)).catch((err) =>
+      console.warn("[MaciContext] per-account key copy failed:", err),
+    );
   }, []);
 
   /** Persist a keypair update + return the new serialized form. */
   const persistKeypair = useCallback(async (next: SerializedKeypair) => {
     await SecureStore.setItemAsync(SECURE_KEY, JSON.stringify(next));
+    mirrorToAccount(next);
     setSerializedKeypair(next);
     return next;
-  }, []);
+  }, [mirrorToAccount]);
 
   const refreshSignUp = useCallback(async (opts?: RefreshSignUpOptions): Promise<SignUpState> => {
     if (!serializedKeypair) {
@@ -217,6 +271,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       lastCheckedHash.current = pubKeyHash;
       const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
       setSignUpState(s);
+      mirrorToAccount(serializedKeypair);
       console.log("[MaciContext] refreshSignUp: cache hit", { stateIndex: stateIndex.toString() });
       return s;
     }
@@ -281,7 +336,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     setSignUpState(s);
     console.log(`[MaciContext] refreshSignUp: ${outcome.kind} → needs-signup`);
     return s;
-  }, [serializedKeypair, persistKeypair, account?.address, lookupSignUp, deriveLegacyKeyCandidates]);
+  }, [serializedKeypair, persistKeypair, mirrorToAccount, account?.address, lookupSignUp, deriveLegacyKeyCandidates]);
 
   // Refresh signup whenever the keypair changes or wallet reconnects.
   useEffect(() => {
@@ -333,6 +388,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       if (res.status === "needsThirdweb") throw new MaciThirdwebNeededError();
       if (res.backupError) console.warn("[MaciContext] MACI key saved, backup failed:", res.backupError);
       const kp = res.keypair; // already persisted in secure-store by the resolver
+      mirrorToAccount(kp);
       setSerializedKeypair(kp);
       const pubKeyHash = deserializeKeypair(kp).pubKey.hash() as bigint;
       if (res.stateIndex !== undefined) {
@@ -347,21 +403,41 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     // Derive the voting key deterministically from a wallet signature so the
     // same wallet reproduces the same key on every device / after a reinstall.
     const derived = await deriveMaciKeypairFromWalletSignature(account);
+    const derivedHash = deserializeKeypair(derived).pubKey.hash() as bigint;
 
+    // The derived key is the account's one key: if it already has a SignUp on
+    // the MACI core (another device, a reinstall), adopt it right away so the
+    // vote sheet skips the signup step instead of offering a signUp tx.
+    const lookup = await lookupSignUp(BigInt(derived.pubX), BigInt(derived.pubY)).catch(
+      (err): { kind: "error"; reason: string } => ({ kind: "error", reason: String(err) }),
+    );
+    if (lookup.kind === "found") {
+      const persisted = await persistKeypair({
+        ...derived,
+        stateIndex: lookup.stateIndex.toString(),
+        pubKeyHash: derivedHash.toString(),
+      });
+      lastCheckedHash.current = derivedHash;
+      setSignUpState({ status: "signed-up", pubKeyHash: derivedHash, stateIndex: lookup.stateIndex });
+      return persisted;
+    }
     const persisted = await persistKeypair(derived);
-    setSignUpState({
-      status: "needs-signup",
-      pubKeyHash: deserializeKeypair(derived).pubKey.hash() as bigint,
-    });
+    setSignUpState(
+      lookup.kind === "not-found" ? { status: "needs-signup", pubKeyHash: derivedHash } : { status: "unknown" },
+    );
     return persisted;
-  }, [account, serializedKeypair, persistKeypair]);
+  }, [account, serializedKeypair, persistKeypair, mirrorToAccount, lookupSignUp]);
 
   const clearKeypair = useCallback(async () => {
     await SecureStore.deleteItemAsync(SECURE_KEY);
     await SecureStore.deleteItemAsync(VOTES_KEY);
+    const address = addressRef.current;
+    if (address) await SecureStore.deleteItemAsync(maciKeypairAccountKey(address)).catch(() => undefined);
     setSerializedKeypair(null);
     setSignUpState({ status: "needs-keypair" });
+    votesRef.current = {};
     setVotes({});
+    setPendingVotes({});
     lastCheckedHash.current = null;
   }, []);
 
@@ -374,7 +450,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     async (pollAddress: string, optionIndex: number, nonce: bigint, txHash: string) => {
       const key = pollAddress.toLowerCase();
       const next: VotesMap = {
-        ...votes,
+        ...votesRef.current,
         [key]: {
           pollAddress: key,
           optionIndex,
@@ -383,19 +459,45 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
           votedAt: Math.floor(Date.now() / 1000),
         },
       };
+      votesRef.current = next;
       setVotes(next);
+      setPendingVotes((prev) => {
+        if (!prev[key]) return prev;
+        const { [key]: _drop, ...rest } = prev;
+        return rest;
+      });
       try {
         await SecureStore.setItemAsync(VOTES_KEY, JSON.stringify(next));
       } catch (err) {
         console.warn("[MaciContext] failed to persist vote record:", err);
       }
     },
-    [votes],
+    [],
   );
 
+  const markVotePending = useCallback((pollAddress: string, optionIndex: number) => {
+    const key = pollAddress.toLowerCase();
+    setPendingVotes((prev) => ({
+      ...prev,
+      [key]: { pollAddress: key, optionIndex, nonce: "", txHash: "", votedAt: Math.floor(Date.now() / 1000) },
+    }));
+  }, []);
+
+  const clearVotePending = useCallback((pollAddress: string) => {
+    const key = pollAddress.toLowerCase();
+    setPendingVotes((prev) => {
+      if (!prev[key]) return prev;
+      const { [key]: _drop, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
   const getLastVote = useCallback(
-    (pollAddress: string): VoteRecord | null => votes[pollAddress.toLowerCase()] ?? null,
-    [votes],
+    (pollAddress: string): VoteRecord | null => {
+      const key = pollAddress.toLowerCase();
+      return pickLastVote(votes[key], pendingVotes[key]);
+    },
+    [votes, pendingVotes],
   );
 
   const getNextNonce = useCallback(
@@ -423,9 +525,11 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       getKeypair,
       recordVote,
       getLastVote,
+      markVotePending,
+      clearVotePending,
       getNextNonce,
     }),
-    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, markSignedUp, getKeypair, recordVote, getLastVote, getNextNonce],
+    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, markSignedUp, getKeypair, recordVote, getLastVote, markVotePending, clearVotePending, getNextNonce],
   );
 
   return <MaciContext.Provider value={value}>{children}</MaciContext.Provider>;

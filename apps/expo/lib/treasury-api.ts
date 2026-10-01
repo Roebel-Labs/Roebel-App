@@ -111,7 +111,10 @@ async function fetchOnce(fetchImpl: FetchLike, timeoutMs: number): Promise<Treas
 		// server could not read the chain. Both: use the on-device fallback.
 		if (!res.ok) return null;
 		const parsed = parseTreasuryApi(await res.json());
-		if (parsed) await rememberRate(parsed.rate);
+		if (parsed) {
+			await rememberRate(parsed.rate);
+			if (!isDegradedTreasury(parsed)) await cacheTreasury(parsed);
+		}
 		return parsed;
 	} catch {
 		return null;
@@ -167,4 +170,134 @@ export async function readRememberedRate(now: number = Date.now()): Promise<numb
 	} catch {
 		return null;
 	}
+}
+
+// ── Fast first paint: on-device cache → Supabase snapshot → route ───────────
+//
+// The web route upserts every complete (non-degraded) answer into the
+// single-row table `public.treasury_snapshot` (payload = the route's JSON).
+// One Supabase select answers in ~100 ms where the route may have to read the
+// chain + Blockscout first, so screens render the snapshot right away and
+// replace it once the route answers. The last good payload is also kept in
+// AsyncStorage, so a cold start renders instantly — even offline.
+
+/** The Supabase read is a fast path only: give up quickly. */
+export const TREASURY_SNAPSHOT_TIMEOUT_MS = 3000;
+const PAYLOAD_KEY = "treasury:last-payload:v1";
+
+/** A degraded route answer (no history / a remembered rate) — never cached,
+ *  and never replaces a complete answer already on screen. */
+export function isDegradedTreasury(p: TreasuryApiResponse): boolean {
+	return !p.historyAvailable || p.rateSource.startsWith("cached:");
+}
+
+/** Reads `treasury_snapshot.payload` (the route's JSON) or null. */
+export type TreasurySnapshotReader = () => Promise<unknown | null>;
+
+const defaultSnapshotReader: TreasurySnapshotReader = async () => {
+	// Lazy: keeps this module free of the Supabase client for its other users.
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const { supabase } = require("@/lib/supabase");
+	const { data, error } = await supabase.from("treasury_snapshot").select("payload").eq("id", 1).maybeSingle();
+	// A missing table (migration not applied yet) is just "no snapshot".
+	if (error || !data) return null;
+	return (data as { payload?: unknown }).payload ?? null;
+};
+
+/** The Supabase snapshot, or null (missing table / row, offline, slow, malformed). */
+export async function fetchTreasurySnapshot(
+	opts: { reader?: TreasurySnapshotReader; timeoutMs?: number } = {},
+): Promise<TreasuryApiResponse | null> {
+	const reader = opts.reader ?? defaultSnapshotReader;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const payload = await Promise.race([
+			reader(),
+			new Promise<null>((resolve) => {
+				timer = setTimeout(() => resolve(null), opts.timeoutMs ?? TREASURY_SNAPSHOT_TIMEOUT_MS);
+			}),
+		]);
+		return payload ? parseTreasuryApi(payload) : null;
+	} catch {
+		return null;
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+export async function cacheTreasury(p: TreasuryApiResponse): Promise<void> {
+	try {
+		await AsyncStorage.setItem(PAYLOAD_KEY, JSON.stringify(p));
+	} catch {
+		/* storage unavailable */
+	}
+}
+
+/** The last good payload on this device, or null. */
+export async function readCachedTreasury(): Promise<TreasuryApiResponse | null> {
+	try {
+		const raw = await AsyncStorage.getItem(PAYLOAD_KEY);
+		return raw ? parseTreasuryApi(JSON.parse(raw)) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Same figure + same history (asOf / rate metadata ignored). */
+export function sameTreasury(a: TreasuryApiResponse, b: TreasuryApiResponse): boolean {
+	return (
+		a.euroTotal === b.euroTotal &&
+		a.xdai === b.xdai &&
+		a.eure === b.eure &&
+		a.historyAvailable === b.historyAvailable &&
+		JSON.stringify(a.history) === JSON.stringify(b.history)
+	);
+}
+
+export type TreasurySource = "cache" | "snapshot" | "route";
+
+/**
+ * Snapshot-first treasury load. Calls `onUpdate` with the cached payload (if
+ * any), then the Supabase snapshot, then the route's answer — each only when
+ * it changes what is on screen. Resolves with the last payload shown, or null
+ * when none of the three had one (= use the on-device fallbacks).
+ *
+ * Rules: an older snapshot never replaces a newer cache; the snapshot is
+ * skipped once the route answered; a degraded route answer never replaces a
+ * complete payload.
+ */
+export async function loadTreasuryProgressive(
+	onUpdate: (p: TreasuryApiResponse, source: TreasurySource) => void,
+	opts: { reader?: TreasurySnapshotReader; fetchImpl?: FetchLike; snapshotTimeoutMs?: number; timeoutMs?: number } = {},
+): Promise<TreasuryApiResponse | null> {
+	let shown: TreasuryApiResponse | null = null;
+	const show = (p: TreasuryApiResponse, source: TreasurySource) => {
+		if (shown && sameTreasury(shown, p)) {
+			shown = p;
+			return;
+		}
+		shown = p;
+		onUpdate(p, source);
+	};
+
+	let routeAnswered = false;
+	const routeP = fetchTreasuryApi({ fetchImpl: opts.fetchImpl, timeoutMs: opts.timeoutMs }).then((r) => {
+		if (r) routeAnswered = true;
+		return r;
+	});
+
+	const cached = await readCachedTreasury();
+	if (cached && !routeAnswered) show(cached, "cache");
+
+	const snap = await fetchTreasurySnapshot({ reader: opts.reader, timeoutMs: opts.snapshotTimeoutMs });
+	if (snap && !routeAnswered && (!cached || snap.asOf >= cached.asOf)) {
+		show(snap, "snapshot");
+		if (!isDegradedTreasury(snap)) await cacheTreasury(snap);
+	}
+
+	const route = await routeP;
+	if (route && !(isDegradedTreasury(route) && shown && !isDegradedTreasury(shown))) {
+		show(route, "route");
+	}
+	return shown;
 }

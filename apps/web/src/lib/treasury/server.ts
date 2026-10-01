@@ -8,6 +8,7 @@ import { buildTreasuryResponse, linkTitle, type TreasuryLink, type TreasuryRespo
 import { parseBalancingTx, parseHiddenTxs } from "./curation";
 import { EURE_V2_ADDRESS, fetchFlows } from "./flows";
 import { getCurrentUsdEurRate, getDayRates, type DayRateStore } from "./rates";
+import { isDegradedTreasury, persistTreasurySnapshot } from "./snapshot";
 
 /** The Gemeinschaftskasse = the Attester Safe on Gnosis. */
 export const TREASURY_SAFE: Address = "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa";
@@ -137,14 +138,29 @@ const DEGRADED_TTL_MS = 60_000;
 let cache: { at: number; ttl: number; value: TreasuryResponse } | null = null;
 let inflight: Promise<TreasuryResponse> | null = null;
 
-export async function getTreasuryCached(compute: () => Promise<TreasuryResponse> = computeTreasury): Promise<TreasuryResponse> {
+/** Mirror a fresh complete answer into `treasury_snapshot` (the app's fast
+ *  first paint). Fire-and-forget: never delays or breaks the response. */
+function persistSnapshotInBackground(value: TreasuryResponse): void {
+	void persistTreasurySnapshot(value, adminClient()).catch(() => undefined);
+}
+
+export async function getTreasuryCached(
+	compute: () => Promise<TreasuryResponse> = computeTreasury,
+	persist: (value: TreasuryResponse) => void = persistSnapshotInBackground,
+): Promise<TreasuryResponse> {
 	if (cache && Date.now() - cache.at < cache.ttl) return cache.value;
 	if (inflight) return inflight;
 	inflight = (async () => {
 		try {
 			const value = await compute();
-			const degraded = !value.historyAvailable || value.rateSource.startsWith("cached:");
+			const degraded = isDegradedTreasury(value);
 			cache = { at: Date.now(), ttl: degraded ? DEGRADED_TTL_MS : FULL_TTL_MS, value };
+			// Once per fresh computation (not per request); degraded answers are skipped inside.
+			try {
+				persist(value);
+			} catch (e) {
+				console.warn("[api/treasury] snapshot persist failed:", e);
+			}
 			return value;
 		} finally {
 			inflight = null;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useActiveAccount } from 'thirdweb/react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { prepareContractCall, readContract, sendTransaction, waitForReceipt } from 'thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import { keccak256, toHex } from 'thirdweb/utils';
@@ -22,18 +23,18 @@ import VoteFlowSheet, { type VoteFlowError } from './VoteFlowSheet';
 import { loadCitizenPreimage } from '@/lib/citizen-commitment';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import {
-  AGE_CONFIRMED_VALUE,
-  ageConfirmedKey,
   applyAgeAnswer,
   buildPlan,
-  canVoteDirectly,
   currentStep,
-  isAgeConfirmed,
   parsePendingChoice,
   pendingChoiceKey,
+  persistAgeConfirmed,
+  readAgeConfirmed,
   serializePendingChoice,
+  shouldAutoCast,
   stepPosition,
   type AgeAnswer,
+  type AgeFlagStorage,
   type VoteFlowState,
   type VoteFlowStep,
 } from '@/lib/vote-flow';
@@ -60,9 +61,21 @@ import {
   PubKey,
 } from '@/lib/maci';
 
-// Reward screen body copy for casting a vote (governance participation).
-const VOTE_REWARD_SUBTITLE =
-  'Danke fürs Mitbestimmen! Für deine Teilnahme an der Abstimmung gibt es Röbel Münzen.';
+// Reward screen for a FIRST vote on a proposal. The claim-reward edge function
+// pays 1 Röbel Münze per (wallet, proposal) — reward_config 'proposal_vote',
+// once per proposal — so a changed vote shows no coin headline.
+const VOTE_REWARD_HEADLINE = '+1 Röbel Münze';
+const VOTE_REWARD_SUBTITLE = 'Danke fürs Mitmachen – deine Belohnung für die Stimme.';
+
+// Age flag storage: AsyncStorage (device + per account) and the original
+// per-account SecureStore key, plus the legacy on-device birthdate.
+const AGE_FLAG_STORAGE: AgeFlagStorage = {
+  secureGet: (k) => SecureStore.getItemAsync(k),
+  secureSet: (k, v) => SecureStore.setItemAsync(k, v),
+  asyncGet: (k) => AsyncStorage.getItem(k),
+  asyncSet: (k, v) => AsyncStorage.setItem(k, v),
+  loadBirthdate: async (address) => (await loadCitizenPreimage(address))?.birthdate ?? null,
+};
 
 // Privacy confirmation shown after the reward screen is dismissed.
 const VOTE_PRIVACY_MESSAGE =
@@ -172,6 +185,8 @@ export default function VoteButtons({
     getKeypair,
     recordVote,
     getLastVote,
+    markVotePending,
+    clearVotePending,
     getNextNonce,
   } = useMaci();
 
@@ -217,6 +232,9 @@ export default function VoteButtons({
   const [ageConfirmed, setAgeConfirmed] = useState<boolean | null>(null);
   const [refreshingSignUp, setRefreshingSignUp] = useState(false);
   const signUpRefreshTried = useRef(false);
+  // One automatic cast / key creation per run of the sheet (retries are taps).
+  const autoCastAttempted = useRef(false);
+  const autoKeyAttempted = useRef(false);
   const requireAuth = useRequireAuth();
   // Passkey session without a key anywhere and without a dormant thirdweb session: show
   // "Einmal mit Google/E-Mail bestätigen" inline in the sheet's key step; the key then
@@ -313,8 +331,9 @@ export default function VoteButtons({
     }
   }, [serializedKeypair, signUpState.status, refreshSignUp]);
 
-  // Age confirmation: the new "16 oder älter" flag OR a legacy on-device
-  // birthdate (old date picker / verification form). Per account.
+  // Age confirmation: asked ONCE per device. Any of the device flag, the
+  // per-account flag (AsyncStorage or the original SecureStore key) or a
+  // legacy on-device birthdate counts (lib/vote-flow.ts readAgeConfirmed).
   useEffect(() => {
     const address = account?.address;
     if (!address) {
@@ -322,24 +341,14 @@ export default function VoteButtons({
       return;
     }
     let cancelled = false;
-    setAgeConfirmed(null);
-    (async () => {
-      let flag: string | null = null;
-      let birthdate: string | null = null;
-      try {
-        flag = await SecureStore.getItemAsync(ageConfirmedKey(address));
-      } catch (err) {
-        console.warn('[VoteButtons] age flag read failed:', err);
-      }
-      if (flag !== AGE_CONFIRMED_VALUE) {
-        try {
-          birthdate = (await loadCitizenPreimage(address))?.birthdate ?? null;
-        } catch (err) {
-          console.warn('[VoteButtons] birthdate read failed:', err);
-        }
-      }
-      if (!cancelled) setAgeConfirmed(isAgeConfirmed(flag, birthdate));
-    })();
+    setAgeConfirmed((prev) => (prev === true ? prev : null));
+    readAgeConfirmed(address, AGE_FLAG_STORAGE)
+      .then((ok) => {
+        if (!cancelled) setAgeConfirmed((prev) => (prev === true ? prev : ok));
+      })
+      .catch(() => {
+        if (!cancelled) setAgeConfirmed((prev) => (prev === true ? prev : false));
+      });
     return () => {
       cancelled = true;
     };
@@ -377,7 +386,8 @@ export default function VoteButtons({
   };
   const flowStep = currentStep(flowState);
   const flowPlan = buildPlan(completedSteps, flowState);
-  const flowPosition = stepPosition(flowPlan, flowStep);
+  // Nothing but the cast itself → no "Schritt 1 von 1".
+  const flowPosition = flowPlan.length > 1 ? stepPosition(flowPlan, flowStep) : null;
 
   const markStepDone = (step: VoteFlowStep) =>
     setCompletedSteps((prev) => (prev.includes(step) ? prev : [...prev, step]));
@@ -411,6 +421,8 @@ export default function VoteButtons({
     setUnderAgeBlocked(false);
     setFlowError(null);
     signUpRefreshTried.current = false;
+    autoCastAttempted.current = false;
+    autoKeyAttempted.current = false;
     setSheetOpen(true);
   };
 
@@ -442,16 +454,15 @@ export default function VoteButtons({
     }
   };
 
-  // ----- Tap on an option: remember it, then vote directly or open the sheet -----
+  // ----- Tap on an option: remember it and open the sheet -----
+  // The tap IS the decision: the sheet walks through only the missing
+  // prerequisites and then casts this choice on its own (no second "abgeben"
+  // tap). With nothing missing it opens straight on the progress state.
   const handleOptionTap = (support: VoteType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     if (phase !== 'idle') return;
     setChoice(support);
     persistChoice(support);
-    if (canVoteDirectly(flowState) && canVote && gnosisAccount) {
-      castVote(support);
-      return;
-    }
     openFlow();
   };
 
@@ -478,13 +489,10 @@ export default function VoteButtons({
       setUnderAgeBlocked(true);
       return;
     }
-    if (persist && account?.address) {
-      try {
-        await SecureStore.setItemAsync(ageConfirmedKey(account.address), AGE_CONFIRMED_VALUE);
-      } catch (err) {
-        // Keep going for this session even if the device store failed.
-        console.warn('[VoteButtons] persist age flag failed:', err);
-      }
+    if (persist) {
+      // Device flag + per-account flags; never throws (a failed store only
+      // means the flag lives in the others).
+      await persistAgeConfirmed(account?.address, AGE_FLAG_STORAGE);
     }
     setAgeConfirmed(true);
     markStepDone('age');
@@ -497,14 +505,11 @@ export default function VoteButtons({
     );
   };
 
+  // Retry after a failed cast (the first attempt runs automatically).
   const handleFlowVote = () => {
-    if (choice === null) return;
-    const support = choice;
-    setSheetOpen(false);
-    // Let the sheet dismiss before the vote celebration / privacy sheet.
-    setTimeout(() => {
-      castVote(support);
-    }, 350);
+    if (choice === null || phase !== 'idle') return;
+    setFlowError(null);
+    void castVote(choice, { fromSheet: true });
   };
 
   // ----- Step 1: generate keypair locally -----
@@ -561,6 +566,16 @@ export default function VoteButtons({
     try {
       setFlowError(null);
       setPhase('signing-up');
+
+      // Already signed up on this MACI core (other device, earlier session,
+      // the July key)? Then no signUp tx — and no wallet prompt. The lookup is
+      // cheap; a signUp that would only revert AlreadyRegistered is not.
+      setTxSubstate('recovering');
+      const pre = await refreshSignUp();
+      if (pre.status !== 'needs-signup' || pre.legacyKeyLost) {
+        showSignUpResult(pre);
+        return;
+      }
       setTxSubstate('wallet-prompt');
 
       // Look up the citizen's CitizenNFT tokenId. SignUpTokenGatekeeper expects
@@ -656,15 +671,25 @@ export default function VoteButtons({
   };
 
   // ----- Step 3: cast (or change) vote -----
-  const castVote = async (support: VoteType) => {
+  // `fromSheet`: the cast runs inside the vote sheet (its progress state);
+  // errors land in the sheet (with a retry), and the sheet closes before the
+  // reward / privacy screens appear.
+  const castVote = async (support: VoteType, opts: { fromSheet?: boolean } = {}) => {
+    const fail = (message: string) => {
+      if (opts.fromSheet) setFlowError({ message });
+      else setErrorDrawer({ visible: true, message });
+    };
     if (!canVote || !account || !pollAddress || pollId === null) return;
     if (signUpState.status !== 'signed-up') return;
     if (!gnosisAccount) {
-      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      fail('Dein Konto wird noch geladen. Bitte versuche es gleich erneut.');
       return;
     }
     const kp = getKeypair();
-    if (!kp) return;
+    if (!kp) {
+      fail('Dein Wahlschlüssel wird noch geladen. Bitte versuche es gleich erneut.');
+      return;
+    }
 
     // Narrow the guarded state into locals so the detached settle closure keeps
     // their non-null types (TS widens captured state back to nullable otherwise).
@@ -679,7 +704,6 @@ export default function VoteButtons({
     // The vote is committed once we've signed it, so the privacy sheet now shows
     // unconditionally (the ballot settles on chain in the background).
     const showPrivacySheet = () => {
-      setChanging(false);
       setTimeout(() => {
         // Vote successfully cast (or changed) — the ballot is signed and
         // committed; the privacy sheet about to appear is the success moment.
@@ -749,7 +773,7 @@ export default function VoteButtons({
           tx_hash: receipt.transactionHash,
           encrypted: true,
         });
-        // Persist the choice locally so the LastVoteCard can show it.
+        // Persist the choice locally (replaces the optimistic record).
         await recordVote(pollAddr, support, nonce, receipt.transactionHash);
         // Mirror participation to Supabase first so the claim-reward verifier
         // finds the vote, then claim the payout (it lands via the reconcile).
@@ -760,43 +784,87 @@ export default function VoteButtons({
         });
         await claimReward(voterAddress, 'proposal_vote', proposalId.toString()).catch(() => {});
       };
+      // The ballot never left the device → drop the optimistic "Du hast … gestimmt".
+      const onFailed = () => {
+        if (!sent) clearVotePending(pollAddr);
+      };
 
-      // The ballot is committed — the remembered choice has done its job.
+      // The ballot is committed — the remembered choice has done its job, and
+      // the vote card shows the choice right away (no refresh needed).
       clearPersistedChoice(pollAddr);
       setChoice(null);
+      markVotePending(pollAddr, support);
+      setChanging(false);
+
+      if (opts.fromSheet) {
+        setSheetOpen(false);
+        // Let the sheet's Modal dismiss before the reward / privacy screen.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
 
       if (isChangingVote) {
         // A changed vote earns no reward — settle quietly, show the privacy sheet.
-        enqueueSettlement({ label: 'Stimme', amount: 0, settle, ...(attempts ? { attempts } : {}) });
+        enqueueSettlement({ label: 'Stimme', amount: 0, settle, onFailed, ...(attempts ? { attempts } : {}) });
         showPrivacySheet();
       } else {
         celebrateSettling({
-          message: 'Stimme abgegeben',
+          message: VOTE_REWARD_HEADLINE,
           coin: 'single',
           subtitle: VOTE_REWARD_SUBTITLE,
           label: 'Stimme',
           loadingLabel: [
-            'Stimme wird versiegelt…',
+            'Stimme wird verschlüsselt…',
             'Belohnung wird vorbereitet…',
             'Fast geschafft…',
           ],
           settle,
+          onFailed,
           onClose: showPrivacySheet,
           ...(attempts ? { attempts } : {}),
         });
       }
     } catch (err) {
       console.error('[VoteButtons] vote prepare failed:', err);
-      setErrorDrawer({
-        visible: true,
-        message: extractErrorMessage(err, 'Stimme konnte nicht abgegeben werden.'),
-      });
+      fail(extractErrorMessage(err, 'Stimme konnte nicht abgegeben werden.'));
     } finally {
       setPhase('idle');
       setTxSubstate(null);
       setVotingFor(null);
     }
   };
+
+  // Reached the 'vote' step with a remembered choice → cast it right away.
+  useEffect(() => {
+    if (
+      !shouldAutoCast({
+        sheetOpen,
+        step: flowStep,
+        choice,
+        busy: phase !== 'idle',
+        hasError: !!flowError,
+        alreadyAttempted: autoCastAttempted.current,
+        ready: canVote && !!gnosisAccount && pollId !== null,
+      })
+    ) {
+      return;
+    }
+    autoCastAttempted.current = true;
+    void castVote(choice as VoteType, { fromSheet: true });
+    // castVote is recreated every render; the inputs that gate it are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetOpen, flowStep, choice, phase, flowError, canVote, gnosisAccount, pollId]);
+
+  // Reached the 'key' step on a thirdweb session → create the key right away.
+  // The derivation signature of an in-app wallet is silent, and the key is the
+  // account's one deterministic key (reused for every poll). A passkey session
+  // keeps the explicit button (its resolver may need a fingerprint / login).
+  useEffect(() => {
+    if (!sheetOpen || flowStep !== 'key' || phase !== 'idle' || flowError || needsThirdweb) return;
+    if (autoKeyAttempted.current || !account || passkeySessionOf(account)) return;
+    autoKeyAttempted.current = true;
+    void handleGenerateKey();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetOpen, flowStep, phase, flowError, needsThirdweb, account]);
 
   // ============== Rendering ==============
 

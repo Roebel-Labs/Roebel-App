@@ -10,9 +10,12 @@ import {
 	getTreasuryAssets,
 	getTreasuryHistory,
 	treasuryAssetsFallback,
+	treasuryAssetsFromApi,
+	treasuryHistoryFromApi,
 	type TreasuryAssets,
 	type TreasuryTx,
 } from "@/lib/roebel-taler";
+import { loadTreasuryProgressive } from "@/lib/treasury-api";
 import { TREASURY_SNAPSHOT } from "@/constants/treasury-snapshot";
 import {
 	fetchTreasuryHistoryBalancingTx,
@@ -43,9 +46,12 @@ export default function TreasuryScreen() {
 		balancingTx: null,
 	});
 
-	// A dead RPC used to leave the hero on a skeleton forever (RN fetch has no
-	// timeout of its own), so both reads are raced against a deadline and fall
-	// back to the dated snapshot instead of showing 0 €.
+	// Fast first paint, like the proposal page: the on-device cache and the
+	// Supabase snapshot (`treasury_snapshot`, written by /api/treasury) render
+	// right away; the route's answer replaces them when it differs. Only when
+	// none of them has a payload do the on-device chain fallbacks run — raced
+	// against a deadline (RN fetch has no timeout of its own), falling back to
+	// the dated snapshot instead of 0 €.
 	useEffect(() => {
 		let cancelled = false;
 		const deadline = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
@@ -54,26 +60,42 @@ export default function TreasuryScreen() {
 				new Promise<T>((resolve) => setTimeout(() => resolve(fallback), LOAD_TIMEOUT_MS)),
 			]).catch(() => fallback);
 
-		deadline(getTreasuryAssets(attesterSafeGnosisAddress), treasuryAssetsFallback())
-			.then((a) => { if (!cancelled) setAssets(a); });
-		// History: /api/treasury rows are final. Only the on-device fallback
-		// needs the curation settings, read under the same deadline; a
-		// failed/slow read just means no curation.
-		deadline(getTreasuryHistory(attesterSafeGnosisAddress), { rows: [] as TreasuryTx[], curated: false })
-			.then(async (h) => {
+		const runChainFallback = (needAssets: boolean) => {
+			if (needAssets) {
+				deadline(getTreasuryAssets(attesterSafeGnosisAddress, { skipApi: true }), treasuryAssetsFallback())
+					.then((a) => { if (!cancelled) setAssets(a); });
+			}
+			// Only the on-device history needs the curation settings, read under
+			// the same deadline; a failed/slow read just means no curation.
+			deadline(
+				getTreasuryHistory(attesterSafeGnosisAddress, { skipApi: true }),
+				{ rows: [] as TreasuryTx[], curated: false },
+			).then(async (h) => {
 				if (cancelled) return;
-				if (h.curated) {
-					setServerCurated(true);
-					setTxs(h.rows);
-					return;
-				}
 				const [hidden, balancingTx] = await Promise.all([
 					deadline(fetchTreasuryHistoryHiddenTxs(), [] as string[]),
 					deadline(fetchTreasuryHistoryBalancingTx(), null as string | null),
 				]);
 				if (cancelled) return;
 				setCuration({ hidden, balancingTx });
+				setServerCurated(false);
 				setTxs(h.rows);
+			});
+		};
+
+		loadTreasuryProgressive((api) => {
+			if (cancelled) return;
+			setAssets(treasuryAssetsFromApi(api));
+			if (api.historyAvailable) {
+				setServerCurated(true);
+				setTxs(treasuryHistoryFromApi(api));
+			}
+		})
+			.catch(() => null)
+			.then((final) => {
+				if (cancelled) return;
+				if (!final) runChainFallback(true);
+				else if (!final.historyAvailable) runChainFallback(false);
 			});
 		return () => { cancelled = true; };
 	}, []);

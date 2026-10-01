@@ -22,7 +22,7 @@ import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
-import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { watchTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 export default function ProposalDetailScreen() {
@@ -52,11 +52,8 @@ export default function ProposalDetailScreen() {
   const [liveKasseEuro, setLiveKasseEuro] = useState<number | null>(null);
   useEffect(() => {
     if (!proposal?.gemeinschaftskasseSnapshot) return;
-    let cancelled = false;
-    getTreasuryEuro(attesterSafeGnosisAddress)
-      .then((e) => { if (!cancelled) setLiveKasseEuro(e); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    // Snapshot-first (cache → Supabase → route → chain), like the proposal text.
+    return watchTreasuryEuro(attesterSafeGnosisAddress, setLiveKasseEuro);
   }, [proposal?.gemeinschaftskasseSnapshot]);
 
   // Body text: Supabase `content.markdown` is the source of truth (admins can
