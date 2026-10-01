@@ -20,11 +20,20 @@ export async function GET(req: NextRequest) {
   }
   const db = createAdminClient();
   const errors: string[] = [];
-  const settings = await loadSettings(db);
+  let settings: Awaited<ReturnType<typeof loadSettings>>;
+  let proposals: Awaited<ReturnType<typeof listActiveProposals>>;
+  try {
+    settings = await loadSettings(db);
+    proposals = await listActiveProposals(db);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[cron/vorhaben] setup failed", msg);
+    return NextResponse.json({ synced: 0, dispatched: false, errors: [msg] }, { status: 500 });
+  }
   const reader = gnosisReader();
 
   let synced = 0;
-  for (const p of await listActiveProposals(db)) {
+  for (const p of proposals) {
     try {
       if (await syncProposal({ db, reader, settings, nowMs: Date.now, listAttesters }, p)) synced++;
     } catch (e) {

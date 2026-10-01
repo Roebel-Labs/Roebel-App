@@ -6,11 +6,11 @@ import type { ContractReader } from "../src/lib/vorhaben/chain";
 
 type Op = { table: string; op: string; payload?: unknown };
 
-function recordingDb(seed: Record<string, unknown[]>) {
+function recordingDb(seed: Record<string, unknown[]>, errors: Record<string, string> = {}) {
   const ops: Op[] = [];
   const chain = (table: string, op: string, payload?: unknown) => {
     ops.push({ table, op, payload });
-    const result = { data: seed[table] ?? [], error: null };
+    const result = { data: seed[table] ?? [], error: errors[`${table}:${op}`] ? { message: errors[`${table}:${op}`] } : null };
     const self: Record<string, unknown> = {
       eq: () => self, neq: () => self, in: () => self, is: () => self, order: () => self, lt: () => self,
       select: () => self,
@@ -91,4 +91,50 @@ test("listAttesters failure → window not opened, nothing snapshotted, error pr
     && "tally_confirm_opened_at" in (o.payload as object));
   assert.equal(opened.length, 0);
   assert.equal(db.ops.filter((o) => o.table === "proposal_wahlhelfer").length, 0);
+});
+
+const contracts = { proposal_contracts: [{ id: "c1", platform_fee_bps: 500, platform_safe_address: settings.platformSafe }] };
+const mk = (db: ReturnType<typeof recordingDb>, state = 4, published = true, nowMs = 200_000): SyncDeps =>
+  ({ db: db as never, reader: reader(state, published), settings, nowMs: () => nowMs, listAttesters: async () => ["0xa"] });
+const notified = (db: ReturnType<typeof recordingDb>) => db.ops.filter((o) => o.table === "notifications").length;
+
+test("wahlhelfer upsert error → no window update, no notify", async () => {
+  const db = recordingDb(contracts, { "proposal_wahlhelfer:upsert": "boom" });
+  await assert.rejects(syncProposal(mk(db), proposal), /boom/);
+  assert.equal(db.ops.filter((o) => o.table === "proposals" && JSON.stringify(o.payload).includes("tally_confirm_opened_at")).length, 0);
+  assert.equal(notified(db), 0);
+});
+
+test("window update error → no notify", async () => {
+  const db = recordingDb(contracts, { "proposals:update": "boom" });
+  await assert.rejects(syncProposal(mk(db), proposal), /boom/);
+  assert.equal(notified(db), 0);
+});
+
+test("stage update error → no stage event", async () => {
+  const db = recordingDb(contracts);
+  const orig = db.from;
+  // fail only the lifecycle_stage update
+  db.from = (table: string) => {
+    const t = orig(table);
+    return { ...t, update: (p: unknown) => (table === "proposals" && "lifecycle_stage" in (p as object)
+      ? (() => { db.ops.push({ table, op: "update", payload: p }); return { eq: async () => ({ error: { message: "stagefail" } }) }; })()
+      : t.update(p)) };
+  };
+  await assert.rejects(syncProposal(mk(db, 1, false, 50_000), { ...proposal, lifecycle_stage: "vorschlag" as never }), /stagefail/);
+  assert.equal(db.ops.filter((o) => o.table === "proposal_stage_events").length, 0);
+});
+
+test("lines read error → no stage write", async () => {
+  const db = recordingDb(contracts, { "proposal_payout_lines:select": "readfail" });
+  await assert.rejects(syncProposal(mk(db, 1, false, 50_000), { ...proposal, lifecycle_stage: "vorschlag" as never }), /readfail/);
+  assert.equal(db.ops.filter((o) => o.table === "proposal_stage_events" || (o.table === "proposals" && JSON.stringify(o.payload).includes("lifecycle_stage"))).length, 0);
+});
+
+test("reminder mark error → no notify", async () => {
+  const db = recordingDb({ ...contracts, proposal_wahlhelfer: [{ id: "w1", attester_wallet: "0xa" }] }, { "proposal_wahlhelfer:update": "markfail" });
+  const opened = 200_000 - 4 * 86400_000;
+  await assert.rejects(syncProposal(mk(db), { ...proposal, tally_confirm_opened_at: new Date(opened).toISOString(),
+    tally_confirm_until: new Date(opened + 7 * 86400_000).toISOString() }), /markfail/);
+  assert.equal(notified(db), 0);
 });
