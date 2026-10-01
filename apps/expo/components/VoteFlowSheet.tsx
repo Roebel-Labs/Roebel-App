@@ -68,6 +68,16 @@ export default function VoteFlowSheet(props: VoteFlowSheetProps) {
             <ActivityIndicator color={colors.textSecondary} />
             <Text style={[styles.body, { color: colors.textSecondary }]}>Einen Moment…</Text>
           </View>
+        ) : step === 'vote' && !error ? (
+          // The tapped option is the decision: no second "abgeben" tap, the
+          // sheet casts it and only shows the progress.
+          <View style={styles.checking}>
+            <ActivityIndicator color={colors.textSecondary} />
+            <Text style={[styles.headline, { color: colors.textPrimary }]}>Stimme wird verschlüsselt…</Text>
+            <Text style={[styles.body, { color: colors.textSecondary }]}>
+              {`Deine Auswahl „${props.choiceLabel}“ wird versiegelt und abgegeben.`}
+            </Text>
+          </View>
         ) : (
           <>
             <Text style={[styles.headline, { color: colors.textPrimary }]}>{content.title}</Text>
@@ -113,7 +123,7 @@ export default function VoteFlowSheet(props: VoteFlowSheetProps) {
           </>
         )}
 
-        {content.hideCancel ? null : (
+        {content.hideCancel || (step === 'vote' && !error && busy) ? null : (
           <Pressable
             onPress={onClose}
             disabled={busy}
@@ -190,11 +200,11 @@ function getStepContent(p: VoteFlowSheetProps): StepContent {
         primary: { label: 'Zur Bürgerumfrage anmelden', onPress: p.onSignUp },
       };
     case 'vote':
+      // Only rendered after a failed cast (the progress state has no copy
+      // here): retry the SAME remembered choice — still no confirmation step.
       return {
-        title: `Stimme ${choice} abgeben`,
-        body:
-          'Deine Stimme ist geheim — wie ein versiegelter Umschlag in der Wahlurne. Bis zum Ende der Frist kannst du sie beliebig oft ändern; nur die letzte zählt.',
-        primary: { label: `${choice} abgeben`, onPress: p.onVote },
+        title: `Stimme ${choice} wurde nicht abgegeben`,
+        primary: { label: 'Erneut versuchen', onPress: p.onVote },
       };
   }
 }

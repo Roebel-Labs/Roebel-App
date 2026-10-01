@@ -35,6 +35,8 @@ export default function LastVoteCard({ vote, canChange, onChangeVote }: LastVote
   const label = OPTION_LABEL[vote.optionIndex] ?? 'unbekannt';
   const ago = relativeTime(Math.max(0, Math.floor(Date.now() / 1000) - vote.votedAt));
   const txUrl = `https://gnosisscan.io/tx/${vote.txHash}`;
+  // '' = the just-cast vote is still being sent (no tx hash yet).
+  const sending = !vote.txHash;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surfaceSecondary }]}>
@@ -44,24 +46,33 @@ export default function LastVoteCard({ vote, canChange, onChangeVote }: LastVote
         </Text>
         {canChange ? (
           <Pressable onPress={onChangeVote} hitSlop={8}>
-            <Text style={[styles.changeLink, { color: colors.primary }]}>Stimme ändern</Text>
+            <Text style={[styles.changeLink, { color: colors.primary }]}>Entscheidung ändern</Text>
           </Pressable>
         ) : null}
       </View>
       <View style={styles.metaRow}>
-        <Text style={[styles.meta, { color: colors.textSecondary }]}>
-          Geheim gesendet · {ago} ·{' '}
-        </Text>
-        <Pressable
-          onPress={() => Linking.openURL(txUrl)}
-          hitSlop={6}
-          accessibilityRole="link"
-          accessibilityLabel="Digitalen Beweis öffnen"
-        >
-          <Text style={[styles.txLink, { color: colors.textSecondary }]}>
-            Digitaler Beweis ↗
+        {sending ? (
+          // Optimistic record: the ballot is sealed and still being sent.
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>
+            Geheim · wird gerade eingeworfen…
           </Text>
-        </Pressable>
+        ) : (
+          <>
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>
+              Geheim gesendet · {ago} ·{' '}
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL(txUrl)}
+              hitSlop={6}
+              accessibilityRole="link"
+              accessibilityLabel="Digitalen Beweis öffnen"
+            >
+              <Text style={[styles.txLink, { color: colors.textSecondary }]}>
+                Digitaler Beweis ↗
+              </Text>
+            </Pressable>
+          </>
+        )}
       </View>
     </View>
   );

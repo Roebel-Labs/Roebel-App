@@ -17,8 +17,18 @@ jest.mock("@/constants/gnosis", () => ({
 	attesterSafeGnosisAddress: "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa",
 }));
 
+// Supabase `treasury_snapshot` row for the snapshot-first tests (null = no row).
+let mockSnapshotRow: unknown = null;
+jest.mock("@/lib/supabase", () => ({
+	supabase: {
+		from: () => ({
+			select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: mockSnapshotRow, error: null }) }) }),
+		}),
+	},
+}));
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getTreasuryEuro, getTreasuryHistory } from "../roebel-taler";
+import { getTreasuryEuro, getTreasuryHistory, watchTreasuryEuro } from "../roebel-taler";
 import { __resetTreasuryApiMemo, rememberRate } from "../treasury-api";
 import { TREASURY_SNAPSHOT } from "@/constants/treasury-snapshot";
 
@@ -42,6 +52,7 @@ const chainOnly: Route = (url) => {
 };
 
 beforeEach(async () => {
+	mockSnapshotRow = null;
 	__resetTreasuryApiMemo();
 	await AsyncStorage.clear();
 });
@@ -105,5 +116,40 @@ describe("treasury history", () => {
 		]);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(fetchMock.mock.calls.some(([u]) => String(u).includes("coingecko"))).toBe(false);
+	});
+});
+
+describe("watchTreasuryEuro (snapshot-first)", () => {
+	const body = (euroTotal: number) => ({
+		euroTotal, xdai: 452, eure: 0, rate: 0.88, rateSource: "frankfurter", asOf: "2026-10-01T08:00:00.000Z", history: [], historyAvailable: true,
+	});
+	const settle = () => new Promise((r) => setTimeout(r, 50));
+
+	it("shows the Supabase snapshot first, then the route figure", async () => {
+		mockSnapshotRow = { payload: body(390) };
+		installFetch((url) => (url.endsWith("/api/treasury") ? body(398.06) : new Error("chain not needed")));
+		const seen: number[] = [];
+		watchTreasuryEuro(SAFE, (e) => seen.push(e));
+		await settle();
+		expect(seen).toEqual([390, 398.06]);
+	});
+
+	it("no snapshot, no route → the on-device fallback (dated snapshot), never 0 €", async () => {
+		installFetch(chainOnly);
+		const seen: number[] = [];
+		watchTreasuryEuro(SAFE, (e) => seen.push(e));
+		await settle();
+		expect(seen).toHaveLength(1);
+		expect(seen[0]).toBeGreaterThan(0);
+	});
+
+	it("stops after cancel", async () => {
+		mockSnapshotRow = { payload: body(390) };
+		installFetch((url) => (url.endsWith("/api/treasury") ? body(398.06) : new Error("x")));
+		const seen: number[] = [];
+		const cancel = watchTreasuryEuro(SAFE, (e) => seen.push(e));
+		cancel();
+		await settle();
+		expect(seen).toEqual([]);
 	});
 });

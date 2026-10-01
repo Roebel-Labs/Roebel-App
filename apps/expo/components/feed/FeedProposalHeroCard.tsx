@@ -9,11 +9,15 @@ import { useProposalTally } from '@/hooks/useProposalTally';
 import { shortenAddress } from '@/lib/governance-utils';
 import AnimatedGradientBorder from './AnimatedGradientBorder';
 import CompactVotingBars from '@/components/proposals/CompactVotingBars';
+import { useActiveAccount } from 'thirdweb/react';
+import { useMaci } from '@/context/MaciContext';
 
 const ILLUSTRATION = require('@/assets/illustration/buergerumfragen-cropped.png');
 
 /** How long the ended/calculating/results card lingers after the deadline. */
 const RESULTS_WINDOW_SEC = 24 * 3600;
+// VoteType: 0=Against, 1=For, 2=Abstain.
+const MY_VOTE_LABEL: Record<number, string> = { 0: 'Dagegen', 1: 'Dafür', 2: 'Enthalten' };
 
 /**
  * All open proposals (Pending or Active), newest first. Falls back to the
@@ -107,9 +111,14 @@ function HeroProposalCard({
     [proposal.blockchain_proposal_id],
   );
   const tally = useProposalTally(proposalIdBig);
+  // Own vote (device-local, incl. the one just cast) → the card says so right
+  // away instead of "Jetzt abstimmen".
+  const account = useActiveAccount();
+  const { getLastVote } = useMaci();
 
   const deadlineSec = tally.deadlineSec;
   const isActive = deadlineSec !== null && nowSec < deadlineSec;
+  const myVote = isActive && account && tally.pollAddress ? getLastVote(tally.pollAddress) : null;
 
   // ── Visibility gating ──────────────────────────────────────────────
   if (tally.orphan) return null;
@@ -204,6 +213,12 @@ function HeroProposalCard({
               </View>
             ) : null}
 
+            {myVote ? (
+              <Text style={[styles.votedText, { color: colors.textPrimary }]}>
+                {`Du hast „${MY_VOTE_LABEL[myVote.optionIndex] ?? 'abgestimmt'}“ gestimmt`}
+              </Text>
+            ) : null}
+
             <Pressable
               onPress={handlePress}
               style={({ pressed }) => [
@@ -213,7 +228,7 @@ function HeroProposalCard({
               ]}
             >
               <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
-                {isActive ? 'Jetzt abstimmen' : 'Ergebnis ansehen'}
+                {isActive ? (myVote ? 'Entscheidung ändern' : 'Jetzt abstimmen') : 'Ergebnis ansehen'}
               </Text>
             </Pressable>
           </View>
@@ -290,6 +305,10 @@ const styles = StyleSheet.create({
   totalVotes: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+  },
+  votedText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   button: {
     height: 32,

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
-import { getTreasuryEuro } from "@/lib/roebel-taler";
+import { watchTreasuryEuro } from "@/lib/roebel-taler";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import Skeleton from "@/components/ui/Skeleton";
 
@@ -18,11 +18,9 @@ export default function TreasuryCard() {
 	const [euro, setEuro] = useState<number | null>(null);
 
 	useEffect(() => {
-		let cancelled = false;
-		getTreasuryEuro(attesterSafeGnosisAddress)
-			.then((e) => { if (!cancelled) setEuro(e); })
-			.catch(() => { if (!cancelled) setEuro(0); });
-		return () => { cancelled = true; };
+		// Snapshot-first (cache → Supabase → route → chain); the skeleton stays
+		// until the first real figure, never a 0 € placeholder.
+		return watchTreasuryEuro(attesterSafeGnosisAddress, setEuro);
 	}, []);
 
 	const styles = makeStyles(colors);

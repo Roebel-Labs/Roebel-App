@@ -41,7 +41,7 @@ import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import { softShadow } from '@/lib/shadow';
-import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { watchTreasuryEuro } from '@/lib/roebel-taler';
 import {
   MIN_MINTABLE,
   MINT_COOLDOWN_MS,
@@ -104,11 +104,8 @@ export default function RewardsIndexScreen() {
   // Stadtkasse euro figure (same source as the old TreasuryCard).
   const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    getTreasuryEuro(attesterSafeGnosisAddress)
-      .then((e) => { if (!cancelled) setStadtkasseEuro(e); })
-      .catch(() => { if (!cancelled) setStadtkasseEuro(0); });
-    return () => { cancelled = true; };
+    // Snapshot-first (cache → Supabase → route → chain), never a 0 € placeholder.
+    return watchTreasuryEuro(attesterSafeGnosisAddress, setStadtkasseEuro);
   }, []);
 
   // Hourly mint cooldown: a mint claims the accrued coin, then the next whole
