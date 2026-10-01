@@ -20,7 +20,7 @@ export function tallyResultHash(f: TallyFacts): `0x${string}` {
 /** The exact text an Attester signs. Rebuilt server-side from chain data on submit. */
 export function buildTallyConfirmMessage(f: TallyFacts): string {
   return (
-    `Ich bestätige das Auszählungsergebnis von Vorschlag #${f.proposalNumber} „${f.title}": ` +
+    `Ich bestätige das Auszählungsergebnis von Vorschlag #${f.proposalNumber} „${f.title}“: ` +
     `Ja ${f.forVotes}, Nein ${f.againstVotes}, Enthaltung ${f.abstainVotes}. ` +
     `Auszählungsvertrag ${f.tallyAddress.toLowerCase()} auf Gnosis. ` +
     `Ergebnis-Hash ${tallyResultHash(f)}.`

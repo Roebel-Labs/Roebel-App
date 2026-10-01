@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ContractFunctionRevertedError } from "viem";
 import { listAttesters, readProposalOutcome, type ContractReader } from "../src/lib/vorhaben/chain";
 
 const TALLY = "0x00000000000000000000000000000000000000aa";
@@ -42,8 +43,41 @@ test("lists attesters by scanning token ids, skipping burned ones", async () => 
   const owners: Record<string, string> = { "0": "0xAA", "2": "0xBB", "3": "0xCC" }; // 1 burned
   const r = fakeReader({
     attesterCount: () => 3n,
-    ownerOf: ([id]) => { const o = owners[String(id)]; if (!o) throw new Error("ERC721NonexistentToken"); return o; },
+    ownerOf: ([id]) => {
+      const o = owners[String(id)];
+      if (!o) {
+        const err = new ContractFunctionRevertedError({
+          abi: [], functionName: "ownerOf", args: [id],
+        });
+        throw err;
+      }
+      return o;
+    },
     hasAttesterNFT: () => true,
   });
   assert.deepEqual(await listAttesters(r), ["0xaa", "0xbb", "0xcc"]);
+});
+
+test("rejects listAttesters on non-revert RPC errors", async () => {
+  const r = fakeReader({
+    attesterCount: () => 3n,
+    ownerOf: () => { throw new Error("503 Service Unavailable"); },
+    hasAttesterNFT: () => true,
+  });
+  await assert.rejects(listAttesters(r), /503 Service Unavailable/);
+});
+
+test("throws when found attesters < attesterCount after maxScan", async () => {
+  const r = fakeReader({
+    attesterCount: () => 10n,
+    ownerOf: ([id]) => {
+      if (id === 0n || id === 1n) return "0xAA";
+      const err = new ContractFunctionRevertedError({
+        abi: [], functionName: "ownerOf", args: [id],
+      });
+      throw err;
+    },
+    hasAttesterNFT: () => true,
+  });
+  await assert.rejects(listAttesters(r), /found 1 of 10 attesters/);
 });

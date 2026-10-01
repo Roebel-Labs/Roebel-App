@@ -1,4 +1,4 @@
-import { createPublicClient, http, parseAbi } from "viem";
+import { BaseError, ContractFunctionRevertedError, createPublicClient, http, parseAbi } from "viem";
 import { gnosis } from "viem/chains";
 import { ATTESTER_NFT, GOVERNOR, VOTE_OPTION } from "./constants";
 
@@ -70,8 +70,18 @@ export async function listAttesters(r: ContractReader, maxScan = 500): Promise<s
   for (let start = 0; start < maxScan && found.size < count; start += 20) {
     const ids = Array.from({ length: 20 }, (_, k) => BigInt(start + k));
     const owners = await Promise.all(ids.map((id) =>
-      r.readContract({ address: ATTESTER_NFT, abi: attesterAbi, functionName: "ownerOf", args: [id] }).catch(() => null)));
+      r.readContract({ address: ATTESTER_NFT, abi: attesterAbi, functionName: "ownerOf", args: [id] })
+        .catch((err) => {
+          // Only swallow genuine contract reverts (burned tokens); rethrow RPC errors
+          if (err instanceof BaseError && err.walk((e) => e instanceof ContractFunctionRevertedError)) {
+            return null;
+          }
+          throw err;
+        })));
     for (const o of owners) if (typeof o === "string") found.add(o.toLowerCase());
+  }
+  if (found.size < count) {
+    throw new Error(`listAttesters: found ${found.size} of ${count} attesters after scanning ${maxScan} token ids`);
   }
   const holders = [...found];
   const still = await Promise.all(holders.map((w) => isAttester(r, w)));
