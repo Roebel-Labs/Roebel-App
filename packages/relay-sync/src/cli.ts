@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createGnosisVerifier } from "./chain.js";
 import { createSupabaseRegistry } from "./registry.js";
-import { syncAllowList } from "./sync.js";
+import { assertDistinctPaths, syncAllowList } from "./sync.js";
 
 /**
  * `netizen-relay-sync` — runs on the sovereign node, next to the relay.
@@ -35,6 +35,12 @@ async function main(): Promise<void> {
   // members.txt = every bound account; citizens.txt (CITIZENS_PATH) = NFT holders only.
   const allowListPath = process.env.ALLOWLIST_PATH ?? "/etc/strfry/members.txt";
   const citizensPath = process.env.CITIZENS_PATH ?? "/etc/strfry/citizens.txt";
+  try {
+    assertDistinctPaths(allowListPath, citizensPath);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(2);
+  }
   const intervalSeconds = Number(process.env.SYNC_INTERVAL_SECONDS ?? 300);
   const once = process.argv.includes("--once");
   // The node's own AI agents. Their Nostr key is NIP-06 derived from an agent

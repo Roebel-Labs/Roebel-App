@@ -191,6 +191,48 @@ describe("sync pass", () => {
   });
 });
 
+describe("paths and logs", () => {
+  it("refuses identical members/citizens paths", async () => {
+    await assert.rejects(
+      syncAllowList({
+        fetchRegistry: async () => [],
+        chain: permissiveChain,
+        allowListPath: "/etc/strfry/citizens.txt",
+        citizensPath: "/etc/strfry/../strfry/citizens.txt",
+      }),
+      /CITIZENS_PATH must differ from ALLOWLIST_PATH/,
+    );
+  });
+
+  it("logs per-file state and warns when every NFT check failed", async () => {
+    const logs: string[] = [];
+    await syncAllowList({
+      fetchRegistry: async () => [rowFor(ALICE, ALICE_WALLET), rowFor(BOB, BOB_WALLET)],
+      chain: {
+        ...permissiveChain,
+        holdsCitizenNft: async () => {
+          throw new Error("rpc down");
+        },
+      },
+      allowListPath: "/m",
+      citizensPath: "/c",
+      log: (m) => logs.push(m),
+      write: async (path) => path === "/m",
+    });
+    assert.ok(logs.some((l) => /members list updated/.test(l)));
+    assert.ok(logs.some((l) => /citizens list unchanged/.test(l)));
+    assert.ok(logs.some((l) => /WARNING: every CitizenNFT check failed/.test(l)));
+  });
+
+  it("uses distinct headers per list", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "netizen-hdr-"));
+    await writeAllowList(join(dir, "m.txt"), [], "members");
+    await writeAllowList(join(dir, "c.txt"), [], "citizens");
+    assert.match(await readFile(join(dir, "m.txt"), "utf8"), /MEMBERS list/);
+    assert.match(await readFile(join(dir, "c.txt"), "utf8"), /CITIZENS list/);
+  });
+});
+
 describe("fail-closed", () => {
   it("does not touch the allow-list when the registry fetch fails", async () => {
     let wrote = false;

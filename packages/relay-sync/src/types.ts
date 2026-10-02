@@ -44,7 +44,7 @@ export type RejectionReason =
   | "wallet-signature-invalid";
 
 export type VerificationOutcome =
-  | { allowed: true; citizen: boolean; pubkey: string; wallet: string }
+  | { allowed: true; citizen: boolean; citizenCheckFailed?: boolean; pubkey: string; wallet: string }
   | { allowed: false; wallet: string; reason: RejectionReason };
 
 export interface SyncSummary {

@@ -1,4 +1,5 @@
-import { writeAllowList } from "./allowlist.js";
+import { resolve } from "node:path";
+import { writeAllowList, type ListKind } from "./allowlist.js";
 import type { ChainVerifier, RegistryRow, SyncSummary } from "./types.js";
 import { verifyRegistryRow } from "./verify.js";
 
@@ -12,7 +13,7 @@ export interface SyncDeps {
   citizensPath?: string;
   log?: (message: string) => void;
   /** Injectable for tests. */
-  write?: (path: string, pubkeys: string[]) => Promise<boolean>;
+  write?: (path: string, pubkeys: string[], kind?: ListKind) => Promise<boolean>;
   /**
    * Non-citizen pubkeys that must survive every pass — in practice the node's own
    * AI agents (`agents.a2a`), whose Nostr key is NIP-06 derived from an agent
@@ -30,6 +31,16 @@ export interface SyncDeps {
   alwaysAllow?: string[];
 }
 
+/** Throws when both lists would be written to the same file. */
+export function assertDistinctPaths(allowListPath: string, citizensPath?: string): void {
+  if (citizensPath && resolve(citizensPath) === resolve(allowListPath)) {
+    throw new Error(
+      "CITIZENS_PATH must differ from ALLOWLIST_PATH — the live box may still point " +
+        "ALLOWLIST_PATH at citizens.txt; set ALLOWLIST_PATH=/etc/strfry/members.txt",
+    );
+  }
+}
+
 const HEX64 = /^[0-9a-f]{64}$/;
 
 /**
@@ -45,6 +56,7 @@ const HEX64 = /^[0-9a-f]{64}$/;
  * from both lists; losing the NFT drops the key from the citizens list only.
  */
 export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
+  assertDistinctPaths(deps.allowListPath, deps.citizensPath);
   const log = deps.log ?? (() => {});
   const write = deps.write ?? writeAllowList;
 
@@ -53,6 +65,7 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
 
   const allowed: string[] = [];
   const citizens: string[] = [];
+  let nftChecksFailed = 0;
   const rejected: SyncSummary["rejected"] = [];
 
   for (const row of rows) {
@@ -60,6 +73,7 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
     if (outcome.allowed) {
       allowed.push(outcome.pubkey);
       if (outcome.citizen) citizens.push(outcome.pubkey);
+      if (outcome.citizenCheckFailed) nftChecksFailed++;
     } else rejected.push({ wallet: outcome.wallet, reason: outcome.reason });
   }
 
@@ -75,16 +89,27 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
   }
 
   // Everything is computed before the first write, so an abort leaves both files untouched.
-  const membersChanged = await write(deps.allowListPath, [...allowed, ...agentKeys]);
+  const membersChanged = await write(deps.allowListPath, [...allowed, ...agentKeys], "members");
   const citizensChanged = deps.citizensPath
-    ? await write(deps.citizensPath, citizens)
+    ? await write(deps.citizensPath, citizens, "citizens")
     : false;
   const changed = membersChanged || citizensChanged;
   log(
-    `verified ${allowed.length}/${rows.length}, ${citizens.length} citizen(s)` +
+    `verified ${allowed.length}/${rows.length}` +
       (agentKeys.length ? ` (+${agentKeys.length} declared agent key(s))` : "") +
-      ` — allow-list ${changed ? "updated" : "unchanged"}`,
+      ` — members list ${membersChanged ? "updated" : "unchanged"}`,
   );
+  if (deps.citizensPath) {
+    log(
+      `${citizens.length} citizen(s) — citizens list ${citizensChanged ? "updated" : "unchanged"}`,
+    );
+  }
+  if (allowed.length > 0 && nftChecksFailed === allowed.length) {
+    log(
+      `WARNING: every CitizenNFT check failed this pass (${nftChecksFailed}/${allowed.length}) — ` +
+        "citizens list is empty; check GNOSIS_RPC_URL / CITIZEN_NFT_ADDRESS",
+    );
+  }
   for (const { wallet, reason } of rejected) log(`  rejected ${wallet}: ${reason}`);
 
   return {

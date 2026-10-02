@@ -65,11 +65,13 @@ export async function verifyRegistryRow(
   }
 
   let citizen = false;
+  let citizenCheckFailed = false;
   try {
     citizen = await chain.holdsCitizenNft(wallet);
   } catch (error) {
+    citizenCheckFailed = true;
     log(`  citizen check failed for ${wallet}: ${error instanceof Error ? error.message : error}`);
   }
 
-  return { allowed: true, citizen, pubkey: binding.pubkey, wallet };
+  return { allowed: true, citizen, citizenCheckFailed, pubkey: binding.pubkey, wallet };
 }
