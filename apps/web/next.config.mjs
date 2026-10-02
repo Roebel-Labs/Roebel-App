@@ -82,10 +82,11 @@ const nextConfig = {
     // Builds (larger machine) — code levers are exhausted at this point.
     config.parallelism = 1;
     // @netizen-labs/protocol is ESM TS source with `.js` import suffixes
-    // (`./vorhaben.js` → vorhaben.ts); let webpack map them to the TS files.
+    // (`./vorhaben.js` → vorhaben.ts). A real .js file still wins; only a
+    // missing one falls back to the TS source.
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
-      ".js": [".ts", ".tsx", ".js"],
+      ".js": [".js", ".ts", ".tsx"],
     };
     return config;
   },

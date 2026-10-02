@@ -494,6 +494,29 @@ describe("fix round 1", () => {
       }
     });
 
+    it("never overwrites a person event the API attached while the town row was being signed", async () => {
+      const tables = baseTables([outbox({ id: 1 })]);
+      const h = harness(tables);
+      const ev = personEvent();
+      const realUpdate = h.deps.updateRow;
+      let raced = false;
+      h.deps.updateRow = async (table, query, body) => {
+        if (!raced && table === "nostr_outbox" && "signed_event" in body) {
+          raced = true;
+          // The API's conditional attach lands between the publisher's read and its store.
+          Object.assign(tables.nostr_outbox[0], { signed_event: ev, event_id: ev.id, person_signed: true });
+          assert.ok(query.includes("signed_event=is.null"));
+        }
+        return realUpdate(table, query, body);
+      };
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.published, 1);
+      assert.deepEqual(tables.nostr_outbox[0].signed_event, ev);
+      assert.equal(tables.nostr_outbox[0].event_id, ev.id);
+      assert.deepEqual(h.published, [ev]);
+      assert.ok(tables.nostr_outbox[0].published_at);
+    });
+
     it("emits no warning while waiting under 15 minutes", async () => {
       const tables = baseTables([outbox({ id: 1, person_signed: true, occurred_at: new Date((NOW - 14 * 60) * 1000).toISOString() })]);
       const h = harness(tables);

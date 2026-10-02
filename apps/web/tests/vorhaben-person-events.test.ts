@@ -22,7 +22,7 @@ const BOUND = new Map<string, string>([[pk(ASSIGNEE_SK), ASSIGNEE], [pk(ATTESTER
 
 interface EvOpts {
   action: string; role: string; from?: string | null; to: string; seq?: number; content: string;
-  payload: Record<string, unknown>; object?: string; extraTags?: string[][]; roleMarker?: string;
+  payload: Record<string, unknown>; object?: string; extraTags?: string[][]; roleMarker?: string; createdAt?: number;
 }
 function makeEvent(s: Uint8Array, o: EvOpts): NostrEvent {
   const tags: string[][] = [
@@ -33,7 +33,7 @@ function makeEvent(s: Uint8Array, o: EvOpts): NostrEvent {
   if (o.from) tags.push(["from", o.from]);
   tags.push(["to", o.to], ["p", pk(s), "", o.roleMarker ?? o.role], ["role", o.role], ["seq", String(o.seq ?? 3)],
     ["occurred_at", String(NOW)], ["payload_hash", payloadHash(o.payload)], ...(o.extraTags ?? []));
-  return signEvent({ pubkey: pk(s), created_at: NOW, kind: 2101, tags, content: o.content }, s);
+  return signEvent({ pubkey: pk(s), created_at: o.createdAt ?? NOW, kind: 2101, tags, content: o.content }, s);
 }
 
 function harness(over: Partial<PersonEventDeps> & { task?: Partial<PersonTaskInfo>; next?: number; row?: Partial<OutboxMatch> | null } = {}) {
@@ -47,6 +47,7 @@ function harness(over: Partial<PersonEventDeps> & { task?: Partial<PersonTaskInf
     getTask: async (id) => (id === T_ID ? task : null),
     getProposal: async (id) => (id === P_ID ? { proposalKey: P_KEY, proposer: PROPOSER } : null),
     isAttester: async (w) => w === ATTESTER,
+    eventKnown: async () => false,
     nextSeq: async () => over.next ?? 3,
     runTaskAction: async (w, a, p) => { calls.actions.push([w, a, p]); return { ok: true, data: { status: "abgenommen" } }; },
     runTallyConfirm: async () => { calls.tally++; return { ok: true, lineIds: ["l1"] }; },
@@ -278,4 +279,63 @@ test("parseObjectAddress accepts this town's task and poll addresses only", () =
   assert.deepEqual(parseObjectAddress(pollAddress(TOWN, P_KEY), TOWN), { type: "poll", proposalKey: P_KEY });
   assert.equal(parseObjectAddress(taskAddress("e".repeat(64), T_ID), TOWN), null);
   assert.equal(parseObjectAddress("32108:" + TOWN + ":task:nope", TOWN), null);
+});
+
+test("relay safety: uppercase hex id/sig → 400 before anything else", async () => {
+  const { deps, calls } = harness();
+  const ev = approveEvent();
+  for (const bad of [{ ...ev, id: ev.id.toUpperCase() }, { ...ev, sig: ev.sig.toUpperCase() }, { ...ev, pubkey: ev.pubkey.toUpperCase() }, { ...ev, sig: ev.sig.slice(2) }]) {
+    const r = await handlePersonEvent(deps, { event: bad, action: "task_approve", payload: approvePayload });
+    assert.equal(r.ok, false);
+    if (!r.ok) { assert.equal(r.status, 400); assert.equal(r.code, "BAD_EVENT"); }
+  }
+  assert.equal(calls.actions.length, 0);
+});
+
+test("relay safety: created_at more than 600 s off → 400", async () => {
+  const { deps, calls } = harness();
+  for (const createdAt of [NOW - 601, NOW + 601]) {
+    const r = await handlePersonEvent(deps, { event: approveEvent({ createdAt }), action: "task_approve", payload: approvePayload });
+    assert.equal(r.ok, false);
+    if (!r.ok) { assert.equal(r.status, 400); assert.equal(r.code, "STALE_EVENT"); }
+  }
+  assert.equal(calls.actions.length, 0);
+});
+
+test("relay safety: a third a-tag → 400", async () => {
+  const { deps, calls } = harness();
+  const event = approveEvent({ extraTags: [["a", taskAddress(TOWN, NEW_T_ID), "", "mention"]] });
+  const r = await handlePersonEvent(deps, { event, action: "task_approve", payload: approvePayload });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.status, 400); assert.equal(r.code, "TAG_NOT_ALLOWED"); }
+  assert.equal(calls.actions.length, 0);
+});
+
+test("relay safety: a non-hex p tag → 400 with a German-only message", async () => {
+  const { deps, calls } = harness();
+  const event = approveEvent({ extraTags: [["p", "npub1xyz", "", "assignee"]] });
+  const r = await handlePersonEvent(deps, { event, action: "task_approve", payload: approvePayload });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.status, 400); assert.equal(r.message, "Das Ereignis ist keine gültige Vorhaben-Aktion."); }
+  assert.ok(calls.logs.some((l) => l.includes("safeParseAction")));
+  assert.equal(calls.actions.length, 0);
+});
+
+test("the stored event is rebuilt canonically, extra request fields are dropped", async () => {
+  const attached: NostrEvent[] = [];
+  const { deps } = harness({ attachEvent: async (_id, _seq, ev) => { attached.push(ev); return true; } });
+  const event = approveEvent();
+  const r = await handlePersonEvent(deps, { event: { ...event, foo: "bar", seenOn: ["wss://x"] }, action: "task_approve", payload: approvePayload });
+  assert.equal(r.ok, true);
+  assert.deepEqual(Object.keys(attached[0]).sort(), ["content", "created_at", "id", "kind", "pubkey", "sig", "tags"]);
+  assert.deepEqual(attached[0], event);
+});
+
+test("resubmitting an event already in the outbox → 409 DUPLICATE, rules never run", async () => {
+  const event = approveEvent();
+  const { deps, calls } = harness({ eventKnown: async (id) => id === event.id });
+  const r = await handlePersonEvent(deps, { event, action: "task_approve", payload: approvePayload });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.status, 409); assert.equal(r.code, "DUPLICATE"); }
+  assert.equal(calls.actions.length, 0);
 });

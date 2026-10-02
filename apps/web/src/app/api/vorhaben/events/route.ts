@@ -32,9 +32,10 @@ function buildDeps(): PersonEventDeps {
       return row?.wallet_address?.toLowerCase() ?? null;
     },
     pubkeyForWallet: async (w) => {
-      const row = must<{ pubkey_hex: string } | null>(await db.from("nostr_identities").select("pubkey_hex")
-        .eq("wallet_address", w.toLowerCase()).is("revoked_at", null).maybeSingle(), "identity read");
-      return row?.pubkey_hex ?? null;
+      const rows = must<Array<{ pubkey_hex: string }> | null>(await db.from("nostr_identities").select("pubkey_hex")
+        .eq("wallet_address", w.toLowerCase()).is("revoked_at", null)
+        .order("updated_at", { ascending: false }).limit(1), "identity read");
+      return rows?.[0]?.pubkey_hex ?? null;
     },
     getTask: async (taskId) => {
       const t = must<{ proposal_id: string; status: string; assignee_wallet: string | null } | null>(
@@ -49,6 +50,10 @@ function buildDeps(): PersonEventDeps {
       return p ? { proposalKey: p.proposal_id, proposer: p.proposer_address } : null;
     },
     isAttester: (w) => isAttester(reader, w),
+    eventKnown: async (id) => {
+      const rows = must<unknown[] | null>(await db.from("nostr_outbox").select("id").eq("event_id", id).limit(1), "outbox event read");
+      return Array.isArray(rows) && rows.length > 0;
+    },
     nextSeq: async (objectType, objectId) => {
       const n = must<number>(await db.rpc("next_outbox_seq", { p_object_type: objectType, p_object_id: objectId }), "next_outbox_seq");
       if (!Number.isSafeInteger(n) || n < 1) throw new Error(`next_outbox_seq returned ${String(n)}`);

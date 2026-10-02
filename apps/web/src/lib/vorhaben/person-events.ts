@@ -53,6 +53,8 @@ export interface PersonEventDeps {
   getTask: (taskId: string) => Promise<PersonTaskInfo | null>;
   getProposal: (proposalUuid: string) => Promise<{ proposalKey: string; proposer: string } | null>;
   isAttester: (wallet: string) => Promise<boolean>;
+  /** True when nostr_outbox already holds a row with event_id = id (a resubmitted event). */
+  eventKnown: (eventId: string) => Promise<boolean>;
   /** public.next_outbox_seq(object_type, object_id). */
   nextSeq: (objectType: OutboxObjectType, objectId: string) => Promise<number>;
   /** handleVorhabenAction with the production deps (the unchanged rules). */
@@ -104,8 +106,10 @@ const EXTRA_TAGS: Record<string, string[]> = {
 };
 
 const HEX64 = /^[0-9a-f]{64}$/;
+const HEX128 = /^[0-9a-f]{128}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_EVENT_BYTES = 65536;
+/** Max distance of created_at / occurred_at from server time. */
 const OCCURRED_SKEW_SEC = 600;
 
 const fail = (status: number, code: string, message: string, next?: number): Fail =>
@@ -114,12 +118,23 @@ const bad = (code: string, message: string) => fail(400, code, message);
 const tagValue = (ev: { tags: string[][] }, name: string) => ev.tags.find((t) => t[0] === name)?.[1];
 const uuid = (v: unknown): string | null => (typeof v === "string" && UUID_RE.test(v.trim()) ? v.trim().toLowerCase() : null);
 
-function isEventShape(v: unknown): v is NostrEvent {
-  if (!v || typeof v !== "object") return false;
+/**
+ * Relay-acceptable shape only: a stored person event that the relay rejects would block the object's record.
+ * Returns a rebuilt canonical event (never the raw request object, so no extra fields reach nostr_outbox).
+ */
+function canonicalEvent(v: unknown): NostrEvent | null {
+  if (!v || typeof v !== "object") return null;
   const e = v as Record<string, unknown>;
-  return typeof e.id === "string" && typeof e.pubkey === "string" && typeof e.sig === "string" && typeof e.content === "string"
-    && typeof e.kind === "number" && typeof e.created_at === "number"
-    && Array.isArray(e.tags) && e.tags.every((t) => Array.isArray(t) && t.every((x) => typeof x === "string"));
+  if (typeof e.id !== "string" || !HEX64.test(e.id)) return null;
+  if (typeof e.pubkey !== "string" || !HEX64.test(e.pubkey)) return null;
+  if (typeof e.sig !== "string" || !HEX128.test(e.sig)) return null;
+  if (typeof e.content !== "string" || typeof e.kind !== "number" || !Number.isSafeInteger(e.kind)) return null;
+  if (typeof e.created_at !== "number" || !Number.isSafeInteger(e.created_at)) return null;
+  if (!Array.isArray(e.tags) || !e.tags.every((t) => Array.isArray(t) && t.length > 0 && t.every((x) => typeof x === "string"))) return null;
+  return {
+    id: e.id, pubkey: e.pubkey, created_at: e.created_at, kind: e.kind,
+    tags: (e.tags as string[][]).map((t) => [...t]), content: e.content, sig: e.sig,
+  };
 }
 
 /** Parses a published object address: a task (32108) or a poll (32104) under the town key. */
@@ -165,12 +180,19 @@ interface Checked { event: NostrEvent; parsed: ParsedAction; wallet: string; tow
 async function verifyBase(deps: PersonEventDeps, raw: unknown): Promise<Checked | Fail> {
   const town = (deps.townPubkey ?? "").trim().toLowerCase();
   if (!HEX64.test(town)) return fail(503, "FEATURE_OFF", "Signierte Nostr-Aktionen sind auf diesem Server nicht eingerichtet (VORHABEN_TOWN_PUBKEY fehlt).");
-  if (!isEventShape(raw)) return bad("BAD_EVENT", "Das Ereignis fehlt oder ist unvollständig.");
-  const event = raw;
+  const event = canonicalEvent(raw);
+  if (!event) return bad("BAD_EVENT", "Das Ereignis fehlt, ist unvollständig oder nicht in Kleinbuchstaben-Hex kodiert.");
   if (new TextEncoder().encode(JSON.stringify(event)).length > MAX_EVENT_BYTES) return bad("EVENT_TOO_LARGE", "Das Ereignis ist zu groß.");
   if (!verifyEvent(event)) return fail(401, "BAD_EVENT_SIGNATURE", "Die Signatur des Ereignisses ist ungültig.");
+  if (Math.abs(event.created_at - deps.nowSec()) > OCCURRED_SKEW_SEC) return bad("STALE_EVENT", "Der Zeitstempel des Ereignisses weicht zu stark ab.");
   const parsed = safeParseAction(event);
-  if (!parsed.ok) return bad("BAD_EVENT", `Das Ereignis ist keine gültige Vorhaben-Aktion: ${parsed.error}`);
+  if (!parsed.ok) {
+    deps.log(`vorhaben/events: event ${event.id} rejected by safeParseAction: ${parsed.error}`);
+    return bad("BAD_EVENT", "Das Ereignis ist keine gültige Vorhaben-Aktion.");
+  }
+  if (event.tags.filter((t) => t[0] === "a").length !== 2) return bad("TAG_NOT_ALLOWED", "Nur das Objekt- und das Vorschlags-a-Tag sind erlaubt.");
+  if (event.tags.some((t) => t[0] === "p" && !HEX64.test(t[1] ?? ""))) return bad("BAD_ACTOR", "p-Tags müssen 64-stellige Hex-Schlüssel sein.");
+  if (await deps.eventKnown(event.id)) return fail(409, "DUPLICATE", "Dieses Ereignis wurde bereits übermittelt.");
   const wallet = (await deps.walletForPubkey(event.pubkey))?.toLowerCase() ?? null;
   if (!wallet) return fail(401, "NOT_BOUND", "Dieser Nostr-Schlüssel ist mit keinem aktiven Konto verbunden.");
   return { event, parsed: parsed.value, wallet, town };

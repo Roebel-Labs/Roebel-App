@@ -69,6 +69,15 @@ export async function resolvePubkeys(fetchRows: FetchRows, wallets: Iterable<unk
   return out;
 }
 
+/** A stored person event is relayable only if it verifies and is the 2101 for this row's seq. */
+function validPersonEvent(event: NostrEvent, seq: unknown): boolean {
+  let valid = false;
+  try { valid = verifyEvent(event); } catch { valid = false; }
+  if (!valid) return false;
+  const seqTag = event.tags?.find((t) => t[0] === "seq")?.[1];
+  return event.kind === 2101 && seqTag === String(seq);
+}
+
 const PATH: Stage[] = ["meinungsbild", "beschlussvorlage", "beschlossen", "umgesetzt"];
 
 /** Current NSP-12 stage per the ledger: abgelehnt if recorded, else the furthest path stage, else meinungsbild. */
@@ -205,13 +214,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
         }
         continue;
       }
-      let valid = false;
-      try { valid = verifyEvent(event); } catch { valid = false; }
-      if (valid) {
-        const seqTag = event.tags?.find((t) => t[0] === "seq")?.[1];
-        valid = event.kind === 2101 && seqTag === String(row.seq);
-      }
-      if (!valid) { await fail(row, "person_event_invalid"); continue; }
+      if (!validPersonEvent(event, row.seq)) { await fail(row, "person_event_invalid"); continue; }
       if (row.event_id && row.event_id !== event.id) { await fail(row, "person_event_id_mismatch"); continue; }
     } else if (!event) {
       const priorRows = await deps.fetchRows(
@@ -228,15 +231,26 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
       });
       if (!spec) { await fail(row, Number.isSafeInteger(row.seq) && (row.seq as number) >= 1 ? "unmappable" : "seq_missing"); continue; }
       const signed = deps.sign(spec);
+      let stored: Row | undefined;
       try {
-        // Store first: the event that goes out is the one the row remembers.
-        await deps.updateRow("nostr_outbox", `id=eq.${row.id}`, { signed_event: signed, event_id: signed.id });
+        // Store first: the event that goes out is the one the row remembers. Conditional on signed_event IS NULL so
+        // it never overwrites a person event the API attached meanwhile; the re-read tells which one won.
+        await deps.updateRow("nostr_outbox", `id=eq.${row.id}&signed_event=is.null`, { signed_event: signed, event_id: signed.id });
+        stored = (await deps.fetchRows("nostr_outbox", `select=signed_event,event_id,person_signed,seq&id=eq.${row.id}`))[0];
       } catch (e) {
         summary.failed += 1;
         deps.log(`nostr_outbox ${row.id}: storing the signed event failed, not publishing: ${errMsg(e)}`);
         continue;
       }
-      event = signed;
+      const kept = (stored?.signed_event ?? null) as NostrEvent | null;
+      if (!kept) { await fail(row, "store_lost"); continue; }
+      if (kept.id !== signed.id) {
+        // The API attached the person's event first: relay that one (same checks as a person-signed row).
+        if (stored?.person_signed !== true || !validPersonEvent(kept, row.seq)) { await fail(row, "person_event_invalid"); continue; }
+        row.person_signed = true;
+        deps.log(`nostr_outbox ${row.id}: person event ${kept.id} attached before the town signature; relaying it`);
+      }
+      event = kept;
     }
 
     const res = await send(deps, event);
