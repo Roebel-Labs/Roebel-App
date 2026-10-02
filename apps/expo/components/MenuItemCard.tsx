@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { MenuItemRecord, SpecialMenuItemRecord } from '@/lib/types';
-import { formatMenuPrice } from '@/lib/utils';
+import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
 
 type Props = {
@@ -32,7 +32,9 @@ export default function MenuItemCard({ item, showDietaryBadges = true }: Props) 
           </Text>
         )}
       </View>
-      <Text style={[styles.price, { color: colors.textPrimary }]}>{formatMenuPrice(item.price)}</Text>
+      {hasMenuPrice(item.price) && (
+        <Text style={[styles.price, { color: colors.textPrimary }]}>{formatMenuPrice(item.price)}</Text>
+      )}
     </View>
   );
 }

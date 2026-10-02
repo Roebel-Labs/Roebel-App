@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, Animated, Easing, AccessibilityInfo } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
@@ -27,6 +28,52 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 4, style 
         style
       ]}
     />
+  );
+}
+
+/**
+ * Skeleton block with a light band sweeping across it. Uses the core Animated
+ * API on the native driver (no reanimated worklets) and stays static when the
+ * user has "reduce motion" enabled.
+ */
+export function ShimmerSkeleton({ width = '100%', height = 20, borderRadius = 4, style }: SkeletonProps) {
+  const { colors, isDark } = useTheme();
+  const [blockWidth, setBlockWidth] = React.useState(0);
+  const [reduceMotion, setReduceMotion] = React.useState(false);
+  const progress = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    if (!blockWidth || reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.timing(progress, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [blockWidth, reduceMotion, progress]);
+
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-blockWidth, blockWidth] });
+  const highlight = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.55)';
+
+  return (
+    <View
+      onLayout={(e) => setBlockWidth(e.nativeEvent.layout.width)}
+      style={[{ width, height, borderRadius, backgroundColor: colors.skeleton, overflow: 'hidden' }, style]}
+    >
+      {blockWidth > 0 && !reduceMotion ? (
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}>
+          <LinearGradient
+            colors={['transparent', highlight, 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 

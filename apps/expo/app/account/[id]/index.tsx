@@ -21,7 +21,7 @@ import AvatarStack from '@/components/AvatarStack';
 import ProfileTabs from '@/components/profile/ProfileTabs';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
-import { Skeleton } from '@/components/SkeletonLoader';
+import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import RatingModal from '@/components/RatingModal';
 import MenuSearchModal from '@/components/MenuSearchModal';
@@ -45,7 +45,7 @@ import { fetchOrgListings } from '@/lib/supabase-marketplace';
 import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articles';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
-import { isRestaurantOpen } from '@/lib/utils';
+import { hasMenuPrice, isRestaurantOpen } from '@/lib/utils';
 import {
   subTypeFeatures,
   type Account,
@@ -906,18 +906,7 @@ function PublicAccountScreenInner() {
         {/* slot 6 — menu content */}
         {activeTab === 'menu' && isRestaurant ? (
           gastroData.loading ? (
-            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-              {[0, 1, 2, 3].map((i) => (
-                <View key={i} style={styles.gastroItemRow}>
-                  <View style={{ flex: 1, gap: 8 }}>
-                    <Skeleton width={'60%' as any} height={16} borderRadius={4} />
-                    <Skeleton width={'30%' as any} height={13} borderRadius={4} />
-                    <Skeleton width={'90%' as any} height={13} borderRadius={4} />
-                  </View>
-                  <Skeleton width={96} height={96} borderRadius={8} />
-                </View>
-              ))}
-            </View>
+            <MenuSkeleton />
           ) : (
             <View
               onLayout={(e) => handleWrapperLayout(e.nativeEvent.layout.y)}
@@ -945,9 +934,11 @@ function PublicAccountScreenInner() {
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.gastroItemName, { color: colors.textPrimary }]} numberOfLines={1}>{item.name}</Text>
                           <View style={styles.gastroMetaRow}>
-                            <Text style={[styles.gastroItemPrice, { color: colors.textPrimary }]}>
-                              {item.has_variants ? `ab €${item.price.toFixed(2)}` : `€${item.price.toFixed(2)}`}
-                            </Text>
+                            {hasMenuPrice(item.price) && (
+                              <Text style={[styles.gastroItemPrice, { color: colors.textPrimary }]}>
+                                {item.has_variants ? `ab €${item.price.toFixed(2)}` : `€${item.price.toFixed(2)}`}
+                              </Text>
+                            )}
                             <MenuItemThumbs summary={gastroData.voteSummaries[item.id] ?? null} />
                           </View>
                           {!!item.description && (
@@ -1040,11 +1031,11 @@ function PublicAccountScreenInner() {
   );
 }
 
-// Skeleton tree shaped to mirror the real screen: banner, avatar, identity,
-// tab strip, then menu rows that match `gastroItemRow` exactly. When the real
-// content arrives, each placeholder swaps into its matching slot in place,
-// so the user perceives one continuous skeleton state rather than two
-// flashing variants.
+// Skeleton tree shaped to mirror the real screen: photo, identity sheet
+// (logo, name, category, meta line, location row), bio + vote, tab strip and
+// the menu (featured cards, category bar, rows matching `gastroItemRow`).
+// When the real content arrives, each placeholder swaps into its matching
+// slot in place, so the user perceives one continuous loading state.
 function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -1052,7 +1043,8 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Photo — same height as OrgProfileHero */}
-        <View style={{ height: HERO_HEIGHT, backgroundColor: colors.cardPlaceholder }}>
+        <View style={{ height: HERO_HEIGHT }}>
+          <ShimmerSkeleton width={'100%' as any} height={HERO_HEIGHT} borderRadius={0} />
           <Pressable
             onPress={onBack}
             style={[styles.backPill, { top: insets.top + 8, backgroundColor: colors.background }]}
@@ -1064,28 +1056,81 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
           </Pressable>
         </View>
 
-        {/* Rounded info sheet — name, category, meta line, location row */}
+        {/* Info sheet — logo, name, category, meta line, location row */}
         <View style={[styles.skeletonSheet, { backgroundColor: colors.background }]}>
-          <Skeleton width={'75%' as any} height={30} borderRadius={6} />
-          <Skeleton width={110} height={16} borderRadius={4} />
-          <Skeleton width={'70%' as any} height={16} borderRadius={4} />
-          <Skeleton width={'100%' as any} height={52} borderRadius={14} />
+          <View style={[styles.skeletonLogo, { borderColor: colors.background, backgroundColor: colors.background }]}>
+            <ShimmerSkeleton width={68} height={68} borderRadius={34} />
+          </View>
+          <ShimmerSkeleton width={'70%' as any} height={30} borderRadius={6} />
+          <ShimmerSkeleton width={110} height={16} borderRadius={4} />
+          <ShimmerSkeleton width={'60%' as any} height={18} borderRadius={4} />
+          <ShimmerSkeleton width={'100%' as any} height={50} borderRadius={14} style={{ marginTop: 8 }} />
         </View>
 
-        {/* Content rows */}
-        <View style={{ paddingHorizontal: 16, paddingTop: 24 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <View key={i} style={styles.gastroItemRow}>
-              <View style={{ flex: 1, gap: 8 }}>
-                <Skeleton width={'60%' as any} height={16} borderRadius={4} />
-                <Skeleton width={'30%' as any} height={13} borderRadius={4} />
-                <Skeleton width={'90%' as any} height={13} borderRadius={4} />
-              </View>
-              <Skeleton width={96} height={96} borderRadius={8} />
+        {/* Bio + thumbs vote */}
+        <View style={styles.identityBlock}>
+          <ShimmerSkeleton width={'95%' as any} height={14} borderRadius={4} />
+          <ShimmerSkeleton width={'65%' as any} height={14} borderRadius={4} />
+          <ShimmerSkeleton width={88} height={34} borderRadius={17} />
+        </View>
+
+        {/* Tab strip */}
+        <View style={[styles.tabsWrap, styles.skeletonTabs, { borderBottomColor: colors.border }]}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.skeletonTab}>
+              <ShimmerSkeleton width={72} height={14} borderRadius={4} />
             </View>
           ))}
         </View>
+
+        <MenuSkeleton />
       </ScrollView>
+    </View>
+  );
+}
+
+// Menu part of the skeleton: "Beliebte Gerichte" cards (FeaturedMenuItemsGrid),
+// the category bar (StickyCategoryBar) and one category of rows.
+function MenuSkeleton() {
+  const { colors } = useTheme();
+  return (
+    <View>
+      <View style={styles.skeletonFeatured}>
+        <ShimmerSkeleton width={170} height={22} borderRadius={4} style={{ marginHorizontal: 16, marginBottom: 12 }} />
+        <ScrollView horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skeletonFeaturedRow}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ width: 160, gap: 8 }}>
+              <ShimmerSkeleton width={160} height={160} borderRadius={12} />
+              <ShimmerSkeleton width={'80%' as any} height={14} borderRadius={4} />
+              <ShimmerSkeleton width={'40%' as any} height={13} borderRadius={4} />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={[styles.skeletonCategoryBar, { borderBottomColor: colors.border }]}>
+        <ShimmerSkeleton width={40} height={40} borderRadius={20} />
+        {[64, 88, 56, 72].map((w, i) => (
+          <ShimmerSkeleton key={i} width={w} height={14} borderRadius={4} />
+        ))}
+      </View>
+
+      <View style={[styles.gastroCategorySection, { borderTopColor: colors.border }]}>
+        <ShimmerSkeleton width={140} height={22} borderRadius={4} style={{ marginBottom: 12 }} />
+        {[0, 1, 2, 3].map((i) => (
+          <View
+            key={i}
+            style={[styles.gastroItemRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
+          >
+            <View style={{ flex: 1, gap: 8 }}>
+              <ShimmerSkeleton width={'60%' as any} height={16} borderRadius={4} />
+              <ShimmerSkeleton width={'30%' as any} height={13} borderRadius={4} />
+              <ShimmerSkeleton width={'90%' as any} height={13} borderRadius={4} />
+            </View>
+            <ShimmerSkeleton width={96} height={96} borderRadius={8} />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -1142,13 +1187,44 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     gap: 10,
   },
+  skeletonLogo: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    marginTop: -62,
+    marginBottom: 2,
+  },
+  skeletonTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+  },
+  skeletonTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  skeletonFeatured: {
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  skeletonFeaturedRow: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  skeletonCategoryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   skeletonSheet: {
     marginTop: -SHEET_OVERLAP,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     paddingHorizontal: 16,
     paddingTop: 24,
-    gap: 12,
+    gap: 10,
   },
   pillRow: {
     flexDirection: 'row',

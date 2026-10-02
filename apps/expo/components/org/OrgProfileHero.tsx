@@ -27,9 +27,9 @@ import {
 import BadgeCheckIcon from '@/assets/icons/badge-check.svg';
 import { VERIFIED_GOLD } from '@/components/profile/IdentityRow';
 
-export const HERO_HEIGHT = 340;
-/** How far the rounded info sheet slides up over the photo. */
-export const SHEET_OVERLAP = 24;
+export const HERO_HEIGHT = 300;
+/** How far the info sheet slides up over the photo (flat sheet: none). */
+export const SHEET_OVERLAP = 0;
 export const STAR_GOLD = '#FFB400';
 
 export type HeroAction = {
@@ -61,7 +61,7 @@ type Props = {
 
 /**
  * Top of every org detail page: a swipeable full-bleed photo with round
- * floating actions, and a rounded sheet over it carrying the name (+ gold
+ * floating actions, and a flat sheet below it carrying the name (+ gold
  * verified check), category, rating · open-state line and a tappable
  * location row that opens the map focused on the org.
  */
@@ -309,8 +309,6 @@ const styles = StyleSheet.create({
   },
   sheet: {
     marginTop: -SHEET_OVERLAP,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     paddingHorizontal: 16,
     paddingTop: 24,
     gap: 10,

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { hasMenuPrice } from '@/lib/utils';
 import { View, Text, ScrollView, Pressable, StyleSheet, TextInput } from 'react-native';
 import { Skeleton } from '@/components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -132,9 +133,11 @@ function MenuItemDetailScreenInner() {
         {/* Title + price + description */}
         <View style={styles.headBlock}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{item.name}</Text>
-          <Text style={[styles.price, { color: colors.textPrimary }]}>
-            {item.variants.length > 0 ? `ab €${item.price.toFixed(2)}` : `€${displayPrice.toFixed(2)}`}
-          </Text>
+          {hasMenuPrice(displayPrice) && (
+            <Text style={[styles.price, { color: colors.textPrimary }]}>
+              {item.variants.length > 0 ? `ab €${item.price.toFixed(2)}` : `€${displayPrice.toFixed(2)}`}
+            </Text>
+          )}
           {!!item.description && (
             <Text style={[styles.description, { color: colors.textPrimary }]}>{item.description}</Text>
           )}
@@ -210,7 +213,9 @@ function MenuItemDetailScreenInner() {
                   )}
                   <Text style={[styles.relName, { color: colors.textPrimary }]} numberOfLines={1}>{rel.name}</Text>
                   <View style={styles.relMeta}>
-                    <Text style={[styles.relPrice, { color: colors.textPrimary }]}>€{rel.price.toFixed(2)}</Text>
+                    {hasMenuPrice(rel.price) && (
+                      <Text style={[styles.relPrice, { color: colors.textPrimary }]}>€{rel.price.toFixed(2)}</Text>
+                    )}
                     <MenuItemThumbs summary={relatedVotes[rel.id] ?? null} />
                   </View>
                 </Pressable>

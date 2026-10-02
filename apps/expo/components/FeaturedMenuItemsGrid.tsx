@@ -1,4 +1,5 @@
 import React from 'react';
+import { hasMenuPrice } from '@/lib/utils';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -59,7 +60,9 @@ export default function FeaturedMenuItemsGrid({ accountId, items, voteSummaries 
               </View>
               <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>{item.name}</Text>
               <View style={styles.meta}>
-                <Text style={[styles.price, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+                {hasMenuPrice(item.price) && (
+                  <Text style={[styles.price, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+                )}
                 <MenuItemThumbs summary={v ?? null} />
               </View>
             </Pressable>

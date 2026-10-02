@@ -22,7 +22,7 @@ import {
   updateMenuItem,
   deleteMenuItem,
 } from '@/lib/supabase-menu';
-import { formatMenuPrice } from '@/lib/utils';
+import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import type { MenuItemRecord } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
@@ -304,9 +304,11 @@ export default function MenuItemsScreen() {
                           )}
                         </View>
                       )}
-                      <Text style={[styles.gridCardPrice, { color: colors.textSecondary }]}>
-                        {formatMenuPrice(item.price)}
-                      </Text>
+                      {hasMenuPrice(item.price) && (
+                        <Text style={[styles.gridCardPrice, { color: colors.textSecondary }]}>
+                          {formatMenuPrice(item.price)}
+                        </Text>
+                      )}
                     </View>
                     <View style={styles.gridCardFooter}>
                       {!item.is_available && (

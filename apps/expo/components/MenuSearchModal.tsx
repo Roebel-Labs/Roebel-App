@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { hasMenuPrice } from '@/lib/utils';
 import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -91,7 +92,9 @@ export default function MenuSearchModal({ visible, accountId, onClose }: Props) 
                 {!!item.description && (
                   <Text style={[styles.itemDesc, { color: colors.textSecondary }]} numberOfLines={2}>{item.description}</Text>
                 )}
-                <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+                {hasMenuPrice(item.price) && (
+                  <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+                )}
               </View>
               {item.image_url ? (
                 <Image source={{ uri: item.image_url }} style={styles.thumb} contentFit="cover" />

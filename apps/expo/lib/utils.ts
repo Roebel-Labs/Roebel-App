@@ -392,6 +392,15 @@ const DAYS_MAP: { [key: number]: DayOfWeek } = {
  * @param price - Price in EUR
  * @returns Formatted string (e.g., "17,90 €" or "Kostenlos")
  */
+/**
+ * Menu items whose restaurant publishes no prices are stored with price 0
+ * (the column is NOT NULL). Menu displays hide the price for those instead
+ * of showing "Kostenlos".
+ */
+export function hasMenuPrice(price: number | null | undefined): price is number {
+  return typeof price === 'number' && price > 0;
+}
+
 export function formatMenuPrice(price: number | null): string {
   if (price === null || price === 0) return 'Kostenlos';
   return price.toFixed(2).replace('.', ',') + ' €';
