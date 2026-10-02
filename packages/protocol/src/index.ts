@@ -46,3 +46,10 @@ export {
   type OrgMetadata,
   type OrgRole,
 } from "./orgs.js";
+
+export {
+  ACTION_NAMES, ACTOR_ROLES, LIFECYCLE_STAGES, LINE_ROLES, PUBLISHED_LINE_STATUSES, TASK_STATUSES, VORHABEN_KINDS,
+  contractAddress, kasseNoticeAddress, kasseNoticeD, nsp12StageFor, nsp12TransitionsBetween, payoutLineAddress, pollAddress,
+  safeParseAction, safeParseContract, safeParsePayoutLine, safeParseTask, taskAddress, validateActionChain,
+  type ActionName, type ActorRole, type KasseNotice, type LifecycleStage, type ParsedAction, type TaskStatus,
+} from "./vorhaben.js";

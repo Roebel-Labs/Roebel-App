@@ -185,7 +185,11 @@
         32104,
         32105,
         32106,
-        32107
+        32107,
+        2101,
+        32108,
+        32110,
+        32111
       ],
       "ingestIntervalSeconds": 120
     },
@@ -202,7 +206,8 @@
         "notices",
         "menus",
         "proposals",
-        "forum"
+        "forum",
+        "vorhaben"
       ],
       "intervalSeconds": 300,
       "backfeed": true
@@ -286,6 +291,10 @@
       "bodies": [
         {
           "id": "stadtvertretung",
+          "noticeScope": "town"
+        },
+        {
+          "id": "gemeinschaftskasse",
           "noticeScope": "town"
         }
       ]
