@@ -32,7 +32,7 @@ tasks, assignees, proofs and payouts 1:1 like the Röbel app, using only `relay.
 | Applications | Not published (personal data before any decision). Only the assignment is public. |
 | Task comments | Not published now; later as person-signed NIP-22 comments (kind 1111) on the task. |
 | Architecture | Outbox written by Postgres triggers → existing publisher drains it → immutable action events + addressable state events. Signed by the node's `town` key now; the same kinds are signed by the acting person later. |
-| NSP-12 mapping | The vote is a Meinungsbild (advisory). `stage` stays `meinungsbild` until the community Safe executes; then a civic notice 32102 "Gemeinschaftskasse hat ausgeführt" moves it to `umgesetzt`. Rejection → `abgelehnt` with the Meinungsbild as basis. The detailed lifecycle lives in a separate `vorhaben` tag. Nothing is ever published as `beschlossen` by this system. |
+| NSP-12 mapping | The vote itself is a Meinungsbild (32104, advisory). The **Gemeinschaftskasse** is registered as its own NSP-12 decision body (`gemeinschaftskasse`, notices signed by the town key) — it decides about its *own* funds, clearly separate from the Stadtvertretung. Path (legal under NSP-12's topology): `meinungsbild → beschlussvorlage → beschlossen \| abgelehnt` (each gated by a Gemeinschaftskasse notice 32102) `→ umgesetzt` once all payouts are confirmed. The detailed lifecycle lives in a separate `vorhaben` tag. (Revised 2026-10-02 after checking `ALLOWED_TRANSITIONS`: the first draft's direct `meinungsbild → umgesetzt` was illegal.) |
 
 ## 2. Event grammar (NSP-13 v1)
 
@@ -44,8 +44,8 @@ strings in the asset's display unit (`"5"`, `"0.25"`, `"10"`). Kind numbers chec
 | Kind | Name | Type | `d` tag |
 |---|---|---|---|
 | 32100 | Proposal head (NSP-12, exists) | addressable | `proposal:<proposal_id>` (unchanged) |
-| 32104 | Meinungsbild result (NSP-12) | addressable | `meinungsbild:proposal:<proposal_id>` |
-| 32102 | Civic notice (exists) | addressable | `notice:vorhaben:<proposal_id>:<kind>` |
+| 32104 | Meinungsbild result (NSP-12) | addressable | `poll:<proposal_id>` (NSP-12 requires `poll:<id>`) |
+| 32102 | Civic notice (exists) | addressable | `gemeinschaftskasse:<proposal_id>:<beschluss\|ablehnung\|ausgefuehrt>` |
 | **2101** | Action applied | regular (immutable) | — |
 | **32108** | Task | addressable | `task:<task uuid>` |
 | **32110** | Payout contract | addressable | `contract:<proposal uuid>` |
@@ -57,7 +57,7 @@ appear only inside `d` tags of NSP-13 objects and in `["proposal_uuid", …]` on
 ### 2.1 Proposal head 32100 — additions
 
 ```
-["stage", "<NSP-12 stage>"]          // meinungsbild | abgelehnt | umgesetzt (this system only emits these)
+["stage", "<NSP-12 stage>"]          // meinungsbild | beschlussvorlage | beschlossen | abgelehnt | umgesetzt
 ["vorhaben", "<lifecycle_stage>"]    // abstimmung | auszaehlung | angenommen | abgelehnt | in_umsetzung | umgesetzt
 ["proposal_uuid", "<uuid>"]
 ["budget", "<amount>", "<asset>"]    // only if set
@@ -67,9 +67,16 @@ appear only inside `d` tags of NSP-13 objects and in `["proposal_uuid", …]` on
 ```
 The existing `status` tag (governor state snapshot) is unchanged.
 
-Stage mapping (`vorhaben` → `stage`): `abstimmung`, `auszaehlung`, `angenommen`, `in_umsetzung` → `meinungsbild`;
-`abgelehnt` → `abgelehnt`; `umgesetzt` → `umgesetzt`. A 2100 transition (NSP-12) is emitted for each change of
-`stage`; `umgesetzt` transitions carry `["a","32102:<town pk>:notice:vorhaben:<id>:executed","","notice"]`.
+Stage mapping (`vorhaben` → `stage`) and the NSP-12 2100 transitions the publisher emits (signed by the town key):
+- `abstimmung`, `auszaehlung` → `meinungsbild` (the head starts there; no transition emitted).
+- `angenommen` / `in_umsetzung` → `beschlossen`: emit `meinungsbild → beschlussvorlage`, then
+  `beschlussvorlage → beschlossen` citing `["a","32102:<town pk>:gemeinschaftskasse:<id>:beschluss","","notice"]`.
+- `abgelehnt` → emit `meinungsbild → beschlussvorlage`, then `beschlussvorlage → abgelehnt` citing
+  `…:gemeinschaftskasse:<id>:ablehnung`.
+- `umgesetzt` → emit `beschlossen → umgesetzt` (content summarises the executed payouts; the
+  `…:ausgefuehrt` notice is published alongside).
+Each transition is emitted at most once per proposal (tracked in the outbox, §3), in this order, and every
+transition is checked with `isLegalTransition` before signing.
 
 ### 2.2 Action 2101 (the log)
 
@@ -143,17 +150,20 @@ recipient address is public by nature of the transfer.
 
 ### 2.5 Meinungsbild 32104 (NSP-12)
 
-Published once the tally is on-chain: `["advisory","true"]` (pinned by NSP-12), `["a", head, "", "proposal"]`,
+Published once the tally is on-chain, `d` = `poll:<proposal_id>`: `["advisory","true"]` (pinned by NSP-12), `["a", head, "", "proposal"]`,
 `["for", n]`, `["against", n]`, `["abstain", n]`, `["tally_contract", "<0x…>"]`, `["result_hash", "<0x…>"]`,
 `["chain","100"]`. Each Wahlhelfer confirmation is a separate 2101 `tally_confirmed` pointing at it.
 
-### 2.6 Civic notice 32102 "Gemeinschaftskasse hat ausgeführt"
+### 2.6 Gemeinschaftskasse notices 32102
 
-Emitted by the publisher (town scope) when the proposal's lifecycle becomes `umgesetzt`, `content` in German
-summarising what was paid ("Die Gemeinschaftskasse hat Vorschlag #3 umgesetzt: 150 € an …"), with the `tx`
-hashes of all confirmed lines. It is the basis the NSP-12 `umgesetzt` transition references. Wording must stay
-within the legal framing: the town key states what the *community treasury* executed, never that the
-municipality decided anything.
+The manifest registers `{ "id": "gemeinschaftskasse", "noticeScope": "town" }` under `record.decisions.bodies`.
+Three notices per proposal at most, all town-signed, German content, legally framed as decisions of the
+community treasury about its own funds — never as decisions of the municipality:
+- `gemeinschaftskasse:<id>:beschluss` — when the Meinungsbild was positive ("Die Gemeinschaftskasse setzt
+  Vorschlag #3 um: 150 € an …, Aufgaben …").
+- `gemeinschaftskasse:<id>:ablehnung` — when it was negative.
+- `gemeinschaftskasse:<id>:ausgefuehrt` — when the lifecycle reaches `umgesetzt`, with the `tx` hashes of all
+  confirmed payout lines.
 
 ## 3. Data flow
 
