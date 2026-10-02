@@ -26,11 +26,20 @@ async function read<T>(run: (signal: AbortSignal) => PromiseLike<{ data: T | nul
   }
 }
 
-/** deadline_block holds the poll's end as unix seconds (MACI governor). */
-const endMs = (deadline: string | number | null): number | null => {
+/**
+ * deadline_block holds the poll's end as unix seconds (MACI governor). Anything that does not look like
+ * a timestamp (missing, zero, or a block-number-sized value) is unknown → never treated as ended.
+ */
+export const endMs = (deadline: string | number | null | undefined): number | null => {
   const n = Number(deadline);
-  return Number.isFinite(n) && n > 0 ? n * 1000 : null;
+  return Number.isFinite(n) && n >= 1_000_000_000 ? n * 1000 : null;
 };
+
+/** The decrypt duty shows ONLY once the voting period is over (and not longer than the duty window). */
+export function isDecryptDue(deadline: string | number | null | undefined, nowMs: number): boolean {
+  const end = endMs(deadline);
+  return end !== null && nowMs >= end && nowMs - end < DUTY_WINDOW_MS;
+}
 
 export async function fetchDecryptDuties(nowMs = Date.now()): Promise<DecryptDuty[]> {
   const rows = await read<any[]>((signal) => supabase
@@ -43,10 +52,10 @@ export async function fetchDecryptDuties(nowMs = Date.now()): Promise<DecryptDut
     .limit(10)
     .abortSignal(signal));
   return (rows ?? [])
-    .map((r) => ({ r, end: endMs(r.deadline_block) }))
-    .filter(({ end }) => end !== null && end <= nowMs && nowMs - end < DUTY_WINDOW_MS)
-    .map(({ r, end }) => ({
-      proposalKey: r.proposal_id, proposalNumber: r.proposal_number, title: r.title, votingEndedAt: new Date(end!).toISOString(),
+    .filter((r) => isDecryptDue(r.deadline_block, nowMs))
+    .map((r) => ({
+      proposalKey: r.proposal_id, proposalNumber: r.proposal_number, title: r.title,
+      votingEndedAt: new Date(endMs(r.deadline_block)!).toISOString(),
     }));
 }
 
