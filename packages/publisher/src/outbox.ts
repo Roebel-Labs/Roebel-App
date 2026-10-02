@@ -12,6 +12,10 @@
  *   in the ledger is never published again.
  * A stage_changed row stays unpublished (and blocks its object) until all of
  * its transitions are on the record, so a failed hop is retried next pass.
+ * Rollout order (every 2101 now carries a required `seq`): stop the publisher →
+ * apply the 20261003 migration (adds nostr_outbox.seq) → deploy the new publisher.
+ * No 2101 was ever published before this, so no legacy (seq-less) tolerance exists;
+ * a row without a valid seq fails with last_error "seq_missing".
  * Spec: docs/superpowers/specs/2026-10-02-nsp13-vorhaben-record-design.md §3.2
  */
 import type { NostrEvent } from "@netizen-labs/nostr";
@@ -200,7 +204,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
         prior,
         now: deps.now(),
       });
-      if (!spec) { await fail(row, "unmappable"); continue; }
+      if (!spec) { await fail(row, Number.isSafeInteger(row.seq) && (row.seq as number) >= 1 ? "unmappable" : "seq_missing"); continue; }
       const signed = deps.sign(spec);
       try {
         // Store first: the event that goes out is the one the row remembers.

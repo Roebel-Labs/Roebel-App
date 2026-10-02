@@ -52,8 +52,9 @@ test("getActions: prior chain order for shuffled input, d-less 2101s survive", a
   const row = (action: string, from: string | null, to: string, at: string): OutboxRow => ({
     id: 1, object_type: "task", object_id: "t1", proposal_id: proposalKey, action, from_status: from, to_status: to,
     actor_wallet: null, actor_role: "creator", body: null, extra: {}, occurred_at: at, signed_event: null,
-    event_id: null, published_at: null, attempts: 0,
+    event_id: null, published_at: null, attempts: 0, seq: SEQ[action],
   });
+  const SEQ: Record<string, number> = { task_created: 1, task_assigned: 2, task_started: 3 };
   const ctx = (prior: string | null) => ({ townPubkey: town, proposalKey, actorPubkey: "c".repeat(64), prior, now: 1_800_000_000 });
   const ids = ["1", "2", "3"].map((n) => n.repeat(64));
   // occurred_at deliberately disagrees with the chain order for #2 vs #3.
@@ -76,7 +77,7 @@ test("getActions: only the town's events about THIS object (foreign author and s
   const row = (objectId: string): OutboxRow => ({
     id: 1, object_type: "task", object_id: objectId, proposal_id: proposalKey, action: "task_created", from_status: null, to_status: "offen",
     actor_wallet: null, actor_role: "creator", body: null, extra: {}, occurred_at: "2026-10-01T10:00:00Z", signed_event: null,
-    event_id: null, published_at: null, attempts: 0,
+    event_id: null, published_at: null, attempts: 0, seq: 1,
   });
   const ctx = { townPubkey: town, proposalKey, actorPubkey: null, prior: null, now: 1_800_000_000 };
   const mine = { ...asRecordEvent(actionToSpec(row("t1"), ctx)!, town), id: "1".repeat(64) };

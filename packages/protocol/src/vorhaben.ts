@@ -190,13 +190,19 @@ export const PERSON_ACTION_ROLES: Readonly<Record<string, readonly string[]>> = 
   task_created: ["proposer", "attester"],
 };
 
-/** Town-signed events are trusted; a person-signed one only for a person-signable action carrying its own role-marked p tag. */
+/**
+ * Shape/marker filter for kind-2101 actions. NOT an authorization check: callers (API, indexer, ingester) MUST verify
+ * the signer actually holds that role for this object. Town-signed 2101s pass; a person-signed one passes only for a
+ * person-signable action whose `role` tag equals the role marker on the p tag naming the event's own pubkey.
+ */
 export function isTrustedAction(ev: DecisionEventLike & { pubkey: string }, townPubkey: string): boolean {
+  if (ev.kind !== VORHABEN_KINDS.action) return false;
   if (ev.pubkey === townPubkey) return true;
   const action = tag(ev, "action");
   if (!action || !Object.prototype.hasOwnProperty.call(PERSON_ACTION_ROLES, action)) return false;
   const allowed = PERSON_ACTION_ROLES[action];
-  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && allowed.includes(t[3] ?? ""));
+  const role = tag(ev, "role");
+  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && t[3] === role && allowed.includes(t[3] ?? ""));
 }
 
 /** sha256 hex of the payload JSON with sorted top-level keys (parity with apps/web org-membership `hashPayload`). */
@@ -225,7 +231,10 @@ function orderObjectActions(list: Array<{ id: string; p: ParsedAction }>): Array
   return [...list].sort((a, b) => a.p.seq - b.p.seq || depths.get(a.id)! - depths.get(b.id)! || a.p.occurredAt - b.p.occurredAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** Rebuilds Vorhaben state from kind-2101 actions; invalid events are skipped. */
+/**
+ * Rebuilds Vorhaben state from kind-2101 actions; invalid events are skipped. Callers must pre-filter with
+ * isTrustedAction AND a real role check (this function trusts every well-formed action it is given).
+ */
 export function replayVorhaben(actions: Array<DecisionEventLike & { id: string }>): ReplayState {
   const state: ReplayState = { tasks: new Map(), lines: new Map(), tallyConfirmations: new Map(), stages: new Map() };
   const byObject = new Map<string, Array<{ id: string; p: ParsedAction }>>();

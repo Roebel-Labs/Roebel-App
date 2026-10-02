@@ -118,6 +118,15 @@ function harness(tables: Tables, failIf: (ev: NostrEvent) => boolean = () => fal
 const tag = (ev: NostrEvent, name: string) => ev.tags.find((t) => t[0] === name)?.[1];
 
 describe("drainOutbox", () => {
+  it("records seq_missing for a row without a valid seq", async () => {
+    const tables = baseTables([outbox({ id: 1, seq: null })]);
+    const h = harness(tables, () => false);
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.failed, 1);
+    assert.equal(tables.nostr_outbox[0].last_error, "seq_missing");
+    assert.equal(h.published.length, 0);
+  });
+
   it("signs once and stores the event before publishing; a retry re-sends the same id", async () => {
     const tables = baseTables([outbox({ id: 1 })]);
     const h = harness(tables, () => true);

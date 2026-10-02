@@ -162,14 +162,20 @@ const signed = (pubkey: string, action: string, p: string[][]) => ({ pubkey, kin
 
 test("isTrustedAction: town always; person only with own role-marked p tag for a person-signable action", () => {
   assert.equal(isTrustedAction(signed(TOWN, "payout_confirmed", []), TOWN), true);
-  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "assignee"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "assignee"], ["role", "assignee"]]), TOWN), true);
   assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "attester"]]), TOWN), false); // wrong role
   assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", TOWN, "", "assignee"]]), TOWN), false); // p is someone else
   assert.equal(isTrustedAction(signed(PERSON, "task_started", []), TOWN), false);
   assert.equal(isTrustedAction(signed(PERSON, "payout_confirmed", [["p", PERSON, "", "assignee"]]), TOWN), false); // town-only
-  assert.equal(isTrustedAction(signed(PERSON, "task_approved", [["p", PERSON, "", "attester"]]), TOWN), true);
-  assert.equal(isTrustedAction(signed(PERSON, "task_created", [["p", PERSON, "", "proposer"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_approved", [["p", PERSON, "", "attester"], ["role", "attester"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_created", [["p", PERSON, "", "proposer"], ["role", "proposer"]]), TOWN), true);
   assert.equal(isTrustedAction(signed(PERSON, "toString", [["p", PERSON, "", "assignee"]]), TOWN), false);
+  const wrongKind = { ...signed(TOWN, "payout_confirmed", []), kind: 1 };
+  assert.equal(isTrustedAction(wrongKind, TOWN), false);
+  const mismatch = signed(PERSON, "task_approved", [["p", PERSON, "", "attester"], ["role", "proposer"]]);
+  assert.equal(isTrustedAction(mismatch, TOWN), false); // role tag != marker
+  const match = signed(PERSON, "task_approved", [["p", PERSON, "", "attester"], ["role", "attester"]]);
+  assert.equal(isTrustedAction(match, TOWN), true);
   assert.deepEqual(PERSON_ACTION_ROLES.tally_confirmed, ["wahlhelfer"]);
 });
 
