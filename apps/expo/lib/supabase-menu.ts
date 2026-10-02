@@ -85,6 +85,7 @@ export async function updateMenuItem(
       | 'is_available'
       | 'sort_order'
       | 'image_url'
+      | 'image_thumb_url'
       | 'sides_required'
       | 'sides_label'
       | 'variants_label'

@@ -1,7 +1,7 @@
 import React from 'react';
+import MenuImage from '@/components/MenuImage';
 import { hasMenuPrice } from '@/lib/utils';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
@@ -49,9 +49,7 @@ export default function FeaturedMenuItemsGrid({ accountId, items, voteSummaries 
               style={styles.card}
             >
               <View style={[styles.imgWrap, { backgroundColor: colors.surfaceSecondary }]}>
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={styles.img} contentFit="cover" />
-                ) : null}
+                <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} style={styles.img} />
                 {index < 3 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>#{index + 1} Beliebt</Text>

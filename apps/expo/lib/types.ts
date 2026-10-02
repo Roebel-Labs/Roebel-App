@@ -242,6 +242,8 @@ export type MenuItemRecord = {
   description: string | null;
   price: number;
   image_url: string | null;
+  /** ~480 px copy of image_url for lists; null = use image_url. */
+  image_thumb_url?: string | null;
   is_vegetarian: boolean;
   is_vegan: boolean;
   is_available: boolean;

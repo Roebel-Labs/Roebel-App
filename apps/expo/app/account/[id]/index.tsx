@@ -22,6 +22,7 @@ import ProfileTabs from '@/components/profile/ProfileTabs';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import RatingModal from '@/components/RatingModal';
 import MenuSearchModal from '@/components/MenuSearchModal';
@@ -156,6 +157,11 @@ function PublicAccountScreenInner() {
   const sheet = useOrgSheetData(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
+  // Warm the image cache as soon as the menu arrives, so rows below the fold
+  // are ready when the user scrolls to them.
+  useEffect(() => {
+    if (gastroData.categories.length) prefetchMenuImages(gastroData.categories.flatMap((c) => c.items));
+  }, [gastroData.categories]);
 
   // Stable callbacks for StickyCategoryBar (memoized) — they read refs +
   // gastroData.categories, both of which are stable across scroll events,
@@ -948,7 +954,7 @@ function PublicAccountScreenInner() {
                           )}
                         </View>
                         {item.image_url ? (
-                          <Image source={{ uri: item.image_url }} style={styles.gastroThumb} contentFit="cover" />
+                          <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} borderRadius={8} style={styles.gastroThumb} />
                         ) : null}
                       </Pressable>
                     ))

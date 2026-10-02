@@ -489,7 +489,7 @@ serve(async (req: Request) => {
 
   if (!body.preview) {
     const table = kind === 'menu_item' ? 'menu_items' : 'special_menu_items';
-    const { error: updErr } = await supabase.from(table).update({ image_url: publicUrl }).eq('id', item.id);
+    const { error: updErr } = await supabase.from(table).update({ image_url: publicUrl, image_thumb_url: null }).eq('id', item.id);
     if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
   }
 

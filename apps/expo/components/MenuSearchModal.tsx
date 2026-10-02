@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import MenuImage from '@/components/MenuImage';
 import { hasMenuPrice } from '@/lib/utils';
 import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
@@ -97,7 +97,7 @@ export default function MenuSearchModal({ visible, accountId, onClose }: Props) 
                 )}
               </View>
               {item.image_url ? (
-                <Image source={{ uri: item.image_url }} style={styles.thumb} contentFit="cover" />
+                <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} borderRadius={8} style={styles.thumb} />
               ) : (
                 <View style={[styles.thumb, { backgroundColor: colors.surfaceSecondary }]} />
               )}

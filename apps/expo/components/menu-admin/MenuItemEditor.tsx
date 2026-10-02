@@ -46,6 +46,8 @@ export default function MenuItemEditor({ restaurantId, categoryId, item, onSaved
       description: description.trim() || null,
       price: numericPrice,
       image_url: imageUrl,
+      // A replaced photo makes the stored list thumbnail stale.
+      ...(imageUrl !== (item?.image_url ?? null) ? { image_thumb_url: null } : {}),
       is_vegetarian: isVegetarian,
       is_vegan: isVegan,
       is_available: isAvailable,

@@ -313,13 +313,29 @@ export async function createMenuItem(input: CreateMenuItemInput) {
   }
 }
 
+/**
+ * Menu photos carry a small list thumbnail (`image_thumb_url`). When an update
+ * replaces `image_url`, the old thumbnail no longer matches and is dropped;
+ * clients then fall back to the full image.
+ */
+async function withThumbReset<T extends { image_url?: string | null }>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: "menu_items" | "special_menu_items",
+  id: string,
+  updateData: T,
+): Promise<T & { image_thumb_url?: null }> {
+  if (updateData.image_url === undefined) return updateData
+  const { data } = await supabase.from(table).select("image_url").eq("id", id).single()
+  return data?.image_url === updateData.image_url ? updateData : { ...updateData, image_thumb_url: null }
+}
+
 export async function updateMenuItem(input: UpdateMenuItemInput) {
   try {
     const { id, ...updateData } = input
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("menu_items")
-      .update(updateData)
+      .update(await withThumbReset(supabase, "menu_items", id, updateData))
       .eq("id", id)
       .select()
       .single()
@@ -646,7 +662,7 @@ export async function updateSpecialMenuItem(input: UpdateSpecialMenuItemInput) {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("special_menu_items")
-      .update(updateData)
+      .update(await withThumbReset(supabase, "special_menu_items", id, updateData))
       .eq("id", id)
       .select()
       .single()
@@ -857,7 +873,7 @@ export async function uploadItemImage(
 
     const { error: updateErr } = await supabase
       .from(tableFor(kind))
-      .update({ image_url: publicUrl })
+      .update({ image_url: publicUrl, image_thumb_url: null })
       .eq("id", itemId)
     if (updateErr) throw updateErr
 
@@ -874,7 +890,7 @@ export async function clearItemImage(kind: ItemKind, itemId: string) {
     const supabase = await createClient()
     const { error } = await supabase
       .from(tableFor(kind))
-      .update({ image_url: null })
+      .update({ image_url: null, image_thumb_url: null })
       .eq("id", itemId)
     if (error) throw error
 
@@ -898,7 +914,7 @@ export async function commitItemImage(
     const supabase = await createClient()
     const { error } = await supabase
       .from(tableFor(kind))
-      .update({ image_url: url })
+      .update({ image_url: url, image_thumb_url: null })
       .eq("id", itemId)
     if (error) throw error
 

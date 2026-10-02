@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import MenuImage from '@/components/MenuImage';
 import { hasMenuPrice } from '@/lib/utils';
 import { View, Text, ScrollView, Pressable, StyleSheet, TextInput } from 'react-native';
-import { Skeleton } from '@/components/SkeletonLoader';
+import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { ArrowLeftIcon } from '@/components/Icons';
 import SideSelectionGroup from '@/components/SideSelectionGroup';
@@ -78,15 +78,15 @@ function MenuItemDetailScreenInner() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <ScrollView contentContainerStyle={{ paddingBottom: 48 }} scrollEnabled={false}>
-          <Skeleton width="100%" height={280} borderRadius={0} />
+          <ShimmerSkeleton width="100%" height={280} borderRadius={0} />
           <View style={styles.headBlock}>
-            <Skeleton width="70%" height={26} />
-            <Skeleton width={80} height={18} style={{ marginTop: 8 } as any} />
-            <Skeleton width="100%" height={14} style={{ marginTop: 16 } as any} />
-            <Skeleton width="85%" height={14} style={{ marginTop: 6 } as any} />
+            <ShimmerSkeleton width="70%" height={26} />
+            <ShimmerSkeleton width={80} height={18} style={{ marginTop: 8 } as any} />
+            <ShimmerSkeleton width="100%" height={14} style={{ marginTop: 16 } as any} />
+            <ShimmerSkeleton width="85%" height={14} style={{ marginTop: 6 } as any} />
             <View style={[styles.thumbsRow, { marginTop: 20 }]}>
-              <Skeleton width={80} height={32} borderRadius={9999} />
-              <Skeleton width={48} height={32} borderRadius={9999} />
+              <ShimmerSkeleton width={80} height={32} borderRadius={9999} />
+              <ShimmerSkeleton width={48} height={32} borderRadius={9999} />
             </View>
           </View>
         </ScrollView>
@@ -115,7 +115,7 @@ function MenuItemDetailScreenInner() {
         {/* Hero */}
         <View style={[styles.heroWrap, { backgroundColor: colors.surfaceSecondary }]}>
           {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.hero} contentFit="cover" />
+            <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} size="full" style={styles.hero} />
           ) : (
             <View style={styles.heroPlaceholder}>
               <Text style={{ color: colors.textTertiary, fontFamily: 'Inter-Medium', fontSize: 16 }}>
@@ -207,7 +207,7 @@ function MenuItemDetailScreenInner() {
                   style={styles.relCard}
                 >
                   {rel.image_url ? (
-                    <Image source={{ uri: rel.image_url }} style={styles.relImg} contentFit="cover" />
+                    <MenuImage uri={rel.image_url} thumbUri={rel.image_thumb_url} borderRadius={12} style={styles.relImg} />
                   ) : (
                     <View style={[styles.relImg, { backgroundColor: colors.surfaceSecondary }]} />
                   )}
