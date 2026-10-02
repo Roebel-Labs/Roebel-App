@@ -17,8 +17,9 @@
 - Migrations: written by the implementer, **pasted by Max** (apply_migration is declined); controller verifies read-only.
 - Node deploy (`netizen up`, relay-sync, policy, publisher) is **operator-run by Max**.
 - Never names or wallet addresses in Nostr events (NSP-13 privacy); German UI copy; code English.
-- Relay limits: event JSON ≤ **65536** bytes; rate **120 events/hour per pubkey, burst 20** (token bucket on strfry's `receivedAt`).
-- Kind allow-list (members): `0, 1, 5, 6, 7, 11, 16, 1111, 1059, 2101, 24133, 30078, 31922, 31923, 30023, 30402`.
+- Relay limits: event JSON ≤ **65536** bytes (the `event` object is measured, not strfry's plugin wrapper); rate **120 events/hour per pubkey, burst 20** (token bucket on strfry's `receivedAt`). Kinds **5** (deletion) and **62** (request to vanish) are exempt from the rate limit, so a user who spent their burst can still delete.
+- Kind allow-list (members): `0, 1, 5, 6, 7, 11, 16, 62, 1111, 1059, 2101, 24133, 30078, 31922, 31923, 30023, 30402`.
+  Note: `1059` gift wraps and `24133` remote-signer events are signed by **ephemeral keys**, so the member list cannot admit them; they are handled in Stages 3/5, not by the member list.
   Authority-only kinds (only pubkeys in `publisher-keys.txt` / `AGENT_PUBKEYS`): `2100, 32100, 32101, 32102, 32103, 32104, 32105, 32106, 32107, 32108, 32110, 32111`.
   Citizen-only kinds (pubkey also in `citizens.txt`): `11` (forum thread).
 - Person-signable actions → allowed roles: `task_started|proof_added|task_submitted` ← assignee; `task_assigned|task_cancelled` ← proposer|attester; `task_approved|changes_requested` ← attester; `tally_confirmed` ← wahlhelfer; `task_created` ← proposer|attester. All other actions are town-only.

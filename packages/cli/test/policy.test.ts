@@ -126,3 +126,28 @@ test("the wrapper passes every list path; the bundle ships citizens.txt and keep
   assert.ok(RSYNC_DELETE_EXCLUDES.includes("--exclude=strfry-policy/citizens.txt"));
   assert.ok(RSYNC_DELETE_EXCLUDES.includes("--exclude=strfry-policy/publisher-keys.txt"));
 });
+
+test("a member may request to vanish (kind 62)", () => {
+  assert.equal(one(line(MEMBER, 62)).action, "accept");
+});
+
+test("deletions and vanish requests pass after the burst is spent", () => {
+  const lines = Array.from({ length: 21 }, () => line(MEMBER, 1));
+  lines.push(line(MEMBER, 5), line(MEMBER, 62), line(MEMBER, 1));
+  const out = run(lines);
+  assert.equal(out[20].msg, "rate-limited: slow down");
+  assert.equal(out[21].action, "accept");
+  assert.equal(out[22].action, "accept");
+  assert.equal(out[23].action, "reject", "ordinary kinds stay limited");
+});
+
+test("the size limit measures the event, not strfry's plugin wrapper", () => {
+  // Event just under the limit; the wrapper pushes the whole line past it.
+  const probe = line(MEMBER, 1, 1_800_000_000, "");
+  const ev = JSON.stringify(JSON.parse(probe).event);
+  const fill = "x".repeat(65536 - ev.length - 10);
+  const l = line(MEMBER, 1, 1_800_000_000, fill);
+  const evLen = JSON.stringify(JSON.parse(l).event).length;
+  assert.ok(evLen <= 65536 && l.length > 65536);
+  assert.equal(one(l).action, "accept");
+});
