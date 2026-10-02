@@ -9,7 +9,7 @@ import {
   contractAddress, headAddress, kasseNoticeD, nsp12StageFor, payoutLineAddress, pollAddress, taskAddress,
   type KasseNotice, type LifecycleStage,
 } from "@netizen-labs/protocol";
-import { MAPPER_VERSION, TOWN_SCOPE, str, unixFromUpdatedAt, type PublishSpec } from "./mappers.js";
+import { KIND_CIVIC_NOTICE, MAPPER_VERSION, TOWN_SCOPE, str, unixFromUpdatedAt, type PublishSpec } from "./mappers.js";
 
 type Row = Record<string, unknown>;
 
@@ -43,7 +43,6 @@ export interface VorhabenContext {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/;
-const KIND_CIVIC_NOTICE = 32102;
 
 /** numeric(38,18) arrives as "5.000000000000000000"; the record uses "5". */
 function decimal(v: unknown): string | null {
@@ -72,6 +71,8 @@ const DEFAULT_CONTENT: Record<string, string> = {
   meinungsbild_published: "Das Bürgervotum ist ausgezählt und veröffentlicht.",
   tally_confirmed: "Wahlhelfer:in bestätigt das Bürgervotum.",
 };
+
+const freshest = (row: Row, minCreatedAt?: number) => Math.max(unixFromUpdatedAt(row), minCreatedAt ?? 0);
 
 /** One 2101 action event. Null when a required field is missing (caller logs). */
 export function actionToSpec(row: OutboxRow, ctx: VorhabenContext): PublishSpec | null {
@@ -120,7 +121,7 @@ export function actionToSpec(row: OutboxRow, ctx: VorhabenContext): PublishSpec 
 }
 
 /** 32108 task. */
-export function taskToSpec(task: Row, proposalKey: string, townPubkey: string, assigneePubkey: string | null, creatorPubkey: string | null): PublishSpec | null {
+export function taskToSpec(task: Row, proposalKey: string, townPubkey: string, assigneePubkey: string | null, creatorPubkey: string | null, minCreatedAt?: number): PublishSpec | null {
   const id = str(task, "id"), title = str(task, "title"), status = str(task, "status");
   const reward = decimal(task["reward_amount"]), asset = str(task, "reward_asset");
   if (!id || !title || !status || !proposalKey || reward === null || !asset) return null;
@@ -141,11 +142,11 @@ export function taskToSpec(task: Row, proposalKey: string, townPubkey: string, a
   if (creatorPubkey) tags.push(["p", creatorPubkey, "", "creator"]);
   const src = unix(task["created_at"]);
   if (src !== null) tags.push(["created_at_src", String(src)]);
-  return { scope: TOWN_SCOPE, kind: VORHABEN_KINDS.task, d, content: str(task, "description") ?? "", tags, createdAt: unixFromUpdatedAt(task) };
+  return { scope: TOWN_SCOPE, kind: VORHABEN_KINDS.task, d, content: str(task, "description") ?? "", tags, createdAt: freshest(task, minCreatedAt) };
 }
 
 /** 32110 payout contract; `totals` is one [asset, amount] per asset. */
-export function contractToSpec(contract: Row, proposalKey: string, townPubkey: string, lineIds: string[], totals: Array<[string, string]>): PublishSpec | null {
+export function contractToSpec(contract: Row, proposalKey: string, townPubkey: string, lineIds: string[], totals: Array<[string, string]>, minCreatedAt?: number): PublishSpec | null {
   const proposalUuid = str(contract, "proposal_id"), safe = str(contract, "platform_safe_address");
   const bps = Number(contract["platform_fee_bps"]);
   if (!proposalUuid || !safe || !proposalKey || !Number.isInteger(bps)) return null;
@@ -153,9 +154,12 @@ export function contractToSpec(contract: Row, proposalKey: string, townPubkey: s
   const tags: string[][] = [
     ["d", d], ["a", headAddress(townPubkey, proposalKey), "", "proposal"], ["fee_bps", String(bps)], ["platform_safe", safe],
   ];
-  for (const [asset, amount] of totals) tags.push(["total", decimal(amount) ?? amount, asset]);
+  for (const [asset, amount] of totals) {
+    const total = decimal(amount);
+    if (total !== null) tags.push(["total", total, asset]);
+  }
   for (const lineId of lineIds) tags.push(["a", payoutLineAddress(townPubkey, lineId), "", "line"]);
-  return { scope: TOWN_SCOPE, kind: VORHABEN_KINDS.contract, d, content: "", tags, createdAt: unixFromUpdatedAt(contract) };
+  return { scope: TOWN_SCOPE, kind: VORHABEN_KINDS.contract, d, content: "", tags, createdAt: freshest(contract, minCreatedAt) };
 }
 
 /** 32111 payout line. Null for unpublished states (sendend, gesendet). */
@@ -209,17 +213,17 @@ export function buergervotumToSpec(proposal: Row, townPubkey: string): PublishSp
 }
 
 /** 32102 Gemeinschaftskasse notice: the treasury deciding about its own funds, never the Stadt. */
-export function kasseNoticeToSpec(proposal: Row, kind: KasseNotice, txs: string[], now: number): PublishSpec {
+export function kasseNoticeToSpec(proposal: Row, kind: KasseNotice, txs: string[], now: number, townPubkey: string): PublishSpec {
   const key = str(proposal, "proposal_id") ?? "";
   const title = str(proposal, "title") ?? "";
-  const ref = `Vorschlag${numberLabel(proposal)} „${title}“`;
+  const ref = `Vorschlag${numberLabel(proposal)}${title ? ` „${title}“` : ""}`;
   const content = kind === "beschluss"
     ? `Bürgervotum positiv: Die Gemeinschaftskasse setzt ${ref} aus ihren eigenen Mitteln um. Dies ist keine Entscheidung der Stadt Röbel/Müritz.`
     : kind === "ablehnung"
       ? `Bürgervotum negativ: Die Gemeinschaftskasse setzt ${ref} nicht um. Dies ist keine Entscheidung der Stadt Röbel/Müritz.`
       : `Die Gemeinschaftskasse hat ${ref} umgesetzt. Alle Auszahlungen sind auf der Blockchain belegt.`;
   const d = kasseNoticeD(key, kind);
-  const tags: string[][] = [["d", d], ["t", "gemeinschaftskasse"]];
+  const tags: string[][] = [["d", d], ["t", "gemeinschaftskasse"], ["a", headAddress(townPubkey, key), "", "proposal"]];
   for (const tx of txs) tags.push(["tx", tx]);
   return { scope: TOWN_SCOPE, kind: KIND_CIVIC_NOTICE, d, content, tags, createdAt: now };
 }

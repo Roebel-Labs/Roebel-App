@@ -137,6 +137,10 @@ describe("object mappers", () => {
     assert.deepEqual(s.tags.filter((t) => t[3] === "line").map((t) => t[1]), [payoutLineAddress(PK, "l1"), payoutLineAddress(PK, "l2")]);
     assert.deepEqual(s.tags.filter((t) => t[0] === "total"), [["total", "150", "EURe"], ["total", "10", "MUENZEN"]]);
     assert.equal(safeParseContract(sig(s)).ok, true);
+    const bad = contractToSpec({ id: "k1", proposal_id: PROPOSAL.id, platform_fee_bps: 500, platform_safe_address: "0x" + "b".repeat(40), created_at: OCC }, KEY, PK, [], [["EURe", "abc"]])!;
+    assert.ok(!bad.tags.some((t) => t[0] === "total"));
+    const fresh = Math.floor(Date.parse(OCC) / 1000) + 5000;
+    assert.equal(contractToSpec({ id: "k1", proposal_id: PROPOSAL.id, platform_fee_bps: 500, platform_safe_address: "0x" + "b".repeat(40), created_at: OCC }, KEY, PK, [], [], fresh)!.createdAt, fresh);
   });
   it("buergervotumToSpec", () => {
     const s = buergervotumToSpec(PROPOSAL, PK)!;
@@ -153,13 +157,15 @@ describe("object mappers", () => {
     assert.equal(buergervotumToSpec({ ...PROPOSAL, tally_confirm_opened_at: null }, PK), null);
   });
   it("kasseNoticeToSpec", () => {
-    const s = kasseNoticeToSpec(PROPOSAL, "beschluss", [], NOW);
+    const s = kasseNoticeToSpec(PROPOSAL, "beschluss", [], NOW, PK);
     assert.equal(s.kind, 32102);
     assert.equal(s.d, "gemeinschaftskasse:0xabc:beschluss");
     assert.deepEqual(s.tags[0], ["d", "gemeinschaftskasse:0xabc:beschluss"]);
     assert.ok(s.content.includes("Gemeinschaftskasse") && s.content.includes("keine Entscheidung der Stadt"));
     assert.equal(s.createdAt, NOW);
-    const x = kasseNoticeToSpec(PROPOSAL, "ausgefuehrt", ["0x" + "a".repeat(64)], NOW);
+    assert.deepEqual(s.tags.find((t) => t[3] === "proposal"), ["a", HEAD, "", "proposal"]);
+    assert.ok(kasseNoticeToSpec({ ...PROPOSAL, title: "" }, "beschluss", [], NOW, PK).content.includes("Vorschlag #3 aus"));
+    const x = kasseNoticeToSpec(PROPOSAL, "ausgefuehrt", ["0x" + "a".repeat(64)], NOW, PK);
     assert.ok(x.tags.some((t) => t[0] === "tx"));
   });
 });
@@ -174,6 +180,9 @@ describe("proposalToSpec vorhaben tags", () => {
     assert.deepEqual(s.tags.find((t) => t[0] === "beneficiary"), ["beneficiary", "Seglerverein"]);
     assert.ok(s.tags.some((t) => t[3] === "contract" && t[1] === `32110:${PK}:contract:${PROPOSAL.id}`));
     assert.equal(s.tags.filter((t) => t[3] === "task").length, 2);
+    const fresh = Math.floor(Date.parse(PROPOSAL.updated_at) / 1000) + 9000;
+    assert.equal(proposalToSpec(PROPOSAL, "0xgov", { townPubkey: PK, taskIds: [], minCreatedAt: fresh })!.createdAt, fresh);
+    assert.ok(proposalToSpec(PROPOSAL, "0xgov", { townPubkey: PK, taskIds: [], minCreatedAt: 1 })!.createdAt > 1);
     const off = { ...PROPOSAL, vorhaben_enabled: false };
     assert.deepEqual(proposalToSpec(off, "0xgov", { townPubkey: PK, taskIds: ["t1"] }), proposalToSpec(off, "0xgov"));
     assert.ok(!proposalToSpec(off, "0xgov", { townPubkey: PK, taskIds: [] })!.tags.some((t) => t[0] === "stage"));

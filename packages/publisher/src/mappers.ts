@@ -671,7 +671,7 @@ export const KIND_PROPOSAL_META = 32100;
  * deliberately absent: it is on-chain for those who need it, and the record
  * never carries raw addresses.
  */
-export function proposalToSpec(row: Row, governor: string, vorhaben?: { townPubkey: string; taskIds: string[] }): PublishSpec | null {
+export function proposalToSpec(row: Row, governor: string, vorhaben?: { townPubkey: string; taskIds: string[]; minCreatedAt?: number }): PublishSpec | null {
   if (!governor) return null;
   const proposalId = str(row, "proposal_id");
   const title = str(row, "title");
@@ -701,7 +701,7 @@ export function proposalToSpec(row: Row, governor: string, vorhaben?: { townPubk
     d: `proposal:${proposalId}`,
     content: str(row, "summary") ?? "",
     tags,
-    createdAt: unixFromUpdatedAt(row),
+    createdAt: Math.max(unixFromUpdatedAt(row), vorhaben && row["vorhaben_enabled"] === true ? vorhaben.minCreatedAt ?? 0 : 0),
   };
 }
 
