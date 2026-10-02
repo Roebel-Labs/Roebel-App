@@ -801,11 +801,11 @@ export const INSPIRATION_TASKS: InspirationTask[] = [
     id: "kommune-participation",
     audience: ["kommune"],
     title: "Bürgerabstimmung zu einem Ortsthema aufsetzen",
-    pitch: "Frage, neutrale Hintergrundinfos und Zeitplan für eine Bürgerabstimmung in der App, das der Stadtvertretung eine Stimmung zeigt.",
+    pitch: "Frage, neutrale Hintergrundinfos und Zeitplan für eine Bürgerabstimmung in der App, die der Stadtvertretung eine Stimmung zeigt.",
     value: { kind: "good", estimate: "Bürgerstimme in Wochen statt Monaten" },
     botSlug: "recherche",
     starterPrompt:
-      "{orgName} möchte die Meinung der Bürger zu einem Thema einholen (ich nenne es gleich). Formuliere eine neutrale Frage, zwei, drei Antwortoptionen, einen ausgewogenen Hintergrundtext und einen Zeitplan. Es ist eine Bürgerabstimmung, keine rechtsverbindlichen Beschlüsse der Stadt.",
+      "{orgName} möchte die Meinung der Bürger zu einem Thema einholen (ich nenne es gleich). Formuliere eine neutrale Frage, zwei, drei Antwortoptionen, einen ausgewogenen Hintergrundtext und einen Zeitplan. Es ist eine Bürgerabstimmung, kein rechtsverbindlicher Beschluss der Stadt.",
     requiredTools: ["list_proposals", "search_roebel", "write_file", "ask_options"],
     signals: [S.kommune],
     tier: "business",

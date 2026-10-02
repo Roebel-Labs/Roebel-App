@@ -105,9 +105,9 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF NEW.confirmed_at IS NOT NULL AND OLD.confirmed_at IS NULL THEN
     INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_wallet, actor_role, extra, occurred_at)
-    VALUES ('tally', NEW.proposal_id, NEW.proposal_id, 'tally_confirmed', 'bestaetigt', NEW.attester_wallet, 'wahlhelfer',
+    VALUES ('tally', NEW.proposal_id, NEW.proposal_id, 'tally_confirmed', 'bestaetigt', lower(NEW.attester_wallet), 'wahlhelfer',
             jsonb_build_object('message', NEW.message, 'signature', NEW.signature, 'result_hash', NEW.result_hash,
-                               'attester_wallet', NEW.attester_wallet, 'wahlhelfer_id', NEW.id),
+                               'attester_wallet', lower(NEW.attester_wallet), 'wahlhelfer_id', NEW.id),
             NEW.confirmed_at);
   END IF;
   RETURN NEW;
@@ -151,7 +151,10 @@ CREATE TRIGGER nostr_outbox_payout AFTER INSERT OR UPDATE OF status ON public.pr
 REVOKE ALL ON FUNCTION public.nostr_outbox_task_activity(), public.nostr_outbox_task(), public.nostr_outbox_stage(),
   public.nostr_outbox_wahlhelfer(), public.nostr_outbox_meinungsbild(), public.nostr_outbox_payout() FROM PUBLIC, anon, authenticated;
 
--- Backfill: proposals already in the vorhaben system get their tasks/lines/confirmations as first actions.
+-- Backfill: existing tasks only (no payout lines, no tally confirmations) get a
+-- task_created action. to_status is 'offen' on purpose, not the task's current
+-- status: the action chain starts at creation, and later transitions that
+-- happened before this migration are not reconstructed.
 INSERT INTO public.nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_wallet, actor_role, occurred_at)
 SELECT 'task', t.id, t.proposal_id, 'task_created', 'offen', lower(t.created_by_wallet),
   CASE WHEN lower(t.created_by_wallet) = lower(p.proposer_address) THEN 'proposer' ELSE 'attester' END, t.created_at

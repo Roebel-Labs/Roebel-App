@@ -90,7 +90,7 @@ transition is checked with `isLegalTransition` before signing.
 ["role", "<role>"]                    // always present: proposer | applicant | assignee | attester | wahlhelfer | system
 ["prior", "<event id of the previous 2101 on the same object>"]   // omitted for the first
 ["occurred_at", "<unix seconds of the DB change>"]
-content: German reason / comment text where one exists ("Quittung fehlt"), else ""
+content: fixed German line per action (free-text policy below)
 ```
 
 Action names (object kind in brackets):
@@ -106,6 +106,25 @@ Action names (object kind in brackets):
 - `proof_added` extra tags: `["url", "<public storage url>", "image"|"pdf"]`, `["tx", "<hash>"]`.
 
 `prior` gives each object a gap-free, ordered chain; a client detects a missing event by a broken chain.
+
+**Free-text policy.** `content` is a fixed German default per action, never the actor's own text (proof notes and
+remarks may name people, places or phone numbers): `task_created` "Aufgabe angelegt.", `task_assigned` "Aufgabe
+vergeben.", `task_started` "Aufgabe gestartet.", `proof_added` "Nachweis hinzugefügt.", `task_submitted` "Zur
+Abnahme eingereicht.", `task_approved` "Aufgabe abgenommen.", `task_paid` "Aufgabe ausgezahlt.", `stage_changed`
+"Stand geändert.", `payout_planned|proposed|confirmed|failed|unclear` "Auszahlung geplant." / "Auszahlung zur
+Freigabe vorgeschlagen." / "Auszahlung bestätigt." / "Auszahlung fehlgeschlagen." / "Auszahlung wird geprüft.",
+`meinungsbild_published` "Das Bürgervotum ist ausgezählt und veröffentlicht.", `tally_confirmed` "Wahlhelfer:in
+bestätigt das Bürgervotum.". Exception: `changes_requested` (attester) and `task_cancelled` (proposer) keep the
+reason text, since it is given in a public role. Proof attachment URLs (`url`, `tx`) stay published; the app says
+so in the proof drawer ("Nachweise (Fotos, Dateien, Transaktions-Hash) sind öffentlich einsehbar und werden im
+öffentlichen Protokoll verlinkt. Dein Text bleibt in der App.").
+
+**Ordering notes.**
+- One stage change can expand into several NSP-12 hops (§2.1); those hops share one `created_at`. Order them by
+  their `from`/`to` chain, never by `created_at` alone.
+- Payout lines publish only the states in `PUBLISHED_LINE_STATUSES`; the intermediate `sendend`/`gesendet` are
+  skipped, so a payout chain may jump (e.g. `from` = `vorgeschlagen`, `to` = `bestaetigt`, or a `from` naming an
+  unpublished state). Clients must accept such jumps; `prior` still makes the chain gap-free.
 
 ### 2.3 Task 32108
 
@@ -153,6 +172,8 @@ recipient address is public by nature of the transfer.
 Published once the tally is on-chain, `d` = `poll:<proposal_id>`: `["advisory","true"]` (pinned by NSP-12), `["a", head, "", "proposal"]`,
 `["for", n]`, `["against", n]`, `["abstain", n]`, `["tally_contract", "<0x…>"]`, `["result_hash", "<0x…>"]`,
 `["chain","100"]`. Each Wahlhelfer confirmation is a separate 2101 `tally_confirmed` pointing at it.
+`created_at` = max(`tally_confirm_opened_at`, latest `proposal_wahlhelfer.confirmed_at`, `proposals.updated_at`)
++ `MAPPER_VERSION`, so a later version (final counts, `result_hash`) always supersedes the earlier one.
 
 ### 2.6 Gemeinschaftskasse notices 32102
 
@@ -214,8 +235,18 @@ The relay already allows it.
 - The new kinds are added to the indexer source kinds for the Röbel node (manifest / `packages/cli` render) and
   to the `record.decisions` block of the NSP-0 manifest (`packages/protocol/examples/roebel.netizen.json`), so a
   third-party client learns from the manifest which kinds and which signer to trust.
-- `packages/record-client` gets typed readers: `listVorhaben(proposalId)`, `getTask(id)`, `getContract(proposalId)`,
-  `getActions(objectAddress)` — the same helpers our web app and any third-party client use.
+- `packages/record-client` gets typed readers: `listTasks(proposalAddress, townPubkey)`,
+  `getContractLines(contractAddress, townPubkey)`, `getContract(contractAddress, townPubkey)`,
+  `getActions(objectAddress, townPubkey)`, and `listProposals` exposes the head additions (stage, vorhaben,
+  proposal_uuid, budget, beneficiary) — the same helpers our web app and any third-party client use.
+- **Trusted signer = the town key.** Anyone can publish an event carrying the town's `a` tags, so every client
+  MUST filter by `authors: [townPubkey]` (and re-check `pubkey`). `getActions` additionally keeps only events whose
+  `object`-marked `a` equals the requested address (the `a` filter also matches actions that name it as their
+  proposal head).
+- **Indexer watermark.** The outbox-drained kinds 2100 and 2101 carry their signing time as `created_at` but can
+  reach the relay much later (retries, drain outage). The indexer therefore re-reads a 7-day overlap for those
+  kinds (5 minutes for other immutable kinds); inserts dedupe by id. One pass stays capped at `limit: 500` per
+  kind, enough at town scale.
 
 ## 4. Protocol package (`packages/protocol`)
 
