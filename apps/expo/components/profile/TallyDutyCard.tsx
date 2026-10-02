@@ -6,7 +6,7 @@ import { fontFamily } from '@/constants/theme';
 import { softShadow } from '@/lib/shadow';
 import { fetchOpenTallyDuties, type TallyDuty } from '@/lib/vorhaben';
 import { timeLeft } from '@/lib/vorhaben-labels';
-import { demoTallyDuty, isPreviewChannel } from '@/lib/vorhaben-preview';
+import { DEMO_TALLY_KEY, demoTallyDuty, isPreviewChannel } from '@/lib/vorhaben-preview';
 
 export default function TallyDutyCard({ wallet }: { wallet: string | undefined }) {
   const router = useRouter();
@@ -21,13 +21,15 @@ export default function TallyDutyCard({ wallet }: { wallet: string | undefined }
   }, [wallet]));
 
   if (duties.length === 0) return null;
+  // Preview demo: the Wahlhelfer:in's real job, releasing their part of the election key.
+  const decrypt = duties.every((d) => d.proposalKey === DEMO_TALLY_KEY);
   return (
     <View style={[styles.card, { backgroundColor: colors.background }, softShadow(2, isDark)]}>
-      <Text style={[styles.title, { color: colors.textPrimary }]}>Auszählung bestätigen</Text>
-      <Text style={[styles.lead, { color: colors.textSecondary }]}>Als Wahlhelfer:in bestätigst du das Ergebnis.</Text>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>{decrypt ? 'Wahlergebnis entschlüsseln' : 'Auszählung bestätigen'}</Text>
+      <Text style={[styles.lead, { color: colors.textSecondary }]}>{decrypt ? 'Als Wahlhelfer:in gibst du deinen Teil des Wahlschlüssels frei.' : 'Als Wahlhelfer:in bestätigst du das Ergebnis.'}</Text>
       {duties.map((d, i) => (
-        <Pressable key={d.proposalUuid} onPress={() => router.push(`/auszaehlung/${d.proposalKey}` as any)}
-          accessibilityRole="button" accessibilityLabel={`Vorschlag ${d.proposalNumber} bestätigen`}
+        <Pressable key={d.proposalUuid} onPress={() => router.push((d.proposalKey === DEMO_TALLY_KEY ? `/entschluesseln/${d.proposalKey}` : `/auszaehlung/${d.proposalKey}`) as any)}
+          accessibilityRole="button" accessibilityLabel={`Vorschlag ${d.proposalNumber} ${d.proposalKey === DEMO_TALLY_KEY ? 'entschlüsseln' : 'bestätigen'}`}
           style={({ pressed }) => [styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, { opacity: pressed ? 0.7 : 1 }]}>
           <View style={[styles.dot, { backgroundColor: colors.primary }]} />
           <View style={styles.rowText}>

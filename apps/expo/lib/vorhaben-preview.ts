@@ -22,6 +22,11 @@ const DEMO_UNTIL = () => new Date(Date.now() + 5 * 86_400_000 + 3 * 3_600_000).t
 const DEMO_TITLE = 'Neue Sitzbänke an der Uferpromenade';
 const DEMO_TALLY_ADDRESS = '0x4b1d6c0e2a9f3e7d8c5b6a4f3e2d1c0b9a8f7e6d';
 
+/** The demo "Wahlergebnis entschlüsseln" proposal; the result is shown only once the pipeline ran. */
+export const DEMO_DECRYPT = {
+  proposalNumber: 4, title: DEMO_TITLE, forVotes: '14', againstVotes: '3', abstainVotes: '2', reward: 10,
+} as const;
+
 export function demoTallyDuty(): TallyDuty {
   return { proposalUuid: 'vorschau', proposalKey: DEMO_TALLY_KEY, proposalNumber: 4, title: DEMO_TITLE, until: DEMO_UNTIL() };
 }
