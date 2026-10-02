@@ -1,4 +1,4 @@
-import { formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone, contractPurpose } from '../vorhaben-labels';
+import { STAGE_STEPPER_LABELS, formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone, contractPurpose } from '../vorhaben-labels';
 
 describe('vorhaben labels', () => {
   test('amounts in German format, Münzen never as euro', () => {
@@ -68,4 +68,11 @@ describe('contractPurpose', () => {
     expect(contractPurpose({ role: 'empfaenger', referenceId: 'p' }, titles, 'Verein X')).toBe('Verein X');
     expect(contractPurpose({ role: 'plattform', referenceId: 'p' }, titles, 'Verein X')).toBe('Plattformanteil');
   });
+});
+
+test('stepper labels are the plain labels plus soft hyphens only', () => {
+  for (const [stage, label] of Object.entries(STAGE_STEPPER_LABELS)) {
+    expect(label.replace(/\u00AD/g, '')).toBe(STAGE_LABELS[stage as keyof typeof STAGE_LABELS]);
+  }
+  expect(STAGE_STEPPER_LABELS.abstimmung.split('\u00AD')).toEqual(['Bür', 'ger', 'ab', 'stim', 'mung']);
 });

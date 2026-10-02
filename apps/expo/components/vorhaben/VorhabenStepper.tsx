@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { STAGE_LABELS, STAGE_STEPS, type Stage } from '@/lib/vorhaben-labels';
+import { STAGE_LABELS, STAGE_STEPPER_LABELS, STAGE_STEPS, type Stage } from '@/lib/vorhaben-labels';
 import StatusChip from './StatusChip';
 
 // Fixed step width so labels stay readable; the row scrolls horizontally when
@@ -48,6 +48,9 @@ export default function VorhabenStepper({ stage }: { stage: Stage }) {
             </View>
             <Text
               numberOfLines={2}
+              android_hyphenationFrequency="full"
+              textBreakStrategy="highQuality"
+              accessibilityLabel={STAGE_LABELS[s]}
               style={[
                 styles.label,
                 {
@@ -56,7 +59,7 @@ export default function VorhabenStepper({ stage }: { stage: Stage }) {
                 },
               ]}
             >
-              {STAGE_LABELS[s]}
+              {STAGE_STEPPER_LABELS[s]}
             </Text>
           </View>
         );

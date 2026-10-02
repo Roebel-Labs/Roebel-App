@@ -9,6 +9,18 @@ export const STAGE_LABELS: Record<Stage, string> = {
   abstimmung: 'Bürgerabstimmung', auszaehlung: 'Auszählung', angenommen: 'Angenommen',
   abgelehnt: 'Abgelehnt', in_umsetzung: 'In Umsetzung', umgesetzt: 'Umgesetzt',
 };
+// Stepper labels with German soft hyphens (U+00AD) at syllable breaks, so narrow
+// steps wrap as "Bürger-|abstimmung" instead of mid-syllable or not at all.
+// Invisible unless the line actually breaks there.
+const SHY = '\u00AD';
+export const STAGE_STEPPER_LABELS: Record<Stage, string> = {
+  abstimmung: ['Bür', 'ger', 'ab', 'stim', 'mung'].join(SHY),
+  auszaehlung: ['Aus', 'zäh', 'lung'].join(SHY),
+  angenommen: ['An', 'ge', 'nom', 'men'].join(SHY),
+  abgelehnt: ['Ab', 'ge', 'lehnt'].join(SHY),
+  in_umsetzung: `In ${['Um', 'set', 'zung'].join(SHY)}`,
+  umgesetzt: ['Um', 'ge', 'setzt'].join(SHY),
+};
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   offen: 'Offen', vergeben: 'Vergeben', in_arbeit: 'In Arbeit', eingereicht: 'Wartet auf Abnahme',
   abgenommen: 'Abgenommen', ausgezahlt: 'Ausgezahlt', abgebrochen: 'Abgebrochen',
