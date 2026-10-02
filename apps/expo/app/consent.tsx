@@ -23,6 +23,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
+import { useUser } from '@/context/UserContext';
 import { useWalletBoot } from '@/context/WalletBootContext';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
 
@@ -37,6 +38,7 @@ export default function ConsentModalScreen() {
   const { acceptAll, acceptEssential } = useConsent();
   const router = useRouter();
   const account = useActiveAccount();
+  const { user } = useUser();
 
   // First launch while the passkey gate is open: logged-out people continue to the welcome
   // screen, where "Unabhängiges Konto" is the first choice. Gate closed (production today): as
@@ -65,7 +67,7 @@ export default function ConsentModalScreen() {
     void import('@/lib/nostr/enroll')
       .then(async ({ markPublicRecordConsent, enrollNow }) => {
         await markPublicRecordConsent();
-        if (account) await enrollNow(account);
+        if (account) await enrollNow(account, !!user?.is_verified_citizen);
       })
       .catch(() => {});
     await leave();

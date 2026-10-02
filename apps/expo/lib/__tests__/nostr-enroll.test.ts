@@ -14,7 +14,7 @@ const mockEnsureProfile = jest.fn(async () => {});
 const mockRetryPending = jest.fn(async () => {});
 jest.mock('../nostr/publish', () => ({ ensureProfilePublished: mockEnsureProfile, retryPendingPublications: mockRetryPending }));
 
-import { markPublicRecordConsent, selfHealEnrollment } from '../nostr/enroll';
+import { ENROLL_NON_CITIZENS, enrollNow, markPublicRecordConsent, mayEnroll, selfHealEnrollment } from '../nostr/enroll';
 
 const account = { address: '0xabc' } as any;
 
@@ -25,14 +25,14 @@ beforeEach(() => {
 
 describe('selfHealEnrollment', () => {
   it('does nothing without consent', async () => {
-    await selfHealEnrollment(account);
+    await selfHealEnrollment(account, true);
     expect(mockEnsureIdentity).not.toHaveBeenCalled();
     expect(mockEnsureProfile).not.toHaveBeenCalled();
   });
 
-  it('enrolls with consent, without any citizenship argument', async () => {
+  it('enrolls a citizen with consent', async () => {
     await markPublicRecordConsent();
-    await selfHealEnrollment(account);
+    await selfHealEnrollment(account, true);
     expect(mockEnsureIdentity).toHaveBeenCalledWith(account);
     expect(mockEnsureProfile).toHaveBeenCalledWith('0xabc');
     expect(mockRetryPending).toHaveBeenCalledWith('0xabc');
@@ -41,8 +41,30 @@ describe('selfHealEnrollment', () => {
   it('skips publishing when the identity is not registered', async () => {
     mockGetRegisteredAt.mockResolvedValueOnce(0);
     await markPublicRecordConsent();
-    await selfHealEnrollment(account);
+    await selfHealEnrollment(account, true);
     expect(mockEnsureIdentity).toHaveBeenCalled();
     expect(mockEnsureProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe('non-citizens while ENROLL_NON_CITIZENS is off', () => {
+  it('the flag is off until a consent version covers every account', () => {
+    expect(ENROLL_NON_CITIZENS).toBe(false);
+    expect(mayEnroll(false)).toBe(false);
+    expect(mayEnroll(true)).toBe(true);
+  });
+
+  it('self-heal neither binds a key nor publishes a profile or backfill', async () => {
+    await markPublicRecordConsent();
+    await selfHealEnrollment(account, false);
+    expect(mockEnsureIdentity).not.toHaveBeenCalled();
+    expect(mockEnsureProfile).not.toHaveBeenCalled();
+    expect(mockRetryPending).not.toHaveBeenCalled();
+  });
+
+  it('enrollNow at consent time does nothing for them', async () => {
+    await enrollNow(account, false);
+    expect(mockEnsureIdentity).not.toHaveBeenCalled();
+    expect(mockRetryPending).not.toHaveBeenCalled();
   });
 });

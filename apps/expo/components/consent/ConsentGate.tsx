@@ -15,6 +15,7 @@ import {
 } from '@/lib/sentry-init';
 import { ConsentReconsentSheet } from './ConsentReconsentSheet';
 import { useActiveAccount } from 'thirdweb/react';
+import { useUser } from '@/context/UserContext';
 
 export function ConsentGate() {
   const { ready, needsConsent, preferences } = useConsent();
@@ -22,6 +23,7 @@ export function ConsentGate() {
   const pathname = usePathname();
   const pushedRef = useRef(false);
   const account = useActiveAccount();
+  const { user } = useUser();
   const healedRef = useRef(false);
 
   // Public-record self-heal: consent was accepted earlier but enrollment has
@@ -30,15 +32,18 @@ export function ConsentGate() {
   useEffect(() => {
     if (!ready || needsConsent || healedRef.current) return;
     if (!account) return;
+    const citizen = !!user?.is_verified_citizen;
+    // Not eligible (yet): leave healedRef unset so a later verification re-runs this.
+    if (!citizen) return;
     healedRef.current = true;
     const acct = account;
     const timer = setTimeout(() => {
       void import('@/lib/nostr/enroll')
-        .then(({ selfHealEnrollment }) => selfHealEnrollment(acct))
+        .then(({ selfHealEnrollment }) => selfHealEnrollment(acct, citizen))
         .catch(() => {});
     }, 4000);
     return () => clearTimeout(timer);
-  }, [ready, needsConsent, account]);
+  }, [ready, needsConsent, account, user?.is_verified_citizen]);
 
   // Route to /consent on first launch once the SecureStore read has resolved.
   useEffect(() => {
