@@ -201,13 +201,18 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
         const at = Date.parse(row.occurred_at);
         if (!personWarned && Number.isFinite(at) && deps.now() - at / 1000 > PERSON_WAIT_WARN_SECONDS) {
           personWarned = true;
-          deps.log(`WARNING nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id}: person-signed event not attached after 15 minutes`);
+          deps.log(`WARNING nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id}: person-signed event not attached after 15 minutes (age measured from occurred_at)`);
         }
         continue;
       }
       let valid = false;
       try { valid = verifyEvent(event); } catch { valid = false; }
+      if (valid) {
+        const seqTag = event.tags?.find((t) => t[0] === "seq")?.[1];
+        valid = event.kind === 2101 && seqTag === String(row.seq);
+      }
       if (!valid) { await fail(row, "person_event_invalid"); continue; }
+      if (row.event_id && row.event_id !== event.id) { await fail(row, "person_event_id_mismatch"); continue; }
     } else if (!event) {
       const priorRows = await deps.fetchRows(
         "nostr_outbox",

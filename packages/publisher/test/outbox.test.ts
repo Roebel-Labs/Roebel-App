@@ -470,6 +470,46 @@ describe("fix round 1", () => {
       assert.equal(tag(h.published[1], "prior"), ev.id);
     });
 
+    it("fails on an event_id that differs from the stored person event", async () => {
+      const ev = personEvent();
+      const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: "f".repeat(64) })]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.failed, 1);
+      assert.equal(tables.nostr_outbox[0].last_error, "person_event_id_mismatch");
+      assert.equal(tables.nostr_outbox[0].attempts, 1);
+      assert.equal(h.published.length, 0);
+    });
+
+    it("rejects a person event of the wrong kind or with the wrong seq", async () => {
+      const wrongKind = buildEvent(sk, 1, "", { createdAt: NOW - 5, tags: [["seq", "1"]] });
+      const wrongSeq = buildEvent(sk, 2101, "", { createdAt: NOW - 5, tags: [["seq", "2"]] });
+      for (const ev of [wrongKind, wrongSeq]) {
+        const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id })]);
+        const h = harness(tables);
+        const r = await drainOutbox(h.deps);
+        assert.equal(r.failed, 1);
+        assert.equal(tables.nostr_outbox[0].last_error, "person_event_invalid");
+        assert.equal(h.published.length, 0);
+      }
+    });
+
+    it("emits no warning while waiting under 15 minutes", async () => {
+      const tables = baseTables([outbox({ id: 1, person_signed: true, occurred_at: new Date((NOW - 14 * 60) * 1000).toISOString() })]);
+      const h = harness(tables);
+      await drainOutbox(h.deps);
+      assert.equal(h.logs.filter((l) => l.includes("WARNING")).length, 0);
+    });
+
+    it("signs via the town path when person_signed was flipped back to false", async () => {
+      const tables = baseTables([outbox({ id: 1, person_signed: false })]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.published, 1);
+      assert.equal(h.signs, 1);
+      assert.equal(h.published[0].pubkey, TOWN);
+    });
+
     it("warns once per pass about rows waiting longer than 15 minutes", async () => {
       const old = new Date((NOW - 16 * 60) * 1000).toISOString();
       const tables = baseTables([
