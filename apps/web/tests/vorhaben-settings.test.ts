@@ -15,8 +15,16 @@ const rows = [
 test("parses the seeded settings", () => {
   assert.deepEqual(parseSettings(rows), {
     platformFeeBps: 500, platformSafe: "0xbcabbaa26420e0a4771808f9639d4176355e5d4b", wahlhelferAsset: "MUENZEN",
-    wahlhelferAmount: "10", budgetFeeRail: "funder_xdai", windowDays: 7, dispatchEnabled: false,
+    wahlhelferAmount: "10", budgetFeeRail: "funder_xdai", taskPayoutRail: "manual_safe", windowDays: 7, dispatchEnabled: false,
   });
+});
+
+test("task_payout_rail defaults to manual_safe when missing; safe_eure is accepted; anything else throws", () => {
+  assert.equal(parseSettings(rows).taskPayoutRail, "manual_safe");
+  assert.equal(parseSettings([...rows, { key: "task_payout_rail", value: "" }]).taskPayoutRail, "manual_safe");
+  assert.equal(parseSettings([...rows, { key: "task_payout_rail", value: "safe_eure" }]).taskPayoutRail, "safe_eure");
+  assert.equal(parseSettings([...rows, { key: "task_payout_rail", value: "manual_safe" }]).taskPayoutRail, "manual_safe");
+  assert.throws(() => parseSettings([...rows, { key: "task_payout_rail", value: "funder_xdai" }]));
 });
 
 test("rejects a missing or malformed key instead of defaulting", () => {

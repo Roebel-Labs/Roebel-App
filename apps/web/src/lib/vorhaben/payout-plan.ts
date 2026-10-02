@@ -52,12 +52,18 @@ export function planWahlhelferLines(
   return [main, ...feeLine(main, fee, main.rail)];
 }
 
+/**
+ * A task reward plus its platform fee, both on the same rail. An EURe reward goes on `eureRail`
+ * (vorhaben_settings.task_payout_rail): manual_safe = an Attester pays from the Safe and records the
+ * hash; safe_eure = the server proposes a Safe batch. Other assets keep their own rail.
+ */
 export function planTaskLines(
   i: { taskId: string; wallet: string; label: string; amount: string; asset: Asset }, fee: FeeConfig,
+  eureRail: Extract<Rail, "manual_safe" | "safe_eure">,
 ): LineDraft[] {
   const main: LineDraft = {
     role: "aufgabe", recipient_wallet: i.wallet.toLowerCase(), recipient_label: i.label,
-    amount: fromAtto(toAtto(i.amount)), asset: i.asset, rail: railForAsset(i.asset),
+    amount: fromAtto(toAtto(i.amount)), asset: i.asset, rail: i.asset === "EURe" ? eureRail : railForAsset(i.asset),
     reference_type: "task", reference_id: i.taskId,
   };
   return [main, ...feeLine(main, fee, main.rail)];

@@ -15,8 +15,8 @@ export interface TaskDeps {
   isAttester: (wallet: string) => Promise<boolean>;
   nowMs: () => number;
   settings: VorhabenSettings;
-  /** EURe transfer from the Attester Safe for `amount`, mined at or after `notBeforeSec`. */
-  verifyManualTx: (txHash: string, amount: string, notBeforeSec: number) => Promise<boolean>;
+  /** EURe transfer from the Attester Safe for `amount` (to `to` when given), mined at or after `notBeforeSec`. */
+  verifyManualTx: (txHash: string, amount: string, notBeforeSec: number, to?: string | null) => Promise<boolean>;
   dispatch: (lineIds: string[]) => Promise<void>;
   /** Current Attester wallets (lowercase); only used for the "wartet auf Abnahme" notice. */
   listAttesters: () => Promise<string[]>;
@@ -359,7 +359,8 @@ async function createTaskLines(deps: TaskDeps, proposal: ProposalRow, task: Task
   const names = await displayNames(db, [assignee]);
   await insertLines(db, contract.id, proposal.id, planTaskLines(
     { taskId: task.id, wallet: assignee, label: names.get(assignee) ?? "Unbekannt", amount: String(task.reward_amount), asset: task.reward_asset },
-    { bps: contract.platform_fee_bps, platformSafe: contract.platform_safe_address, budgetFeeRail: settings.budgetFeeRail }));
+    { bps: contract.platform_fee_bps, platformSafe: contract.platform_safe_address, budgetFeeRail: settings.budgetFeeRail },
+    settings.taskPayoutRail));
   const ids = rows<{ id: string }>(await db.from("proposal_payout_lines").select("id")
     .eq("reference_type", "task").eq("reference_id", task.id), "task lines read").map((l) => l.id);
   if (settings.dispatchEnabled && ids.length) {
@@ -370,6 +371,30 @@ async function createTaskLines(deps: TaskDeps, proposal: ProposalRow, task: Task
 }
 
 // ---- payout_record_manual ----------------------------------------------------------------------
+
+type ManualLine = LineRow & { created_at?: string };
+
+/** Lines an Attester records by hand: the budget, and (task_payout_rail = manual_safe) a task reward + its fee. */
+function isManualRecordable(l: ManualLine): boolean {
+  if (l.rail !== "manual_safe") return false;
+  return l.role === "empfaenger" || l.role === "aufgabe" || (l.role === "plattform" && l.reference_type === "task");
+}
+const notBeforeSec = (l: ManualLine): number => {
+  const ms = new Date(l.created_at ?? "").getTime();
+  if (!Number.isFinite(ms)) throw new Error(`line ${l.id} has no created_at`);
+  return Math.floor(ms / 1000);
+};
+const isUniqueViolation = (e: unknown) => (e as { code?: string } | null)?.code === "23505";
+
+/** CAS geplant → gesendet with the hash. "taken" = unique index hit (the tx is recorded elsewhere). */
+async function claimLine(deps: TaskDeps, id: string, hash: string): Promise<"ok" | "taken" | "lost"> {
+  const up = await deps.db.from("proposal_payout_lines")
+    .update({ status: "gesendet", tx_hash: hash, error: null, updated_at: new Date(deps.nowMs()).toISOString() })
+    .eq("id", id).eq("status", "geplant").select("id");
+  if (isUniqueViolation(up.error)) return "taken";
+  check(up, "line update");
+  return Array.isArray(up.data) && up.data.length > 0 ? "ok" : "lost";
+}
 
 async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<string, unknown>): Promise<TaskResult> {
   const { db } = deps;
@@ -382,35 +407,69 @@ async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<stri
 
   const lr = await db.from("proposal_payout_lines").select("*").eq("id", lineId).maybeSingle();
   check(lr, "line read");
-  const line = lr.data ? (toLineRow(lr.data) as LineRow & { created_at?: string }) : null;
+  const line = lr.data ? (toLineRow(lr.data) as ManualLine) : null;
   if (!line) return fail(404, "NOT_FOUND", "Auszahlung nicht gefunden.");
-  if (line.role !== "empfaenger" || line.rail !== "manual_safe") return fail(400, "BAD_LINE", "Diese Auszahlung wird nicht manuell eingetragen.");
+  if (!isManualRecordable(line)) return fail(400, "BAD_LINE", "Diese Auszahlung wird nicht manuell eingetragen.");
   if (line.status !== "geplant") return fail(409, "BAD_STATUS", "Für diese Auszahlung ist schon eine Transaktion eingetragen.");
 
   // Case-insensitive: Safe-service execution hashes (safe_eure lines) are not guaranteed lowercase.
-  const used = rows(await db.from("proposal_payout_lines").select("id").ilike("tx_hash", hash).limit(1), "tx reuse read");
-  if (used.length > 0) return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  // One tx may back a task reward AND its platform fee (one Safe batch); any other reuse is refused.
+  const used = rows<{ id: string; role: string; reference_type: string; reference_id: string }>(
+    await db.from("proposal_payout_lines").select("id, role, reference_type, reference_id").ilike("tx_hash", hash), "tx reuse read");
+  const sameReference = (u: { role: string; reference_type: string; reference_id: string }) =>
+    line.reference_type === "task" && u.reference_type === "task" && u.reference_id === line.reference_id && u.role !== line.role;
+  if (used.some((u) => !sameReference(u))) {
+    return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  }
   const links = rows<{ proposal_id: string | null }>(
     await db.from("treasury_tx_links").select("proposal_id").eq("tx_hash", hash), "tx link read");
   if (links.some((l) => l.proposal_id && l.proposal_id !== line.proposal_id)) {
     return fail(409, "TX_USED", "Diese Transaktion gehört schon zu einem anderen Vorschlag.");
   }
 
-  const createdMs = new Date(line.created_at ?? "").getTime();
-  if (!Number.isFinite(createdMs)) throw new Error(`line ${line.id} has no created_at`);
-  if (!(await deps.verifyManualTx(hash, line.amount, Math.floor(createdMs / 1000)))) {
-    return fail(400, "BAD_TX", "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag.");
+  if (!(await deps.verifyManualTx(hash, line.amount, notBeforeSec(line), line.recipient_wallet))) {
+    return fail(400, "BAD_TX", line.recipient_wallet
+      ? "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag an diese Empfänger:in."
+      : "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag.");
   }
-  const up = await db.from("proposal_payout_lines")
-    .update({ status: "gesendet", tx_hash: hash, error: null, updated_at: new Date(deps.nowMs()).toISOString() })
-    .eq("id", lineId).eq("status", "geplant").select("id");
-  // proposal_payout_lines_manual_tx_key: a concurrent request recorded the same tx on another line.
-  if ((up.error as { code?: string } | null)?.code === "23505") {
-    return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
-  }
-  check(up, "line update");
-  if (!Array.isArray(up.data) || up.data.length === 0) return conflict();
-  // The single settle path moves it to bestaetigt and runs afterLineSettled.
+  const claim = await claimLine(deps, line.id, hash);
+  // Unique index on the manual tx: a concurrent request recorded the same tx on another line.
+  if (claim === "taken") return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  if (claim === "lost") return conflict();
+  // The single settle path moves it to bestaetigt and runs afterLineSettled (task → ausgezahlt).
   const settled = await deps.settle({ ...line, status: "gesendet", tx_hash: hash });
-  return { ok: true, data: { status: settled === "settled" ? "bestaetigt" : "gesendet" } };
+  const status = settled === "settled" ? "bestaetigt" : "gesendet";
+  if (line.role !== "aufgabe") return { ok: true, data: { status } };
+
+  // The reward is recorded; the fee is a bonus of the same request and must never fail it.
+  const fee = await recordTaskFeeFromSameTx(deps, line, hash).catch((e) => {
+    console.error(`[vorhaben/tasks] fee line for task ${line.reference_id} not recorded`, e);
+    return { feeRecorded: false, feeOpen: true };
+  });
+  return { ok: true, data: { status, ...fee } };
+}
+
+/**
+ * When the reward tx also carries the platform fee (one Safe batch), record + settle the sibling fee
+ * line too. Otherwise it stays geplant and is recorded separately. A 23505 means the old per-tx index
+ * (before 20261004_manual_tx_per_role) refuses the shared hash: the fee simply stays open.
+ */
+async function recordTaskFeeFromSameTx(
+  deps: TaskDeps, main: ManualLine, hash: string,
+): Promise<{ feeRecorded: boolean; feeOpen: boolean }> {
+  const fr = await deps.db.from("proposal_payout_lines").select("*")
+    .eq("reference_type", main.reference_type).eq("reference_id", main.reference_id)
+    .eq("role", "plattform").eq("rail", "manual_safe").eq("status", "geplant").limit(1);
+  const feeRow = rows<unknown>(fr, "fee line read")[0];
+  if (!feeRow) return { feeRecorded: false, feeOpen: false };
+  const fee = toLineRow(feeRow) as ManualLine;
+  if (!(await deps.verifyManualTx(hash, fee.amount, notBeforeSec(fee), fee.recipient_wallet))) {
+    return { feeRecorded: false, feeOpen: true };
+  }
+  const claim = await claimLine(deps, fee.id, hash);
+  if (claim !== "ok") return { feeRecorded: false, feeOpen: claim === "taken" };
+  // Recorded: if settling fails here, the reconcile cron settles the gesendet line.
+  try { await deps.settle({ ...fee, status: "gesendet", tx_hash: hash }); }
+  catch (e) { console.error(`[vorhaben/tasks] fee line ${fee.id} settle deferred to reconcile`, e); }
+  return { feeRecorded: true, feeOpen: false };
 }

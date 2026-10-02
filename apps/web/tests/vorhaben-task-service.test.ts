@@ -19,7 +19,12 @@ const PREFIX = "https://proj.supabase.co/storage/v1/object/public/";
 const PLATFORM = "0xbcabbaa26420e0a4771808f9639d4176355e5d4b";
 
 /** In-memory Supabase fake that honours eq/neq/in/is/limit filters and records every op. */
-function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[]; updateError?: Record<string, { message: string; code?: string }> } = {}) {
+type DbError = { message: string; code?: string };
+function fakeDb(seed: Record<string, Row[]>, opts: {
+  casMiss?: string[]; updateError?: Record<string, DbError>;
+  /** Per-update error, decided from the table and the eq() filters of that update. */
+  updateErrorWhen?: (table: string, eqs: Row) => DbError | null;
+} = {}) {
   const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
   const ops: Op[] = [];
   let n = 0;
@@ -27,6 +32,7 @@ function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[]; updateE
     const builder = (op: string, payload?: unknown, upsertOpts?: { onConflict?: string }) => {
       ops.push({ table, op, payload });
       const filters: Array<(r: Row) => boolean> = [];
+      const eqs: Row = {};
       let limit = Infinity;
       let selected = false;
       const run = (): { data: unknown; error: { message: string; code?: string } | null } => {
@@ -51,13 +57,15 @@ function fakeDb(seed: Record<string, Row[]>, opts: { casMiss?: string[]; updateE
         }
         // update
         if (opts.updateError?.[table]) return { data: null, error: opts.updateError[table] };
+        const when = opts.updateErrorWhen?.(table, eqs);
+        if (when) return { data: null, error: when };
         if (selected && opts.casMiss?.includes(table)) return { data: [], error: null };
         const hit = list.filter(match);
         for (const r of hit) Object.assign(r, payload as Row);
         return { data: hit.map((r) => ({ id: r.id })), error: null };
       };
       const b: any = {
-        eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return b; },
+        eq: (c: string, v: unknown) => { eqs[c] = v; filters.push((r) => r[c] === v); return b; },
         neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return b; },
         ilike: (c: string, v: string) => { filters.push((r) => typeof r[c] === "string" && r[c].toLowerCase() === v.toLowerCase()); return b; },
         in: (c: string, v: unknown[]) => { filters.push((r) => v.includes(r[c])); return b; },
@@ -100,7 +108,7 @@ const seed = (over: Record<string, Row[]> = {}): Record<string, Row[]> => ({
 });
 
 const settings = { platformFeeBps: 500, platformSafe: PLATFORM, wahlhelferAsset: "MUENZEN" as const, wahlhelferAmount: "10",
-  budgetFeeRail: "funder_xdai" as const, windowDays: 7, dispatchEnabled: true };
+  budgetFeeRail: "funder_xdai" as const, taskPayoutRail: "manual_safe" as const, windowDays: 7, dispatchEnabled: true };
 
 function deps(db: ReturnType<typeof fakeDb>, over: Partial<TaskDeps> = {}): TaskDeps & { dispatched: string[][]; settled: LineRow[] } {
   const dispatched: string[][] = [];
@@ -192,7 +200,7 @@ test("task_approve on an accepted proposal inserts the task + platform lines and
   const lines = db.ops.find((o) => o.table === "proposal_payout_lines" && o.op === "upsert")!.payload as Row[];
   assert.equal(lines.length, 2);
   assert.deepEqual(lines.map((l) => [l.role, l.amount, l.asset, l.rail]),
-    [["aufgabe", "5", "EURe", "safe_eure"], ["plattform", "0.25", "EURe", "safe_eure"]]);
+    [["aufgabe", "5", "EURe", "manual_safe"], ["plattform", "0.25", "EURe", "manual_safe"]]);
   assert.equal(lines[0].recipient_wallet, APPLICANT);
   assert.equal(d.dispatched.length, 1);
   assert.equal(d.dispatched[0].length, 2);
@@ -316,12 +324,13 @@ test("payout_record_manual with an unverified tx is BAD_TX and leaves the line u
 
 test("payout_record_manual moves the line to gesendet with the hash and settles once", async () => {
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
-  let checked: [string, string, number] | null = null;
-  const d = deps(db, { verifyManualTx: async (h, a, nb) => { checked = [h, a, nb]; return true; } });
+  let checked: [string, string, number, string | null | undefined] | null = null;
+  const d = deps(db, { verifyManualTx: async (h, a, nb, to) => { checked = [h, a, nb, to]; return true; } });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX.toUpperCase().replace("0X", "0x") });
   assert.equal(r.ok, true);
   // The tx must be mined at or after the line was created.
-  assert.deepEqual(checked, [TX, "150", Math.floor((NOW - 3600_000) / 1000)]);
+  // A budget line has no recipient wallet: no recipient check.
+  assert.deepEqual(checked, [TX, "150", Math.floor((NOW - 3600_000) / 1000), null]);
   const line = db.tables.proposal_payout_lines[0];
   assert.equal(line.status, "gesendet");
   assert.equal(line.tx_hash, TX);
@@ -389,6 +398,115 @@ test("payout_record_manual: a numeric amount from PostgREST reaches the verifier
   assert.equal(r.ok, true);
   assert.equal(amount, "150");
   assert.equal(d.settled[0].amount, "150");
+});
+
+// ---- manual task payouts (aufgabe line + its platform fee, ideally one Safe batch tx) ----------
+
+const F_ID = "66666666-6666-4666-8666-666666666666";
+const taskLine = (over: Row = {}): Row => manualLine({
+  role: "aufgabe", recipient_wallet: APPLICANT, recipient_label: "Bea", amount: "5", reference_type: "task", reference_id: T_ID, ...over,
+});
+const feeLineRow = (over: Row = {}): Row => manualLine({
+  id: F_ID, role: "plattform", recipient_wallet: PLATFORM, recipient_label: "Plattform", amount: "0.25", reference_type: "task",
+  reference_id: T_ID, created_at: new Date(NOW - 1800_000).toISOString(), ...over,
+});
+/** A fake chain: the tx holds exactly these EURe transfers from the Safe. */
+const chainWith = (transfers: Array<{ to: string; amount: string }>, calls: unknown[][] = []): TaskDeps["verifyManualTx"] =>
+  async (h, a, nb, to) => {
+    calls.push([h, a, nb, to]);
+    return transfers.some((t) => t.amount === a && (!to || t.to === to));
+  };
+const taskSeed = (lines: Row[]) => seed({
+  proposals: [proposal({ lifecycle_stage: "in_umsetzung" })],
+  proposal_tasks: [task({ status: "abgenommen", assignee_wallet: APPLICANT })],
+  proposal_payout_lines: lines,
+});
+
+test("payout_record_manual on a task line with the fee in the same tx records + settles both, main first", async () => {
+  const db = fakeDb(taskSeed([taskLine(), feeLineRow()]));
+  const calls: unknown[][] = [];
+  const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }, { to: PLATFORM, amount: "0.25" }], calls) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: true, feeOpen: false });
+  assert.deepEqual(calls, [
+    [TX, "5", Math.floor((NOW - 3600_000) / 1000), APPLICANT],
+    [TX, "0.25", Math.floor((NOW - 1800_000) / 1000), PLATFORM],
+  ]);
+  const [main, fee] = db.tables.proposal_payout_lines;
+  assert.deepEqual([main.status, main.tx_hash, fee.status, fee.tx_hash], ["gesendet", TX, "gesendet", TX]);
+  assert.deepEqual(d.settled.map((l) => [l.id, l.status, l.tx_hash]), [[L_ID, "gesendet", TX], [F_ID, "gesendet", TX]]);
+});
+
+test("payout_record_manual on a task line without the fee in the tx settles the reward and leaves the fee geplant", async () => {
+  const db = fakeDb(taskSeed([taskLine(), feeLineRow()]));
+  const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }]) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: false, feeOpen: true });
+  const [main, fee] = db.tables.proposal_payout_lines;
+  assert.equal(main.status, "gesendet");
+  assert.deepEqual([fee.status, fee.tx_hash], ["geplant", null]);
+  assert.deepEqual(d.settled.map((l) => l.id), [L_ID]);
+
+  // The fee is then recorded on its own with a second tx; the reward line keeps its hash.
+  const TX2 = "0x" + "cd".repeat(32);
+  const d2 = deps(db, { verifyManualTx: chainWith([{ to: PLATFORM, amount: "0.25" }]) });
+  const r2 = await handleVorhabenAction(d2, ATTESTER, "payout_record_manual", { lineId: F_ID, txHash: TX2 });
+  assert.equal(r2.ok, true);
+  assert.deepEqual([db.tables.proposal_payout_lines[1].status, db.tables.proposal_payout_lines[1].tx_hash], ["gesendet", TX2]);
+});
+
+test("payout_record_manual: the fee line of a task may reuse the hash of its own reward line", async () => {
+  const db = fakeDb(taskSeed([taskLine({ status: "bestaetigt", tx_hash: TX }), feeLineRow()]));
+  const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }, { to: PLATFORM, amount: "0.25" }]) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: F_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  assert.equal(db.tables.proposal_payout_lines[1].status, "gesendet");
+});
+
+test("payout_record_manual: a transfer to someone else than the assignee is BAD_TX", async () => {
+  const db = fakeDb(taskSeed([taskLine(), feeLineRow()]));
+  const d = deps(db, { verifyManualTx: chainWith([{ to: OTHER, amount: "5" }, { to: PLATFORM, amount: "0.25" }]) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "BAD_TX"); assert.equal(r.status, 400); }
+  assert.equal(updatesOf(db, "proposal_payout_lines").length, 0);
+  assert.equal(d.settled.length, 0);
+});
+
+test("payout_record_manual: a hash already used by another task's line is TX_USED", async () => {
+  const T2 = "77777777-7777-4777-8777-777777777777";
+  const other = taskLine({ id: "88888888-8888-4888-8888-888888888888", reference_id: T2, status: "bestaetigt", tx_hash: TX });
+  const db = fakeDb(taskSeed([taskLine(), feeLineRow(), other]));
+  let verified = 0;
+  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return true; } }), ATTESTER,
+    "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
+  assert.equal(verified, 0);
+  assert.equal(db.tables.proposal_payout_lines[0].status, "geplant");
+});
+
+test("payout_record_manual: a 23505 on the fee line (old per-tx index) still settles the reward; fee not recorded", async () => {
+  const db = fakeDb(taskSeed([taskLine(), feeLineRow()]), {
+    updateErrorWhen: (table, eqs) => (table === "proposal_payout_lines" && eqs.id === F_ID
+      ? { message: "duplicate key value violates unique constraint \"proposal_payout_lines_manual_tx_key\"", code: "23505" } : null),
+  });
+  const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }, { to: PLATFORM, amount: "0.25" }]) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: false, feeOpen: true });
+  assert.equal(db.tables.proposal_payout_lines[0].status, "gesendet");
+  assert.equal(db.tables.proposal_payout_lines[1].status, "geplant");
+  assert.deepEqual(d.settled.map((l) => l.id), [L_ID]);
+});
+
+test("payout_record_manual: a platform line of a budget (proposal reference) is not recordable by hand", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [feeLineRow({ reference_type: "proposal", reference_id: P_ID })] }));
+  const r = await handleVorhabenAction(deps(db), ATTESTER, "payout_record_manual", { lineId: F_ID, txHash: TX });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "BAD_LINE");
 });
 
 test("task_create bounds the reward at 9.999.999,99", async () => {

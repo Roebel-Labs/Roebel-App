@@ -89,7 +89,7 @@ export async function syncProposal(deps: SyncDeps, p: ProposalRow): Promise<Sync
       const names = await displayNames(db, tasks.map((t) => t.assignee_wallet));
       for (const t of tasks) {
         await insertLines(db, contract.id, p.id, planTaskLines(
-          { taskId: t.id, wallet: t.assignee_wallet, label: names.get(t.assignee_wallet.toLowerCase()) ?? "Unbekannt", amount: String(t.reward_amount), asset: t.reward_asset }, fee));
+          { taskId: t.id, wallet: t.assignee_wallet, label: names.get(t.assignee_wallet.toLowerCase()) ?? "Unbekannt", amount: String(t.reward_amount), asset: t.reward_asset }, fee, settings.taskPayoutRail));
       }
     }
   }

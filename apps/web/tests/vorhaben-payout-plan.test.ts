@@ -17,8 +17,21 @@ test("wahlhelfer: 10 Münzen + 0.5 Münzen fee on the funder rail", () => {
 });
 
 test("task: 5 EURe + 0.25 EURe fee, both on the Safe rail", () => {
-  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURe" }, fee);
+  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURe" }, fee, "safe_eure");
   assert.deepEqual(lines.map((l) => [l.role, l.amount, l.rail]), [["aufgabe", "5", "safe_eure"], ["plattform", "0.25", "safe_eure"]]);
+});
+
+test("task: task_payout_rail manual_safe puts the reward AND its fee on manual_safe (EURe)", () => {
+  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURe" }, fee, "manual_safe");
+  assert.deepEqual(lines.map((l) => [l.role, l.amount, l.asset, l.rail, l.recipient_wallet, l.reference_type, l.reference_id]), [
+    ["aufgabe", "5", "EURe", "manual_safe", "0xbb", "task", "t1"],
+    ["plattform", "0.25", "EURe", "manual_safe", fee.platformSafe, "task", "t1"],
+  ]);
+});
+
+test("task: a non-EURe reward keeps its own rail (manual payouts are verified as EURe only)", () => {
+  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURC" }, fee, "manual_safe");
+  assert.deepEqual(lines.map((l) => l.rail), ["safe_eurc_base", "safe_eurc_base"]);
 });
 
 test("budget: only the manual Safe line in EURe; no fee before the transfer is confirmed", () => {
@@ -40,7 +53,7 @@ test("budget fee: zero bps produces no line", () => {
 });
 
 test("zero fee produces no platform line", () => {
-  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURe" }, { ...fee, bps: 0 });
+  const lines = planTaskLines({ taskId: "t1", wallet: "0xbb", label: "Ben", amount: "5", asset: "EURe" }, { ...fee, bps: 0 }, "manual_safe");
   assert.equal(lines.length, 1);
 });
 
