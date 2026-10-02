@@ -235,6 +235,22 @@ test("task_create rejects more than 2 decimals; a valid create returns id + stat
   if (!r3.ok) assert.equal(r3.code, "FORBIDDEN");
 });
 
+test("task_create accepts a client-chosen task id (person-signed create) and rejects a malformed one", async () => {
+  const base = { proposalId: P_ID, title: "Überweisung", criteria: ["Beleg hochgeladen"], rewardAmount: "5", rewardAsset: "EURe" };
+  const NEW_ID = "55555555-5555-4555-8555-555555555555";
+  const db = fakeDb(seed({ proposal_tasks: [] }));
+  const r = await handleVorhabenAction(deps(db), PROPOSER, "task_create", { ...base, taskId: NEW_ID });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal((r.data as { id: string }).id, NEW_ID);
+  assert.equal(db.tables.proposal_tasks[0].id, NEW_ID);
+
+  const db2 = fakeDb(seed({ proposal_tasks: [] }));
+  const r2 = await handleVorhabenAction(deps(db2), PROPOSER, "task_create", { ...base, taskId: "nope" });
+  assert.equal(r2.ok, false);
+  if (!r2.ok) assert.equal(r2.status, 400);
+  assert.equal(db2.ops.length, 0);
+});
+
 test("a lost conditional status update returns CONFLICT and writes no activity", async () => {
   const db = fakeDb(seed({ proposal_tasks: [task({ status: "vergeben", assignee_wallet: APPLICANT })] }), { casMiss: ["proposal_tasks"] });
   const r = await handleVorhabenAction(deps(db), APPLICANT, "task_start", { taskId: T_ID });

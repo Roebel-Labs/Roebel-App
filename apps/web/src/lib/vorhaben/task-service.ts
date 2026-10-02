@@ -106,6 +106,9 @@ export async function handleVorhabenAction(
 
 async function createTask(deps: TaskDeps, wallet: string, p: Record<string, unknown>): Promise<TaskResult> {
   const proposalId = uuid(p.proposalId);
+  // Optional client-chosen id: a person-signed task_created event must name its task address before the row exists.
+  const presetId = p.taskId === undefined || p.taskId === null ? null : uuid(p.taskId);
+  if ((p.taskId !== undefined && p.taskId !== null) && !presetId) return bad("Die Aufgaben-ID ist ungültig.");
   const title = text(p.title, 140, 3);
   const description = text(p.description, 4000);
   if (!proposalId) return bad("Vorschlag fehlt.");
@@ -139,10 +142,12 @@ async function createTask(deps: TaskDeps, wallet: string, p: Record<string, unkn
   }
 
   const ins = await deps.db.from("proposal_tasks").insert({
+    ...(presetId ? { id: presetId } : {}),
     proposal_id: proposalId, title, description,
     acceptance_criteria: criteria.map((t, i) => ({ id: `k${i + 1}`, text: t, done: false })),
     reward_amount: amount, reward_asset: "EURe", deadline, status: "offen", created_by_wallet: wallet,
   }).select("id").single();
+  if (presetId && (ins.error as { code?: string } | null)?.code === "23505") return fail(409, "CONFLICT", "Diese Aufgabe gibt es schon.");
   check(ins, "task insert");
   const id = (ins.data as { id: string } | null)?.id;
   if (!id) throw new Error("task insert returned no id");

@@ -679,6 +679,12 @@ importers:
       '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../packages/miniapp-sdk
+      '@netizen-labs/nostr':
+        specifier: workspace:*
+        version: link:../../packages/nostr
+      '@netizen-labs/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@netizen-labs/record-client':
         specifier: workspace:*
         version: link:../../packages/record-client

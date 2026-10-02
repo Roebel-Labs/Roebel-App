@@ -24,7 +24,10 @@ const nextConfig = {
   // @netizen-labs/workspace happens to be transpiled today even without being
   // listed — but only as a side effect of this array being non-empty for an
   // unrelated package. Naming it removes that dependency on a coincidence.
-  transpilePackages: ["@netizen-labs/miniapp-sdk", "@netizen-labs/workspace", "@netizen-labs/record-client"],
+  transpilePackages: [
+    "@netizen-labs/miniapp-sdk", "@netizen-labs/workspace", "@netizen-labs/record-client",
+    "@netizen-labs/nostr", "@netizen-labs/protocol",
+  ],
   // Keep heavy server-only packages OUT of the webpack bundle (loaded from
   // node_modules at runtime instead). @safe-global/protocol-kit pulls in
   // @safe-global/safe-deployments — multi-MB of all-chain Safe contract JSON —
@@ -78,6 +81,12 @@ const nextConfig = {
     // optimizations alone no longer cover. If OOM recurs, enable Vercel Enhanced
     // Builds (larger machine) — code levers are exhausted at this point.
     config.parallelism = 1;
+    // @netizen-labs/protocol is ESM TS source with `.js` import suffixes
+    // (`./vorhaben.js` → vorhaben.ts); let webpack map them to the TS files.
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
     return config;
   },
   async rewrites() {
