@@ -166,9 +166,35 @@ async function publishTransitions(deps: OutboxDeps, row: OutboxRow, proposal: Ro
   return { count, complete: true };
 }
 
+const hasSeq = (row: OutboxRow): row is OutboxRow & { seq: number } => Number.isSafeInteger(row.seq) && (row.seq as number) >= 1;
+
+/**
+ * Within one object, rows go out in `seq` order, not `id` order: the id comes from nextval at insert, the seq from
+ * the trigger under the per-object advisory lock afterwards, so two concurrent inserts can get them inverted.
+ * Each object keeps the batch positions its rows had; only which of its rows sits in which slot changes.
+ * Rows without a seq sort last within their object (they fail `seq_missing`).
+ */
+export function orderBySeq(rows: OutboxRow[]): OutboxRow[] {
+  const key = (r: OutboxRow) => `${r.object_type}:${r.object_id}`;
+  const rank = (r: OutboxRow) => (hasSeq(r) ? r.seq : Number.MAX_SAFE_INTEGER);
+  const groups = new Map<string, OutboxRow[]>();
+  for (const r of rows) {
+    const g = groups.get(key(r));
+    if (g) g.push(r); else groups.set(key(r), [r]);
+  }
+  for (const g of groups.values()) g.sort((a, b) => rank(a) - rank(b) || Number(a.id) - Number(b.id));
+  const cursor = new Map<string, number>();
+  return rows.map((r) => {
+    const k = key(r);
+    const i = cursor.get(k) ?? 0;
+    cursor.set(k, i + 1);
+    return groups.get(k)![i];
+  });
+}
+
 export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainSummary> {
   const summary: DrainSummary = { published: 0, failed: 0, waiting: 0, transitions: 0 };
-  const rows = (await deps.fetchRows("nostr_outbox", `select=*&published_at=is.null&order=id.asc&limit=${batch}`)) as unknown as OutboxRow[];
+  const rows = orderBySeq((await deps.fetchRows("nostr_outbox", `select=*&published_at=is.null&order=id.asc&limit=${batch}`)) as unknown as OutboxRow[]);
   if (!rows.length) return summary;
 
   const proposalIds = [...new Set(rows.map((r) => r.proposal_id).filter((id) => typeof id === "string" && SAFE_ID.test(id)))];
@@ -202,6 +228,20 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     const proposal = proposals.get(String(row.proposal_id));
     if (!proposal) { await fail(row, "proposal_missing"); continue; }
 
+    // The chain link is the row with seq - 1 on the same object, never "the last one published by id" (see orderBySeq).
+    // A row whose predecessor is not on the record yet waits. Rows without a seq skip this and fail seq_missing below.
+    let prior: string | null = null;
+    if (hasSeq(row) && row.seq > 1) {
+      const pred = (await deps.fetchRows(
+        "nostr_outbox",
+        `select=event_id,published_at&object_type=eq.${row.object_type}&object_id=eq.${row.object_id}&seq=eq.${row.seq - 1}&limit=1`,
+      ))[0];
+      if (!pred) { await fail(row, "predecessor_missing"); continue; }
+      if (!pred.published_at) { summary.waiting += 1; continue; }
+      if (typeof pred.event_id !== "string") { await fail(row, "predecessor_event_missing"); continue; }
+      prior = pred.event_id;
+    }
+
     let event = row.signed_event as NostrEvent | null;
     if (row.person_signed === true) {
       // Person-signed: the town key never signs this row. Relayed verbatim once the API attached the event.
@@ -217,11 +257,6 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
       if (!validPersonEvent(event, row.seq)) { await fail(row, "person_event_invalid"); continue; }
       if (row.event_id && row.event_id !== event.id) { await fail(row, "person_event_id_mismatch"); continue; }
     } else if (!event) {
-      const priorRows = await deps.fetchRows(
-        "nostr_outbox",
-        `select=event_id&object_type=eq.${row.object_type}&object_id=eq.${row.object_id}&published_at=not.is.null&order=id.desc&limit=1`,
-      );
-      const prior = typeof priorRows[0]?.event_id === "string" ? (priorRows[0].event_id as string) : null;
       const spec = actionToSpec(row, {
         townPubkey: deps.townPubkey,
         proposalKey: String(proposal.proposal_id ?? ""),
@@ -229,7 +264,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
         prior,
         now: deps.now(),
       });
-      if (!spec) { await fail(row, Number.isSafeInteger(row.seq) && (row.seq as number) >= 1 ? "unmappable" : "seq_missing"); continue; }
+      if (!spec) { await fail(row, hasSeq(row) ? "unmappable" : "seq_missing"); continue; }
       const signed = deps.sign(spec);
       let stored: Row | undefined;
       try {

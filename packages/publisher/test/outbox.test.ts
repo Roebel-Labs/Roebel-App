@@ -153,7 +153,7 @@ describe("drainOutbox", () => {
   it("keeps strict per-object order: a failed row holds back later rows on the same object", async () => {
     const tables = baseTables([
       outbox({ id: 1, action: "task_created", from_status: null, to_status: "offen" }),
-      outbox({ id: 2 }),
+      outbox({ id: 2, seq: 2 }),
     ]);
     const h = harness(tables, () => true);
     const first = await drainOutbox(h.deps);
@@ -231,7 +231,7 @@ describe("drainOutbox", () => {
     assert.deepEqual(tables.nostr_stage_ledger.map((r) => r.nsp12_stage), ["beschlussvorlage", "beschlossen"]);
     assert.equal(tables.nostr_stage_ledger[1].event_id, after2101[2].id);
 
-    tables.nostr_outbox.push(outbox({ id: 2, object_type: "proposal", object_id: P_UUID, action: "stage_changed", from_status: "in_umsetzung", to_status: "umgesetzt", actor_role: "system" }));
+    tables.nostr_outbox.push(outbox({ id: 2, seq: 2, object_type: "proposal", object_id: P_UUID, action: "stage_changed", from_status: "in_umsetzung", to_status: "umgesetzt", actor_role: "system" }));
     const before = h.published.length;
     const s2 = await drainOutbox(h.deps);
     assert.equal(s2.transitions, 1);
@@ -390,7 +390,7 @@ describe("fix round 1", () => {
   });
 
   it("logs an ALARM when more than 50 rows wait in one pass", async () => {
-    const rows = Array.from({ length: 52 }, (_, i) => outbox({ id: i + 1 }));
+    const rows = Array.from({ length: 52 }, (_, i) => outbox({ id: i + 1, seq: i + 1 }));
     const h = harness(baseTables(rows), () => true);
     const s = await drainOutbox(h.deps);
     assert.equal(s.waiting, 51);
@@ -543,5 +543,66 @@ describe("fix round 1", () => {
       await drainOutbox(h.deps);
       assert.equal(h.logs.filter((l) => l.includes("WARNING")).length, 1);
     });
+  });
+});
+
+describe("fix round 2: seq order (M1)", () => {
+  it("publishes in seq order when ids are inverted and chains prior to seq - 1", async () => {
+    // Concurrent inserts: id 1 got seq 2, id 2 got seq 1.
+    const tables = baseTables([
+      outbox({ id: 1, seq: 2 }),
+      outbox({ id: 2, seq: 1, action: "task_created", from_status: null, to_status: "offen" }),
+    ]);
+    const h = harness(tables);
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.published, 2);
+    const [first, second] = h.published;
+    assert.equal(tag(first, "seq"), "1");
+    assert.equal(tag(first, "prior"), undefined);
+    assert.equal(tag(second, "seq"), "2");
+    assert.equal(tag(second, "prior"), first.id);
+  });
+
+  it("chains to seq - 1, not to the last row published by id", async () => {
+    const published = "a".repeat(64);
+    const later = "b".repeat(64);
+    const tables = baseTables([
+      outbox({ id: 5, seq: 1, published_at: "2026-10-01T10:00:00+00:00", event_id: published }),
+      outbox({ id: 9, seq: 3, published_at: "2026-10-01T10:05:00+00:00", event_id: later }),
+      outbox({ id: 7, seq: 2 }),
+    ]);
+    const h = harness(tables);
+    await drainOutbox(h.deps);
+    assert.equal(h.published.length, 1);
+    assert.equal(tag(h.published[0], "prior"), published);
+  });
+
+  it("waits (no attempt) while the seq - 1 predecessor is unpublished outside the batch", async () => {
+    const tables = baseTables([outbox({ id: 1, seq: 2 }), outbox({ id: 2, seq: 1 })]);
+    const h = harness(tables);
+    // Batch of one: only id 1 (seq 2) is fetched; its predecessor is not on the record.
+    const r = await drainOutbox(h.deps, 1);
+    assert.equal(r.waiting, 1);
+    assert.equal(r.failed, 0);
+    assert.equal(h.published.length, 0);
+    assert.equal(tables.nostr_outbox[0].attempts, 0);
+    assert.equal(tables.nostr_outbox[0].signed_event, null);
+  });
+
+  it("fails predecessor_missing for a gap in the chain", async () => {
+    const tables = baseTables([outbox({ id: 1, seq: 3 })]);
+    const h = harness(tables);
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.failed, 1);
+    assert.equal(tables.nostr_outbox[0].last_error, "predecessor_missing");
+  });
+
+  it("keeps seq_missing for pre-migration rows without seq", async () => {
+    const tables = baseTables([outbox({ id: 1, seq: undefined }), outbox({ id: 2, seq: null })]);
+    const h = harness(tables);
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.failed, 1);
+    assert.equal(r.waiting, 1);
+    assert.equal(tables.nostr_outbox[0].last_error, "seq_missing");
   });
 });
