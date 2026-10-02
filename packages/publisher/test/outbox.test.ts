@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildEvent, deriveOrgIdentity, verifyEvent, type NostrEvent, type OrgIdentity } from "@netizen-labs/nostr";
-import { safeParseAction, safeParseTransition } from "@netizen-labs/protocol";
+import { buildEvent, deriveOrgIdentity, getPublicKeyHex, verifyEvent, type NostrEvent, type OrgIdentity } from "@netizen-labs/nostr";
+import { headAddress, safeParseAction, safeParseTransition, taskAddress } from "@netizen-labs/protocol";
 import { drainOutbox, resolvePubkeys, type OutboxDeps } from "../src/outbox.js";
 import { buildSpecs, publishOnce, signSpec } from "../src/sync.js";
 import type { PublishSpec } from "../src/mappers.js";
@@ -116,6 +116,18 @@ function harness(tables: Tables, failIf: (ev: NostrEvent) => boolean = () => fal
 }
 
 const tag = (ev: NostrEvent, name: string) => ev.tags.find((t) => t[0] === name)?.[1];
+
+/** A person-signed 2101 that matches outbox({}) (task_assigned on T1, seq 1) under TOWN; `over` replaces tags by name. */
+function buildPersonEvent(sk: Uint8Array, over: Record<string, string[][]> = {}): NostrEvent {
+  const pk = getPublicKeyHex(sk);
+  const base: Record<string, string[][]> = {
+    a: [["a", taskAddress(TOWN, T1), "", "object"], ["a", headAddress(TOWN, KEY), "", "proposal"]],
+    action: [["action", "task_assigned"]], from: [["from", "offen"]], to: [["to", "vergeben"]],
+    p: [["p", pk, "", "proposer"]], role: [["role", "proposer"]], seq: [["seq", "1"]], occurred_at: [["occurred_at", String(NOW - 5)]],
+  };
+  const tags = Object.entries({ ...base, ...over }).flatMap(([, v]) => v);
+  return buildEvent(sk, 2101, "", { createdAt: NOW - 5, tags });
+}
 
 describe("drainOutbox", () => {
   it("records seq_missing for a row without a valid seq", async () => {
@@ -414,7 +426,7 @@ describe("fix round 1", () => {
   });
   describe("person-signed rows", () => {
     const sk = new Uint8Array(32).fill(7);
-    const personEvent = () => buildEvent(sk, 2101, "", { createdAt: NOW - 5, tags: [["seq", "1"]] });
+    const personEvent = () => buildPersonEvent(sk);
 
     it("waits without signing or attempts until the API attaches the person's event, then relays it verbatim", async () => {
       const tables = baseTables([outbox({ id: 1, person_signed: true, occurred_at: new Date((NOW - 60) * 1000).toISOString() })]);
@@ -482,8 +494,8 @@ describe("fix round 1", () => {
     });
 
     it("rejects a person event of the wrong kind or with the wrong seq", async () => {
-      const wrongKind = buildEvent(sk, 1, "", { createdAt: NOW - 5, tags: [["seq", "1"]] });
-      const wrongSeq = buildEvent(sk, 2101, "", { createdAt: NOW - 5, tags: [["seq", "2"]] });
+      const wrongKind = buildEvent(sk, 1, "", { createdAt: NOW - 5, tags: personEvent().tags });
+      const wrongSeq = buildPersonEvent(sk, { seq: [["seq", "2"]] });
       for (const ev of [wrongKind, wrongSeq]) {
         const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id })]);
         const h = harness(tables);
@@ -604,5 +616,82 @@ describe("fix round 2: seq order (M1)", () => {
     assert.equal(r.failed, 1);
     assert.equal(r.waiting, 1);
     assert.equal(tables.nostr_outbox[0].last_error, "seq_missing");
+  });
+});
+
+describe("fix round 2: person events must describe their row (I2)", () => {
+  const sk = new Uint8Array(32).fill(9);
+  const OTHER_TOWN = "f".repeat(64);
+  const cases: Array<[string, Record<string, string[][]>]> = [
+    ["object address under another town key", { a: [["a", taskAddress(OTHER_TOWN, T1), "", "object"], ["a", headAddress(TOWN, KEY), "", "proposal"]] }],
+    ["proposal address under another town key", { a: [["a", taskAddress(TOWN, T1), "", "object"], ["a", headAddress(OTHER_TOWN, KEY), "", "proposal"]] }],
+    ["another object", { a: [["a", taskAddress(TOWN, T2), "", "object"], ["a", headAddress(TOWN, KEY), "", "proposal"]] }],
+    ["action", { action: [["action", "task_cancelled"]] }],
+    ["to", { to: [["to", "abgebrochen"]] }],
+    ["first p tag", { p: [["p", ACTOR_PK, "", "proposer"], ["p", getPublicKeyHex(sk), "", "proposer"]] }],
+  ];
+  for (const [name, over] of cases) {
+    it(`does not relay a person event with a mismatched ${name}; the town key signs the same seq`, async () => {
+      const ev = buildPersonEvent(sk, over);
+      const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id })]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.published, 1);
+      assert.equal(h.published.length, 1);
+      assert.notEqual(h.published[0].id, ev.id);
+      assert.equal(h.published[0].pubkey, TOWN);
+      assert.equal(tag(h.published[0], "seq"), "1");
+      const row = tables.nostr_outbox[0];
+      assert.equal(row.person_signed, false);
+      assert.equal(row.event_id, h.published[0].id);
+      assert.ok(row.published_at);
+      assert.ok(h.logs.some((l) => l.startsWith("RELEASED nostr_outbox 1") && l.includes("person_event_mismatch")));
+    });
+  }
+
+  it("relays a matching person event verbatim", async () => {
+    const ev = buildPersonEvent(sk);
+    const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id })]);
+    const h = harness(tables);
+    await drainOutbox(h.deps);
+    assert.deepEqual(h.published, [ev]);
+    assert.equal(h.signs, 0);
+  });
+
+  it("releases a mismatched person event the API attached during the town store race", async () => {
+    const tables = baseTables([outbox({ id: 1 })]);
+    const h = harness(tables);
+    const ev = buildPersonEvent(sk, { action: [["action", "task_cancelled"]] });
+    const realUpdate = h.deps.updateRow;
+    let raced = false;
+    h.deps.updateRow = async (table, query, body) => {
+      if (!raced && table === "nostr_outbox" && body.signed_event) {
+        raced = true;
+        Object.assign(tables.nostr_outbox[0], { signed_event: ev, event_id: ev.id, person_signed: true });
+      }
+      return realUpdate(table, query, body);
+    };
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.published, 1);
+    assert.equal(h.published.length, 1);
+    assert.equal(h.published[0].pubkey, TOWN);
+    assert.equal(tables.nostr_outbox[0].person_signed, false);
+    assert.equal(tables.nostr_outbox[0].event_id, h.published[0].id);
+  });
+
+  it("fails without re-signing when the row changed before the release", async () => {
+    const ev = buildPersonEvent(sk, { action: [["action", "task_cancelled"]] });
+    const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id })]);
+    const h = harness(tables);
+    const realUpdate = h.deps.updateRow;
+    h.deps.updateRow = async (table, query, body) => {
+      if (body.person_signed === false) tables.nostr_outbox[0].event_id = "d".repeat(64); // someone else rewrote it
+      return realUpdate(table, query, body);
+    };
+    const r = await drainOutbox(h.deps);
+    assert.equal(r.failed, 1);
+    assert.equal(h.published.length, 0);
+    assert.equal(h.signs, 0);
+    assert.match(String(tables.nostr_outbox[0].last_error), /^person_event_mismatch/);
   });
 });

@@ -24,7 +24,7 @@ import {
   type KasseNotice, type LifecycleStage, type Stage,
 } from "@netizen-labs/protocol";
 import { TOWN_SCOPE, transitionToSpec, type PublishSpec } from "./mappers.js";
-import { actionToSpec, kasseNoticeToSpec, type OutboxRow } from "./vorhaben.js";
+import { actionAddresses, actionToSpec, kasseNoticeToSpec, type OutboxRow } from "./vorhaben.js";
 
 type Row = Record<string, unknown>;
 type FetchRows = (table: string, query: string) => Promise<Row[]>;
@@ -69,13 +69,34 @@ export async function resolvePubkeys(fetchRows: FetchRows, wallets: Iterable<unk
   return out;
 }
 
-/** A stored person event is relayable only if it verifies and is the 2101 for this row's seq. */
+/** A stored person event is well-formed only if it verifies and is a 2101 for this row's seq. */
 function validPersonEvent(event: NostrEvent, seq: unknown): boolean {
   let valid = false;
   try { valid = verifyEvent(event); } catch { valid = false; }
   if (!valid) return false;
   const seqTag = event.tags?.find((t) => t[0] === "seq")?.[1];
   return event.kind === 2101 && seqTag === String(seq);
+}
+
+/**
+ * Why a well-formed person event does not describe THIS row under THIS publisher's town key (null = it does):
+ * object and proposal `a` addresses, action, `to`, and the first `p` tag naming the signer. The API checks the same
+ * against VORHABEN_TOWN_PUBKEY; a mismatch here means that key and the node's derived town key differ, or the row moved.
+ */
+export function personEventMismatch(event: NostrEvent, row: OutboxRow, townPubkey: string, proposalKey: string): string | null {
+  const want = actionAddresses(row, townPubkey, proposalKey);
+  const marked = (marker: string) => event.tags.filter((t) => t[0] === "a" && t[3] === marker);
+  const objects = marked("object");
+  if (objects.length !== 1 || objects[0][1] !== want.object) return "object address";
+  const heads = marked("proposal");
+  if (heads.length !== 1 || heads[0][1] !== want.proposal) return "proposal address";
+  const one = (name: string) => event.tags.filter((t) => t[0] === name);
+  const action = one("action");
+  if (action.length !== 1 || action[0][1] !== row.action) return "action";
+  const to = one("to");
+  if (to.length !== 1 || to[0][1] !== row.to_status) return "to";
+  if (one("p")[0]?.[1] !== event.pubkey) return "first p tag is not the signer";
+  return null;
 }
 
 const PATH: Stage[] = ["meinungsbild", "beschlussvorlage", "beschlossen", "umgesetzt"];
@@ -219,6 +240,88 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
   };
 
   let personWarned = false;
+
+  /**
+   * Clears a person event from its row (conditional on the row still holding exactly that event, unpublished) so the
+   * town key signs the same seq instead. Honest: the action happened in the database; only who signs the record
+   * changes. Returns false when the row changed under us (then nothing was cleared).
+   */
+  const release = async (row: OutboxRow, event: NostrEvent, reason: string, detail: string): Promise<boolean> => {
+    const held = row.event_id ? `event_id=eq.${row.event_id}` : "event_id=is.null";
+    try {
+      await deps.updateRow("nostr_outbox", `id=eq.${row.id}&${held}&published_at=is.null`, { signed_event: null, event_id: null, person_signed: false, last_error: `${reason}: ${detail}` });
+      const now = (await deps.fetchRows("nostr_outbox", `select=signed_event,person_signed&id=eq.${row.id}`))[0];
+      if (!now || (now.signed_event !== null && now.signed_event !== undefined)) {
+        deps.log(`nostr_outbox ${row.id}: releasing person event ${event.id} did not take (row changed); not re-signing`);
+        return false;
+      }
+    } catch (e) {
+      deps.log(`nostr_outbox ${row.id}: releasing person event ${event.id} failed: ${errMsg(e)}`);
+      return false;
+    }
+    deps.log(`RELEASED nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id} seq ${row.seq}: person event ${event.id} by ${event.pubkey} not relayed (${reason}: ${detail}); the town key signs this seq instead`);
+    row.signed_event = null;
+    row.event_id = null;
+    row.person_signed = false;
+    return true;
+  };
+
+  type Outcome = { kind: "exit" } | { kind: "event"; event: NostrEvent } | { kind: "mismatch"; event: NostrEvent; detail: string };
+  /** The event to relay for a row: its stored/attached person event, or a freshly stored town signature. "exit" = already recorded as failed/waiting. */
+  const resolveEvent = async (row: OutboxRow, prior: string | null, proposalKey: string): Promise<Outcome> => {
+    const checkPerson = (ev: NostrEvent): Outcome => {
+      const detail = personEventMismatch(ev, row, deps.townPubkey, proposalKey);
+      return detail ? { kind: "mismatch", event: ev, detail } : { kind: "event", event: ev };
+    };
+    const event = row.signed_event as NostrEvent | null;
+    if (row.person_signed === true) {
+      // Person-signed: relayed verbatim once the API attached the event (unless released, see release()).
+      if (!event) {
+        summary.waiting += 1;
+        const at = Date.parse(row.occurred_at);
+        if (!personWarned && Number.isFinite(at) && deps.now() - at / 1000 > PERSON_WAIT_WARN_SECONDS) {
+          personWarned = true;
+          deps.log(`WARNING nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id}: person-signed event not attached after 15 minutes (age measured from occurred_at)`);
+        }
+        return { kind: "exit" };
+      }
+      if (!validPersonEvent(event, row.seq)) { await fail(row, "person_event_invalid"); return { kind: "exit" }; }
+      if (row.event_id && row.event_id !== event.id) { await fail(row, "person_event_id_mismatch"); return { kind: "exit" }; }
+      return checkPerson(event);
+    }
+    if (event) return { kind: "event", event };
+    const spec = actionToSpec(row, {
+      townPubkey: deps.townPubkey,
+      proposalKey,
+      actorPubkey: row.actor_wallet ? pubkeys.get(row.actor_wallet.toLowerCase()) ?? null : null,
+      prior,
+      now: deps.now(),
+    });
+    if (!spec) { await fail(row, hasSeq(row) ? "unmappable" : "seq_missing"); return { kind: "exit" }; }
+    const signed = deps.sign(spec);
+    let stored: Row | undefined;
+    try {
+      // Store first: the event that goes out is the one the row remembers. Conditional on signed_event IS NULL so
+      // it never overwrites a person event the API attached meanwhile; the re-read tells which one won.
+      await deps.updateRow("nostr_outbox", `id=eq.${row.id}&signed_event=is.null`, { signed_event: signed, event_id: signed.id });
+      stored = (await deps.fetchRows("nostr_outbox", `select=signed_event,event_id,person_signed,seq&id=eq.${row.id}`))[0];
+    } catch (e) {
+      summary.failed += 1;
+      deps.log(`nostr_outbox ${row.id}: storing the signed event failed, not publishing: ${errMsg(e)}`);
+      return { kind: "exit" };
+    }
+    const kept = (stored?.signed_event ?? null) as NostrEvent | null;
+    if (!kept) { await fail(row, "store_lost"); return { kind: "exit" }; }
+    if (kept.id === signed.id) return { kind: "event", event: kept };
+    // The API attached the person's event first: relay that one (same checks as a person-signed row).
+    if (stored?.person_signed !== true || !validPersonEvent(kept, row.seq)) { await fail(row, "person_event_invalid"); return { kind: "exit" }; }
+    row.person_signed = true;
+    row.signed_event = kept;
+    row.event_id = typeof stored?.event_id === "string" ? stored.event_id : null;
+    deps.log(`nostr_outbox ${row.id}: person event ${kept.id} attached before the town signature; relaying it`);
+    return checkPerson(kept);
+  };
+
   for (const row of rows) {
     const objectKey = `${row.object_type}:${row.object_id}`;
     if (blocked.has(objectKey)) { summary.waiting += 1; continue; }
@@ -242,51 +345,15 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
       prior = pred.event_id;
     }
 
-    let event = row.signed_event as NostrEvent | null;
-    if (row.person_signed === true) {
-      // Person-signed: the town key never signs this row. Relayed verbatim once the API attached the event.
-      if (!event) {
-        summary.waiting += 1;
-        const at = Date.parse(row.occurred_at);
-        if (!personWarned && Number.isFinite(at) && deps.now() - at / 1000 > PERSON_WAIT_WARN_SECONDS) {
-          personWarned = true;
-          deps.log(`WARNING nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id}: person-signed event not attached after 15 minutes (age measured from occurred_at)`);
-        }
-        continue;
-      }
-      if (!validPersonEvent(event, row.seq)) { await fail(row, "person_event_invalid"); continue; }
-      if (row.event_id && row.event_id !== event.id) { await fail(row, "person_event_id_mismatch"); continue; }
-    } else if (!event) {
-      const spec = actionToSpec(row, {
-        townPubkey: deps.townPubkey,
-        proposalKey: String(proposal.proposal_id ?? ""),
-        actorPubkey: row.actor_wallet ? pubkeys.get(row.actor_wallet.toLowerCase()) ?? null : null,
-        prior,
-        now: deps.now(),
-      });
-      if (!spec) { await fail(row, hasSeq(row) ? "unmappable" : "seq_missing"); continue; }
-      const signed = deps.sign(spec);
-      let stored: Row | undefined;
-      try {
-        // Store first: the event that goes out is the one the row remembers. Conditional on signed_event IS NULL so
-        // it never overwrites a person event the API attached meanwhile; the re-read tells which one won.
-        await deps.updateRow("nostr_outbox", `id=eq.${row.id}&signed_event=is.null`, { signed_event: signed, event_id: signed.id });
-        stored = (await deps.fetchRows("nostr_outbox", `select=signed_event,event_id,person_signed,seq&id=eq.${row.id}`))[0];
-      } catch (e) {
-        summary.failed += 1;
-        deps.log(`nostr_outbox ${row.id}: storing the signed event failed, not publishing: ${errMsg(e)}`);
-        continue;
-      }
-      const kept = (stored?.signed_event ?? null) as NostrEvent | null;
-      if (!kept) { await fail(row, "store_lost"); continue; }
-      if (kept.id !== signed.id) {
-        // The API attached the person's event first: relay that one (same checks as a person-signed row).
-        if (stored?.person_signed !== true || !validPersonEvent(kept, row.seq)) { await fail(row, "person_event_invalid"); continue; }
-        row.person_signed = true;
-        deps.log(`nostr_outbox ${row.id}: person event ${kept.id} attached before the town signature; relaying it`);
-      }
-      event = kept;
+    const proposalKey = String(proposal.proposal_id ?? "");
+    let outcome = await resolveEvent(row, prior, proposalKey);
+    if (outcome.kind === "mismatch") {
+      if (!(await release(row, outcome.event, "person_event_mismatch", outcome.detail))) { await fail(row, `person_event_mismatch: ${outcome.detail}`); continue; }
+      outcome = await resolveEvent(row, prior, proposalKey);
+      if (outcome.kind === "mismatch") { await fail(row, `person_event_mismatch: ${outcome.detail}`); continue; }
     }
+    if (outcome.kind === "exit") continue;
+    const event = outcome.event;
 
     const res = await send(deps, event);
     if (!res.ok) { await fail(row, res.message || "relay rejected"); continue; }

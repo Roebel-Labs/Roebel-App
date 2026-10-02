@@ -62,14 +62,18 @@ const unix = (iso: unknown): number | null => {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 };
 
-function objectAddress(row: OutboxRow, ctx: VorhabenContext): string {
+/** The object and proposal-head `a` addresses a 2101 for this row carries under the given town key. */
+export function actionAddresses(row: Pick<OutboxRow, "object_type" | "object_id">, townPubkey: string, proposalKey: string): { object: string; proposal: string } {
+  const proposal = headAddress(townPubkey, proposalKey);
   switch (row.object_type) {
-    case "task": return taskAddress(ctx.townPubkey, row.object_id);
-    case "payout": return payoutLineAddress(ctx.townPubkey, row.object_id);
-    case "tally": return pollAddress(ctx.townPubkey, ctx.proposalKey);
-    case "proposal": return headAddress(ctx.townPubkey, ctx.proposalKey);
+    case "task": return { object: taskAddress(townPubkey, row.object_id), proposal };
+    case "payout": return { object: payoutLineAddress(townPubkey, row.object_id), proposal };
+    case "tally": return { object: pollAddress(townPubkey, proposalKey), proposal };
+    case "proposal": return { object: proposal, proposal };
   }
 }
+
+const objectAddress = (row: OutboxRow, ctx: VorhabenContext): string => actionAddresses(row, ctx.townPubkey, ctx.proposalKey).object;
 
 /**
  * Free-text policy (spec §2.2): the record carries a fixed German line per action,

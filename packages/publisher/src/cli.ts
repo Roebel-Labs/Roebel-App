@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { deriveOrgIdentity } from "@netizen-labs/nostr";
 import { backfeedOnce } from "./backfeed.js";
+import { TOWN_SCOPE } from "./mappers.js";
 import { publishOnce, type DatasetName, type LedgerRow } from "./sync.js";
 
 /**
@@ -53,6 +55,10 @@ async function main(): Promise<void> {
   };
 
   console.log(`publisher for "${nodeId}" -> ${relayUrl}; datasets: ${datasets.join(", ")}`);
+  if (datasets.includes("vorhaben")) {
+    // Must equal VORHABEN_TOWN_PUBKEY on Vercel, or every person-signed action is released to a town signature (person_event_mismatch).
+    console.log(`town pubkey (hex): ${deriveOrgIdentity(nodeSecret, nodeId, TOWN_SCOPE).publicKey}`);
+  }
 
   const governor = process.env.PROPOSAL_GOVERNOR;
 
