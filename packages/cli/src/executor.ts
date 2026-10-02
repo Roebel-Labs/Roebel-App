@@ -26,6 +26,11 @@ export const RSYNC_DELETE_EXCLUDES = [
   // deploy overwrites it with the empty rendered stub and revokes write
   // access for the whole town until the next sync pass.
   "--exclude=strfry-policy/members.txt",
+  // Same for the citizens list (relay-sync CITIZENS_PATH) and the publisher's
+  // own signing keys: both are written on the box, and the write policy reads
+  // them — wiping either blocks citizen-only kinds / the community record.
+  "--exclude=strfry-policy/citizens.txt",
+  "--exclude=strfry-policy/publisher-keys.txt",
   // The monetization opt-out list is also GENERATED / box-edited STATE — an
   // author's consent to be excluded from paid access, set via the admin
   // console, not bundle content. Without this exclude, every deploy wipes
