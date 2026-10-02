@@ -352,3 +352,55 @@ describe("publishOnce vorhaben", () => {
     assert.ok(logs.some((l) => l.includes("outbox drain failed: boom")));
   });
 });
+
+describe("fix round 1", () => {
+  it("re-produces the identical 2100 id when the ledger write failed after relay OK", async () => {
+    const tables = baseTables([
+      outbox({ id: 1, object_type: "proposal", object_id: P_UUID, action: "stage_changed", from_status: "auszaehlung", to_status: "angenommen", actor_role: "system" }),
+    ]);
+    const h = harness(tables);
+    let failLedger = true;
+    const insert = h.deps.insertRow;
+    h.deps.insertRow = async (t, b) => { if (t === "nostr_stage_ledger" && failLedger) throw new Error("db down"); return insert(t, b); };
+    let clock = NOW;
+    h.deps.now = () => clock;
+    await drainOutbox(h.deps);
+    const first = h.published.filter((e) => e.kind === 2100);
+    assert.equal(first.length, 1);
+    assert.equal(tables.nostr_stage_ledger.length, 0);
+    assert.ok(h.logs.some((l) => l.includes("ALARM nostr_stage_ledger")));
+
+    failLedger = false;
+    clock = NOW + 600;
+    await drainOutbox(h.deps);
+    const again = h.published.filter((e) => e.kind === 2100 && tag(e, "to") === "beschlussvorlage");
+    assert.equal(again.length, 2);
+    assert.equal(again[1].id, again[0].id);
+    assert.deepEqual(tables.nostr_stage_ledger.map((r) => r.nsp12_stage), ["beschlussvorlage", "beschlossen"]);
+    assert.ok(tables.nostr_outbox[0].published_at);
+  });
+
+  it("logs an ALARM when more than 50 rows wait in one pass", async () => {
+    const rows = Array.from({ length: 52 }, (_, i) => outbox({ id: i + 1 }));
+    const h = harness(baseTables(rows), () => true);
+    const s = await drainOutbox(h.deps);
+    assert.equal(s.waiting, 51);
+    assert.ok(h.logs.some((l) => l.includes("ALARM") && l.includes("51 rows waiting")));
+  });
+
+  it("isolates a Vorhaben load failure: other datasets build, no proposal heads", async () => {
+    const tables: Tables = {
+      accounts: [{ id: "11111111-1111-1111-1111-111111111111", account_type: "organisation", name: "Hafenverein", slug: "hafenverein", updated_at: "2026-07-28T12:00:00+00:00" }],
+      events: [{ id: "ev-1", account_id: "11111111-1111-1111-1111-111111111111", title: "Seefest", date: "2026-08-14", time: "19:30:00", status: "approved", updated_at: "2026-07-30T10:00:00+00:00" }],
+      proposals: [{ id: P_UUID, proposal_id: KEY, title: "Vereinsbus", vorhaben_enabled: true, updated_at: "2026-09-01T00:00:00+00:00" }],
+      nostr_identities: [], account_owners: [],
+    };
+    const db = fakeDb(tables);
+    const logs: string[] = [];
+    const fetchRows = async (t: string, q: string) => { if (t === "proposal_tasks") throw new Error("proposal_tasks: PostgREST 400"); return db.fetchRows(t, q); };
+    const specs = await buildSpecs({ datasets: ["events", "proposals", "vorhaben"], fetchRows, nodeId: NODE, nodeSecret: SECRET, governor: "100:0x5F5e", log: (m) => logs.push(m) });
+    assert.ok(specs.some((s) => s.kind === 31923));
+    assert.ok(!specs.some((s) => s.kind === 32100));
+    assert.ok(logs.some((l) => l.includes("vorhaben state load failed")));
+  });
+});

@@ -110,15 +110,23 @@ export interface PublishSummary {
 
 /** Build the full spec list for one pass. Exposed for tests. */
 export async function buildSpecs(
-  deps: Pick<PublisherDeps, "datasets" | "fetchRows" | "nodeId" | "governor"> & { nodeSecret?: string },
+  deps: Pick<PublisherDeps, "datasets" | "fetchRows" | "nodeId" | "governor" | "log"> & { nodeSecret?: string },
 ): Promise<PublishSpec[]> {
   const specs: PublishSpec[] = [];
   // Vorhaben state first: the proposals dataset needs its task ids and freshness for the head tags.
   let vorhaben: VorhabenState | null = null;
+  let vorhabenFailed = false;
   if (deps.datasets.includes("vorhaben")) {
     if (!deps.nodeSecret) throw new Error("datasets includes 'vorhaben' but no node secret was given to derive the town key");
-    vorhaben = await loadVorhaben(deps.fetchRows, deriveOrgIdentity(deps.nodeSecret, deps.nodeId, TOWN_SCOPE).publicKey);
-    specs.push(...vorhaben.specs);
+    try {
+      vorhaben = await loadVorhaben(deps.fetchRows, deriveOrgIdentity(deps.nodeSecret, deps.nodeId, TOWN_SCOPE).publicKey);
+      specs.push(...vorhaben.specs);
+    } catch (error) {
+      // Isolated: the other datasets still publish. The proposal heads are
+      // skipped too — a tag-less head would replace the tagged one on the relay.
+      vorhabenFailed = true;
+      deps.log?.(`vorhaben state load failed, skipping vorhaben + proposals this pass: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   const wantsOrgs = deps.datasets.includes("orgs");
   const wantsEvents = deps.datasets.includes("events");
@@ -329,7 +337,7 @@ export async function buildSpecs(
       if (spec) specs.push(spec);
     }
   }
-  if (deps.datasets.includes("proposals")) {
+  if (deps.datasets.includes("proposals") && !vorhabenFailed) {
     if (!deps.governor) {
       // Deliberately loud: a configured dataset that silently publishes nothing is a lie.
       throw new Error("datasets includes 'proposals' but PROPOSAL_GOVERNOR is not set");

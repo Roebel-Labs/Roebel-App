@@ -43,6 +43,7 @@ export interface DrainSummary { published: number; failed: number; waiting: numb
 const WALLET = /^0x[0-9a-f]{40}$/;
 const SAFE_ID = /^[0-9A-Za-z-]+$/;
 const ALARM_AT = 10;
+const WAITING_ALARM = 50;
 
 /** Wallets → pubkey_hex of their live (unrevoked) identity binding; keys are lowercase wallets. */
 export async function resolvePubkeys(fetchRows: FetchRows, wallets: Iterable<unknown>): Promise<Map<string, string>> {
@@ -93,7 +94,7 @@ async function send(deps: OutboxDeps, ev: NostrEvent): Promise<{ ok: boolean; me
  * have yet. Notices first (a transition must cite an existing notice), then
  * the 2100s in path order. Returns how many 2100s landed and whether all did.
  */
-async function publishTransitions(deps: OutboxDeps, row: OutboxRow, proposal: Row): Promise<{ count: number; complete: boolean }> {
+async function publishTransitions(deps: OutboxDeps, row: OutboxRow, proposal: Row, at: number): Promise<{ count: number; complete: boolean }> {
   if (!(LIFECYCLE_STAGES as readonly string[]).includes(row.to_status)) return { count: 0, complete: true };
   const target = nsp12StageFor(row.to_status as LifecycleStage);
   const key = String(proposal.proposal_id ?? "");
@@ -111,7 +112,10 @@ async function publishTransitions(deps: OutboxDeps, row: OutboxRow, proposal: Ro
   }
   if (!hops.length) return { count: 0, complete: true };
 
-  const now = deps.now();
+  // Deterministic: `at` is the stage row's stored 2101 created_at, so a retry
+  // (relay OK but ledger write failed, or an OK that timed out) re-produces
+  // the identical event ids — the relay sees a duplicate, never a second hop.
+  const now = at;
   const notices: Array<{ kind: KasseNotice; txs: string[] }> = [];
   for (const h of hops) if (h.notice) notices.push({ kind: h.notice, txs: [] });
   if (hops.some((h) => h.to === "umgesetzt")) {
@@ -215,7 +219,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     if (row.action === "stage_changed") {
       let t: { count: number; complete: boolean };
       try {
-        t = await publishTransitions(deps, row, proposal);
+        t = await publishTransitions(deps, row, proposal, event.created_at);
       } catch (e) {
         t = { count: 0, complete: false };
         deps.log(`nostr_outbox ${row.id}: transitions failed: ${errMsg(e)}`);
@@ -233,6 +237,9 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     }
     summary.published += 1;
     blocked.delete(objectKey);
+  }
+  if (summary.waiting > WAITING_ALARM) {
+    deps.log(`ALARM nostr_outbox: ${summary.waiting} rows waiting behind failed objects this pass — an object may be wedged`);
   }
   if (summary.published || summary.failed || summary.waiting) {
     deps.log(`outbox: published ${summary.published}, failed ${summary.failed}, waiting ${summary.waiting}, transitions ${summary.transitions}`);
