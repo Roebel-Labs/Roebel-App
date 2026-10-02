@@ -18,15 +18,20 @@ const BINDING_FAILURE_REASONS = {
  *   1. the row is well-formed and not revoked
  *   2. the Nostr half of the binding verifies (offline Schnorr)
  *   3. the wallet half verifies via ERC-1271 (on-chain)
- *   4. the wallet currently holds a CitizenNFTv2 (on-chain)
+ *   4. the wallet currently holds a CitizenNFTv2 (on-chain) — sets `citizen`
  *
- * RPC failures are **thrown, not swallowed** — the caller aborts the whole pass
- * rather than silently treating an unreachable node as "not a Citizen" and
- * revoking half the town.
+ * `allowed` (relay membership) needs gates 1-3 only; any bound account may
+ * write. `citizen` additionally needs the NFT and gates citizen-only kinds.
+ *
+ * Binding/signature RPC failures are **thrown, not swallowed** — the caller
+ * aborts the whole pass rather than treating an unreachable node as "invalid
+ * signature" and revoking half the town. An NFT-check failure only costs that
+ * row its `citizen` flag for this pass (logged); membership is unaffected.
  */
 export async function verifyRegistryRow(
   row: RegistryRow,
   chain: ChainVerifier,
+  log: (message: string) => void = () => {},
 ): Promise<VerificationOutcome> {
   const wallet = (row.wallet_address ?? "").toLowerCase();
 
@@ -59,9 +64,12 @@ export async function verifyRegistryRow(
     return { allowed: false, wallet, reason: "wallet-signature-invalid" };
   }
 
-  if (!(await chain.holdsCitizenNft(wallet))) {
-    return { allowed: false, wallet, reason: "not-a-citizen" };
+  let citizen = false;
+  try {
+    citizen = await chain.holdsCitizenNft(wallet);
+  } catch (error) {
+    log(`  citizen check failed for ${wallet}: ${error instanceof Error ? error.message : error}`);
   }
 
-  return { allowed: true, pubkey: binding.pubkey, wallet };
+  return { allowed: true, citizen, pubkey: binding.pubkey, wallet };
 }

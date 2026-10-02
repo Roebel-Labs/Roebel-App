@@ -95,23 +95,82 @@ describe("sync pass", () => {
     assert.deepEqual(written[0].sort(), [ALICE.publicKey, BOB.publicKey].sort());
   });
 
-  it("drops a member who no longer holds the NFT — revocation needs no special case", async () => {
-    const written: string[][] = [];
+  it("lists a non-citizen as member only; citizens go to both lists", async () => {
+    const writes: Record<string, string[]> = {};
     const summary = await syncAllowList({
       fetchRegistry: async () => [rowFor(ALICE, ALICE_WALLET), rowFor(BOB, BOB_WALLET)],
       chain: {
         ...permissiveChain,
         holdsCitizenNft: async (address) => address === ALICE_WALLET,
       },
-      allowListPath: "/unused",
-      write: async (_path, pubkeys) => {
-        written.push(pubkeys);
+      allowListPath: "/members",
+      citizensPath: "/citizens",
+      write: async (path, pubkeys) => {
+        writes[path] = pubkeys;
         return true;
       },
     });
+    assert.deepEqual(writes["/members"].sort(), [ALICE.publicKey, BOB.publicKey].sort());
+    assert.deepEqual(writes["/citizens"], [ALICE.publicKey]);
+    assert.equal(summary.allowed, 2);
+    assert.equal(summary.citizens, 1);
+    assert.deepEqual(summary.rejected, []);
+  });
 
-    assert.deepEqual(written[0], [ALICE.publicKey]);
-    assert.deepEqual(summary.rejected, [{ wallet: BOB_WALLET, reason: "not-a-citizen" }]);
+  it("a revoked row is in neither list", async () => {
+    const writes: Record<string, string[]> = {};
+    const summary = await syncAllowList({
+      fetchRegistry: async () => [
+        rowFor(ALICE, ALICE_WALLET),
+        { ...rowFor(BOB, BOB_WALLET), revoked_at: "2026-07-27T10:00:00Z" },
+      ],
+      chain: permissiveChain,
+      allowListPath: "/members",
+      citizensPath: "/citizens",
+      write: async (path, pubkeys) => {
+        writes[path] = pubkeys;
+        return true;
+      },
+    });
+    assert.deepEqual(writes["/members"], [ALICE.publicKey]);
+    assert.deepEqual(writes["/citizens"], [ALICE.publicKey]);
+    assert.deepEqual(summary.rejected, [{ wallet: BOB_WALLET, reason: "revoked" }]);
+  });
+
+  it("an NFT RPC failure keeps the member, drops the citizen, and the pass continues", async () => {
+    const writes: Record<string, string[]> = {};
+    await syncAllowList({
+      fetchRegistry: async () => [rowFor(ALICE, ALICE_WALLET), rowFor(BOB, BOB_WALLET)],
+      chain: {
+        ...permissiveChain,
+        holdsCitizenNft: async (address) => {
+          if (address === BOB_WALLET) throw new Error("gnosis rpc down");
+          return true;
+        },
+      },
+      allowListPath: "/members",
+      citizensPath: "/citizens",
+      write: async (path, pubkeys) => {
+        writes[path] = pubkeys;
+        return true;
+      },
+    });
+    assert.deepEqual(writes["/members"].sort(), [ALICE.publicKey, BOB.publicKey].sort());
+    assert.deepEqual(writes["/citizens"], [ALICE.publicKey]);
+  });
+
+  it("writes the real files atomically", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "netizen-sync-"));
+    await syncAllowList({
+      fetchRegistry: async () => [rowFor(ALICE, ALICE_WALLET), rowFor(BOB, BOB_WALLET)],
+      chain: { ...permissiveChain, holdsCitizenNft: async (a) => a === ALICE_WALLET },
+      allowListPath: join(dir, "members.txt"),
+      citizensPath: join(dir, "citizens.txt"),
+    });
+    assert.equal(parseAllowList(await readFile(join(dir, "members.txt"), "utf8")).length, 2);
+    assert.deepEqual(parseAllowList(await readFile(join(dir, "citizens.txt"), "utf8")), [
+      ALICE.publicKey,
+    ]);
   });
 
   it("keeps a valid member when another row is malformed", async () => {
@@ -159,7 +218,7 @@ describe("fail-closed", () => {
         fetchRegistry: async () => [rowFor(ALICE, ALICE_WALLET), rowFor(BOB, BOB_WALLET)],
         chain: {
           ...permissiveChain,
-          holdsCitizenNft: async (address) => {
+          verifyWalletSignature: async ({ address }) => {
             if (address === BOB_WALLET) throw new Error("gnosis rpc down");
             return true;
           },

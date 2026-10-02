@@ -6,7 +6,10 @@ export interface SyncDeps {
   /** Fetch the private registry. Must THROW on failure — see the fail-closed rule. */
   fetchRegistry: () => Promise<RegistryRow[]>;
   chain: ChainVerifier;
+  /** Members list: every bound, signature-valid, non-revoked account (+ alwaysAllow). */
   allowListPath: string;
+  /** Citizens list: members that also hold a CitizenNFT. Skipped when unset. */
+  citizensPath?: string;
   log?: (message: string) => void;
   /** Injectable for tests. */
   write?: (path: string, pubkeys: string[]) => Promise<boolean>;
@@ -38,8 +41,8 @@ const HEX64 = /^[0-9a-f]{64}$/;
  * empty file and revoke write access for the entire town. A stale allow-list is a
  * far better failure than an empty one.
  *
- * Revocation is not a special case: a Citizen who no longer holds the NFT simply
- * fails verification and is absent from the next write.
+ * Revocation is not a special case: a revoked row fails verification and is absent
+ * from both lists; losing the NFT drops the key from the citizens list only.
  */
 export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
   const log = deps.log ?? (() => {});
@@ -49,12 +52,15 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
   log(`registry: ${rows.length} row(s)`);
 
   const allowed: string[] = [];
+  const citizens: string[] = [];
   const rejected: SyncSummary["rejected"] = [];
 
   for (const row of rows) {
-    const outcome = await verifyRegistryRow(row, deps.chain);
-    if (outcome.allowed) allowed.push(outcome.pubkey);
-    else rejected.push({ wallet: outcome.wallet, reason: outcome.reason });
+    const outcome = await verifyRegistryRow(row, deps.chain, log);
+    if (outcome.allowed) {
+      allowed.push(outcome.pubkey);
+      if (outcome.citizen) citizens.push(outcome.pubkey);
+    } else rejected.push({ wallet: outcome.wallet, reason: outcome.reason });
   }
 
   // Declared agent keys are unioned in AFTER verification — they are authorised by
@@ -68,9 +74,14 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
     else log(`  ignoring malformed alwaysAllow entry: ${raw}`);
   }
 
-  const changed = await write(deps.allowListPath, [...allowed, ...agentKeys]);
+  // Everything is computed before the first write, so an abort leaves both files untouched.
+  const membersChanged = await write(deps.allowListPath, [...allowed, ...agentKeys]);
+  const citizensChanged = deps.citizensPath
+    ? await write(deps.citizensPath, citizens)
+    : false;
+  const changed = membersChanged || citizensChanged;
   log(
-    `verified ${allowed.length}/${rows.length}` +
+    `verified ${allowed.length}/${rows.length}, ${citizens.length} citizen(s)` +
       (agentKeys.length ? ` (+${agentKeys.length} declared agent key(s))` : "") +
       ` — allow-list ${changed ? "updated" : "unchanged"}`,
   );
@@ -79,6 +90,7 @@ export async function syncAllowList(deps: SyncDeps): Promise<SyncSummary> {
   return {
     checked: rows.length,
     allowed: allowed.length,
+    citizens: citizens.length,
     agents: agentKeys.length,
     rejected,
     changed,

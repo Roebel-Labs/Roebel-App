@@ -32,7 +32,9 @@ async function main(): Promise<void> {
   // Default matches what `netizen render` ships as strfry-policy/members.txt and
   // mounts at /etc/strfry. The currently-live Röbel box predates that naming and
   // reads citizens.txt — point ALLOWLIST_PATH at it there until it is re-applied.
+  // members.txt = every bound account; citizens.txt (CITIZENS_PATH) = NFT holders only.
   const allowListPath = process.env.ALLOWLIST_PATH ?? "/etc/strfry/members.txt";
+  const citizensPath = process.env.CITIZENS_PATH ?? "/etc/strfry/citizens.txt";
   const intervalSeconds = Number(process.env.SYNC_INTERVAL_SECONDS ?? 300);
   const once = process.argv.includes("--once");
   // The node's own AI agents. Their Nostr key is NIP-06 derived from an agent
@@ -66,11 +68,12 @@ async function main(): Promise<void> {
         fetchRegistry: registry,
         chain,
         allowListPath,
+        citizensPath,
         alwaysAllow: [...agentPubkeys, ...extraKeys],
         log: (message) => console.log(`[${startedAt}] ${message}`),
       });
       if (summary.changed) {
-        console.log(`[${startedAt}] wrote ${summary.allowed} pubkey(s) to ${allowListPath}`);
+        console.log(`[${startedAt}] wrote ${summary.allowed} member(s) to ${allowListPath}, ${summary.citizens} citizen(s) to ${citizensPath}`);
       }
     } catch (error) {
       // Fail closed: log loudly, leave the allow-list untouched, try again next tick.

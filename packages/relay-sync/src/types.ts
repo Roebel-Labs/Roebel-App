@@ -41,16 +41,18 @@ export type RejectionReason =
   | "binding-account-mismatch"
   | "binding-statement-mismatch"
   | "binding-bad-signature"
-  | "wallet-signature-invalid"
-  | "not-a-citizen";
+  | "wallet-signature-invalid";
 
 export type VerificationOutcome =
-  | { allowed: true; pubkey: string; wallet: string }
+  | { allowed: true; citizen: boolean; pubkey: string; wallet: string }
   | { allowed: false; wallet: string; reason: RejectionReason };
 
 export interface SyncSummary {
   checked: number;
+  /** Members written to the members list. */
   allowed: number;
+  /** Members that also hold a CitizenNFT (written to the citizens list). */
+  citizens: number;
   /** Declared agent keys unioned in (manifest-authorised, not on-chain verified). */
   agents: number;
   rejected: Array<{ wallet: string; reason: RejectionReason }>;

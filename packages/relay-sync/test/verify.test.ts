@@ -37,6 +37,7 @@ describe("admitting a Citizen", () => {
   it("allows a row where both halves verify and the NFT is held", async () => {
     const outcome = await verifyRegistryRow(row(), chain());
     assert.equal(outcome.allowed, true);
+    assert.equal(outcome.allowed && outcome.citizen, true);
     assert.equal(outcome.allowed === true && outcome.pubkey, IDENTITY.publicKey);
   });
 
@@ -119,9 +120,10 @@ describe("rejecting a row", () => {
     assert.equal(outcome.allowed === false && outcome.reason, "wallet-signature-invalid");
   });
 
-  it("rejects a wallet that no longer holds a CitizenNFT — this is revocation", async () => {
+  it("admits a bound wallet without a CitizenNFT as member, not citizen", async () => {
     const outcome = await verifyRegistryRow(row(), chain({ holdsCitizenNft: async () => false }));
-    assert.equal(outcome.allowed === false && outcome.reason, "not-a-citizen");
+    assert.equal(outcome.allowed, true);
+    assert.equal(outcome.allowed && outcome.citizen, false);
   });
 });
 
@@ -140,17 +142,19 @@ describe("RPC failures", () => {
     );
   });
 
-  it("propagates an NFT-check failure instead of reporting not-a-citizen", async () => {
-    await assert.rejects(
-      verifyRegistryRow(
-        row(),
-        chain({
-          holdsCitizenNft: async () => {
-            throw new Error("rpc timeout");
-          },
-        }),
-      ),
-      /rpc timeout/,
+  it("an NFT-check failure keeps membership, drops citizen, and logs", async () => {
+    const logs: string[] = [];
+    const outcome = await verifyRegistryRow(
+      row(),
+      chain({
+        holdsCitizenNft: async () => {
+          throw new Error("rpc timeout");
+        },
+      }),
+      (m) => logs.push(m),
     );
+    assert.equal(outcome.allowed, true);
+    assert.equal(outcome.allowed && outcome.citizen, false);
+    assert.ok(logs.some((l) => /rpc timeout/.test(l)));
   });
 });
