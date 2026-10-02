@@ -5,6 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
+import { randomUUID } from 'expo-crypto';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { useGoBack } from '@/hooks/useGoBack';
@@ -35,6 +36,8 @@ export default function NewTaskScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  // One id per form: a retry after a lost response hits CONFLICT instead of creating a second task.
+  const taskIdRef = useRef(randomUUID());
   const [noAccount, setNoAccount] = useState(false);
 
   useEffect(() => {
@@ -68,11 +71,13 @@ export default function NewTaskScreen() {
       if (!proposal) { setError('Vorschlag nicht gefunden.'); return; }
       const proposalId = proposal.id;
       const payload: Record<string, unknown> = {
-        proposalId, title: t, description: description.trim(), criteria: crit, rewardAmount: amount, rewardAsset: 'EURe',
+        proposalId, taskId: taskIdRef.current, title: t, description: description.trim(), criteria: crit, rewardAmount: amount, rewardAsset: 'EURe',
       };
       if (days) payload.deadline = new Date(Date.now() + days * 86_400_000).toISOString();
       const role = account.address.toLowerCase() === proposal.proposer ? 'proposer' : 'attester';
       const r = await vorhabenAction(account, 'task_create', payload, { proposalKey, role });
+      // CONFLICT on our own id: an earlier attempt already created the task.
+      if (!r.ok && r.code === 'CONFLICT') { router.replace(`/aufgabe/${taskIdRef.current}` as any); return; }
       if (!r.ok) {
         setError(r.code === 'NETWORK_ERROR' ? 'Keine Verbindung. Bitte versuche es erneut.' : r.message);
         return;

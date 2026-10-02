@@ -279,7 +279,7 @@ export default function NostrIdentityScreen() {
   }, []);
 
   // The Bürger-NFT is NOT a step towards the identity: every account that agreed to the public record gets
-  // one. It only unlocks extra post types (forum threads), so it sits last, marked optional, and never blocks
+  // a Nostr identity. The NFT only unlocks extra post types (forum threads), so it sits last, marked optional, and never blocks
   // the progression for someone without it.
   const rightsDetail =
     hasCitizenNft === true
