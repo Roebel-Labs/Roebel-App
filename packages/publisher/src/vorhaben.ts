@@ -30,6 +30,8 @@ export interface OutboxRow {
   event_id: string | null;
   published_at: string | null;
   attempts: number;
+  /** Per-object position in the action chain (NSP-13); rows without it cannot be mapped. */
+  seq?: number | null;
 }
 
 export interface VorhabenContext {
@@ -108,6 +110,7 @@ export function actionToSpec(row: OutboxRow, ctx: VorhabenContext): PublishSpec 
   if (!HEX64.test(ctx.townPubkey) || !ctx.proposalKey || !row.to_status || !row.actor_role) return null;
   const occurred = unix(row.occurred_at);
   if (occurred === null) return null;
+  if (!Number.isSafeInteger(row.seq) || (row.seq as number) < 1) return null;
   const extra = row.extra ?? {};
   const s = (k: string) => (typeof extra[k] === "string" && (extra[k] as string).trim() !== "" ? (extra[k] as string) : null);
 
@@ -120,6 +123,7 @@ export function actionToSpec(row: OutboxRow, ctx: VorhabenContext): PublishSpec 
   tags.push(["to", row.to_status]);
   if (ctx.actorPubkey && HEX64.test(ctx.actorPubkey)) tags.push(["p", ctx.actorPubkey, "", row.actor_role]);
   tags.push(["role", row.actor_role]);
+  tags.push(["seq", String(row.seq)]);
   if (ctx.prior) {
     if (!HEX64.test(ctx.prior)) return null;
     tags.push(["prior", ctx.prior]);

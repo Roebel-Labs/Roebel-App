@@ -19,7 +19,7 @@ function row(over: Partial<OutboxRow> = {}): OutboxRow {
   return {
     id: 1, object_type: "task", object_id: "t1", proposal_id: "uuid-1", action: "task_assigned", from_status: "offen", to_status: "vergeben",
     actor_wallet: "0x" + "1".repeat(40), actor_role: "proposer", body: null, extra: {}, occurred_at: OCC,
-    signed_event: null, event_id: null, published_at: null, attempts: 0, ...over,
+    signed_event: null, event_id: null, published_at: null, attempts: 0, seq: 1, ...over,
   };
 }
 
@@ -30,6 +30,10 @@ const PROPOSAL = {
 };
 
 describe("actionToSpec", () => {
+  it("is unmappable without a positive seq", () => {
+    assert.equal(actionToSpec(row({ seq: null }), CTX), null);
+    assert.equal(actionToSpec(row({ seq: 0 }), CTX), null);
+  });
   it("builds the exact tag list for task_assigned and passes safeParseAction", () => {
     const s = actionToSpec(row(), CTX)!;
     assert.equal(s.kind, 2101);
@@ -39,7 +43,7 @@ describe("actionToSpec", () => {
     assert.equal(s.content, "Aufgabe vergeben.");
     assert.deepEqual(s.tags, [
       ["a", taskAddress(PK, "t1"), "", "object"], ["a", HEAD, "", "proposal"], ["action", "task_assigned"], ["from", "offen"], ["to", "vergeben"],
-      ["p", ACTOR, "", "proposer"], ["role", "proposer"], ["occurred_at", OCC_UNIX],
+      ["p", ACTOR, "", "proposer"], ["role", "proposer"], ["seq", "1"], ["occurred_at", OCC_UNIX],
     ]);
     assert.ok(!s.tags.some((t) => t[0] === "d"));
     assert.deepEqual(safeParseAction(sig(s)).ok, true);

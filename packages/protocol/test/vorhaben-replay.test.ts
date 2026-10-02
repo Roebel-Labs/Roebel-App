@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hashMessage, pollAddress, replayVorhaben, safeParseAction, taskAddress, verifyPayoutTx, verifyTallyConfirmation } from "../src/vorhaben.js";
+import { PERSON_ACTION_ROLES, hashMessage, isTrustedAction, payloadHash, validateActionChain, pollAddress, replayVorhaben, safeParseAction, taskAddress, verifyPayoutTx, verifyTallyConfirmation } from "../src/vorhaben.js";
 
 const PK = "a".repeat(64);
 const HEAD = `32100:${PK}:proposal:0xabc`;
 let n = 0;
+const seqs = new Map<string, number>();
 function act(object: string, action: string, from: string | null, to: string, prior?: string, extra: string[][] = []) {
   const id = (++n).toString(16).padStart(64, "0");
-  const tags = [["a", object, "", "object"], ["a", HEAD, "", "proposal"], ["action", action], ["to", to], ["role", "system"],
+  const seq = (seqs.get(object) ?? 0) + 1;
+  seqs.set(object, seq);
+  const tags = [["a", object, "", "object"], ["a", HEAD, "", "proposal"], ["action", action], ["to", to], ["role", "system"], ["seq", String(seq)],
     ["occurred_at", String(1000 + n)], ...(from ? [["from", from]] : []), ...(prior ? [["prior", prior]] : []), ...extra];
   return { id, kind: 2101, content: "", created_at: 2000 + n, tags };
 }
@@ -41,7 +44,7 @@ test("replay tracks stage_changed per head", () => {
   assert.equal(replayVorhaben([b, a]).stages.get(HEAD), "angenommen");
 });
 
-test("replay falls back to occurred_at when prior is absent", () => {
+test("replay orders by seq when prior is absent", () => {
   const T = taskAddress(PK, "t2");
   const a = act(T, "task_created", null, "offen");
   const b = act(T, "task_assigned", "offen", "vergeben");
@@ -103,7 +106,7 @@ test("verifyPayoutTx matches an ERC-1155 TransferSingle value and rejects revert
   assert.equal(await verifyPayoutTx("0x" + "5".repeat(64), token, 12n, rev), false);
 });
 
-test("replay uses prior chain order even when occurred_at contradicts it", () => {
+test("replay uses seq order even when occurred_at contradicts it", () => {
   const T = taskAddress(PK, "t4");
   const a = act(T, "task_created", null, "offen");
   const b = act(T, "task_assigned", "offen", "vergeben", a.id);
@@ -137,4 +140,51 @@ test("verifyPayoutTx binds recipient and token id when asked", async () => {
   assert.equal(await verifyPayoutTx(h, token, 12n, mk(single), { to: "0x" + "cd".repeat(20) }), false);
   const boom = { readContract: async () => null, getTransactionReceipt: async () => { throw new Error("rpc"); } };
   assert.equal(await verifyPayoutTx(h, token, 5n, boom), false);
+});
+
+test("replay orders by seq even when prior is missing and occurred_at contradicts", () => {
+  const T = taskAddress(PK, "t6");
+  const a = act(T, "task_created", null, "offen");
+  const b = act(T, "task_assigned", "offen", "vergeben");
+  a.tags.find((x) => x[0] === "occurred_at")![1] = "9999";
+  assert.equal(replayVorhaben([b, a]).tasks.get(T)?.status, "vergeben");
+});
+
+test("payloadHash matches the apps/web hashPayload vector and ignores key order", () => {
+  const v = "768ca668c0f84dd39bf269e25c9a3f0af4812e41026b6fead9a2666078ef16f6";
+  assert.equal(payloadHash({ b: 2, a: "x" }), v);
+  assert.equal(payloadHash({ a: "x", b: 2 }), v);
+});
+
+const TOWN = "c".repeat(64);
+const PERSON = "d".repeat(64);
+const signed = (pubkey: string, action: string, p: string[][]) => ({ pubkey, kind: 2101, content: "", created_at: 1, tags: [["action", action], ...p] });
+
+test("isTrustedAction: town always; person only with own role-marked p tag for a person-signable action", () => {
+  assert.equal(isTrustedAction(signed(TOWN, "payout_confirmed", []), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "assignee"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "attester"]]), TOWN), false); // wrong role
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", TOWN, "", "assignee"]]), TOWN), false); // p is someone else
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", []), TOWN), false);
+  assert.equal(isTrustedAction(signed(PERSON, "payout_confirmed", [["p", PERSON, "", "assignee"]]), TOWN), false); // town-only
+  assert.equal(isTrustedAction(signed(PERSON, "task_approved", [["p", PERSON, "", "attester"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "task_created", [["p", PERSON, "", "proposer"]]), TOWN), true);
+  assert.equal(isTrustedAction(signed(PERSON, "toString", [["p", PERSON, "", "assignee"]]), TOWN), false);
+  assert.deepEqual(PERSON_ACTION_ROLES.tally_confirmed, ["wahlhelfer"]);
+});
+
+test("validateActionChain requires seq 1..n and prior = seq-1", () => {
+  const T = taskAddress(PK, "t7");
+  const a = act(T, "task_created", null, "offen");
+  const b = act(T, "task_assigned", "offen", "vergeben", a.id);
+  const c = act(T, "task_started", "vergeben", "in_arbeit"); // prior optional
+  assert.deepEqual(validateActionChain([c, a, b]), { ok: true });
+  const gap = { ...c, tags: c.tags.map((t) => (t[0] === "seq" ? ["seq", "4"] : t)) };
+  assert.equal(validateActionChain([a, b, gap]).ok, false);
+  const dup = { ...c, tags: c.tags.map((t) => (t[0] === "seq" ? ["seq", "2"] : t)) };
+  assert.equal(validateActionChain([a, b, dup]).ok, false);
+  const wrongPrior = { ...c, tags: [...c.tags, ["prior", a.id]] };
+  assert.equal(validateActionChain([a, b, wrongPrior]).ok, false);
+  assert.equal(safeParseAction({ ...a, tags: a.tags.map((t) => (t[0] === "seq" ? ["seq", "0"] : t)) }).ok, false);
+  assert.equal(safeParseAction({ ...a, tags: a.tags.filter((t) => t[0] !== "seq") }).ok, false);
 });

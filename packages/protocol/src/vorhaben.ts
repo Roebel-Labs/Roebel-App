@@ -1,5 +1,6 @@
 // NSP-13 "Vorhaben" record: the post-vote lifecycle of a proposal on Nostr.
 // Spec: docs/superpowers/specs/2026-10-02-nsp13-vorhaben-record-design.md
+import { sha256 } from "@noble/hashes/sha256";
 import { keccak_256 } from "@noble/hashes/sha3";
 import { DECISION_KINDS, isLegalTransition, type DecisionEventLike, type Stage } from "./decisions.js";
 
@@ -74,7 +75,7 @@ const HEX64 = /^[0-9a-f]{64}$/;
 
 export interface ParsedAction {
   object: string; proposal: string; action: ActionName; from: string | null; to: string;
-  role: ActorRole; actor: string | null; prior: string | null; occurredAt: number; content: string; tags: string[][];
+  role: ActorRole; actor: string | null; seq: number; prior: string | null; occurredAt: number; content: string; tags: string[][];
 }
 
 export function safeParseAction(ev: DecisionEventLike): { ok: true; value: ParsedAction } | { ok: false; error: string } {
@@ -96,6 +97,10 @@ export function safeParseAction(ev: DecisionEventLike): { ok: true; value: Parse
   const occurredRaw = tag(ev, "occurred_at") ?? "";
   if (!/^\d+$/.test(occurredRaw)) return fail("occurred_at must be unix seconds");
   const occurred = Number(occurredRaw);
+  const seqRaw = tag(ev, "seq") ?? "";
+  if (!/^[1-9]\d*$/.test(seqRaw)) return fail("seq must be a positive integer");
+  const seq = Number(seqRaw);
+  if (!Number.isSafeInteger(seq)) return fail("seq out of range");
   const prior = tag(ev, "prior") ?? null;
   if (prior !== null && !HEX64.test(prior)) return fail("prior must be a 64-hex event id");
   const pTags = ev.tags.filter((t) => t[0] === "p");
@@ -112,7 +117,7 @@ export function safeParseAction(ev: DecisionEventLike): { ok: true; value: Parse
   }
   return { ok: true, value: {
     object: objects[0][1], proposal: heads[0][1], action: action as ActionName, from: tag(ev, "from") ?? null, to,
-    role: role as ActorRole, actor, prior, occurredAt: occurred, content: ev.content, tags: ev.tags,
+    role: role as ActorRole, actor, seq, prior, occurredAt: occurred, content: ev.content, tags: ev.tags,
   } };
 }
 
@@ -149,29 +154,55 @@ export function safeParsePayoutLine(ev: DecisionEventLike): ShapeResult {
   return { ok: true };
 }
 
-/** Every action's `prior` must name an earlier action on the same object; the first per object has none. */
+/**
+ * Per object, `seq` values must form 1..n without gaps or duplicates; where `prior` is present it must name the event
+ * with seq-1 (the first action may not carry a prior).
+ */
 export function validateActionChain(events: Array<DecisionEventLike & { id: string }>): { ok: true } | { ok: false; object: string; error: string } {
-  const byObject = new Map<string, Array<{ id: string; prior: string | null }>>();
+  const byObject = new Map<string, Array<{ id: string; seq: number; prior: string | null }>>();
   for (const ev of events) {
     if (!HEX64.test(ev.id)) return { ok: false, object: "?", error: "event id must be 64-hex" };
     const parsed = safeParseAction(ev);
     if (!parsed.ok) return { ok: false, object: "?", error: parsed.error };
     const list = byObject.get(parsed.value.object) ?? [];
-    list.push({ id: ev.id, prior: parsed.value.prior });
+    list.push({ id: ev.id, seq: parsed.value.seq, prior: parsed.value.prior });
     byObject.set(parsed.value.object, list);
   }
   for (const [object, list] of byObject) {
-    const roots = list.filter((e) => e.prior === null);
-    if (roots.length !== 1) return { ok: false, object, error: `expected one first action, found ${roots.length}` };
-    const children = new Map<string, string[]>();
-    for (const e of list) if (e.prior) children.set(e.prior, [...(children.get(e.prior) ?? []), e.id]);
-    if ([...children.values()].some((c) => c.length > 1)) return { ok: false, object, error: "chain forks" };
-    const seen = new Set<string>();
-    let cur: string | undefined = roots[0].id;
-    while (cur && !seen.has(cur)) { seen.add(cur); cur = children.get(cur)?.[0]; }
-    if (seen.size !== new Set(list.map((e) => e.id)).size || seen.size !== list.length) return { ok: false, object, error: "unreachable or cyclic actions" };
+    const sorted = [...list].sort((x, y) => x.seq - y.seq);
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].seq !== i + 1) return { ok: false, object, error: `seq must run 1..${sorted.length} without gaps or duplicates` };
+      const { prior } = sorted[i];
+      if (prior === null) continue;
+      if (i === 0) return { ok: false, object, error: "first action must not have a prior" };
+      if (prior !== sorted[i - 1].id) return { ok: false, object, error: `prior of seq ${sorted[i].seq} must reference seq ${sorted[i].seq - 1}` };
+    }
   }
   return { ok: true };
+}
+
+/** Which `p`-tag marker roles may sign each person-signable action; every other action is town-only. */
+export const PERSON_ACTION_ROLES: Readonly<Record<string, readonly string[]>> = {
+  task_started: ["assignee"], proof_added: ["assignee"], task_submitted: ["assignee"],
+  task_assigned: ["proposer", "attester"], task_cancelled: ["proposer", "attester"],
+  task_approved: ["attester"], changes_requested: ["attester"],
+  tally_confirmed: ["wahlhelfer"],
+  task_created: ["proposer", "attester"],
+};
+
+/** Town-signed events are trusted; a person-signed one only for a person-signable action carrying its own role-marked p tag. */
+export function isTrustedAction(ev: DecisionEventLike & { pubkey: string }, townPubkey: string): boolean {
+  if (ev.pubkey === townPubkey) return true;
+  const action = tag(ev, "action");
+  if (!action || !Object.prototype.hasOwnProperty.call(PERSON_ACTION_ROLES, action)) return false;
+  const allowed = PERSON_ACTION_ROLES[action];
+  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && allowed.includes(t[3] ?? ""));
+}
+
+/** sha256 hex of the payload JSON with sorted top-level keys (parity with apps/web org-membership `hashPayload`). */
+export function payloadHash(payload: Record<string, unknown>): string {
+  const sorted = Object.fromEntries(Object.entries(payload).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return Array.from(sha256(new TextEncoder().encode(JSON.stringify(sorted))), (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 export interface ReplayState {
@@ -181,19 +212,17 @@ export interface ReplayState {
   stages: Map<string, string>;
 }
 
-/** Orders one object's actions by the `prior` chain; falls back to occurred_at when the chain is not a single clean path. */
+/** Orders one object's actions by `seq`; ties fall back to the `prior` chain position, then occurred_at, then id. */
 function orderObjectActions(list: Array<{ id: string; p: ParsedAction }>): Array<{ id: string; p: ParsedAction }> {
-  const byTime = [...list].sort((a, b) => a.p.occurredAt - b.p.occurredAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const ids = new Set(list.map((e) => e.id));
-  const roots = list.filter((e) => e.p.prior === null || !ids.has(e.p.prior));
-  const children = new Map<string, Array<{ id: string; p: ParsedAction }>>();
-  for (const e of list) if (e.p.prior) children.set(e.p.prior, [...(children.get(e.p.prior) ?? []), e]);
-  if (roots.length !== 1 || [...children.values()].some((c) => c.length > 1)) return byTime;
-  const out: Array<{ id: string; p: ParsedAction }> = [];
-  const seen = new Set<string>();
-  let cur: { id: string; p: ParsedAction } | undefined = roots[0];
-  while (cur && !seen.has(cur.id)) { seen.add(cur.id); out.push(cur); cur = children.get(cur.id)?.[0]; }
-  return out.length === list.length ? out : byTime;
+  const byId = new Map(list.map((e) => [e.id, e]));
+  const depth = (e: { id: string; p: ParsedAction }): number => {
+    let d = 0, cur = e;
+    const seen = new Set<string>();
+    while (cur.p.prior && byId.has(cur.p.prior) && !seen.has(cur.id)) { seen.add(cur.id); cur = byId.get(cur.p.prior)!; d++; }
+    return d;
+  };
+  const depths = new Map(list.map((e) => [e.id, depth(e)]));
+  return [...list].sort((a, b) => a.p.seq - b.p.seq || depths.get(a.id)! - depths.get(b.id)! || a.p.occurredAt - b.p.occurredAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Rebuilds Vorhaben state from kind-2101 actions; invalid events are skipped. */

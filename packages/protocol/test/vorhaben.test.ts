@@ -53,7 +53,7 @@ const action = (over: Partial<{ tags: string[][]; content: string; kind: number 
   tags: over.tags ?? [
     ["a", taskAddress(PK, "t1"), "", "object"], ["a", HEAD, "", "proposal"],
     ["action", "task_assigned"], ["from", "offen"], ["to", "vergeben"],
-    ["p", "b".repeat(64), "", "assignee"], ["role", "proposer"], ["occurred_at", "1789999990"],
+    ["p", "b".repeat(64), "", "assignee"], ["role", "proposer"], ["occurred_at", "1789999990"], ["seq", "1"],
   ],
 });
 
@@ -65,6 +65,7 @@ test("safeParseAction accepts a well-formed action", () => {
     assert.equal(r.value.role, "proposer");
     assert.equal(r.value.actor, "b".repeat(64));
     assert.equal(r.value.prior, null);
+    assert.equal(r.value.seq, 1);
     assert.equal(r.value.occurredAt, 1789999990);
   }
 });
@@ -78,7 +79,7 @@ test("safeParseAction rejects wrong kind, unknown action, missing role, malforme
 
 test("tally_confirmed requires signature, signed_text and signer_account", () => {
   const base = [["a", pollAddress(PK, "0xabc"), "", "object"], ["a", HEAD, "", "proposal"], ["action", "tally_confirmed"],
-    ["to", "bestaetigt"], ["role", "wahlhelfer"], ["occurred_at", "1"]];
+    ["to", "bestaetigt"], ["role", "wahlhelfer"], ["occurred_at", "1"], ["seq", "1"]];
   assert.equal(safeParseAction(action({ tags: base })).ok, false);
   const full = [...base, ["signed_text", "Ich bestätige …"], ["signature", "0x" + "1".repeat(130)],
     ["signer_account", "0x" + "2".repeat(40)], ["result_hash", "0x" + "3".repeat(64)], ["chain", "100"]];
@@ -101,8 +102,8 @@ test("state event validators", () => {
 
 test("validateActionChain detects a broken prior link", () => {
   const a1 = { ...action(), id: "1".repeat(64) };
-  const a2 = { ...action({ tags: [...action().tags.filter((t) => t[0] !== "action" && t[0] !== "from" && t[0] !== "to"),
-    ["action", "task_started"], ["from", "vergeben"], ["to", "in_arbeit"], ["prior", "1".repeat(64)]] }), id: "2".repeat(64) };
+  const a2 = { ...action({ tags: [...action().tags.filter((t) => !["action", "from", "to", "seq"].includes(t[0])),
+    ["action", "task_started"], ["from", "vergeben"], ["to", "in_arbeit"], ["seq", "2"], ["prior", "1".repeat(64)]] }), id: "2".repeat(64) };
   assert.deepEqual(validateActionChain([a2, a1]), { ok: true });
   const orphan = { ...a2, tags: a2.tags.map((t) => (t[0] === "prior" ? ["prior", "9".repeat(64)] : t)) };
   assert.equal(validateActionChain([a1, orphan]).ok, false);
@@ -121,12 +122,13 @@ test("Röbel manifest: vorhaben dataset, kinds indexed, Gemeinschaftskasse body"
 
 test("fix round 1: chain walk, strict tags, kind/action fit, transitions", () => {
   const a1 = { ...action(), id: "1".repeat(64) };
-  const mk = (id: string, prior: string) => ({ ...action({ tags: [...action().tags.filter((t) => t[0] !== "action" && t[0] !== "from" && t[0] !== "to"),
-    ["action", "task_started"], ["from", "vergeben"], ["to", "in_arbeit"], ["prior", prior]] }), id });
-  assert.equal(validateActionChain([a1, mk("2".repeat(64), "2".repeat(64))]).ok, false); // self-reference
-  assert.equal(validateActionChain([a1, mk("2".repeat(64), "3".repeat(64)), mk("3".repeat(64), "2".repeat(64))]).ok, false); // cycle
-  assert.equal(validateActionChain([a1, mk("2".repeat(64), "1".repeat(64)), mk("3".repeat(64), "1".repeat(64))]).ok, false); // fork
-  assert.equal(validateActionChain([a1, { ...action(), id: "4".repeat(64) }]).ok, false); // two roots
+  const mk = (id: string, seq: number, prior?: string) => ({ ...action({ tags: [...action().tags.filter((t) => !["action", "from", "to", "seq"].includes(t[0])),
+    ["action", "task_started"], ["from", "vergeben"], ["to", "in_arbeit"], ["seq", String(seq)], ...(prior ? [["prior", prior]] : [])] }), id });
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), 2, "2".repeat(64))]).ok, false); // self-reference
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), 2, "3".repeat(64)), mk("3".repeat(64), 3, "2".repeat(64))]).ok, false); // wrong priors
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), 2, "1".repeat(64)), mk("3".repeat(64), 2, "1".repeat(64))]).ok, false); // duplicate seq
+  assert.equal(validateActionChain([a1, { ...action(), id: "4".repeat(64) }]).ok, false); // two seq 1
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), 2, "1".repeat(64)), mk("3".repeat(64), 3, "2".repeat(64))]).ok, true);
   assert.equal(validateActionChain([{ ...a1, id: "xyz" }]).ok, false);
   for (const bad of ["", "1e3", "0x10"]) {
     assert.equal(safeParseAction(action({ tags: action().tags.map((t) => (t[0] === "occurred_at" ? ["occurred_at", bad] : t)) })).ok, false);
@@ -135,7 +137,7 @@ test("fix round 1: chain walk, strict tags, kind/action fit, transitions", () =>
   assert.equal(safeParseAction(action({ tags: [...action().tags, ["p", "zz"]] })).ok, false);
   assert.equal(safeParseAction(action({ tags: action().tags.map((t) => (t[3] === "object" ? ["a", payoutLineAddress(PK, "l1"), "", "object"] : t)) })).ok, false);
   const base = [["a", pollAddress(PK, "0xabc"), "", "object"], ["a", HEAD, "", "proposal"], ["action", "tally_confirmed"],
-    ["to", "bestaetigt"], ["role", "wahlhelfer"], ["occurred_at", "1"], ["signed_text", "x"], ["signature", "0x" + "1".repeat(130)],
+    ["to", "bestaetigt"], ["role", "wahlhelfer"], ["occurred_at", "1"], ["seq", "1"], ["signed_text", "x"], ["signature", "0x" + "1".repeat(130)],
     ["signer_account", "0x" + "2".repeat(40)], ["result_hash", "0x" + "3".repeat(64)], ["chain", "100"]];
   const swap = (n: string, v: string) => base.map((t) => (t[0] === n ? [n, v] : t));
   assert.equal(safeParseAction(action({ tags: swap("signature", "nothex") })).ok, false);

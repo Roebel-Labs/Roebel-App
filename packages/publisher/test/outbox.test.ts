@@ -73,7 +73,7 @@ function outbox(over: Row): Row {
   return {
     object_type: "task", object_id: T1, proposal_id: P_UUID, action: "task_assigned", from_status: "offen", to_status: "vergeben",
     actor_wallet: null, actor_role: "proposer", body: null, extra: {}, occurred_at: "2026-10-01T10:00:00+00:00",
-    signed_event: null, event_id: null, published_at: null, attempts: 0, last_error: null, ...over,
+    signed_event: null, event_id: null, published_at: null, attempts: 0, last_error: null, seq: 1, ...over,
   };
 }
 

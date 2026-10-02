@@ -50,7 +50,7 @@ export {
 export {
   ACTION_NAMES, ACTOR_ROLES, LIFECYCLE_STAGES, LINE_ROLES, PUBLISHED_LINE_STATUSES, TASK_STATUSES, VORHABEN_KINDS,
   contractAddress, kasseNoticeAddress, kasseNoticeD, nsp12StageFor, nsp12TransitionsBetween, payoutLineAddress, pollAddress,
-  hashMessage, replayVorhaben, verifyPayoutTx, verifyTallyConfirmation,
+  PERSON_ACTION_ROLES, hashMessage, isTrustedAction, payloadHash, replayVorhaben, verifyPayoutTx, verifyTallyConfirmation,
   safeParseAction, safeParseContract, safeParsePayoutLine, safeParseTask, taskAddress, validateActionChain,
   type ActionName, type ActorRole, type KasseNotice, type LifecycleStage, type ParsedAction, type ReplayState, type TaskStatus, type VerifyClient,
 } from "./vorhaben.js";
