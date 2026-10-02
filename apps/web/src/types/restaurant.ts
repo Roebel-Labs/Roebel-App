@@ -25,9 +25,9 @@ export const AI_IMAGE_MODEL_LABELS: Record<AiImageModel, string> = {
 }
 
 export const AI_IMAGE_MODEL_DESCRIPTIONS: Record<AiImageModel, string> = {
-  nano_banana_2_lite: "Standard — Google · schnell und günstig.",
+  nano_banana_2_lite: "Google · schnell und günstig.",
   seedream: "Alternative — schnell und zuverlässig.",
-  nano_banana_pro: "Google · höhere Detailtreue, etwas langsamer.",
+  nano_banana_pro: "Standard — Google · höchste Detailtreue, realistische Fotos.",
 }
 
 export const AI_IMAGE_STYLE_DESCRIPTIONS: Record<AiImageStyle, string> = {

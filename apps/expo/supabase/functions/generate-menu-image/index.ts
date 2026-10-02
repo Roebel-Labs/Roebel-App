@@ -1,18 +1,20 @@
 /**
  * Supabase Edge Function: generate-menu-image
  *
- * Generates a food photo for a menu_items row via Seedream 4.5 (kie.ai),
+ * Generates a food photo for a menu_items row via Nano Banana Pro (kie.ai),
  * stores it in the `images` bucket and writes the public URL to
  * `menu_items.image_url`.
  *
- * v3 style — per-gastro brand, angle by food type, sharp, centered, no text.
+ * v4 style — per-gastro brand, angle by food type, real-photo look, sharp,
+ * centered, never any text in the image.
  *
  * If `reference_image_urls` (1–10 public URLs) is provided, runs the edit /
  * image-to-image variant instead: the caller's real photo of the dish is
  * restyled into the branded studio look while keeping the actual food.
  *
- * `model` selects the kie.ai backend: 'seedream' (default, Seedream 4.5) or
- * 'nano_banana_pro' (Google Nano Banana Pro). Each has its own input contract.
+ * `model` selects the kie.ai backend: 'nano_banana_pro' (default, Google Nano
+ * Banana Pro), 'nano_banana_2_lite' or 'seedream' (Seedream 4.5). Each has its
+ * own input contract.
  *
  * Auth: verify_jwt=false; protect with x-seed-token header matched against
  * SEED_TOKEN env. Optional x-kie-key header overrides KIE_API_KEY env.
@@ -105,8 +107,9 @@ const NANO_BANANA_2_LITE_MODEL = 'nano-banana-2-lite';
 const MAX_REFERENCE_IMAGES = 10;
 const BUCKET = 'images';
 const POLL_INTERVAL_MS = 2500;
-const POLL_BUDGET_MS = 60_000;
-const VERSION_TAG = 'v3';
+// Nano Banana Pro needs 30-80s; stay under the edge runtime's 150s wall clock.
+const POLL_BUDGET_MS = 120_000;
+const VERSION_TAG = 'v4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -121,11 +124,11 @@ function json(status: number, body: Record<string, unknown>) {
   });
 }
 
-type GastroKey = 'mt' | 'delizia' | 'waage' | 'generic';
+type GastroKey = 'mt' | 'delizia' | 'waage' | 'segler' | 'generic';
 type StylePreset = 'dark_stoneware' | 'italian_gingham' | 'light_concrete' | 'wooden_board';
 type ImageModel = 'nano_banana_2_lite' | 'seedream' | 'nano_banana_pro';
 
-const DEFAULT_IMAGE_MODEL: ImageModel = 'nano_banana_2_lite';
+const DEFAULT_IMAGE_MODEL: ImageModel = 'nano_banana_pro';
 
 function isValidModel(v: unknown): v is ImageModel {
   return v === 'nano_banana_2_lite' || v === 'seedream' || v === 'nano_banana_pro';
@@ -136,6 +139,7 @@ function gastroFor(restaurantName: string): GastroKey {
   if (n.includes('delizia')) return 'delizia';
   if (n.includes('müritz') || n.includes('mueritz')) return 'mt';
   if (n.includes('waage')) return 'waage';
+  if (n.includes('seglerheim')) return 'segler';
   return 'generic';
 }
 
@@ -146,7 +150,7 @@ function backgroundForPreset(p: StylePreset): string {
     case 'italian_gingham':
       return 'served on a white ceramic plate on top of a beige-and-white gingham checkered cotton tablecloth (small even squares, classic Italian trattoria), bright and clean';
     case 'light_concrete':
-      return 'on a light grey concrete-textured flat surface (subtle stone texture, Uber-Eats catalog style), clean and bright, even neutral background';
+      return 'on a light grey concrete-textured flat surface (subtle natural stone texture), clean and bright, even neutral background';
     case 'wooden_board':
       return 'served on a warm oak wooden board with visible natural grain (rustic farm-to-table look), clean neutral surroundings, soft round shadow under the board';
   }
@@ -160,6 +164,8 @@ function backgroundFor(g: GastroKey): string {
       return backgroundForPreset('italian_gingham');
     case 'waage':
       return backgroundForPreset('light_concrete');
+    case 'segler':
+      return backgroundForPreset('wooden_board');
     default:
       return 'on a clean flat neutral background';
   }
@@ -209,6 +215,13 @@ function vesselFor(g: GastroKey, itemName: string): string {
   return 'shot from directly overhead, food perfectly centered in the frame';
 }
 
+// Real-photo look: the v3 "studio/advertising" wording produced glossy,
+// obviously synthetic images.
+const REALISM =
+  'Look: authentic, appetizing and believable, like a real photo taken in the restaurant by a skilled food photographer with a full-frame camera, 50mm lens, aperture f/8 so the entire dish is sharp. Soft natural daylight, gentle realistic shadows. Real food textures with natural imperfections: crumbs, uneven browning, sauce drips, glistening oil. Natural, true-to-life colors, not oversaturated. Not CGI, not 3D render, not plastic, not overly perfect or glossy.';
+const NO_TEXT =
+  'STRICTLY NO text of any kind: no letters, words, numbers, logos, brand names, labels, watermarks, captions or printed patterns anywhere; all paper, packaging, cups, bottles and plates are plain and unprinted. No people, no hands.';
+
 function buildPrompt(
   itemName: string,
   description: string | null,
@@ -222,13 +235,11 @@ function buildPrompt(
   const desc = description ? `: ${description}` : '';
   const tail = hint ? ` ${hint}` : '';
   return [
-    `Studio-grade product food photography of ${itemName}${desc}.`,
+    `Real professional food photograph for a restaurant menu of ${itemName}${desc}.`,
     `${vessel}, ${bg}.`,
     'The subject is perfectly centered in the frame with even margins on all sides.',
-    'Entire image is in perfect sharp focus — every element crisp and clean, no depth-of-field blur, no bokeh.',
-    'Bright, even, soft natural lighting. Vibrant natural colors. Magazine/advertising quality. Ultra clean composition.',
-    'No people, no hands, no cutlery, no menu cards, no packaging branding.',
-    'ABSOLUTELY NO text, no letters, no numbers, no signage, no captions, no logos, no watermarks anywhere in the image.',
+    REALISM,
+    NO_TEXT,
     tail,
   ].join(' ').trim();
 }
@@ -250,14 +261,12 @@ function buildEditPrompt(
   const desc = description ? ` (${description})` : '';
   const tail = hint ? ` ${hint}` : '';
   return [
-    `Restyle this reference photo of ${itemName}${desc} into studio-grade product food photography.`,
+    `Restyle this reference photo of ${itemName}${desc} into a real professional food photograph for a restaurant menu.`,
     'Keep the exact same dish, ingredients, portion size and arrangement shown in the reference image — do not invent or remove food, do not change the recipe.',
     `Re-plate and re-light it: ${vessel}, ${bg}.`,
     'The subject is perfectly centered in the frame with even margins on all sides.',
-    'Entire image is in perfect sharp focus — every element crisp and clean, no depth-of-field blur, no bokeh.',
-    'Bright, even, soft natural lighting. Vibrant natural colors. Magazine/advertising quality. Ultra clean composition.',
-    'No people, no hands, no cutlery, no menu cards, no packaging branding.',
-    'ABSOLUTELY NO text, no letters, no numbers, no signage, no captions, no logos, no watermarks anywhere in the image.',
+    REALISM,
+    NO_TEXT,
     tail,
   ].join(' ').trim();
 }
@@ -373,15 +382,15 @@ serve(async (req: Request) => {
   const kieKey = req.headers.get('x-kie-key') ?? Deno.env.get('KIE_API_KEY');
   if (!kieKey) return json(500, { ok: false, code: 'NO_KIE_KEY' });
 
-  // Each kie.ai model family has a different input contract. Both target ~1K
-  // output so a generation finishes within the 60s poll budget:
+  // Each kie.ai model family has a different input contract. All target ~1K
+  // output so a generation finishes within the poll budget:
   //  - Seedream 4.5: separate text-to-image / edit model ids, references via
   //    `image_urls`, sized via `quality` ('basic' = the faster ~1K tier).
   //  - Nano Banana Pro: one model id for both modes, references via `image_input`
   //    (empty array for text-to-image), sized via `resolution`/`output_format`.
   let createBody: Record<string, unknown>;
   if (model === 'nano_banana_2_lite') {
-    // Nano Banana 2 Lite (default): one model id for both modes, references via
+    // Nano Banana 2 Lite: one model id for both modes, references via
     // `image_urls` (empty array = text-to-image), fast ~1K output.
     createBody = {
       model: NANO_BANANA_2_LITE_MODEL,

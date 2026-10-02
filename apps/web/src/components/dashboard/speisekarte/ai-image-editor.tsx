@@ -50,8 +50,8 @@ const PRESETS: AiImageStyle[] = [
 ];
 const DEFAULT_PRESET_VALUE = "__default__";
 
-const MODELS: AiImageModel[] = ["nano_banana_2_lite", "seedream", "nano_banana_pro"];
-const DEFAULT_MODEL: AiImageModel = "nano_banana_2_lite";
+const MODELS: AiImageModel[] = ["nano_banana_pro", "nano_banana_2_lite", "seedream"];
+const DEFAULT_MODEL: AiImageModel = "nano_banana_pro";
 const modelStorageKey = (kind: ItemKind, itemId: string) =>
   `roebel:ai-model:${kind}:${itemId}`;
 
