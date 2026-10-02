@@ -84,22 +84,30 @@ export function safeParseAction(ev: DecisionEventLike): { ok: true; value: Parse
   if (heads.length !== 1 || !HEAD.test(heads[0][1] ?? "")) return fail("expected exactly one proposal head a-tag");
   const action = tag(ev, "action");
   if (!action || !(ACTION_NAMES as readonly string[]).includes(action)) return fail(`unknown action ${action}`);
+  const wantKind = action.startsWith("task_") ? VORHABEN_KINDS.task : action.startsWith("payout_") ? VORHABEN_KINDS.payoutLine
+    : action === "tally_confirmed" || action === "meinungsbild_published" ? DECISION_KINDS.meinungsbild
+    : action === "stage_changed" ? DECISION_KINDS.head : null;
+  if (wantKind !== null && !objects[0][1].startsWith(`${wantKind}:`)) return fail(`object kind must be ${wantKind} for ${action}`);
   const role = tag(ev, "role");
   if (!role || !(ACTOR_ROLES as readonly string[]).includes(role)) return fail("role tag missing or unknown");
   const to = tag(ev, "to");
   if (!to) return fail("to tag missing");
-  const occurred = Number(tag(ev, "occurred_at"));
-  if (!Number.isInteger(occurred) || occurred < 0) return fail("occurred_at must be unix seconds");
+  const occurredRaw = tag(ev, "occurred_at") ?? "";
+  if (!/^\d+$/.test(occurredRaw)) return fail("occurred_at must be unix seconds");
+  const occurred = Number(occurredRaw);
   const prior = tag(ev, "prior") ?? null;
   if (prior !== null && !HEX64.test(prior)) return fail("prior must be a 64-hex event id");
-  const pTag = ev.tags.find((t) => t[0] === "p");
-  const actor = pTag?.[1] ?? null;
-  if (actor !== null && !HEX64.test(actor)) return fail("p tag must be a 64-hex pubkey");
+  const pTags = ev.tags.filter((t) => t[0] === "p");
+  for (const p of pTags) if (!HEX64.test(p[1] ?? "")) return fail("p tag must be a 64-hex pubkey");
+  const actor = pTags[0]?.[1] ?? null;
   if (action === "tally_confirmed") {
     for (const name of ["signed_text", "signature", "signer_account", "result_hash", "chain"]) {
       if (!tag(ev, name)) return fail(`tally_confirmed requires ${name}`);
     }
     if (!/^0x[0-9a-fA-F]{40}$/.test(tag(ev, "signer_account")!)) return fail("signer_account must be an address");
+    if (!/^0x[0-9a-fA-F]+$/.test(tag(ev, "signature")!)) return fail("signature must be hex");
+    if (!/^0x[0-9a-fA-F]{64}$/.test(tag(ev, "result_hash")!)) return fail("result_hash must be 32-byte hex");
+    if (!/^\d+$/.test(tag(ev, "chain")!)) return fail("chain must be numeric");
   }
   return { ok: true, value: {
     object: objects[0][1], proposal: heads[0][1], action: action as ActionName, from: tag(ev, "from") ?? null, to,
@@ -144,6 +152,7 @@ export function safeParsePayoutLine(ev: DecisionEventLike): ShapeResult {
 export function validateActionChain(events: Array<DecisionEventLike & { id: string }>): { ok: true } | { ok: false; object: string; error: string } {
   const byObject = new Map<string, Array<{ id: string; prior: string | null }>>();
   for (const ev of events) {
+    if (!HEX64.test(ev.id)) return { ok: false, object: "?", error: "event id must be 64-hex" };
     const parsed = safeParseAction(ev);
     if (!parsed.ok) return { ok: false, object: "?", error: parsed.error };
     const list = byObject.get(parsed.value.object) ?? [];
@@ -151,13 +160,15 @@ export function validateActionChain(events: Array<DecisionEventLike & { id: stri
     byObject.set(parsed.value.object, list);
   }
   for (const [object, list] of byObject) {
-    const ids = new Set(list.map((e) => e.id));
     const roots = list.filter((e) => e.prior === null);
     if (roots.length !== 1) return { ok: false, object, error: `expected one first action, found ${roots.length}` };
-    for (const e of list) if (e.prior !== null && !ids.has(e.prior)) return { ok: false, object, error: `prior ${e.prior} missing` };
-    const children = new Map<string, number>();
-    for (const e of list) if (e.prior) children.set(e.prior, (children.get(e.prior) ?? 0) + 1);
-    if ([...children.values()].some((n) => n > 1)) return { ok: false, object, error: "chain forks" };
+    const children = new Map<string, string[]>();
+    for (const e of list) if (e.prior) children.set(e.prior, [...(children.get(e.prior) ?? []), e.id]);
+    if ([...children.values()].some((c) => c.length > 1)) return { ok: false, object, error: "chain forks" };
+    const seen = new Set<string>();
+    let cur: string | undefined = roots[0].id;
+    while (cur && !seen.has(cur)) { seen.add(cur); cur = children.get(cur)?.[0]; }
+    if (seen.size !== new Set(list.map((e) => e.id)).size || seen.size !== list.length) return { ok: false, object, error: "unreachable or cyclic actions" };
   }
   return { ok: true };
 }

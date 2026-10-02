@@ -118,3 +118,30 @@ test("Röbel manifest: vorhaben dataset, kinds indexed, Gemeinschaftskasse body"
   for (const k of [2101, 32108, 32110, 32111]) assert.ok(m.services.indexer?.kinds.includes(k), `kind ${k} indexed`);
   assert.ok(m.record?.decisions.bodies?.some((b) => b.id === "gemeinschaftskasse" && b.noticeScope === "town"));
 });
+
+test("fix round 1: chain walk, strict tags, kind/action fit, transitions", () => {
+  const a1 = { ...action(), id: "1".repeat(64) };
+  const mk = (id: string, prior: string) => ({ ...action({ tags: [...action().tags.filter((t) => t[0] !== "action" && t[0] !== "from" && t[0] !== "to"),
+    ["action", "task_started"], ["from", "vergeben"], ["to", "in_arbeit"], ["prior", prior]] }), id });
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), "2".repeat(64))]).ok, false); // self-reference
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), "3".repeat(64)), mk("3".repeat(64), "2".repeat(64))]).ok, false); // cycle
+  assert.equal(validateActionChain([a1, mk("2".repeat(64), "1".repeat(64)), mk("3".repeat(64), "1".repeat(64))]).ok, false); // fork
+  assert.equal(validateActionChain([a1, { ...action(), id: "4".repeat(64) }]).ok, false); // two roots
+  assert.equal(validateActionChain([{ ...a1, id: "xyz" }]).ok, false);
+  for (const bad of ["", "1e3", "0x10"]) {
+    assert.equal(safeParseAction(action({ tags: action().tags.map((t) => (t[0] === "occurred_at" ? ["occurred_at", bad] : t)) })).ok, false);
+  }
+  assert.equal(safeParseAction(action({ tags: [...action().tags, ["p"]] })).ok, false);
+  assert.equal(safeParseAction(action({ tags: [...action().tags, ["p", "zz"]] })).ok, false);
+  assert.equal(safeParseAction(action({ tags: action().tags.map((t) => (t[3] === "object" ? ["a", payoutLineAddress(PK, "l1"), "", "object"] : t)) })).ok, false);
+  const base = [["a", pollAddress(PK, "0xabc"), "", "object"], ["a", HEAD, "", "proposal"], ["action", "tally_confirmed"],
+    ["to", "bestaetigt"], ["role", "wahlhelfer"], ["occurred_at", "1"], ["signed_text", "x"], ["signature", "0x" + "1".repeat(130)],
+    ["signer_account", "0x" + "2".repeat(40)], ["result_hash", "0x" + "3".repeat(64)], ["chain", "100"]];
+  const swap = (n: string, v: string) => base.map((t) => (t[0] === n ? [n, v] : t));
+  assert.equal(safeParseAction(action({ tags: swap("signature", "nothex") })).ok, false);
+  assert.equal(safeParseAction(action({ tags: swap("result_hash", "0x12") })).ok, false);
+  assert.equal(safeParseAction(action({ tags: swap("chain", "gnosis") })).ok, false);
+  assert.deepEqual(nsp12TransitionsBetween("beschlussvorlage", "abgelehnt"), [{ from: "beschlussvorlage", to: "abgelehnt", notice: "ablehnung" }]);
+  assert.throws(() => nsp12TransitionsBetween("beschlossen", "abgelehnt"));
+  assert.throws(() => nsp12TransitionsBetween("beschlussvorlage", "meinungsbild"));
+});
