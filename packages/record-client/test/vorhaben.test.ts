@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { isTrustedAction, PERSON_ACTION_ROLES } from "@netizen-labs/protocol";
 import { actionToSpec, payoutLineToSpec, taskToSpec, type OutboxRow } from "@netizen-labs/publisher";
-import { getActions, getContractLines, listTasks } from "../src/vorhaben";
+import { actionTrustLevel, getActions, getContractLines, listTasks } from "../src/vorhaben";
 import { asRecordEvent, filteringClient } from "./helpers";
 
 const town = "a".repeat(64);
@@ -88,4 +89,40 @@ test("getActions: only the town's events about THIS object (foreign author and s
   assert.deepEqual(out.map((a) => a.id), [mine.id]);
   // Asking by the head address returns nothing: the head is the proposal marker, not the object.
   assert.deepEqual(await getActions(filteringClient([mine, sibling]), headAddress(town, proposalKey), town), []);
+});
+
+test("getActions: person-signed actions by trust rule; forged role claims dropped; ordered by seq", async () => {
+  const person = "c".repeat(64);
+  const obj = taskAddress(town, "t1");
+  const head = headAddress(town, proposalKey);
+  const mk = (id: string, pubkey: string, action: string, role: string, pRole: string | null, seq: number, prior: string | null = null) => ({
+    id: id.repeat(64), pubkey, kind: 2101, created_at: 1_800_000_000, content: "", sig: "0".repeat(128), node_id: "roebel", source: "test",
+    tags: [
+      ["a", obj, "", "object"], ["a", head, "", "proposal"], ["action", action], ["to", "x"], ["role", role], ["seq", String(seq)],
+      ...(prior ? [["prior", prior]] : []),
+      ...(pRole ? [["p", pubkey, "", pRole]] : []),
+    ],
+  });
+  const t = mk("1", town, "task_created", "creator", null, 1);
+  const ok = mk("2", person, "task_started", "assignee", "assignee", 3);
+  const earlier = mk("3", person, "task_assigned", "attester", "attester", 2);
+  const wrongRole = mk("4", person, "task_approved", "assignee", "assignee", 4);
+  const townOnly = mk("5", person, "payout_confirmed", "attester", "attester", 5);
+  const noP = mk("6", person, "task_started", "assignee", null, 6);
+  const out = await getActions(filteringClient([ok, wrongRole, townOnly, noP, earlier, t]), obj, town);
+  assert.deepEqual(out.map((a) => a.id[0]), ["1", "3", "2"]);
+  assert.equal(actionTrustLevel(t, town), "town");
+  assert.equal(actionTrustLevel(ok, town), "person-claimed");
+  for (const bad of [wrongRole, townOnly, noP]) assert.equal(actionTrustLevel(bad, town), "untrusted");
+});
+
+test("actionTrustLevel: parity with protocol isTrustedAction over every action/role combination", () => {
+  const person = "c".repeat(64);
+  const actions = [...Object.keys(PERSON_ACTION_ROLES), "payout_confirmed", "stage_changed", "bogus", "toString", "__proto__"];
+  const roles = ["assignee", "proposer", "attester", "wahlhelfer", "creator", "town"];
+  for (const action of actions) for (const role of roles) for (const pRole of [...roles, null]) for (const signer of [person, town]) for (const kind of [2101, 1]) {
+    const tags = [["action", action], ["role", role], ...(pRole ? [["p", person, "", pRole]] : [])];
+    const ev = { id: "0".repeat(64), pubkey: signer, kind, created_at: 1, content: "", tags, sig: "", node_id: "n", source: "t" };
+    assert.equal(actionTrustLevel(ev, town) !== "untrusted", isTrustedAction(ev, town), `${action}/${role}/${pRole}/${kind}`);
+  }
 });

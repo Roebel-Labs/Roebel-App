@@ -46,6 +46,7 @@ export interface VorhabenActionRow {
   role: string;
   actor_pubkey: string | null;
   prior: string | null;
+  seq: number;
   occurred_at: string;
   content: string;
   tags: string[][];
@@ -115,6 +116,7 @@ function toAction(ev: RecordEvent): VorhabenActionRow | null {
     role,
     actor_pubkey: ev.tags.find((t) => t[0] === "p" && t[3] === role)?.[1] ?? null,
     prior: tagValue(ev, "prior"),
+    seq: /^[1-9]\d*$/.test(tagValue(ev, "seq") ?? "") ? Number(tagValue(ev, "seq")) : 0,
     occurred_at: unixToIso(tagValue(ev, "occurred_at")) ?? new Date(ev.created_at * 1000).toISOString(),
     content: ev.content,
     tags: ev.tags,
@@ -122,35 +124,30 @@ function toAction(ev: RecordEvent): VorhabenActionRow | null {
 }
 
 /**
- * Order a hash-linked chain: an action follows the action named by its `prior`.
- * Rows whose prior is absent from the set (chain start, or a gap) are roots; roots
- * and siblings are ordered by (occurred_at, id) so the result is deterministic.
+ * Order one object's actions by `seq`; ties fall back to `prior` chain depth, then occurred_at, then id
+ * (same rule as the protocol's replay). A missing/invalid `seq` sorts first.
  */
 function chainOrder(rows: VorhabenActionRow[]): VorhabenActionRow[] {
-  const byTime = (a: VorhabenActionRow, b: VorhabenActionRow) =>
-    a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  const ids = new Set(rows.map((r) => r.id));
-  const children = new Map<string, VorhabenActionRow[]>();
-  const roots: VorhabenActionRow[] = [];
-  for (const r of rows) {
-    if (r.prior && ids.has(r.prior) && r.prior !== r.id) {
-      const list = children.get(r.prior) ?? [];
-      list.push(r);
-      children.set(r.prior, list);
-    } else roots.push(r);
-  }
-  const out: VorhabenActionRow[] = [];
-  const seen = new Set<string>();
-  const visit = (r: VorhabenActionRow) => {
-    if (seen.has(r.id)) return;
-    seen.add(r.id);
-    out.push(r);
-    for (const c of (children.get(r.id) ?? []).sort(byTime)) visit(c);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const depth = (r: VorhabenActionRow): number => {
+    let d = 0;
+    let cur = r;
+    const seen = new Set<string>();
+    while (cur.prior && byId.has(cur.prior) && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      cur = byId.get(cur.prior)!;
+      d++;
+    }
+    return d;
   };
-  for (const r of roots.sort(byTime)) visit(r);
-  // Pure cycles have no root; append whatever is left deterministically.
-  for (const r of [...rows].sort(byTime)) visit(r);
-  return out;
+  const depths = new Map(rows.map((r) => [r.id, depth(r)]));
+  return [...rows].sort(
+    (a, b) =>
+      a.seq - b.seq ||
+      depths.get(a.id)! - depths.get(b.id)! ||
+      (a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
 }
 
 const nonNull = <T>(v: T | null): v is T => v !== null;
@@ -174,13 +171,48 @@ export async function getContractLines(client: RecordClient, contractAddress: st
   return events.filter(byTown(townPubkey)).map(toLine).filter(nonNull);
 }
 
+/** Which `p`-tag marker roles may sign each person-signable action; every other action is town-only. Mirrors @netizen-labs/protocol PERSON_ACTION_ROLES (parity-tested). */
+const PERSON_ACTION_ROLES: Readonly<Record<string, readonly string[]>> = {
+  task_started: ["assignee"], proof_added: ["assignee"], task_submitted: ["assignee"],
+  task_assigned: ["proposer", "attester"], task_cancelled: ["proposer", "attester"],
+  task_approved: ["attester"], changes_requested: ["attester"],
+  tally_confirmed: ["wahlhelfer"],
+  task_created: ["proposer", "attester"],
+};
+
+export type ActionTrustLevel = "town" | "person-claimed" | "untrusted";
+
 /**
- * The action log of one object (task, line, head, poll), in `prior` chain order.
- * The `a` filter also matches actions that merely name this address as their
- * proposal head, so only events whose `object`-marked `a` equals it are kept.
+ * How far a kind-2101 action can be trusted from its shape alone. "town": signed by the town key.
+ * "person-claimed": a person-signable action whose `role` tag equals an allowed marker on the p tag naming the
+ * event's own pubkey. This is a MARKER check, NOT authorization: anyone can claim a role. UIs should show it as
+ * a claim; a third-party client must still verify the signer really holds the role (assignee per the task's
+ * state event, attester via AttesterNFT, ...).
+ */
+export function actionTrustLevel(ev: RecordEvent, townPubkey: string): ActionTrustLevel {
+  if (ev.kind !== KIND_ACTION) return "untrusted";
+  if (ev.pubkey === townPubkey) return "town";
+  const action = tagValue(ev, "action");
+  if (!action || !Object.prototype.hasOwnProperty.call(PERSON_ACTION_ROLES, action)) return "untrusted";
+  const allowed = PERSON_ACTION_ROLES[action];
+  const role = tagValue(ev, "role");
+  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && t[3] === role && allowed.includes(t[3] ?? ""))
+    ? "person-claimed"
+    : "untrusted";
+}
+
+/**
+ * The action log of one object (task, line, head, poll), ordered by `seq` (then prior depth, occurred_at, id).
+ * Keeps town-signed actions and person-signed ones that pass the marker rule (see `actionTrustLevel`). That is
+ * NOT authorization: a third-party client must additionally verify the person's real role (e.g. the assignee
+ * named by the task's state event, an attester via AttesterNFT) before acting on a person-claimed action.
+ * The `a` filter also matches actions that merely name this address as their proposal head, so only events
+ * whose `object`-marked `a` equals it are kept.
  */
 export async function getActions(client: RecordClient, objectAddress: string, townPubkey: string): Promise<VorhabenActionRow[]> {
-  const events = await client.events({ kinds: [KIND_ACTION], authors: [townPubkey], a: [objectAddress], limit: FETCH_LIMIT });
-  const own = events.filter((ev) => byTown(townPubkey)(ev) && tagWithMarker(ev, "a", "object")?.[1] === objectAddress);
+  const events = await client.events({ kinds: [KIND_ACTION], a: [objectAddress], limit: FETCH_LIMIT });
+  const own = events.filter(
+    (ev) => actionTrustLevel(ev, townPubkey) !== "untrusted" && tagWithMarker(ev, "a", "object")?.[1] === objectAddress,
+  );
   return chainOrder(own.map(toAction).filter(nonNull));
 }
