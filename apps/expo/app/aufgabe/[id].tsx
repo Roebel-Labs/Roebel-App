@@ -21,6 +21,7 @@ import StatusChip from '@/components/vorhaben/StatusChip';
 import { displayNames, fetchTaskDetail, vorhabenAction, type ActivityRow, type TaskAttachment, type TaskDetail } from '@/lib/vorhaben';
 import { FINAL_TASK_STATUSES, formatAmount, TASK_STATUS_LABELS, taskTone, type TaskStatus } from '@/lib/vorhaben-labels';
 import type { VorhabenAction } from '@/lib/signed-request';
+import { personRoleFor } from '@/lib/nostr/vorhaben-events';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { FORUM_ATTACHMENTS_BUCKET, uploadForumFileFromBase64 } from '@/lib/forum-attachments';
 import { formatRelativeTimestamp } from '@/lib/utils';
@@ -105,11 +106,14 @@ export default function TaskTicketScreen() {
     setActionError(null);
     setDrawerError(null);
     try {
-      const r = await vorhabenAction(account, action, { taskId: detail.task.id, ...payload });
+      // Person-signed path (NSP-13): the role this screen acts in and the status it saw.
+      const role = personRoleFor(action, account.address.toLowerCase() === detail.proposal.proposer);
+      const ctx = role ? { proposalKey: detail.proposal.key, role, status: detail.task.status } : undefined;
+      const r = await vorhabenAction(account, action, { taskId: detail.task.id, ...payload }, ctx);
       if (!r.ok) {
         const msg = r.code === 'NETWORK_ERROR' ? 'Keine Verbindung. Bitte versuche es erneut.' : r.message;
         if (inDrawer) setDrawerError(msg); else setActionError(msg);
-        if (r.code === 'CONFLICT' || r.code === 'BAD_STATUS') await load();
+        if (['CONFLICT', 'BAD_STATUS', 'STATE_MISMATCH', 'SEQ_CONFLICT'].includes(r.code)) await load();
         return false;
       }
       await load();

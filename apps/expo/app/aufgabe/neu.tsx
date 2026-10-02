@@ -9,7 +9,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { useGoBack } from '@/hooks/useGoBack';
 import { ArrowLeftIcon } from '@/components/Icons';
-import { resolveProposalUuid, vorhabenAction } from '@/lib/vorhaben';
+import { resolveProposalForTask, vorhabenAction } from '@/lib/vorhaben';
 import { parseEuroInput } from '@/lib/vorhaben-labels';
 
 type Deadline = 'week' | 'two_weeks' | 'none';
@@ -58,19 +58,21 @@ export default function NewTaskScreen() {
     setBusy(true);
     setError(null);
     try {
-      let proposalId: string | null;
+      let proposal: { id: string; proposer: string } | null;
       try {
-        proposalId = await resolveProposalUuid(proposalKey);
+        proposal = await resolveProposalForTask(proposalKey);
       } catch {
         setError('Verbindung fehlgeschlagen. Bitte später erneut versuchen.');
         return;
       }
-      if (!proposalId) { setError('Vorschlag nicht gefunden.'); return; }
+      if (!proposal) { setError('Vorschlag nicht gefunden.'); return; }
+      const proposalId = proposal.id;
       const payload: Record<string, unknown> = {
         proposalId, title: t, description: description.trim(), criteria: crit, rewardAmount: amount, rewardAsset: 'EURe',
       };
       if (days) payload.deadline = new Date(Date.now() + days * 86_400_000).toISOString();
-      const r = await vorhabenAction(account, 'task_create', payload);
+      const role = account.address.toLowerCase() === proposal.proposer ? 'proposer' : 'attester';
+      const r = await vorhabenAction(account, 'task_create', payload, { proposalKey, role });
       if (!r.ok) {
         setError(r.code === 'NETWORK_ERROR' ? 'Keine Verbindung. Bitte versuche es erneut.' : r.message);
         return;

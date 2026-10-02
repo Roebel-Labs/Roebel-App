@@ -105,7 +105,21 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  return context.resolveRequest(context, moduleName, platform);
+  try {
+    return context.resolveRequest(context, moduleName, platform);
+  } catch (err) {
+    // Workspace packages written for Node ESM (packages/protocol) import siblings as `./x.js` while the
+    // file is `x.ts`; Metro resolves the specifier literally. Only when that fails, and only for a relative
+    // import from a workspace package's own source, retry extensionless (jest.resolver.js does the same).
+    const origin = context.originModulePath || '';
+    if (
+      /^\.\.?\//.test(moduleName) && moduleName.endsWith('.js') &&
+      /[\\/]packages[\\/][^\\/]+[\\/]src[\\/]/.test(origin) && !/node_modules/.test(origin)
+    ) {
+      return context.resolveRequest(context, moduleName.slice(0, -3), platform);
+    }
+    throw err;
+  }
 };
 
 module.exports = config;

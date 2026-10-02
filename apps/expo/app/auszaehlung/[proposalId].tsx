@@ -54,12 +54,12 @@ export default function TallyConfirmScreen() {
     setBusy(true);
     setError(null);
     try {
-      const r = await submitTally(account, uuid, view.message);
+      const r = await submitTally(account, uuid, view.message, proposalKey);
       if (r.ok) { setDone(true); return; }
       if (r.code === 'NETWORK_ERROR') setError('Keine Verbindung. Bitte versuche es erneut.');
       else if (r.code === 'SIGN_FAILED') setError('Signatur abgebrochen oder fehlgeschlagen.');
       else setError(r.message);
-      if (r.code === 'ALREADY_CONFIRMED' || r.code === 'WINDOW_CLOSED') await load();
+      if (['ALREADY_CONFIRMED', 'WINDOW_CLOSED', 'SEQ_CONFLICT'].includes(r.code)) await load();
     } finally {
       busyRef.current = false;
       setBusy(false);

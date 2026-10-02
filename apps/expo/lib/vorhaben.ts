@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import {
   getApiBaseUrl, postSigned, signQueued, VORHABEN_SCOPE, type ApiResult, type SigningAccount, type VorhabenAction,
 } from './signed-request';
+import { sendTallyConfirmEvent, sendTaskActionEvent, type TaskEventContext } from './nostr/vorhaben-events';
 import { contractPurpose, type Asset, type LineStatus, type Stage, type TaskStatus } from './vorhaben-labels';
 
 export interface TallyDuty { proposalUuid: string; proposalKey: string; proposalNumber: number; title: string; until: string }
@@ -48,6 +49,14 @@ export async function resolveProposalUuid(proposalKey: string): Promise<string |
   return (data as { id: string } | null)?.id ?? null;
 }
 
+/** id + proposer of a proposal (for task_create: the role the creator signs in). null when missing. */
+export async function resolveProposalForTask(proposalKey: string): Promise<{ id: string; proposer: string } | null> {
+  const { data, error } = await timed((signal) => supabase.from('proposals').select('id, proposer_address').eq('proposal_id', proposalKey).abortSignal(signal).maybeSingle());
+  if (error) throw new Error(error.message);
+  const row = data as { id: string; proposer_address: string | null } | null;
+  return row ? { id: row.id, proposer: (row.proposer_address ?? '').toLowerCase() } : null;
+}
+
 export function fetchOpenTallyDuties(wallet: string): Promise<TallyDuty[]> {
   return soft([], async () => {
     const { data, error } = await timed((signal) => supabase
@@ -69,12 +78,23 @@ export function fetchTallyView(proposalUuid: string, wallet: string): Promise<Ap
   return getJson<TallyView>(`/api/vorhaben/tally-confirm?proposalId=${proposalUuid}&wallet=${wallet.toLowerCase()}`);
 }
 
-export async function submitTally(account: SigningAccount, proposalUuid: string, message: string): Promise<ApiResult<{ lineIds: string[] }>> {
+/**
+ * The Wahlhelfer co-sign: one wallet signature over `message`. With a registered Nostr key it travels inside a
+ * person-signed event (NSP-13 Stage 2, needs `proposalKey`); otherwise as the legacy request.
+ */
+export async function submitTally(
+  account: SigningAccount, proposalUuid: string, message: string, proposalKey?: string,
+): Promise<ApiResult<{ lineIds: string[] }>> {
   let signature: string;
   try {
     signature = await signQueued(account, message);
   } catch {
     return { ok: false, code: 'SIGN_FAILED', message: 'Signatur abgebrochen oder fehlgeschlagen.' };
+  }
+  if (proposalKey) {
+    const outcome = await sendTallyConfirmEvent(account.address, proposalUuid, proposalKey, message, signature);
+    if (outcome.kind === 'done') return outcome.result;
+    console.warn('[vorhaben] tally confirm via legacy request:', outcome.reason);
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
@@ -240,9 +260,20 @@ export async function displayNames(wallets: string[]): Promise<Map<string, strin
   return out;
 }
 
-export function vorhabenAction(
-  account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>,
+/**
+ * One task action. With `ctx` and a registered Nostr key on this device, the action is a kind-2101 event signed
+ * with the person's own key (NSP-13 Stage 2, no wallet prompt); otherwise the legacy wallet-signed request.
+ */
+export async function vorhabenAction(
+  account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>, ctx?: TaskEventContext,
 ): Promise<ApiResult<{ status?: string; id?: string }>> {
+  if (ctx) {
+    const outcome = await sendTaskActionEvent<{ status?: string; id?: string }>(account.address, action, payload, ctx);
+    if (outcome.kind === 'done') return outcome.result;
+    if (outcome.reason !== 'no identity or feature off' && outcome.reason !== 'not person-signable') {
+      console.warn('[vorhaben] action via legacy request:', action, outcome.reason);
+    }
+  }
   return postSigned<{ status?: string; id?: string }>('/api/vorhaben/tasks', account, action, payload, VORHABEN_SCOPE);
 }
 

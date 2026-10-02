@@ -75,6 +75,9 @@ importers:
       '@netizen-labs/nostr':
         specifier: workspace:*
         version: link:../../packages/nostr
+      '@netizen-labs/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@noble/ciphers':
         specifier: 1.3.0
         version: 1.3.0
