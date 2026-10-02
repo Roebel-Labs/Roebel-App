@@ -176,8 +176,12 @@ interface Expect {
 
 interface Checked { event: NostrEvent; parsed: ParsedAction; wallet: string; town: string }
 
-/** Steps 1–3: town key, event shape/size, schnorr signature, 2101 grammar, binding. */
-async function verifyBase(deps: PersonEventDeps, raw: unknown): Promise<Checked | Fail> {
+/**
+ * Steps 1–3: town key, event shape/size, schnorr signature, 2101 grammar, binding.
+ * `claimedWallet` (optional body.wallet): the account the app is logged in with. The device key is not cleared on
+ * logout, so after an account switch it may still be bound to the previous wallet — never act as that one.
+ */
+async function verifyBase(deps: PersonEventDeps, raw: unknown, claimedWallet?: unknown): Promise<Checked | Fail> {
   const town = (deps.townPubkey ?? "").trim().toLowerCase();
   if (!HEX64.test(town)) return fail(503, "FEATURE_OFF", "Signierte Nostr-Aktionen sind auf diesem Server nicht eingerichtet (VORHABEN_TOWN_PUBKEY fehlt).");
   const event = canonicalEvent(raw);
@@ -195,6 +199,9 @@ async function verifyBase(deps: PersonEventDeps, raw: unknown): Promise<Checked 
   if (await deps.eventKnown(event.id)) return fail(409, "DUPLICATE", "Dieses Ereignis wurde bereits übermittelt.");
   const wallet = (await deps.walletForPubkey(event.pubkey))?.toLowerCase() ?? null;
   if (!wallet) return fail(401, "NOT_BOUND", "Dieser Nostr-Schlüssel ist mit keinem aktiven Konto verbunden.");
+  if (typeof claimedWallet === "string" && claimedWallet.trim().toLowerCase() !== wallet) {
+    return fail(409, "WALLET_MISMATCH", "Der Nostr-Schlüssel auf diesem Gerät gehört zu einem anderen Konto.");
+  }
   return { event, parsed: parsed.value, wallet, town };
 }
 
@@ -259,9 +266,9 @@ async function attach(deps: PersonEventDeps, c: Checked, x: Expect, check?: (row
   }
 }
 
-/** POST body { event, action, payload } — a task action. */
+/** POST body { event, action, payload, wallet? } — a task action. */
 export async function handlePersonTaskEvent(deps: PersonEventDeps, body: unknown): Promise<PersonEventResult> {
-  const b = (body && typeof body === "object" ? body : {}) as { event?: unknown; action?: unknown; payload?: unknown };
+  const b = (body && typeof body === "object" ? body : {}) as { event?: unknown; action?: unknown; payload?: unknown; wallet?: unknown };
   const town = (deps.townPubkey ?? "").trim().toLowerCase();
   if (!HEX64.test(town)) return fail(503, "FEATURE_OFF", "Signierte Nostr-Aktionen sind auf diesem Server nicht eingerichtet (VORHABEN_TOWN_PUBKEY fehlt).");
   const action = typeof b.action === "string" ? (b.action as VorhabenAction) : null;
@@ -273,7 +280,7 @@ export async function handlePersonTaskEvent(deps: PersonEventDeps, body: unknown
   if (!b.payload || typeof b.payload !== "object" || Array.isArray(b.payload)) return bad("BAD_REQUEST", "payload fehlt.");
   const payload = b.payload as Record<string, unknown>;
 
-  const base = await verifyBase(deps, b.event);
+  const base = await verifyBase(deps, b.event, b.wallet);
   if ("ok" in base) return base;
   const { wallet } = base;
 
@@ -329,9 +336,9 @@ export async function handlePersonTaskEvent(deps: PersonEventDeps, body: unknown
   return { ok: true, data: { ...data, eventId: base.event.id, personSigned } };
 }
 
-/** POST body { event, kind: "tally_confirm", proposalId, signature } — the Wahlhelfer co-sign. */
+/** POST body { event, kind: "tally_confirm", proposalId, signature, wallet? } — the Wahlhelfer co-sign. */
 export async function handlePersonTallyEvent(deps: PersonEventDeps, body: unknown): Promise<PersonEventResult> {
-  const b = (body && typeof body === "object" ? body : {}) as { event?: unknown; proposalId?: unknown; signature?: unknown };
+  const b = (body && typeof body === "object" ? body : {}) as { event?: unknown; proposalId?: unknown; signature?: unknown; wallet?: unknown };
   const town = (deps.townPubkey ?? "").trim().toLowerCase();
   if (!HEX64.test(town)) return fail(503, "FEATURE_OFF", "Signierte Nostr-Aktionen sind auf diesem Server nicht eingerichtet (VORHABEN_TOWN_PUBKEY fehlt).");
   const proposalUuid = uuid(b.proposalId);
@@ -340,7 +347,7 @@ export async function handlePersonTallyEvent(deps: PersonEventDeps, body: unknow
   // Hash over exactly what the client sent (proposalId as given).
   const payload = { proposalId: b.proposalId as string, signature };
 
-  const base = await verifyBase(deps, b.event);
+  const base = await verifyBase(deps, b.event, b.wallet);
   if ("ok" in base) return base;
   const { event, wallet } = base;
   const proposal = await deps.getProposal(proposalUuid);

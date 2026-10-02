@@ -339,3 +339,13 @@ test("resubmitting an event already in the outbox → 409 DUPLICATE, rules never
   if (!r.ok) { assert.equal(r.status, 409); assert.equal(r.code, "DUPLICATE"); }
   assert.equal(calls.actions.length, 0);
 });
+
+test("wallet claimed by the app differs from the key's binding → 409 WALLET_MISMATCH, rules never run", async () => {
+  const { deps, calls } = harness();
+  const r = await handlePersonEvent(deps, { event: approveEvent(), action: "task_approve", payload: approvePayload, wallet: PROPOSER });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.status, 409); assert.equal(r.code, "WALLET_MISMATCH"); }
+  assert.equal(calls.actions.length, 0);
+  const ok = await handlePersonEvent(harness().deps, { event: approveEvent(), action: "task_approve", payload: approvePayload, wallet: ATTESTER.toUpperCase().replace("0X", "0x") });
+  assert.equal(ok.ok, true);
+});

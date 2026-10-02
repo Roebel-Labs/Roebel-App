@@ -95,7 +95,7 @@ function buildDeps(): PersonEventDeps {
   };
 }
 
-// POST { event, action, payload } | { event, kind: "tally_confirm", proposalId, signature }
+// POST { event, action, payload, wallet? } | { event, kind: "tally_confirm", proposalId, signature, wallet? }
 // The person-signed kind-2101 event replaces the wallet-signed request (NSP-13 Stage 2).
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
