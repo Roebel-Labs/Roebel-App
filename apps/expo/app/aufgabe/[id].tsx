@@ -18,7 +18,10 @@ import BottomDrawer from '@/components/BottomDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FilePickerSheet, { type PickedFile } from '@/components/forum/FilePickerSheet';
 import StatusChip from '@/components/vorhaben/StatusChip';
-import { displayNames, fetchTaskDetail, vorhabenAction, type ActivityRow, type TaskAttachment, type TaskDetail } from '@/lib/vorhaben';
+import {
+  displayNames, fetchTaskDetail, fetchTaskPayoutLines, vorhabenAction, type ActivityRow, type TaskAttachment, type TaskDetail,
+  type TaskPayoutLine,
+} from '@/lib/vorhaben';
 import { FINAL_TASK_STATUSES, formatAmount, TASK_STATUS_LABELS, taskTone, type TaskStatus } from '@/lib/vorhaben-labels';
 import type { VorhabenAction } from '@/lib/signed-request';
 import { personRoleFor } from '@/lib/nostr/vorhaben-events';
@@ -29,7 +32,7 @@ import { formatRelativeTimestamp } from '@/lib/utils';
 const PROPOSER_INACTIVE_MS = 7 * 24 * 3600 * 1000;
 const UPLOAD_TIMEOUT_MS = 60000;
 const TX_RE = /^0x[0-9a-fA-F]{64}$/;
-type Drawer = null | 'apply' | 'proof' | 'changes' | 'cancel' | 'approve';
+type Drawer = null | 'apply' | 'proof' | 'changes' | 'cancel' | 'approve' | 'payout';
 type ProofItem = { type: 'image' | 'pdf'; url: string; label: string };
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -70,6 +73,9 @@ export default function TaskTicketScreen() {
   const [uploading, setUploading] = useState(false);
   const uploadingRef = useRef(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [payoutLines, setPayoutLines] = useState<TaskPayoutLine[]>([]);
+  const [payoutTx, setPayoutTx] = useState('');
+  const [payoutNotice, setPayoutNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -77,6 +83,8 @@ export default function TaskTicketScreen() {
       const d = await fetchTaskDetail(id);
       setDetail(d);
       setLoadError(null);
+      // Payout lines exist only once the task is approved; optional UI, a failed read just hides the button.
+      setPayoutLines(d && d.task.status === 'abgenommen' ? await fetchTaskPayoutLines(id) : []);
       if (d) {
         const wallets = [
           d.task.assignee_wallet ?? '', ...d.applications.map((a) => a.applicant_wallet), ...d.activity.map((a) => a.actor_wallet),
@@ -171,6 +179,21 @@ export default function TaskTicketScreen() {
   const hasProof = activity.some((a) => a.kind === 'proof');
   const canReview = !!me && hasAttesterNFT && !isAssignee && task.status === 'eingereicht';
   const canCancel = !!me && (isProposer || hasAttesterNFT) && !FINAL_TASK_STATUSES.includes(task.status);
+  const rewardLine = task.status === 'abgenommen'
+    ? payoutLines.find((l) => l.role === 'aufgabe' && l.rail === 'manual_safe' && l.status === 'geplant') ?? null
+    : null;
+  const feeLine = payoutLines.find((l) => l.role === 'plattform' && l.rail === 'manual_safe' && l.status === 'geplant') ?? null;
+  const canRecordPayout = !!me && hasAttesterNFT && !!rewardLine;
+  const feePct = rewardLine && feeLine && Number(rewardLine.amount) > 0
+    ? (Math.round((Number(feeLine.amount) / Number(rewardLine.amount)) * 1000) / 10).toLocaleString('de-DE')
+    : null;
+  const rewardText = rewardLine ? formatAmount(rewardLine.amount, rewardLine.asset) : 'die Belohnung';
+  const payoutHint = feeLine
+    ? `Zahle aus der Gemeinschaftskasse ${rewardText} an ${nameOf(task.assignee_wallet)} und `
+      + `${formatAmount(feeLine.amount, feeLine.asset)} Plattformgebühr${feePct ? ` (${feePct} %)` : ''} an den Plattform-Safe – `
+      + 'am besten beides in einer Safe-Transaktion. Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain.'
+    : `Zahle aus der Gemeinschaftskasse ${rewardText} an ${nameOf(task.assignee_wallet)}. `
+      + 'Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain.';
 
   const pickPhoto = async () => {
     if (uploadingRef.current || !account) return;
@@ -245,6 +268,36 @@ export default function TaskTicketScreen() {
     if (ok) { setProofText(''); setProofTx(''); setProofItems([]); setDrawer(null); }
   };
 
+  // Task payouts are paid by hand for now: an Attester pays from the Gemeinschaftskasse Safe and records the hash.
+  // Legacy wallet-signed request (no ctx): payout_record_manual is not person-signable.
+  const submitPayout = async () => {
+    const line = rewardLine;
+    if (busyRef.current || !line) return;
+    const tx = payoutTx.trim();
+    if (!TX_RE.test(tx)) { setDrawerError('Der Transaktions-Hash ist ungültig (0x und 64 Zeichen).'); return; }
+    if (!account) { setDrawerError('Bitte melde dich an, um die Überweisung einzutragen.'); return; }
+    busyRef.current = true;
+    setBusy(true);
+    setDrawerError(null);
+    try {
+      const r = await vorhabenAction(account, 'payout_record_manual', { lineId: line.id, txHash: tx });
+      if (!r.ok) {
+        setDrawerError(r.code === 'NETWORK_ERROR' ? 'Keine Verbindung. Bitte versuche es erneut.' : r.message);
+        if (r.code === 'BAD_STATUS' || r.code === 'CONFLICT') await load();
+        return;
+      }
+      setPayoutTx('');
+      setDrawer(null);
+      setPayoutNotice(r.data.feeOpen
+        ? 'Belohnung eingetragen. Die Plattformgebühr war nicht in derselben Transaktion – trage sie bitte separat im Vertrag ein.'
+        : 'Überweisung eingetragen.');
+      await load();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
   const primary = (label: string, onPress: () => void, key: string) => (
     <Pressable key={key} disabled={busy} onPress={onPress} accessibilityRole="button"
       style={({ pressed }) => [styles.primary, { backgroundColor: colors.primary, opacity: busy ? 0.6 : pressed ? 0.85 : 1 }]}>
@@ -270,6 +323,7 @@ export default function TaskTicketScreen() {
     actions.push(primary('Abnehmen', () => openDrawer('approve'), 'approve'));
     actions.push(secondary('Nachbesserung anfordern', () => openDrawer('changes'), 'changes'));
   }
+  if (canRecordPayout) actions.push(primary('Überweisung eintragen', () => { setPayoutTx(''); openDrawer('payout'); }, 'payout'));
 
   const deadline = task.deadline ? `bis ${format(new Date(task.deadline), 'd. MMM', { locale: de })}` : null;
 
@@ -400,6 +454,19 @@ export default function TaskTicketScreen() {
               <Text style={[styles.meta, { color: colors.error }]}>{loadError} Angezeigt wird der letzte Stand.</Text>
             </View>
           )}
+          {rewardLine && !canRecordPayout && (
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>
+              Die Belohnung wird aus der Gemeinschaftskasse überwiesen und von einer Attester:in hier eingetragen.
+            </Text>
+          )}
+          {payoutNotice && (
+            <View style={styles.noticeRow}>
+              <Text style={[styles.meta, { color: colors.textPrimary }]}>{payoutNotice}</Text>
+              <Pressable onPress={() => router.push(`/vertrag/${proposal.key}` as any)} accessibilityRole="link">
+                <Text style={[styles.link, { color: colors.primary }]}>Zum Vertrag</Text>
+              </Pressable>
+            </View>
+          )}
           {actionError && <Text style={[styles.error, { color: colors.error }]}>{actionError}</Text>}
           {actions.length > 0 && <View style={styles.actions}>{actions}</View>}
           {!account && noAccount && (
@@ -469,13 +536,26 @@ export default function TaskTicketScreen() {
         </ScrollView>
       </BottomDrawer>
 
+      <BottomDrawer visible={drawer === 'payout'} onClose={closeDrawer} keyboardAware>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.drawer}>
+          <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>Überweisung eintragen</Text>
+          <Text style={[styles.drawerHint, { color: colors.textSecondary }]}>{payoutHint}</Text>
+          {input(payoutTx, setPayoutTx, 'Transaktions-Hash (0x…)', false)}
+          {drawerError && <Text style={[styles.error, { color: colors.error }]}>{drawerError}</Text>}
+          <Pressable disabled={busy || !payoutTx.trim()} onPress={submitPayout} accessibilityRole="button"
+            style={({ pressed }) => [styles.primary, { backgroundColor: colors.primary, opacity: busy || !payoutTx.trim() ? 0.5 : pressed ? 0.85 : 1 }]}>
+            {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[styles.primaryText, { color: colors.onPrimary }]}>Eintragen</Text>}
+          </Pressable>
+        </ScrollView>
+      </BottomDrawer>
+
       <FilePickerSheet visible={pickerOpen} onClose={closeFilePicker} onPicked={onFilePicked}
         onError={(m) => setDrawerError(m)} />
 
       <ConfirmationDrawer
         visible={drawer === 'approve'}
         title="Aufgabe abnehmen?"
-        message={drawerError ?? 'Danach wird die Auszahlung freigegeben.'}
+        message={drawerError ?? 'Danach wird die Belohnung aus der Gemeinschaftskasse ausgezahlt; eine Attester:in trägt die Überweisung hier ein.'}
         variant="success"
         confirmText="Abnehmen"
         isLoading={busy}
@@ -529,4 +609,5 @@ const styles = StyleSheet.create({
   textArea: { minHeight: 96, maxHeight: 200, borderWidth: 1, borderRadius: 12, padding: 12, fontFamily: fontFamily.regular, fontSize: 15, textAlignVertical: 'top' },
   textField: { height: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontFamily: fontFamily.regular, fontSize: 14 },
   attachButtons: { flexDirection: 'row', gap: 10 },
+  noticeRow: { gap: 4 },
 });

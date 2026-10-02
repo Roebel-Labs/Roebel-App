@@ -264,17 +264,33 @@ export async function displayNames(wallets: string[]): Promise<Map<string, strin
  * One task action. With `ctx` and a registered Nostr key on this device, the action is a kind-2101 event signed
  * with the person's own key (NSP-13 Stage 2, no wallet prompt); otherwise the legacy wallet-signed request.
  */
+/** `feeRecorded`/`feeOpen`: payout_record_manual on a task reward line (was the platform fee in the same tx?). */
+export type VorhabenActionData = { status?: string; id?: string; feeRecorded?: boolean; feeOpen?: boolean };
+
 export async function vorhabenAction(
   account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>, ctx?: TaskEventContext,
-): Promise<ApiResult<{ status?: string; id?: string }>> {
+): Promise<ApiResult<VorhabenActionData>> {
   if (ctx) {
-    const outcome = await sendTaskActionEvent<{ status?: string; id?: string }>(account.address, action, payload, ctx);
+    const outcome = await sendTaskActionEvent<VorhabenActionData>(account.address, action, payload, ctx);
     if (outcome.kind === 'done') return outcome.result;
     if (outcome.reason !== 'no identity or feature off' && outcome.reason !== 'not person-signable') {
       console.warn('[vorhaben] action via legacy request:', action, outcome.reason);
     }
   }
-  return postSigned<{ status?: string; id?: string }>('/api/vorhaben/tasks', account, action, payload, VORHABEN_SCOPE);
+  return postSigned<VorhabenActionData>('/api/vorhaben/tasks', account, action, payload, VORHABEN_SCOPE);
+}
+
+export interface TaskPayoutLine { id: string; role: LineRole; amount: string; asset: Asset; rail: string; status: LineStatus }
+
+/** Payout lines of one task (reward + platform fee); [] when none exist yet or the read fails (optional UI). */
+export function fetchTaskPayoutLines(taskId: string): Promise<TaskPayoutLine[]> {
+  return soft([], async () => {
+    const { data, error } = await timed((signal) => supabase.from('proposal_payout_lines')
+      .select('id, role, amount, asset, rail, status')
+      .eq('reference_type', 'task').eq('reference_id', taskId).abortSignal(signal));
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as any[]).map((r) => ({ ...r, amount: String(r.amount) }) as TaskPayoutLine);
+  });
 }
 
 // ---- Contract ("Vertrag") ----------------------------------------------------------------------

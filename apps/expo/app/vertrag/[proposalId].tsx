@@ -128,7 +128,9 @@ export default function ContractScreen() {
   };
 
   const renderLine = (line: ContractLine) => {
-    const canRecord = hasAttesterNFT && !!account && line.role === 'empfaenger' && line.status === 'geplant' && line.rail === 'manual_safe';
+    // Manually paid lines: the budget, and a task reward + its platform fee (task payouts are paid by hand for now).
+    const manualRole = line.role === 'empfaenger' || line.role === 'aufgabe' || (line.role === 'plattform' && line.referenceType === 'task');
+    const canRecord = hasAttesterNFT && !!account && manualRole && line.status === 'geplant' && line.rail === 'manual_safe';
     const body = (
       <View style={styles.rowTop}>
         <View style={styles.flex}>
