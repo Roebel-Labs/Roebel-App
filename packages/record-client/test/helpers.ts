@@ -16,7 +16,7 @@ export function asRecordEvent(spec: PublishSpec, pubkey = "f".repeat(64)) {
 }
 
 /**
- * A fake client over fixed events that honours `kinds` and `a` like the index:
+ * A fake client over fixed events that honours `kinds`, `authors` and `a` like the index:
  * an `a` filter matches any tag with t[0]==="a" && t[1]===value (extra
  * marker/role elements are ignored, as jsonb containment does).
  */
@@ -25,8 +25,10 @@ export function filteringClient(events: ReturnType<typeof asRecordEvent>[]) {
     const u = new URL(url);
     const kinds = u.searchParams.get("kinds")?.split(",").map(Number);
     const a = u.searchParams.get("a")?.split(",");
+    const authors = u.searchParams.get("authors")?.split(",");
     const out = events.filter(
-      (e) => (!kinds || kinds.includes(e.kind)) && (!a || e.tags.some((t) => t[0] === "a" && a.includes(t[1]))),
+      (e) => (!kinds || kinds.includes(e.kind)) && (!authors || authors.includes(e.pubkey))
+        && (!a || e.tags.some((t) => t[0] === "a" && a.includes(t[1]))),
     );
     return new Response(JSON.stringify({ events: out }));
   }) as unknown as typeof fetch);

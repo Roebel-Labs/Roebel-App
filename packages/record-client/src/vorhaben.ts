@@ -155,20 +155,32 @@ function chainOrder(rows: VorhabenActionRow[]): VorhabenActionRow[] {
 
 const nonNull = <T>(v: T | null): v is T => v !== null;
 
-/** Tasks of a proposal, by the head address. */
-export async function listTasks(client: RecordClient, proposalAddress: string): Promise<VorhabenTaskRow[]> {
-  const events = await client.events({ kinds: [KIND_TASK], a: [proposalAddress], limit: FETCH_LIMIT });
-  return events.map(toTask).filter(nonNull);
+/**
+ * The town key is the only trusted signer of the Vorhaben record: anyone can
+ * publish an event carrying the town's `a` tags, so every reader asks for
+ * `authors: [townPubkey]` and re-checks the pubkey on what comes back.
+ */
+const byTown = (townPubkey: string) => (ev: RecordEvent) => ev.pubkey === townPubkey;
+
+/** Tasks of a proposal, by the head address, signed by the town key. */
+export async function listTasks(client: RecordClient, proposalAddress: string, townPubkey: string): Promise<VorhabenTaskRow[]> {
+  const events = await client.events({ kinds: [KIND_TASK], authors: [townPubkey], a: [proposalAddress], limit: FETCH_LIMIT });
+  return events.filter(byTown(townPubkey)).map(toTask).filter(nonNull);
 }
 
-/** Payout lines of a contract, by the contract address. */
-export async function getContractLines(client: RecordClient, contractAddress: string): Promise<VorhabenLineRow[]> {
-  const events = await client.events({ kinds: [KIND_PAYOUT_LINE], a: [contractAddress], limit: FETCH_LIMIT });
-  return events.map(toLine).filter(nonNull);
+/** Payout lines of a contract, by the contract address, signed by the town key. */
+export async function getContractLines(client: RecordClient, contractAddress: string, townPubkey: string): Promise<VorhabenLineRow[]> {
+  const events = await client.events({ kinds: [KIND_PAYOUT_LINE], authors: [townPubkey], a: [contractAddress], limit: FETCH_LIMIT });
+  return events.filter(byTown(townPubkey)).map(toLine).filter(nonNull);
 }
 
-/** The action log of one object (task, line, head, poll), in `prior` chain order. */
-export async function getActions(client: RecordClient, objectAddress: string): Promise<VorhabenActionRow[]> {
-  const events = await client.events({ kinds: [KIND_ACTION], a: [objectAddress], limit: FETCH_LIMIT });
-  return chainOrder(events.map(toAction).filter(nonNull));
+/**
+ * The action log of one object (task, line, head, poll), in `prior` chain order.
+ * The `a` filter also matches actions that merely name this address as their
+ * proposal head, so only events whose `object`-marked `a` equals it are kept.
+ */
+export async function getActions(client: RecordClient, objectAddress: string, townPubkey: string): Promise<VorhabenActionRow[]> {
+  const events = await client.events({ kinds: [KIND_ACTION], authors: [townPubkey], a: [objectAddress], limit: FETCH_LIMIT });
+  const own = events.filter((ev) => byTown(townPubkey)(ev) && tagWithMarker(ev, "a", "object")?.[1] === objectAddress);
+  return chainOrder(own.map(toAction).filter(nonNull));
 }

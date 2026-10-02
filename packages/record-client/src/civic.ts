@@ -24,6 +24,8 @@ const KIND_PROPOSAL_META = 32100;
 const KIND_MENU = 32101;
 /** Netizen civic notice (service alerts, announcements). */
 const KIND_CIVIC_NOTICE = 32102;
+/** NSP-13 payout contract, one per Vorhaben. */
+const KIND_PAYOUT_CONTRACT = 32110;
 
 /** Civic-record roster is town-scale, not paginated; one generous fetch covers it (mirrors ORG_FETCH_LIMIT in datasets.ts). */
 const CIVIC_FETCH_LIMIT = 200;
@@ -123,6 +125,26 @@ export interface ProposalMetaRow {
   irys_tx: string | null;
   status: string | null;
   published_at: string | null;
+  /** NSP-12 `stage` tag of the head; null for a proposal without one. */
+  stage: string | null;
+  /** NSP-13 lifecycle stage (`vorhaben` tag); null unless Vorhaben-enabled. */
+  vorhaben: string | null;
+  /** proposals.id — keys the payout contract (`32110:<town>:contract:<uuid>`). */
+  proposal_uuid: string | null;
+  budget_amount: string | null;
+  budget_asset: string | null;
+  beneficiary: string | null;
+}
+
+/** NSP-13 payout contract (kind 32110). */
+export interface ContractRow {
+  proposal_uuid: string;
+  proposal_address: string | null;
+  fee_bps: number;
+  platform_safe: string;
+  totals: { amount: string; asset: string }[];
+  /** `32111:<town>:payout:<lineId>` addresses, in the contract's order. */
+  line_addresses: string[];
 }
 
 export interface NoticeRow {
@@ -309,6 +331,7 @@ export async function listProposals(client: RecordClient, opts?: { limit?: numbe
     const title = tagValue(ev, "title");
     if (proposalId === null || title === null) continue;
     const publishedAt = tagValue(ev, "published_at");
+    const budget = ev.tags.find((t) => t[0] === "budget" && t[1] && t[2]);
     rows.push({
       proposal_id: proposalId,
       title,
@@ -319,9 +342,43 @@ export async function listProposals(client: RecordClient, opts?: { limit?: numbe
       irys_tx: tagValue(ev, "irys"),
       status: tagValue(ev, "status"),
       published_at: publishedAt !== null ? new Date(Number(publishedAt) * 1000).toISOString() : null,
+      stage: tagValue(ev, "stage"),
+      vorhaben: tagValue(ev, "vorhaben"),
+      proposal_uuid: tagValue(ev, "proposal_uuid"),
+      budget_amount: budget?.[1] ?? null,
+      budget_asset: budget?.[2] ?? null,
+      beneficiary: tagValue(ev, "beneficiary"),
     });
   }
   return rows;
+}
+
+/**
+ * kind 32110, by its address `32110:<townPubkey>:contract:<proposal uuid>`.
+ * Pinned to `contractToSpec` (publisher vorhaben.ts). The town key is the only
+ * trusted signer: the query asks for `authors: [townPubkey]` and the pubkey and
+ * `d` are re-checked on what comes back; the newest version wins.
+ */
+export async function getContract(client: RecordClient, contractAddress: string, townPubkey: string): Promise<ContractRow | null> {
+  const m = /^(\d+):([0-9a-f]{64}):(contract:.+)$/.exec(contractAddress);
+  if (!m || Number(m[1]) !== KIND_PAYOUT_CONTRACT || m[2] !== townPubkey) return null;
+  const d = m[3];
+  const events = await client.events({ kinds: [KIND_PAYOUT_CONTRACT], authors: [townPubkey], d: [d], limit: 5 });
+  const ev = events
+    .filter((e) => e.kind === KIND_PAYOUT_CONTRACT && e.pubkey === townPubkey && tagValue(e, "d") === d)
+    .sort((a, b) => b.created_at - a.created_at)[0];
+  if (!ev) return null;
+  const fee = Number(tagValue(ev, "fee_bps"));
+  const safe = tagValue(ev, "platform_safe");
+  if (!Number.isInteger(fee) || !safe) return null;
+  return {
+    proposal_uuid: d.slice("contract:".length),
+    proposal_address: ev.tags.find((t) => t[0] === "a" && t[3] === "proposal")?.[1] ?? null,
+    fee_bps: fee,
+    platform_safe: safe,
+    totals: ev.tags.filter((t) => t[0] === "total" && t[1] && t[2]).map((t) => ({ amount: t[1], asset: t[2] })),
+    line_addresses: ev.tags.filter((t) => t[0] === "a" && t[3] === "line" && t[1]).map((t) => t[1]),
+  };
 }
 
 /**

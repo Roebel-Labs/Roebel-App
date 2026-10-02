@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  businessToSpec, dealToSpec, listingToSpec, menuToSpec, noticeToSpec, orgToSpec, proposalToSpec,
+  businessToSpec, contractToSpec, dealToSpec, listingToSpec, menuToSpec, noticeToSpec, orgToSpec, proposalToSpec,
 } from "@netizen-labs/publisher";
 import { deriveOrgIdentity } from "@netizen-labs/nostr";
 import { RecordClient } from "../src/index";
-import { getMenu, getMenuBySlug, listDeals, listListings, listNotices, listProposals } from "../src/civic";
+import { getContract, getMenu, getMenuBySlug, listDeals, listListings, listNotices, listProposals } from "../src/civic";
 import { asRecordEvent } from "./helpers";
 
 const clientFor = (events: unknown[]) =>
@@ -178,6 +178,56 @@ test("round-trip parity: a proposal with no formal category reports null, not th
   const spec = proposalToSpec(row, "100:0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3")!;
   const [proposal] = await listProposals(clientFor([asRecordEvent(spec)]));
   assert.equal(proposal.category, null);
+});
+
+test("round-trip parity: Vorhaben head tags (stage, vorhaben, proposal_uuid, budget, beneficiary); null when absent", async () => {
+  const town = "a".repeat(64);
+  const row = {
+    id: "f4a87bbe-9deb-4f5e-9807-3b8534135c15", proposal_id: "0xabc", title: "Vereinsbus", summary: "Ein Bus.", state: "executed",
+    updated_at: "2026-10-01T10:00:00Z", vorhaben_enabled: true, lifecycle_stage: "in_umsetzung",
+    budget_amount: "150.000000000000000000", budget_asset: "EURe", beneficiary_name: "Seglerverein",
+  };
+  const spec = proposalToSpec(row, "100:0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3", { townPubkey: town, taskIds: [] })!;
+  const [p] = await listProposals(clientFor([asRecordEvent(spec, town)]));
+  assert.equal(p.vorhaben, "in_umsetzung");
+  assert.equal(p.stage, spec.tags.find((t) => t[0] === "stage")![1]);
+  assert.equal(p.proposal_uuid, row.id);
+  assert.equal(p.budget_amount, "150");
+  assert.equal(p.budget_asset, "EURe");
+  assert.equal(p.beneficiary, "Seglerverein");
+
+  const plain = proposalToSpec({ proposal_id: "p3", title: "Radweg", state: "pending", updated_at: "2026-07-02T10:00:00Z" }, "100:0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3")!;
+  const [q] = await listProposals(clientFor([asRecordEvent(plain)]));
+  assert.equal(q.stage, null);
+  assert.equal(q.vorhaben, null);
+  assert.equal(q.proposal_uuid, null);
+  assert.equal(q.budget_amount, null);
+  assert.equal(q.budget_asset, null);
+  assert.equal(q.beneficiary, null);
+});
+
+// --- payout contract (kind 32110, NSP-13) ---
+
+test("round-trip parity: getContract reads fee, safe, totals and line addresses, town-signed only", async () => {
+  const town = "a".repeat(64);
+  const uuid = "11111111-1111-1111-1111-111111111111";
+  const safe = "0x" + "b".repeat(40);
+  const spec = contractToSpec(
+    { id: "k1", proposal_id: uuid, platform_fee_bps: 500, platform_safe_address: safe, created_at: "2026-10-01T10:00:00Z" },
+    "0xabc", town, ["l1", "l2"], [["EURe", "150.000000000000000000"], ["CRC", "12.5"]],
+  )!;
+  const address = `32110:${town}:contract:${uuid}`;
+  const forged = { ...asRecordEvent({ ...spec, createdAt: spec.createdAt + 100, tags: spec.tags.map((t) => (t[0] === "fee_bps" ? ["fee_bps", "9999"] : t)) }, "9".repeat(64)) };
+  const c = await getContract(clientFor([forged, asRecordEvent(spec, town)]), address, town);
+  assert.ok(c);
+  assert.equal(c!.proposal_uuid, uuid);
+  assert.equal(c!.proposal_address, `32100:${town}:proposal:0xabc`);
+  assert.equal(c!.fee_bps, 500);
+  assert.equal(c!.platform_safe, safe);
+  assert.deepEqual(c!.totals, [{ amount: "150", asset: "EURe" }, { amount: "12.5", asset: "CRC" }]);
+  assert.deepEqual(c!.line_addresses, [`32111:${town}:payout:l1`, `32111:${town}:payout:l2`]);
+  assert.equal(await getContract(clientFor([forged]), address, town), null);
+  assert.equal(await getContract(clientFor([asRecordEvent(spec, town)]), "not-an-address", town), null);
 });
 
 // --- notices (kind 32102, custom) ---
