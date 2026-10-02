@@ -193,7 +193,10 @@ export const PERSON_ACTION_ROLES: Readonly<Record<string, readonly string[]>> = 
 /**
  * Shape/marker filter for kind-2101 actions. NOT an authorization check: callers (API, indexer, ingester) MUST verify
  * the signer actually holds that role for this object. Town-signed 2101s pass; a person-signed one passes only for a
- * person-signable action whose `role` tag equals the role marker on the p tag naming the event's own pubkey.
+ * person-signable action that carries exactly ONE p tag marked with a role allowed for that action, that tag names
+ * the event's own pubkey, its marker equals the `role` tag, and the signer's p tag is the first p tag. A second
+ * role-marked p tag (a forged co-claim) makes the event untrusted. task_assigned may still name the new assignee
+ * (marker "assignee", not a signing role for that action) after the signer.
  */
 export function isTrustedAction(ev: DecisionEventLike & { pubkey: string }, townPubkey: string): boolean {
   if (ev.kind !== VORHABEN_KINDS.action) return false;
@@ -202,7 +205,9 @@ export function isTrustedAction(ev: DecisionEventLike & { pubkey: string }, town
   if (!action || !Object.prototype.hasOwnProperty.call(PERSON_ACTION_ROLES, action)) return false;
   const allowed = PERSON_ACTION_ROLES[action];
   const role = tag(ev, "role");
-  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && t[3] === role && allowed.includes(t[3] ?? ""));
+  const pTags = ev.tags.filter((t) => t[0] === "p");
+  const marked = pTags.filter((t) => allowed.includes(t[3] ?? ""));
+  return marked.length === 1 && marked[0][1] === ev.pubkey && marked[0][3] === role && pTags[0][1] === ev.pubkey;
 }
 
 /** sha256 hex of the payload JSON with sorted top-level keys (parity with apps/web org-membership `hashPayload`). */

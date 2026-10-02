@@ -44,6 +44,11 @@ export interface VorhabenActionRow {
   from: string | null;
   to: string;
   role: string;
+  /** Who signed the event: the town key, or the person themself. */
+  pubkey: string;
+  /** "person-claimed" is a marker check, not authorization (see actionTrustLevel). */
+  trust: "town" | "person-claimed";
+  /** Town-signed: the p tag marked with the role. Person-signed: the signer (never a p tag the signer chose). */
   actor_pubkey: string | null;
   prior: string | null;
   seq: number;
@@ -103,18 +108,22 @@ function toLine(ev: RecordEvent): VorhabenLineRow | null {
   };
 }
 
-function toAction(ev: RecordEvent): VorhabenActionRow | null {
+function toAction(ev: RecordEvent, townPubkey: string): VorhabenActionRow | null {
   const action = tagValue(ev, "action");
   const to = tagValue(ev, "to");
   const role = tagValue(ev, "role");
   if (!action || !to || !role) return null;
+  const level = actionTrustLevel(ev, townPubkey);
+  if (level === "untrusted") return null;
   return {
     id: ev.id,
     action,
     from: tagValue(ev, "from"),
     to,
     role,
-    actor_pubkey: ev.tags.find((t) => t[0] === "p" && t[3] === role)?.[1] ?? null,
+    pubkey: ev.pubkey,
+    trust: level,
+    actor_pubkey: level === "town" ? ev.tags.find((t) => t[0] === "p" && t[3] === role)?.[1] ?? null : ev.pubkey,
     prior: tagValue(ev, "prior"),
     seq: /^[1-9]\d*$/.test(tagValue(ev, "seq") ?? "") ? Number(tagValue(ev, "seq")) : 0,
     occurred_at: unixToIso(tagValue(ev, "occurred_at")) ?? new Date(ev.created_at * 1000).toISOString(),
@@ -184,8 +193,10 @@ export type ActionTrustLevel = "town" | "person-claimed" | "untrusted";
 
 /**
  * How far a kind-2101 action can be trusted from its shape alone. "town": signed by the town key.
- * "person-claimed": a person-signable action whose `role` tag equals an allowed marker on the p tag naming the
- * event's own pubkey. This is a MARKER check, NOT authorization: anyone can claim a role. UIs should show it as
+ * "person-claimed": a person-signable action with exactly ONE p tag marked with a role allowed for that action; that
+ * tag names the event's own pubkey, its marker equals the `role` tag, and the signer's p tag comes first (a second
+ * role-marked p tag is a forged co-claim → untrusted). Mirrors @netizen-labs/protocol isTrustedAction (parity-tested).
+ * This is a MARKER check, NOT authorization: anyone can claim a role. UIs should show it as
  * a claim; a third-party client must still verify the signer really holds the role (assignee per the task's
  * state event, attester via AttesterNFT, ...).
  */
@@ -196,7 +207,9 @@ export function actionTrustLevel(ev: RecordEvent, townPubkey: string): ActionTru
   if (!action || !Object.prototype.hasOwnProperty.call(PERSON_ACTION_ROLES, action)) return "untrusted";
   const allowed = PERSON_ACTION_ROLES[action];
   const role = tagValue(ev, "role");
-  return ev.tags.some((t) => t[0] === "p" && t[1] === ev.pubkey && t[3] === role && allowed.includes(t[3] ?? ""))
+  const pTags = ev.tags.filter((t) => t[0] === "p");
+  const marked = pTags.filter((t) => allowed.includes(t[3] ?? ""));
+  return marked.length === 1 && marked[0][1] === ev.pubkey && marked[0][3] === role && pTags[0][1] === ev.pubkey
     ? "person-claimed"
     : "untrusted";
 }
@@ -211,8 +224,6 @@ export function actionTrustLevel(ev: RecordEvent, townPubkey: string): ActionTru
  */
 export async function getActions(client: RecordClient, objectAddress: string, townPubkey: string): Promise<VorhabenActionRow[]> {
   const events = await client.events({ kinds: [KIND_ACTION], a: [objectAddress], limit: FETCH_LIMIT });
-  const own = events.filter(
-    (ev) => actionTrustLevel(ev, townPubkey) !== "untrusted" && tagWithMarker(ev, "a", "object")?.[1] === objectAddress,
-  );
-  return chainOrder(own.map(toAction).filter(nonNull));
+  const own = events.filter((ev) => tagWithMarker(ev, "a", "object")?.[1] === objectAddress);
+  return chainOrder(own.map((ev) => toAction(ev, townPubkey)).filter(nonNull));
 }

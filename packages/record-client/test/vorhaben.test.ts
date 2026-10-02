@@ -116,13 +116,50 @@ test("getActions: person-signed actions by trust rule; forged role claims droppe
   for (const bad of [wrongRole, townOnly, noP]) assert.equal(actionTrustLevel(bad, town), "untrusted");
 });
 
+test("getActions: rows carry signer pubkey and trust; a person action's actor is its signer", async () => {
+  const person = "c".repeat(64);
+  const other = "d".repeat(64);
+  const obj = taskAddress(town, "t1");
+  const head = headAddress(town, proposalKey);
+  const base = (pubkey: string, action: string, role: string, seq: number, p: string[][]) => ({
+    id: String(seq).repeat(64), pubkey, kind: 2101, created_at: 1_800_000_000, content: "", sig: "0".repeat(128), node_id: "roebel", source: "test",
+    tags: [["a", obj, "", "object"], ["a", head, "", "proposal"], ["action", action], ["to", "x"], ["role", role], ["seq", String(seq)], ...p],
+  });
+  const t = base(town, "task_created", "proposer", 1, [["p", other, "", "proposer"]]);
+  const mine = base(person, "task_started", "assignee", 2, [["p", person, "", "assignee"]]);
+  const out = await getActions(filteringClient([t, mine]), obj, town);
+  assert.deepEqual(out.map((a) => [a.pubkey, a.trust, a.actor_pubkey]), [[town, "town", other], [person, "person-claimed", person]]);
+});
+
+test("actionTrustLevel: forged double role-marked p tags are untrusted", async () => {
+  const person = "c".repeat(64);
+  const victim = "d".repeat(64);
+  const obj = taskAddress(town, "t1");
+  const ev = (p: string[][]) => ({
+    id: "9".repeat(64), pubkey: person, kind: 2101, created_at: 1_800_000_000, content: "", sig: "0".repeat(128), node_id: "roebel", source: "test",
+    tags: [["a", obj, "", "object"], ["a", headAddress(town, proposalKey), "", "proposal"], ["action", "task_started"], ["to", "x"], ["role", "assignee"], ["seq", "1"], ...p],
+  });
+  const forged = [
+    ev([["p", victim, "", "assignee"], ["p", person, "", "assignee"]]),
+    ev([["p", person, "", "assignee"], ["p", victim, "", "assignee"]]),
+    ev([["p", victim, "", ""], ["p", person, "", "assignee"]]),
+  ];
+  for (const f of forged) {
+    assert.equal(actionTrustLevel(f, town), "untrusted");
+    assert.equal(isTrustedAction(f, town), false);
+  }
+  assert.deepEqual(await getActions(filteringClient(forged), obj, town), []);
+});
+
 test("actionTrustLevel: parity with protocol isTrustedAction over every action/role combination", () => {
   const person = "c".repeat(64);
   const actions = [...Object.keys(PERSON_ACTION_ROLES), "payout_confirmed", "stage_changed", "bogus", "toString", "__proto__"];
   const roles = ["assignee", "proposer", "attester", "wahlhelfer", "creator", "town"];
   for (const action of actions) for (const role of roles) for (const pRole of [...roles, null]) for (const signer of [person, town]) for (const kind of [2101, 1]) {
-    const tags = [["action", action], ["role", role], ...(pRole ? [["p", person, "", pRole]] : [])];
-    const ev = { id: "0".repeat(64), pubkey: signer, kind, created_at: 1, content: "", tags, sig: "", node_id: "n", source: "t" };
-    assert.equal(actionTrustLevel(ev, town) !== "untrusted", isTrustedAction(ev, town), `${action}/${role}/${pRole}/${kind}`);
+    for (const extra of [[], [["p", town, "", "assignee"]], [["p", town, "", role]]]) {
+      const tags = [["action", action], ["role", role], ...(pRole ? [["p", person, "", pRole]] : []), ...extra];
+      const ev = { id: "0".repeat(64), pubkey: signer, kind, created_at: 1, content: "", tags, sig: "", node_id: "n", source: "t" };
+      assert.equal(actionTrustLevel(ev, town) !== "untrusted", isTrustedAction(ev, town), `${action}/${role}/${pRole}/${kind}/${extra.length}`);
+    }
   }
 });

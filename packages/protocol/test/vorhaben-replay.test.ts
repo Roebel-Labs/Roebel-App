@@ -179,6 +179,19 @@ test("isTrustedAction: town always; person only with own role-marked p tag for a
   assert.deepEqual(PERSON_ACTION_ROLES.tally_confirmed, ["wahlhelfer"]);
 });
 
+test("isTrustedAction: exactly one role-marked p tag, naming the signer, and it comes first", () => {
+  const OTHER = "e".repeat(64);
+  // Forged double claims: a second role-marked p tag (someone else, or the signer twice) is never trusted.
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", OTHER, "", "assignee"], ["p", PERSON, "", "assignee"], ["role", "assignee"]]), TOWN), false);
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "assignee"], ["p", OTHER, "", "assignee"], ["role", "assignee"]]), TOWN), false);
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", PERSON, "", "assignee"], ["p", PERSON, "", "assignee"], ["role", "assignee"]]), TOWN), false);
+  assert.equal(isTrustedAction(signed(PERSON, "task_assigned", [["p", PERSON, "", "proposer"], ["p", OTHER, "", "attester"], ["role", "proposer"]]), TOWN), false);
+  // The signer's own p tag must come first (the web route and the app builder both emit it first).
+  assert.equal(isTrustedAction(signed(PERSON, "task_started", [["p", OTHER, "", ""], ["p", PERSON, "", "assignee"], ["role", "assignee"]]), TOWN), false);
+  // task_assigned may also name the new assignee after the signer.
+  assert.equal(isTrustedAction(signed(PERSON, "task_assigned", [["p", PERSON, "", "proposer"], ["p", OTHER, "", "assignee"], ["role", "proposer"]]), TOWN), true);
+});
+
 test("validateActionChain requires seq 1..n and prior = seq-1", () => {
   const T = taskAddress(PK, "t7");
   const a = act(T, "task_created", null, "offen");
