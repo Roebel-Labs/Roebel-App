@@ -26,7 +26,7 @@ export function ConsentReconsentSheet() {
   const { colors } = useTheme();
   const router = useRouter();
   const account = useActiveAccount();
-  const { user } = useUser();
+  const { isCitizen } = useUser();
 
   // Confirming the new policy version IS the public-record consent — the
   // changelog bullet names it. Enrollment runs silently after.
@@ -34,7 +34,7 @@ export function ConsentReconsentSheet() {
     void import('@/lib/nostr/enroll')
       .then(async ({ markPublicRecordConsent, enrollNow }) => {
         await markPublicRecordConsent();
-        if (account) await enrollNow(account, !!user?.is_verified_citizen);
+        if (account) await enrollNow(account, isCitizen);
       })
       .catch(() => {});
   };

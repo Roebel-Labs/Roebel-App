@@ -38,7 +38,7 @@ export default function ConsentModalScreen() {
   const { acceptAll, acceptEssential } = useConsent();
   const router = useRouter();
   const account = useActiveAccount();
-  const { user } = useUser();
+  const { isCitizen } = useUser();
 
   // First launch while the passkey gate is open: logged-out people continue to the welcome
   // screen, where "Unabhängiges Konto" is the first choice. Gate closed (production today): as
@@ -67,7 +67,7 @@ export default function ConsentModalScreen() {
     void import('@/lib/nostr/enroll')
       .then(async ({ markPublicRecordConsent, enrollNow }) => {
         await markPublicRecordConsent();
-        if (account) await enrollNow(account, !!user?.is_verified_citizen);
+        if (account) await enrollNow(account, isCitizen);
       })
       .catch(() => {});
     await leave();

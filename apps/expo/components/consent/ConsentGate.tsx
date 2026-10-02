@@ -23,7 +23,7 @@ export function ConsentGate() {
   const pathname = usePathname();
   const pushedRef = useRef(false);
   const account = useActiveAccount();
-  const { user } = useUser();
+  const { isCitizen } = useUser();
   const healedRef = useRef(false);
 
   // Public-record self-heal: consent was accepted earlier but enrollment has
@@ -32,7 +32,7 @@ export function ConsentGate() {
   useEffect(() => {
     if (!ready || needsConsent || healedRef.current) return;
     if (!account) return;
-    const citizen = !!user?.is_verified_citizen;
+    const citizen = isCitizen;
     // Not eligible (yet): leave healedRef unset so a later verification re-runs this.
     if (!citizen) return;
     healedRef.current = true;
@@ -43,7 +43,7 @@ export function ConsentGate() {
         .catch(() => {});
     }, 4000);
     return () => clearTimeout(timer);
-  }, [ready, needsConsent, account, user?.is_verified_citizen]);
+  }, [ready, needsConsent, account, isCitizen]);
 
   // Route to /consent on first launch once the SecureStore read has resolved.
   useEffect(() => {
