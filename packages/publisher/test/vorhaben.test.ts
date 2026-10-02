@@ -36,7 +36,7 @@ describe("actionToSpec", () => {
     assert.equal(s.d, "");
     assert.equal(s.scope, "town");
     assert.equal(s.createdAt, NOW);
-    assert.equal(s.content, "");
+    assert.equal(s.content, "Aufgabe vergeben.");
     assert.deepEqual(s.tags, [
       ["a", taskAddress(PK, "t1"), "", "object"], ["a", HEAD, "", "proposal"], ["action", "task_assigned"], ["from", "offen"], ["to", "vergeben"],
       ["p", ACTOR, "", "proposer"], ["role", "proposer"], ["occurred_at", OCC_UNIX],
@@ -60,9 +60,28 @@ describe("actionToSpec", () => {
     assert.ok(s.tags.some((t) => t[0] === "url" && t[1] === "https://cdn.example/a.jpg" && t[2] === "image"));
     assert.ok(s.tags.some((t) => t[0] === "url" && t[2] === "pdf"));
     assert.deepEqual(s.tags.find((t) => t[0] === "tx"), ["tx", tx]);
-    assert.equal(s.content, "Quittung");
+    // Proof text stays in the app; the attachment URLs are published.
+    assert.equal(s.content, "Nachweis hinzugefügt.");
     assert.ok(!s.tags.some((t) => t[0] === "from"));
     assert.equal(safeParseAction(sig(s)).ok, true);
+  });
+  it("publishes fixed German defaults, never the private free text, except public-role reasons", () => {
+    const defaults: Record<string, string> = {
+      task_created: "Aufgabe angelegt.", task_assigned: "Aufgabe vergeben.", task_started: "Aufgabe gestartet.", proof_added: "Nachweis hinzugefügt.",
+      task_submitted: "Zur Abnahme eingereicht.", task_approved: "Aufgabe abgenommen.", task_paid: "Aufgabe ausgezahlt.", stage_changed: "Stand geändert.",
+      payout_planned: "Auszahlung geplant.", payout_proposed: "Auszahlung zur Freigabe vorgeschlagen.", payout_confirmed: "Auszahlung bestätigt.",
+      payout_failed: "Auszahlung fehlgeschlagen.", payout_unclear: "Auszahlung wird geprüft.",
+      meinungsbild_published: "Das Bürgervotum ist ausgezählt und veröffentlicht.",
+    };
+    for (const [action, text] of Object.entries(defaults)) {
+      const objectType = action.startsWith("payout_") ? "payout" : action === "stage_changed" ? "proposal" : action === "meinungsbild_published" ? "tally" : "task";
+      const s = actionToSpec(row({ action, object_type: objectType, body: "Privat: Telefon 0151 1234567" }), CTX)!;
+      assert.equal(s.content, text, action);
+    }
+    for (const action of ["changes_requested", "task_cancelled"]) {
+      const s = actionToSpec(row({ action, body: "Foto fehlt noch." }), CTX)!;
+      assert.equal(s.content, "Foto fehlt noch.", action);
+    }
   });
   it("tally_confirmed carries the signature material", () => {
     const hash = "0x" + "e".repeat(64);
@@ -155,6 +174,22 @@ describe("object mappers", () => {
     assert.ok(s.content.includes("Bürgervotum"));
     assert.ok(!/Meinungsbild|Bürgerentscheid/.test(s.content));
     assert.equal(buergervotumToSpec({ ...PROPOSAL, tally_confirm_opened_at: null }, PK), null);
+  });
+  it("buergervotumToSpec createdAt = max(opened, last confirmation, updated_at) + MAPPER_VERSION", () => {
+    const opened = Math.floor(Date.parse(PROPOSAL.tally_confirm_opened_at) / 1000);
+    const updated = Math.floor(Date.parse(PROPOSAL.updated_at) / 1000);
+    // updated_at (10-01) is later than the window opening (09-28).
+    const base = buergervotumToSpec(PROPOSAL, PK)!;
+    assert.equal(base.createdAt, Math.max(opened, updated) + 3);
+    const confirmed = Math.floor(Date.parse("2026-10-02T12:00:00+00:00") / 1000);
+    const later = buergervotumToSpec({ ...PROPOSAL, result_hash: "0x" + "e".repeat(64) }, PK, "2026-10-02T12:00:00+00:00")!;
+    assert.equal(later.createdAt, confirmed + 3);
+    assert.ok(later.createdAt > base.createdAt);
+    // An older confirmation never pulls created_at below updated_at.
+    assert.equal(buergervotumToSpec(PROPOSAL, PK, "2026-09-29T00:00:00+00:00")!.createdAt, base.createdAt);
+    // Without updated_at the window opening is the floor.
+    const { updated_at: _u, ...noUpdated } = PROPOSAL;
+    assert.equal(buergervotumToSpec(noUpdated, PK)!.createdAt, opened + 3);
   });
   it("kasseNoticeToSpec", () => {
     const s = kasseNoticeToSpec(PROPOSAL, "beschluss", [], NOW, PK);

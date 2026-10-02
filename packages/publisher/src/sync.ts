@@ -420,7 +420,7 @@ async function loadVorhaben(fetchRows: PublisherDeps["fetchRows"], townPubkey: s
   );
   const hashes = await fetchRows(
     "proposal_wahlhelfer",
-    `select=proposal_id,result_hash&result_hash=not.is.null&proposal_id=${inIds}`,
+    `select=proposal_id,result_hash,confirmed_at&confirmed_at=not.is.null&proposal_id=${inIds}`,
   );
   const pubkeys = await resolvePubkeys(fetchRows, [
     ...tasks.flatMap((t) => [t.assignee_wallet, t.created_by_wallet]),
@@ -429,10 +429,18 @@ async function loadVorhaben(fetchRows: PublisherDeps["fetchRows"], townPubkey: s
   const pk = (w: unknown) => (typeof w === "string" ? pubkeys.get(w.toLowerCase()) ?? null : null);
 
   const resultHash = new Map<string, string>();
-  for (const h of hashes) if (typeof h.result_hash === "string" && !resultHash.has(String(h.proposal_id))) resultHash.set(String(h.proposal_id), h.result_hash);
+  // Latest confirmation per proposal: the 32104 must re-sign above it (spec §2).
+  const lastConfirmed = new Map<string, string>();
+  for (const h of hashes) {
+    const pid = String(h.proposal_id);
+    if (typeof h.result_hash === "string" && !resultHash.has(pid)) resultHash.set(pid, h.result_hash);
+    const at = typeof h.confirmed_at === "string" ? h.confirmed_at : null;
+    const prev = lastConfirmed.get(pid);
+    if (at && Number.isFinite(Date.parse(at)) && (!prev || Date.parse(at) > Date.parse(prev))) lastConfirmed.set(pid, at);
+  }
   for (const p of proposals) {
     const hash = resultHash.get(String(p.id));
-    const spec = buergervotumToSpec(hash ? { ...p, result_hash: hash } : p, townPubkey);
+    const spec = buergervotumToSpec(hash ? { ...p, result_hash: hash } : p, townPubkey, lastConfirmed.get(String(p.id)) ?? null);
     if (spec) state.specs.push(spec);
   }
 

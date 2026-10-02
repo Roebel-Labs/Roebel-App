@@ -77,6 +77,17 @@ describe("ingesting a relay", () => {
     assert.equal(profileFilter.since, undefined);
   });
 
+  it("Vorhaben actions (2100/2101) re-read a 7-day overlap — their created_at is the signing time, published later on retry", async () => {
+    const W = 1_785_000_000;
+    const d = deps([], { watermark: async () => W });
+    await ingestSource({ ...SOURCE, kinds: [1, 2100, 2101] }, d);
+    const sinceOf = (k: number) => d.filters.find((f) => (f.kinds as number[])[0] === k)!.since as number;
+    assert.equal(sinceOf(2100), W - 7 * 24 * 3600);
+    assert.equal(sinceOf(2101), W - 7 * 24 * 3600);
+    // Other immutable kinds keep the short overlap.
+    assert.equal(sinceOf(1), W - 300);
+  });
+
   it("reads everything on a first pass, when there is no watermark", async () => {
     const d = deps([]);
     await ingestSource(SOURCE, d);

@@ -437,6 +437,9 @@ export default function TaskTicketScreen() {
       <BottomDrawer visible={drawer === 'proof'} onClose={closeDrawer} keyboardAware>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.drawer}>
           <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>Fortschritt melden</Text>
+          <Text style={[styles.drawerHint, { color: colors.textSecondary }]}>
+            Nachweise (Fotos, Dateien, Transaktions-Hash) sind öffentlich einsehbar und werden im öffentlichen Protokoll verlinkt. Dein Text bleibt in der App.
+          </Text>
           {input(proofText, setProofText, 'Was hast du erledigt?')}
           <View style={styles.attachButtons}>
             {secondary('Foto anhängen', pickPhoto, 'photo')}
@@ -518,6 +521,7 @@ const styles = StyleSheet.create({
   commentInput: { flex: 1, minHeight: 40, maxHeight: 120, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontFamily: fontFamily.regular, fontSize: 15 },
   drawer: { paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
   drawerTitle: { fontFamily: fontFamily.semiBold, fontSize: 18 },
+  drawerHint: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, marginTop: -4 },
   textArea: { minHeight: 96, maxHeight: 200, borderWidth: 1, borderRadius: 12, padding: 12, fontFamily: fontFamily.regular, fontSize: 15, textAlignVertical: 'top' },
   textField: { height: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontFamily: fontFamily.regular, fontSize: 14 },
   attachButtons: { flexDirection: 'row', gap: 10 },

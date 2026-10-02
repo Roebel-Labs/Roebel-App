@@ -50,6 +50,17 @@ export interface IngestResult {
 const OVERLAP_SECONDS = 300;
 
 /**
+ * The outbox-drained kinds (2100 NSP-12 transition, 2101 NSP-13 action) are signed by the drain
+ * and can reach the relay well after their created_at (retries, a drain outage), so
+ * they would fall behind a 5-minute overlap. Seven days covers any realistic gap;
+ * INSERT ... ON CONFLICT (id) DO NOTHING makes the re-read idempotent. The per-kind
+ * `limit: 500` still caps one pass — a town producing more than 500 actions inside
+ * the window would need a paging pass (not expected at Röbel's scale).
+ */
+const LONG_OVERLAP_KINDS = new Set([2100, 2101]);
+const LONG_OVERLAP_SECONDS = 7 * 24 * 3600;
+
+/**
  * Index one relay.
  *
  * Signatures are re-verified here even though the relay already checked them. The
@@ -78,7 +89,8 @@ export async function ingestSource(source: Source, deps: IngestDeps): Promise<In
     const filter: Record<string, unknown> = { kinds: [kind], limit: 500 };
     if (!isReplaceable(kind) && !isParameterised(kind)) {
       const since = await deps.watermark(source.nodeId, source.relay, kind);
-      if (since !== null) filter.since = Math.max(0, since - OVERLAP_SECONDS);
+      const overlap = LONG_OVERLAP_KINDS.has(kind) ? LONG_OVERLAP_SECONDS : OVERLAP_SECONDS;
+      if (since !== null) filter.since = Math.max(0, since - overlap);
     }
     filters.push(filter);
   }

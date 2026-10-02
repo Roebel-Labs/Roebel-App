@@ -67,10 +67,38 @@ function objectAddress(row: OutboxRow, ctx: VorhabenContext): string {
   }
 }
 
+/**
+ * Free-text policy (spec §2.2): the record carries a fixed German line per action,
+ * never the actor's own text (proof notes, comments may name people or places).
+ * Only the reasons given in a public role — changes_requested (attester) and
+ * task_cancelled (proposer) — keep row.body. Proof attachment URLs stay published.
+ */
 const DEFAULT_CONTENT: Record<string, string> = {
+  task_created: "Aufgabe angelegt.",
+  task_assigned: "Aufgabe vergeben.",
+  task_started: "Aufgabe gestartet.",
+  proof_added: "Nachweis hinzugefügt.",
+  task_submitted: "Zur Abnahme eingereicht.",
+  task_approved: "Aufgabe abgenommen.",
+  task_paid: "Aufgabe ausgezahlt.",
+  stage_changed: "Stand geändert.",
+  changes_requested: "Änderungen angefordert.",
+  task_cancelled: "Aufgabe abgebrochen.",
+  payout_planned: "Auszahlung geplant.",
+  payout_proposed: "Auszahlung zur Freigabe vorgeschlagen.",
+  payout_confirmed: "Auszahlung bestätigt.",
+  payout_failed: "Auszahlung fehlgeschlagen.",
+  payout_unclear: "Auszahlung wird geprüft.",
   meinungsbild_published: "Das Bürgervotum ist ausgezählt und veröffentlicht.",
   tally_confirmed: "Wahlhelfer:in bestätigt das Bürgervotum.",
 };
+const PUBLIC_REASON_ACTIONS = new Set(["changes_requested", "task_cancelled"]);
+
+function actionContent(row: OutboxRow): string {
+  const body = typeof row.body === "string" ? row.body.trim() : "";
+  if (PUBLIC_REASON_ACTIONS.has(row.action) && body) return body;
+  return DEFAULT_CONTENT[row.action] ?? "";
+}
 
 const freshest = (row: Row, minCreatedAt?: number) => Math.max(unixFromUpdatedAt(row), minCreatedAt ?? 0);
 
@@ -116,7 +144,7 @@ export function actionToSpec(row: OutboxRow, ctx: VorhabenContext): PublishSpec 
   }
 
   return {
-    scope: TOWN_SCOPE, kind: VORHABEN_KINDS.action, d: "", content: row.body ?? DEFAULT_CONTENT[row.action] ?? "", tags, createdAt: ctx.now,
+    scope: TOWN_SCOPE, kind: VORHABEN_KINDS.action, d: "", content: actionContent(row), tags, createdAt: ctx.now,
   };
 }
 
@@ -190,8 +218,12 @@ export function payoutLineToSpec(line: Row, proposalKey: string, townPubkey: str
 const count = (v: unknown) => (typeof v === "string" || typeof v === "number") && /^\d+$/.test(String(v)) ? String(v) : "0";
 const numberLabel = (p: Row) => (typeof p["proposal_number"] === "number" ? ` #${p["proposal_number"]}` : "");
 
-/** 32104 Bürgervotum (NSP-12 Meinungsbild). Null until the tally window opened. */
-export function buergervotumToSpec(proposal: Row, townPubkey: string): PublishSpec | null {
+/**
+ * 32104 Bürgervotum (NSP-12 Meinungsbild). Null until the tally window opened.
+ * created_at = max(window opened, latest Wahlhelfer confirmation, proposals.updated_at)
+ * + MAPPER_VERSION, so a later version (counts, result_hash) always supersedes.
+ */
+export function buergervotumToSpec(proposal: Row, townPubkey: string, lastConfirmedAt?: string | null): PublishSpec | null {
   const key = str(proposal, "proposal_id");
   const opened = unix(proposal["tally_confirm_opened_at"]);
   if (!key || opened === null) return null;
@@ -208,7 +240,7 @@ export function buergervotumToSpec(proposal: Row, townPubkey: string): PublishSp
   return {
     scope: TOWN_SCOPE, kind: DECISION_KINDS.meinungsbild, d,
     content: `Bürgervotum zu Vorschlag${numberLabel(proposal)}: ${f} Ja, ${a} Nein, ${ab} Enthaltung. Das Bürgervotum ist eine Abstimmung der Bürger:innen in der Röbel-App.`,
-    tags, createdAt: opened + MAPPER_VERSION,
+    tags, createdAt: Math.max(opened, unix(lastConfirmedAt) ?? 0, unix(proposal["updated_at"]) ?? 0) + MAPPER_VERSION,
   };
 }
 
