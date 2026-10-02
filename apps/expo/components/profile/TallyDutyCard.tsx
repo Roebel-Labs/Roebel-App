@@ -6,6 +6,7 @@ import { fontFamily } from '@/constants/theme';
 import { softShadow } from '@/lib/shadow';
 import { fetchOpenTallyDuties, type TallyDuty } from '@/lib/vorhaben';
 import { timeLeft } from '@/lib/vorhaben-labels';
+import { demoTallyDuty, isPreviewChannel } from '@/lib/vorhaben-preview';
 
 export default function TallyDutyCard({ wallet }: { wallet: string | undefined }) {
   const router = useRouter();
@@ -14,7 +15,8 @@ export default function TallyDutyCard({ wallet }: { wallet: string | undefined }
 
   useFocusEffect(useCallback(() => {
     let alive = true;
-    if (wallet) fetchOpenTallyDuties(wallet).then((d) => { if (alive) setDuties(d); });
+    // Preview builds show a demo duty when there is no real one, so the flow can be reviewed.
+    if (wallet) fetchOpenTallyDuties(wallet).then((d) => { if (alive) setDuties(d.length === 0 && isPreviewChannel() ? [demoTallyDuty()] : d); });
     return () => { alive = false; };
   }, [wallet]));
 
