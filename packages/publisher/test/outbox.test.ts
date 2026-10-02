@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { deriveOrgIdentity, verifyEvent, type NostrEvent, type OrgIdentity } from "@netizen-labs/nostr";
+import { buildEvent, deriveOrgIdentity, verifyEvent, type NostrEvent, type OrgIdentity } from "@netizen-labs/nostr";
 import { safeParseAction, safeParseTransition } from "@netizen-labs/protocol";
 import { drainOutbox, resolvePubkeys, type OutboxDeps } from "../src/outbox.js";
 import { buildSpecs, publishOnce, signSpec } from "../src/sync.js";
@@ -411,5 +411,74 @@ describe("fix round 1", () => {
     assert.ok(specs.some((s) => s.kind === 31923));
     assert.ok(!specs.some((s) => s.kind === 32100));
     assert.ok(logs.some((l) => l.includes("vorhaben state load failed")));
+  });
+  describe("person-signed rows", () => {
+    const sk = new Uint8Array(32).fill(7);
+    const personEvent = () => buildEvent(sk, 2101, "", { createdAt: NOW - 5, tags: [["seq", "1"]] });
+
+    it("waits without signing or attempts until the API attaches the person's event, then relays it verbatim", async () => {
+      const tables = baseTables([outbox({ id: 1, person_signed: true, occurred_at: new Date((NOW - 60) * 1000).toISOString() })]);
+      const h = harness(tables);
+      const first = await drainOutbox(h.deps);
+      assert.equal(first.waiting, 1);
+      assert.equal(first.failed, 0);
+      assert.equal(h.signs, 0);
+      assert.equal(h.published.length, 0);
+      assert.equal(tables.nostr_outbox[0].attempts, 0);
+      assert.equal(tables.nostr_outbox[0].signed_event, null);
+
+      const ev = personEvent();
+      Object.assign(tables.nostr_outbox[0], { signed_event: ev, event_id: ev.id });
+      const second = await drainOutbox(h.deps);
+      assert.equal(second.published, 1);
+      assert.equal(h.signs, 0);
+      assert.deepEqual(h.published[0], ev);
+      assert.ok(tables.nostr_outbox[0].published_at);
+    });
+
+    it("blocks later rows of the object while waiting", async () => {
+      const tables = baseTables([outbox({ id: 1, person_signed: true }), outbox({ id: 2, seq: 2 })]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.waiting, 2);
+      assert.equal(h.signs, 0);
+      assert.equal(h.published.length, 0);
+    });
+
+    it("rejects a stored person event that fails verification", async () => {
+      const ev = personEvent();
+      const bad = { ...ev, content: "tampered" };
+      const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: bad, event_id: ev.id })]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.failed, 1);
+      assert.equal(tables.nostr_outbox[0].last_error, "person_event_invalid");
+      assert.equal(tables.nostr_outbox[0].attempts, 1);
+      assert.equal(h.published.length, 0);
+    });
+
+    it("chains the next town row's prior to the person event id", async () => {
+      const ev = personEvent();
+      const tables = baseTables([
+        outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id }),
+        outbox({ id: 2, seq: 2, action: "task_cancelled", to_status: "abgebrochen" }),
+      ]);
+      const h = harness(tables);
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.published, 2);
+      assert.equal(h.signs, 1);
+      assert.equal(tag(h.published[1], "prior"), ev.id);
+    });
+
+    it("warns once per pass about rows waiting longer than 15 minutes", async () => {
+      const old = new Date((NOW - 16 * 60) * 1000).toISOString();
+      const tables = baseTables([
+        outbox({ id: 1, person_signed: true, occurred_at: old }),
+        outbox({ id: 2, object_id: T2, person_signed: true, occurred_at: old }),
+      ]);
+      const h = harness(tables);
+      await drainOutbox(h.deps);
+      assert.equal(h.logs.filter((l) => l.includes("WARNING")).length, 1);
+    });
   });
 });

@@ -18,7 +18,7 @@
  * a row without a valid seq fails with last_error "seq_missing".
  * Spec: docs/superpowers/specs/2026-10-02-nsp13-vorhaben-record-design.md §3.2
  */
-import type { NostrEvent } from "@netizen-labs/nostr";
+import { verifyEvent, type NostrEvent } from "@netizen-labs/nostr";
 import {
   LIFECYCLE_STAGES, kasseNoticeAddress, nsp12StageFor, nsp12TransitionsBetween,
   type KasseNotice, type LifecycleStage, type Stage,
@@ -48,6 +48,8 @@ const WALLET = /^0x[0-9a-f]{40}$/;
 const SAFE_ID = /^[0-9A-Za-z-]+$/;
 const ALARM_AT = 10;
 const WAITING_ALARM = 50;
+/** A person-signed row the API has not resolved after this long is overdue (the API should have attached or released it). */
+const PERSON_WAIT_WARN_SECONDS = 15 * 60;
 
 /** Wallets → pubkey_hex of their live (unrevoked) identity binding; keys are lowercase wallets. */
 export async function resolvePubkeys(fetchRows: FetchRows, wallets: Iterable<unknown>): Promise<Map<string, string>> {
@@ -181,6 +183,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     else deps.log(`nostr_outbox ${row.id} ${row.action} failed (attempt ${attempts}): ${message}`);
   };
 
+  let personWarned = false;
   for (const row of rows) {
     const objectKey = `${row.object_type}:${row.object_id}`;
     if (blocked.has(objectKey)) { summary.waiting += 1; continue; }
@@ -191,7 +194,21 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     if (!proposal) { await fail(row, "proposal_missing"); continue; }
 
     let event = row.signed_event as NostrEvent | null;
-    if (!event) {
+    if (row.person_signed === true) {
+      // Person-signed: the town key never signs this row. Relayed verbatim once the API attached the event.
+      if (!event) {
+        summary.waiting += 1;
+        const at = Date.parse(row.occurred_at);
+        if (!personWarned && Number.isFinite(at) && deps.now() - at / 1000 > PERSON_WAIT_WARN_SECONDS) {
+          personWarned = true;
+          deps.log(`WARNING nostr_outbox ${row.id} ${row.action} ${row.object_type}:${row.object_id}: person-signed event not attached after 15 minutes`);
+        }
+        continue;
+      }
+      let valid = false;
+      try { valid = verifyEvent(event); } catch { valid = false; }
+      if (!valid) { await fail(row, "person_event_invalid"); continue; }
+    } else if (!event) {
       const priorRows = await deps.fetchRows(
         "nostr_outbox",
         `select=event_id&object_type=eq.${row.object_type}&object_id=eq.${row.object_id}&published_at=not.is.null&order=id.desc&limit=1`,
@@ -233,7 +250,7 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
     }
 
     try {
-      await deps.updateRow("nostr_outbox", `id=eq.${row.id}`, { published_at: new Date(deps.now() * 1000).toISOString(), last_error: null });
+      await deps.updateRow("nostr_outbox", `id=eq.${row.id}`, { published_at: new Date(deps.now() * 1000).toISOString(), last_error: null, ...(row.person_signed === true ? { event_id: event.id } : {}) });
     } catch (e) {
       // On the relay but not marked: the next pass re-sends the stored event (a duplicate). Keep the object blocked.
       deps.log(`nostr_outbox ${row.id}: published but not marked: ${errMsg(e)}`);

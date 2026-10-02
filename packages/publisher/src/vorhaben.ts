@@ -32,6 +32,8 @@ export interface OutboxRow {
   attempts: number;
   /** Per-object position in the action chain (NSP-13); rows without it cannot be mapped. */
   seq?: number | null;
+  /** True when the person's own signed event (signed_event) is relayed verbatim; the town key never signs it. */
+  person_signed?: boolean | null;
 }
 
 export interface VorhabenContext {
