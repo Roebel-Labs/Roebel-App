@@ -81,6 +81,7 @@ export function queryFromUrl(url: URL): EventQuery {
     limit: integer(p.get("limit")),
     eTags: strings(p.get("e")),
     pTags: strings(p.get("p")),
+    aTags: strings(p.get("a")),
     dTags: strings(p.get("d")),
   };
 }

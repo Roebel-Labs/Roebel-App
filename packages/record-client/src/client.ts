@@ -26,6 +26,8 @@ export interface EventFilters {
   ids?: string[];
   e?: string[];
   p?: string[];
+  /** Events carrying an ["a", <address>] tag. */
+  a?: string[];
   d?: string[];
   since?: number;
   until?: number;
@@ -69,6 +71,7 @@ export class RecordClient {
     list("ids", filters.ids);
     list("e", filters.e);
     list("p", filters.p);
+    list("a", filters.a);
     list("d", filters.d);
     if (filters.since !== undefined) p.set("since", String(filters.since));
     if (filters.until !== undefined) p.set("until", String(filters.until));

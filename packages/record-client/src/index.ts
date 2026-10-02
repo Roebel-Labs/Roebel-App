@@ -9,3 +9,5 @@ export { listPosts, getThread } from "./social";
 export type { RecordPost } from "./social";
 export { listListings, listDeals, getMenu, getMenuBySlug, listProposals, listNotices } from "./civic";
 export type { ListingRow, DealRow, MenuData, ProposalMetaRow, NoticeRow } from "./civic";
+export { listTasks, getContractLines, getActions } from "./vorhaben";
+export type { VorhabenTaskRow, VorhabenLineRow, VorhabenActionRow } from "./vorhaben";

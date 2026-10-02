@@ -29,6 +29,8 @@ export interface EventQuery {
   eTags?: string[];
   /** Events carrying a ["p", <pubkey>] tag — mentions/attributions. */
   pTags?: string[];
+  /** Events carrying an ["a", <address>] tag (any trailing marker/role elements still match). Case-preserved. */
+  aTags?: string[];
   /** Parameterised replaceable records by stable identity (the d tag). */
   dTags?: string[];
 }
@@ -62,6 +64,7 @@ export function buildEventQuery(query: EventQuery): BuiltQuery {
     where.push(`tags @> ANY(${bind(vals.map((v) => `[${JSON.stringify([name, v])}]`))}::jsonb[])`);
   if (query.eTags?.length) tagContain("e", query.eTags.map((v) => v.toLowerCase()));
   if (query.pTags?.length) tagContain("p", query.pTags.map((v) => v.toLowerCase()));
+  if (query.aTags?.length) tagContain("a", query.aTags);
   if (query.dTags?.length) where.push(`d_tag = ANY(${bind(query.dTags)}::text[])`);
 
   if (typeof query.since === "number") where.push(`created_at >= ${bind(query.since)}`);

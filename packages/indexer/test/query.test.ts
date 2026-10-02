@@ -103,9 +103,20 @@ describe("tag filters", () => {
     assert.match(text, /tags @> ANY\(\$1::jsonb\[\]\)/);
     assert.deepEqual(values[0], [`[${JSON.stringify(["p", "b".repeat(64)])}]`]);
   });
+
+  it("a filter matches ['a', address] by containment and keeps case", () => {
+    const addr = `32108:${"a".repeat(64)}:task:T1`;
+    const { text, values } = buildEventQuery({ aTags: [addr] });
+    assert.match(text, /tags @> ANY\(\$1::jsonb\[\]\)/);
+    assert.deepEqual(values[0], [`[${JSON.stringify(["a", addr])}]`]);
+  });
 });
 
 describe("url parsing", () => {
+  it("reads the a filter off the query string", () => {
+    assert.deepEqual(queryFromUrl(new URL("http://x/events?a=32108:abc:task:t1")).aTags, ["32108:abc:task:t1"]);
+  });
+
   it("reads a full cross-node query off the query string", () => {
     const q = queryFromUrl(
       new URL("http://x/events?q=fest&kinds=1,30023&authors=aa,bb&since=100&until=200&node=roebel&limit=10"),
