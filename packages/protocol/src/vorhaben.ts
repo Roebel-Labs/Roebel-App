@@ -183,7 +183,7 @@ export interface ReplayState {
 
 /** Orders one object's actions by the `prior` chain; falls back to occurred_at when the chain is not a single clean path. */
 function orderObjectActions(list: Array<{ id: string; p: ParsedAction }>): Array<{ id: string; p: ParsedAction }> {
-  const byTime = [...list].sort((a, b) => a.p.occurredAt - b.p.occurredAt);
+  const byTime = [...list].sort((a, b) => a.p.occurredAt - b.p.occurredAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const ids = new Set(list.map((e) => e.id));
   const roots = list.filter((e) => e.p.prior === null || !ids.has(e.p.prior));
   const children = new Map<string, Array<{ id: string; p: ParsedAction }>>();
@@ -200,7 +200,10 @@ function orderObjectActions(list: Array<{ id: string; p: ParsedAction }>): Array
 export function replayVorhaben(actions: Array<DecisionEventLike & { id: string }>): ReplayState {
   const state: ReplayState = { tasks: new Map(), lines: new Map(), tallyConfirmations: new Map(), stages: new Map() };
   const byObject = new Map<string, Array<{ id: string; p: ParsedAction }>>();
+  const seenIds = new Set<string>();
   for (const ev of actions) {
+    if (seenIds.has(ev.id)) continue;
+    seenIds.add(ev.id);
     const parsed = safeParseAction(ev);
     if (!parsed.ok) continue;
     byObject.set(parsed.value.object, [...(byObject.get(parsed.value.object) ?? []), { id: ev.id, p: parsed.value }]);
@@ -271,20 +274,35 @@ const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const TRANSFER_SINGLE_TOPIC = "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62";
 const word = (hex: string, i: number) => hex.slice(2 + i * 64, 2 + (i + 1) * 64);
 
-/** True when the tx succeeded and `token` emitted a Transfer (ERC-20) or TransferSingle (ERC-1155) of exactly `amountAtto`. */
-export async function verifyPayoutTx(txHash: string, token: string, amountAtto: bigint, client: VerifyClient): Promise<boolean> {
-  let receipt;
-  try { receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` }); } catch { return false; }
-  if (!receipt || receipt.status !== "success") return false;
-  return receipt.logs.some((log) => {
-    if (log.address.toLowerCase() !== token.toLowerCase()) return false;
-    const topic0 = log.topics[0]?.toLowerCase();
-    if (!/^0x[0-9a-fA-F]*$/.test(log.data)) return false;
-    try {
-      if (topic0 === TRANSFER_TOPIC) return log.data.length === 66 && BigInt(log.data) === amountAtto;
-      // TransferSingle data = (uint256 id, uint256 value)
-      if (topic0 === TRANSFER_SINGLE_TOPIC) return log.data.length >= 2 + 128 && BigInt("0x" + word(log.data, 1)) === amountAtto;
-    } catch { return false; }
-    return false;
-  });
+const padAddr = (a: string) => "0x" + a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+
+/**
+ * True when the tx succeeded and `token` emitted a Transfer (ERC-20) or TransferSingle (ERC-1155) of exactly `amountAtto`.
+ * Without `opts.to` this does NOT prove the recipient; pass `to` (and `tokenId` for ERC-1155) to bind those too.
+ */
+export async function verifyPayoutTx(
+  txHash: string, token: string, amountAtto: bigint, client: VerifyClient, opts?: { to?: string; tokenId?: bigint },
+): Promise<boolean> {
+  try {
+    const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
+    if (!receipt || receipt.status !== "success") return false;
+    const wantTo = opts?.to ? padAddr(opts.to) : null;
+    return receipt.logs.some((log) => {
+      if (log.address.toLowerCase() !== token.toLowerCase()) return false;
+      const topic0 = log.topics[0]?.toLowerCase();
+      if (!/^0x[0-9a-fA-F]*$/.test(log.data)) return false;
+      if (topic0 === TRANSFER_TOPIC) {
+        if (wantTo && log.topics[2]?.toLowerCase() !== wantTo) return false;
+        return log.data.length === 66 && BigInt(log.data) === amountAtto;
+      }
+      if (topic0 === TRANSFER_SINGLE_TOPIC) {
+        // topics: operator, from, to; data = (uint256 id, uint256 value)
+        if (wantTo && log.topics[3]?.toLowerCase() !== wantTo) return false;
+        if (log.data.length < 2 + 128) return false;
+        if (opts?.tokenId !== undefined && BigInt("0x" + word(log.data, 0)) !== opts.tokenId) return false;
+        return BigInt("0x" + word(log.data, 1)) === amountAtto;
+      }
+      return false;
+    });
+  } catch { return false; }
 }

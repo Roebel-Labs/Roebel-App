@@ -102,3 +102,39 @@ test("verifyPayoutTx matches an ERC-1155 TransferSingle value and rejects revert
   assert.equal(await verifyPayoutTx("0x" + "5".repeat(64), token, 7n, ok), false);
   assert.equal(await verifyPayoutTx("0x" + "5".repeat(64), token, 12n, rev), false);
 });
+
+test("replay uses prior chain order even when occurred_at contradicts it", () => {
+  const T = taskAddress(PK, "t4");
+  const a = act(T, "task_created", null, "offen");
+  const b = act(T, "task_assigned", "offen", "vergeben", a.id);
+  const bt = b.tags.find((x) => x[0] === "occurred_at")!; bt[1] = "1"; // later in chain, earlier in time
+  assert.equal(replayVorhaben([b, a]).tasks.get(T)?.status, "vergeben");
+});
+
+test("replay dedupes events by id", () => {
+  const T = taskAddress(PK, "t5");
+  const a = act(T, "task_created", null, "offen");
+  assert.deepEqual(replayVorhaben([a, a]).tasks.get(T)?.history, ["task_created"]);
+});
+
+test("hashMessage handles multi-byte text like viem", () => {
+  assert.equal(hashMessage("Ich bestätige"), "0x0f599aeb9fb8e4af2094d74051e24ab15232f1248baa75028af03b31dec2158f");
+});
+
+test("verifyPayoutTx binds recipient and token id when asked", async () => {
+  const token = "0x" + "9".repeat(40);
+  const to = "0x" + "ab".repeat(20);
+  const pad = (a: string) => "0x" + a.slice(2).padStart(64, "0");
+  const w = (v: bigint) => v.toString(16).padStart(64, "0");
+  const erc20 = { address: token, topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", pad("0x1"), pad(to)], data: "0x" + w(5n) };
+  const single = { address: token, topics: ["0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62", pad("0x1"), pad("0x2"), pad(to)], data: "0x" + w(7n) + w(12n) };
+  const mk = (log: typeof erc20) => ({ readContract: async () => null, getTransactionReceipt: async () => ({ status: "success" as const, logs: [log] }) });
+  const h = "0x" + "5".repeat(64);
+  assert.equal(await verifyPayoutTx(h, token, 5n, mk(erc20), { to: to.toUpperCase().replace("0X", "0x") }), true);
+  assert.equal(await verifyPayoutTx(h, token, 5n, mk(erc20), { to: "0x" + "cd".repeat(20) }), false);
+  assert.equal(await verifyPayoutTx(h, token, 12n, mk(single), { to, tokenId: 7n }), true);
+  assert.equal(await verifyPayoutTx(h, token, 12n, mk(single), { to, tokenId: 8n }), false);
+  assert.equal(await verifyPayoutTx(h, token, 12n, mk(single), { to: "0x" + "cd".repeat(20) }), false);
+  const boom = { readContract: async () => null, getTransactionReceipt: async () => { throw new Error("rpc"); } };
+  assert.equal(await verifyPayoutTx(h, token, 5n, boom), false);
+});
