@@ -6,30 +6,49 @@ import { fontFamily } from '@/constants/theme';
 import { softShadow } from '@/lib/shadow';
 import { fetchOpenTallyDuties, type TallyDuty } from '@/lib/vorhaben';
 import { timeLeft } from '@/lib/vorhaben-labels';
-import { DEMO_TALLY_KEY, demoTallyDuty, isPreviewChannel } from '@/lib/vorhaben-preview';
+import { fetchDecryptDuties, type DecryptDuty } from '@/lib/vorhaben-decrypt';
 
 export default function TallyDutyCard({ wallet }: { wallet: string | undefined }) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const [duties, setDuties] = useState<TallyDuty[]>([]);
+  const [decrypt, setDecrypt] = useState<DecryptDuty[]>([]);
 
   useFocusEffect(useCallback(() => {
     let alive = true;
-    // Preview builds show a demo duty when there is no real one, so the flow can be reviewed.
-    if (wallet) fetchOpenTallyDuties(wallet).then((d) => { if (alive) setDuties(d.length === 0 && isPreviewChannel() ? [demoTallyDuty()] : d); });
+    if (wallet) fetchOpenTallyDuties(wallet).then((d) => { if (alive) setDuties(d); });
+    fetchDecryptDuties().then((d) => { if (alive) setDecrypt(d); });
     return () => { alive = false; };
   }, [wallet]));
 
-  if (duties.length === 0) return null;
-  // Preview demo: the Wahlhelfer:in's real job, releasing their part of the election key.
-  const decrypt = duties.every((d) => d.proposalKey === DEMO_TALLY_KEY);
+  if (duties.length === 0 && decrypt.length === 0) return null;
   return (
+    <>
+    {decrypt.length > 0 && (
+      <View style={[styles.card, { backgroundColor: colors.background }, softShadow(2, isDark)]}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Wahlergebnis entschlüsseln</Text>
+        <Text style={[styles.lead, { color: colors.textSecondary }]}>Die Abstimmung ist beendet. Als Wahlhelfer:in gibst du deinen Teil des Wahlschlüssels frei.</Text>
+        {decrypt.map((d, i) => (
+          <Pressable key={d.proposalKey} onPress={() => router.push(`/entschluesseln/${d.proposalKey}` as any)}
+            accessibilityRole="button" accessibilityLabel={`Vorschlag ${d.proposalNumber} entschlüsseln`}
+            style={({ pressed }) => [styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, { opacity: pressed ? 0.7 : 1 }]}>
+            <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+            <View style={styles.rowText}>
+              <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>Vorschlag #{d.proposalNumber}</Text>
+              <Text numberOfLines={1} style={[styles.rowSubtitle, { color: colors.textSecondary }]}>{d.title}</Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
+          </Pressable>
+        ))}
+      </View>
+    )}
+    {duties.length > 0 && (
     <View style={[styles.card, { backgroundColor: colors.background }, softShadow(2, isDark)]}>
-      <Text style={[styles.title, { color: colors.textPrimary }]}>{decrypt ? 'Wahlergebnis entschlüsseln' : 'Auszählung bestätigen'}</Text>
-      <Text style={[styles.lead, { color: colors.textSecondary }]}>{decrypt ? 'Als Wahlhelfer:in gibst du deinen Teil des Wahlschlüssels frei.' : 'Als Wahlhelfer:in bestätigst du das Ergebnis.'}</Text>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>Auszählung bestätigen</Text>
+      <Text style={[styles.lead, { color: colors.textSecondary }]}>Als Wahlhelfer:in bestätigst du das Ergebnis.</Text>
       {duties.map((d, i) => (
-        <Pressable key={d.proposalUuid} onPress={() => router.push((d.proposalKey === DEMO_TALLY_KEY ? `/entschluesseln/${d.proposalKey}` : `/auszaehlung/${d.proposalKey}`) as any)}
-          accessibilityRole="button" accessibilityLabel={`Vorschlag ${d.proposalNumber} ${d.proposalKey === DEMO_TALLY_KEY ? 'entschlüsseln' : 'bestätigen'}`}
+        <Pressable key={d.proposalUuid} onPress={() => router.push(`/auszaehlung/${d.proposalKey}` as any)}
+          accessibilityRole="button" accessibilityLabel={`Vorschlag ${d.proposalNumber} bestätigen`}
           style={({ pressed }) => [styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, { opacity: pressed ? 0.7 : 1 }]}>
           <View style={[styles.dot, { backgroundColor: colors.primary }]} />
           <View style={styles.rowText}>
@@ -40,6 +59,8 @@ export default function TallyDutyCard({ wallet }: { wallet: string | undefined }
         </Pressable>
       ))}
     </View>
+    )}
+    </>
   );
 }
 

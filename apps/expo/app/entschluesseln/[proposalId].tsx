@@ -11,18 +11,22 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 import { signQueued } from '@/lib/signed-request';
-import { DEMO_DECRYPT, DEMO_TALLY_KEY, isPreviewChannel } from '@/lib/vorhaben-preview';
+import { DECRYPT_REWARD_MUENZEN, fetchDecryptProposal, type DecryptProposal } from '@/lib/vorhaben-decrypt';
 
 /**
  * "Wahlergebnis entschlüsseln": a Wahlhelfer:in releases their part of the election key. Once 3 of 5
  * parts are in, the key exists briefly in memory, the ZK proofs are computed and the result goes
  * on-chain. No result is visible before that.
  *
- * Preview only for now (demo proposal): real wallet signatures for the feel, real-length timings,
- * nothing is sent. The real share submission follows once the key ceremony has run.
+ * Until the key ceremony has run, the release is a walkthrough on the real proposal: real wallet
+ * signatures, real-length timings, nothing is sent. The pipeline stops at "Ergebnis veröffentlichen"
+ * until the real result is published; only then is it shown.
  */
 
-const STORAGE_KEY = 'vorhaben.demoDecrypt.v1';
+const storageKey = (proposalKey: string) => `vorhaben.decrypt.${proposalKey.toLowerCase()}`;
+/** Index of "Ergebnis veröffentlichen": the walkthrough never passes it on its own. */
+const PUBLISH_IDX = 4;
+const RESULT_POLL_MS = 30_000;
 
 /** Pipeline after the threshold is met; `end` = seconds after the third part arrived. */
 const PIPELINE: { label: string; detail: string; end: number; minutes?: number }[] = [
@@ -33,7 +37,7 @@ const PIPELINE: { label: string; detail: string; end: number; minutes?: number }
   { label: 'Ergebnis veröffentlichen', detail: 'Die Auszählung wird in den Auszählungsvertrag geschrieben.', end: 830 },
   { label: 'Gegenprüfung', detail: 'Die veröffentlichten Werte werden unabhängig nachgerechnet. Danach wird der Wahlschlüssel gelöscht.', end: 850 },
 ];
-const TOTAL = PIPELINE[PIPELINE.length - 1].end;
+const WAIT_FROM = PIPELINE[PUBLISH_IDX - 1].end;
 
 type Phase = 'idle' | 'sign1' | 'decrypting' | 'sign2' | 'sending';
 
@@ -42,8 +46,7 @@ export default function DecryptResultScreen() {
   const goBack = useGoBack();
   const account = useActiveAccount();
   const { proposalId } = useLocalSearchParams<{ proposalId: string }>();
-  const demo = proposalId === DEMO_TALLY_KEY && isPreviewChannel();
-
+  const [proposal, setProposal] = useState<DecryptProposal | null | undefined>(undefined);
   const [startedAt, setStartedAt] = useState<number | null | undefined>(undefined);
   const [now, setNow] = useState(Date.now());
   const [phase, setPhase] = useState<Phase>('idle');
@@ -52,35 +55,47 @@ export default function DecryptResultScreen() {
   const busyRef = useRef(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
+    if (!proposalId) return;
+    fetchDecryptProposal(proposalId).then(setProposal);
+    AsyncStorage.getItem(storageKey(proposalId))
       .then((v) => setStartedAt(v ? Number(v) || null : null))
       .catch(() => setStartedAt(null));
-  }, []);
+  }, [proposalId]);
 
+  const result = proposal?.result ?? null;
   const elapsed = startedAt ? (now - startedAt) / 1000 : -1;
-  const finished = startedAt != null && elapsed >= TOTAL;
+  const finished = !!result;
+  const waitingForResult = !finished && startedAt != null && elapsed >= WAIT_FROM;
 
   useEffect(() => {
-    if (!startedAt || finished) return;
+    if (!startedAt || finished || waitingForResult) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [startedAt, finished]);
+  }, [startedAt, finished, waitingForResult]);
+
+  // The last steps wait for the real tally: re-read the proposal until its result is published.
+  useEffect(() => {
+    if (!waitingForResult || !proposalId) return;
+    const t = setInterval(() => { fetchDecryptProposal(proposalId).then((p) => { if (p) setProposal(p); }); }, RESULT_POLL_MS);
+    return () => clearInterval(t);
+  }, [waitingForResult, proposalId]);
 
   const release = useCallback(async () => {
-    if (busyRef.current || !account) return;
+    if (busyRef.current || !account || !proposal) return;
+    const n = proposal.proposalNumber;
     busyRef.current = true;
     setError(null);
     try {
       setPhase('sign1');
-      await signQueued(account, `Röbel Wahlhelfer:in: Schlüsselteil für Vorschlag #${DEMO_DECRYPT.proposalNumber} öffnen.`);
+      await signQueued(account, `Röbel Wahlhelfer:in: Schlüsselteil für Vorschlag #${n} öffnen.`);
       setPhase('decrypting');
       await new Promise((r) => setTimeout(r, 1200));
       setPhase('sign2');
-      await signQueued(account, `Röbel Wahlhelfer:in: Schlüsselteil für Vorschlag #${DEMO_DECRYPT.proposalNumber} an die Auszählung übergeben.`);
+      await signQueued(account, `Röbel Wahlhelfer:in: Schlüsselteil für Vorschlag #${n} an die Auszählung übergeben.`);
       setPhase('sending');
       await new Promise((r) => setTimeout(r, 1500));
       const t = Date.now();
-      await AsyncStorage.setItem(STORAGE_KEY, String(t)).catch(() => {});
+      await AsyncStorage.setItem(storageKey(proposal.proposalKey), String(t)).catch(() => {});
       setStartedAt(t);
       setNow(t);
       setReward(true);
@@ -90,12 +105,7 @@ export default function DecryptResultScreen() {
       setPhase('idle');
       busyRef.current = false;
     }
-  }, [account]);
-
-  const restart = useCallback(async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-    setStartedAt(null);
-  }, []);
+  }, [account, proposal]);
 
   const header = (
     <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -107,15 +117,15 @@ export default function DecryptResultScreen() {
     </View>
   );
 
-  if (!demo) {
+  if (proposal === null) {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
         {header}
-        <MeckyNotFound title="Diese Auszählung ist noch nicht geöffnet." />
+        <MeckyNotFound title="Vorschlag nicht gefunden" />
       </SafeAreaView>
     );
   }
-  if (startedAt === undefined) {
+  if (proposal === undefined || startedAt === undefined) {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
         {header}
@@ -124,9 +134,10 @@ export default function DecryptResultScreen() {
     );
   }
 
-  const partsIn = startedAt ? 3 : 2;
+  const released = !!startedAt || finished;
+  const partsIn = released ? 3 : 2;
   // Index of the running pipeline step (-1 = waiting for parts, PIPELINE.length = all done).
-  const activeIdx = !startedAt ? -1 : finished ? PIPELINE.length : PIPELINE.findIndex((s) => elapsed < s.end);
+  const activeIdx = finished ? PIPELINE.length : !startedAt ? -1 : waitingForResult ? PUBLISH_IDX : PIPELINE.findIndex((s) => elapsed < s.end);
   const busy = phase !== 'idle';
   const phaseLabel: Record<Phase, string> = {
     idle: 'Wahlergebnis entschlüsseln',
@@ -140,7 +151,7 @@ export default function DecryptResultScreen() {
     {
       label: 'Schlüsselteile sammeln',
       detail: `Wahlhelfer:innen geben ihren Teil des Wahlschlüssels frei – ${partsIn} von 3.`,
-      done: !!startedAt, active: !startedAt, progress: null as number | null, remaining: null as string | null,
+      done: released, active: !released, progress: null as number | null, remaining: null as string | null,
     },
     ...PIPELINE.map((s, i) => {
       const start = i === 0 ? 0 : PIPELINE[i - 1].end;
@@ -162,20 +173,24 @@ export default function DecryptResultScreen() {
     <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
       {header}
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.kicker, { color: colors.textSecondary }]}>Vorschlag #{DEMO_DECRYPT.proposalNumber}</Text>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{DEMO_DECRYPT.title}</Text>
+        <Text style={[styles.kicker, { color: colors.textSecondary }]}>Vorschlag #{proposal.proposalNumber}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{proposal.title}</Text>
 
-        {finished ? (
+        {finished && result ? (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.cardHead, { color: colors.textPrimary }]}>Ergebnis</Text>
-            {[['Ja', DEMO_DECRYPT.forVotes], ['Nein', DEMO_DECRYPT.againstVotes], ['Enthaltung', DEMO_DECRYPT.abstainVotes]].map(([l, v]) => (
+            {[['Ja', result.forVotes], ['Nein', result.againstVotes], ['Enthaltung', result.abstainVotes]].map(([l, v]) => (
               <View key={l} style={styles.row}>
                 <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>{l}</Text>
                 <Text style={[styles.rowValue, { color: colors.textPrimary }]}>{v}</Text>
               </View>
             ))}
-            <Text style={[styles.body, { color: colors.success, marginTop: 6 }]}>Angenommen. Der Wahlschlüssel ist gelöscht.</Text>
+            <Text style={[styles.body, { color: colors.textSecondary, marginTop: 6 }]}>Veröffentlicht. Der Wahlschlüssel ist gelöscht.</Text>
           </View>
+        ) : proposal.votingOpen ? (
+          <Text style={[styles.body, { color: colors.textSecondary }]}>
+            Die Abstimmung läuft noch. Sobald sie beendet ist, kannst du hier deinen Teil des Wahlschlüssels freigeben.
+          </Text>
         ) : (
           <Text style={[styles.body, { color: colors.textSecondary }]}>
             Die Abstimmung ist beendet. Alle Stimmen sind verschlüsselt – niemand kennt das Ergebnis. Erst wenn 3 von 5
@@ -200,7 +215,7 @@ export default function DecryptResultScreen() {
                     <Text style={[styles.stepLabel, { color: s.done || s.active ? colors.textPrimary : colors.textSecondary, fontFamily: s.active ? fontFamily.semiBold : fontFamily.medium }]}>
                       {s.label}
                     </Text>
-                    {s.active && startedAt ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                    {s.active && released ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                   </View>
                   <Text style={[styles.stepDetail, { color: colors.textSecondary }]}>{s.detail}</Text>
                   {s.progress != null && (
@@ -215,11 +230,11 @@ export default function DecryptResultScreen() {
           })}
         </View>
 
-        {!startedAt ? (
+        {finished || proposal.votingOpen ? null : !startedAt ? (
           <>
             <Text style={[styles.note, { color: colors.textSecondary }]}>
               Deine Wallet bestätigt zweimal: einmal, um deinen Schlüsselteil auf diesem Gerät zu öffnen, und einmal, um ihn
-              an die Auszählung zu übergeben. Als Dank erhältst du {DEMO_DECRYPT.reward} Röbel Münzen.
+              an die Auszählung zu übergeben. Als Dank erhältst du {DECRYPT_REWARD_MUENZEN} Röbel Münzen.
             </Text>
             {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
             <Pressable disabled={busy || !account} onPress={release} accessibilityRole="button"
@@ -228,21 +243,17 @@ export default function DecryptResultScreen() {
               <Text style={[styles.primaryText, { color: colors.onPrimary }]}>{phaseLabel[phase]}</Text>
             </Pressable>
           </>
-        ) : !finished ? (
+        ) : (
           <Text style={[styles.note, { color: colors.textSecondary }]}>
             Danke, dein Schlüsselteil ist angekommen. Die Auszählung läuft jetzt von selbst weiter – du kannst die App
-            schließen. Das Ergebnis erscheint hier, sobald alle Beweise geprüft sind.
+            schließen. Das Ergebnis erscheint hier, sobald alle Beweise geprüft und veröffentlicht sind.
           </Text>
-        ) : (
-          <Pressable onPress={restart} style={[styles.secondary, { borderColor: colors.border }]} accessibilityRole="button">
-            <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Vorschau neu starten</Text>
-          </Pressable>
         )}
       </ScrollView>
 
       <MuenzenRewardOverlay
         visible={reward}
-        amount={DEMO_DECRYPT.reward}
+        amount={DECRYPT_REWARD_MUENZEN}
         subtitle="Danke fürs Entschlüsseln, Wahlhelfer:in."
         onClose={() => setReward(false)}
       />

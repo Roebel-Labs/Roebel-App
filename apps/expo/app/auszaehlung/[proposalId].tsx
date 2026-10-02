@@ -9,8 +9,6 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { ArrowLeftIcon } from '@/components/Icons';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { fetchTallyView, resolveProposalUuid, submitTally, type TallyView } from '@/lib/vorhaben';
-import { signQueued } from '@/lib/signed-request';
-import { DEMO_TALLY_KEY, demoTallyView, isPreviewChannel } from '@/lib/vorhaben-preview';
 import { formatAmount, timeLeft } from '@/lib/vorhaben-labels';
 
 export default function TallyConfirmScreen() {
@@ -26,13 +24,10 @@ export default function TallyConfirmScreen() {
   const [done, setDone] = useState(false);
   const [noAccount, setNoAccount] = useState(false);
   const busyRef = useRef(false);
-  // Preview-only demo: real wallet signature for the feel, nothing is sent to the server.
-  const demo = proposalKey === DEMO_TALLY_KEY && isPreviewChannel();
 
   const load = useCallback(async () => {
     if (!proposalKey || !account) return;
     setError(null);
-    if (demo) { setUuid(DEMO_TALLY_KEY); setView(demoTallyView()); return; }
     try {
       const id = await resolveProposalUuid(proposalKey);
       if (!id) { setError('Vorschlag nicht gefunden'); return; }
@@ -42,7 +37,7 @@ export default function TallyConfirmScreen() {
     } catch {
       setError('Verbindung fehlgeschlagen. Bitte später erneut versuchen.');
     }
-  }, [proposalKey, account, demo]);
+  }, [proposalKey, account]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -59,15 +54,6 @@ export default function TallyConfirmScreen() {
     setBusy(true);
     setError(null);
     try {
-      if (demo) {
-        try {
-          await signQueued(account, view.message);
-          setDone(true);
-        } catch {
-          setError('Signatur abgebrochen oder fehlgeschlagen.');
-        }
-        return;
-      }
       const r = await submitTally(account, uuid, view.message, proposalKey);
       if (r.ok) { setDone(true); return; }
       if (r.code === 'NETWORK_ERROR') setError('Keine Verbindung. Bitte versuche es erneut.');
@@ -129,8 +115,8 @@ export default function TallyConfirmScreen() {
             <Text style={[styles.success, { color: colors.success }]}>
               {done ? `Danke, Wahlhelfer:in. Deine ${formatAmount(view.reward.amount, view.reward.asset)} werden dir in Kürze überwiesen.` : 'Danke, du hast das Ergebnis bestätigt.'}
             </Text>
-            <Pressable style={[styles.secondary, { borderColor: colors.border }]} onPress={() => (demo ? goBack() : router.replace(`/vertrag/${proposalKey}` as any))}>
-              <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>{demo ? 'Zurück' : 'Zum Vertrag'}</Text>
+            <Pressable style={[styles.secondary, { borderColor: colors.border }]} onPress={() => router.replace(`/vertrag/${proposalKey}` as any)}>
+              <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Zum Vertrag</Text>
             </Pressable>
           </>
         ) : (
