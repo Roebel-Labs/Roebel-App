@@ -30,6 +30,7 @@ export interface OutboxRow {
   event_id: string | null;
   published_at: string | null;
   attempts: number;
+  last_error?: string | null;
   /** Per-object position in the action chain (NSP-13); rows without it cannot be mapped. */
   seq?: number | null;
   /** True when the person's own signed event (signed_event) is relayed verbatim; the town key never signs it. */

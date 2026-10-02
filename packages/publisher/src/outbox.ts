@@ -16,6 +16,8 @@
  * apply the 20261003 migration (adds nostr_outbox.seq) → deploy the new publisher.
  * No 2101 was ever published before this, so no legacy (seq-less) tolerance exists;
  * a row without a valid seq fails with last_error "seq_missing".
+ * A person-signed row is relayed verbatim only if its event describes the row (personEventMismatch); one that does
+ * not, or that the relay keeps rejecting as blocked (PERSON_BLOCKED_RELEASE_AT), is released and town-signed.
  * Spec: docs/superpowers/specs/2026-10-02-nsp13-vorhaben-record-design.md §3.2
  */
 import { verifyEvent, type NostrEvent } from "@netizen-labs/nostr";
@@ -48,6 +50,16 @@ const WALLET = /^0x[0-9a-f]{40}$/;
 const SAFE_ID = /^[0-9A-Za-z-]+$/;
 const ALARM_AT = 10;
 const WAITING_ALARM = 50;
+/**
+ * A person event the relay rejects as `blocked:` (e.g. "blocked: only … members may publish": the signer has no
+ * write access) this many passes in a row is released and the town key signs the same seq instead. Rate limits,
+ * network errors and every other rejection keep retrying the person event. The streak lives in last_error
+ * ("person_blocked n/3: …"), so any other failure in between resets it.
+ */
+export const PERSON_BLOCKED_RELEASE_AT = 3;
+const PERSON_BLOCKED = /^person_blocked (\d+)\//;
+const isBlockedRejection = (message: string) => /^blocked:/.test(message.trim());
+
 /** A person-signed row the API has not resolved after this long is overdue (the API should have attached or released it). */
 const PERSON_WAIT_WARN_SECONDS = 15 * 60;
 
@@ -353,9 +365,19 @@ export async function drainOutbox(deps: OutboxDeps, batch = 200): Promise<DrainS
       if (outcome.kind === "mismatch") { await fail(row, `person_event_mismatch: ${outcome.detail}`); continue; }
     }
     if (outcome.kind === "exit") continue;
-    const event = outcome.event;
+    let event = outcome.event;
 
-    const res = await send(deps, event);
+    let res = await send(deps, event);
+    if (!res.ok && row.person_signed === true && isBlockedRejection(res.message)) {
+      const streak = Number(PERSON_BLOCKED.exec(String(row.last_error ?? ""))?.[1] ?? 0) + 1;
+      const streakError = `person_blocked ${streak}/${PERSON_BLOCKED_RELEASE_AT}: ${res.message}`;
+      if (streak < PERSON_BLOCKED_RELEASE_AT || !(await release(row, event, "person_event_blocked", res.message))) { await fail(row, streakError); continue; }
+      const again = await resolveEvent(row, prior, proposalKey);
+      if (again.kind === "mismatch") { await fail(row, `person_event_mismatch: ${again.detail}`); continue; }
+      if (again.kind === "exit") continue;
+      event = again.event;
+      res = await send(deps, event);
+    }
     if (!res.ok) { await fail(row, res.message || "relay rejected"); continue; }
 
     if (row.action === "stage_changed") {

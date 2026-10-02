@@ -695,3 +695,68 @@ describe("fix round 2: person events must describe their row (I2)", () => {
     assert.match(String(tables.nostr_outbox[0].last_error), /^person_event_mismatch/);
   });
 });
+
+describe("fix round 2: a person event the relay keeps blocking (I1)", () => {
+  const sk = new Uint8Array(32).fill(11);
+  const blockedPerson = (ev: NostrEvent) => ev.pubkey !== TOWN;
+
+  it("releases after 3 blocked passes and town-signs the same seq; later rows follow", async () => {
+    const ev = buildPersonEvent(sk);
+    const tables = baseTables([
+      outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id }),
+      outbox({ id: 2, seq: 2, action: "task_cancelled", to_status: "abgebrochen" }),
+    ]);
+    const h = harness(tables);
+    const realPublish = h.deps.publish;
+    h.deps.publish = async (e) => (blockedPerson(e) ? { ok: false, message: "blocked: only Röbel / Müritz members may publish to this relay" } : realPublish(e));
+
+    for (const n of [1, 2]) {
+      const r = await drainOutbox(h.deps);
+      assert.equal(r.published, 0);
+      assert.equal(r.waiting, 1);
+      assert.match(String(tables.nostr_outbox[0].last_error), new RegExp(`^person_blocked ${n}/3: blocked:`));
+      assert.equal(tables.nostr_outbox[0].person_signed, true);
+    }
+    const r3 = await drainOutbox(h.deps);
+    assert.equal(r3.published, 2);
+    const row = tables.nostr_outbox[0];
+    assert.equal(row.person_signed, false);
+    assert.equal(h.published[0].pubkey, TOWN);
+    assert.equal(tag(h.published[0], "seq"), "1");
+    assert.equal(row.event_id, h.published[0].id);
+    assert.equal(tag(h.published[1], "prior"), h.published[0].id);
+    assert.ok(h.logs.some((l) => l.startsWith("RELEASED nostr_outbox 1") && l.includes("person_event_blocked")));
+  });
+
+  it("keeps retrying the person event on rate limits and network errors", async () => {
+    const ev = buildPersonEvent(sk);
+    const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id, attempts: 5, last_error: "person_blocked 2/3: blocked: x" })]);
+    const h = harness(tables);
+    let message = "rate-limited: slow down";
+    h.deps.publish = async () => { if (message === "throw") throw new Error("socket hang up"); return { ok: false, message }; };
+    await drainOutbox(h.deps);
+    assert.equal(tables.nostr_outbox[0].last_error, "rate-limited: slow down");
+    message = "throw";
+    for (let i = 0; i < 4; i++) await drainOutbox(h.deps);
+    assert.equal(tables.nostr_outbox[0].person_signed, true);
+    assert.deepEqual(tables.nostr_outbox[0].signed_event, ev);
+    assert.equal(h.signs, 0);
+  });
+
+  it("a non-blocked failure resets the streak", async () => {
+    const ev = buildPersonEvent(sk);
+    const tables = baseTables([outbox({ id: 1, person_signed: true, signed_event: ev, event_id: ev.id, last_error: "rate-limited: x" })]);
+    const h = harness(tables);
+    h.deps.publish = async () => ({ ok: false, message: "blocked: nope" });
+    await drainOutbox(h.deps);
+    assert.match(String(tables.nostr_outbox[0].last_error), /^person_blocked 1\/3/);
+  });
+
+  it("never releases a town-signed row that is blocked", async () => {
+    const tables = baseTables([outbox({ id: 1, last_error: "person_blocked 2/3: blocked: x" })]);
+    const h = harness(tables, () => true);
+    await drainOutbox(h.deps);
+    assert.equal(tables.nostr_outbox[0].last_error, "blocked: test");
+    assert.equal(h.signs, 1);
+  });
+});
