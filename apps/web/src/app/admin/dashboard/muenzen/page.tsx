@@ -23,6 +23,7 @@ import {
   IdentityCell,
 } from "@/components/admin/muenzen/ui";
 import { FLOW_COLORS } from "@/lib/muenzen/constants";
+import { FunderTopupCard } from "@/components/admin/muenzen/FunderTopupCard";
 
 interface FlowTotals {
   mint: number;
@@ -65,6 +66,8 @@ export default function MuenzenOverviewPage() {
         onRefresh={refresh}
         refreshing={refreshing}
       />
+
+      <FunderTopupCard onDone={refresh} className="mb-6" />
 
       {error && <ErrorState error={error} onRetry={refresh} />}
 
