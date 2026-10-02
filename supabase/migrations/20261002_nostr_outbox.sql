@@ -34,15 +34,17 @@ ALTER TABLE public.nostr_outbox ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nostr_stage_ledger ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.nostr_outbox, public.nostr_stage_ledger FROM anon, authenticated;
 GRANT ALL ON public.nostr_outbox, public.nostr_stage_ledger TO service_role;
+REVOKE ALL ON SEQUENCE public.nostr_outbox_id_seq FROM anon, authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.nostr_outbox_id_seq TO service_role;
 
 -- task_activity → task actions (comments are never published)
 CREATE OR REPLACE FUNCTION public.nostr_outbox_task_activity() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_proposal uuid; v_creator text; v_action text; v_role text;
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_proposal uuid; v_proposer text; v_action text; v_role text;
 BEGIN
   IF NEW.kind = 'comment' THEN RETURN NEW; END IF;
-  SELECT proposal_id, lower(created_by_wallet) INTO v_proposal, v_creator FROM proposal_tasks WHERE id = NEW.task_id;
+  SELECT t.proposal_id, lower(p.proposer_address) INTO v_proposal, v_proposer
+  FROM proposal_tasks t JOIN proposals p ON p.id = t.proposal_id WHERE t.id = NEW.task_id;
   IF v_proposal IS NULL THEN RETURN NEW; END IF;
   v_action := CASE
     WHEN NEW.kind = 'proof' THEN 'proof_added'
@@ -58,7 +60,7 @@ BEGIN
     WHEN NEW.actor_wallet = 'system' THEN 'system'
     WHEN v_action IN ('task_approved','changes_requested') THEN 'attester'
     WHEN v_action IN ('task_assigned','task_cancelled') THEN
-      CASE WHEN lower(NEW.actor_wallet) = v_creator THEN 'proposer' ELSE 'attester' END
+      CASE WHEN lower(NEW.actor_wallet) = v_proposer THEN 'proposer' ELSE 'attester' END
     ELSE 'assignee' END;
   INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, from_status, to_status, actor_wallet, actor_role, body, extra, occurred_at)
   VALUES ('task', NEW.task_id, v_proposal, v_action, NEW.from_status, COALESCE(NEW.to_status, (SELECT status FROM proposal_tasks WHERE id = NEW.task_id)),
@@ -70,11 +72,13 @@ CREATE TRIGGER nostr_outbox_task_activity AFTER INSERT ON public.task_activity F
 
 -- proposal_tasks → task_created / task_paid
 CREATE OR REPLACE FUNCTION public.nostr_outbox_task() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_wallet, actor_role, occurred_at)
-    VALUES ('task', NEW.id, NEW.proposal_id, 'task_created', NEW.status, lower(NEW.created_by_wallet), 'proposer', NEW.created_at);
+    VALUES ('task', NEW.id, NEW.proposal_id, 'task_created', NEW.status, lower(NEW.created_by_wallet),
+            CASE WHEN lower(NEW.created_by_wallet) = (SELECT lower(proposer_address) FROM proposals WHERE id = NEW.proposal_id) THEN 'proposer' ELSE 'attester' END,
+            NEW.created_at);
   ELSIF NEW.status = 'ausgezahlt' AND OLD.status IS DISTINCT FROM 'ausgezahlt' THEN
     INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, from_status, to_status, actor_role)
     VALUES ('task', NEW.id, NEW.proposal_id, 'task_paid', OLD.status, 'ausgezahlt', 'system');
@@ -86,7 +90,7 @@ CREATE TRIGGER nostr_outbox_task AFTER INSERT OR UPDATE OF status ON public.prop
 
 -- proposal_stage_events → stage_changed
 CREATE OR REPLACE FUNCTION public.nostr_outbox_stage() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, from_status, to_status, actor_role, occurred_at)
   VALUES ('proposal', NEW.proposal_id, NEW.proposal_id, 'stage_changed', NEW.from_stage, NEW.to_stage, 'system', NEW.created_at);
@@ -97,7 +101,7 @@ CREATE TRIGGER nostr_outbox_stage AFTER INSERT ON public.proposal_stage_events F
 
 -- proposal_wahlhelfer → tally_confirmed
 CREATE OR REPLACE FUNCTION public.nostr_outbox_wahlhelfer() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF NEW.confirmed_at IS NOT NULL AND OLD.confirmed_at IS NULL THEN
     INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_wallet, actor_role, extra, occurred_at)
@@ -113,7 +117,7 @@ CREATE TRIGGER nostr_outbox_wahlhelfer AFTER UPDATE OF confirmed_at ON public.pr
 
 -- proposals → meinungsbild_published (window opened = tally on-chain)
 CREATE OR REPLACE FUNCTION public.nostr_outbox_meinungsbild() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF NEW.tally_confirm_opened_at IS NOT NULL AND OLD.tally_confirm_opened_at IS NULL AND NEW.vorhaben_enabled THEN
     INSERT INTO nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_role, occurred_at)
@@ -126,7 +130,7 @@ CREATE TRIGGER nostr_outbox_meinungsbild AFTER UPDATE OF tally_confirm_opened_at
 
 -- proposal_payout_lines → payout_* (only published states; sendend/gesendet skipped)
 CREATE OR REPLACE FUNCTION public.nostr_outbox_payout() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_action text;
 BEGIN
   IF TG_OP = 'INSERT' THEN
@@ -149,8 +153,9 @@ REVOKE ALL ON FUNCTION public.nostr_outbox_task_activity(), public.nostr_outbox_
 
 -- Backfill: proposals already in the vorhaben system get their tasks/lines/confirmations as first actions.
 INSERT INTO public.nostr_outbox (object_type, object_id, proposal_id, action, to_status, actor_wallet, actor_role, occurred_at)
-SELECT 'task', t.id, t.proposal_id, 'task_created', t.status, lower(t.created_by_wallet), 'proposer', t.created_at
-FROM public.proposal_tasks t
+SELECT 'task', t.id, t.proposal_id, 'task_created', 'offen', lower(t.created_by_wallet),
+  CASE WHEN lower(t.created_by_wallet) = lower(p.proposer_address) THEN 'proposer' ELSE 'attester' END, t.created_at
+FROM public.proposal_tasks t JOIN public.proposals p ON p.id = t.proposal_id
 WHERE NOT EXISTS (SELECT 1 FROM public.nostr_outbox o WHERE o.object_type = 'task' AND o.object_id = t.id AND o.action = 'task_created');
 
 NOTIFY pgrst, 'reload schema';
