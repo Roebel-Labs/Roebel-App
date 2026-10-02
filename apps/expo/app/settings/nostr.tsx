@@ -82,7 +82,7 @@ const EXPLAINERS: { question: string; answer: string }[] = [
   {
     question: 'Wer darf dort schreiben?',
     answer:
-      'Nur Bürgerinnen und Bürger mit Bürger-NFT. Lesen darf jeder. Deine Freischaltung wird automatisch geprüft — wenn du deine Mitgliedschaft verlierst, endet auch der Schreibzugriff.',
+      'Jedes Konto, das der öffentlichen Aufzeichnung zugestimmt hat. Lesen darf jeder. Einzelne Beitragsarten, etwa Forum-Threads, bleiben verifizierten Bürgerinnen und Bürgern vorbehalten.',
   },
   {
     question: 'Kann ich Beiträge wieder löschen?',
@@ -286,7 +286,7 @@ export default function NostrIdentityScreen() {
     hasCitizenNft === true
       ? 'Bürger-NFT bestätigt.'
       : hasCitizenNft === false
-        ? 'Kein Bürger-NFT gefunden. Schreibrechte haben nur verifizierte Bürgerinnen und Bürger.'
+        ? 'Kein Bürger-NFT gefunden. Einige Beitragsarten, etwa Forum-Threads, sind verifizierten Bürgerinnen und Bürgern vorbehalten.'
         : 'Wird auf der Blockchain nachgesehen …';
 
   const steps: { title: string; detail: string }[] = [

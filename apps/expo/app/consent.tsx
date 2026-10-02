@@ -23,7 +23,6 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
-import { useUser } from '@/context/UserContext';
 import { useWalletBoot } from '@/context/WalletBootContext';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
 
@@ -38,7 +37,6 @@ export default function ConsentModalScreen() {
   const { acceptAll, acceptEssential } = useConsent();
   const router = useRouter();
   const account = useActiveAccount();
-  const { user } = useUser();
 
   // First launch while the passkey gate is open: logged-out people continue to the welcome
   // screen, where "Unabhängiges Konto" is the first choice. Gate closed (production today): as
@@ -62,12 +60,12 @@ export default function ConsentModalScreen() {
   const handleAcceptAll = async () => {
     await acceptAll('first_launch');
     // Accepting the policy IS the public-record consent (the changelog names
-    // it). Remember it, and enroll verified Citizens silently in the
-    // background; everyone else enrolls via self-heal once verified.
+    // it). Remember it, and enroll silently in the background
+    // (self-heal retries on a later launch if it cannot complete now).
     void import('@/lib/nostr/enroll')
       .then(async ({ markPublicRecordConsent, enrollNow }) => {
         await markPublicRecordConsent();
-        if (user?.is_verified_citizen && account) await enrollNow(account);
+        if (account) await enrollNow(account);
       })
       .catch(() => {});
     await leave();

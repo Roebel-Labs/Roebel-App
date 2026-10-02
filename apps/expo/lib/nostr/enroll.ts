@@ -4,9 +4,8 @@
  * There is deliberately no separate dialog: the privacy consent (first-launch
  * screen and the policy-version re-consent sheet) carries the public-record
  * clause, and pressing its Accept is the consent moment. This module remembers
- * that acceptance and turns it into an enrollment — immediately for verified
- * Citizens, or later via self-heal for anyone who becomes one (or was offline
- * when they accepted).
+ * that acceptance and turns it into an enrollment — immediately for every
+ * account, or later via self-heal (e.g. when offline at acceptance).
  *
  * The durable acceptance proof remains the wallet-signed registration itself;
  * the flag here only bridges the gap between "accepted" and "enrolled".
@@ -34,15 +33,15 @@ export async function hasPublicRecordConsent(): Promise<boolean> {
 }
 
 /**
- * Enroll and start the historic backfill. Callers gate on verified citizenship;
+ * Enroll and start the historic backfill. Every consenting account may enroll;
  * everything in here is silent and never throws.
  */
 export async function enrollNow(account: SigningAccount): Promise<void> {
   try {
-    const { ensureIdentitySilently, getRegisteredAt } = await import('./identity');
+    const { ensureIdentitySilently, getRegisteredAt } = require('./identity') as typeof import('./identity');
     await ensureIdentitySilently(account);
     if (await getRegisteredAt()) {
-      const { ensureProfilePublished, retryPendingPublications } = await import('./publish');
+      const { ensureProfilePublished, retryPendingPublications } = require('./publish') as typeof import('./publish');
       await ensureProfilePublished(account.address);
       await retryPendingPublications(account.address);
     }
@@ -53,15 +52,10 @@ export async function enrollNow(account: SigningAccount): Promise<void> {
 
 /**
  * Launch-time repair: consent was given but enrollment has not completed on
- * this device — the citizen was offline, the relay was down, or they were not
- * yet verified when they accepted. Also nudges the backfill along for the
+ * this device — the account was offline or the relay was down when they accepted. Also nudges the backfill along for the
  * already-enrolled.
  */
-export async function selfHealEnrollment(
-  account: SigningAccount,
-  isVerifiedCitizen: boolean,
-): Promise<void> {
-  if (!isVerifiedCitizen) return;
+export async function selfHealEnrollment(account: SigningAccount): Promise<void> {
   if (!(await hasPublicRecordConsent())) return;
   await enrollNow(account);
 }

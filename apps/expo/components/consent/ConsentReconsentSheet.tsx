@@ -18,7 +18,6 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
-import { useUser } from '@/context/UserContext';
 import { POLICY_CHANGELOG, PRIVACY_POLICY_VERSION } from '@/constants/consent';
 
 export function ConsentReconsentSheet() {
@@ -26,7 +25,6 @@ export function ConsentReconsentSheet() {
   const { colors } = useTheme();
   const router = useRouter();
   const account = useActiveAccount();
-  const { user } = useUser();
 
   // Confirming the new policy version IS the public-record consent — the
   // changelog bullet names it. Enrollment runs silently after.
@@ -34,7 +32,7 @@ export function ConsentReconsentSheet() {
     void import('@/lib/nostr/enroll')
       .then(async ({ markPublicRecordConsent, enrollNow }) => {
         await markPublicRecordConsent();
-        if (user?.is_verified_citizen && account) await enrollNow(account);
+        if (account) await enrollNow(account);
       })
       .catch(() => {});
   };
