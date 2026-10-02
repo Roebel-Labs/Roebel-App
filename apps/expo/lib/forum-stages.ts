@@ -5,7 +5,7 @@ export const STAGE_LABELS: Record<ForumStage, string> = {
   idee: 'Idee',
   entwurf: 'Entwurf',
   diskussion: 'Diskussion',
-  meinungsbild: 'Meinungsbild',
+  meinungsbild: 'Bürgervotum',
   beschlussvorlage: 'Beschlussvorlage',
   beschlossen: 'Beschlossen',
   abgelehnt: 'Abgelehnt',

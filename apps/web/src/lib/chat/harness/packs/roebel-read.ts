@@ -336,7 +336,7 @@ export const listProposalsTool: HarnessTool<z.infer<typeof listLimitInput>> = {
   pack: "roebel",
   risk: "read",
   description:
-    "Bürgervorschläge mit Status und Stimmen (Ja/Nein/Enthaltung). Abstimmungen sind ein Meinungsbild der Bürgerschaft, keine Stadtratsbeschlüsse.",
+    "Bürgervorschläge mit Status und Stimmen (Ja/Nein/Enthaltung). Abstimmungen sind ein Bürgervotum der Bürgerschaft, keine rechtsverbindlichen Beschlüsse der Stadt.",
   inputSchema: listLimitInput,
   summarize: () => "Bürgervorschläge ansehen",
   execute: async ({ limit: n }, ctx) => {

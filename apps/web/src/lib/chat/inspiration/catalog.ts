@@ -207,12 +207,12 @@ export const INSPIRATION_TASKS: InspirationTask[] = [
   {
     id: "citizen-proposal-explainer",
     audience: ["citizen"],
-    title: "Offenes Meinungsbild neutral erklären",
-    pitch: "Fasst ein laufendes Meinungsbild mit Pro und Contra zusammen, damit du in zwei Minuten informiert abstimmst.",
+    title: "Offenes Bürgervotum neutral erklären",
+    pitch: "Fasst eine laufende Bürgerabstimmung mit Pro und Contra zusammen, damit du in zwei Minuten informiert abstimmst.",
     value: { kind: "good", estimate: "informierte Teilnahme" },
     botSlug: "mecky",
     starterPrompt:
-      "Erklär mir das aktuell offene Meinungsbild in Röbel neutral: worum geht es, was spricht dafür, was dagegen, was kostet es? Gib keine Empfehlung, wie ich abstimmen soll.",
+      "Erklär mir die aktuell offene Bürgerabstimmung in Röbel neutral: worum geht es, was spricht dafür, was dagegen, was kostet es? Gib keine Empfehlung, wie ich abstimmen soll.",
     requiredTools: ["list_proposals", "list_feed_posts", "get_treasury"],
     signals: [S.citizen, S.proposalOpen],
     tier: "free",
@@ -800,12 +800,12 @@ export const INSPIRATION_TASKS: InspirationTask[] = [
   {
     id: "kommune-participation",
     audience: ["kommune"],
-    title: "Meinungsbild zu einem Ortsthema aufsetzen",
-    pitch: "Frage, neutrale Hintergrundinfos und Zeitplan für ein Meinungsbild in der App, das der Stadtvertretung eine Stimmung zeigt.",
+    title: "Bürgerabstimmung zu einem Ortsthema aufsetzen",
+    pitch: "Frage, neutrale Hintergrundinfos und Zeitplan für eine Bürgerabstimmung in der App, das der Stadtvertretung eine Stimmung zeigt.",
     value: { kind: "good", estimate: "Bürgerstimme in Wochen statt Monaten" },
     botSlug: "recherche",
     starterPrompt:
-      "{orgName} möchte die Meinung der Bürger zu einem Thema einholen (ich nenne es gleich). Formuliere eine neutrale Frage, zwei, drei Antwortoptionen, einen ausgewogenen Hintergrundtext und einen Zeitplan. Es ist ein Meinungsbild, keine verbindliche Abstimmung.",
+      "{orgName} möchte die Meinung der Bürger zu einem Thema einholen (ich nenne es gleich). Formuliere eine neutrale Frage, zwei, drei Antwortoptionen, einen ausgewogenen Hintergrundtext und einen Zeitplan. Es ist eine Bürgerabstimmung, keine rechtsverbindlichen Beschlüsse der Stadt.",
     requiredTools: ["list_proposals", "search_roebel", "write_file", "ask_options"],
     signals: [S.kommune],
     tier: "business",

@@ -18,7 +18,7 @@ export const ROEBEL_TENANT: TenantConfig = {
     "Mecky ist das Maskottchen und der KI-Assistent der Röbel-App.",
     "„Röbel Münzen“ sind die lokale Gemeinschaftswährung der App (auf Circles); nenn sie immer „Röbel Münzen“, nie mit Kürzel.",
     "Verifizierte Bürgerinnen und Bürger werden von anderen Röbelern bestätigt und können über Vorschläge abstimmen; Abstimmungen sind geheim.",
-    "Abstimmungen in der App sind ein Meinungsbild der Bürgerschaft, keine rechtsverbindlichen Beschlüsse der Stadt.",
+    "Abstimmungen in der App sind ein Bürgervotum der Bürgerschaft, keine rechtsverbindlichen Beschlüsse der Stadt.",
     "Die Gemeinschaftskasse ist der gemeinsame Topf der Röbeler Gemeinschaft; ihre Zahlen sind in der App öffentlich einsehbar.",
   ],
 };

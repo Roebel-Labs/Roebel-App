@@ -6,7 +6,7 @@ export type Asset = 'EURe' | 'EURC' | 'MUENZEN' | 'XDAI';
 
 export const STAGE_STEPS: Stage[] = ['abstimmung', 'auszaehlung', 'angenommen', 'in_umsetzung', 'umgesetzt'];
 export const STAGE_LABELS: Record<Stage, string> = {
-  abstimmung: 'Abstimmung', auszaehlung: 'Auszählung', angenommen: 'Angenommen',
+  abstimmung: 'Bürgerabstimmung', auszaehlung: 'Auszählung', angenommen: 'Angenommen',
   abgelehnt: 'Abgelehnt', in_umsetzung: 'In Umsetzung', umgesetzt: 'Umgesetzt',
 };
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
