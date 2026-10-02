@@ -18,3 +18,5 @@ export { backfeedOnce, classify } from "./backfeed.js";
 export type { BackfeedDeps, BackfeedSummary } from "./backfeed.js";
 export { actionToSpec, buergervotumToSpec, contractToSpec, kasseNoticeToSpec, payoutLineToSpec, proposalVorhabenTags, taskToSpec } from "./vorhaben.js";
 export type { OutboxRow, VorhabenContext } from "./vorhaben.js";
+export { drainOutbox, resolvePubkeys } from "./outbox.js";
+export type { DrainSummary, OutboxDeps } from "./outbox.js";

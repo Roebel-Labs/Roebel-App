@@ -20,9 +20,13 @@ import {
   orgPostToSpec,
   orgToSpec,
   proposalToSpec,
+  unixFromUpdatedAt,
+  TOWN_SCOPE,
   type MenuInput,
   type PublishSpec,
 } from "./mappers.js";
+import { drainOutbox, resolvePubkeys } from "./outbox.js";
+import { buergervotumToSpec, contractToSpec, payoutLineToSpec, taskToSpec } from "./vorhaben.js";
 
 /**
  * One publish pass: public datasets → signed replaceable events on the relay.
@@ -43,7 +47,7 @@ import {
 
 export type DatasetName =
   | "events" | "cinema" | "orgs" | "articles" | "marketplace" | "deals"
-  | "news" | "businesses" | "notices" | "menus" | "proposals" | "forum";
+  | "news" | "businesses" | "notices" | "menus" | "proposals" | "forum" | "vorhaben";
 
 /** One ledger row per published event that a spec asked to record. */
 export interface LedgerRow {
@@ -86,6 +90,13 @@ export interface PublisherDeps {
    * Required if datasets includes "proposals".
    */
   governor?: string;
+  /**
+   * PostgREST PATCH / POST. Both are needed for the `vorhaben` outbox drain
+   * (signed_event / published_at write-back, stage ledger); without them the
+   * drain is skipped and only the Vorhaben state events publish.
+   */
+  updateRow?: (table: string, query: string, body: Record<string, unknown>) => Promise<void>;
+  insertRow?: (table: string, body: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
 export interface PublishSummary {
@@ -99,9 +110,16 @@ export interface PublishSummary {
 
 /** Build the full spec list for one pass. Exposed for tests. */
 export async function buildSpecs(
-  deps: Pick<PublisherDeps, "datasets" | "fetchRows" | "nodeId" | "governor">,
+  deps: Pick<PublisherDeps, "datasets" | "fetchRows" | "nodeId" | "governor"> & { nodeSecret?: string },
 ): Promise<PublishSpec[]> {
   const specs: PublishSpec[] = [];
+  // Vorhaben state first: the proposals dataset needs its task ids and freshness for the head tags.
+  let vorhaben: VorhabenState | null = null;
+  if (deps.datasets.includes("vorhaben")) {
+    if (!deps.nodeSecret) throw new Error("datasets includes 'vorhaben' but no node secret was given to derive the town key");
+    vorhaben = await loadVorhaben(deps.fetchRows, deriveOrgIdentity(deps.nodeSecret, deps.nodeId, TOWN_SCOPE).publicKey);
+    specs.push(...vorhaben.specs);
+  }
   const wantsOrgs = deps.datasets.includes("orgs");
   const wantsEvents = deps.datasets.includes("events");
 
@@ -316,16 +334,127 @@ export async function buildSpecs(
       // Deliberately loud: a configured dataset that silently publishes nothing is a lie.
       throw new Error("datasets includes 'proposals' but PROPOSAL_GOVERNOR is not set");
     }
+    // The Vorhaben columns are only selected when the dataset is on, so a node
+    // without the Vorhaben migration keeps publishing proposals unchanged.
     const rows = await deps.fetchRows(
       "proposals",
-      "select=id,proposal_id,blockchain_proposal_id,proposal_number,title,summary,category,irys_content_id,state,created_at,updated_at",
+      "select=id,proposal_id,blockchain_proposal_id,proposal_number,title,summary,category,irys_content_id,state,created_at,updated_at" +
+        (vorhaben ? ",vorhaben_enabled,lifecycle_stage,budget_amount,budget_asset,beneficiary_name" : ""),
     );
     for (const row of rows) {
-      const spec = proposalToSpec(row, deps.governor);
+      const id = String(row.id ?? "");
+      const spec = vorhaben
+        ? proposalToSpec(row, deps.governor, {
+            townPubkey: vorhaben.townPubkey,
+            taskIds: vorhaben.taskIds.get(id) ?? [],
+            minCreatedAt: vorhaben.headFreshness.get(id),
+          })
+        : proposalToSpec(row, deps.governor);
       if (spec) specs.push(spec);
     }
   }
   return specs;
+}
+
+interface VorhabenState {
+  townPubkey: string;
+  specs: PublishSpec[];
+  taskIds: Map<string, string[]>;
+  /** Newest task createdAt per proposal uuid — the head must supersede its tasks. */
+  headFreshness: Map<string, number>;
+}
+
+/** Exact sum of numeric(38,18) strings (no float drift on money). */
+function sumDecimals(values: unknown[]): string {
+  const SCALE = 18;
+  let total = 0n;
+  for (const v of values) {
+    const s = String(v ?? "").trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) continue;
+    const [int, frac = ""] = s.split(".");
+    total += BigInt(int + frac.slice(0, SCALE).padEnd(SCALE, "0"));
+  }
+  const raw = total.toString().padStart(SCALE + 1, "0");
+  return `${raw.slice(0, -SCALE)}.${raw.slice(-SCALE)}`;
+}
+
+/**
+ * The NSP-13 state events (32104 / 32108 / 32110 / 32111) rebuilt from the
+ * current rows of every Vorhaben-enabled proposal. Stateless like every other
+ * dataset: addressable events replace themselves, unchanged rows re-sign to
+ * the same id.
+ */
+async function loadVorhaben(fetchRows: PublisherDeps["fetchRows"], townPubkey: string): Promise<VorhabenState> {
+  const state: VorhabenState = { townPubkey, specs: [], taskIds: new Map(), headFreshness: new Map() };
+  const proposals = await fetchRows(
+    "proposals",
+    "select=id,proposal_id,proposal_number,title,lifecycle_stage,for_votes,against_votes,abstain_votes,tally_address,tally_confirm_opened_at,updated_at&vorhaben_enabled=is.true",
+  );
+  const ids = proposals.map((p) => String(p.id ?? "")).filter((id) => /^[0-9A-Za-z-]+$/.test(id));
+  if (!ids.length) return state;
+  const inIds = `in.(${ids.join(",")})`;
+  const keyById = new Map(proposals.map((p) => [String(p.id), String(p.proposal_id ?? "")]));
+
+  const tasks = await fetchRows(
+    "proposal_tasks",
+    `select=id,proposal_id,title,description,acceptance_criteria,reward_amount,reward_asset,deadline,status,assignee_wallet,created_by_wallet,created_at,updated_at&proposal_id=${inIds}&order=created_at.asc`,
+  );
+  const contracts = await fetchRows(
+    "proposal_contracts",
+    `select=id,proposal_id,platform_fee_bps,platform_safe_address,created_at&proposal_id=${inIds}`,
+  );
+  // All lines (not only published states): the contract lists every line and its
+  // totals must not dip while a line is mid-send; payoutLineToSpec drops the
+  // unpublished states (sendend, gesendet) itself.
+  const lines = await fetchRows(
+    "proposal_payout_lines",
+    `select=id,contract_id,proposal_id,role,recipient_wallet,recipient_label,amount,asset,rail,reference_type,reference_id,status,tx_hash,created_at,updated_at&proposal_id=${inIds}&order=created_at.asc`,
+  );
+  const hashes = await fetchRows(
+    "proposal_wahlhelfer",
+    `select=proposal_id,result_hash&result_hash=not.is.null&proposal_id=${inIds}`,
+  );
+  const pubkeys = await resolvePubkeys(fetchRows, [
+    ...tasks.flatMap((t) => [t.assignee_wallet, t.created_by_wallet]),
+    ...lines.map((l) => l.recipient_wallet),
+  ]);
+  const pk = (w: unknown) => (typeof w === "string" ? pubkeys.get(w.toLowerCase()) ?? null : null);
+
+  const resultHash = new Map<string, string>();
+  for (const h of hashes) if (typeof h.result_hash === "string" && !resultHash.has(String(h.proposal_id))) resultHash.set(String(h.proposal_id), h.result_hash);
+  for (const p of proposals) {
+    const hash = resultHash.get(String(p.id));
+    const spec = buergervotumToSpec(hash ? { ...p, result_hash: hash } : p, townPubkey);
+    if (spec) state.specs.push(spec);
+  }
+
+  for (const t of tasks) {
+    const pid = String(t.proposal_id ?? "");
+    const key = keyById.get(pid);
+    if (!key) continue;
+    const spec = taskToSpec(t, key, townPubkey, pk(t.assignee_wallet), pk(t.created_by_wallet));
+    if (!spec) continue;
+    state.specs.push(spec);
+    state.taskIds.set(pid, [...(state.taskIds.get(pid) ?? []), String(t.id)]);
+    state.headFreshness.set(pid, Math.max(state.headFreshness.get(pid) ?? 0, unixFromUpdatedAt(t)));
+  }
+
+  for (const c of contracts) {
+    const pid = String(c.proposal_id ?? "");
+    const key = keyById.get(pid);
+    if (!key) continue;
+    const own = lines.filter((l) => String(l.contract_id) === String(c.id));
+    const assets = [...new Set(own.map((l) => String(l.asset ?? "")).filter(Boolean))].sort();
+    const totals: Array<[string, string]> = assets.map((a) => [a, sumDecimals(own.filter((l) => l.asset === a).map((l) => l.amount))]);
+    const freshness = own.reduce((m, l) => Math.max(m, unixFromUpdatedAt(l)), 0);
+    const spec = contractToSpec(c, key, townPubkey, own.map((l) => String(l.id)), totals, freshness || undefined);
+    if (spec) state.specs.push(spec);
+    for (const l of own) {
+      const lineSpec = payoutLineToSpec(l, key, townPubkey, pk(l.recipient_wallet));
+      if (lineSpec) state.specs.push(lineSpec);
+    }
+  }
+  return state;
 }
 
 /**
@@ -405,7 +534,9 @@ export async function publishOnce(deps: PublisherDeps): Promise<PublishSummary> 
 
   const identities = new Map<string, OrgIdentity>();
   const events = specs.map((s) => signSpec(s, identities, deps.nodeSecret, deps.nodeId));
-  const pubkeys = [...new Set(events.map((e) => e.pubkey))];
+  const drainEnabled = deps.datasets.includes("vorhaben") && !!deps.updateRow && !!deps.insertRow;
+  const townPubkey = drainEnabled ? deriveOrgIdentity(deps.nodeSecret, deps.nodeId, TOWN_SCOPE).publicKey : "";
+  const pubkeys = [...new Set([...events.map((e) => e.pubkey), ...(drainEnabled ? [townPubkey] : [])])];
   if (deps.onPubkeys) await deps.onPubkeys(pubkeys);
 
   const client = deps.makeClient
@@ -435,6 +566,24 @@ export async function publishOnce(deps: PublisherDeps): Promise<PublishSummary> 
           event_id: event.id,
           status: "published",
         });
+      }
+    }
+    // The Vorhaben action log goes out after the state it refers to, over the
+    // same connection. A drain failure is logged, never fails the pass.
+    if (drainEnabled) {
+      try {
+        await drainOutbox({
+          fetchRows: deps.fetchRows,
+          updateRow: deps.updateRow!,
+          insertRow: deps.insertRow!,
+          publish: (e) => client.publish(e),
+          sign: (s) => signSpec(s, identities, deps.nodeSecret, deps.nodeId),
+          townPubkey,
+          now: () => Math.floor(Date.now() / 1000),
+          log,
+        });
+      } catch (error) {
+        log(`outbox drain failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   } finally {

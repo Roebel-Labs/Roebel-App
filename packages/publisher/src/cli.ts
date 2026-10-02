@@ -23,7 +23,7 @@ function required(name: string): string {
   return value;
 }
 
-const VALID_DATASETS = new Set<DatasetName>(["events", "cinema", "orgs", "articles", "marketplace", "deals", "news", "businesses", "notices", "menus", "proposals", "forum"]);
+const VALID_DATASETS = new Set<DatasetName>(["events", "cinema", "orgs", "articles", "marketplace", "deals", "news", "businesses", "notices", "menus", "proposals", "forum", "vorhaben"]);
 
 async function main(): Promise<void> {
   const nodeId = required("NODE_ID");
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     .map((d) => d.trim())
     .filter((d): d is DatasetName => VALID_DATASETS.has(d as DatasetName));
   if (datasets.length === 0) {
-    console.error("PUBLISH_DATASETS names no known dataset (events, cinema, orgs, articles, marketplace, deals, news, businesses, notices, menus, proposals, forum)");
+    console.error("PUBLISH_DATASETS names no known dataset (events, cinema, orgs, articles, marketplace, deals, news, businesses, notices, menus, proposals, forum, vorhaben)");
     process.exit(2);
   }
 
@@ -168,6 +168,8 @@ async function main(): Promise<void> {
         fetchRows,
         relayUrl,
         recordPublications,
+        updateRow,
+        insertRow,
         ...(governor ? { governor } : {}),
         ...(mirrorMedia ? { mirrorMedia } : {}),
         // Announce signing keys BEFORE publishing, atomically — the allow-list
