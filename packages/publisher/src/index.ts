@@ -16,3 +16,5 @@ export { buildSpecs, mirrorSpecMedia, publishOnce, signSpec } from "./sync.js";
 export type { DatasetName, PublisherDeps, PublishSummary } from "./sync.js";
 export { backfeedOnce, classify } from "./backfeed.js";
 export type { BackfeedDeps, BackfeedSummary } from "./backfeed.js";
+export { actionToSpec, buergervotumToSpec, contractToSpec, kasseNoticeToSpec, payoutLineToSpec, proposalVorhabenTags, taskToSpec } from "./vorhaben.js";
+export type { OutboxRow, VorhabenContext } from "./vorhaben.js";

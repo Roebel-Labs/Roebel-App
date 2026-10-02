@@ -15,6 +15,7 @@
  */
 
 import { DECISION_KINDS, headAddress, isLegalTransition } from "@netizen-labs/protocol";
+import { proposalVorhabenTags } from "./vorhaben.js";
 
 export interface PublishSpec {
   /** Identity scope the event is signed under — deriveOrgIdentity(secret, node, scope). */
@@ -38,7 +39,7 @@ export const KIND_CALENDAR_TIME = 31923;
 
 type Row = Record<string, unknown>;
 
-function str(row: Row, key: string): string | null {
+export function str(row: Row, key: string): string | null {
   const v = row[key];
   return typeof v === "string" && v.trim() !== "" ? v : null;
 }
@@ -62,7 +63,7 @@ function unixFromCreatedAt(row: Row): number {
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
 }
 
-function unixFromUpdatedAt(row: Row): number {
+export function unixFromUpdatedAt(row: Row): number {
   const raw = str(row, "updated_at") ?? str(row, "created_at");
   const parsed = raw ? Date.parse(raw) : NaN;
   return (Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0) + MAPPER_VERSION;
@@ -670,7 +671,7 @@ export const KIND_PROPOSAL_META = 32100;
  * deliberately absent: it is on-chain for those who need it, and the record
  * never carries raw addresses.
  */
-export function proposalToSpec(row: Row, governor: string): PublishSpec | null {
+export function proposalToSpec(row: Row, governor: string, vorhaben?: { townPubkey: string; taskIds: string[] }): PublishSpec | null {
   if (!governor) return null;
   const proposalId = str(row, "proposal_id");
   const title = str(row, "title");
@@ -692,6 +693,7 @@ export function proposalToSpec(row: Row, governor: string): PublishSpec | null {
   if (state !== null && state !== undefined) tags.push(["status", String(state)]);
   const createdAt = str(row, "created_at");
   if (createdAt) tags.push(["published_at", String(Math.floor(Date.parse(createdAt) / 1000))]);
+  if (vorhaben && row["vorhaben_enabled"] === true) tags.push(...proposalVorhabenTags(row, vorhaben.townPubkey, vorhaben.taskIds));
 
   return {
     scope: TOWN_SCOPE,
