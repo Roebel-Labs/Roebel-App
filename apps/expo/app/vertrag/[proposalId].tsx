@@ -195,7 +195,7 @@ export default function ContractScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <BottomDrawer visible={!!recording} onClose={closeDrawer}>
+      <BottomDrawer visible={!!recording} onClose={closeDrawer} keyboardAware>
         <View style={styles.drawer}>
           <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>Überweisung eintragen</Text>
           {recording && (

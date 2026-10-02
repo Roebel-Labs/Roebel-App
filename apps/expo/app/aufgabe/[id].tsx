@@ -317,7 +317,7 @@ export default function TaskTicketScreen() {
     which: 'apply' | 'changes' | 'cancel', title: string, value: string, onChange: (s: string) => void,
     placeholder: string, cta: string, required: boolean, submit: () => Promise<void>,
   ) => (
-    <BottomDrawer visible={drawer === which} onClose={closeDrawer}>
+    <BottomDrawer visible={drawer === which} onClose={closeDrawer} keyboardAware>
       <View style={styles.drawer}>
         <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>{title}</Text>
         {input(value, onChange, placeholder, true, which === 'apply' ? 1000 : 4000)}
@@ -434,8 +434,8 @@ export default function TaskTicketScreen() {
         if (await run('task_cancel', { body: cancelText.trim() }, true)) { setCancelText(''); setDrawer(null); }
       })}
 
-      <BottomDrawer visible={drawer === 'proof'} onClose={closeDrawer}>
-        <View style={styles.drawer}>
+      <BottomDrawer visible={drawer === 'proof'} onClose={closeDrawer} keyboardAware>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.drawer}>
           <Text style={[styles.drawerTitle, { color: colors.textPrimary }]}>Fortschritt melden</Text>
           {input(proofText, setProofText, 'Was hast du erledigt?')}
           <View style={styles.attachButtons}>
@@ -459,7 +459,7 @@ export default function TaskTicketScreen() {
             style={({ pressed }) => [styles.primary, { backgroundColor: colors.primary, opacity: busy || uploading ? 0.5 : pressed ? 0.85 : 1 }]}>
             {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[styles.primaryText, { color: colors.onPrimary }]}>Nachweis senden</Text>}
           </Pressable>
-        </View>
+        </ScrollView>
       </BottomDrawer>
 
       <FilePickerSheet visible={pickerOpen} onClose={closeFilePicker} onPicked={onFilePicked}

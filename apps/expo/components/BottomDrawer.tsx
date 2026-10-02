@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,9 @@ import {
   Dimensions,
   PanResponder,
   Pressable,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
@@ -28,6 +31,12 @@ type Props = {
    * Ignored when `snapPoint` is provided.
    */
   maxSnapPoint?: number;
+  /**
+   * Dock the drawer above the keyboard while a text input inside it is focused
+   * (same behaviour as the comment composer). Opt-in so existing drawers keep
+   * their layout.
+   */
+  keyboardAware?: boolean;
 };
 
 export default function BottomDrawer({
@@ -36,6 +45,7 @@ export default function BottomDrawer({
   children,
   snapPoint,
   maxSnapPoint = 0.92,
+  keyboardAware = false,
 }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -45,6 +55,22 @@ export default function BottomDrawer({
   const isDynamic = snapPoint === undefined;
   const drawerHeight = snapPoint !== undefined ? SCREEN_HEIGHT * snapPoint : undefined;
   const drawerMaxHeight = SCREEN_HEIGHT * maxSnapPoint;
+
+  // While the keyboard is up it already covers the home indicator, so the
+  // content needs no extra safe-area padding at the bottom.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    if (!keyboardAware) return;
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [keyboardAware]);
+  const bottomPadding = keyboardAware && keyboardVisible ? 12 : Math.max(8, insets.bottom);
 
   // Pan responder for drag-to-dismiss
   const panResponder = useRef(
@@ -117,7 +143,7 @@ export default function BottomDrawer({
       onRequestClose={closeDrawer}
       statusBarTranslucent
     >
-      <View style={styles.overlay}>
+      <OverlayContainer keyboardAware={keyboardAware}>
         {/* Backdrop */}
         <Pressable style={styles.backdrop} onPress={closeDrawer} />
 
@@ -146,14 +172,23 @@ export default function BottomDrawer({
           <View
             style={[
               isDynamic ? styles.contentDynamic : styles.content,
-              { paddingBottom: Math.max(8, insets.bottom) },
+              { paddingBottom: bottomPadding },
             ]}
           >
             {children}
           </View>
         </Animated.View>
-      </View>
+      </OverlayContainer>
     </Modal>
+  );
+}
+
+function OverlayContainer({ keyboardAware, children }: { keyboardAware: boolean; children: React.ReactNode }) {
+  if (!keyboardAware) return <View style={styles.overlay}>{children}</View>;
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
+      {children}
+    </KeyboardAvoidingView>
   );
 }
 
