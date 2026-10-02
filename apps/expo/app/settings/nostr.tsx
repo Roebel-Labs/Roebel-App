@@ -278,36 +278,37 @@ export default function NostrIdentityScreen() {
     );
   }, []);
 
-  // Two genuinely different things were hidden behind one "Mitgliedschaft prüfen"
-  // step: an on-chain fact we can read instantly, and a wait on the node's
-  // allow-list. Separating them means the screen never shows a spinner for
-  // something already known.
-  const membershipDetail =
+  // The Bürger-NFT is NOT a step towards the identity: every account that agreed to the public record gets
+  // one. It only unlocks extra post types (forum threads), so it sits last, marked optional, and never blocks
+  // the progression for someone without it.
+  const rightsDetail =
     hasCitizenNft === true
-      ? 'Bürger-NFT bestätigt.'
+      ? 'Bürger-NFT bestätigt. Du kannst auch Forum-Threads eröffnen.'
       : hasCitizenNft === false
-        ? 'Kein Bürger-NFT gefunden. Einige Beitragsarten, etwa Forum-Threads, sind verifizierten Bürgerinnen und Bürgern vorbehalten.'
+        ? 'Für deine Identität nicht nötig. Nur einzelne Beitragsarten, etwa Forum-Threads, sind verifizierten Bürgerinnen und Bürgern vorbehalten.'
         : 'Wird auf der Blockchain nachgesehen …';
 
-  const steps: { title: string; detail: string }[] = [
+  const steps: { key: string; title: string; detail: string; done: boolean; active: boolean; spinner?: boolean }[] = [
     {
+      key: 'identity',
       title: 'Identität erstellen',
       detail: 'Dein Wallet erzeugt deinen Ausweis. Ein Tipp genügt.',
+      done: stage === 'waiting' || stage === 'active',
+      active: stage === 'new',
     },
-    { title: 'Bürger-NFT', detail: membershipDetail },
     {
+      key: 'relay',
       title: 'Freischaltung auf dem Relay',
       detail:
         stage === 'active'
           ? 'Aktiv. Neue Beiträge erscheinen automatisch auch auf dem Relay.'
           : 'Röbel trägt dich in die Schreibliste ein. Das läuft im Hintergrund und dauert meist ein paar Minuten.',
+      done: stage === 'active',
+      active: stage === 'waiting',
+      spinner: stage === 'waiting',
     },
+    { key: 'rights', title: 'Bürger-Rechte (optional)', detail: rightsDetail, done: hasCitizenNft === true, active: false },
   ];
-
-  // Step 2 is complete as soon as the chain says so — it does not wait on step 3.
-  const nftDone = hasCitizenNft === true;
-  const currentStep = stage === 'active' ? 2 : hasCitizenNft === null ? 1 : stage === 'waiting' ? 2 : 0;
-  const completedThrough = stage === 'active' ? 3 : nftDone && stage === 'waiting' ? 2 : nftDone ? 1 : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -331,11 +332,11 @@ export default function NostrIdentityScreen() {
         {/* The progression. Genuinely sequential, so it earns the vertical rail. */}
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
           {steps.map((step, index) => {
-            const done = index < completedThrough;
-            const active = index === currentStep && stage !== 'loading' && !done;
+            const done = step.done;
+            const active = step.active && stage !== 'loading' && !done;
             const dotColor = done ? colors.success : active ? colors.primary : colors.borderSecondary;
             return (
-              <View key={step.title} style={styles.step}>
+              <View key={step.key} style={styles.step}>
                 <View style={styles.stepRail}>
                   <View style={[styles.stepDot, { backgroundColor: dotColor }]}>
                     {done && <Text style={styles.stepDotMark}>✓</Text>}
@@ -344,7 +345,7 @@ export default function NostrIdentityScreen() {
                     <View
                       style={[
                         styles.stepLine,
-                        { backgroundColor: index < completedThrough - 1 ? colors.success : colors.borderSecondary },
+                        { backgroundColor: done && steps[index + 1].done ? colors.success : colors.borderSecondary },
                       ]}
                     />
                   )}
@@ -359,7 +360,7 @@ export default function NostrIdentityScreen() {
                     {step.title}
                   </Text>
                   <Text style={[styles.stepDetail, { color: colors.textSecondary }]}>{step.detail}</Text>
-                  {active && index === 2 && stage === 'waiting' && (
+                  {active && step.spinner && (
                     <View style={styles.inlineStatus}>
                       <ActivityIndicator size="small" color={colors.primary} />
                       <Text style={[styles.inlineStatusText, { color: colors.primary }]}>
