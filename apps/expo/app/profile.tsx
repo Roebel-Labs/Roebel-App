@@ -41,6 +41,7 @@ import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
+import * as Updates from 'expo-updates';
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -64,6 +65,14 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [storyCollections, setStoryCollections] = useState<StoryCollection[]>([]);
   const [chatEnabled, setChatEnabled] = useState(true);
+  // The Mecky chat banner is not released yet: hidden on the production channel, kept on preview/dev for testing.
+  const chatBannerOnChannel = (() => {
+    try {
+      return Updates.channel !== 'production';
+    } catch {
+      return false;
+    }
+  })();
 
   const isConnected = !!account;
   const isOrg = activeAccount?.account_type === 'organisation';
@@ -203,7 +212,7 @@ export default function ProfileScreen() {
                     </View>
                   )}
                   {showGrid && <ProfileActionGrid items={PERSONAL_PROFILE_ACTIONS} />}
-                  {chatEnabled && <ChatAgentsBanner wallet={account?.address} />}
+                  {chatEnabled && chatBannerOnChannel && <ChatAgentsBanner wallet={account?.address} />}
                   {(isCitizen || isAspiringCitizen || wantsToBeCitizen) && (
                     <StoryCollectionsBar collections={storyCollections} heading="Lerne mehr über die Röbel App" />
                   )}
