@@ -1,0 +1,64 @@
+# Mirror the roebel-data mini-app from this monorepo into the standalone deploy repo
+# (MaxBrych/netizen-roebel-data), which is what the `netizen-roebel-data` Vercel
+# project builds from. Pushing to that repo's `main` triggers the production deploy
+# that the Röbel Expo host loads (mini_apps.home_url).
+#
+# One-time setup required (see apps/mini-apps/roebel-data/DEPLOY.md):
+#   1. Create a fine-grained GitHub PAT with Contents: read/write on
+#      MaxBrych/netizen-roebel-data.
+#   2. Add it to THIS repo's secrets as `NETIZEN_ROEBEL_DATA_DEPLOY_TOKEN`.
+#   3. In Vercel → netizen-roebel-data → Settings → Git, set Production Branch = main
+#      (so a push to the deploy repo auto-promotes to production).
+name: Sync roebel-data mini-app to deploy repo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mini-apps/roebel-data/**"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+concurrency:
+  group: sync-roebel-data
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+
+      - name: Clone deploy repo
+        env:
+          TOKEN: ${{ secrets.NETIZEN_ROEBEL_DATA_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::NETIZEN_ROEBEL_DATA_DEPLOY_TOKEN secret is not set — see apps/mini-apps/roebel-data/DEPLOY.md"
+            exit 1
+          fi
+          git clone --depth 1 \
+            "https://x-access-token:${TOKEN}@github.com/MaxBrych/netizen-roebel-data.git" deploy-repo
+
+      - name: Mirror app source + assets
+        run: |
+          # src is a full mirror (removes files deleted in the monorepo).
+          rsync -a --delete apps/mini-apps/roebel-data/src/ deploy-repo/src/
+          # public is additive — keep deploy-only assets (e.g. icon-1024.png).
+          rsync -a apps/mini-apps/roebel-data/public/ deploy-repo/public/
+          # NOTE: package.json / next.config / manifest are intentionally NOT synced —
+          # the deploy repo pins @netizen-labs/miniapp-sdk from npm, the monorepo uses
+          # the workspace. Change those in both places by hand (rare).
+
+      - name: Commit & push if changed
+        run: |
+          cd deploy-repo
+          git config user.name "roebel-data-sync[bot]"
+          git config user.email "sync@roebel.app"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to sync."
+            exit 0
+          fi
+          git commit -m "sync: apps/mini-apps/roebel-data @ ${GITHUB_SHA::12}"
+          git push origin HEAD:main
