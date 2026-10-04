@@ -30,3 +30,10 @@ describe('isDecryptDue', () => {
     expect(endMs(47070186)).toBeNull();
   });
 });
+
+describe('DECRYPT_STAGES', () => {
+  it('covers the stage a proposal is in right after voting ends', () => {
+    const { DECRYPT_STAGES } = require('../vorhaben-decrypt');
+    expect(DECRYPT_STAGES).toEqual(expect.arrayContaining(['abstimmung', 'auszaehlung']));
+  });
+});

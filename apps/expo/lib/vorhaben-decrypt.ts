@@ -11,6 +11,7 @@ export interface PublishedResult { forVotes: string; againstVotes: string; absta
 
 /** Voting ended within this window and the result is not yet published → the duty shows. */
 const DUTY_WINDOW_MS = 30 * 86_400_000;
+export const DECRYPT_STAGES = ['abstimmung', 'auszaehlung'];
 const READ_TIMEOUT_MS = 15000;
 
 async function read<T>(run: (signal: AbortSignal) => PromiseLike<{ data: T | null; error: unknown }>): Promise<T | null> {
@@ -45,7 +46,8 @@ export async function fetchDecryptDuties(nowMs = Date.now()): Promise<DecryptDut
   const rows = await read<any[]>((signal) => supabase
     .from('proposals')
     .select('proposal_id, proposal_number, title, deadline_block, tally_confirm_opened_at')
-    .eq('lifecycle_stage', 'abstimmung')
+    // The cron moves a proposal to 'auszaehlung' once voting ends; either stage still awaits the result.
+    .in('lifecycle_stage', DECRYPT_STAGES)
     .is('tally_confirm_opened_at', null)
     .not('deadline_block', 'is', null)
     .order('created_at', { ascending: false })
