@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PERSONAL_NOTIFICATION_LOG_FILTER } from "./policy";
+import { BROADCAST_NOTIFICATION_LOG_TYPES } from "./policy";
 import type { UnreadNotificationCountSources } from "./unread-count";
 
 interface CountResult {
@@ -23,7 +23,7 @@ export function createSupabaseUnreadCountSources(
         .from("notification_log")
         .select("id", { count: "exact", head: true })
         .in("status", ["sent", "partial"])
-        .not("notification_type", "in", PERSONAL_NOTIFICATION_LOG_FILTER);
+        .in("notification_type", [...BROADCAST_NOTIFICATION_LOG_TYPES]);
       if (after) query = query.gt("created_at", after);
       return requireCount(query);
     },

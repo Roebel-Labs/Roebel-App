@@ -5,7 +5,7 @@ import {
   countUnreadNotifications,
   type UnreadNotificationCountSources,
 } from "../src/lib/notifications/unread-count";
-import { PERSONAL_NOTIFICATION_LOG_TYPES } from "../src/lib/notifications/policy";
+import { BROADCAST_NOTIFICATION_LOG_TYPES, PERSONAL_NOTIFICATION_LOG_TYPES } from "../src/lib/notifications/policy";
 
 test("logged-out counts include broadcasts but never query personal notifications", async () => {
   const calls: string[] = [];
@@ -92,4 +92,13 @@ test("source failures reject instead of silently undercounting", async () => {
 
 test("targeted mini-app pushes are excluded from the global broadcast log", () => {
   assert.ok(PERSONAL_NOTIFICATION_LOG_TYPES.includes("mini_app"));
+});
+
+test("only broadcast types are read from the global push log; targeted ones never are", () => {
+  const broadcast: readonly string[] = BROADCAST_NOTIFICATION_LOG_TYPES;
+  for (const t of ["vorhaben_task", "vorhaben_tally", "vorhaben_payout", "vorhaben_safe", "direct_message",
+    "post_like", "post_comment", "comment_like", "post_reply", "org_invite", "mini_app", "test"]) {
+    assert.ok(!broadcast.includes(t), `${t} must not be broadcast`);
+  }
+  assert.ok(broadcast.includes("post_new") && broadcast.includes("event_new") && broadcast.includes("proposal_new"));
 });

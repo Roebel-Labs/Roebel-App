@@ -7,7 +7,7 @@ import {
   cleanNotificationBody,
   isWalletLike,
 } from "@/lib/notification-display"
-import { PERSONAL_NOTIFICATION_LOG_FILTER } from "@/lib/notifications/policy"
+import { BROADCAST_NOTIFICATION_LOG_TYPES } from "@/lib/notifications/policy"
 
 // ============================================
 // Create
@@ -102,7 +102,7 @@ export async function getUnifiedNotifications(params?: {
         .from("notification_log")
         .select("id, title, body, notification_type, created_at, data", { count: "exact" })
         .in("status", ["sent", "partial"])
-        .not("notification_type", "in", PERSONAL_NOTIFICATION_LOG_FILTER)
+        .in("notification_type", [...BROADCAST_NOTIFICATION_LOG_TYPES])
         .order("created_at", { ascending: false })
         .limit(fetchLimit),
 

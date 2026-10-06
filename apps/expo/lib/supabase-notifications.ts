@@ -40,7 +40,9 @@ const NOTIFICATION_PAGE_SIZE = 20;
 // people's likes/comments/DMs/invites into everyone's inbox. Only broadcast
 // types (feed posts, news, events) legitimately belong to every user, so we
 // exclude the personal types here.
-const PERSONAL_LOG_TYPES = ['direct_message', 'post_like', 'post_comment', 'org_invite'];
+// Allow-list, not deny-list: a new targeted type (vorhaben_task, comment_like, post_reply, …) must never
+// leak by default. Mirrors BROADCAST_NOTIFICATION_LOG_TYPES on the web and the RLS policy on the table.
+const BROADCAST_LOG_TYPES = ['event_new', 'news_breaking', 'news_featured', 'post_new', 'broadcast', 'proposal_new', 'category'];
 
 /**
  * Fetch notification log entries for the inbox
@@ -56,7 +58,7 @@ export async function fetchNotificationLog(
       .from('notification_log') as any)
       .select('id, notification_type, title, body, data, status, created_at')
       .in('status', ['sent', 'partial'])
-      .not('notification_type', 'in', `(${PERSONAL_LOG_TYPES.join(',')})`)
+      .in('notification_type', BROADCAST_LOG_TYPES)
       .order('created_at', { ascending: false })
       .range(from, to);
 
