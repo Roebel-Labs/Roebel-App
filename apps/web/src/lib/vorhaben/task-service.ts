@@ -466,7 +466,7 @@ async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<stri
   const match = await deps.verifyManualTx(hash, line.amount, notBeforeSec(line), line.recipient_wallet);
   if (!match) {
     return fail(400, "BAD_TX", line.recipient_wallet
-      ? "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse (xDAI oder EURe) über genau diesen Betrag an diese Empfänger:in."
+      ? "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse über genau diesen Betrag in € an diese Empfänger:in."
       : "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über genau diesen Betrag. Wurde mit der Karte bezahlt? Dann bitte „Kartenzahlung eintragen“.");
   }
   const { claim } = await claimLine(deps, line.id, hash, proofOf(match, "safe_transfer"));
@@ -548,7 +548,7 @@ async function recordCardPayout(deps: TaskDeps, wallet: string, p: Record<string
   const match = await deps.verifyCardTx(hash, line.amount, notBeforeSec(line));
   if (!match) {
     return fail(400, "BAD_TX",
-      "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse (xDAI oder EURe) über mindestens diesen Betrag, nach dem Anlegen der Auszahlung.");
+      "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse über mindestens diesen Betrag in €, nach dem Anlegen der Auszahlung.");
   }
   const { claim, proofStored } = await claimLine(deps, line.id, hash,
     proofOf(match, "card", { proof_url: proofUrl, proof_note: note || null }));

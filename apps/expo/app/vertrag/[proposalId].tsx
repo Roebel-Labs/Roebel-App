@@ -177,7 +177,7 @@ export default function ContractScreen() {
       pathname: '/transaction',
       params: {
         direction: 'out', title: ROLE_LABELS[line.role], amountText: plainNumber(line.amount),
-        currency: line.asset === 'MUENZEN' ? 'muenzen' : line.asset === 'XDAI' ? 'xdai' : 'eur',
+        currency: line.asset === 'MUENZEN' ? 'muenzen' : 'eur',
         txHash: line.txHash, name: line.recipientName, context: `Teil des Vertrags zu Vorschlag #${view.proposalNumber}`,
       },
     } as any);
@@ -285,8 +285,8 @@ export default function ContractScreen() {
           <Text style={[styles.meta, { color: colors.textSecondary }]}>
             {mode === 'card'
               ? 'Die Spende wurde mit der Karte bezahlt, nachdem die Gemeinschaftskasse die Karte aufgeladen hat. '
-                + 'Trage den Hash dieser Aufladung ein (xDAI oder EURe, mindestens der Betrag; 1 xDAI = 1 €) und lade den Beleg hoch.'
-              : 'Die Auszahlung kann in xDAI oder EURe aus der Gemeinschaftskasse erfolgen (1 xDAI = 1 €). '
+                + 'Trage den Hash dieser Aufladung ein (mindestens der Betrag in €) und lade den Beleg hoch.'
+              : 'Die Auszahlung erfolgt aus der Gemeinschaftskasse. '
                 + 'Füge den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain.'}
           </Text>
           <TextInput value={txInput} onChangeText={setTxInput}

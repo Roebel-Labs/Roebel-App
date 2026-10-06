@@ -36,9 +36,9 @@ const de = (n: number, min: number, max: number) =>
 
 export function formatAmount(amount: string | number, asset: Asset): string {
   const n = Number(amount);
-  if (asset === 'EURe' || asset === 'EURC') return `${de(n, 2, 2)} €`;
   if (asset === 'MUENZEN') return `${de(n, 0, 2)} Röbel Münzen`;
-  return `${de(n, 0, 4)} xDAI`;
+  // EURe, EURC and xDAI all count as euros for the Gemeinschaftskasse (1 xDAI = 1 €); the UI only says €.
+  return `${de(n, 2, 2)} €`;
 }
 
 export function nextStepFor(task: { status: TaskStatus; assignee_wallet: string | null }, wallet: string): string | null {
@@ -124,9 +124,10 @@ export function paidProofText(line: {
   amount: string; asset: Asset; paidAsset?: 'EURe' | 'XDAI' | null; paidAmount?: string | null; paymentMethod?: string | null;
 }): string | null {
   const parts: string[] = [];
-  if (line.paidAsset && line.paidAmount && (line.paidAsset !== line.asset || Number(line.paidAmount) !== Number(line.amount))) {
+  // Only a different euro amount is worth a note (e.g. a card top-up larger than the budget); the asset never shows.
+  if (line.paidAmount && Number(line.paidAmount) !== Number(line.amount)) {
     const n = Number(line.paidAmount);
-    parts.push(`bezahlt: ${de(n, 2, 4)} ${line.paidAsset === 'XDAI' ? 'xDAI' : 'EURe'}`);
+    parts.push(`bezahlt: ${de(n, 2, 2)} €`);
   }
   if (line.paymentMethod === 'card') parts.push('per Karte');
   return parts.length ? parts.join(' · ') : null;

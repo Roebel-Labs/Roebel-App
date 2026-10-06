@@ -32,7 +32,7 @@ import { formatRelativeTimestamp } from '@/lib/utils';
 const PROPOSER_INACTIVE_MS = 7 * 24 * 3600 * 1000;
 const UPLOAD_TIMEOUT_MS = 60000;
 const TX_RE = /^0x[0-9a-fA-F]{64}$/;
-const PAYOUT_ASSET_HINT = 'Die Auszahlung kann in xDAI oder EURe aus der Gemeinschaftskasse erfolgen (1 xDAI = 1 €).';
+const PAYOUT_ASSET_HINT = 'Die Auszahlung erfolgt aus der Gemeinschaftskasse.';
 type Drawer = null | 'apply' | 'proof' | 'changes' | 'cancel' | 'approve' | 'payout';
 type ProofItem = { type: 'image' | 'pdf'; url: string; label: string };
 

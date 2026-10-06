@@ -6,7 +6,7 @@ describe('vorhaben labels', () => {
     expect(formatAmount('0.25', 'EURe')).toBe('0,25 €');
     expect(formatAmount('10', 'MUENZEN')).toBe('10 Röbel Münzen');
     expect(formatAmount('0.5', 'MUENZEN')).toBe('0,5 Röbel Münzen');
-    expect(formatAmount('7.5', 'XDAI')).toBe('7,5 xDAI');
+    expect(formatAmount('7.5', 'XDAI')).toBe('7,50 €');
   });
 
   test('next step depends on status and who is looking', () => {
@@ -88,10 +88,10 @@ describe('payout recording copy', () => {
   });
 
   test('proof line shows what the Safe paid when it differs from the promise, and card payments', () => {
-    expect(paidProofText({ amount: '5', asset: 'EURe', paidAsset: 'XDAI', paidAmount: '5' })).toBe('bezahlt: 5,00 xDAI');
+    expect(paidProofText({ amount: '5', asset: 'EURe', paidAsset: 'XDAI', paidAmount: '5' })).toBeNull();
     expect(paidProofText({ amount: '5', asset: 'EURe', paidAsset: 'EURe', paidAmount: '5' })).toBeNull();
     expect(paidProofText({ amount: '150', asset: 'EURe', paidAsset: 'XDAI', paidAmount: '168.88', paymentMethod: 'card' }))
-      .toBe('bezahlt: 168,88 xDAI · per Karte');
+      .toBe('bezahlt: 168,88 € · per Karte');
     expect(paidProofText({ amount: '150', asset: 'EURe', paidAsset: null, paidAmount: null, paymentMethod: null })).toBeNull();
   });
 });

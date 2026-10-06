@@ -158,7 +158,8 @@ export async function afterLineSettled(db: Db, line: LineRow, proposalKeyOverrid
       proposalKey = (data as { proposal_id: string } | null)?.proposal_id;
     }
     if (!proposalKey) return;
-    const unit = line.asset === "MUENZEN" ? "Röbel Münzen" : line.asset === "XDAI" ? "xDAI" : "€";
+    // xDAI counts 1:1 as € for the Gemeinschaftskasse; people only ever see €.
+    const unit = line.asset === "MUENZEN" ? "Röbel Münzen" : "€";
     await notify(db, [{
       wallet, kind: "vorhaben_payout", screen: "vertrag", proposalKey,
       title: "Auszahlung angekommen",
