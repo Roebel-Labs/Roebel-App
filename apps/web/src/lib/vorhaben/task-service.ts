@@ -9,14 +9,17 @@ import { planTaskLines } from "./payout-plan";
 import { displayNames, ensureContract, getProposal, insertLines, toLineRow, type LineRow, type ProposalRow } from "./repo";
 import type { Db, VorhabenSettings } from "./settings";
 import { decideTaskAction, type TaskAction, type TaskCtx, type TaskStatus } from "./task-machine";
+import type { PayoutMatch } from "./rails/manual";
 
 export interface TaskDeps {
   db: Db;
   isAttester: (wallet: string) => Promise<boolean>;
   nowMs: () => number;
   settings: VorhabenSettings;
-  /** EURe transfer from the Attester Safe for `amount` (to `to` when given), mined at or after `notBeforeSec`. */
-  verifyManualTx: (txHash: string, amount: string, notBeforeSec: number, to?: string | null) => Promise<boolean>;
+  /** Exact EURe/xDAI payment from the Attester Safe for `amount` (to `to` when given), mined at or after `notBeforeSec`. */
+  verifyManualTx: (txHash: string, amount: string, notBeforeSec: number, to?: string | null) => Promise<PayoutMatch | null>;
+  /** Card top-up: the Safe sent at least `amount` (xDAI or EURe, any recipient), mined at or after `notBeforeSec`. */
+  verifyCardTx: (txHash: string, amount: string, notBeforeSec: number) => Promise<PayoutMatch | null>;
   dispatch: (lineIds: string[]) => Promise<void>;
   /** Current Attester wallets (lowercase); only used for the "wartet auf Abnahme" notice. */
   listAttesters: () => Promise<string[]>;
@@ -85,7 +88,7 @@ function parseAttachments(v: unknown, prefix: string): Attachment[] | null {
   return out;
 }
 
-const TASK_ACTION: Record<Exclude<VorhabenAction, "task_create" | "payout_record_manual">, TaskAction> = {
+const TASK_ACTION: Record<Exclude<VorhabenAction, "task_create" | "payout_record_manual" | "payout_record_card">, TaskAction> = {
   task_apply: "apply", task_withdraw: "withdraw", task_assign: "assign", task_start: "start", task_comment: "comment",
   task_proof: "proof", task_submit: "submit", task_approve: "approve", task_request_changes: "request_changes", task_cancel: "cancel",
 };
@@ -97,6 +100,7 @@ export async function handleVorhabenAction(
   const wallet = walletIn.toLowerCase();
   if (action === "task_create") return createTask(deps, wallet, payload);
   if (action === "payout_record_manual") return recordManualPayout(deps, wallet, payload);
+  if (action === "payout_record_card") return recordCardPayout(deps, wallet, payload);
   const taskAction = TASK_ACTION[action];
   if (!taskAction) return bad("Unbekannte Aktion.");
   return runTaskAction(deps, wallet, taskAction, payload);
@@ -370,9 +374,11 @@ async function createTaskLines(deps: TaskDeps, proposal: ProposalRow, task: Task
   return ids;
 }
 
-// ---- payout_record_manual ----------------------------------------------------------------------
+// ---- payout_record_manual / payout_record_card ------------------------------------------------
 
 type ManualLine = LineRow & { created_at?: string };
+/** Proof columns of 20261006_payout_line_proof (paid_asset, paid_amount, payment_method, proof_url, proof_note). */
+type LineProof = Record<string, string | null>;
 
 /** Lines an Attester records by hand: the budget, and (task_payout_rail = manual_safe) a task reward + its fee. */
 function isManualRecordable(l: ManualLine): boolean {
@@ -385,68 +391,100 @@ const notBeforeSec = (l: ManualLine): number => {
   return Math.floor(ms / 1000);
 };
 const isUniqueViolation = (e: unknown) => (e as { code?: string } | null)?.code === "23505";
+/** Postgres 42703 (undefined column) or PostgREST PGRST204 (column not in the schema cache): migration not applied yet. */
+const isMissingColumn = (e: unknown) => ["42703", "PGRST204"].includes((e as { code?: string } | null)?.code ?? "");
+const proofOf = (m: PayoutMatch, method: "safe_transfer" | "card", extra: LineProof = {}): LineProof =>
+  ({ payment_method: method, paid_asset: m.asset, paid_amount: m.paidAmount, ...extra });
 
-/** CAS geplant → gesendet with the hash. "taken" = unique index hit (the tx is recorded elsewhere). */
-async function claimLine(deps: TaskDeps, id: string, hash: string): Promise<"ok" | "taken" | "lost"> {
-  const up = await deps.db.from("proposal_payout_lines")
-    .update({ status: "gesendet", tx_hash: hash, error: null, updated_at: new Date(deps.nowMs()).toISOString() })
-    .eq("id", id).eq("status", "geplant").select("id");
-  if (isUniqueViolation(up.error)) return "taken";
+/**
+ * CAS geplant → gesendet with the hash (+ proof columns when they exist). "taken" = unique index hit
+ * (the tx is recorded elsewhere). Before the proof migration the update is retried without the proof:
+ * the line must still settle.
+ */
+async function claimLine(deps: TaskDeps, id: string, hash: string, proof: LineProof): Promise<{ claim: "ok" | "taken" | "lost"; proofStored: boolean }> {
+  const base = { status: "gesendet", tx_hash: hash, error: null, updated_at: new Date(deps.nowMs()).toISOString() };
+  const attempt = (patch: Record<string, unknown>) => deps.db.from("proposal_payout_lines")
+    .update(patch).eq("id", id).eq("status", "geplant").select("id");
+  let up = await attempt({ ...base, ...proof });
+  let proofStored = true;
+  if (isMissingColumn(up.error)) {
+    console.warn(`[vorhaben/tasks] proof columns missing (20261006_payout_line_proof not applied); line ${id} recorded without proof`);
+    proofStored = false;
+    up = await attempt(base);
+  }
+  if (isUniqueViolation(up.error)) return { claim: "taken", proofStored: false };
   check(up, "line update");
-  return Array.isArray(up.data) && up.data.length > 0 ? "ok" : "lost";
+  return { claim: Array.isArray(up.data) && up.data.length > 0 ? "ok" : "lost", proofStored };
 }
 
-async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<string, unknown>): Promise<TaskResult> {
-  const { db } = deps;
+/** Shared validation of payout_record_*: Attester, an existing line, and its hash. */
+async function loadRecordableLine(
+  deps: TaskDeps, wallet: string, p: Record<string, unknown>,
+): Promise<Fail | { line: ManualLine; hash: string }> {
   const lineId = uuid(p.lineId);
   const txHash = typeof p.txHash === "string" ? p.txHash.trim() : "";
   if (!lineId) return bad("Auszahlungszeile fehlt.");
   if (!TX_RE.test(txHash)) return bad("Der Transaktions-Hash ist ungültig.");
-  const hash = txHash.toLowerCase();
   if (!(await deps.isAttester(wallet))) return fail(403, "FORBIDDEN", "Nur Attester:innen können Auszahlungen eintragen.");
-
-  const lr = await db.from("proposal_payout_lines").select("*").eq("id", lineId).maybeSingle();
+  const lr = await deps.db.from("proposal_payout_lines").select("*").eq("id", lineId).maybeSingle();
   check(lr, "line read");
   const line = lr.data ? (toLineRow(lr.data) as ManualLine) : null;
   if (!line) return fail(404, "NOT_FOUND", "Auszahlung nicht gefunden.");
-  if (!isManualRecordable(line)) return fail(400, "BAD_LINE", "Diese Auszahlung wird nicht manuell eingetragen.");
-  if (line.status !== "geplant") return fail(409, "BAD_STATUS", "Für diese Auszahlung ist schon eine Transaktion eingetragen.");
+  return { line, hash: txHash.toLowerCase() };
+}
 
+/**
+ * Refuses a hash another line or another proposal's treasury link already uses. `allowSameTask`: one
+ * tx may back a task reward AND its platform fee (one Safe batch); any other reuse is refused.
+ */
+async function hashReuse(deps: TaskDeps, line: ManualLine, hash: string, allowSameTask: boolean): Promise<Fail | null> {
   // Case-insensitive: Safe-service execution hashes (safe_eure lines) are not guaranteed lowercase.
-  // One tx may back a task reward AND its platform fee (one Safe batch); any other reuse is refused.
   const used = rows<{ id: string; role: string; reference_type: string; reference_id: string }>(
-    await db.from("proposal_payout_lines").select("id, role, reference_type, reference_id").ilike("tx_hash", hash), "tx reuse read");
-  const sameReference = (u: { role: string; reference_type: string; reference_id: string }) =>
+    await deps.db.from("proposal_payout_lines").select("id, role, reference_type, reference_id").ilike("tx_hash", hash), "tx reuse read");
+  const sameReference = (u: { role: string; reference_type: string; reference_id: string }) => allowSameTask &&
     line.reference_type === "task" && u.reference_type === "task" && u.reference_id === line.reference_id && u.role !== line.role;
   if (used.some((u) => !sameReference(u))) {
     return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
   }
   const links = rows<{ proposal_id: string | null }>(
-    await db.from("treasury_tx_links").select("proposal_id").eq("tx_hash", hash), "tx link read");
+    await deps.db.from("treasury_tx_links").select("proposal_id").eq("tx_hash", hash), "tx link read");
   if (links.some((l) => l.proposal_id && l.proposal_id !== line.proposal_id)) {
     return fail(409, "TX_USED", "Diese Transaktion gehört schon zu einem anderen Vorschlag.");
   }
+  return null;
+}
 
-  if (!(await deps.verifyManualTx(hash, line.amount, notBeforeSec(line), line.recipient_wallet))) {
+async function recordManualPayout(deps: TaskDeps, wallet: string, p: Record<string, unknown>): Promise<TaskResult> {
+  const loaded = await loadRecordableLine(deps, wallet, p);
+  if ("ok" in loaded) return loaded;
+  const { line, hash } = loaded;
+  if (!isManualRecordable(line)) return fail(400, "BAD_LINE", "Diese Auszahlung wird nicht manuell eingetragen.");
+  if (line.status !== "geplant") return fail(409, "BAD_STATUS", "Für diese Auszahlung ist schon eine Transaktion eingetragen.");
+  const reused = await hashReuse(deps, line, hash, true);
+  if (reused) return reused;
+
+  const match = await deps.verifyManualTx(hash, line.amount, notBeforeSec(line), line.recipient_wallet);
+  if (!match) {
     return fail(400, "BAD_TX", line.recipient_wallet
-      ? "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag an diese Empfänger:in."
-      : "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über diesen Betrag.");
+      ? "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse (xDAI oder EURe) über genau diesen Betrag an diese Empfänger:in."
+      : "Die Transaktion passt nicht: Es fehlt eine erfolgreiche EURe-Überweisung der Gemeinschaftskasse über genau diesen Betrag. Wurde mit der Karte bezahlt? Dann bitte „Kartenzahlung eintragen“.");
   }
-  const claim = await claimLine(deps, line.id, hash);
+  const { claim } = await claimLine(deps, line.id, hash, proofOf(match, "safe_transfer"));
   // Unique index on the manual tx: a concurrent request recorded the same tx on another line.
   if (claim === "taken") return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
   if (claim === "lost") return conflict();
   // The single settle path moves it to bestaetigt and runs afterLineSettled (task → ausgezahlt).
   const settled = await deps.settle({ ...line, status: "gesendet", tx_hash: hash });
   const status = settled === "settled" ? "bestaetigt" : "gesendet";
-  if (line.role !== "aufgabe") return { ok: true, data: { status } };
+  const paid = { paidAsset: match.asset, paidAmount: match.paidAmount };
+  if (line.role !== "aufgabe") return { ok: true, data: { status, ...paid } };
 
   // The reward is recorded; the fee is a bonus of the same request and must never fail it.
   const fee = await recordTaskFeeFromSameTx(deps, line, hash).catch((e) => {
     console.error(`[vorhaben/tasks] fee line for task ${line.reference_id} not recorded`, e);
     return { feeRecorded: false, feeOpen: true };
   });
-  return { ok: true, data: { status, ...fee } };
+  return { ok: true, data: { status, ...paid, ...fee } };
 }
 
 /**
@@ -463,13 +501,62 @@ async function recordTaskFeeFromSameTx(
   const feeRow = rows<unknown>(fr, "fee line read")[0];
   if (!feeRow) return { feeRecorded: false, feeOpen: false };
   const fee = toLineRow(feeRow) as ManualLine;
-  if (!(await deps.verifyManualTx(hash, fee.amount, notBeforeSec(fee), fee.recipient_wallet))) {
-    return { feeRecorded: false, feeOpen: true };
-  }
-  const claim = await claimLine(deps, fee.id, hash);
+  const match = await deps.verifyManualTx(hash, fee.amount, notBeforeSec(fee), fee.recipient_wallet);
+  if (!match) return { feeRecorded: false, feeOpen: true };
+  const { claim } = await claimLine(deps, fee.id, hash, proofOf(match, "safe_transfer"));
   if (claim !== "ok") return { feeRecorded: false, feeOpen: claim === "taken" };
   // Recorded: if settling fails here, the reconcile cron settles the gesendet line.
   try { await deps.settle({ ...fee, status: "gesendet", tx_hash: hash }); }
   catch (e) { console.error(`[vorhaben/tasks] fee line ${fee.id} settle deferred to reconcile`, e); }
   return { feeRecorded: true, feeOpen: false };
+}
+
+/** https URL of the receipt (e.g. the uploaded photo), or null. */
+function httpsUrl(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (s.length < 10 || s.length > 1000) return null;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" && !!u.hostname ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * payout_record_card: the budget (empfaenger line) was paid with the operator's payment card, which
+ * the Gemeinschaftskasse topped up with at least the line amount. The line keeps its promised amount;
+ * the top-up tx is the on-chain proof and the receipt (proofUrl) the off-chain one. Settles through the
+ * same single path, so the budget's platform fee line is created exactly as for a direct transfer.
+ */
+async function recordCardPayout(deps: TaskDeps, wallet: string, p: Record<string, unknown>): Promise<TaskResult> {
+  const proofUrl = httpsUrl(p.proofUrl);
+  const note = text(p.note, 1000);
+  if (!proofUrl) return bad("Bitte lade den Beleg hoch (gültiger https-Link).");
+  if (note === null) return bad("Die Notiz darf höchstens 1000 Zeichen lang sein.");
+  const loaded = await loadRecordableLine(deps, wallet, p);
+  if ("ok" in loaded) return loaded;
+  const { line, hash } = loaded;
+  if (line.rail !== "manual_safe" || line.role !== "empfaenger") {
+    return fail(400, "BAD_LINE", "Eine Kartenzahlung kann nur für das Budget eingetragen werden.");
+  }
+  if (line.status !== "geplant") return fail(409, "BAD_STATUS", "Für diese Auszahlung ist schon eine Transaktion eingetragen.");
+  const reused = await hashReuse(deps, line, hash, false);
+  if (reused) return reused;
+
+  const match = await deps.verifyCardTx(hash, line.amount, notBeforeSec(line));
+  if (!match) {
+    return fail(400, "BAD_TX",
+      "Die Transaktion passt nicht: Es fehlt eine erfolgreiche Auszahlung der Gemeinschaftskasse (xDAI oder EURe) über mindestens diesen Betrag, nach dem Anlegen der Auszahlung.");
+  }
+  const { claim, proofStored } = await claimLine(deps, line.id, hash,
+    proofOf(match, "card", { proof_url: proofUrl, proof_note: note || null }));
+  if (claim === "taken") return fail(409, "TX_USED", "Diese Transaktion ist schon einer anderen Auszahlung zugeordnet.");
+  if (claim === "lost") return conflict();
+  const settled = await deps.settle({ ...line, status: "gesendet", tx_hash: hash });
+  return {
+    ok: true,
+    data: { status: settled === "settled" ? "bestaetigt" : "gesendet", paidAsset: match.asset, paidAmount: match.paidAmount, proofStored },
+  };
 }

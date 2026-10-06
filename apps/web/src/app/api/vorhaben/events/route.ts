@@ -4,7 +4,7 @@ import { jsonFail, jsonOk } from "@/lib/signed-request/verify";
 import { verifyWalletSignature, VerifierUnavailableError } from "@/lib/signed-request/signature";
 import { gnosisReader, isAttester, listAttesters } from "@/lib/vorhaben/chain";
 import { handlePersonEvent, type OutboxMatch, type PersonEventDeps } from "@/lib/vorhaben/person-events";
-import { verifyManualSafeTransfer } from "@/lib/vorhaben/rails/manual";
+import { verifyCardTopUp, verifyManualSafeTransfer } from "@/lib/vorhaben/rails/manual";
 import { getProposal } from "@/lib/vorhaben/repo";
 import { buildDispatch, buildSettle } from "@/lib/vorhaben/runtime";
 import { loadSettings } from "@/lib/vorhaben/settings";
@@ -64,6 +64,7 @@ function buildDeps(): PersonEventDeps {
       isAttester: (w) => isAttester(reader, w),
       listAttesters: () => listAttesters(reader),
       verifyManualTx: verifyManualSafeTransfer,
+      verifyCardTx: verifyCardTopUp,
       dispatch: buildDispatch(db),
       settle: buildSettle(db),
       storagePublicPrefix: supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/` : "",

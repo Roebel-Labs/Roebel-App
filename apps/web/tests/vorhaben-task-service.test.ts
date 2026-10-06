@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { handleVorhabenAction, type TaskDeps } from "../src/lib/vorhaben/task-service";
 import type { LineRow } from "../src/lib/vorhaben/repo";
+import { settleIfMined } from "../src/lib/vorhaben/dispatch";
 
 type Row = Record<string, any>;
 type Op = { table: string; op: string; payload?: unknown };
@@ -17,13 +18,15 @@ const L_ID = "33333333-3333-4333-8333-333333333333";
 const TX = "0x" + "ab".repeat(32);
 const PREFIX = "https://proj.supabase.co/storage/v1/object/public/";
 const PLATFORM = "0xbcabbaa26420e0a4771808f9639d4176355e5d4b";
+/** What the chain check reports for a matching manual payout (xDAI from the Gemeinschaftskasse). */
+const XDAI_MATCH = { asset: "XDAI" as const, paidAmount: "150" };
 
 /** In-memory Supabase fake that honours eq/neq/in/is/limit filters and records every op. */
 type DbError = { message: string; code?: string };
 function fakeDb(seed: Record<string, Row[]>, opts: {
   casMiss?: string[]; updateError?: Record<string, DbError>;
   /** Per-update error, decided from the table and the eq() filters of that update. */
-  updateErrorWhen?: (table: string, eqs: Row) => DbError | null;
+  updateErrorWhen?: (table: string, eqs: Row, payload: Row) => DbError | null;
 } = {}) {
   const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
   const ops: Op[] = [];
@@ -57,7 +60,7 @@ function fakeDb(seed: Record<string, Row[]>, opts: {
         }
         // update
         if (opts.updateError?.[table]) return { data: null, error: opts.updateError[table] };
-        const when = opts.updateErrorWhen?.(table, eqs);
+        const when = opts.updateErrorWhen?.(table, eqs, payload as Row);
         if (when) return { data: null, error: when };
         if (selected && opts.casMiss?.includes(table)) return { data: [], error: null };
         const hit = list.filter(match);
@@ -117,7 +120,8 @@ function deps(db: ReturnType<typeof fakeDb>, over: Partial<TaskDeps> = {}): Task
     db: db as never, settings, nowMs: () => NOW,
     isAttester: async (w) => w === ATTESTER,
     listAttesters: async () => [ATTESTER, APPLICANT],
-    verifyManualTx: async () => true,
+    verifyManualTx: async () => XDAI_MATCH,
+    verifyCardTx: async () => ({ asset: "XDAI", paidAmount: "168.88" }),
     dispatch: async (ids) => { dispatched.push(ids); },
     settle: async (l) => { settled.push(l); return "settled"; },
     storagePublicPrefix: PREFIX,
@@ -313,7 +317,7 @@ const manualLine = (over: Row = {}): Row => ({
 
 test("payout_record_manual with an unverified tx is BAD_TX and leaves the line unchanged", async () => {
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
-  const d = deps(db, { verifyManualTx: async () => false });
+  const d = deps(db, { verifyManualTx: async () => null });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.code, "BAD_TX");
@@ -325,7 +329,7 @@ test("payout_record_manual with an unverified tx is BAD_TX and leaves the line u
 test("payout_record_manual moves the line to gesendet with the hash and settles once", async () => {
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
   let checked: [string, string, number, string | null | undefined] | null = null;
-  const d = deps(db, { verifyManualTx: async (h, a, nb, to) => { checked = [h, a, nb, to]; return true; } });
+  const d = deps(db, { verifyManualTx: async (h, a, nb, to) => { checked = [h, a, nb, to]; return XDAI_MATCH; } });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX.toUpperCase().replace("0X", "0x") });
   assert.equal(r.ok, true);
   // The tx must be mined at or after the line was created.
@@ -355,7 +359,7 @@ test("payout_record_manual: a tx already linked to another proposal is TX_USED; 
   const OTHER_P = "44444444-4444-4444-8444-444444444444";
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine()], treasury_tx_links: [{ tx_hash: TX, proposal_id: OTHER_P }] }));
   let verified = 0;
-  const d = deps(db, { verifyManualTx: async () => { verified++; return true; } });
+  const d = deps(db, { verifyManualTx: async () => { verified++; return XDAI_MATCH; } });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, false);
   if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
@@ -372,7 +376,7 @@ test("payout_record_manual: the execution hash of a safe_eure line (any case) is
     reference_id: T_ID, status: "bestaetigt", tx_hash: "0x" + "AB".repeat(32) });
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine(), safeLine] }));
   let verified = 0;
-  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return true; } }), ATTESTER,
+  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return XDAI_MATCH; } }), ATTESTER,
     "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, false);
   if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
@@ -393,7 +397,7 @@ test("payout_record_manual: a unique violation on the CAS (concurrent claim of t
 test("payout_record_manual: a numeric amount from PostgREST reaches the verifier as a string", async () => {
   const db = fakeDb(seed({ proposal_payout_lines: [manualLine({ amount: 150 })] }));
   let amount: unknown = null;
-  const d = deps(db, { verifyManualTx: async (_h, a) => { amount = a; return true; } });
+  const d = deps(db, { verifyManualTx: async (_h, a) => { amount = a; return XDAI_MATCH; } });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, true);
   assert.equal(amount, "150");
@@ -414,7 +418,7 @@ const feeLineRow = (over: Row = {}): Row => manualLine({
 const chainWith = (transfers: Array<{ to: string; amount: string }>, calls: unknown[][] = []): TaskDeps["verifyManualTx"] =>
   async (h, a, nb, to) => {
     calls.push([h, a, nb, to]);
-    return transfers.some((t) => t.amount === a && (!to || t.to === to));
+    return transfers.some((t) => t.amount === a && (!to || t.to === to)) ? { asset: "XDAI", paidAmount: a } : null;
   };
 const taskSeed = (lines: Row[]) => seed({
   proposals: [proposal({ lifecycle_stage: "in_umsetzung" })],
@@ -428,7 +432,7 @@ test("payout_record_manual on a task line with the fee in the same tx records + 
   const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }, { to: PLATFORM, amount: "0.25" }], calls) });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, true);
-  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: true, feeOpen: false });
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", paidAsset: "XDAI", paidAmount: "5", feeRecorded: true, feeOpen: false });
   assert.deepEqual(calls, [
     [TX, "5", Math.floor((NOW - 3600_000) / 1000), APPLICANT],
     [TX, "0.25", Math.floor((NOW - 1800_000) / 1000), PLATFORM],
@@ -443,7 +447,7 @@ test("payout_record_manual on a task line without the fee in the tx settles the 
   const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }]) });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, true);
-  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: false, feeOpen: true });
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", paidAsset: "XDAI", paidAmount: "5", feeRecorded: false, feeOpen: true });
   const [main, fee] = db.tables.proposal_payout_lines;
   assert.equal(main.status, "gesendet");
   assert.deepEqual([fee.status, fee.tx_hash], ["geplant", null]);
@@ -480,7 +484,7 @@ test("payout_record_manual: a hash already used by another task's line is TX_USE
   const other = taskLine({ id: "88888888-8888-4888-8888-888888888888", reference_id: T2, status: "bestaetigt", tx_hash: TX });
   const db = fakeDb(taskSeed([taskLine(), feeLineRow(), other]));
   let verified = 0;
-  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return true; } }), ATTESTER,
+  const r = await handleVorhabenAction(deps(db, { verifyManualTx: async () => { verified++; return XDAI_MATCH; } }), ATTESTER,
     "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, false);
   if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
@@ -496,7 +500,7 @@ test("payout_record_manual: a 23505 on the fee line (old per-tx index) still set
   const d = deps(db, { verifyManualTx: chainWith([{ to: APPLICANT, amount: "5" }, { to: PLATFORM, amount: "0.25" }]) });
   const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
   assert.equal(r.ok, true);
-  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", feeRecorded: false, feeOpen: true });
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", paidAsset: "XDAI", paidAmount: "5", feeRecorded: false, feeOpen: true });
   assert.equal(db.tables.proposal_payout_lines[0].status, "gesendet");
   assert.equal(db.tables.proposal_payout_lines[1].status, "geplant");
   assert.deepEqual(d.settled.map((l) => l.id), [L_ID]);
@@ -538,4 +542,108 @@ test("task_approve: when line creation fails the notice does not promise a payou
   assert.equal(r.ok, true);
   assert.equal(db.tables.proposal_tasks[0].status, "abgenommen");
   assert.equal(db.tables.notifications[0].body, "Deine Aufgabe wurde abgenommen. Die Auszahlung wird vorbereitet.");
+});
+
+// ---- proof columns + card payments (20261006_payout_line_proof) ------------------------------
+
+/** PostgREST before the proof migration: any update naming a proof column fails with PGRST204. */
+const withoutProofColumns = (table: string, _eqs: Row, payload: Row): DbError | null =>
+  table === "proposal_payout_lines" && payload && "paid_asset" in payload
+    ? { message: "Could not find the 'paid_asset' column of 'proposal_payout_lines' in the schema cache", code: "PGRST204" } : null;
+const RECEIPT = "https://proj.supabase.co/storage/v1/object/public/images/vorhaben/beleg.jpg";
+
+test("payout_record_manual stores what the Safe paid: method, asset and amount", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine({ role: "aufgabe", recipient_wallet: APPLICANT, amount: "5", reference_type: "task", reference_id: T_ID })] }));
+  const d = deps(db, { verifyManualTx: async () => ({ asset: "XDAI", paidAmount: "5" }) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  const line = db.tables.proposal_payout_lines[0];
+  assert.deepEqual([line.payment_method, line.paid_asset, line.paid_amount, line.amount], ["safe_transfer", "XDAI", "5", "5"]);
+});
+
+test("payout_record_manual without the proof columns (migration not applied) still records and settles", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }), { updateErrorWhen: withoutProofColumns });
+  const d = deps(db);
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_manual", { lineId: L_ID, txHash: TX });
+  assert.equal(r.ok, true);
+  const line = db.tables.proposal_payout_lines[0];
+  assert.deepEqual([line.status, line.tx_hash, line.paid_asset], ["gesendet", TX, undefined]);
+  assert.equal(d.settled.length, 1);
+});
+
+test("payout_record_card records a budget paid by card: proof stored, settled once, promised amount kept", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }));
+  let checked: unknown[] = [];
+  const d = deps(db, { verifyCardTx: async (h, a, nb) => { checked = [h, a, nb]; return { asset: "XDAI", paidAmount: "168.88" }; } });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT, note: " Spende per Karte " });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.deepEqual(r.data, { status: "bestaetigt", paidAsset: "XDAI", paidAmount: "168.88", proofStored: true });
+  assert.deepEqual(checked, [TX, "150", Math.floor((NOW - 3600_000) / 1000)]);
+  const line = db.tables.proposal_payout_lines[0];
+  assert.deepEqual(
+    [line.status, line.tx_hash, line.amount, line.payment_method, line.paid_asset, line.paid_amount, line.proof_url, line.proof_note],
+    ["gesendet", TX, "150", "card", "XDAI", "168.88", RECEIPT, "Spende per Karte"]);
+  assert.deepEqual(d.settled.map((l) => [l.id, l.status, l.tx_hash]), [[L_ID, "gesendet", TX]]);
+});
+
+test("payout_record_card: the real settle path creates the budget's platform fee line", async () => {
+  const settingsRows = [
+    ["platform_fee_bps", "500"], ["platform_safe_address", PLATFORM], ["wahlhelfer_reward_asset", "MUENZEN"],
+    ["wahlhelfer_reward_amount", "10"], ["budget_fee_rail", "funder_xdai"], ["tally_confirm_window_days", "7"], ["dispatch_enabled", "true"],
+  ].map(([key, value]) => ({ key, value }));
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()], vorhaben_settings: settingsRows, treasury_tx_links: [] }));
+  const d = deps(db, { settle: (l) => settleIfMined({ db: db as never, receiptStatus: async () => "success" }, l) });
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT });
+  assert.equal(r.ok, true);
+  const [budget, fee] = db.tables.proposal_payout_lines;
+  assert.equal(budget.status, "bestaetigt");
+  assert.deepEqual([fee.role, fee.reference_type, fee.reference_id, fee.amount, fee.rail], ["plattform", "proposal", P_ID, "7.5", "funder_xdai"]);
+  assert.deepEqual(db.tables.treasury_tx_links.map((l) => [l.tx_hash, l.proposal_id]), [[TX, P_ID]]);
+});
+
+test("payout_record_card: refusals (non-Attester, no receipt, wrong line, wrong status, unverified tx)", async () => {
+  const run = async (lines: Row[], wallet: string, payload: Row, over: Partial<TaskDeps> = {}) => {
+    const db = fakeDb(seed({ proposal_payout_lines: lines }));
+    const d = deps(db, over);
+    const r = await handleVorhabenAction(d, wallet, "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT, ...payload });
+    assert.equal(updatesOf(db, "proposal_payout_lines").length, 0);
+    assert.equal(d.settled.length, 0);
+    return r.ok ? "ok" : r.code;
+  };
+  assert.equal(await run([manualLine()], OTHER, {}), "FORBIDDEN");
+  assert.equal(await run([manualLine()], ATTESTER, { proofUrl: undefined }), "BAD_REQUEST");
+  assert.equal(await run([manualLine()], ATTESTER, { proofUrl: "http://example.com/beleg.jpg" }), "BAD_REQUEST");
+  assert.equal(await run([manualLine()], ATTESTER, { proofUrl: "javascript:alert(1)" }), "BAD_REQUEST");
+  assert.equal(await run([manualLine()], ATTESTER, { note: "x".repeat(1001) }), "BAD_REQUEST");
+  assert.equal(await run([manualLine({ role: "aufgabe", recipient_wallet: APPLICANT, reference_type: "task", reference_id: T_ID })], ATTESTER, {}), "BAD_LINE");
+  assert.equal(await run([manualLine({ rail: "safe_eure" })], ATTESTER, {}), "BAD_LINE");
+  assert.equal(await run([manualLine({ status: "bestaetigt", tx_hash: "0x" + "cd".repeat(32) })], ATTESTER, {}), "BAD_STATUS");
+  assert.equal(await run([manualLine()], ATTESTER, {}, { verifyCardTx: async () => null }), "BAD_TX");
+});
+
+test("payout_record_card: a hash used by any other line or another proposal's treasury link is TX_USED", async () => {
+  const other = manualLine({ id: "99999999-9999-4999-8999-999999999999", role: "aufgabe", reference_type: "task", reference_id: T_ID,
+    status: "bestaetigt", tx_hash: TX });
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine(), other] }));
+  let verified = 0;
+  const r = await handleVorhabenAction(deps(db, { verifyCardTx: async () => { verified++; return XDAI_MATCH; } }), ATTESTER,
+    "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT });
+  assert.equal(r.ok, false);
+  if (!r.ok) { assert.equal(r.code, "TX_USED"); assert.equal(r.status, 409); }
+  assert.equal(verified, 0);
+
+  const db2 = fakeDb(seed({ proposal_payout_lines: [manualLine()], treasury_tx_links: [{ tx_hash: TX, proposal_id: "44444444-4444-4444-8444-444444444444" }] }));
+  const r2 = await handleVorhabenAction(deps(db2), ATTESTER, "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT });
+  assert.equal(r2.ok, false);
+  if (!r2.ok) assert.equal(r2.code, "TX_USED");
+});
+
+test("payout_record_card without the proof columns still settles; proofStored=false", async () => {
+  const db = fakeDb(seed({ proposal_payout_lines: [manualLine()] }), { updateErrorWhen: withoutProofColumns });
+  const d = deps(db);
+  const r = await handleVorhabenAction(d, ATTESTER, "payout_record_card", { lineId: L_ID, txHash: TX, proofUrl: RECEIPT });
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal((r.data as { proofStored: boolean }).proofStored, false);
+  assert.deepEqual([db.tables.proposal_payout_lines[0].status, db.tables.proposal_payout_lines[0].tx_hash], ["gesendet", TX]);
+  assert.equal(d.settled.length, 1);
 });

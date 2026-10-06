@@ -12,7 +12,8 @@ export const VORHABEN_SCOPE = "roebel-vorhaben-v1" as const;
 
 export type VorhabenAction =
   | "task_create" | "task_apply" | "task_withdraw" | "task_assign" | "task_start" | "task_comment"
-  | "task_proof" | "task_submit" | "task_approve" | "task_request_changes" | "task_cancel" | "payout_record_manual";
+  | "task_proof" | "task_submit" | "task_approve" | "task_request_changes" | "task_cancel" | "payout_record_manual"
+  | "payout_record_card";
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"

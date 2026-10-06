@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { VORHABEN_SCOPE, type VorhabenAction } from "@/lib/signed-request/message";
 import { failResponse, jsonFail, jsonOk, verifySignedRequest } from "@/lib/signed-request/verify";
 import { gnosisReader, isAttester, listAttesters } from "@/lib/vorhaben/chain";
-import { verifyManualSafeTransfer } from "@/lib/vorhaben/rails/manual";
+import { verifyCardTopUp, verifyManualSafeTransfer } from "@/lib/vorhaben/rails/manual";
 import { buildDispatch, buildSettle } from "@/lib/vorhaben/runtime";
 import { loadSettings } from "@/lib/vorhaben/settings";
 import { handleVorhabenAction } from "@/lib/vorhaben/task-service";
@@ -12,9 +12,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const ACTIONS: readonly VorhabenAction[] = ["task_create", "task_apply", "task_withdraw", "task_assign", "task_start", "task_comment",
-  "task_proof", "task_submit", "task_approve", "task_request_changes", "task_cancel", "payout_record_manual"];
+  "task_proof", "task_submit", "task_approve", "task_request_changes", "task_cancel", "payout_record_manual",
+  "payout_record_card"];
 // Money-moving actions always need a fresh wallet signature (no session token).
-const SIGNATURE_REQUIRED: readonly VorhabenAction[] = ["task_approve", "payout_record_manual"];
+const SIGNATURE_REQUIRED: readonly VorhabenAction[] = ["task_approve", "payout_record_manual", "payout_record_card"];
 
 // POST signed { scope: "roebel-vorhaben-v1", action, wallet, timestampSec, payload, signature }
 export async function POST(request: NextRequest) {
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
       isAttester: (w) => isAttester(reader, w),
       listAttesters: () => listAttesters(reader),
       verifyManualTx: verifyManualSafeTransfer,
+      verifyCardTx: verifyCardTopUp,
       dispatch: buildDispatch(db),
       settle: buildSettle(db),
       storagePublicPrefix: supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/` : "",
