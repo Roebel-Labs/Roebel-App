@@ -103,3 +103,31 @@ export function contractPurpose(
     case 'plattform': return 'Plattformanteil';
   }
 }
+
+/** Shown for a payout_record_* request that timed out or had no connection (the server is idempotent per line). */
+export const PAYOUT_NETWORK_ERROR =
+  'Keine Verbindung oder Zeitüberschreitung. Bitte erneut versuchen – bereits Eingetragenes wird nicht doppelt gezählt.';
+
+/** German error for a payout recording; never the raw fetch/abort text of the client. */
+export function payoutErrorText(r: { code: string; message: string }): string {
+  if (r.code === 'NETWORK_ERROR') return PAYOUT_NETWORK_ERROR;
+  if (r.code === 'BAD_RESPONSE') return 'Unerwartete Antwort vom Server. Bitte erneut versuchen.';
+  if (r.code === 'SIGN_FAILED') return r.message.startsWith('Signatur') ? r.message : 'Die Signatur ist fehlgeschlagen. Bitte versuche es erneut.';
+  return r.message || 'Eintragen fehlgeschlagen. Bitte erneut versuchen.';
+}
+
+/**
+ * Small proof line under a recorded payout: what the Gemeinschaftskasse really sent and how. The line
+ * itself keeps its promised amount ("5,00 €"). null when there is nothing beyond the promise to show.
+ */
+export function paidProofText(line: {
+  amount: string; asset: Asset; paidAsset?: 'EURe' | 'XDAI' | null; paidAmount?: string | null; paymentMethod?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (line.paidAsset && line.paidAmount && (line.paidAsset !== line.asset || Number(line.paidAmount) !== Number(line.amount))) {
+    const n = Number(line.paidAmount);
+    parts.push(`bezahlt: ${de(n, 2, 4)} ${line.paidAsset === 'XDAI' ? 'xDAI' : 'EURe'}`);
+  }
+  if (line.paymentMethod === 'card') parts.push('per Karte');
+  return parts.length ? parts.join(' · ') : null;
+}

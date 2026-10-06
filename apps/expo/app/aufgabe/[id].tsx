@@ -22,7 +22,7 @@ import {
   displayNames, fetchTaskDetail, fetchTaskPayoutLines, vorhabenAction, type ActivityRow, type TaskAttachment, type TaskDetail,
   type TaskPayoutLine,
 } from '@/lib/vorhaben';
-import { FINAL_TASK_STATUSES, formatAmount, TASK_STATUS_LABELS, taskTone, type TaskStatus } from '@/lib/vorhaben-labels';
+import { FINAL_TASK_STATUSES, formatAmount, payoutErrorText, TASK_STATUS_LABELS, taskTone, type TaskStatus } from '@/lib/vorhaben-labels';
 import type { VorhabenAction } from '@/lib/signed-request';
 import { personRoleFor } from '@/lib/nostr/vorhaben-events';
 import { uploadMediaFile } from '@/lib/upload-media';
@@ -32,6 +32,7 @@ import { formatRelativeTimestamp } from '@/lib/utils';
 const PROPOSER_INACTIVE_MS = 7 * 24 * 3600 * 1000;
 const UPLOAD_TIMEOUT_MS = 60000;
 const TX_RE = /^0x[0-9a-fA-F]{64}$/;
+const PAYOUT_ASSET_HINT = 'Die Auszahlung kann in xDAI oder EURe aus der Gemeinschaftskasse erfolgen (1 xDAI = 1 €).';
 type Drawer = null | 'apply' | 'proof' | 'changes' | 'cancel' | 'approve' | 'payout';
 type ProofItem = { type: 'image' | 'pdf'; url: string; label: string };
 
@@ -191,9 +192,10 @@ export default function TaskTicketScreen() {
   const payoutHint = feeLine
     ? `Zahle aus der Gemeinschaftskasse ${rewardText} an ${nameOf(task.assignee_wallet)} und `
       + `${formatAmount(feeLine.amount, feeLine.asset)} Plattformgebühr${feePct ? ` (${feePct} %)` : ''} an den Plattform-Safe – `
-      + 'am besten beides in einer Safe-Transaktion. Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain.'
+      + 'am besten beides in einer Safe-Transaktion. Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain. '
+      + PAYOUT_ASSET_HINT
     : `Zahle aus der Gemeinschaftskasse ${rewardText} an ${nameOf(task.assignee_wallet)}. `
-      + 'Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain.';
+      + 'Füge danach den Transaktions-Hash ein; wir prüfen die Überweisung auf der Blockchain. ' + PAYOUT_ASSET_HINT;
 
   const pickPhoto = async () => {
     if (uploadingRef.current || !account) return;
@@ -282,8 +284,9 @@ export default function TaskTicketScreen() {
     try {
       const r = await vorhabenAction(account, 'payout_record_manual', { lineId: line.id, txHash: tx });
       if (!r.ok) {
-        setDrawerError(r.code === 'NETWORK_ERROR' ? 'Keine Verbindung. Bitte versuche es erneut.' : r.message);
-        if (r.code === 'BAD_STATUS' || r.code === 'CONFLICT') await load();
+        setDrawerError(payoutErrorText(r));
+        // A timed-out request may still have been recorded: reload so the drawer state matches the server.
+        if (r.code === 'BAD_STATUS' || r.code === 'CONFLICT' || r.code === 'NETWORK_ERROR') await load();
         return;
       }
       setPayoutTx('');

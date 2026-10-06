@@ -1,4 +1,4 @@
-import { STAGE_STEPPER_LABELS, formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone, contractPurpose } from '../vorhaben-labels';
+import { STAGE_STEPPER_LABELS, formatAmount, nextStepFor, timeLeft, STAGE_STEPS, STAGE_LABELS, boardTabFor, progressOf, parseEuroInput, taskTone, contractPurpose, payoutErrorText, paidProofText, PAYOUT_NETWORK_ERROR } from '../vorhaben-labels';
 
 describe('vorhaben labels', () => {
   test('amounts in German format, Münzen never as euro', () => {
@@ -75,4 +75,23 @@ test('stepper labels are the plain labels plus soft hyphens only', () => {
     expect(label.replace(/\u00AD/g, '')).toBe(STAGE_LABELS[stage as keyof typeof STAGE_LABELS]);
   }
   expect(STAGE_STEPPER_LABELS.abstimmung.split('\u00AD')).toEqual(['Bür', 'ger', 'ab', 'stim', 'mung']);
+});
+
+describe('payout recording copy', () => {
+  test('a timeout or lost connection never shows the raw fetch text', () => {
+    const text = payoutErrorText({ code: 'NETWORK_ERROR', message: 'fetch failed: Fetch request has been canceled' });
+    expect(text).toBe(PAYOUT_NETWORK_ERROR);
+    expect(text).toContain('nicht doppelt gezählt');
+    expect(payoutErrorText({ code: 'BAD_RESPONSE', message: 'Unexpected token <' })).not.toContain('token');
+    expect(payoutErrorText({ code: 'SIGN_FAILED', message: 'User rejected the request' })).toBe('Die Signatur ist fehlgeschlagen. Bitte versuche es erneut.');
+    expect(payoutErrorText({ code: 'BAD_TX', message: 'Die Transaktion passt nicht.' })).toBe('Die Transaktion passt nicht.');
+  });
+
+  test('proof line shows what the Safe paid when it differs from the promise, and card payments', () => {
+    expect(paidProofText({ amount: '5', asset: 'EURe', paidAsset: 'XDAI', paidAmount: '5' })).toBe('bezahlt: 5,00 xDAI');
+    expect(paidProofText({ amount: '5', asset: 'EURe', paidAsset: 'EURe', paidAmount: '5' })).toBeNull();
+    expect(paidProofText({ amount: '150', asset: 'EURe', paidAsset: 'XDAI', paidAmount: '168.88', paymentMethod: 'card' }))
+      .toBe('bezahlt: 168,88 xDAI · per Karte');
+    expect(paidProofText({ amount: '150', asset: 'EURe', paidAsset: null, paidAmount: null, paymentMethod: null })).toBeNull();
+  });
 });

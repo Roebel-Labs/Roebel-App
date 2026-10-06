@@ -4,7 +4,7 @@ jest.mock('expo-crypto', () => ({
     require('node:crypto').createHash('sha256').update(s).digest('hex'),
 }));
 
-import { buildSignedMessage, postSigned, SIGN_TIMEOUT_MS, VORHABEN_SCOPE } from '../signed-request';
+import { buildSignedMessage, PAYOUT_RECORD_TIMEOUT_MS, postSigned, REQUEST_TIMEOUT_MS, requestTimeoutFor, SIGN_TIMEOUT_MS, VORHABEN_SCOPE } from '../signed-request';
 
 describe('signed-request', () => {
   it('builds the roebel-tickets-v1 message with sorted payload hash', async () => {
@@ -130,5 +130,25 @@ describe('signed-request on a passkey session (API session token)', () => {
     expect(account.signMessage).toHaveBeenCalledTimes(2);
     const refund = fetchMock.mock.calls.find((c: any) => String(c[0]).endsWith('/api/tickets/refund')) as any;
     expect(JSON.parse(refund[1].body).signature).toMatch(/^0x/);
+  });
+});
+
+describe('request timeouts', () => {
+  it('gives only the payout_record_* actions 45 s (on-chain verification), everything else 20 s', () => {
+    expect(PAYOUT_RECORD_TIMEOUT_MS).toBe(45000);
+    expect(requestTimeoutFor('payout_record_manual')).toBe(45000);
+    expect(requestTimeoutFor('payout_record_card')).toBe(45000);
+    expect(requestTimeoutFor('task_approve')).toBe(REQUEST_TIMEOUT_MS);
+    expect(requestTimeoutFor('checkout')).toBe(20000);
+  });
+
+  it('payout_record_card always signs under the vorhaben scope', async () => {
+    const account = { address: '0xABC', signMessage: jest.fn(async () => '0x' + 'ab'.repeat(65)) };
+    const fetchMock = jest.fn(async () => ({ json: async () => ({ ok: true, data: { status: 'bestaetigt' } }) }));
+    (global as any).fetch = fetchMock;
+    await postSigned('/api/vorhaben/tasks', account, 'payout_record_card', { lineId: 'l1', txHash: '0x1', proofUrl: 'https://x/y.jpg' }, VORHABEN_SCOPE);
+    const signed = (account.signMessage.mock.calls[0] as any)[0].message as string;
+    expect(signed.startsWith('roebel-vorhaben-v1:payout_record_card:0xabc:')).toBe(true);
+    expect(JSON.parse((fetchMock.mock.calls[0] as any)[1].body).signature).toMatch(/^0x/);
   });
 });

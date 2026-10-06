@@ -265,7 +265,11 @@ export async function displayNames(wallets: string[]): Promise<Map<string, strin
  * with the person's own key (NSP-13 Stage 2, no wallet prompt); otherwise the legacy wallet-signed request.
  */
 /** `feeRecorded`/`feeOpen`: payout_record_manual on a task reward line (was the platform fee in the same tx?). */
-export type VorhabenActionData = { status?: string; id?: string; feeRecorded?: boolean; feeOpen?: boolean };
+/** `paidAsset`/`paidAmount`: what the Gemeinschaftskasse really sent (payout_record_*); `proofStored`: card receipt saved. */
+export type VorhabenActionData = {
+  status?: string; id?: string; feeRecorded?: boolean; feeOpen?: boolean;
+  paidAsset?: 'EURe' | 'XDAI'; paidAmount?: string; proofStored?: boolean;
+};
 
 export async function vorhabenAction(
   account: SigningAccount, action: VorhabenAction, payload: Record<string, unknown>, ctx?: TaskEventContext,
@@ -300,11 +304,17 @@ export interface ContractLine {
   id: string; role: LineRole; recipientName: string; recipientWallet: string | null; amount: string; asset: Asset;
   status: LineStatus; txHash: string | null; referenceType: string; referenceId: string; createdAt: string;
   rail: string; purpose: string;
+  /** Proof of a manual payout (20261006_payout_line_proof); null before it is recorded or the migration ran. */
+  paidAsset: 'EURe' | 'XDAI' | null; paidAmount: string | null; paymentMethod: 'safe_transfer' | 'card' | null;
+  proofUrl: string | null; proofNote: string | null;
 }
 export interface ContractView {
   proposalKey: string; proposalNumber: number; title: string; stage: Stage; feeBps: number;
   lines: ContractLine[]; totals: { asset: Asset; amount: number }[];
 }
+
+const LINE_COLS = 'id, role, recipient_wallet, recipient_label, amount, asset, rail, reference_type, reference_id, status, tx_hash, created_at';
+const PROOF_COLS = 'paid_asset, paid_amount, payment_method, proof_url, proof_note';
 
 /** Public payout contract of a proposal; null when the proposal does not exist. Throws on a read failure. */
 export async function fetchContract(proposalKey: string): Promise<ContractView | null> {
@@ -314,13 +324,16 @@ export async function fetchContract(proposalKey: string): Promise<ContractView |
   if (p.error) throw new Error(p.error.message);
   const proposal = p.data as any;
   if (!proposal) return null;
-  const [l, c, t] = await timed((signal) => Promise.all([
-    supabase.from('proposal_payout_lines')
-      .select('id, role, recipient_wallet, recipient_label, amount, asset, rail, reference_type, reference_id, status, tx_hash, created_at')
-      .eq('proposal_id', proposal.id).order('created_at', { ascending: true }).abortSignal(signal),
+  const lineRead = (cols: string, signal: AbortSignal) => supabase.from('proposal_payout_lines')
+    .select(cols).eq('proposal_id', proposal.id).order('created_at', { ascending: true }).abortSignal(signal);
+  const [first, c, t] = await timed((signal) => Promise.all([
+    lineRead(`${LINE_COLS}, ${PROOF_COLS}`, signal),
     supabase.from('proposal_contracts').select('platform_fee_bps').eq('proposal_id', proposal.id).abortSignal(signal).maybeSingle(),
     supabase.from('proposal_tasks').select('id, title').eq('proposal_id', proposal.id).abortSignal(signal),
   ]));
+  let l = first;
+  // Before 20261006_payout_line_proof the proof columns do not exist (42703): read without them.
+  if (l.error && (l.error as { code?: string }).code === '42703') l = await timed((signal) => lineRead(LINE_COLS, signal));
   if (l.error) throw new Error(l.error.message);
   const rows = (l.data ?? []) as any[];
   const taskTitles = new Map<string, string>(((t.data ?? []) as { id: string; title: string }[]).map((r) => [r.id, r.title]));
@@ -335,6 +348,11 @@ export async function fetchContract(proposalKey: string): Promise<ContractView |
       id: r.id, role: r.role, recipientName, recipientWallet: wallet, amount: String(r.amount), asset: r.asset, status: r.status,
       txHash: r.tx_hash ?? null, referenceType: r.reference_type ?? '', referenceId: r.reference_id ?? '', createdAt: r.created_at ?? '',
       rail: r.rail ?? '', purpose: contractPurpose(r, taskTitles, beneficiary),
+      paidAsset: r.paid_asset === 'EURe' || r.paid_asset === 'XDAI' ? r.paid_asset : null,
+      paidAmount: r.paid_amount == null ? null : String(r.paid_amount),
+      paymentMethod: r.payment_method === 'card' || r.payment_method === 'safe_transfer' ? r.payment_method : null,
+      proofUrl: typeof r.proof_url === 'string' && r.proof_url.startsWith('https://') ? r.proof_url : null,
+      proofNote: r.proof_note ?? null,
     };
   });
   const sums = new Map<Asset, number>();

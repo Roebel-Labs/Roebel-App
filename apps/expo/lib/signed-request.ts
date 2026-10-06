@@ -12,7 +12,8 @@ export type TicketAction =
 export const VORHABEN_SCOPE = 'roebel-vorhaben-v1';
 export type VorhabenAction =
   | 'task_create' | 'task_apply' | 'task_withdraw' | 'task_assign' | 'task_start' | 'task_comment'
-  | 'task_proof' | 'task_submit' | 'task_approve' | 'task_request_changes' | 'task_cancel' | 'payout_record_manual';
+  | 'task_proof' | 'task_submit' | 'task_approve' | 'task_request_changes' | 'task_cancel' | 'payout_record_manual'
+  | 'payout_record_card';
 export type SignedAction = TicketAction | VorhabenAction;
 
 export interface SigningAccount {
@@ -70,9 +71,18 @@ export function signQueued(account: SigningAccount, message: string): Promise<st
   ));
 }
 
-async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: ApiResult<T> }> {
+export const REQUEST_TIMEOUT_MS = 20000;
+/** Payout recordings verify the tx on-chain (receipt + block reads) before answering: they get longer. */
+export const PAYOUT_RECORD_TIMEOUT_MS = 45000;
+const LONG_ACTIONS: readonly SignedAction[] = ['payout_record_manual', 'payout_record_card'];
+export const requestTimeoutFor = (action: SignedAction): number =>
+  (LONG_ACTIONS.includes(action) ? PAYOUT_RECORD_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+
+async function postJson<T>(
+  path: string, body: unknown, headers: Record<string, string> = {}, timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<{ status: number; json: ApiResult<T> }> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${getApiBaseUrl()}${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, signal: controller.signal,
@@ -108,16 +118,16 @@ async function postWithSignature<T>(
   } catch (err) {
     return { ok: false, code: 'SIGN_FAILED', message: err instanceof Error ? err.message : 'Signatur fehlgeschlagen' };
   }
-  return (await postJson<T>(path, { scope, action, wallet, timestampSec, payload, signature })).json;
+  return (await postJson<T>(path, { scope, action, wallet, timestampSec, payload, signature }, {}, requestTimeoutFor(action))).json;
 }
 
 /**
  * One signed request. thirdweb session: a fresh wallet signature, as always. Passkey session:
  * the passkey API session token (one fingerprint per device session, lib/passkey/api-session.ts);
  * without a token (server off, refused) it falls back to the per-request signature.
- * `refund_order`, `task_approve` and `payout_record_manual` always sign (the server requires a fresh signature).
+ * `refund_order`, `task_approve` and the payout_record_* actions always sign (the server requires a fresh signature).
  */
-const ALWAYS_SIGN: readonly SignedAction[] = ['refund_order', 'task_approve', 'payout_record_manual'];
+const ALWAYS_SIGN: readonly SignedAction[] = ['refund_order', 'task_approve', 'payout_record_manual', 'payout_record_card'];
 
 export async function postSigned<T>(
   path: string, account: SigningAccount, action: SignedAction, payload: Record<string, unknown>, scope: string = SIGNED_SCOPE,
@@ -133,7 +143,7 @@ export async function postSigned<T>(
       kind: 'web',
       endpoint: `web:${path}`,
       withToken: async (headers) => {
-        const r = await postJson<T>(path, { scope, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
+        const r = await postJson<T>(path, { scope, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers, requestTimeoutFor(action));
         return { status: r.status, code: r.json.ok ? undefined : r.json.code, value: r.json };
       },
       withSignature: () => postWithSignature<T>(path, account, action, payload, scope),
