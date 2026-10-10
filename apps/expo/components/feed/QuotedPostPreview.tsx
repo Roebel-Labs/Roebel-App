@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import { useRelations } from '@/context/RelationsContext';
+import { isAuthorMuted } from '@/lib/relations-state';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { formatRelativeTimestamp } from '@/lib/utils';
@@ -16,12 +18,23 @@ type Props = {
 /** Embedded mini preview of a quoted post (X-style bordered card). */
 export default function QuotedPostPreview({ post, onPress }: Props) {
   const { colors } = useTheme();
+  const { index } = useRelations();
 
   if (!post) {
     return (
       <View style={[styles.container, { borderColor: colors.border }]}>
         <Text style={[styles.deleted, { color: colors.textTertiary }]}>
           Beitrag wurde gelöscht
+        </Text>
+      </View>
+    );
+  }
+
+  if (isAuthorMuted(index, post)) {
+    return (
+      <View style={[styles.quoteHidden, { borderColor: colors.border }]}>
+        <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 14 }}>
+          Beitrag ausgeblendet
         </Text>
       </View>
     );
@@ -80,6 +93,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     gap: 6,
+  },
+  quoteHidden: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
   },
   authorRow: {
     flexDirection: 'row',

@@ -112,16 +112,31 @@ export async function fetchFeedPosts(options: {
   page: number;
   pageSize?: number;
   walletAddress?: string;
+  /** accounts.id values to hide (muted + unfollowed). Server-side filter plus legacy-path filter. */
+  excludeAccountIds?: string[];
 }): Promise<{ data: PostRecord[]; hasMore: boolean; likedPostIds?: string[] | null; repostedPostIds?: string[] | null }> {
   const size = options.pageSize || PAGE_SIZE;
 
   if (feedRpcAvailable !== false) {
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_feed_page', {
+    const baseArgs = {
       p_feed_type: options.feedType,
       p_page: options.page,
       p_page_size: size,
       p_wallet: options.walletAddress ?? null,
-    });
+    };
+    // Only send the 5th arg when there is something to exclude: a client with
+    // nothing hidden keeps working against the older 4-arg get_feed_page.
+    const hasExclusions = !!options.excludeAccountIds?.length;
+    let { data: rpcData, error: rpcError } = await supabase.rpc(
+      'get_feed_page',
+      (hasExclusions ? { ...baseArgs, p_exclude_account_ids: options.excludeAccountIds } : baseArgs) as any,
+    );
+    // PGRST202 with the 5th arg may just mean the server is still on the old
+    // 4-arg function: retry once without it (the client-side filter in useFeed
+    // covers the exclusion) instead of marking the whole RPC unavailable.
+    if (hasExclusions && rpcError?.code === 'PGRST202') {
+      ({ data: rpcData, error: rpcError } = await supabase.rpc('get_feed_page', baseArgs));
+    }
     const payload = rpcData as any;
     if (!rpcError && payload && Array.isArray(payload.posts)) {
       feedRpcAvailable = true;
@@ -159,6 +174,11 @@ export async function fetchFeedPosts(options: {
   }
 
   let rows = (data as PostRecord[]).map(mergeAccountIntoAuthor);
+  // Legacy null-account_id rows are left to the client filter in useFeed.
+  if (options.excludeAccountIds?.length) {
+    const excluded = new Set(options.excludeAccountIds);
+    rows = rows.filter((r) => !excluded.has(r.account_id ?? ''));
+  }
 
   // On the first page, surface currently-pinned posts at the very top — even a
   // pin on an older post that wouldn't fall inside this page's window. Pins
