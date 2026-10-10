@@ -8,6 +8,7 @@ import {
   type HiddenIndex, type RelationChange, type RelationsSnapshot,
 } from '@/lib/relations-state';
 import { useSnackbar } from '@/context/SnackbarContext';
+import { createSerialRunner } from '@/lib/serial-runner';
 
 type FollowSource = 'onboarding' | 'manual' | 'intro';
 type Ctx = {
@@ -29,44 +30,58 @@ export function RelationsProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<RelationsSnapshot>(EMPTY_SNAPSHOT);
   const [ready, setReady] = useState(false);
   const snapRef = useRef(snapshot);
-  snapRef.current = snapshot;
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
+  const enqueue = useRef(createSerialRunner()).current;
 
   // Cache first (no flash of muted posts), then a silent server refresh. Never prompts a passkey at launch.
   useEffect(() => {
     let cancelled = false;
     setReady(false);
     setSnapshot(EMPTY_SNAPSHOT);
+    snapRef.current = EMPTY_SNAPSHOT;
     if (!wallet || !account) { setReady(true); return; }
     void (async () => {
       const cached = await loadCachedSnapshot(wallet);
       if (cancelled) return;
-      if (cached) setSnapshot(cached);
+      if (cached) { snapRef.current = cached; setSnapshot(cached); }
       setReady(true);
-      if (!(await canSignSilently(account))) return;
-      const res = await callRelations(account, 'list', {});
-      if (cancelled || !res.ok) return;
-      setSnapshot(res.data);
-      void saveCachedSnapshot(wallet, res.data);
+      try {
+        if (!(await canSignSilently(account))) return;
+        const res = await callRelations(account, 'list', {});
+        if (cancelled || !res.ok) return;
+        snapRef.current = res.data;
+        setSnapshot(res.data);
+        void saveCachedSnapshot(wallet, res.data);
+      } catch { /* keep the cached snapshot */ }
     })();
     return () => { cancelled = true; };
   }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = useCallback(async (change: RelationChange, action: 'follow' | 'unfollow' | 'mute' | 'unmute', payload: Record<string, unknown>) => {
-    if (!account || !wallet) return false;
-    const before = snapRef.current;
-    const optimistic = applyRelationChange(before, change);
-    setSnapshot(optimistic);
-    const res = await callRelations(account, action, payload);
-    if (!res.ok) {
-      setSnapshot(before);
-      showSnackbar({ message: 'Das hat nicht geklappt. Bitte versuche es erneut.' });
-      return false;
-    }
-    setSnapshot(res.data);
-    void saveCachedSnapshot(wallet, res.data);
-    void queryClient.invalidateQueries({ queryKey: ['feed', 'posts'] });
-    return true;
-  }, [account, wallet, queryClient, showSnackbar]);
+  const run = useCallback((change: RelationChange, action: 'follow' | 'unfollow' | 'mute' | 'unmute', payload: Record<string, unknown>) => {
+    if (!account || !wallet) return Promise.resolve(false);
+    return enqueue(async () => {
+      if (walletRef.current !== wallet) return false;
+      const before = snapRef.current;
+      const optimistic = applyRelationChange(before, change);
+      snapRef.current = optimistic;
+      setSnapshot(optimistic);
+      let res: Awaited<ReturnType<typeof callRelations>> | null = null;
+      try { res = await callRelations(account, action, payload); } catch { res = null; }
+      if (walletRef.current !== wallet) return false; // account switched meanwhile; the effect already reset state
+      if (!res || !res.ok) {
+        snapRef.current = before;
+        setSnapshot(before);
+        showSnackbar({ message: 'Das hat nicht geklappt. Bitte versuche es erneut.' });
+        return false;
+      }
+      snapRef.current = res.data;
+      setSnapshot(res.data);
+      void saveCachedSnapshot(wallet, res.data);
+      void queryClient.invalidateQueries({ queryKey: ['feed', 'posts'] });
+      return true;
+    });
+  }, [account, wallet, queryClient, showSnackbar, enqueue]);
 
   const value = useMemo<Ctx>(() => {
     const index = buildHiddenIndex(snapshot);
