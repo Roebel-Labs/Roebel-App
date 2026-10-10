@@ -18,4 +18,12 @@ describe('feed-visibility', () => {
     expect(isQuoteHidden({ id: 'r', quoted_post: { id: 'q', account_id: 'u', wallet_address: '0xuu' } }, index)).toBe(false);
     expect(isQuoteHidden({ id: 'r', quoted_post: null }, index)).toBe(false);
   });
+  it('drops a pure repost of a muted author, keeps a quote of one', () => {
+    const q = { id: 'q', account_id: 'm', wallet_address: '0xmm' };
+    const posts = [
+      { id: 'r', post_type: 'repost', account_id: 'ok', wallet_address: '0xok', quoted_post: q },
+      { id: 'qt', post_type: 'quote', account_id: 'ok', wallet_address: '0xok', quoted_post: q },
+    ];
+    expect(filterVisiblePosts(posts, index).map((p) => p.id)).toEqual(['qt']);
+  });
 });

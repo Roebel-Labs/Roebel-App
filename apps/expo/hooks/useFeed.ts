@@ -62,8 +62,12 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
   walletRef.current = user?.wallet_address ?? null;
 
   const { hiddenIds, index, ready: relationsReady } = useRelations();
-  // hiddenIds in the key: a follow/mute change refetches page 0 server-filtered.
-  const postsKey = ['feed', 'posts', feedType, hiddenIds.join(',')] as const;
+  // Latest hidden ids via ref (not in the key): RelationsContext invalidates
+  // ['feed','posts'] after each change, which refetches with the new ids, and
+  // the client-side filter below applies the change instantly.
+  const hiddenIdsRef = useRef<string[]>(hiddenIds);
+  hiddenIdsRef.current = hiddenIds;
+  const postsKey = ['feed', 'posts', feedType] as const;
 
   const postsQuery = useInfiniteQuery({
     queryKey: postsKey,
@@ -74,7 +78,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
         feedType,
         page: pageParam as number,
         walletAddress: walletRef.current ?? undefined,
-        excludeAccountIds: hiddenIds,
+        excludeAccountIds: hiddenIdsRef.current,
       }),
     getNextPageParam: (last, _pages, lastPageParam) =>
       last.hasMore ? (lastPageParam as number) + 1 : undefined,
@@ -156,7 +160,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
           feedType,
           page: 0,
           walletAddress: walletRef.current ?? undefined,
-          excludeAccountIds: hiddenIds,
+          excludeAccountIds: hiddenIdsRef.current,
         }),
         sectionsQuery.refetch(),
       ]);
@@ -180,8 +184,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
 
   const removePost = useCallback(
     (postId: string) => {
-      // Prefix match: the key carries a hiddenIds suffix.
-      queryClient.setQueriesData({ queryKey: ['feed', 'posts', feedType] }, (old: any) => {
+      queryClient.setQueryData(postsKey, (old: any) => {
         if (!old) return old;
         return {
           ...old,

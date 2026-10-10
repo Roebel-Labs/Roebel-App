@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useRelations } from '@/context/RelationsContext';
-import { isAuthorMuted } from '@/lib/relations-state';
+import { isQuoteHidden } from '@/lib/feed-visibility';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import { formatRelativeTimestamp } from '@/lib/utils';
@@ -30,7 +30,7 @@ export default function QuotedPostPreview({ post, onPress }: Props) {
     );
   }
 
-  if (isAuthorMuted(index, post)) {
+  if (isQuoteHidden({ id: post.id, quoted_post: post }, index)) {
     return (
       <View style={[styles.quoteHidden, { borderColor: colors.border }]}>
         <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 14 }}>
