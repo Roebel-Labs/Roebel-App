@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import FollowButton from '@/components/follow/FollowButton';
+import { FollowCounts } from '@/components/follow/FollowersDrawer';
+import { fetchPersonalAccountId } from '@/lib/supabase-follows';
 import { supabase } from '@/lib/supabase';
 import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
@@ -106,6 +109,16 @@ export default function PublicUserProfileScreen() {
     if (!currentUser || !profile) return false;
     return currentUser.wallet_address.toLowerCase() === profile.wallet_address.toLowerCase();
   }, [currentUser, profile]);
+
+  const [personalId, setPersonalId] = useState<string | null>(null);
+  const profileWallet = profile?.wallet_address;
+  useEffect(() => {
+    setPersonalId(null);
+    if (!profileWallet) return;
+    let cancelled = false;
+    void fetchPersonalAccountId(profileWallet.toLowerCase()).then((id) => { if (!cancelled) setPersonalId(id); });
+    return () => { cancelled = true; };
+  }, [profileWallet]);
 
   const bannerReward = useMemo<LootboxReward | null>(() => {
     const hit = equipped.find((r) => r.reward?.type === 'profile_banner');
@@ -209,6 +222,13 @@ export default function PublicUserProfileScreen() {
               isVerifiedCitizen={profile.is_verified_citizen}
             />
           </View>
+
+          {personalId ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <FollowCounts accountId={personalId} showFollowing canOpenList={isOwner} />
+              <FollowButton accountId={personalId} muteWallet={profile.wallet_address} />
+            </View>
+          ) : null}
 
           {isFieldVisible(privacy, 'bio') && profile.bio ? (
             <Text style={[styles.bio, { color: colors.textPrimary }]}>{profile.bio}</Text>

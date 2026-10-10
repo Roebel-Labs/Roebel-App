@@ -83,6 +83,8 @@ type Props = {
   account: Account;
   /** The shared photo + identity header (OrgProfileHero). */
   hero: React.ReactNode;
+  /** Follow counts + button, shown right under the hero. */
+  followRow?: React.ReactNode;
   members: MemberWithProfile[];
   services: MarketplaceListingRecord[];
   products: MarketplaceListingRecord[];
@@ -133,6 +135,7 @@ export default function BusinessProfileView(props: Props) {
   const {
     account,
     hero,
+    followRow,
     members,
     services,
     products,
@@ -328,6 +331,7 @@ export default function BusinessProfileView(props: Props) {
         contentContainerStyle={{ paddingBottom: (bottomBar ? bottomBarHeight : insets.bottom) + 24 }}
       >
         {hero}
+        {followRow}
 
         {account.bio ? (
           <View onLayout={(e) => recordSection('about', e)} style={styles.section}>

@@ -15,6 +15,10 @@ import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useRelations } from '@/context/RelationsContext';
+import FollowButton from '@/components/follow/FollowButton';
+import { FollowCounts } from '@/components/follow/FollowersDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
@@ -118,6 +122,7 @@ function PublicAccountScreenInner() {
   const { colors } = useTheme();
   const { switchAccount } = useAccount();
   const { user } = useUser();
+  const { isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -406,7 +411,22 @@ function PublicAccountScreenInner() {
           accessibilityLabel: 'Profil bearbeiten',
         }]
       : []),
+    ...(!canEdit && user
+      ? [{
+          key: 'mute',
+          icon: <Ionicons name={isMuted(account.id) ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color={colors.textPrimary} />,
+          onPress: () => void (isMuted(account.id) ? unmute(account.id, null) : mute(account.id, null)),
+          accessibilityLabel: isMuted(account.id) ? 'Stummschaltung aufheben' : 'Stummschalten',
+        }]
+      : []),
   ];
+
+  const followRow = (
+    <View style={styles.followRow}>
+      <FollowCounts accountId={account.id} canOpenList={canEdit} />
+      <FollowButton accountId={account.id} muteWallet={null} ownAccountIds={canEdit ? [account.id] : []} />
+    </View>
+  );
 
   const hero = (
     <OrgProfileHero
@@ -434,6 +454,7 @@ function PublicAccountScreenInner() {
         <BusinessProfileView
           account={account}
           hero={hero}
+          followRow={followRow}
           members={members}
           services={services}
           products={products}
@@ -824,6 +845,7 @@ function PublicAccountScreenInner() {
 
         {/* Extern status, bio and thumbs vote under the identity header */}
         <View style={styles.identityBlock}>
+          {followRow}
           {showExternBadge && (
             <View style={styles.pillRow}>
               <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
@@ -1142,6 +1164,7 @@ function MenuSkeleton() {
 }
 
 const styles = StyleSheet.create({
+  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
   container: {
     flex: 1,
   },

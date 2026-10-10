@@ -39,6 +39,8 @@ import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
+import { FollowCounts } from '@/components/follow/FollowersDrawer';
+import { fetchPersonalAccountId } from '@/lib/supabase-follows';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 import * as Updates from 'expo-updates';
@@ -76,6 +78,15 @@ export default function ProfileScreen() {
 
   const isConnected = !!account;
   const isOrg = activeAccount?.account_type === 'organisation';
+  const ownWallet = user?.wallet_address?.toLowerCase() ?? null;
+  const [ownPersonalId, setOwnPersonalId] = useState<string | null>(null);
+  useEffect(() => {
+    setOwnPersonalId(null);
+    if (!ownWallet) return;
+    let cancelled = false;
+    void fetchPersonalAccountId(ownWallet).then((id) => { if (!cancelled) setOwnPersonalId(id); });
+    return () => { cancelled = true; };
+  }, [ownWallet]);
   const citizenRequest = userRequests.find((r: any) => r.nft_type === 'citizen') || null;
   const isAspiringCitizen = !isOrg && !isCitizen && !!citizenRequest && user?.preferred_role !== 'tourist';
   const wantsToBeCitizen = !isOrg && !isCitizen && !isAspiringCitizen && user?.preferred_role === 'buerger';
@@ -184,6 +195,11 @@ export default function ProfileScreen() {
                     />
                   </View>
                 )}
+                {activeAccount?.id ? (
+                  <View style={styles.bannerWrap}>
+                    <FollowCounts accountId={activeAccount.id} canOpenList />
+                  </View>
+                ) : null}
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
                 <ProfileMenu variant="org" />
               </ProfileSheet>
@@ -198,6 +214,11 @@ export default function ProfileScreen() {
                     onPress={() => router.push(profileHref as any)}
                     right={muenzenSlot}
                   />
+                  {ownPersonalId ? (
+                    <View style={styles.bannerWrap}>
+                      <FollowCounts accountId={ownPersonalId} showFollowing canOpenList />
+                    </View>
+                  ) : null}
                   <ProfileCompletionCard user={user} />
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
