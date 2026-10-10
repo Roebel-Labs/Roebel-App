@@ -12,12 +12,12 @@ export async function fetchFollowSuggestions(): Promise<FollowSuggestion[]> {
 }
 
 export async function fetchFollowStats(accountId: string): Promise<{ followers: number; following: number }> {
-  const { data, error } = await supabase.rpc('get_follow_stats', { p_account_id: accountId });
+  const { data, error } = await (supabase as any).rpc('get_follow_stats', { p_account_id: accountId });
   if (error || !data) return { followers: 0, following: 0 };
   return { followers: Number((data as any).followers ?? 0), following: Number((data as any).following ?? 0) };
 }
 
 export async function fetchPersonalAccountId(wallet: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc('personal_account_id', { p_wallet: wallet });
+  const { data, error } = await (supabase as any).rpc('personal_account_id', { p_wallet: wallet });
   return error ? null : ((data as string | null) ?? null);
 }
