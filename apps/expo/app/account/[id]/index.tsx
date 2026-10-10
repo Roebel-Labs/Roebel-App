@@ -122,7 +122,7 @@ function PublicAccountScreenInner() {
   const { colors } = useTheme();
   const { switchAccount } = useAccount();
   const { user } = useUser();
-  const { isMuted, mute, unmute } = useRelations();
+  const { isFollowing, isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -423,7 +423,7 @@ function PublicAccountScreenInner() {
 
   const followRow = (
     <View style={styles.followRow}>
-      <FollowCounts accountId={account.id} canOpenList={canEdit} />
+      <FollowCounts accountId={account.id} canOpenList={canEdit} refreshKey={isFollowing(account.id)} />
       <FollowButton accountId={account.id} muteWallet={null} ownAccountIds={canEdit ? [account.id] : []} />
     </View>
   );
@@ -1164,7 +1164,6 @@ function MenuSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
   container: {
     flex: 1,
   },
@@ -1211,6 +1210,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
+  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
   identityBlock: {
     paddingHorizontal: 16,
     paddingTop: 16,

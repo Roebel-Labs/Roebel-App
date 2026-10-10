@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -21,14 +21,21 @@ export function FollowersDrawer({ visible, onClose, accountId }: DrawerProps) {
   const [loading, setLoading] = useState(false);
   const [lastPage, setLastPage] = useState(0);
 
+  const requestId = useRef(0);
+
   const load = useCallback(
     async (offset: number) => {
       if (!signer) return;
+      const mine = ++requestId.current;
       setLoading(true);
-      const page = await fetchFollowers(signer, accountId, offset);
-      setRows((prev) => (offset === 0 ? page : [...prev, ...page]));
-      setLastPage(page.length);
-      setLoading(false);
+      try {
+        const page = await fetchFollowers(signer, accountId, offset);
+        if (mine !== requestId.current) return; // closed or superseded
+        setRows((prev) => (offset === 0 ? page : [...prev, ...page]));
+        setLastPage(page.length);
+      } finally {
+        if (mine === requestId.current) setLoading(false);
+      }
     },
     [signer, accountId],
   );
@@ -36,6 +43,8 @@ export function FollowersDrawer({ visible, onClose, accountId }: DrawerProps) {
   useEffect(() => {
     if (visible) void load(0);
     else {
+      requestId.current++;
+      setLoading(false);
       setRows([]);
       setLastPage(0);
     }
@@ -84,10 +93,12 @@ type CountsProps = {
   showFollowing?: boolean;
   /** Tapping opens the follower list; true only for own profile / org owners+admins. */
   canOpenList?: boolean;
+  /** Change to re-fetch the counts (e.g. the viewer's follow state). */
+  refreshKey?: unknown;
 };
 
 /** "N Follower" line; plain text unless canOpenList (spec: no public follower lists). */
-export function FollowCounts({ accountId, showFollowing = false, canOpenList = false }: CountsProps) {
+export function FollowCounts({ accountId, showFollowing = false, canOpenList = false, refreshKey }: CountsProps) {
   const { colors } = useTheme();
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [open, setOpen] = useState(false);
@@ -95,7 +106,7 @@ export function FollowCounts({ accountId, showFollowing = false, canOpenList = f
     let cancelled = false;
     void fetchFollowStats(accountId).then((s) => { if (!cancelled) setStats(s); });
     return () => { cancelled = true; };
-  }, [accountId]);
+  }, [accountId, refreshKey]);
 
   const followers = (
     <Text style={[styles.counts, { color: colors.textSecondary }]}>{stats.followers} Follower</Text>
