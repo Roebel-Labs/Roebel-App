@@ -19,7 +19,10 @@ import { placeKey, type PlaceItem } from '@/lib/map/place-item';
 import PlaceListRow from './PlaceListRow';
 
 type Props = {
-  categoryKey: MapCategoryKey;
+  /** The category behind the list. Omitted for a pin group, which passes `heading`. */
+  categoryKey?: MapCategoryKey;
+  /** Overrides the category's icon + title (pin groups that share one spot). */
+  heading?: { icon: string; title: string };
   items: PlaceItem[];
   onSelectPlace: (item: PlaceItem) => void;
   onClose: () => void;
@@ -39,13 +42,15 @@ const EMPTY_COPY: Record<MapCategoryKey, string> = {
   uebernachten: 'Noch keine Unterkunft eingetragen.',
 };
 
-function countLabel(key: MapCategoryKey, count: number): string {
+function countLabel(key: MapCategoryKey | undefined, count: number): string {
   if (key === 'ausgehen') return count === 1 ? '1 Termin' : `${count} Termine`;
+  if (!key) return count === 1 ? '1 Eintrag' : `${count} Einträge`;
   return count === 1 ? '1 Ort' : `${count} Orte`;
 }
 
 export default function MapCategorySheet({
   categoryKey,
+  heading,
   items,
   onSelectPlace,
   onClose,
@@ -56,7 +61,8 @@ export default function MapCategorySheet({
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['55%', '92%'], []);
-  const category = categoryByKey(categoryKey);
+  const categoryDef = categoryKey ? categoryByKey(categoryKey) : undefined;
+  const category = heading ?? (categoryDef && { icon: categoryDef.icon, title: categoryDef.label });
 
   const renderBackdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
@@ -111,7 +117,7 @@ export default function MapCategorySheet({
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Text style={styles.icon}>{category.icon}</Text>
-              <Text style={[styles.title, { color: colors.textPrimary }]}>{category.label}</Text>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>{category.title}</Text>
             </View>
             <Text style={[styles.count, { color: colors.textSecondary }]}>
               {countLabel(categoryKey, items.length)}
@@ -121,7 +127,7 @@ export default function MapCategorySheet({
         ListEmptyComponent={
           <View style={[styles.empty, { borderColor: colors.border }]}>
             <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              {EMPTY_COPY[categoryKey]}
+              {categoryKey ? EMPTY_COPY[categoryKey] : 'Hier ist gerade nichts.'}
             </Text>
             <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
               Orte aus Röbel erscheinen hier, sobald sie in der App eingetragen sind.

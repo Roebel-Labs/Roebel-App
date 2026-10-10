@@ -45,12 +45,30 @@ export type MapFeatureProperties = {
   emoji: string;
   size: MarkerSize;
   featured: boolean;
+  // Importance on the map (see PIN_RANK): higher ranks anchor pin groups and
+  // win label collisions.
+  rank: number;
   // Key into MARKER_IMAGES (lib/map/markers.ts). Omitted (not null) when no
   // PNG pin is registered, so Mapbox `['has','markerImage']` filters work.
   markerImage?: string;
 };
 
 export type MapGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Point, MapFeatureProperties>;
+
+/**
+ * How much a pin matters when pins compete for space: featured places and
+ * events happening today/tomorrow first, then food, other events, shops,
+ * Vereine, tips.
+ */
+export const PIN_RANK = {
+  featured: 30,
+  eventSoon: 30,
+  restaurant: 20,
+  event: 20,
+  business: 15,
+  org: 10,
+  poi: 5,
+} as const;
 
 /**
  * Keep only events with real coordinates. Entities without geocoding no
@@ -131,7 +149,9 @@ export function entitiesToGeoJSON(
   businesses: BusinessRecord[],
   pois: PoiRecord[] = [],
   orgs: OrgWithCoordinates[] = [],
-  icons?: MapMarkerIcons
+  icons?: MapMarkerIcons,
+  // Events on or before this YYYY-MM-DD rank as "soon" (today + tomorrow).
+  soonUntil?: string
 ): MapGeoJSON {
   const features: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = [];
 
@@ -142,6 +162,7 @@ export function entitiesToGeoJSON(
 
   for (const e of events) {
     const featured = !!e.is_popular;
+    const soon = !!soonUntil && e.date <= soonUntil;
     features.push(
       feature(e.longitude, e.latitude, {
         id: e.id,
@@ -157,6 +178,7 @@ export function entitiesToGeoJSON(
         emoji: eventEmoji(e.category),
         size: featured ? 'lg' : 'md',
         featured,
+        rank: featured ? PIN_RANK.featured : soon ? PIN_RANK.eventSoon : PIN_RANK.event,
       }, icons)
     );
   }
@@ -178,6 +200,7 @@ export function entitiesToGeoJSON(
         emoji: restaurantEmoji(r.slug, r.name),
         size: featured ? 'lg' : 'md',
         featured,
+        rank: featured ? PIN_RANK.featured : PIN_RANK.restaurant,
         markerImage: markerImageForSlug(r.slug),
       }, icons)
     );
@@ -201,6 +224,7 @@ export function entitiesToGeoJSON(
         emoji: businessEmoji(b.slug, b.category),
         size: featured ? 'lg' : 'md',
         featured,
+        rank: featured ? PIN_RANK.featured : PIN_RANK.business,
         markerImage: markerImageForSlug(b.slug),
       }, icons)
     );
@@ -222,6 +246,7 @@ export function entitiesToGeoJSON(
         emoji: poiEmoji(p.type),
         size: 'sm',
         featured: false,
+        rank: PIN_RANK.poi,
       }, icons)
     );
   }
@@ -242,6 +267,7 @@ export function entitiesToGeoJSON(
         emoji: orgEmoji(o.sub_type),
         size: 'md',
         featured: false,
+        rank: PIN_RANK.org,
       }, icons)
     );
   }

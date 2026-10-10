@@ -40,13 +40,27 @@ import {
   entitiesToGeoJSON,
   markerImagesFromIcons,
   type EventWithCoordinates,
+  type MapFeatureProperties,
   type OrgWithCoordinates,
 } from '@/lib/map/geojson';
+import {
+  addDays,
+  eventsUntil,
+  localDateKey,
+  MAP_EVENT_WINDOW_DAYS,
+  withNextOccurrence,
+  type EventOccurrence,
+} from '@/lib/map/event-window';
 import type { MapMarkerIcons } from '@/lib/map/markers';
 import { fetchMapMarkerIcons } from '@/lib/supabase-map-icons';
 import { fetchAllOrgAccounts } from '@/lib/supabase-accounts';
 import { buildOrgIndex, EMPTY_ORG_INDEX } from '@/lib/map/org-lookup';
-import { filterOpenNow, type MapFilterState } from '@/lib/map/filters';
+import {
+  DEFAULT_MAP_FILTER,
+  filterOpenNow,
+  ORGS_MAP_FILTER,
+  type MapFilterState,
+} from '@/lib/map/filters';
 import type {
   Account,
   EventRecord,
@@ -106,6 +120,8 @@ export default function LocationScreen() {
   const locateBottom = rowTop + 12;
 
   const [events, setEvents] = useState<EventWithCoordinates[]>([]);
+  // Upcoming dates of multi-date events — `events.date` is only the first.
+  const [occurrences, setOccurrences] = useState<EventOccurrence[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
   const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
   const [pois, setPois] = useState<PoiRecord[]>([]);
@@ -121,6 +137,10 @@ export default function LocationScreen() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState<MapCategoryKey | null>(null);
+  // Members of a pin group that zooming can't separate (same spot), listed.
+  const [groupItems, setGroupItems] = useState<PlaceItem[] | null>(null);
+  // The layers in place before a category narrowed them, restored on close.
+  const filterBeforeCategory = useRef<MapFilterState | null>(null);
   const [showVerloren, setShowVerloren] = useState(false);
   const [showLiveBuses, setShowLiveBuses] = useState(true);
   const [transitLines, setTransitLines] = useState<TransitLine[]>([]);
@@ -136,7 +156,7 @@ export default function LocationScreen() {
   // Fade the map chrome (bottom row, pills, buttons) out while any sheet is
   // open. The sheets render above the chrome regardless; the fade only keeps
   // faded-out controls from catching taps around the sheet's edges.
-  const chromeHidden = !!selection || !!activeCategory;
+  const chromeHidden = !!selection || !!activeCategory || !!groupItems;
   const chromeOpacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.timing(chromeOpacity, {
@@ -148,26 +168,30 @@ export default function LocationScreen() {
   }, [chromeHidden, chromeOpacity]);
 
   const [mapFilter, setMapFilter] = useState<MapFilterState>(
-    filterOnly === 'orgs'
-      ? { events: false, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false, acceptsStablecoin: false }
-      : { events: true, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false, acceptsStablecoin: false }
+    filterOnly === 'orgs' ? ORGS_MAP_FILTER : DEFAULT_MAP_FILTER
   );
 
   // Re-apply the filter if the deep-link param changes after mount
   useEffect(() => {
-    if (filterOnly === 'orgs') {
-      setMapFilter({
-        events: false,
-        restaurants: true,
-        businesses: true,
-        orgs: true,
-        pois: false,
-        openNow: false,
-        acceptsStablecoin: false,
-      });
-    }
+    if (filterOnly === 'orgs') setMapFilter(ORGS_MAP_FILTER);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterOnly]);
+
+  // Day keys from the 15s clock, so the event window rolls over at midnight
+  // without reading Date during render.
+  const today = localDateKey(tickNow);
+  const soonUntil = localDateKey(addDays(tickNow, 1));
+  const windowEnd = localDateKey(addDays(tickNow, MAP_EVENT_WINDOW_DAYS));
+
+  // Past events never reach the map; recurring ones sit on their next date.
+  const upcomingEvents = useMemo(
+    () => withNextOccurrence(events, occurrences, today),
+    [events, occurrences, today]
+  );
+  const mapEvents = useMemo(
+    () => (mapFilter.allEvents ? upcomingEvents : eventsUntil(upcomingEvents, windowEnd)),
+    [upcomingEvents, mapFilter.allEvents, windowEnd]
+  );
 
   // "Jetzt geöffnet" applies to places with opening hours; a marker tap still
   // finds its entity because findPlaceItem reads the unfiltered lists.
@@ -187,14 +211,24 @@ export default function LocationScreen() {
   const geojson = useMemo(
     () =>
       entitiesToGeoJSON(
-        mapFilter.events ? events : [],
+        mapFilter.events ? mapEvents : [],
         mapFilter.restaurants ? visibleRestaurants : [],
         mapFilter.businesses ? visibleBusinesses : [],
         mapFilter.pois ? pois : [],
         mapFilter.orgs ? visibleOrgs : [],
-        markerIcons
+        markerIcons,
+        soonUntil
       ),
-    [events, visibleRestaurants, visibleBusinesses, pois, visibleOrgs, mapFilter, markerIcons]
+    [
+      mapEvents,
+      visibleRestaurants,
+      visibleBusinesses,
+      pois,
+      visibleOrgs,
+      mapFilter,
+      markerIcons,
+      soonUntil,
+    ]
   );
   const markerImages = useMemo(() => markerImagesFromIcons(markerIcons), [markerIcons]);
 
@@ -221,32 +255,37 @@ export default function LocationScreen() {
       activeCategory
         ? itemsForCategory(
             activeCategory,
-            { events, restaurants, businesses, orgs },
+            { events: upcomingEvents, restaurants, businesses, orgs },
             { orgIndex, scores: recommendationScores, now: tickNow }
           )
         : [],
-    [activeCategory, events, restaurants, businesses, orgs, orgIndex, recommendationScores, tickNow]
+    [activeCategory, upcomingEvents, restaurants, businesses, orgs, orgIndex, recommendationScores, tickNow]
   );
+
+  // Closing a category (tap again or swipe the sheet away) puts back the
+  // layers the user had before — including opt-in Vereine/Tipps.
+  const closeCategory = useCallback(() => {
+    setActiveCategory(null);
+    const before = filterBeforeCategory.current;
+    filterBeforeCategory.current = null;
+    if (before) setMapFilter((prev) => ({ ...before, openNow: prev.openNow }));
+  }, []);
 
   const onSelectCategory = useCallback(
     (key: MapCategoryKey) => {
       if (activeCategory === key) {
-        setActiveCategory(null);
-        setMapFilter((prev) => ({
-          ...prev,
-          events: true,
-          restaurants: true,
-          businesses: true,
-          orgs: true,
-          pois: true,
-        }));
+        closeCategory();
         return;
       }
       setActiveCategory(key);
       const layers = categoryByKey(key)?.layers;
-      if (layers) setMapFilter((prev) => ({ ...prev, ...layers }));
+      setMapFilter((prev) => {
+        if (!filterBeforeCategory.current) filterBeforeCategory.current = prev;
+        const base = filterBeforeCategory.current;
+        return { ...base, ...layers, openNow: prev.openNow };
+      });
     },
-    [activeCategory]
+    [activeCategory, closeCategory]
   );
 
   const selectedFeatureId = selection ? placeKey(selection) : null;
@@ -329,6 +368,7 @@ export default function LocationScreen() {
       setLoading(true);
       const [
         eventsResult,
+        occurrencesResult,
         restaurantsResult,
         businessesResult,
         poisResult,
@@ -342,6 +382,10 @@ export default function LocationScreen() {
             .select('*')
             .eq('status', 'approved')
             .order('date', { ascending: true }),
+          supabase
+            .from('event_dates')
+            .select('event_id, date, is_cancelled')
+            .gte('date', localDateKey(new Date())),
           supabase.from('restaurants').select('*').eq('status', 'published'),
           // NB: businesses use 'published'/'pending' — never 'approved'.
           supabase.from('businesses').select('*').eq('status', 'published'),
@@ -353,6 +397,9 @@ export default function LocationScreen() {
 
       if (eventsResult.data) {
         setEvents(processEventsWithCoordinates(eventsResult.data as EventRecord[]));
+      }
+      if (occurrencesResult.data) {
+        setOccurrences(occurrencesResult.data as EventOccurrence[]);
       }
       if (restaurantsResult.data) {
         setRestaurants(restaurantsResult.data as RestaurantRecord[]);
@@ -389,7 +436,9 @@ export default function LocationScreen() {
   const findPlaceItem = (entityType: MapEntityType, id: string): PlaceItem | null => {
     switch (entityType) {
       case 'event': {
-        const e = events.find((x) => x.id === id);
+        // The upcoming copy carries the next date of a recurring event; the
+        // raw list still resolves deep links to events that are over.
+        const e = upcomingEvents.find((x) => x.id === id) ?? events.find((x) => x.id === id);
         return e ? { id: e.id, entityType: 'event', lat: e.latitude, lon: e.longitude, data: e } : null;
       }
       case 'restaurant': {
@@ -431,6 +480,13 @@ export default function LocationScreen() {
 
   const handleMarkerPress = (id: string, entityType: MapEntityType) => {
     openSelectionFor(entityType, id);
+  };
+
+  const handleGroupList = (members: MapFeatureProperties[]) => {
+    const items = members
+      .map((m) => findPlaceItem(m.entityType, m.id))
+      .filter((item): item is PlaceItem => item != null);
+    setGroupItems(items);
   };
 
   // The map is usually pushed from Erkunden; a deep link has nothing behind
@@ -498,6 +554,7 @@ export default function LocationScreen() {
               geojson={geojson}
               markerImages={markerImages}
               onMarkerPress={handleMarkerPress}
+              onGroupList={handleGroupList}
               flyToCoordinate={flyToCoordinate}
               selectedFeatureId={selectedFeatureId}
               vehiclesGeoJSON={showLiveBuses ? vehiclesGeoJSON : null}
@@ -636,12 +693,22 @@ export default function LocationScreen() {
           />
         ) : null}
 
-        {activeCategory && !selection ? (
+        {groupItems && !selection ? (
+          <MapCategorySheet
+            heading={{ icon: '📍', title: 'An diesem Ort' }}
+            items={groupItems}
+            onSelectPlace={selectPlace}
+            onClose={() => setGroupItems(null)}
+            orgIndex={orgIndex}
+          />
+        ) : null}
+
+        {activeCategory && !selection && !groupItems ? (
           <MapCategorySheet
             categoryKey={activeCategory}
             items={categoryItems}
             onSelectPlace={selectPlace}
-            onClose={() => setActiveCategory(null)}
+            onClose={closeCategory}
             orgIndex={orgIndex}
             scores={recommendationScores}
           />

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import {
@@ -6,10 +6,11 @@ import {
   DEFAULT_ZOOM,
   MIN_ZOOM,
   MAX_ZOOM,
-  CLUSTER_RADIUS,
-  CLUSTER_MAX_ZOOM,
+  PIN_GROUP_RADIUS,
 } from '@/lib/map/constants';
-import type { MapGeoJSON } from '@/lib/map/geojson';
+import type { MapFeatureProperties, MapGeoJSON } from '@/lib/map/geojson';
+import { boundsSpanMeters, groupPins, type PinGroup } from '@/lib/map/clusters';
+import MapPinGroup from './MapPinGroup';
 import { EMOJI_IMAGE_POINTS, MARKER_IMAGES, emojiImagesFor } from '@/lib/map/markers';
 import type { MapEntityType } from '@/lib/types';
 import { Mapbox } from '@/lib/map/mapbox';
@@ -25,7 +26,15 @@ type Props = {
   // Remote custom pin images keyed by feature fid (markerImagesFromIcons);
   // registered next to the bundled MARKER_IMAGES.
   markerImages?: Record<string, { uri: string; scale: number }>;
+  // A group whose members sit (almost) on the same spot — zooming can't
+  // pull them apart, so the screen lists them instead.
+  onGroupList?: (members: MapFeatureProperties[]) => void;
 };
+
+/** Zoom is tracked in half steps so groups re-form a few times per zoom, not every frame. */
+const ZOOM_STEP = 0.5;
+/** Below this ground span a group can't be separated by zooming in. */
+const INSEPARABLE_METERS = 25;
 
 // Marker circle radius / emoji text size / PNG icon scale per size class
 const PIN_RADIUS = ['match', ['get', 'size'], 'sm', 11, 'md', 15, 'lg', 21, 15];
@@ -41,8 +50,8 @@ const EMOJI_ICON_SIZE = [
 const ICON_SCALE = ['match', ['get', 'size'], 'sm', 0.25, 'md', 0.35, 'lg', 0.5, 0.35];
 const LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
 
-const NOT_CLUSTER = ['!', ['has', 'point_count']];
-const IS_CLUSTER = ['has', 'point_count'];
+// Lower sort keys are placed first, so the highest rank wins a label collision.
+const LABEL_SORT_KEY = ['-', 0, ['get', 'rank']];
 const HAS_IMAGE = ['has', 'markerImage'];
 const NO_IMAGE = ['!', ['has', 'markerImage']];
 
@@ -54,10 +63,40 @@ export default function MapboxMapView({
   vehiclesGeoJSON,
   onVehiclePress,
   markerImages,
+  onGroupList,
 }: Props) {
   const { isDark, colors } = useTheme();
   const cameraRef = useRef<any>(null);
-  const entitySourceRef = useRef<any>(null);
+  const [zoomStep, setZoomStep] = useState(DEFAULT_ZOOM);
+
+  // Nearby pins become photo-stack groups (lib/map/clusters). The selected
+  // pin always stays on its own so its accent ring is visible.
+  const { singles, groups } = useMemo(
+    () => groupPins(geojson, zoomStep, PIN_GROUP_RADIUS, selectedFeatureId),
+    [geojson, zoomStep, selectedFeatureId]
+  );
+
+  const handleCameraChanged = useCallback((state: any) => {
+    const zoom = state?.properties?.zoom;
+    if (typeof zoom !== 'number') return;
+    const step = Math.floor(zoom / ZOOM_STEP) * ZOOM_STEP;
+    setZoomStep((prev) => (prev === step ? prev : step));
+  }, []);
+
+  const handleGroupPress = useCallback(
+    (group: PinGroup) => {
+      const inseparable =
+        boundsSpanMeters(group.bounds) < INSEPARABLE_METERS || zoomStep >= MAX_ZOOM - ZOOM_STEP;
+      if (inseparable) {
+        onGroupList?.(group.members);
+        return;
+      }
+      const [[minLon, minLat], [maxLon, maxLat]] = group.bounds;
+      // Generous bottom padding: the category row and buttons cover it.
+      cameraRef.current?.fitBounds([maxLon, maxLat], [minLon, minLat], [140, 70, 280, 70], 600);
+    },
+    [onGroupList, zoomStep]
+  );
 
   const emojiImages = useMemo(
     () => ({
@@ -96,28 +135,10 @@ export default function MapboxMapView({
   );
 
   const handleEntityPress = useCallback(
-    async (e: any) => {
+    (e: any) => {
       const feat = e.features?.[0];
       if (!feat) return;
       const props = feat.properties ?? {};
-      if (props.cluster) {
-        // Cluster tap — zoom to the level where it splits apart
-        const coords = feat.geometry?.coordinates as [number, number] | undefined;
-        if (!coords) return;
-        let zoom = DEFAULT_ZOOM + 2;
-        try {
-          zoom = await entitySourceRef.current?.getClusterExpansionZoom(feat);
-        } catch {
-          // fall back to a fixed step
-        }
-        cameraRef.current?.setCamera({
-          centerCoordinate: coords,
-          zoomLevel: Math.min(zoom ?? MAX_ZOOM, MAX_ZOOM),
-          animationDuration: 500,
-          animationMode: 'easeTo',
-        });
-        return;
-      }
       if (props.id && props.entityType) {
         onMarkerPress(props.id, props.entityType as MapEntityType);
       }
@@ -144,6 +165,7 @@ export default function MapboxMapView({
         attributionEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
+        onCameraChanged={handleCameraChanged}
       >
         <Mapbox.Camera
           ref={cameraRef}
@@ -159,47 +181,13 @@ export default function MapboxMapView({
 
         <Mapbox.Images images={{ ...emojiImages, ...MARKER_IMAGES, ...(markerImages ?? {}) }} />
 
-        {/* Entities — one clustered source, Corner-style emoji/PNG pins */}
-        <Mapbox.ShapeSource
-          id="entities-source"
-          ref={entitySourceRef}
-          shape={geojson}
-          cluster
-          clusterRadius={CLUSTER_RADIUS}
-          clusterMaxZoomLevel={CLUSTER_MAX_ZOOM}
-          onPress={handleEntityPress}
-        >
-          {/* Cluster bubbles */}
-          <Mapbox.CircleLayer
-            id="entity-clusters"
-            filter={IS_CLUSTER as any}
-            style={{
-              circleRadius: 20,
-              circleColor: pinBg,
-              circleStrokeWidth: 2,
-              circleStrokeColor: accent,
-              circleOpacity: 0.95,
-            }}
-          />
-          <Mapbox.SymbolLayer
-            id="entity-cluster-count"
-            filter={IS_CLUSTER as any}
-            style={{
-              textField: ['get', 'point_count_abbreviated'] as any,
-              textSize: 14,
-              textColor: labelColor,
-              textFont: LABEL_FONT as any,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-
+        {/* Single pins — Corner-style emoji/PNG pins. Grouped pins are drawn
+            as MapPinGroup marker views below. */}
+        <Mapbox.ShapeSource id="entities-source" shape={singles} onPress={handleEntityPress}>
           {/* Selected pin — accent ring under the pin */}
           <Mapbox.CircleLayer
             id="entity-selected-ring"
-            filter={
-              ['all', NOT_CLUSTER, ['==', ['get', 'fid'], selectedFeatureId ?? '']] as any
-            }
+            filter={['==', ['get', 'fid'], selectedFeatureId ?? ''] as any}
             style={{
               circleRadius: ['+', PIN_RADIUS, 5] as any,
               circleColor: 'rgba(0,0,0,0)',
@@ -211,7 +199,7 @@ export default function MapboxMapView({
           {/* Pin background circles (emoji pins only) */}
           <Mapbox.CircleLayer
             id="entity-pin-bg"
-            filter={['all', NOT_CLUSTER, NO_IMAGE] as any}
+            filter={NO_IMAGE as any}
             style={{
               circleRadius: PIN_RADIUS as any,
               circleColor: pinBg,
@@ -221,7 +209,7 @@ export default function MapboxMapView({
           />
           <Mapbox.SymbolLayer
             id="entity-pin-emoji"
-            filter={['all', NOT_CLUSTER, NO_IMAGE] as any}
+            filter={NO_IMAGE as any}
             style={{
               iconImage: ['get', 'emoji'] as any,
               iconSize: EMOJI_ICON_SIZE as any,
@@ -233,7 +221,7 @@ export default function MapboxMapView({
           {/* Custom PNG pins (Mühle & friends) */}
           <Mapbox.SymbolLayer
             id="entity-pin-image"
-            filter={['all', NOT_CLUSTER, HAS_IMAGE] as any}
+            filter={HAS_IMAGE as any}
             style={{
               iconImage: ['get', 'markerImage'] as any,
               iconSize: ICON_SCALE as any,
@@ -242,11 +230,13 @@ export default function MapboxMapView({
             }}
           />
 
-          {/* Name labels — featured always, the rest from zoom 14 */}
+          {/* Name labels — featured always, the rest from zoom 15.5. Labels
+              collide (textOptional): the higher-ranked name stays. */}
           <Mapbox.SymbolLayer
             id="entity-label-featured"
-            filter={['all', NOT_CLUSTER, ['==', ['get', 'featured'], true]] as any}
+            filter={['==', ['get', 'featured'], true] as any}
             style={{
+              symbolSortKey: LABEL_SORT_KEY as any,
               textField: ['get', 'title'] as any,
               textSize: 12,
               textColor: labelColor,
@@ -261,9 +251,10 @@ export default function MapboxMapView({
           />
           <Mapbox.SymbolLayer
             id="entity-label"
-            filter={['all', NOT_CLUSTER, ['!=', ['get', 'featured'], true]] as any}
-            minZoomLevel={14}
+            filter={['!=', ['get', 'featured'], true] as any}
+            minZoomLevel={15.5}
             style={{
+              symbolSortKey: LABEL_SORT_KEY as any,
               textField: ['get', 'title'] as any,
               textSize: 11,
               textColor: labelColor,
@@ -277,6 +268,18 @@ export default function MapboxMapView({
             }}
           />
         </Mapbox.ShapeSource>
+
+        {groups.map((group) => (
+          <Mapbox.MarkerView
+            key={group.key}
+            coordinate={group.coordinate}
+            // The front tile's centre sits on the anchor member's position.
+            anchor={{ x: 0.5, y: 0.28 }}
+            allowOverlap
+          >
+            <MapPinGroup group={group} onPress={handleGroupPress} />
+          </Mapbox.MarkerView>
+        ))}
 
         {/* Live vehicles — simulated bus / ferry positions */}
         {vehiclesGeoJSON && vehiclesGeoJSON.features.length > 0 ? (

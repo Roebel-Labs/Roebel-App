@@ -5,8 +5,12 @@ export const ROEBEL_CENTER: [number, number] = [12.6000, 53.3667]; // [lng, lat]
 export const DEFAULT_ZOOM = 13;
 export const MIN_ZOOM = 10;
 export const MAX_ZOOM = 18;
-export const CLUSTER_RADIUS = 50;
-export const CLUSTER_MAX_ZOOM = 14;
+/**
+ * Pins closer than this many points on screen merge into a photo-stack
+ * group (lib/map/clusters). Applies at every zoom, so pins that share a
+ * spot stay grouped even fully zoomed in.
+ */
+export const PIN_GROUP_RADIUS = 52;
 
 export const MAP_PRIVACY_STORAGE_KEY = '@map_privacy_accepted';
 

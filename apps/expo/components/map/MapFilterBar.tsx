@@ -23,15 +23,15 @@ type Props = {
 };
 
 type LayerChip = {
-  key: 'events' | 'restaurants' | 'businesses' | 'orgs' | 'pois';
+  key: 'orgs' | 'pois';
   label: string;
   emoji: string;
 };
 
+// Only the opt-in extras. Events, food and shops are browsed through the
+// category row at the bottom — two rows narrowing the same layers made the
+// map harder to read, not easier.
 const CHIPS: LayerChip[] = [
-  { key: 'events', label: 'Events', emoji: '🎪' },
-  { key: 'restaurants', label: 'Gastro', emoji: '🍽️' },
-  { key: 'businesses', label: 'Shops', emoji: '🛍️' },
   { key: 'orgs', label: 'Vereine', emoji: '🎗️' },
   { key: 'pois', label: 'Tipps', emoji: '⭐' },
 ];
