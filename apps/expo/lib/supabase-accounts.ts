@@ -292,11 +292,16 @@ export async function setSuggestToNewUsers(
   return true;
 }
 
-export async function fetchSuggestToNewUsers(accountId: string): Promise<boolean> {
-  const { data } = await (supabase as any)
+/** The stored opt-in, or null when it could not be loaded (error / missing row / column not migrated yet). */
+export async function fetchSuggestToNewUsers(accountId: string): Promise<boolean | null> {
+  const { data, error } = await (supabase as any)
     .from('accounts')
     .select('suggest_to_new_users')
     .eq('id', accountId)
     .maybeSingle();
-  return !!data?.suggest_to_new_users;
+  if (error) {
+    console.error('fetchSuggestToNewUsers error:', error);
+    return null;
+  }
+  return typeof data?.suggest_to_new_users === 'boolean' ? data.suggest_to_new_users : null;
 }

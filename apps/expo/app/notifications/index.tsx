@@ -172,6 +172,10 @@ export default function NotificationsInboxScreen() {
       case 'direct_message':
         if (data.conversationId) router.push(`/messages/${data.conversationId}` as any);
         break;
+      case 'org':
+        // Weekly follower digest (follower_digest) for org owners/admins.
+        if (typeof data.accountId === 'string') router.push(`/account/${data.accountId}` as any);
+        break;
       // org_invite is actioned via the in-app InviteNotificationCard in the
       // same inbox; tapping the push entry has no separate destination.
       default:

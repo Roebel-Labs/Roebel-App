@@ -9,31 +9,40 @@ import FollowList from './FollowList';
 import { fetchFollowSuggestions, type FollowSuggestion } from '@/lib/supabase-follows';
 import { submitFollowSelection } from '@/lib/follow-selection';
 
-export const FOLLOW_INTRO_SEEN_KEY = '@roebel/follow-intro-seen';
+const FOLLOW_INTRO_SEEN_PREFIX = '@roebel/follow-intro-seen';
+
+/** Seen flag per wallet: another account on the same device still gets its own intro. */
+export function followIntroSeenKey(wallet: string): string {
+  return `${FOLLOW_INTRO_SEEN_PREFIX}/${wallet.toLowerCase()}`;
+}
 
 /** One-time "Neu: Folgen & Stummschalten" sheet for existing users who follow nobody yet. */
 export default function FollowIntroSheet() {
   const { colors } = useTheme();
   const { user } = useUser();
-  const { ready, snapshot, follow, unfollow } = useRelations();
+  const { ready, serverLoaded, snapshot, follow, unfollow } = useRelations();
+  const wallet = user?.wallet_address?.toLowerCase() ?? null;
   const [visible, setVisible] = useState(false);
   const [suggestions, setSuggestions] = useState<FollowSuggestion[] | null>(null);
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
+  // serverLoaded: an empty snapshot that was never synced (new device, reinstall) is not "follows
+  // nobody" — showing the sheet there and saving would re-follow everything the user unfollowed.
   const eligible =
-    !!user?.wallet_address &&
-    !!user.onboarding_completed_at &&
+    !!wallet &&
+    !!user?.onboarding_completed_at &&
     ready &&
+    serverLoaded &&
     snapshot.following.length === 0 &&
     snapshot.unfollowed.length === 0;
 
   useEffect(() => {
-    if (!eligible) return;
+    if (!eligible || !wallet) return;
     let alive = true;
     (async () => {
       try {
-        if (await AsyncStorage.getItem(FOLLOW_INTRO_SEEN_KEY)) return;
+        if (await AsyncStorage.getItem(followIntroSeenKey(wallet))) return;
       } catch {
         return;
       }
@@ -45,15 +54,16 @@ export default function FollowIntroSheet() {
     return () => {
       alive = false;
     };
-  }, [eligible]);
+  }, [eligible, wallet]);
 
   const markSeen = useCallback(async () => {
+    if (!wallet) return;
     try {
-      await AsyncStorage.setItem(FOLLOW_INTRO_SEEN_KEY, '1');
+      await AsyncStorage.setItem(followIntroSeenKey(wallet), '1');
     } catch {
       // best-effort; worst case the sheet shows once more
     }
-  }, []);
+  }, [wallet]);
 
   const close = useCallback(() => {
     setVisible(false);

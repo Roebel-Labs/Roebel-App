@@ -109,6 +109,9 @@ function NotificationHandler() {
         router.push('/notifications' as any);
       } else if (data?.type === 'reward') {
         router.push('/rewards' as any);
+      } else if (data?.type === 'org' && data?.accountId) {
+        // Weekly follower digest for org owners/admins.
+        router.push(`/account/${data.accountId}` as any);
       }
     });
 
@@ -152,6 +155,10 @@ function NotificationHandler() {
         } else if (data?.type === 'reward') {
           setTimeout(() => {
             router.push('/rewards' as any);
+          }, 100);
+        } else if (data?.type === 'org' && data?.accountId) {
+          setTimeout(() => {
+            router.push(`/account/${data.accountId}` as any);
           }, 100);
         }
       }

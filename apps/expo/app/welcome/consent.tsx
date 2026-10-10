@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
 import { useRelations } from '@/context/RelationsContext';
 import { submitFollowSelection } from '@/lib/follow-selection';
+import { followIntroSeenKey } from '@/components/follow/FollowIntroSheet';
 import { useUser } from '@/context/UserContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
@@ -117,7 +118,7 @@ export default function WelcomeConsentScreen() {
           ]);
           if (timer) clearTimeout(timer);
           // Only a confirmed submission retires the intro sheet; otherwise it can offer it again.
-          if (ok) await AsyncStorage.setItem('@roebel/follow-intro-seen', '1');
+          if (ok && user?.wallet_address) await AsyncStorage.setItem(followIntroSeenKey(user.wallet_address), '1');
         }
       } catch (err) {
         console.error('onboarding follows failed (non-fatal):', err);

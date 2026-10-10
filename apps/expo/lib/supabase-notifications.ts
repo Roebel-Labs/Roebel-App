@@ -90,7 +90,8 @@ export const DEFAULT_PREFERENCES: Omit<NotificationPreferences, 'device_id'> = {
   likes_enabled: true,
   comments_enabled: true,
   org_invites_enabled: true,
-  follower_digest_enabled: true,
+  // follower_digest_enabled is left to the DB default (true): writing it before the follow-graph
+  // push migration is applied would fail the whole upsert (PGRST204 unknown column).
 };
 
 /**
