@@ -121,14 +121,17 @@ grant execute on function public.personal_account_id(text), public.get_follow_st
 -- Task 3 / migration step `20261010_follow_graph_feed`: get_feed_page exclusion
 -- (apply separately; contains only what follows)
 -- ============================================================
-drop function if exists public.get_feed_page(text, integer, integer, text);
+-- Added as an OVERLOAD next to the live 4-arg get_feed_page (no drop): the 5-arg
+-- version takes every argument explicitly, so a 4-arg call can only resolve to the old
+-- function and a call carrying p_exclude_account_ids only to this one. The client sends
+-- the 5th argument only when the viewer hides someone.
 
 create or replace function public.get_feed_page(
   p_feed_type text,
-  p_page integer default 0,
-  p_page_size integer default 15,
-  p_wallet text default null,
-  p_exclude_account_ids uuid[] default null
+  p_page integer,
+  p_page_size integer,
+  p_wallet text,
+  p_exclude_account_ids uuid[]
 )
 returns jsonb
 language plpgsql
@@ -229,4 +232,5 @@ begin
 end;
 $$;
 
+revoke execute on function public.get_feed_page(text, integer, integer, text, uuid[]) from public;
 grant execute on function public.get_feed_page(text, integer, integer, text, uuid[]) to anon, authenticated;
