@@ -141,17 +141,20 @@ function isWellFormedSignature(sig: string): boolean {
 // ── Handlers ─────────────────────────────────────────────────────────
 
 async function snapshot(admin: Admin, viewer: string) {
-  const [{ data: fol }, { data: hides }] = await Promise.all([
+  const [{ data: fol, error: folErr }, { data: hides, error: hidesErr }] = await Promise.all([
     admin.from('account_follows').select('target_account_id').eq('follower_wallet', viewer),
     admin.from('account_hides').select('target_account_id, kind').eq('viewer_wallet', viewer),
   ]);
+  if (folErr) throw folErr;
+  if (hidesErr) throw hidesErr;
   const unfollowed = (hides ?? []).filter((h: any) => h.kind === 'unfollowed').map((h: any) => h.target_account_id);
   const muted = (hides ?? []).filter((h: any) => h.kind === 'muted').map((h: any) => h.target_account_id);
   const ownerWallets = async (ids: string[]) => {
     if (ids.length === 0) return [] as string[];
-    const { data } = await admin.from('account_owners')
+    const { data, error } = await admin.from('account_owners')
       .select('wallet_address, accounts!inner(account_type)')
       .in('account_id', ids).eq('accounts.account_type', 'personal');
+    if (error) throw error;
     return [...new Set((data ?? []).map((r: any) => String(r.wallet_address).toLowerCase()))];
   };
   return {
@@ -172,6 +175,7 @@ async function handleFollow(admin: Admin, viewer: string, payload: Record<string
   const parsed = parseFollowPayload(payload);
   if (!parsed.ok) return fail('BAD_PAYLOAD', 400, parsed.message);
   const own = await admin.rpc('personal_account_id', { p_wallet: viewer });
+  if (own.error) return fail('INTERNAL', 500, own.error.message);
   const targets = (await existingIds(admin, parsed.targets)).filter((id) => id !== own.data);
   if (targets.length > 0) {
     // Deterministic idempotency: only targets without an existing follow row are inserted AND
@@ -187,7 +191,9 @@ async function handleFollow(admin: Admin, viewer: string, payload: Record<string
           { onConflict: 'follower_wallet,target_account_id', ignoreDuplicates: true });
       if (error) return fail('INTERNAL', 500, error.message);
     }
-    await admin.from('account_hides').delete().eq('viewer_wallet', viewer).eq('kind', 'unfollowed').in('target_account_id', targets);
+    const { error: hideErr } = await admin.from('account_hides').delete()
+      .eq('viewer_wallet', viewer).eq('kind', 'unfollowed').in('target_account_id', targets);
+    if (hideErr) return fail('INTERNAL', 500, hideErr.message);
     await insertNotices(admin, viewer, newIds, parsed.source);
   }
   return ok(await snapshot(admin, viewer));
@@ -224,7 +230,9 @@ async function handleUnfollow(admin: Admin, viewer: string, payload: Record<stri
   if (!parsed.ok) return fail('BAD_PAYLOAD', 400, parsed.message);
   const targets = await existingIds(admin, parsed.targets);
   if (targets.length > 0) {
-    await admin.from('account_follows').delete().eq('follower_wallet', viewer).in('target_account_id', targets);
+    const { error: delErr } = await admin.from('account_follows').delete()
+      .eq('follower_wallet', viewer).in('target_account_id', targets);
+    if (delErr) return fail('INTERNAL', 500, delErr.message);
     const { error } = await admin.from('account_hides').upsert(
       targets.map((t) => ({ viewer_wallet: viewer, target_account_id: t, kind: 'unfollowed' })),
       { onConflict: 'viewer_wallet,target_account_id,kind', ignoreDuplicates: true });
@@ -255,7 +263,7 @@ async function handleFollowers(admin: Admin, viewer: string, payload: Record<str
   const o = owner as { role: string; accounts: { account_type: string } } | null;
   const allowed = !!o && (o.accounts.account_type === 'personal' || ['owner', 'admin'].includes(o.role));
   if (!allowed) return fail('FORBIDDEN', 403, 'not your account');
-  const offset = Math.max(0, Number(payload.offset ?? 0) || 0);
+  const offset = Math.min(10000, Math.max(0, Math.floor(Number(payload.offset ?? 0)) || 0));
   const { data, error } = await admin.rpc('list_account_followers', { p_account_id: parsed.target, p_limit: 50, p_offset: offset });
   if (error) return fail('INTERNAL', 500, error.message);
   return json(200, { ok: true, data: data ?? [] });
