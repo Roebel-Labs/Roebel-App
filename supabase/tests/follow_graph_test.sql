@@ -3,12 +3,14 @@ do $$
 declare
   v_w1 text := '0x00000000000000000000000000000000000000f1';
   v_w2 text := '0x00000000000000000000000000000000000000f2';
-  v_a1 uuid; v_a2 uuid; v_stats jsonb;
+  v_w4 text := '0x00000000000000000000000000000000000000f4';
+  v_a1 uuid; v_a2 uuid; v_a4 uuid; v_stats jsonb;
 begin
   -- fixture: user/owner rows carry the wallet upper-cased (checksum-style) to prove case-insensitive matching
   insert into users (wallet_address, username, display_name, tier) values ('0x'||upper(substr(v_w1,3)), 'fgtest1', 'FG Eins', 'guest'), (v_w2, 'fgtest2', 'FG Zwei', 'guest');
   insert into accounts (account_type, name) values ('personal', 'FG Eins') returning id into v_a1;
-  insert into accounts (account_type, name) values ('personal', 'FG Zwei') returning id into v_a2;
+  -- prod-shaped: personal accounts.name is a wallet string; the suggestion must show users.display_name
+  insert into accounts (account_type, name) values ('personal', '0x00…f2') returning id into v_a2;
   insert into account_owners (account_id, wallet_address, role) values (v_a1, '0x'||upper(substr(v_w1,3)), 'owner'), (v_a2, v_w2, 'owner');
 
   assert public.personal_account_id(v_w1) = v_a1, 'personal_account_id must match case-insensitively';
@@ -20,6 +22,18 @@ begin
   assert (v_stats->>'following')::int = 1, 'following count for the personal account owner';
 
   assert exists (select 1 from public.get_follow_suggestions() s where s.account_id = v_a2), 'suggestions include account';
+  assert (select s.name from public.get_follow_suggestions() s where s.account_id = v_a2) = 'FG Zwei',
+    'person is named by users.display_name, not the wallet-shaped accounts.name';
+
+  -- person whose only names are wallet-shaped (display_name + username) must not appear
+  insert into users (wallet_address, username, display_name, tier) values (v_w4, '0x00f4', '0x0000…00f4', 'guest');
+  insert into accounts (account_type, name) values ('personal', v_w4) returning id into v_a4;
+  insert into account_owners (account_id, wallet_address, role) values (v_a4, v_w4, 'owner');
+  assert not exists (select 1 from public.get_follow_suggestions() s where s.account_id = v_a4),
+    'wallet-named person must not be suggested';
+  assert not exists (select 1 from public.get_follow_suggestions() s where s.name ~* '^0x[0-9a-f]'),
+    'no suggestion is ever named by a wallet';
+
   update accounts set suggest_to_new_users = false where id = v_a2;
   assert not exists (select 1 from public.get_follow_suggestions() s where s.account_id = v_a2), 'opt-out respected';
 

@@ -138,6 +138,22 @@ function isWellFormedSignature(sig: string): boolean {
 }
 
 
+// ── Chunked id filters ───────────────────────────────────────────────
+
+// PostgREST puts `.in()` ids into the URL; an onboarding can address a few hundred accounts,
+// which would overflow the request line. Every id filter goes through this in chunks of 100.
+const IN_CHUNK = 100;
+
+async function inChunks<T>(ids: string[], run: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const { data, error } = await run(ids.slice(i, i + IN_CHUNK));
+    if (error) throw error;
+    out.push(...(data ?? []));
+  }
+  return out;
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 async function snapshot(admin: Admin, viewer: string) {
@@ -151,11 +167,10 @@ async function snapshot(admin: Admin, viewer: string) {
   const muted = (hides ?? []).filter((h: any) => h.kind === 'muted').map((h: any) => h.target_account_id);
   const ownerWallets = async (ids: string[]) => {
     if (ids.length === 0) return [] as string[];
-    const { data, error } = await admin.from('account_owners')
+    const data = await inChunks<any>(ids, (chunk) => admin.from('account_owners')
       .select('wallet_address, accounts!inner(account_type)')
-      .in('account_id', ids).eq('accounts.account_type', 'personal');
-    if (error) throw error;
-    return [...new Set((data ?? []).map((r: any) => String(r.wallet_address).toLowerCase()))];
+      .in('account_id', chunk).eq('accounts.account_type', 'personal'));
+    return [...new Set(data.map((r: any) => String(r.wallet_address).toLowerCase()))];
   };
   return {
     following: (fol ?? []).map((f: any) => f.target_account_id),
@@ -166,9 +181,8 @@ async function snapshot(admin: Admin, viewer: string) {
 }
 
 async function existingIds(admin: Admin, ids: string[]): Promise<string[]> {
-  const { data, error } = await admin.from('accounts').select('id').in('id', ids);
-  if (error) throw error;
-  return (data ?? []).map((r: any) => r.id);
+  const data = await inChunks<any>(ids, (chunk) => admin.from('accounts').select('id').in('id', chunk));
+  return data.map((r: any) => r.id);
 }
 
 async function handleFollow(admin: Admin, viewer: string, payload: Record<string, unknown>) {
@@ -180,10 +194,14 @@ async function handleFollow(admin: Admin, viewer: string, payload: Record<string
   if (targets.length > 0) {
     // Deterministic idempotency: only targets without an existing follow row are inserted AND
     // notified, so a retry never sends a second notice.
-    const { data: existing, error: exErr } = await admin.from('account_follows')
-      .select('target_account_id').eq('follower_wallet', viewer).in('target_account_id', targets);
-    if (exErr) return fail('INTERNAL', 500, exErr.message);
-    const have = new Set((existing ?? []).map((r: any) => r.target_account_id));
+    let existing: any[];
+    try {
+      existing = await inChunks<any>(targets, (chunk) => admin.from('account_follows')
+        .select('target_account_id').eq('follower_wallet', viewer).in('target_account_id', chunk));
+    } catch (exErr) {
+      return fail('INTERNAL', 500, (exErr as { message?: string })?.message ?? 'follow lookup failed');
+    }
+    const have = new Set(existing.map((r: any) => r.target_account_id));
     const newIds = targets.filter((t) => !have.has(t));
     if (newIds.length > 0) {
       const { error } = await admin.from('account_follows')
@@ -191,24 +209,44 @@ async function handleFollow(admin: Admin, viewer: string, payload: Record<string
           { onConflict: 'follower_wallet,target_account_id', ignoreDuplicates: true });
       if (error) return fail('INTERNAL', 500, error.message);
     }
-    const { error: hideErr } = await admin.from('account_hides').delete()
-      .eq('viewer_wallet', viewer).eq('kind', 'unfollowed').in('target_account_id', targets);
-    if (hideErr) return fail('INTERNAL', 500, hideErr.message);
-    await insertNotices(admin, viewer, newIds, parsed.source);
+    try {
+      await inChunks<never>(targets, (chunk) => admin.from('account_hides').delete()
+        .eq('viewer_wallet', viewer).eq('kind', 'unfollowed').in('target_account_id', chunk));
+    } catch (hideErr) {
+      return fail('INTERNAL', 500, (hideErr as { message?: string })?.message ?? 'hide delete failed');
+    }
+    // Notices are best-effort: the follow is already stored, a notice failure must not 500 it.
+    try {
+      await insertNotices(admin, viewer, newIds, parsed.source);
+    } catch (noticeErr) {
+      console.error('new_follower notices failed (non-fatal)', noticeErr);
+    }
   }
   return ok(await snapshot(admin, viewer));
 }
 
+// Off unless app_settings.follow_notices_enabled = 'true' (missing key = off): `notifications` is
+// anon-readable, so every new_follower row would publish who follows whom (spec: follows are private).
+async function followNoticesEnabled(admin: Admin): Promise<boolean> {
+  const { data, error } = await admin.from('app_settings').select('value').eq('key', 'follow_notices_enabled').maybeSingle();
+  if (error) {
+    console.error('fetch app_settings (follow_notices_enabled) error:', error);
+    return false;
+  }
+  return (data as { value: string | null } | null)?.value === 'true';
+}
+
 async function insertNotices(admin: Admin, viewer: string, targetIds: string[], source: FollowSource) {
   if (targetIds.length === 0) return;
+  if (!(await followNoticesEnabled(admin))) return;
   const { data: me } = await admin.from('users').select('display_name, username').ilike('wallet_address', viewer).maybeSingle();
   const followerName = (me as any)?.display_name || (me as any)?.username || 'Jemand Neues';
-  const { data: accounts } = await admin.from('accounts').select('id, name, account_type').in('id', targetIds);
-  const { data: owners } = await admin.from('account_owners').select('account_id, wallet_address, role').in('account_id', targetIds);
+  const accounts = await inChunks<any>(targetIds, (chunk) => admin.from('accounts').select('id, name, account_type').in('id', chunk));
+  const owners = await inChunks<any>(targetIds, (chunk) => admin.from('account_owners').select('account_id, wallet_address, role').in('account_id', chunk));
   const rows: Record<string, unknown>[] = [];
-  for (const acc of (accounts ?? []) as any[]) {
+  for (const acc of accounts) {
     const isOrg = acc.account_type === 'organisation';
-    const recipients = ((owners ?? []) as any[])
+    const recipients = owners
       .filter((o) => o.account_id === acc.id && (isOrg ? ['owner', 'admin'].includes(o.role) : true))
       .map((o) => String(o.wallet_address).toLowerCase())
       .filter((w) => w !== viewer);
@@ -230,9 +268,12 @@ async function handleUnfollow(admin: Admin, viewer: string, payload: Record<stri
   if (!parsed.ok) return fail('BAD_PAYLOAD', 400, parsed.message);
   const targets = await existingIds(admin, parsed.targets);
   if (targets.length > 0) {
-    const { error: delErr } = await admin.from('account_follows').delete()
-      .eq('follower_wallet', viewer).in('target_account_id', targets);
-    if (delErr) return fail('INTERNAL', 500, delErr.message);
+    try {
+      await inChunks<never>(targets, (chunk) => admin.from('account_follows').delete()
+        .eq('follower_wallet', viewer).in('target_account_id', chunk));
+    } catch (delErr) {
+      return fail('INTERNAL', 500, (delErr as { message?: string })?.message ?? 'follow delete failed');
+    }
     const { error } = await admin.from('account_hides').upsert(
       targets.map((t) => ({ viewer_wallet: viewer, target_account_id: t, kind: 'unfollowed' })),
       { onConflict: 'viewer_wallet,target_account_id,kind', ignoreDuplicates: true });

@@ -248,6 +248,14 @@ serve(async (req: Request) => {
       );
     }
 
+    // post_new carries actorWallet/accountId only for the hide filter above: they never reach the
+    // device payload or notification_log. Other types keep accountId (org_invite / follower_digest route by it).
+    let outData: Record<string, unknown> | undefined = data;
+    if (type === 'post_new' && data) {
+      const { actorWallet: _actorWallet, accountId: _accountId, ...rest } = data as Record<string, unknown>;
+      outData = rest;
+    }
+
     // Build Expo push messages
     const messages: ExpoPushMessage[] = deliverable.map((token: PushToken) => ({
       to: token.expo_push_token,
@@ -255,7 +263,7 @@ serve(async (req: Request) => {
       body,
       data: {
         type,
-        ...data,
+        ...outData,
       },
       sound: 'default',
       channelId: 'default',
@@ -312,7 +320,7 @@ serve(async (req: Request) => {
       notification_type: type,
       title,
       body,
-      data,
+      data: outData,
       tokens_sent: successful,
       tokens_failed: failed,
       status: failed === 0 ? 'sent' : successful > 0 ? 'partial' : 'failed',
@@ -401,7 +409,7 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error('Error sending notification:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Failed to send notification' }),
+      JSON.stringify({ error: (error as Error)?.message || 'Failed to send notification' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

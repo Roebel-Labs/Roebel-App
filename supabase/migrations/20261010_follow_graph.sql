@@ -1,6 +1,7 @@
 -- Folgen & Stummschalten (spec: docs/superpowers/specs/2026-10-10-follow-graph-design.md)
--- account_follows is public (follower counts); account_hides is private and only the
--- account-relations edge function (service role) reads or writes it.
+-- account_follows and account_hides are both private: only the account-relations edge
+-- function (service role) reads or writes them. Counts are public only through
+-- get_follow_stats (security definer); follower lists only via the signed `followers` action.
 
 create table if not exists public.account_follows (
   follower_wallet   text not null,
@@ -67,20 +68,36 @@ language sql stable security definer set search_path = public as $$
     where p.status = 'published' and p.created_at > now() - interval '90 days'
     group by 1
   ),
-  fol as (select target_account_id as aid, count(*)::int as n from public.account_follows group by 1)
-  select a.id, a.name, a.avatar_url, a.account_type, a.sub_type,
+  fol as (select target_account_id as aid, count(*)::int as n from public.account_follows group by 1),
+  -- Personal accounts.name is mostly a wallet string in prod: persons are named by their
+  -- oldest owner's users.display_name / username instead. Orgs keep accounts.name.
+  named as (
+    select a.*,
+           case when a.account_type = 'organisation' then nullif(trim(a.name), '')
+                else (select coalesce(
+                               nullif(regexp_replace(trim(u.display_name), '^0x[0-9a-f].*$', '', 'i'), ''),
+                               nullif(regexp_replace(trim(u.username), '^0x[0-9a-f].*$', '', 'i'), ''))
+                      from public.account_owners ao
+                      join public.users u on lower(u.wallet_address) = lower(ao.wallet_address)
+                      where ao.account_id = a.id
+                      order by ao.joined_at asc nulls last
+                      limit 1)
+           end as shown_name
+    from public.accounts a
+    where a.suggest_to_new_users
+  )
+  select a.id, a.shown_name, a.avatar_url, a.account_type, a.sub_type,
          coalesce(fol.n, 0),
          3 * coalesce(fol.n,0) + coalesce(eng.likes,0) + 2 * coalesce(eng.comments,0)
            + 0.1 * coalesce(eng.views,0) + 2 * coalesce(v.up_count,0)
-  from public.accounts a
+  from named a
   left join eng on eng.aid = a.id
   left join fol on fol.aid = a.id
   left join public.account_vote_summary v on v.account_id = a.id
-  where a.suggest_to_new_users
-    and coalesce(trim(a.name), '') <> ''
-    and (a.account_type = 'organisation'
-         or exists (select 1 from public.account_owners ao where ao.account_id = a.id))
-  order by 7 desc, (a.account_type = 'organisation') desc, a.name asc
+  where a.shown_name is not null
+    -- never surface a wallet address as a name
+    and a.shown_name !~* '^0x[0-9a-f]'
+  order by 7 desc, (a.account_type = 'organisation') desc, a.shown_name asc
 $$;
 
 create or replace function public.list_account_followers(p_account_id uuid, p_limit int default 50, p_offset int default 0)
