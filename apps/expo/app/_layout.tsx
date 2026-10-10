@@ -22,6 +22,7 @@ import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
+import { RelationsProvider } from '@/context/RelationsContext';
 import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider } from '@/context/UserContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
@@ -451,6 +452,7 @@ function Layout() {
                       <BookmarksProvider>
                         <LocationProvider>
                           <SnackbarProvider>
+                          <RelationsProvider>
                             <RoebelTalerProvider>
                             <RewardCelebrationProvider>
                             <PendingPostFeedbackProvider>
@@ -464,6 +466,7 @@ function Layout() {
                             </PendingPostFeedbackProvider>
                             </RewardCelebrationProvider>
                             </RoebelTalerProvider>
+                          </RelationsProvider>
                           </SnackbarProvider>
                         </LocationProvider>
                       </BookmarksProvider>
