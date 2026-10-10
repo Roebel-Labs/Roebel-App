@@ -27,6 +27,7 @@ export interface NotificationPreferences {
   likes_enabled: boolean;
   comments_enabled: boolean;
   org_invites_enabled: boolean;
+  follower_digest_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -89,6 +90,7 @@ export const DEFAULT_PREFERENCES: Omit<NotificationPreferences, 'device_id'> = {
   likes_enabled: true,
   comments_enabled: true,
   org_invites_enabled: true,
+  follower_digest_enabled: true,
 };
 
 /**

@@ -274,3 +274,29 @@ export async function updateAccount(
 
   return res.data ?? (await fetchAccountById(accountId));
 }
+
+/** Opt the personal account in/out of the "suggested to new users" follow list. */
+export async function setSuggestToNewUsers(
+  account: SigningAccount,
+  accountId: string,
+  value: boolean
+): Promise<boolean> {
+  const res = await callOrgMembership(account, 'update_account', {
+    accountId,
+    updates: { suggest_to_new_users: value },
+  });
+  if (!res.ok) {
+    console.error('setSuggestToNewUsers error:', res.code, res.message);
+    return false;
+  }
+  return true;
+}
+
+export async function fetchSuggestToNewUsers(accountId: string): Promise<boolean> {
+  const { data } = await (supabase as any)
+    .from('accounts')
+    .select('suggest_to_new_users')
+    .eq('id', accountId)
+    .maybeSingle();
+  return !!data?.suggest_to_new_users;
+}

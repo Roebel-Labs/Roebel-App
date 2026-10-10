@@ -353,6 +353,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/consent/index" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/follows" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
