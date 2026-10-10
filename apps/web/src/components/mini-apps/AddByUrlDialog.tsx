@@ -2,8 +2,7 @@
 
 // "Per URL hinzufügen": register a self-hosted app whose manifest names the
 // logged-in wallet as owner.
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Check, Copy, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +19,15 @@ export function AddByUrlDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   async function copyWallet() {
     if (!wallet) return;
@@ -65,7 +73,7 @@ export function AddByUrlDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setOpen(false)}>
+    <div role="dialog" aria-modal="true" aria-label="App per URL hinzufügen" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setOpen(false)}>
       <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <Card className="p-5">
           <form onSubmit={submit} className="space-y-3">
@@ -73,9 +81,9 @@ export function AddByUrlDialog({
             <p className="text-sm text-muted-foreground">
               Deine App muss unter <code>/.well-known/roebel-miniapp.json</code> ein Manifest mit deiner Wallet als{" "}
               <code>owner</code> haben.{" "}
-              <Link href="/mini-apps/publish.md" target="_blank" className="text-[#00498B] underline">
+              <a href="/mini-apps/publish.md" target="_blank" rel="noreferrer" className="text-[#00498B] underline dark:text-[#7ABBF2]">
                 Anleitung
-              </Link>
+              </a>
             </p>
             {wallet && (
               <div className="rounded-md border border-border bg-muted/40 p-2">
@@ -91,6 +99,7 @@ export function AddByUrlDialog({
             <input
               type="url"
               required
+              autoFocus
               placeholder="https://meine-app.vercel.app"
               value={url}
               onChange={(e) => setUrl(e.target.value)}

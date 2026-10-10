@@ -41,11 +41,11 @@ export function IndexedSourceCard({
             ? "Neue Version erkannt — geht nach der Prüfung live."
             : "Manifest übernommen.",
       );
-      onReindexed();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      onReindexed();
     }
   }
 
@@ -54,7 +54,7 @@ export function IndexedSourceCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold">Eigenes Hosting</p>
-          <a href={app.manifest_url ?? "#"} target="_blank" rel="noreferrer" className="block truncate text-xs text-[#00498B] underline">
+          <a href={app.manifest_url ?? "#"} target="_blank" rel="noreferrer" className="block truncate text-xs text-[#00498B] underline dark:text-[#7ABBF2]">
             {app.manifest_url}
           </a>
           <p className="mt-1 text-xs text-muted-foreground">

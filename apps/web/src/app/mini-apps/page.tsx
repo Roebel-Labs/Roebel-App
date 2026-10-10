@@ -37,7 +37,7 @@ export default function MiniAppsLanding() {
   return (
     <main className="min-h-screen bg-background px-4 py-16 text-foreground">
       <div className="mx-auto max-w-4xl">
-        <p className="text-sm font-semibold uppercase tracking-wide text-[#00498B]">Röbel Mini Apps</p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-[#00498B] dark:text-[#7ABBF2]">Röbel Mini Apps</p>
         <h1 className="mt-2 font-heading text-4xl font-bold leading-tight md:text-5xl">
           Bau eine App für Röbel.
         </h1>
@@ -54,9 +54,15 @@ export default function MiniAppsLanding() {
               {w.prompt && (
                 <code className="mt-3 block break-words rounded-md bg-muted p-3 text-xs leading-relaxed">{w.prompt}</code>
               )}
-              <Link href={w.href} className="mt-4 text-sm font-semibold text-[#00498B] underline dark:text-[#7ABBF2]">
-                {w.cta}
-              </Link>
+              {w.href.endsWith(".md") ? (
+                <a href={w.href} className="mt-4 text-sm font-semibold text-[#00498B] underline dark:text-[#7ABBF2]">
+                  {w.cta}
+                </a>
+              ) : (
+                <Link href={w.href} className="mt-4 text-sm font-semibold text-[#00498B] underline dark:text-[#7ABBF2]">
+                  {w.cta}
+                </Link>
+              )}
             </div>
           ))}
         </div>

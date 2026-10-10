@@ -76,9 +76,9 @@ export default function MiniAppDevelopersPage() {
             Claude Code und Codex.
           </p>
           <p>
-            <Link href="/mini-apps/publish.md" className="font-medium text-primary hover:underline">
+            <a href="/mini-apps/publish.md" className="font-medium text-primary hover:underline">
               → Anleitung (publish.md)
-            </Link>
+            </a>
           </p>
         </Door>
 
