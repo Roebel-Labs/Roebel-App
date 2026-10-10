@@ -29,12 +29,33 @@ function storeFields(p: ParsedManifestFile) {
   };
 }
 
+async function hostIsPublic(host: string): Promise<boolean> {
+  const addrs = (await dnsLookup(host, { all: true })).map((a) => a.address);
+  return addrs.length > 0 && !addrs.some(isBlockedIp);
+}
+
+/** Header-only check of homeUrl; every redirect hop is re-validated (https + public IP). */
 async function embedWarnings(homeUrl: string): Promise<string[]> {
   try {
-    const host = new URL(homeUrl).hostname;
-    const addrs = (await dnsLookup(host, { all: true })).map((a) => a.address);
-    if (addrs.some(isBlockedIp)) return [];
-    const res = await fetch(homeUrl, { redirect: "follow", signal: AbortSignal.timeout(5000) });
+    const signal = AbortSignal.timeout(5000);
+    let current = new URL(homeUrl);
+    let res: Response | null = null;
+    for (let hop = 0; hop <= 3; hop++) {
+      if (current.protocol !== "https:" || !(await hostIsPublic(current.hostname))) {
+        return [hop === 0 ? "homeUrl ist nicht öffentlich erreichbar." : "homeUrl leitet auf eine nicht öffentliche Adresse weiter."];
+      }
+      res = await fetch(current, { redirect: "manual", signal });
+      const loc = res.headers.get("location");
+      if (res.status >= 300 && res.status < 400 && loc) {
+        await res.body?.cancel();
+        current = new URL(loc, current);
+        res = null;
+        continue;
+      }
+      break;
+    }
+    if (!res) return ["homeUrl leitet zu oft weiter."];
+    await res.body?.cancel();
     const out: string[] = [];
     const xfo = (res.headers.get("x-frame-options") ?? "").toLowerCase();
     if (xfo === "deny" || xfo === "sameorigin") {
@@ -61,19 +82,21 @@ export async function validateOrigin(input: string) {
 
 async function loadExisting(origin: string) {
   const supabase = db();
-  const { data: app } = await supabase
+  const { data: app, error: appErr } = await supabase
     .from("mini_apps")
     .select("*, developers(wallet)")
     .eq("origin", origin)
     .maybeSingle();
+  if (appErr) throw new MiniAppError("internal", appErr.message);
   if (!app) return null;
-  const { data: latest } = await supabase
+  const { data: latest, error: latestErr } = await supabase
     .from("mini_app_versions")
     .select("manifest_hash")
     .eq("mini_app_id", app.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (latestErr) throw new MiniAppError("internal", latestErr.message);
   const wallet = (app.developers as { wallet: string } | null)?.wallet ?? null;
   return {
     row: app as MiniAppRow,

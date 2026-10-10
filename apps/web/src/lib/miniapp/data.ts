@@ -307,8 +307,15 @@ export async function reviewApp(
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
   const supabase = db();
+  // Rejecting a staged update on a live app keeps it live (no transient unlisting).
   const nextStatus: MiniAppStatus =
-    decision === "approve" ? "live" : decision === "reset" ? "pending" : "rejected";
+    decision === "approve"
+      ? "live"
+      : decision === "reset"
+        ? "pending"
+        : app.status === "live" && app.pending_update
+          ? "live"
+          : "rejected";
 
   const { data: updated, error } = await supabase
     .from("mini_apps")
@@ -376,10 +383,6 @@ export async function reviewApp(
       permissions: m.permissions,
       primary_color: m.primaryColor,
     });
-  }
-  // A live app whose update was rejected stays live.
-  if (decision === "reject" && app.status === "live" && app.pending_update) {
-    patch.status = "live";
   }
   const { data: final, error: finErr } = await supabase
     .from("mini_apps")
