@@ -18,6 +18,7 @@ import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
 import { ContentSection } from "@/components/mini-apps/ContentSection";
 import { ImagesSection } from "@/components/mini-apps/ImagesSection";
 import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
+import { IndexedSourceCard } from "@/components/mini-apps/IndexedSourceCard";
 import { ManifestForm } from "@/components/mini-apps/ManifestForm";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
@@ -83,6 +84,8 @@ export default function BuilderMiniAppDetail({
         </div>
       </PageHeader>
 
+      {app.origin && <IndexedSourceCard app={app} wallet={wallet ?? null} onReindexed={refresh} />}
+
       {app.status === "rejected" && app.review_notes && (
         <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           <p className="font-medium">Abgelehnt</p>
@@ -125,9 +128,15 @@ export default function BuilderMiniAppDetail({
         <DetailCard
           title="Manifest"
           action={
-            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Bearbeiten
-            </Button>
+            app.origin ? (
+              <span className="text-xs text-muted-foreground">
+                Bearbeite das Manifest auf deiner Domain und lade es neu.
+              </span>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Bearbeiten
+              </Button>
+            )
           }
         >
           <div className="flex items-start gap-3">

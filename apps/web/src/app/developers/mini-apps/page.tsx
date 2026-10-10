@@ -4,7 +4,7 @@
 // Server component, statically rendered.
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Blocks, Bot, FileCode2, Globe, Sparkles, TerminalSquare } from "lucide-react";
+import { Blocks, Bot, FileCode2, Globe, Link2, Sparkles, TerminalSquare } from "lucide-react";
 import { DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
 import { LOVABLE_PROMPT } from "@/lib/miniapp/buildSnippets";
@@ -69,6 +69,19 @@ export default function MiniAppDevelopersPage() {
       </div>
 
       <div className="space-y-4">
+        <Door icon={Link2} title="Eigenes Hosting + Manifest">
+          <p>
+            Deploy auf Vercel, Netlify oder Lovable, Manifest unter
+            /.well-known/roebel-miniapp.json ablegen, mit einem Aufruf registrieren. Ideal für
+            Claude Code und Codex.
+          </p>
+          <p>
+            <Link href="/mini-apps/publish.md" className="font-medium text-primary hover:underline">
+              → Anleitung (publish.md)
+            </Link>
+          </p>
+        </Door>
+
         <Door icon={Sparkles} title="1 · KI-Baukasten (am schnellsten)">
           <p>
             Beschreibe deine Idee im Chat — oder lade ein Mockup, einen Screenshot oder ein Logo

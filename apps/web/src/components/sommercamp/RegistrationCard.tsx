@@ -2,8 +2,8 @@
 
 // Registration = wallet onboarding: connect with the Röbel App account
 // (thirdweb in-app wallet), then name/age + consents. Submitting creates the
-// developer row and opens the KI-Baukasten directly — das Sommer Camp läuft
-// bereits (6 Wochen-Runden über die Sommerferien), daher kein Countdown mehr.
+// developer row and points to the /mini-apps landing page (all Mini App
+// info lives there now).
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2 } from "lucide-react";
@@ -14,19 +14,18 @@ import { wallets } from "@/lib/wallet-config";
 
 type Status = "checking" | "form" | "registered";
 
-// Nach der Anmeldung direkt in den KI-Baukasten: das Sommer Camp läuft bereits
-// (6 Wochen-Runden über die Sommerferien), daher kein Countdown mehr.
+// After registration: link to the /mini-apps landing page.
 function StartGate() {
   return (
     <>
       <p className="text-base text-[#3D4E68]">
-        Das Sommer Camp läuft — leg direkt los und bau deine Mini-App.
+        Danke für deine Anmeldung! Alles rund um Mini-Apps findest du jetzt auf einer eigenen Seite.
       </p>
       <Link
-        href="/dashboard/mini-apps?welcome=sommercamp"
+        href="/mini-apps"
         className="mt-1 rounded-full bg-[#00498B] px-6 py-3 text-base font-bold text-white"
       >
-        Zum KI-Baukasten
+        Zu den Röbel Mini Apps
       </Link>
     </>
   );

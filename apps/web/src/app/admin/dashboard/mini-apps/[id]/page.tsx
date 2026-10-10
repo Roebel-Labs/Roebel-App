@@ -31,12 +31,45 @@ import {
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
 import { ContentSection } from "@/components/mini-apps/ContentSection";
 import { ImagesSection } from "@/components/mini-apps/ImagesSection";
+import { IndexedSourceCard } from "@/components/mini-apps/IndexedSourceCard";
 import { ManifestForm } from "@/components/mini-apps/ManifestForm";
 import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
 import { Playground } from "@/components/mini-apps/Playground";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import type { MiniAppRow, MiniAppVersionRow } from "@/lib/miniapp/types";
 import { timeAgo } from "@/components/admin/muenzen/format";
+
+// Manifest keys (camelCase, as stored on a version) <-> live row columns.
+const DIFF_FIELDS: { label: string; key: string; col: keyof MiniAppRow }[] = [
+  { label: "Name", key: "name", col: "name" },
+  { label: "Beschreibung", key: "description", col: "description" },
+  { label: "Icon", key: "iconUrl", col: "icon_url" },
+  { label: "Start-URL", key: "homeUrl", col: "home_url" },
+  { label: "Kategorie", key: "category", col: "category" },
+  { label: "Tags", key: "tags", col: "tags" },
+  { label: "Screenshots", key: "screenshots", col: "screenshots" },
+  { label: "Berechtigungen", key: "permissions", col: "permissions" },
+  { label: "Primärfarbe", key: "primaryColor", col: "primary_color" },
+];
+
+function fmtVal(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "–";
+  return typeof v === "string" ? v : JSON.stringify(v);
+}
+
+function pendingDiff(app: MiniAppRow, versions: MiniAppVersionRow[]) {
+  const latest = versions
+    .filter((v) => v.status === "pending")
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  if (!latest) return [];
+  const raw = latest.manifest as Record<string, unknown>;
+  const m = (raw.miniapp && typeof raw.miniapp === "object" ? raw.miniapp : raw) as Record<string, unknown>;
+  return DIFF_FIELDS.flatMap((f) => {
+    const oldV = fmtVal(app[f.col]);
+    const newV = fmtVal(m[f.key]);
+    return oldV === newV ? [] : [{ label: f.label, oldV, newV }];
+  });
+}
 
 const nf = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 
@@ -58,6 +91,7 @@ export default function MiniAppAdminDetail({
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editingManifest, setEditingManifest] = useState(false);
+  const [ownerWallet, setOwnerWallet] = useState("");
 
   async function act(label: string, fn: () => Promise<unknown>, successMessage?: string) {
     setBusy(label);
@@ -97,6 +131,29 @@ export default function MiniAppAdminDetail({
         <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {actionError}
         </div>
+      )}
+
+      {app.origin && <IndexedSourceCard app={app} wallet={null} onReindexed={refresh} admin />}
+
+      {app.pending_update && (
+        <DetailCard title="Änderungen">
+          {(() => {
+            const diff = pendingDiff(app, data?.versions ?? []);
+            return diff.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Keine sichtbaren Feldunterschiede.</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {diff.map((d) => (
+                  <li key={d.label} className="break-words">
+                    <span className="font-medium">{d.label}:</span>{" "}
+                    <span className="text-muted-foreground line-through">{d.oldV}</span>{" "}
+                    → <span>{d.newV}</span>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </DetailCard>
       )}
 
       {/* Review actions */}
@@ -205,6 +262,31 @@ export default function MiniAppAdminDetail({
 
         <DetailCard title="Steuerung">
           <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Besitzer ändern (0x…)"
+                value={ownerWallet}
+                onChange={(e) => setOwnerWallet(e.target.value)}
+                className="h-9 font-mono text-xs"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy != null || !/^0x[0-9a-fA-F]{40}$/.test(ownerWallet.trim())}
+                onClick={() =>
+                  act(
+                    "owner",
+                    async () => {
+                      await miniAppWrite("owner", "POST", { id: app.id, wallet: ownerWallet.trim() });
+                      setOwnerWallet("");
+                    },
+                    "Besitzer geändert.",
+                  )
+                }
+              >
+                Besitzer ändern
+              </Button>
+            </div>
             <Button
               size="sm"
               variant="outline"

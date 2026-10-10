@@ -4,10 +4,10 @@
 // left, inbox + settings top right, welcome headline, usage charts and metric
 // cards. Everything that is not data or the Build-with-AI CTA lives in the
 // settings dialog; the inbox guides the way to a fully published app.
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Area,
   AreaChart,
@@ -23,12 +23,10 @@ import {
   ChevronsUpDown,
   Globe,
   Info,
-  PartyPopper,
   Plus,
   Settings,
   Sparkles,
   Upload,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -42,6 +40,7 @@ import {
   type SettingsSection,
 } from "@/components/mini-apps/dashboard/SettingsDialog";
 import { InboxDialog, deriveTasks } from "@/components/mini-apps/dashboard/InboxDialog";
+import { AddByUrlDialog } from "@/components/mini-apps/AddByUrlDialog";
 import { AppBuilderBanner } from "@/components/mini-apps/dashboard/AppBuilderBanner";
 import type { AnalyticsRange, MiniAppRow } from "@/lib/miniapp/types";
 
@@ -55,35 +54,6 @@ const RANGES: { key: AnalyticsRange; label: string }[] = [
 ];
 
 const nf = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
-
-// Sommer-Camp-Teilnehmer landen nach der Anmeldung mit ?welcome=sommercamp hier.
-function SommercampWelcome() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  if (searchParams.get("welcome") !== "sommercamp") return null;
-  return (
-    <Card className="mb-6 flex items-center gap-3 border-[#FFD84D] bg-[#FFD84D]/15 p-4">
-      <PartyPopper className="h-5 w-5 shrink-0 text-[#00498B]" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">Willkommen beim Sommer Camp!</p>
-        <p className="text-xs text-muted-foreground">
-          Du bist angemeldet. Erstelle jetzt deine erste Mini-App mit KI.
-        </p>
-      </div>
-      <Link href="/editor">
-        <Button size="sm">Mit KI erstellen</Button>
-      </Link>
-      <button
-        type="button"
-        aria-label="Hinweis schließen"
-        onClick={() => router.replace("/dashboard/mini-apps")}
-        className="shrink-0 text-muted-foreground hover:text-foreground"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </Card>
-  );
-}
 
 function InfoTip({ text }: { text: string }) {
   return (
@@ -145,6 +115,7 @@ function MiniArea({ data, dataKey }: { data: object[]; dataKey: string }) {
 }
 
 export default function MiniAppDashboard() {
+  const router = useRouter();
   const wallet = useWalletAddress();
   const { data: listData, loading: listLoading, refresh: refreshList } = useMiniAppApi<{
     apps: MiniAppRow[];
@@ -298,13 +269,15 @@ export default function MiniAppDashboard() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <Suspense fallback={null}>
-          <SommercampWelcome />
-        </Suspense>
-
-        <h1 className="font-heading text-3xl font-bold tracking-tight">
-          Willkommen{app ? `, ${app.name}` : ""}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-heading text-3xl font-bold tracking-tight">
+            Willkommen{app ? `, ${app.name}` : ""}
+          </h1>
+          <AddByUrlDialog
+            wallet={wallet ?? null}
+            onRegistered={(id) => router.push(`/dashboard/mini-apps/${id}`)}
+          />
+        </div>
 
         {/* Range + Rankings row */}
         <div className="mt-6 flex items-center justify-between gap-3">

@@ -21,7 +21,7 @@ import { timeAgo } from "@/components/admin/muenzen/format";
 type Bucket = "pending" | "live" | "all";
 
 const BUCKETS: { key: Bucket; label: string; query: string }[] = [
-  { key: "pending", label: "In Prüfung", query: "status=pending,approved,draft" },
+  { key: "pending", label: "In Prüfung", query: "needsReview=1" },
   { key: "live", label: "Live", query: "status=live" },
   { key: "all", label: "Alle", query: "" },
 ];
@@ -92,6 +92,11 @@ export default function MiniAppReviewQueue() {
                   </p>
                 </div>
                 <StatusBadge status={app.status} />
+                {app.pending_update && (
+                  <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                    Update
+                  </span>
+                )}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Card>
             </Link>
