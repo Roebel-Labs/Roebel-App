@@ -63,9 +63,10 @@ export default function FollowIntroSheet() {
   const save = async () => {
     if (saving || !suggestions) return;
     setSaving(true);
-    await submitFollowSelection(suggestions.map((s) => s.account_id), unticked, 'intro', follow, unfollow);
+    // On failure RelationsContext already shows its own snackbar; keep the sheet open for a retry.
+    const ok = await submitFollowSelection(suggestions.map((s) => s.account_id), unticked, 'intro', follow, unfollow);
     setSaving(false);
-    close();
+    if (ok) close();
   };
 
   const allIds = useMemo(() => (suggestions ?? []).map((s) => s.account_id), [suggestions]);

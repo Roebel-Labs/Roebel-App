@@ -108,12 +108,17 @@ export default function WelcomeConsentScreen() {
       try {
         if (!single && state.followAll.length > 0) {
           // Bounded wait: a hanging request must not hold the person on this screen.
-          await Promise.race([
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const ok = await Promise.race([
             submitFollowSelection(state.followAll, new Set(state.followUnticked), 'onboarding', follow, unfollow),
-            new Promise((resolve) => setTimeout(resolve, 8000)),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(false), 8000);
+            }),
           ]);
+          if (timer) clearTimeout(timer);
+          // Only a confirmed submission retires the intro sheet; otherwise it can offer it again.
+          if (ok) await AsyncStorage.setItem('@roebel/follow-intro-seen', '1');
         }
-        await AsyncStorage.setItem('@roebel/follow-intro-seen', '1');
       } catch (err) {
         console.error('onboarding follows failed (non-fatal):', err);
       }

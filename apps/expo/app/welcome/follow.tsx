@@ -94,7 +94,7 @@ export default function WelcomeFollowScreen() {
         onBack={() => router.back()}
         onNext={() => void next()}
         nextLabel={single ? 'Speichern' : 'Weiter'}
-        nextDisabled={saving || (single && suggestions === null)}
+        nextDisabled={saving || suggestions === null}
       />
     </SafeAreaView>
   );
