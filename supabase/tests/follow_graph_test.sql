@@ -84,4 +84,12 @@ begin
   exception when insufficient_privilege then null;
   end;
 end $$;
+do $$
+begin
+  assert exists (select 1 from information_schema.columns
+    where table_name = 'notification_preferences' and column_name = 'follower_digest_enabled'), 'pref column';
+  assert exists (select 1 from cron.job where jobname = 'follower-digest-weekly'), 'cron job';
+  assert position('account_hides' in pg_get_functiondef('public.notify_user_notification_push()'::regprocedure)) > 0,
+    'push trigger checks mutes';
+end $$;
 rollback;
