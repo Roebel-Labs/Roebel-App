@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
@@ -12,6 +12,7 @@ export default function CreateOrgSuccessScreen() {
   const { colors } = useTheme();
   const { state } = useCreateOrgWizard();
   const { switchAccount } = useAccount();
+  const { safe } = useLocalSearchParams<{ safe?: string }>();
 
   const handleGoToProfile = async () => {
     if (state.newAccountId) {
@@ -34,6 +35,18 @@ export default function CreateOrgSuccessScreen() {
         <Text style={[styles.body, { color: colors.textSecondary }]}>
           Du wirst benachrichtigt, sobald dein Antrag von der Verwaltung genehmigt wurde. Dein Profil erscheint dann in der App.
         </Text>
+
+        {safe === 'requested' && (
+          <Text style={[styles.note, { color: colors.textSecondary }]}>
+            Deine Organisation hat einen eigenen Safe. Die Attester bestätigen sie zusätzlich onchain.
+          </Text>
+        )}
+        {safe === 'failed' && (
+          <Text style={[styles.note, { color: colors.textSecondary }]}>
+            Der Safe für deine Organisation konnte noch nicht erstellt werden. Du kannst das später unter
+            Einstellungen → Onchain-Organisation nachholen.
+          </Text>
+        )}
 
         <Pressable
           onPress={handleGoToProfile}
@@ -73,6 +86,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 40,
+  },
+  note: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: -24,
     marginBottom: 40,
   },
   button: {

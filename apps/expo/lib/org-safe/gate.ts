@@ -1,12 +1,26 @@
 /**
- * Preview fence for the org-Safe settings section: `org_safes_enabled` must be
- * 'true' AND the build must not be on the production update channel (same rule
- * as the passkey preview), AND an OrgRegistry address must be configured.
+ * Rollout gate for org Safes (settings section, create-org step, attester inbox).
+ * An OrgRegistry address must be configured and `org_safes_enabled` must be 'true'.
+ * On the production update channel `org_safes_enabled_production` must ALSO be
+ * 'true': flip it after the preview device pass, no OTA needed. Either key
+ * missing = off.
  */
 import * as Updates from 'expo-updates';
-import { fetchOrgSafesEnabled } from '@/lib/supabase-app-settings';
-import { passkeyPreviewAllowed } from '@/lib/passkey/gate';
+import { fetchOrgSafesEnabled, fetchOrgSafesEnabledProduction } from '@/lib/supabase-app-settings';
 import { orgSafesConfigured } from './chain';
+
+export function orgSafesAllowed(p: {
+  flag: boolean;
+  productionFlag: boolean;
+  channel: string | null | undefined;
+  dev: boolean;
+}): boolean {
+  if (!p.flag) return false;
+  if (p.dev) return true;
+  if (!p.channel) return false;
+  if (p.channel !== 'production') return true;
+  return p.productionFlag;
+}
 
 export async function isOrgSafePreviewAllowed(): Promise<boolean> {
   if (!orgSafesConfigured()) return false;
@@ -17,12 +31,9 @@ export async function isOrgSafePreviewAllowed(): Promise<boolean> {
     channel = null;
   }
   const dev = typeof __DEV__ !== 'undefined' && __DEV__;
-  if (!dev && (!channel || channel === 'production')) return false;
-  let flag = false;
-  try {
-    flag = await fetchOrgSafesEnabled();
-  } catch {
-    flag = false;
-  }
-  return passkeyPreviewAllowed({ flag, channel, dev });
+  const [flag, productionFlag] = await Promise.all([
+    fetchOrgSafesEnabled().catch(() => false),
+    channel === 'production' ? fetchOrgSafesEnabledProduction().catch(() => false) : Promise.resolve(false),
+  ]);
+  return orgSafesAllowed({ flag, productionFlag, channel, dev });
 }

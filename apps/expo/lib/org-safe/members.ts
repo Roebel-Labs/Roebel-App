@@ -4,6 +4,7 @@
  */
 import { supabase } from '../supabase';
 import type { BulkOrg } from './ops';
+import type { OrgRef } from './requests';
 
 export type OwnedOrg = BulkOrg & { name: string };
 
@@ -32,4 +33,13 @@ export async function fetchOwnedOrgsWithOwners(wallet: string): Promise<OwnedOrg
   return orgs
     .map((o) => ({ uuid: o.account_id, name: o.accounts.name, owners: byOrg.get(o.account_id) ?? [me] }))
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
+/** Every organisation (id, name, avatar) — the attester inbox resolves org ids against it. */
+export async function fetchOrgRefs(): Promise<OrgRef[]> {
+  const { data, error } = await (supabase.from('accounts') as any)
+    .select('id, name, avatar_url')
+    .eq('account_type', 'organisation');
+  if (error) throw error;
+  return (data ?? []) as OrgRef[];
 }
