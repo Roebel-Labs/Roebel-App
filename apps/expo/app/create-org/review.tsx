@@ -10,6 +10,13 @@ import { useAccount } from '@/context/AccountContext';
 import { createBusiness } from '@/lib/supabase-businesses';
 import { updateAccount } from '@/lib/supabase-accounts';
 import { createRestaurant } from '@/lib/supabase-restaurants';
+import { useGnosisWallet } from '@/context/GnosisWalletContext';
+import { orgRegistryGnosisAddress } from '@/constants/gnosis';
+import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
+import { createAndRequestCalls } from '@/lib/org-safe/ops';
+import { rememberOrgSafe } from '@/lib/org-safe/chain';
+import { sendOrgCalls } from '@/lib/org-safe/send';
+import type { Address } from 'viem';
 import type { OrgSubType } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
@@ -36,6 +43,7 @@ export default function CreateOrgReviewScreen() {
   const { state, dispatch } = useCreateOrgWizard();
   const { createOrgAccount } = useAccount();
   const account = useActiveAccount();
+  const { gnosisAccount } = useGnosisWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const orgInfo = state.orgType ? ORG_TYPE_LABELS[state.orgType] : null;
@@ -112,8 +120,29 @@ export default function CreateOrgReviewScreen() {
         }
       }
 
-      // 5. Navigate to success
-      router.replace('/create-org/success');
+      // 5. NSP-14: the org's own Safe (owner = creator) + its registration request,
+      //    one sponsored batch. Never blocks the org: on failure the owner retries
+      //    from Einstellungen → Onchain-Organisation.
+      let safe: 'requested' | 'failed' | 'off' = 'off';
+      if (gnosisAccount && (await isOrgSafePreviewAllowed())) {
+        try {
+          const plan = createAndRequestCalls({
+            orgUuid: orgAccount.id,
+            owners: [gnosisAccount.address],
+            executor: gnosisAccount.address,
+            registry: orgRegistryGnosisAddress as Address,
+          });
+          await sendOrgCalls(gnosisAccount, plan.calls);
+          await rememberOrgSafe(plan.orgId, plan.safe);
+          safe = 'requested';
+        } catch (e) {
+          console.error('org Safe creation failed', e);
+          safe = 'failed';
+        }
+      }
+
+      // 6. Navigate to success
+      router.replace({ pathname: '/create-org/success', params: { safe } });
     } catch (error: any) {
       console.error('Org creation error:', error);
       Alert.alert('Fehler', error?.message || 'Organisation konnte nicht erstellt werden.');

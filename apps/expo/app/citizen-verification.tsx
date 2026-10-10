@@ -1,5 +1,5 @@
 // Credential explainer: the account's cards, swipeable, with what each unlocks.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ import { CREDENTIAL_COPY, credentialKindsFor, type BenefitIcon, type CredentialK
 import CredentialCarousel from '@/components/profile/CredentialCarousel';
 import CredentialQrSheet from '@/components/profile/CredentialQrSheet';
 import CompleteCitizenDataBanner from '@/components/profile/CompleteCitizenDataBanner';
+import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
 import VoteIcon from '@/assets/icons/delegate.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import OrgIcon from '@/assets/icons/community.svg';
@@ -56,6 +57,16 @@ export default function CredentialExplainerScreen() {
   const initialKind = requested && kinds.includes(requested) ? requested : kinds[0];
   const [active, setActive] = useState<CredentialKind>(initialKind);
   const [showQr, setShowQr] = useState(false);
+  const [orgInbox, setOrgInbox] = useState(false);
+
+  useEffect(() => {
+    if (!hasAttesterNFT) return;
+    let cancelled = false;
+    isOrgSafePreviewAllowed().then((ok) => !cancelled && setOrgInbox(ok));
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAttesterNFT]);
 
   const citizenRequest = userRequests.find((r: any) => r.nft_type === 'citizen') || null;
   const copy = CREDENTIAL_COPY[active];
@@ -125,6 +136,17 @@ export default function CredentialExplainerScreen() {
               <Text style={[styles.ctaText, { color: colors.onPrimary }]}>{copy.cta.label}</Text>
             </Pressable>
           )}
+
+          {active === 'attester' && orgInbox && (
+            <Pressable
+              onPress={() => router.push('/verification/orgs' as any)}
+              style={({ pressed }) => [styles.secondaryCta, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Organisationen bestätigen"
+            >
+              <Text style={[styles.ctaText, { color: colors.textPrimary }]}>Organisationen bestätigen</Text>
+            </Pressable>
+          )}
         </Animated.View>
       </ScrollView>
 
@@ -148,5 +170,6 @@ const styles = StyleSheet.create({
   benefitTitle: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
   benefitDesc: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter-Regular' },
   cta: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  secondaryCta: { height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   ctaText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
 });

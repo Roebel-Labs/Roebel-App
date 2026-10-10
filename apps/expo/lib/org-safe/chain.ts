@@ -8,6 +8,7 @@ import { createPublicClient, getAddress, http, parseAbiItem, type Address, type 
 import { gnosis } from 'viem/chains';
 import { orgRegistryGnosisAddress, orgRegistryDeployBlock } from '@/constants/gnosis';
 import { orgIdFromUuid, predictOrgSafeAddress, type BulkOrg, type OrgChainState, type OrgRole } from './ops';
+import { selectOpenOrgRequests, type OrgRef, type OrgRequestItem, type RawOrgRequest } from './requests';
 
 const RPC = process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 const client = createPublicClient({ chain: gnosis, transport: http(RPC) });
@@ -17,12 +18,15 @@ const registryAbi = [
   parseAbiItem('function getOrg(bytes32 orgId) view returns ((address safe, uint64 generation, uint64 registeredAt, string metadataURI))'),
   parseAbiItem('function roleOf(bytes32 orgId, address account) view returns (uint8)'),
   parseAbiItem('function openRegistrationOf(address safe) view returns (bool open, uint256 requestId)'),
+  parseAbiItem('function requestCount() view returns (uint256)'),
+  parseAbiItem('function hasVoted(uint256 requestId, address attester) view returns (bool)'),
   parseAbiItem(
     'function getRequest(uint256 requestId) view returns ((uint8 requestType, uint8 status, bytes32 orgId, address safe, address requester, string uri, uint32 approvals, uint32 rejections, uint32 requiredApprovals, uint32 requiredRejections, uint64 createdAt, uint64 expiresAt, uint64 claimGeneration))',
   ),
 ] as const;
 const safeAbi = [
   parseAbiItem('function getOwners() view returns (address[])'),
+  parseAbiItem('function isOwner(address owner) view returns (bool)'),
   parseAbiItem('function getThreshold() view returns (uint256)'),
 ] as const;
 const registrationRequested = parseAbiItem(
@@ -183,4 +187,64 @@ export async function orgsNeedingSafe(orgs: readonly BulkOrg[]): Promise<BulkOrg
     out.push(orgs[i]);
   }
   return out;
+}
+
+/** How far back the inbox reads: requests expire after 30 days, so a few hundred ids is plenty. */
+const INBOX_SCAN = 200;
+
+/**
+ * Open org registration requests for the attester inbox, with this attester's
+ * vote and SelfVote state. `orgs` = every app org (id + name) for the name lookup.
+ */
+export async function readOpenOrgRequests(attester: string, orgs: Map<string, OrgRef>): Promise<OrgRequestItem[]> {
+  const registry = orgRegistryGnosisAddress as Address;
+  const count = Number(
+    await client.readContract({ address: registry, abi: registryAbi, functionName: 'requestCount' }),
+  );
+  if (count === 0) return [];
+  const firstId = Math.max(0, count - INBOX_SCAN);
+  const ids = Array.from({ length: count - firstId }, (_, i) => BigInt(firstId + i));
+  const raw = await client.multicall({
+    contracts: ids.map((id) => ({ address: registry, abi: registryAbi, functionName: 'getRequest', args: [id] }) as const),
+    allowFailure: false,
+  });
+  const requests: RawOrgRequest[] = raw.map((r) => ({
+    requestType: Number(r.requestType),
+    status: Number(r.status),
+    orgId: r.orgId,
+    safe: getAddress(r.safe),
+    approvals: Number(r.approvals),
+    rejections: Number(r.rejections),
+    requiredApprovals: Number(r.requiredApprovals),
+    requiredRejections: Number(r.requiredRejections),
+    expiresAt: Number(r.expiresAt),
+  }));
+  const open = selectOpenOrgRequests({
+    requests,
+    firstId,
+    now: Math.floor(Date.now() / 1000),
+    directory: orgs,
+    voted: new Set(),
+    selfOwned: new Set(),
+  });
+  if (open.length === 0) return [];
+
+  const me = getAddress(attester);
+  const [voted, owned] = await Promise.all([
+    client.multicall({
+      contracts: open.map(
+        (o) => ({ address: registry, abi: registryAbi, functionName: 'hasVoted', args: [BigInt(o.requestId), me] }) as const,
+      ),
+      allowFailure: true,
+    }),
+    client.multicall({
+      contracts: open.map((o) => ({ address: o.safe, abi: safeAbi, functionName: 'isOwner', args: [me] }) as const),
+      allowFailure: true,
+    }),
+  ]);
+  return open.map((o, i) => ({
+    ...o,
+    voted: voted[i].status === 'success' && voted[i].result === true,
+    selfOwned: owned[i].status === 'success' && owned[i].result === true,
+  }));
 }

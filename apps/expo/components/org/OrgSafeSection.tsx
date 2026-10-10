@@ -1,20 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { prepareTransaction, sendBatchTransaction, sendTransaction, waitForReceipt } from 'thirdweb';
 import { useActiveAccount } from 'thirdweb/react';
 import type { Address, Hex } from 'viem';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useGnosisWallet } from '@/context/GnosisWalletContext';
-import { client } from '@/constants/thirdweb';
-import { gnosis, orgRegistryGnosisAddress } from '@/constants/gnosis';
+import { orgRegistryGnosisAddress } from '@/constants/gnosis';
 import BottomDrawer from '@/components/BottomDrawer';
 import { fetchMembersWithProfiles, leaveOrg } from '@/lib/supabase-member-management';
 import type { MemberWithProfile } from '@/lib/types';
 import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
 import { isDeployed, orgsNeedingSafe, readOrgChainState, readOrgSafeStatus, rememberOrgSafe, type OrgSafeStatus } from '@/lib/org-safe/chain';
 import { fetchOwnedOrgsWithOwners, type OwnedOrg } from '@/lib/org-safe/members';
+import { sendOrgCalls } from '@/lib/org-safe/send';
 import {
   createAndRequestCalls,
   isInSync,
@@ -108,12 +107,7 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
 
   const send = async (calls: Call[]) => {
     if (!gnosisAccount) throw new Error('Kein Wallet verbunden');
-    const txs = calls.map((c) => prepareTransaction({ to: c.to, data: c.data, chain: gnosis, client }));
-    const result =
-      txs.length === 1
-        ? await sendTransaction({ transaction: txs[0], account: gnosisAccount })
-        : await sendBatchTransaction({ transactions: txs, account: gnosisAccount });
-    await waitForReceipt(result);
+    await sendOrgCalls(gnosisAccount, calls);
   };
 
   const run = async (kind: NonNullable<typeof busy>, fn: () => Promise<void>) => {
