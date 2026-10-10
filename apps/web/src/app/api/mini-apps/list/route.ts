@@ -1,5 +1,6 @@
 // GET /api/mini-apps/list — registry listing.
 //   ?status=live|pending|...   (repeatable via comma)
+//   ?needsReview=1 (admin: review queue incl. live apps with pending updates)
 //   ?category=...  ?featured=1  ?search=...  ?developer=<uuid>  ?mine=1
 // Public callers get live apps only. Admins/owners can request any status.
 import { NextResponse } from "next/server";
@@ -49,8 +50,13 @@ export async function GET(req: Request) {
       status = canSeeAll ? undefined : "live";
     }
 
+    // Admin review queue: pending/approved/draft plus live apps with a staged update.
+    const needsReview = canSeeAll && isAdmin && getParam(req, "needsReview") === "1";
+    if (needsReview) status = undefined;
+
     const apps = await listApps({
       status,
+      needsReview: needsReview || undefined,
       category: category as never,
       featured: featured === "1" ? true : featured === "0" ? false : undefined,
       search,

@@ -108,6 +108,9 @@ export async function getDeveloperByWallet(wallet: string): Promise<DeveloperRow
 export async function listApps(filter: ListAppsFilter = {}): Promise<MiniAppRow[]> {
   let q = db().from("mini_apps").select("*").order("updated_at", { ascending: false });
 
+  if (filter.needsReview) {
+    q = q.or("status.in.(pending,approved,draft),pending_update.eq.true");
+  }
   if (filter.status) {
     if (Array.isArray(filter.status)) q = q.in("status", filter.status);
     else q = q.eq("status", filter.status);
@@ -313,6 +316,7 @@ export async function reviewApp(
       status: nextStatus,
       review_notes: notes ?? null,
       updated_at: new Date().toISOString(),
+      ...(decision === "reset" ? { pending_update: false } : {}),
     })
     .eq("id", id)
     .select("*")
@@ -340,7 +344,7 @@ export async function reviewApp(
   // Settle the latest pending version too.
   const { data: pending } = await supabase
     .from("mini_app_versions")
-    .select("id")
+    .select("id, manifest")
     .eq("mini_app_id", id)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
@@ -357,7 +361,34 @@ export async function reviewApp(
       .eq("id", (pending as { id: string }).id);
   }
 
-  return updated as MiniAppRow;
+  // Indexed apps: store fields only change on approval of a version (spec §5).
+  const patch: Record<string, unknown> = { pending_update: false };
+  if (decision === "approve" && app.source === "indexed" && pending?.manifest) {
+    const m = validateManifest(pending.manifest);
+    Object.assign(patch, {
+      name: m.name,
+      icon_url: m.iconUrl || null,
+      home_url: m.homeUrl,
+      description: m.description || null,
+      category: m.category,
+      tags: m.tags,
+      screenshots: m.screenshots,
+      permissions: m.permissions,
+      primary_color: m.primaryColor,
+    });
+  }
+  // A live app whose update was rejected stays live.
+  if (decision === "reject" && app.status === "live" && app.pending_update) {
+    patch.status = "live";
+  }
+  const { data: final, error: finErr } = await supabase
+    .from("mini_apps")
+    .update(patch)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (finErr) throw new MiniAppError("internal", finErr.message);
+  return final as MiniAppRow;
 }
 
 export async function setRewardBudget(id: string, budget: number): Promise<MiniAppRow> {
@@ -378,6 +409,19 @@ export async function toggleFeatured(id: string, featured: boolean): Promise<Min
   const { data, error } = await db()
     .from("mini_apps")
     .update({ featured, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new MiniAppError("internal", error.message);
+  return data as MiniAppRow;
+}
+
+/** Admin: hand an app to another developer wallet (indexed-origin takeovers). */
+export async function setAppOwner(id: string, wallet: string): Promise<MiniAppRow> {
+  const dev = await getOrCreateDeveloper(wallet);
+  const { data, error } = await db()
+    .from("mini_apps")
+    .update({ developer_id: dev.id, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();
