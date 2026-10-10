@@ -73,7 +73,8 @@ test("canonicalHash ignores key order and whitespace", () => {
 test("slugify", () => {
   assert.equal(slugify("Stadtstack Spiel!"), "stadtstack-spiel");
   assert.equal(slugify("Röbel Größe"), "roebel-groesse");
-  assert.equal(slugify("  --A--  "), "a");
+  assert.equal(slugify("  --A--  "), "a-app");
+  assert.equal(slugify("X"), "x-app");
   assert.equal(slugify("x".repeat(80)).length, 60);
   assert.equal(slugify("!!!"), "app");
 });

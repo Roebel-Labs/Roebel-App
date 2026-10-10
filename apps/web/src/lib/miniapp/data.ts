@@ -205,6 +205,12 @@ export async function updateAppManifest(
 ): Promise<MiniAppRow> {
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
+  if (app.origin) {
+    throw new MiniAppError(
+      "invalid_params",
+      `Diese App wird über ihr Manifest auf ${app.origin} gepflegt. Bearbeite /.well-known/roebel-miniapp.json und lade es neu (register bzw. register_app_url).`,
+    );
+  }
   const m = validateManifest(manifest);
   const supabase = db();
 
@@ -264,7 +270,7 @@ async function nextVersionLabel(miniAppId: string): Promise<string> {
 
 export async function createVersion(
   miniAppId: string,
-  input: { version: string; homeUrl: string; manifest: unknown },
+  input: { version: string; homeUrl: string; manifest: unknown; manifestHash?: string },
 ): Promise<MiniAppVersionRow> {
   const { data, error } = await db()
     .from("mini_app_versions")
@@ -274,6 +280,7 @@ export async function createVersion(
       home_url: input.homeUrl,
       manifest: (input.manifest ?? {}) as Record<string, unknown>,
       status: "pending",
+      ...(input.manifestHash ? { manifest_hash: input.manifestHash } : {}),
     })
     .select("*")
     .single();
@@ -307,6 +314,19 @@ export async function reviewApp(
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
   const supabase = db();
+  // Indexed apps: validate the pending manifest BEFORE any write so a bad
+  // manifest fails without side effects.
+  if (decision === "approve" && app.source === "indexed") {
+    const { data: pre } = await supabase
+      .from("mini_app_versions")
+      .select("manifest")
+      .eq("mini_app_id", id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (pre?.manifest) validateManifest(pre.manifest);
+  }
   // Rejecting a staged update on a live app keeps it live (no transient unlisting).
   const nextStatus: MiniAppStatus =
     decision === "approve"

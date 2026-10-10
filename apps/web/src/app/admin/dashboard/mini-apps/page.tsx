@@ -93,7 +93,7 @@ export default function MiniAppReviewQueue() {
                 </div>
                 <StatusBadge status={app.status} />
                 {app.pending_update && (
-                  <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                  <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                     Update
                   </span>
                 )}

@@ -39,7 +39,9 @@ export function IndexedSourceCard({
           ? "Keine Änderungen am Manifest."
           : body.app.pending_update
             ? "Neue Version erkannt — geht nach der Prüfung live."
-            : "Manifest übernommen.",
+            : body.app.status === "pending"
+              ? "Manifest übernommen — die App ist wieder in Prüfung."
+              : "Manifest übernommen.",
       );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));

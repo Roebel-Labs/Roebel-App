@@ -52,7 +52,7 @@ export function planIndex(
   }
   if (existing.latestHash === hash) return { kind: "touch" };
   if (existing.status === "live") return { kind: "stage-version", markPendingUpdate: true };
-  if (existing.status === "rejected" || existing.status === "suspended") {
+  if (existing.status === "suspended") {
     return { kind: "stage-version", markPendingUpdate: false };
   }
   return { kind: "update-direct" };

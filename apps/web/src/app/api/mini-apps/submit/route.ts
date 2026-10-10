@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const app = await submitApp({
       manifest: body.manifest,
       developerId: dev.id,
-      source: body.source,
+      source: body.source === "ai_builder" ? "ai_builder" : "external",
       version: body.version,
     });
     return NextResponse.json({ app }, { status: 201 });

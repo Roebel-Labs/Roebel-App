@@ -201,7 +201,13 @@ export default function BuilderMiniAppDetail({
       <ContentSection app={app} wallet={wallet} />
 
       {/* Icon + Store-Artwork + Store-Vorschau — Upload, KI-Generierung, Screenshots */}
-      <ImagesSection app={app} wallet={wallet ?? null} onChanged={refresh} />
+      {app.origin ? (
+        <p className="text-sm text-muted-foreground">
+          Icon und Vorschaubilder kommen aus deinem Manifest (iconUrl, screenshots).
+        </p>
+      ) : (
+        <ImagesSection app={app} wallet={wallet ?? null} onChanged={refresh} />
+      )}
 
       {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
       <NotificationsSection app={app} wallet={wallet ?? null} />

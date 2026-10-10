@@ -35,7 +35,8 @@ export function slugify(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .replace(/-+$/g, "");
-  return s || "app";
+  if (!s) return "app";
+  return s.length < 2 ? `${s}-app` : s;
 }
 
 export function parseManifestFile(raw: unknown, origin: string): ParsedManifestFile {

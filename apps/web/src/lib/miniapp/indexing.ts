@@ -124,12 +124,12 @@ async function nextVersion(appId: string): Promise<string> {
 }
 
 async function addVersion(appId: string, parsed: ParsedManifestFile, slug: string, hash: string) {
-  const v = await createVersion(appId, {
+  await createVersion(appId, {
     version: await nextVersion(appId),
     homeUrl: parsed.manifest.homeUrl,
     manifest: { ...parsed.manifest, slug },
+    manifestHash: hash,
   });
-  await db().from("mini_app_versions").update({ manifest_hash: hash }).eq("id", v.id);
 }
 
 /** Mark a known origin's last index as failed without touching anything else. */

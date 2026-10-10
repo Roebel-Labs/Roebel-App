@@ -51,10 +51,12 @@ test("changed + live → stage version, mark pending update", () => {
   assert.deepEqual(planIndex(existing({ status: "live" }), parsed(), "h2"), { kind: "stage-version", markPendingUpdate: true });
 });
 
-test("changed + rejected/suspended → stage version only", () => {
-  for (const status of ["rejected", "suspended"] as const) {
-    assert.deepEqual(planIndex(existing({ status }), parsed(), "h2"), { kind: "stage-version", markPendingUpdate: false });
-  }
+test("changed + rejected → update-direct (resubmit)", () => {
+  assert.deepEqual(planIndex(existing({ status: "rejected" }), parsed(), "h2"), { kind: "update-direct" });
+});
+
+test("changed + suspended → stage version only", () => {
+  assert.deepEqual(planIndex(existing({ status: "suspended" }), parsed(), "h2"), { kind: "stage-version", markPendingUpdate: false });
 });
 
 test("different owner → conflict", () => {
