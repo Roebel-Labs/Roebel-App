@@ -484,6 +484,9 @@ export default function NostrIdentityScreen() {
                   Tipp: Nach dem Einfügen die Zwischenablage leeren (etwas anderes kopieren).
                 </Text>
               )}
+              <Text style={[styles.buttonNote, { color: colors.textSecondary, marginTop: 10 }]}>
+                Folgen und Stummschaltungen werden mitgenommen. Änderungen in anderen Nostr-Apps übernimmt die Röbel-App noch nicht.
+              </Text>
             </View>
           </>
         )}

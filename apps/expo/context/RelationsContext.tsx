@@ -9,6 +9,7 @@ import {
 } from '@/lib/relations-state';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { createSerialRunner } from '@/lib/serial-runner';
+import { hasPendingSocialLists, publishSocialLists } from '@/lib/nostr/social-lists';
 
 type FollowSource = 'onboarding' | 'manual' | 'intro';
 type Ctx = {
@@ -53,6 +54,11 @@ export function RelationsProvider({ children }: { children: React.ReactNode }) {
         snapRef.current = res.data;
         setSnapshot(res.data);
         void saveCachedSnapshot(wallet, res.data);
+        // Retry path: a previous social-list publish never reached the relay.
+        const fresh = res.data;
+        void hasPendingSocialLists().then((pending) => {
+          if (pending && !cancelled && walletRef.current === wallet) void publishSocialLists(fresh);
+        });
       } catch { /* keep the cached snapshot */ }
     })();
     return () => { cancelled = true; };
@@ -78,6 +84,7 @@ export function RelationsProvider({ children }: { children: React.ReactNode }) {
       snapRef.current = res.data;
       setSnapshot(res.data);
       void saveCachedSnapshot(wallet, res.data);
+      void publishSocialLists(res.data);
       void queryClient.invalidateQueries({ queryKey: ['feed', 'posts'] });
       return true;
     });
