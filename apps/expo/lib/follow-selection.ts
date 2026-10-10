@@ -6,6 +6,11 @@ export function splitSelection(all: string[], unticked: Set<string>): { follow: 
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+/** Organisations first, people after; the server's ranking is kept within each group (stable sort). */
+export function orgsFirst<T extends { account_type: string }>(list: T[]): T[] {
+  return [...list].sort((a, b) => Number(b.account_type === 'organisation') - Number(a.account_type === 'organisation'));
+}
+
 export function filterSuggestions(list: FollowSuggestion[], query: string): FollowSuggestion[] {
   const q = fold(query.trim());
   return q ? list.filter((s) => fold(s.name).includes(q)) : list;

@@ -1,4 +1,4 @@
-import { splitSelection, filterSuggestions, submitFollowSelection } from '../follow-selection';
+import { splitSelection, filterSuggestions, submitFollowSelection, orgsFirst } from '../follow-selection';
 
 describe('follow-selection', () => {
   it('everything ticked by default; unticked become explicit unfollows', () => {
@@ -36,5 +36,17 @@ describe('submitFollowSelection', () => {
     const follow = jest.fn().mockRejectedValue(new Error('boom'));
     expect(await submitFollowSelection(ids, new Set(), 'onboarding', follow, jest.fn())).toBe(false);
     spy.mockRestore();
+  });
+});
+
+describe('orgsFirst', () => {
+  it('puts organisations before people and keeps the ranking within each group', () => {
+    const list = [
+      { account_id: 'p1', account_type: 'personal' },
+      { account_id: 'o1', account_type: 'organisation' },
+      { account_id: 'p2', account_type: 'personal' },
+      { account_id: 'o2', account_type: 'organisation' },
+    ];
+    expect(orgsFirst(list).map((s) => s.account_id)).toEqual(['o1', 'o2', 'p1', 'p2']);
   });
 });

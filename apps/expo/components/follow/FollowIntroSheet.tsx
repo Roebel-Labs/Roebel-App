@@ -91,7 +91,7 @@ export default function FollowIntroSheet() {
   if (!suggestions) return null;
 
   return (
-    <BottomDrawer visible={visible} onClose={close} snapPoint={0.7}>
+    <BottomDrawer visible={visible} onClose={close} snapPoint={0.7} contentPaddingHorizontal={16}>
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Neu: Folgen & Stummschalten</Text>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
@@ -124,8 +124,8 @@ export default function FollowIntroSheet() {
 }
 
 const styles = StyleSheet.create({
-  content: { flex: 1, paddingHorizontal: 20, paddingBottom: 16 },
-  title: { fontSize: 20, fontFamily: 'Inter-Bold', marginBottom: 6 },
+  content: { flex: 1, paddingBottom: 16 },
+  title: { fontSize: 20, lineHeight: 26, fontFamily: 'Inter-Bold', marginBottom: 2 },
   body: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 12 },
   list: { flex: 1 },
   button: { borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 },

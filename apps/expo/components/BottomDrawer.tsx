@@ -37,6 +37,8 @@ type Props = {
    * their layout.
    */
   keyboardAware?: boolean;
+  /** Horizontal content padding. Defaults to 24; full-width lists can pass 16. */
+  contentPaddingHorizontal?: number;
 };
 
 export default function BottomDrawer({
@@ -46,6 +48,7 @@ export default function BottomDrawer({
   snapPoint,
   maxSnapPoint = 0.92,
   keyboardAware = false,
+  contentPaddingHorizontal,
 }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -173,6 +176,7 @@ export default function BottomDrawer({
             style={[
               isDynamic ? styles.contentDynamic : styles.content,
               { paddingBottom: bottomPadding },
+              contentPaddingHorizontal !== undefined && { paddingHorizontal: contentPaddingHorizontal },
             ]}
           >
             {children}

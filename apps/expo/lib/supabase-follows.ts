@@ -1,3 +1,4 @@
+import { orgsFirst } from './follow-selection';
 import { supabase } from './supabase';
 import { pickDisplayName } from './post-author';
 
@@ -9,7 +10,7 @@ export type FollowSuggestion = {
 export async function fetchFollowSuggestions(): Promise<FollowSuggestion[]> {
   const { data, error } = await supabase.rpc('get_follow_suggestions');
   if (error) { console.error('get_follow_suggestions failed', error); return []; }
-  return (data ?? []) as FollowSuggestion[];
+  return orgsFirst((data ?? []) as FollowSuggestion[]);
 }
 
 export async function fetchFollowStats(accountId: string): Promise<{ followers: number; following: number }> {
