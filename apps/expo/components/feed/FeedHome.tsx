@@ -42,6 +42,7 @@ import RepostDrawer from './RepostDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
+import FollowIntroSheet from '@/components/follow/FollowIntroSheet';
 import MailIcon from '@/assets/icons/mail-01.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
@@ -716,6 +717,8 @@ export default function FeedHome() {
         onRepost={handleConfirmRepost}
         onQuote={handleQuote}
       />
+
+      <FollowIntroSheet />
 
       <ConfirmationDrawer
         visible={deleteConfirmVisible}

@@ -43,12 +43,12 @@ export default function WelcomeCitizenDataScreen() {
         address: address.trim(),
       },
     });
-    router.push('/welcome/consent' as any);
+    router.push('/welcome/follow' as any);
   };
 
   const handleSkip = () => {
     dispatch({ type: 'SET_CITIZEN_DATA', payload: null });
-    router.push('/welcome/consent' as any);
+    router.push('/welcome/follow' as any);
   };
 
   return (
@@ -61,7 +61,7 @@ export default function WelcomeCitizenDataScreen() {
         showsVerticalScrollIndicator={false}
         extraScrollHeight={100}
       >
-        <StoryProgress step={3} totalSteps={4} />
+        <StoryProgress step={3} totalSteps={5} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Werde verifizierte:r Bürger:in</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Mit diesen Angaben startet dein Bürger-Antrag automatisch. Sie bleiben auf deinem Gerät —

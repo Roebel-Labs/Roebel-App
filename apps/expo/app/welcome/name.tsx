@@ -80,7 +80,7 @@ export default function WelcomeNameScreen() {
         enableOnAndroid
         showsVerticalScrollIndicator={false}
       >
-        {!single && <StoryProgress step={1} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />}
+        {!single && <StoryProgress step={1} totalSteps={state.preferredRole === 'buerger' ? 5 : 4} />}
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie heißt du?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Dein Name erscheint auf deinem Profil. Du kannst ihn später jederzeit ändern.
