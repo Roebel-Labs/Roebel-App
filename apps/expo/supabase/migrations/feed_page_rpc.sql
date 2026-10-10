@@ -119,11 +119,14 @@ begin
 end;
 $$;
 
+drop function if exists public.get_feed_page(text, integer, integer, text);
+
 create or replace function public.get_feed_page(
   p_feed_type text,
   p_page integer default 0,
   p_page_size integer default 15,
-  p_wallet text default null
+  p_wallet text default null,
+  p_exclude_account_ids uuid[] default null
 )
 returns jsonb
 language plpgsql
@@ -142,13 +145,25 @@ declare
   v_posts jsonb := '[]'::jsonb;
   v_liked jsonb := '[]'::jsonb;
   v_reposted jsonb := '[]'::jsonb;
+  v_hide uuid[] := coalesce(p_exclude_account_ids, '{}');
+  v_hide_wallets text[] := '{}';
 begin
+  -- Legacy posts carry no account_id: hide them by the owner wallet of an excluded PERSONAL account.
+  if cardinality(v_hide) > 0 then
+    select coalesce(array_agg(distinct lower(ao.wallet_address)), '{}') into v_hide_wallets
+    from public.account_owners ao
+    join public.accounts a on a.id = ao.account_id and a.account_type = 'personal'
+    where ao.account_id = any (v_hide);
+  end if;
+
   -- array_agg has no implicit input order — the subquery's ORDER BY is not
   -- guaranteed to survive into the aggregate, so order explicitly inside it.
   select coalesce(array_agg(id order by created_at desc), '{}') into v_page_ids
   from (
     select id, created_at from public.posts
     where feed_type = p_feed_type and status = 'published'
+      and not coalesce(account_id = any (v_hide), false)
+      and not (account_id is null and lower(wallet_address) = any (v_hide_wallets))
     order by created_at desc
     offset v_from limit p_page_size
   ) s;
@@ -160,6 +175,8 @@ begin
     from (
       select id, pinned_until from public.posts
       where feed_type = p_feed_type and status = 'published'
+        and not coalesce(account_id = any (v_hide), false)
+        and not (account_id is null and lower(wallet_address) = any (v_hide_wallets))
         and pinned_until > now()
       order by pinned_until desc
     ) s;
@@ -211,4 +228,4 @@ end;
 $$;
 
 grant execute on function public.feed_post_json(public.posts, boolean) to anon, authenticated;
-grant execute on function public.get_feed_page(text, integer, integer, text) to anon, authenticated;
+grant execute on function public.get_feed_page(text, integer, integer, text, uuid[]) to anon, authenticated;
