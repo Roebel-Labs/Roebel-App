@@ -22,6 +22,11 @@ type Props = {
   onTogglePin?: () => void;
   /** Enables the "Digitaler Nachweis" row when this post is on the public record. */
   postId?: string;
+  /** Post author for the follow / mute rows; null or omitted hides them (guests). */
+  author?: { accountId: string | null; wallet: string | null; name: string } | null;
+  isFollowing?: boolean;
+  onToggleFollow?: () => void;
+  onMute?: () => void;
 };
 
 export default function PostOptionsDrawer({
@@ -35,6 +40,10 @@ export default function PostOptionsDrawer({
   isPinned = false,
   onTogglePin,
   postId,
+  author,
+  isFollowing = false,
+  onToggleFollow,
+  onMute,
 }: Props) {
   const { colors } = useTheme();
 
@@ -136,19 +145,59 @@ export default function PostOptionsDrawer({
             </Pressable>
           </>
         ) : (
-          <Pressable
-            onPress={() => {
-              onClose();
-              onReport();
-            }}
-            style={({ pressed }) => [
-              styles.row,
-              pressed && { backgroundColor: colors.pressedOverlay },
-            ]}
-          >
-            <Ionicons name="flag-outline" size={20} color={colors.textPrimary} />
-            <Text style={[styles.rowText, { color: colors.textPrimary }]}>Melden</Text>
-          </Pressable>
+          <>
+            {author && (
+              <>
+                <Pressable
+                  onPress={() => {
+                    onClose();
+                    onToggleFollow?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.row,
+                    { borderBottomColor: colors.border },
+                    pressed && { backgroundColor: colors.pressedOverlay },
+                  ]}
+                >
+                  <Ionicons
+                    name={isFollowing ? 'person-remove-outline' : 'person-add-outline'}
+                    size={20}
+                    color={colors.textPrimary}
+                  />
+                  <Text style={[styles.rowText, { color: colors.textPrimary }]}>
+                    {isFollowing ? `${author.name} entfolgen` : `${author.name} folgen`}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    onClose();
+                    onMute?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.row,
+                    { borderBottomColor: colors.border },
+                    pressed && { backgroundColor: colors.pressedOverlay },
+                  ]}
+                >
+                  <Ionicons name="volume-mute-outline" size={20} color={colors.textPrimary} />
+                  <Text style={[styles.rowText, { color: colors.textPrimary }]}>{`${author.name} stummschalten`}</Text>
+                </Pressable>
+              </>
+            )}
+            <Pressable
+              onPress={() => {
+                onClose();
+                onReport();
+              }}
+              style={({ pressed }) => [
+                styles.row,
+                pressed && { backgroundColor: colors.pressedOverlay },
+              ]}
+            >
+              <Ionicons name="flag-outline" size={20} color={colors.textPrimary} />
+              <Text style={[styles.rowText, { color: colors.textPrimary }]}>Melden</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </BottomDrawer>

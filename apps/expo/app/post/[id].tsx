@@ -68,6 +68,9 @@ import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton, { CommentSkeleton } from '@/components/feed/FeedPostSkeleton';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import PostOptionsDrawer from '@/components/feed/PostOptionsDrawer';
+import { usePostAuthorActions } from '@/hooks/usePostAuthorActions';
+import { useRelations } from '@/context/RelationsContext';
+import { filterMutedComments } from '@/lib/inbox-visibility';
 import PostComposer from '@/components/feed/PostComposer';
 import ReportDrawer from '@/components/feed/ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
@@ -89,6 +92,9 @@ export default function PostDetailScreen() {
 
   const [post, setPost] = useState<PostRecord | null>(null);
   const [comments, setComments] = useState<PostCommentRecord[]>([]);
+  const { index: relationsIndex } = useRelations();
+  const authorActions = usePostAuthorActions(post);
+  const visibleComments = useMemo(() => filterMutedComments(comments, relationsIndex), [comments, relationsIndex]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshingComments, setIsRefreshingComments] = useState(false);
   const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false);
@@ -779,7 +785,7 @@ export default function PostDetailScreen() {
 
           {/* Comments list with post as header */}
           <FlatList
-            data={comments}
+            data={visibleComments}
             keyExtractor={(item) => item.id}
             renderItem={renderComment}
             // An ELEMENT, not the function: a fresh function each render is a
@@ -869,6 +875,10 @@ export default function PostDetailScreen() {
         onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onReport={() => setReportDrawerVisible(true)}
+        author={authorActions.author}
+        isFollowing={authorActions.isFollowing}
+        onToggleFollow={authorActions.onToggleFollow}
+        onMute={authorActions.onMute}
       />
 
       <ReportDrawer

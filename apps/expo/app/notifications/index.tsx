@@ -25,6 +25,8 @@ import {
 import { fetchActorProfiles, type ActorProfile } from '@/lib/supabase-member-notifications';
 import type { NotificationLogEntry, UserNotification } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
+import { useRelations } from '@/context/RelationsContext';
+import { filterMutedNotifications } from '@/lib/inbox-visibility';
 import { fontFamily } from '@/constants/theme';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -92,6 +94,7 @@ export default function NotificationsInboxScreen() {
     }, [markAllAsRead])
   );
 
+  const { index } = useRelations();
   const isLoading = pushInbox.isLoading || userNotifs.isLoading;
   const isRefreshing = pushInbox.isRefreshing || userNotifs.isRefreshing;
 
@@ -116,11 +119,11 @@ export default function NotificationsInboxScreen() {
   // Merge both notification sources chronologically
   const merged = useMemo<MergedItem[]>(() => {
     const pushItems: MergedItem[] = pushInbox.notifications.map((n) => ({ kind: 'push', data: n }));
-    const userItems: MergedItem[] = userNotifs.notifications.map((n) => ({ kind: 'user', data: n }));
+    const userItems: MergedItem[] = filterMutedNotifications(userNotifs.notifications, index).map((n) => ({ kind: 'user', data: n }));
     return [...pushItems, ...userItems].sort(
       (a, b) => new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime()
     );
-  }, [pushInbox.notifications, userNotifs.notifications]);
+  }, [pushInbox.notifications, userNotifs.notifications, index]);
 
   const filtered = useMemo(
     () => merged.filter((item) => matchesFilter(item, filter)),
@@ -178,6 +181,12 @@ export default function NotificationsInboxScreen() {
 
   const handleUserNotifPress = (notification: UserNotification) => {
     if (!notification.is_read) userNotifs.markAsRead(notification.id);
+    if (notification.type === 'new_follower') {
+      const w = (notification.metadata as { follower_wallet?: string } | undefined)?.follower_wallet;
+      const profile = w ? actorProfiles.get(w.toLowerCase()) : undefined;
+      if (profile?.username) router.push(`/user/${profile.username}` as any);
+      return;
+    }
     if (notification.type.startsWith('vorhaben_')) {
       const m = (notification.metadata ?? {}) as { screen?: string; proposal_id?: string; task_id?: string };
       if (m.screen === 'auszaehlung') router.push(`/auszaehlung/${m.proposal_id}` as any);
