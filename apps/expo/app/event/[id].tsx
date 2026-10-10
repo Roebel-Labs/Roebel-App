@@ -18,13 +18,14 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import { SvgXml } from 'react-native-svg';
 import { useGoBack } from '@/hooks/useGoBack';
-import { ArrowLeftIcon, UserIcon, MailIcon, CallIcon, ShareIcon, CalendarIcon, ChevronRight } from '@/components/Icons';
+import { ArrowLeftIcon, UserIcon, CallIcon, ShareIcon, CalendarIcon, ChevronRight } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import type { Account, EventRecord, EventDateRecord, OrgSubType } from '@/lib/types';
 import { currency, formatDate, formatTime, formatLocationFull, getNextUpcomingDate } from '@/lib/utils';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { EventDetailSkeleton } from '@/components/SkeletonLoader';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
+import EventLocationMap from '@/components/EventLocationMap';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { logEventView, logEvent, logCalendarSave } from '@/lib/firebase';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
@@ -75,6 +76,18 @@ const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, colo
   `;
   return <SvgXml xml={svgXml} />;
 };
+
+const OrganizerPhoneButton: React.FC<{ phone: string; color: string }> = ({ phone, color }) => (
+  <Pressable
+    onPress={() => Linking.openURL(`tel:${phone}`)}
+    hitSlop={10}
+    style={({ pressed }) => [styles.organizerAction, pressed && styles.pressed]}
+    accessibilityRole="button"
+    accessibilityLabel={`${phone} anrufen`}
+  >
+    <CallIcon size={22} color={color} strokeWidth={1.5} />
+  </Pressable>
+);
 
 export default function EventDetails() {
   const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
@@ -332,6 +345,13 @@ export default function EventDetails() {
   const hostAvatar = publisherAccount?.avatar_url ?? null;
   const hostIsOrg = publisherAccount?.account_type === 'organisation';
   const publisherId = publisherAccount?.id;
+  // Organiser list: the publishing org (links to its profile) plus the
+  // free-text organiser name when it names someone else.
+  const showPublisherRow = !!publisherAccount && hostIsOrg;
+  const showOrganizerRow =
+    !!event.organizer_name &&
+    (!showPublisherRow ||
+      event.organizer_name.trim().toLowerCase() !== publisherAccount?.name?.trim().toLowerCase());
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -521,6 +541,21 @@ export default function EventDetails() {
             </Text>
           </View>
 
+          {event.latitude != null && event.longitude != null && (
+            <View style={styles.section}>
+              <View style={[styles.listHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.listHeaderLabel, { color: colors.textSecondary }]}>Ort</Text>
+              </View>
+              <EventLocationMap
+                latitude={event.latitude}
+                longitude={event.longitude}
+                label={event.location?.split(',')[0]?.trim() || null}
+                eventId={event.id}
+                horizontalInset={GUTTER * 2}
+              />
+            </View>
+          )}
+
           {/* Weather Widget - Only shows if event is within 10 days */}
           <View style={styles.section}>
             <EventWeatherWidget
@@ -531,71 +566,80 @@ export default function EventDetails() {
           </View>
 
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstalter</Text>
-            {publisherAccount && hostIsOrg && (
+            <View style={[styles.listHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.listHeaderLabel, { color: colors.textSecondary }]}>Veranstalter</Text>
+              {event.organizer_email ? (
+                <Pressable
+                  onPress={() => Linking.openURL(`mailto:${event.organizer_email}`)}
+                  hitSlop={8}
+                  style={({ pressed }) => pressed && styles.pressed}
+                  accessibilityRole="link"
+                  accessibilityLabel={`E-Mail an ${event.organizer_name}`}
+                >
+                  <Text style={[styles.listHeaderLabel, { color: colors.textSecondary }]}>Kontakt</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {showPublisherRow && publisherAccount && (
               <Pressable
                 onPress={() =>
                   router.push({ pathname: '/account/[id]' as any, params: { id: publisherAccount.id } })
                 }
-                style={({ pressed }) => [
-                  styles.publisherRow,
-                  { borderColor: colors.border },
-                  pressed && styles.pressed,
-                ]}
+                style={({ pressed }) => [styles.organizerRow, pressed && styles.pressed]}
                 accessibilityRole="button"
                 accessibilityLabel={`Profil von ${publisherAccount.name} öffnen`}
               >
                 {publisherAccount.avatar_url ? (
                   <Image
                     source={{ uri: publisherAccount.avatar_url }}
-                    style={styles.publisherAvatar}
+                    style={[styles.organizerAvatar, { backgroundColor: colors.cardPlaceholder }]}
                     contentFit="cover"
                     accessibilityIgnoresInvertColors
                   />
                 ) : (
-                  <View style={[styles.publisherAvatarPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
-                    <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+                  <View style={[styles.organizerAvatar, styles.organizerAvatarFallback, { backgroundColor: colors.surfaceSecondary }]}>
+                    <Text style={[styles.organizerInitial, { color: colors.textPrimary }]}>
+                      {publisherAccount.name?.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                 )}
-                <View style={styles.publisherInfo}>
-                  <Text style={[styles.publisherName, { color: colors.textPrimary }]} numberOfLines={1}>
+                <View style={styles.organizerInfo}>
+                  <Text style={[styles.organizerName, { color: colors.textPrimary }]} numberOfLines={1}>
                     {publisherAccount.name}
                   </Text>
                   {publisherAccount.sub_type && (
-                    <Text style={[styles.publisherSubType, { color: colors.textTertiary }]} numberOfLines={1}>
+                    <Text style={[styles.organizerMeta, { color: colors.textSecondary }]} numberOfLines={1}>
                       {EVENT_PUBLISHER_SUB_TYPE_LABELS[publisherAccount.sub_type]}
                     </Text>
                   )}
                 </View>
+                {!showOrganizerRow && event.organizer_phone ? (
+                  <OrganizerPhoneButton phone={event.organizer_phone} color={colors.textSecondary} />
+                ) : null}
                 <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
               </Pressable>
             )}
-            <View style={[styles.organizerCard, { borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
-              <View style={styles.organizerHeader}>
-                <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
-                  <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+
+            {showOrganizerRow && (
+              <View style={styles.organizerRow}>
+                <View style={[styles.organizerAvatar, styles.organizerAvatarFallback, { backgroundColor: colors.surfaceSecondary }]}>
+                  {event.organizer_name ? (
+                    <Text style={[styles.organizerInitial, { color: colors.textPrimary }]}>
+                      {event.organizer_name.charAt(0).toUpperCase()}
+                    </Text>
+                  ) : (
+                    <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+                  )}
                 </View>
-                <Text style={[styles.organizerName, { color: colors.textPrimary }]}>{event.organizer_name}</Text>
-              </View>
-              <View style={styles.contactInfo}>
-                <Pressable
-                  onPress={() => Linking.openURL(`mailto:${event.organizer_email}`)}
-                  style={styles.contactRow}
-                >
-                  <MailIcon size={16} color={colors.primary} strokeWidth={1.5} />
-                  <Text style={[styles.organizerEmail, { color: colors.primary }]}>{event.organizer_email}</Text>
-                </Pressable>
+                <Text style={[styles.organizerName, styles.organizerInfo, { color: colors.textPrimary }]} numberOfLines={2}>
+                  {event.organizer_name}
+                </Text>
                 {event.organizer_phone ? (
-                  <Pressable
-                    onPress={() => Linking.openURL(`tel:${event.organizer_phone}`)}
-                    style={styles.contactRow}
-                  >
-                    <CallIcon size={16} color={colors.tabIconActive} strokeWidth={1.5} />
-                    <Text style={[styles.organizerPhone, { color: colors.textPrimary }]}>{event.organizer_phone}</Text>
-                  </Pressable>
+                  <OrganizerPhoneButton phone={event.organizer_phone} color={colors.textSecondary} />
                 ) : null}
               </View>
-            </View>
+            )}
           </View>
 
           {/* Event Experiences Section */}
@@ -808,77 +852,55 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     opacity: 0.85,
   },
-  publisherRow: {
+  listHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
+    paddingBottom: 10,
+    marginBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  publisherAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  publisherAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  publisherInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  publisherName: {
-    fontSize: 15,
-    fontFamily: fontFamily.medium,
-  },
-  publisherSubType: {
-    fontSize: 12,
-    fontFamily: fontFamily.regular,
-  },
-  organizerCard: {
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-  },
-  organizerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
-  },
-  organizerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  organizerName: {
+  listHeaderLabel: {
     fontSize: 16,
     fontFamily: fontFamily.medium,
   },
-  contactInfo: {
-    gap: 8,
-    marginLeft: 48,
-  },
-  contactRow: {
+  organizerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 14,
+    paddingVertical: 8,
   },
-  organizerEmail: {
-    fontSize: 14,
-    fontFamily: fontFamily.regular,
-    textDecorationLine: 'underline',
+  organizerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
-  organizerPhone: {
-    fontSize: 14,
+  organizerAvatarFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  organizerInitial: {
+    fontSize: 18,
+    fontFamily: fontFamily.semiBold,
+  },
+  organizerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  organizerName: {
+    fontSize: 18,
+    lineHeight: 23,
+    fontFamily: fontFamily.medium,
+  },
+  organizerMeta: {
+    fontSize: 13,
     fontFamily: fontFamily.regular,
+  },
+  organizerAction: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   moreEventsSection: {
     marginTop: 16,
