@@ -12,8 +12,9 @@
 - The client holds the viewer's hidden set in a `RelationsContext`. It passes the hidden account ids to `get_feed_page` and filters comments, quotes and the inbox locally.
 - Push suppression lives in the existing SQL triggers and in `send-notification`.
 - The org digest is a weekly `pg_cron` SQL function.
+- Enrolled citizens also get a device-signed Nostr mirror: a NIP-02 contact list of followed orgs, plus NIP-51 mute and unfollow sets encrypted to themselves with NIP-44. Supabase stays the source of truth.
 
-**Tech Stack:** Supabase Postgres (plpgsql, RLS, pg_cron, pg_net, vault), Deno edge functions (viem), Expo SDK 56 / React Native (StyleSheet + `useTheme`), React Query, thirdweb `useActiveAccount`, Jest (`jest-expo`).
+**Tech Stack:** Nostr (`@netizen-labs/nostr`, NIP-02/44/51, `@noble/ciphers`), Supabase Postgres (plpgsql, RLS, pg_cron, pg_net, vault), Deno edge functions (viem), Expo SDK 56 / React Native (StyleSheet + `useTheme`), React Query, thirdweb `useActiveAccount`, Jest (`jest-expo`).
 
 **Spec:** `docs/superpowers/specs/2026-10-10-follow-graph-design.md`
 
@@ -29,6 +30,8 @@
 - Before replacing any live SQL function, fetch its live body with `select pg_get_functiondef('public.<fn>'::regproc)`. Repo files can lag behind hand-applied changes.
 - Commit convention is `feat(expo): …` / `feat(db): …`. Stage only the files you touched (`git add <paths>`). Never `git add -A`.
 - Never run `eas update`. Max runs EAS himself.
+- Never publish a person's npub in a public tag. Persons appear on Nostr only inside NIP-44-encrypted private items, as `netizen_account` uuid tags (spec §12).
+- `account_follows` is never anon-readable. Counts come only from `get_follow_stats`; follower lists only from the signed `followers` action.
 - Copy uses "Follower", "folgt dir", "Folgen", "Entfolgen", "Stummschalten", "Stummgeschaltet". Org name and person name come from `accounts.name`, falling back to `users.display_name` / `users.username`.
 
 ## Review Focus
@@ -43,6 +46,7 @@
    - the onboarding follow step never blocks completion, even on a network failure.
 
    Task 8 and Task 10 tests.
+6. **No person npub in public Nostr tags.** A muted or unfollowed person must appear only inside the encrypted content, and a followed person must never appear in the kind 3. Task 13 and Task 14 tests.
 
 ---
 
@@ -65,6 +69,11 @@
 | `apps/expo/components/follow/FollowIntroSheet.tsx` | one-time sheet for existing users |
 | `apps/expo/app/welcome/follow.tsx` | onboarding step |
 | `apps/expo/app/settings/follows.tsx` | Settings → Folgen & Stummschalten |
+| `packages/nostr/src/nip44.ts`, `social.ts` | NIP-44 v2, NSP-15 list builders |
+| `packages/protocol/src/social.ts` | NSP-15 constants |
+| `packages/publisher/src/mappers.ts` | `org_profile` ledger rows (org pubkey lookup) |
+| `apps/expo/lib/nostr/social-list-plan.ts`, `social-lists.ts` | device-signed list mirror |
+| `apps/expo/components/follow/FollowersDrawer.tsx` | follower list for own/owned accounts only |
 
 ---
 
@@ -81,7 +90,7 @@
   - `personal_account_id(p_wallet text) → uuid`;
   - `get_follow_suggestions() → table(account_id uuid, name text, avatar_url text, account_type text, sub_type text, followers int, score numeric)`;
   - `get_follow_stats(p_account_id uuid) → jsonb {account_id, followers, following}`;
-  - `list_account_followers(p_account_id uuid, p_limit int, p_offset int) → table(wallet text, name text, avatar_url text, username text)`.
+  - `list_account_followers(p_account_id uuid, p_limit int, p_offset int) → table(name text, avatar_url text, username text)`, service role only (the `followers` action calls it).
 
 - [ ] **Step 1: Write the failing SQL test**
 
@@ -119,14 +128,23 @@ begin
   end;
 end $$;
 
--- RLS: anon may read follows, never hides, never write either
+-- RLS: anon may read neither table and write neither
 set local role anon;
 do $$
 begin
-  perform 1 from account_follows limit 1;
+  begin
+    perform 1 from account_follows limit 1;
+    assert false, 'anon must not read account_follows (wallet↔npub correlation, spec §3)';
+  exception when insufficient_privilege then null;
+  end;
   begin
     perform 1 from account_hides limit 1;
     assert false, 'anon must not read account_hides';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform 1 from public.list_account_followers('00000000-0000-0000-0000-000000000001', 1, 0);
+    assert false, 'anon must not list followers';
   exception when insufficient_privilege then null;
   end;
   begin
@@ -180,10 +198,7 @@ alter table public.account_follows enable row level security;
 alter table public.account_hides enable row level security;
 revoke all on public.account_follows from anon, authenticated;
 revoke all on public.account_hides from anon, authenticated;
-grant select on public.account_follows to anon, authenticated;
-drop policy if exists account_follows_read on public.account_follows;
-create policy account_follows_read on public.account_follows for select using (true);
--- account_hides: no policy, no grant → service role only.
+-- No policies, no grants: service role only. Counts go through get_follow_stats (security definer).
 
 create or replace function public.personal_account_id(p_wallet text)
 returns uuid language sql stable security definer set search_path = public as $$
@@ -239,9 +254,10 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.list_account_followers(p_account_id uuid, p_limit int default 50, p_offset int default 0)
-returns table(wallet text, name text, avatar_url text, username text)
+returns table(name text, avatar_url text, username text)
 language sql stable security definer set search_path = public as $$
-  select f.follower_wallet, coalesce(u.display_name, u.username), u.profile_picture_url, u.username
+  -- No wallet in the output: the list is shown by name and links by username.
+  select coalesce(u.display_name, u.username), u.profile_picture_url, u.username
   from public.account_follows f
   left join public.users u on lower(u.wallet_address) = f.follower_wallet
   where f.target_account_id = p_account_id
@@ -249,9 +265,10 @@ language sql stable security definer set search_path = public as $$
   limit least(p_limit, 200) offset greatest(p_offset, 0)
 $$;
 
-revoke execute on function public.personal_account_id(text) from public;
+revoke execute on function public.personal_account_id(text), public.list_account_followers(uuid, int, int) from public, anon, authenticated;
 grant execute on function public.personal_account_id(text), public.get_follow_stats(uuid),
-  public.get_follow_suggestions(), public.list_account_followers(uuid, int, int) to anon, authenticated;
+  public.get_follow_suggestions() to anon, authenticated;
+-- list_account_followers stays service-role only (account-relations `followers` action).
 ```
 
 Before applying, check two names live:
@@ -594,7 +611,8 @@ git commit -m "feat(db): get_feed_page hides excluded accounts incl. legacy post
     - `unfollow` `{ targets: string[] }`
     - `mute` `{ target: string }`
     - `unmute` `{ target: string }`
-  - Every success returns `{ ok: true, data: RelationsSnapshot }` (the Task 2 type).
+    - `followers` `{ accountId: string, offset?: number }` → `{ ok: true, data: { name, avatar_url, username }[] }`
+  - Every other success returns `{ ok: true, data: RelationsSnapshot }` (the Task 2 type).
   - Error codes: `BAD_ACTION`, `BAD_WALLET`, `BAD_PAYLOAD`, `BAD_SIGNATURE`, `STALE`, `VERIFY_UNAVAILABLE`, `INTERNAL`.
 
 - [ ] **Step 1: Write the failing core test**
@@ -702,7 +720,7 @@ Start by copying the following verbatim from `apps/expo/supabase/functions/org-m
 
 Then change:
 - the scope string in the message builder → `roebel-relations-v1`;
-- `ACTIONS` → `['list','follow','unfollow','mute','unmute']`.
+- `ACTIONS` → `['list','follow','unfollow','mute','unmute','followers']`.
 
 Replace the `switch` with:
 
@@ -808,6 +826,21 @@ async function handleMute(admin: Admin, viewer: string, payload: Record<string, 
   return ok(await snapshot(admin, viewer));
 }
 
+// Follower lists: only the account's owners/admins, or the person whose personal account it is.
+async function handleFollowers(admin: Admin, viewer: string, payload: Record<string, unknown>) {
+  const parsed = parseTargetPayload({ target: payload.accountId });
+  if (!parsed.ok) return fail('BAD_PAYLOAD', 400, parsed.message);
+  const { data: owner } = await admin.from('account_owners').select('role, accounts!inner(account_type)')
+    .eq('account_id', parsed.target).ilike('wallet_address', viewer).maybeSingle();
+  const o = owner as { role: string; accounts: { account_type: string } } | null;
+  const allowed = !!o && (o.accounts.account_type === 'personal' || ['owner', 'admin'].includes(o.role));
+  if (!allowed) return fail('FORBIDDEN', 403, 'not your account');
+  const offset = Math.max(0, Number(payload.offset ?? 0) || 0);
+  const { data, error } = await admin.rpc('list_account_followers', { p_account_id: parsed.target, p_limit: 50, p_offset: offset });
+  if (error) return fail('INTERNAL', 500, error.message);
+  return json(200, { ok: true, data: data ?? [] });
+}
+
 // in serve(), after `const signer = claimedWallet;`:
 try {
   switch (action) {
@@ -816,6 +849,7 @@ try {
     case 'unfollow': return await handleUnfollow(admin, signer, payloadObj);
     case 'mute': return await handleMute(admin, signer, payloadObj, true);
     case 'unmute': return await handleMute(admin, signer, payloadObj, false);
+    case 'followers': return await handleFollowers(admin, signer, payloadObj);
   }
 } catch (err) {
   console.error('account-relations failed', action, err);
@@ -1014,7 +1048,8 @@ git commit -m "feat(db): mute-aware pushes and weekly follower digest for orgs"
 
 ```ts
 // lib/account-relations.ts
-export type RelationsAction = 'list' | 'follow' | 'unfollow' | 'mute' | 'unmute';
+export type RelationsAction = 'list' | 'follow' | 'unfollow' | 'mute' | 'unmute' | 'followers';
+export async function fetchFollowers(account: SigningAccount, accountId: string, offset?: number): Promise<{ name: string | null; avatar_url: string | null; username: string | null }[]>;
 export async function callRelations(account: SigningAccount, action: RelationsAction, payload: Record<string, unknown>): Promise<{ ok: true; data: RelationsSnapshot } | { ok: false; code: string; message: string }>;
 export async function loadCachedSnapshot(wallet: string): Promise<RelationsSnapshot | null>;
 export async function saveCachedSnapshot(wallet: string, s: RelationsSnapshot): Promise<void>;
@@ -1095,7 +1130,7 @@ import { signedOrSession } from './passkey/api-session-runtime';
 import type { SigningAccount } from './org-membership';
 import type { RelationsSnapshot } from './relations-state';
 
-export type RelationsAction = 'list' | 'follow' | 'unfollow' | 'mute' | 'unmute';
+export type RelationsAction = 'list' | 'follow' | 'unfollow' | 'mute' | 'unmute' | 'followers';
 type Result = { ok: true; data: RelationsSnapshot } | { ok: false; code: string; message: string };
 
 async function hashPayload(payload: Record<string, unknown>): Promise<string> {
@@ -1143,6 +1178,15 @@ export async function callRelations(account: SigningAccount, action: RelationsAc
     },
     withSignature,
   });
+}
+
+export type FollowerRow = { name: string | null; avatar_url: string | null; username: string | null };
+
+/** Follower names for an account the signer owns/admins (or their own personal account). [] on any failure. */
+export async function fetchFollowers(account: SigningAccount, accountId: string, offset = 0): Promise<FollowerRow[]> {
+  const res = (await callRelations(account, 'followers', { accountId, offset })) as unknown as
+    { ok: true; data: FollowerRow[] } | { ok: false };
+  return res.ok ? res.data : [];
 }
 
 const cacheKey = (wallet: string) => `@roebel/relations/${wallet.toLowerCase()}`;
@@ -1566,6 +1610,7 @@ git commit -m "feat(expo): follow/mute from posts, mute filters comments and inb
 
 **Files:**
 - Create: `apps/expo/components/follow/FollowButton.tsx`
+- Create: `apps/expo/components/follow/FollowersDrawer.tsx`
 - Modify: `apps/expo/app/account/[id]/index.tsx` (org: `heroActions` ~:392, plus a stats line)
 - Modify: `apps/expo/app/user/[username].tsx` (person profile header)
 - Modify: `apps/expo/app/profile.tsx` (own counts)
@@ -1655,9 +1700,11 @@ In `app/user/[username].tsx`:
 2. Load `fetchFollowStats(personalId)`.
 3. Render `{stats.followers} Follower · folgt {stats.following}` and `<FollowButton accountId={personalId} muteWallet={profile.wallet_address} />` when `personalId && !isOwner`.
 
-- [ ] **Step 4: Own profile**
+- [ ] **Step 4: Own profile + follower lists**
 
-In `app/profile.tsx`, show `{followers} Follower · folgt {following}` for the active personal account, with the same fetch.
+1. In `app/profile.tsx`, show `{followers} Follower · folgt {following}` for the active personal account, with the same fetch.
+2. Make the count tappable **only** on the own profile and on org profiles where `canEdit`. It opens a `BottomDrawer` listing `fetchFollowers(account, accountId)`: avatar + name, tap → `/user/<username>`, and a "Mehr laden" row while a page returns 50.
+3. Everywhere else the count is plain text (spec §3: no public follower lists).
 
 - [ ] **Step 5: Type-check the touched files**
 
@@ -1668,7 +1715,7 @@ Expected: no lines. Judge only these files; the repo baseline has ~1235 unrelate
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/expo/components/follow/FollowButton.tsx apps/expo/app/account/[id]/index.tsx apps/expo/app/user/[username].tsx apps/expo/app/profile.tsx
+git add apps/expo/components/follow/FollowButton.tsx apps/expo/components/follow/FollowersDrawer.tsx apps/expo/app/account/[id]/index.tsx apps/expo/app/user/[username].tsx apps/expo/app/profile.tsx
 git commit -m "feat(expo): Folgen button, follower counts and mute on profiles"
 ```
 
@@ -1897,12 +1944,518 @@ git commit -m "feat(expo): Folgen & Stummschalten settings and follower digest t
 
 ---
 
-### Task 12: Full verification and handoff
+### Task 12: NIP-44 + social list builders in `@netizen-labs/nostr` (NSP-15)
+
+**Files:**
+- Create: `packages/nostr/src/nip44.ts`
+- Create: `packages/nostr/src/social.ts`
+- Modify: `packages/nostr/src/index.ts` (export both)
+- Modify: `packages/nostr/package.json` (`"@noble/ciphers": "1.3.0"`, the same version as apps/expo)
+- Create: `packages/nostr/test/nip44.test.ts`
+- Create: `packages/nostr/test/nip44.vectors.json` (official vectors, downloaded)
+- Create: `packages/nostr/test/social.test.ts`
+- Create: `packages/protocol/src/social.ts`
+- Modify: `packages/protocol/src/index.ts`
+
+**Interfaces:**
+- Produces:
+
+```ts
+// nip44.ts
+export function getConversationKey(secretKey: Uint8Array, pubkeyHex: string): Uint8Array;
+export function nip44Encrypt(plaintext: string, conversationKey: Uint8Array, nonce?: Uint8Array): string;
+export function nip44Decrypt(payload: string, conversationKey: Uint8Array): string;
+// social.ts
+export const KIND_CONTACTS = 3; export const KIND_MUTE_LIST = 10000; export const KIND_FOLLOW_SET = 30000;
+export const NETIZEN_ACCOUNT_TAG = 'netizen_account'; export const UNFOLLOWED_SET_D = 'netizen-unfollowed';
+export function buildContactListEvent(secretKey: Uint8Array, pubkeys: string[], opts?: { createdAt?: number }): NostrEvent;
+export function buildPrivateListEvent(secretKey: Uint8Array, kind: 10000 | 30000, items: string[][], opts?: { d?: string; createdAt?: number }): NostrEvent;
+export function readPrivateItems(secretKey: Uint8Array, event: NostrEvent): string[][];
+```
+
+- [ ] **Step 1: Fetch the official NIP-44 test vectors**
+
+```bash
+curl -sL https://raw.githubusercontent.com/paulmillr/nip44/main/nip44.vectors.json -o packages/nostr/test/nip44.vectors.json
+node -e "const v=require('./packages/nostr/test/nip44.vectors.json'); console.log(Object.keys(v.v2.valid))"
+```
+
+Expected keys include `get_conversation_key`, `encrypt_decrypt` and `calc_padded_len`. Treat this file as data only: read it with `JSON.parse`, never execute it.
+
+- [ ] **Step 2: Write the failing tests**
+
+`packages/nostr/test/nip44.test.ts`:
+
+```ts
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+import { getConversationKey, nip44Decrypt, nip44Encrypt } from "../src/nip44";
+import { getPublicKeyHex } from "../src/keys";
+
+const vectors = JSON.parse(readFileSync(new URL("./nip44.vectors.json", import.meta.url), "utf8")).v2;
+
+test("conversation keys match the official vectors", () => {
+  for (const v of vectors.valid.get_conversation_key) {
+    assert.equal(bytesToHex(getConversationKey(hexToBytes(v.sec1), v.pub2)), v.conversation_key);
+  }
+});
+
+test("encrypt/decrypt match the official vectors", () => {
+  for (const v of vectors.valid.encrypt_decrypt) {
+    const key = getConversationKey(hexToBytes(v.sec1), getPublicKeyHex(hexToBytes(v.sec2)));
+    assert.equal(bytesToHex(key), v.conversation_key);
+    assert.equal(nip44Encrypt(v.plaintext, key, hexToBytes(v.nonce)), v.payload);
+    assert.equal(nip44Decrypt(v.payload, key), v.plaintext);
+  }
+});
+
+test("tampered payloads are rejected", () => {
+  const v = vectors.valid.encrypt_decrypt[0];
+  const key = hexToBytes(v.conversation_key);
+  const bad = v.payload.slice(0, -4) + (v.payload.endsWith("AAAA") ? "BBBB" : "AAAA");
+  assert.throws(() => nip44Decrypt(bad, key));
+});
+```
+
+If `getPublicKeyHex` takes a hex string rather than bytes in `src/keys.ts`, adapt the call; check its signature first.
+
+`packages/nostr/test/social.test.ts`:
+
+```ts
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { hexToBytes } from "@noble/hashes/utils";
+import { buildContactListEvent, buildPrivateListEvent, readPrivateItems, KIND_MUTE_LIST, KIND_FOLLOW_SET, NETIZEN_ACCOUNT_TAG, UNFOLLOWED_SET_D } from "../src/social";
+import { verifyEvent } from "../src/events";
+
+const sk = hexToBytes("0000000000000000000000000000000000000000000000000000000000000003");
+const ORG = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
+test("contact list is kind 3 with one p tag per pubkey, deduped", () => {
+  const e = buildContactListEvent(sk, [ORG, ORG], { createdAt: 1700000000 });
+  assert.equal(e.kind, 3);
+  assert.deepEqual(e.tags, [["p", ORG]]);
+  assert.ok(verifyEvent(e));
+});
+
+test("private lists carry NO public tags and decrypt back to the items", () => {
+  const items = [["p", ORG], [NETIZEN_ACCOUNT_TAG, "11111111-1111-4111-8111-111111111111"]];
+  const mute = buildPrivateListEvent(sk, KIND_MUTE_LIST, items, { createdAt: 1700000000 });
+  assert.equal(mute.kind, 10000);
+  assert.deepEqual(mute.tags, []);
+  assert.ok(!mute.content.includes("1111"), "content must be encrypted");
+  assert.deepEqual(readPrivateItems(sk, mute), items);
+
+  const set = buildPrivateListEvent(sk, KIND_FOLLOW_SET, [[NETIZEN_ACCOUNT_TAG, "x"]], { d: UNFOLLOWED_SET_D });
+  assert.deepEqual(set.tags, [["d", UNFOLLOWED_SET_D]]);
+});
+
+test("an empty private list still publishes (clears the replaceable list)", () => {
+  const e = buildPrivateListEvent(sk, KIND_MUTE_LIST, []);
+  assert.deepEqual(readPrivateItems(sk, e), []);
+});
+```
+
+- [ ] **Step 3: Run, expect FAIL**
+
+Run: `cd packages/nostr && pnpm install && pnpm test`
+
+Expected: module-not-found errors for `../src/nip44` and `../src/social`.
+
+- [ ] **Step 4: Implement `nip44.ts`** (NIP-44 v2)
+
+```ts
+import { chacha20 } from "@noble/ciphers/chacha";
+import { equalBytes } from "@noble/ciphers/utils";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { expand, extract } from "@noble/hashes/hkdf";
+import { hmac } from "@noble/hashes/hmac";
+import { sha256 } from "@noble/hashes/sha256";
+import { concatBytes, hexToBytes, randomBytes, utf8ToBytes } from "@noble/hashes/utils";
+import { base64 } from "@scure/base";
+
+// NIP-44 v2: secp256k1 ECDH → HKDF-SHA256 → ChaCha20 + HMAC-SHA256, padded plaintext.
+const SALT = utf8ToBytes("nip44-v2");
+
+export function getConversationKey(secretKey: Uint8Array, pubkeyHex: string): Uint8Array {
+  const sharedX = secp256k1.getSharedSecret(secretKey, hexToBytes("02" + pubkeyHex)).subarray(1, 33);
+  return extract(sha256, sharedX, SALT);
+}
+
+function messageKeys(conversationKey: Uint8Array, nonce: Uint8Array) {
+  const keys = expand(sha256, conversationKey, nonce, 76);
+  return { chachaKey: keys.subarray(0, 32), chachaNonce: keys.subarray(32, 44), hmacKey: keys.subarray(44, 76) };
+}
+
+export function calcPaddedLen(len: number): number {
+  if (len <= 32) return 32;
+  const nextPower = 1 << (Math.floor(Math.log2(len - 1)) + 1);
+  const chunk = nextPower <= 256 ? 32 : nextPower / 8;
+  return chunk * (Math.floor((len - 1) / chunk) + 1);
+}
+
+function pad(plaintext: string): Uint8Array {
+  const bytes = utf8ToBytes(plaintext);
+  if (bytes.length < 1 || bytes.length > 65535) throw new Error("nip44: plaintext length out of range");
+  const out = new Uint8Array(2 + calcPaddedLen(bytes.length));
+  new DataView(out.buffer).setUint16(0, bytes.length);
+  out.set(bytes, 2);
+  return out;
+}
+
+function unpad(padded: Uint8Array): string {
+  const len = new DataView(padded.buffer, padded.byteOffset).getUint16(0);
+  if (len < 1 || padded.length !== 2 + calcPaddedLen(len)) throw new Error("nip44: invalid padding");
+  return new TextDecoder().decode(padded.subarray(2, 2 + len));
+}
+
+export function nip44Encrypt(plaintext: string, conversationKey: Uint8Array, nonce: Uint8Array = randomBytes(32)): string {
+  const { chachaKey, chachaNonce, hmacKey } = messageKeys(conversationKey, nonce);
+  const ciphertext = chacha20(chachaKey, chachaNonce, pad(plaintext));
+  const mac = hmac(sha256, hmacKey, concatBytes(nonce, ciphertext));
+  return base64.encode(concatBytes(new Uint8Array([2]), nonce, ciphertext, mac));
+}
+
+export function nip44Decrypt(payload: string, conversationKey: Uint8Array): string {
+  const data = base64.decode(payload);
+  if (data.length < 99 || data[0] !== 2) throw new Error("nip44: unknown version or too short");
+  const nonce = data.subarray(1, 33);
+  const ciphertext = data.subarray(33, data.length - 32);
+  const mac = data.subarray(data.length - 32);
+  const { chachaKey, chachaNonce, hmacKey } = messageKeys(conversationKey, nonce);
+  if (!equalBytes(hmac(sha256, hmacKey, concatBytes(nonce, ciphertext)), mac)) throw new Error("nip44: invalid MAC");
+  return unpad(chacha20(chachaKey, chachaNonce, ciphertext));
+}
+```
+
+Also add a `calc_padded_len` vector loop to the test, using `calcPaddedLen` (export it).
+
+- [ ] **Step 5: Implement `social.ts`**
+
+```ts
+import { buildEvent, type NostrEvent } from "./events";
+import { getPublicKeyHex } from "./keys";
+import { getConversationKey, nip44Decrypt, nip44Encrypt } from "./nip44";
+
+/**
+ * NSP-15 Social lists. Follows of ORGS are a public NIP-02 contact list; mutes (NIP-51 kind
+ * 10000) and the "unfollowed" follow set (kind 30000, d=netizen-unfollowed) live ONLY in the
+ * NIP-44 private part, encrypted to the author. Persons are referenced by account uuid
+ * (`netizen_account`), never by npub, so no list publishes the wallet↔npub link.
+ */
+export const KIND_CONTACTS = 3;
+export const KIND_MUTE_LIST = 10000;
+export const KIND_FOLLOW_SET = 30000;
+export const NETIZEN_ACCOUNT_TAG = "netizen_account";
+export const UNFOLLOWED_SET_D = "netizen-unfollowed";
+
+export function buildContactListEvent(secretKey: Uint8Array, pubkeys: string[], opts: { createdAt?: number } = {}): NostrEvent {
+  const tags = [...new Set(pubkeys.map((p) => p.toLowerCase()))].map((p) => ["p", p]);
+  return buildEvent(secretKey, KIND_CONTACTS, "", { tags, createdAt: opts.createdAt });
+}
+
+export function buildPrivateListEvent(
+  secretKey: Uint8Array,
+  kind: typeof KIND_MUTE_LIST | typeof KIND_FOLLOW_SET,
+  items: string[][],
+  opts: { d?: string; createdAt?: number } = {},
+): NostrEvent {
+  const self = getPublicKeyHex(secretKey);
+  const content = nip44Encrypt(JSON.stringify(items), getConversationKey(secretKey, self));
+  return buildEvent(secretKey, kind, content, { tags: opts.d ? [["d", opts.d]] : [], createdAt: opts.createdAt });
+}
+
+export function readPrivateItems(secretKey: Uint8Array, event: NostrEvent): string[][] {
+  if (!event.content) return [];
+  const items = JSON.parse(nip44Decrypt(event.content, getConversationKey(secretKey, getPublicKeyHex(secretKey))));
+  return Array.isArray(items) ? items.filter((t): t is string[] => Array.isArray(t)) : [];
+}
+```
+
+Check the signatures of `buildEvent` and `getPublicKeyHex` in `src/events.ts` / `src/keys.ts` before relying on them: options-object name, and bytes vs hex input.
+
+`nip44Encrypt` requires plaintext ≥ 1 byte. `JSON.stringify([])` is `"[]"` (2 bytes), so an empty list is fine.
+
+- [ ] **Step 6: Exports + protocol constants**
+
+1. In `packages/nostr/src/index.ts`, add `export * from "./nip44";` and `export * from "./social";`, matching the file's existing style. Use extensionless paths if the other exports use them (Metro: `reference_metro_workspace_imports`).
+2. Create `packages/protocol/src/social.ts`:
+
+```ts
+/**
+ * NSP-15 Social lists — how a Netizen node mirrors follows and mutes to Nostr.
+ * kind 3 (NIP-02): public `p` tags of followed ORG pubkeys only.
+ * kind 10000 (NIP-51 mutes) and kind 30000 d=netizen-unfollowed: all items NIP-44-encrypted to self;
+ * persons appear as ["netizen_account", <account uuid>], orgs additionally as ["p", <org pubkey>].
+ * Org pubkeys resolve via nostr_publications(source_type='org_profile', source_id=<account uuid>).
+ */
+export const NSP15_KINDS = { contacts: 3, mutes: 10000, followSet: 30000 } as const;
+export const NSP15_ACCOUNT_TAG = "netizen_account";
+export const NSP15_UNFOLLOWED_D = "netizen-unfollowed";
+export const NSP15_ORG_LEDGER_SOURCE = "org_profile";
+```
+
+3. Export it from `packages/protocol/src/index.ts` in that file's style (it uses `.js` specifiers).
+
+- [ ] **Step 7: Run, expect PASS**
+
+Run: `cd packages/nostr && pnpm test && pnpm typecheck`
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/nostr/src/nip44.ts packages/nostr/src/social.ts packages/nostr/src/index.ts packages/nostr/package.json packages/nostr/test/nip44.test.ts packages/nostr/test/nip44.vectors.json packages/nostr/test/social.test.ts packages/protocol/src/social.ts packages/protocol/src/index.ts pnpm-lock.yaml
+git commit -m "feat(nostr): NIP-44 v2 and NSP-15 social list builders"
+```
+
+---
+
+### Task 13: Publisher records org pubkeys in the ledger
+
+**Files:**
+- Modify: `packages/publisher/src/mappers.ts` (`orgToSpec`, ~:216)
+- Modify: `packages/publisher/test/mappers.test.ts`
+
+**Interfaces:**
+- Produces: `nostr_publications` rows `{ source_type: 'org_profile', source_id: <account uuid>, pubkey_hex: <org pubkey> }`. They are written by the existing ledger path in `publishOnce` (`sync.ts:576-584, 608-613`) for every accepted org kind 0, duplicates included.
+
+- [ ] **Step 1: Write the failing test** (next to the existing `orgToSpec` tests at `mappers.test.ts:113`)
+
+```ts
+test("orgToSpec records the org profile in the ledger so apps can resolve the org pubkey", () => {
+  const spec = orgToSpec(ORG_ROW, "roebel")!;
+  assert.deepEqual(spec.ledger, { sourceType: "org_profile", sourceId: ORG_ROW.id });
+});
+```
+
+Use the assertion style already in that file.
+
+- [ ] **Step 2: Run, expect FAIL**
+
+Run: `cd packages/publisher && pnpm test`
+
+Expected: `spec.ledger` is undefined.
+
+- [ ] **Step 3: Implement.** In `orgToSpec`'s returned object, add:
+
+```ts
+    // NSP-15: apps resolve a followed/muted org's pubkey from this ledger row.
+    ledger: { sourceType: "org_profile", sourceId: id },
+```
+
+- [ ] **Step 4: Run, expect PASS.**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/publisher/src/mappers.ts packages/publisher/test/mappers.test.ts
+git commit -m "feat(publisher): ledger rows for org profiles (NSP-15 pubkey lookup)"
+```
+
+- [ ] **Step 6: Deployment gate. Do not do this yourself; hand it to Max.**
+
+The publisher runs on the node. Read memory `project_netizen_two_repo_divergence` first: `packages/` exist in both DAO_test and netizen_labs, and deploying from the wrong one breaks buzz.roebel.app. The change must be ported to whichever repo the node deploys from.
+
+After the next publisher pass, verify with MCP:
+
+```sql
+select count(*) from nostr_publications where source_type = 'org_profile';
+```
+
+Expected: about the number of organisation accounts (37 today). Until this lands, the app publishes kind 3 without org `p` tags (Task 14 degrades gracefully).
+
+---
+
+### Task 14: App mirrors follows and mutes to the relay
+
+**Files:**
+- Create: `apps/expo/lib/nostr/social-list-plan.ts` (pure)
+- Test: `apps/expo/lib/__tests__/social-list-plan.test.ts`
+- Create: `apps/expo/lib/nostr/social-lists.ts`
+- Modify: `apps/expo/lib/nostr/publish.ts` (export a `publishSigned` wrapper around the private `publish`)
+- Modify: `apps/expo/context/RelationsContext.tsx` (publish after each successful change)
+- Modify: `apps/expo/app/settings/nostr.tsx` (one line of copy near the nsec export)
+
+**Interfaces:**
+- Consumes: Task 12 builders, Task 13 ledger rows, `RelationsSnapshot`.
+- Produces:
+
+```ts
+// social-list-plan.ts
+export type SocialListPlan = { contacts: string[]; muteItems: string[][]; unfollowedItems: string[][] };
+export function planSocialLists(s: RelationsSnapshot, orgPubkeyById: Map<string, string>): SocialListPlan;
+export function nextCreatedAt(nowSec: number, lastSec: number | null): number;
+// social-lists.ts
+export async function publishSocialLists(s: RelationsSnapshot): Promise<void>;  // never throws
+```
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+import { nextCreatedAt, planSocialLists } from '../nostr/social-list-plan';
+import { EMPTY_SNAPSHOT } from '../relations-state';
+
+const orgs = new Map([['org-1', 'a'.repeat(64)], ['org-2', 'b'.repeat(64)]]);
+
+describe('social-list-plan', () => {
+  it('contact list holds followed ORGS only; persons never appear by pubkey', () => {
+    const plan = planSocialLists({ ...EMPTY_SNAPSHOT, following: ['org-1', 'person-1'] }, orgs);
+    expect(plan.contacts).toEqual(['a'.repeat(64)]);
+  });
+  it('mutes carry p for orgs plus netizen_account for everyone', () => {
+    const plan = planSocialLists({ ...EMPTY_SNAPSHOT, muted: ['org-2', 'person-1'] }, orgs);
+    expect(plan.muteItems).toEqual([
+      ['p', 'b'.repeat(64)], ['netizen_account', 'org-2'],
+      ['netizen_account', 'person-1'],
+    ]);
+  });
+  it('unfollowed set uses account tags only', () => {
+    const plan = planSocialLists({ ...EMPTY_SNAPSHOT, unfollowed: ['org-1'] }, orgs);
+    expect(plan.unfollowedItems).toEqual([['netizen_account', 'org-1']]);
+  });
+  it('created_at strictly increases so two publishes in one second never tie', () => {
+    expect(nextCreatedAt(100, null)).toBe(100);
+    expect(nextCreatedAt(100, 100)).toBe(101);
+    expect(nextCreatedAt(100, 150)).toBe(151);
+  });
+});
+```
+
+- [ ] **Step 2: Run, expect FAIL**
+
+Run: `cd apps/expo && npx jest lib/__tests__/social-list-plan.test.ts --watchAll=false`
+
+- [ ] **Step 3: Implement `social-list-plan.ts`**
+
+```ts
+import type { RelationsSnapshot } from '../relations-state';
+
+// NSP-15 (packages/protocol/src/social.ts). Pure: no keys, no network.
+const ACCOUNT_TAG = 'netizen_account';
+
+export type SocialListPlan = { contacts: string[]; muteItems: string[][]; unfollowedItems: string[][] };
+
+export function planSocialLists(s: RelationsSnapshot, orgPubkeyById: Map<string, string>): SocialListPlan {
+  const contacts = s.following.map((id) => orgPubkeyById.get(id)).filter((p): p is string => !!p);
+  const muteItems: string[][] = [];
+  for (const id of s.muted) {
+    const pk = orgPubkeyById.get(id);
+    if (pk) muteItems.push(['p', pk]);
+    muteItems.push([ACCOUNT_TAG, id]);
+  }
+  return { contacts, muteItems, unfollowedItems: s.unfollowed.map((id) => [ACCOUNT_TAG, id]) };
+}
+
+export function nextCreatedAt(nowSec: number, lastSec: number | null): number {
+  return lastSec !== null && lastSec >= nowSec ? lastSec + 1 : nowSec;
+}
+```
+
+The `orgPubkeyById` map only ever contains ORG accounts (Task 13 ledger), so persons can never leak into `p` tags.
+
+- [ ] **Step 4: Run, expect PASS.**
+
+- [ ] **Step 5: Export a publish wrapper in `lib/nostr/publish.ts`**
+
+```ts
+/** Publish an already-signed event with ledger bookkeeping (social lists, NSP-15). Best-effort. */
+export function publishSigned(event: NostrEvent, sourceType: string, sourceId: string): Promise<PublicationStatus> {
+  return publish(event, sourceType, sourceId);
+}
+```
+
+- [ ] **Step 6: Implement `lib/nostr/social-lists.ts`**
+
+```ts
+import {
+  buildContactListEvent, buildPrivateListEvent, KIND_FOLLOW_SET, KIND_MUTE_LIST, UNFOLLOWED_SET_D,
+} from '@netizen-labs/nostr';
+import { supabase } from '../supabase';
+import type { RelationsSnapshot } from '../relations-state';
+import { loadStoredIdentity } from './identity';
+import { publishSigned } from './publish';
+import { nextCreatedAt, planSocialLists } from './social-list-plan';
+
+let lastCreatedAt: number | null = null;
+let queue: Promise<void> = Promise.resolve();
+
+async function orgPubkeys(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const { data } = await supabase.from('nostr_publications')
+    .select('source_id, pubkey_hex').eq('source_type', 'org_profile').in('source_id', ids);
+  return new Map((data ?? []).map((r: { source_id: string; pubkey_hex: string }) => [r.source_id, r.pubkey_hex]));
+}
+
+/**
+ * Mirror the viewer's follows/mutes to the relay as NSP-15 lists. Best-effort and serialised:
+ * Supabase stays the source of truth; a user without a Nostr identity (non-citizen, no consent) is skipped.
+ */
+export function publishSocialLists(s: RelationsSnapshot): Promise<void> {
+  queue = queue.then(async () => {
+    try {
+      const identity = await loadStoredIdentity();
+      if (!identity) return;
+      const plan = planSocialLists(s, await orgPubkeys([...new Set([...s.following, ...s.muted])]));
+      const createdAt = nextCreatedAt(Math.floor(Date.now() / 1000), lastCreatedAt);
+      lastCreatedAt = createdAt;
+      const self = identity.publicKey;
+      await publishSigned(buildContactListEvent(identity.secretKey, plan.contacts, { createdAt }), 'contacts', self);
+      await publishSigned(buildPrivateListEvent(identity.secretKey, KIND_MUTE_LIST, plan.muteItems, { createdAt }), 'mutes', self);
+      await publishSigned(
+        buildPrivateListEvent(identity.secretKey, KIND_FOLLOW_SET, plan.unfollowedItems, { d: UNFOLLOWED_SET_D, createdAt }),
+        'unfollowed', self,
+      );
+    } catch (err) {
+      console.warn('social lists publish failed (non-fatal)', err);
+    }
+  });
+  return queue;
+}
+```
+
+Check that `loadStoredIdentity()` returns `{ secretKey: Uint8Array, publicKey: string }` (see `lib/nostr/identity.ts`) and adapt the field names if they differ.
+
+- [ ] **Step 7: Hook into `RelationsContext`**
+
+1. In `run`, right after `setSnapshot(res.data); void saveCachedSnapshot(wallet, res.data);`, add `void publishSocialLists(res.data);`.
+2. In the initial-load effect, after a successful `list`: if any own ledger row of type `contacts` / `mutes` / `unfollowed` is `pending` (query `nostr_publications` by `pubkey_hex` = own identity pubkey and those three `source_type`s), call `void publishSocialLists(res.data)`. That is the retry path; nothing else republishes on launch.
+
+- [ ] **Step 8: Copy in the nsec export screen**
+
+In `app/settings/nostr.tsx`, below the export button, add a secondary-text line:
+
+> "Folgen und Stummschaltungen werden mitgenommen. Änderungen in anderen Nostr-Apps übernimmt die Röbel-App noch nicht."
+
+Use the screen's existing secondary text style.
+
+- [ ] **Step 9: Run the tests + type-check touched files**
+
+```bash
+cd apps/expo && npx jest lib/__tests__/social-list-plan.test.ts lib/__tests__/relations-state.test.ts --watchAll=false
+NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit -p . 2>&1 | grep -E "lib/nostr/social|RelationsContext|settings/nostr"
+```
+
+Expected: PASS, and nothing from the grep.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add apps/expo/lib/nostr/social-list-plan.ts apps/expo/lib/__tests__/social-list-plan.test.ts apps/expo/lib/nostr/social-lists.ts apps/expo/lib/nostr/publish.ts apps/expo/context/RelationsContext.tsx apps/expo/app/settings/nostr.tsx
+git commit -m "feat(expo): mirror follows and mutes to the relay as NSP-15 lists"
+```
+
+---
+
+### Task 15: Full verification and handoff
 
 - [ ] **Step 1: Full Jest run of the new suites**
 
 ```bash
-cd apps/expo && npx jest lib/__tests__/relations-state.test.ts lib/__tests__/account-relations-core.test.ts lib/__tests__/account-relations.test.ts lib/__tests__/feed-visibility.test.ts lib/__tests__/inbox-visibility.test.ts lib/__tests__/follow-selection.test.ts lib/__tests__/onboarding-deferral.test.ts lib/__tests__/profile-completion.test.ts --watchAll=false
+cd apps/expo && npx jest lib/__tests__/relations-state.test.ts lib/__tests__/account-relations-core.test.ts lib/__tests__/account-relations.test.ts lib/__tests__/feed-visibility.test.ts lib/__tests__/inbox-visibility.test.ts lib/__tests__/follow-selection.test.ts lib/__tests__/onboarding-deferral.test.ts lib/__tests__/profile-completion.test.ts lib/__tests__/social-list-plan.test.ts --watchAll=false
+cd ../../packages/nostr && pnpm test
+cd ../publisher && pnpm test
 ```
 
 Expected: all PASS.
@@ -1919,6 +2472,9 @@ Run `supabase/tests/follow_graph_test.sql` via MCP. Expected: no assertion error
 4. Existing account → the intro sheet appears once and doesn't return after closing.
 5. Settings → Stummgeschaltet → Aufheben brings the posts back after pull-to-refresh.
 6. Logged out: the feed loads and shows no Folgen rows.
+7. As an enrolled citizen, follow an org and mute a person. Then check on `https://index.roebel.app/events?authors=<own pubkey>&kinds=3,10000,30000` that:
+   - kind 3 has the org `p` tag (once Task 13 is deployed) and no person;
+   - the kind 10000 content is ciphertext and its tags are empty.
 
 - [ ] **Step 4: Push and hand over**
 
@@ -1926,7 +2482,8 @@ Run `supabase/tests/follow_graph_test.sql` via MCP. Expected: no assertion error
 2. Report to Max:
    - the commits;
    - that migrations and edge functions are live;
-   - that the client needs his EAS update; runtime is unchanged (no native deps).
+   - that the client needs his EAS update; runtime is unchanged (no native deps);
+   - that the publisher change (Task 13) waits for his node deploy from the correct repo.
    - Ask him to remember the first Monday digest (08:00 UTC).
 
 ---
@@ -1935,4 +2492,5 @@ Run `supabase/tests/follow_graph_test.sql` via MCP. Expected: no assertion error
 
 - **Spec §8 deviation:** the digest is a SQL function + `pg_cron` instead of a new `follower-digest` edge function. It is the same behaviour with one less deploy, and it uses the vault secrets the existing triggers already use.
 - **Spec §5 extension:** `post_new` broadcast pushes also skip viewers who unfollowed or muted the author. Otherwise the lock screen would show posts the feed hides.
+- **Spec §12 (Nostr):** Supabase stays the source of truth; read-back/backfeed (N2) is a follow-up slice.
 - **Spec §3:** `accounts` has no deleted flag, so suggestions exclude empty-name accounts and personal accounts without owners instead.

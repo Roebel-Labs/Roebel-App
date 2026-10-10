@@ -67,10 +67,15 @@ alter table accounts add column suggest_to_new_users boolean not null default tr
 - **Mute** is independent of follow. A muted account keeps its follow row, so the
   follower count never drops and a mute stays undetectable.
 - **Hidden set** for a viewer = all targets with any `account_hides` row.
-- **RLS**: `account_follows` select for everyone, no anon insert/update/delete.
-  `account_hides`: no anon access at all. All writes go through the edge function (§4).
-  This deliberately breaks with the open `WITH CHECK (true)` style of `post_likes`, which
-  is forgeable (see `project_rls_lockdown_unapplied`).
+- **RLS**: neither table is readable or writable with the anon key. All reads and writes go
+  through the edge function (§4) or counting RPCs.
+  - `account_follows` is not row-readable, because a public wallet → follows table plus the
+    public Nostr contact lists (§12) would let anyone match a citizen's wallet to their npub.
+    That is exactly the bulk mapping `nostr_identities` was locked down to prevent.
+  - Counts are public via `get_follow_stats`. Follower *lists* are visible only to the
+    account's own owners and admins (an org sees who follows it) and to the person themselves.
+  - This deliberately breaks with the open `WITH CHECK (true)` style of `post_likes`, which
+    is forgeable (see `project_rls_lockdown_unapplied`).
 - **Self-follow** is rejected. Following your own org is allowed.
 - `suggest_to_new_users`: a person can opt out of the onboarding list (Settings →
   Datenschutz → "Neuen Nutzer:innen vorschlagen"). Default on for everyone; already-public
@@ -90,6 +95,7 @@ silently; passkey users spend at most one fingerprint per session — no prompt 
 | `follow` | `targets: uuid[]`, `source` | upsert follows, delete `unfollowed` hides, insert inbox notices |
 | `unfollow` | `targets: uuid[]` | delete follows, insert `unfollowed` hides |
 | `mute` / `unmute` | `target: uuid` | insert / delete `muted` hide |
+| `followers` | `accountId: uuid`, `offset` | follower names for an account the signer owns/admins or is |
 
 - Batch limit 1000 targets per call (Röbel has a few hundred accounts). Onboarding is one
   call.
@@ -148,7 +154,8 @@ muted the actor. Which metadata key holds the actor (`liker_wallet`, `commenter_
 - **Profiles** (`app/account/[id]/index.tsx`, `OrgProfileHero` `HeroAction`, the person
   branch):
   - a Folgen/Entfolgt button;
-  - "N Follower · folgt M" (tappable lists);
+  - "N Follower · folgt M". The list behind the count opens only for the account's own
+    owners/admins or the person themselves (§3).
   - "Stummschalten" in the overflow menu.
 - **Own profile**: follower and following counts.
 - **Settings → "Folgen & Stummschalten"**:
@@ -205,6 +212,7 @@ computed live; at a few hundred accounts no materialisation is needed.
 - Mute effects on Erkunden, map, events, marketplace, or DMs (DMs already have
   "Blockieren").
 - Web app (`project_expo_is_the_only_citizen_client`).
+- Nostr read-back / backfeed (§12, N2).
 - Multi-town scoping. All accounts count as "home town" until a second community exists.
   The RPC is the single place to add a community filter later.
 
@@ -243,3 +251,61 @@ Risks:
   - onboarding with all ticked and some unticked;
   - the intro sheet for an existing user;
   - mute from a post, then confirm that the comments and inbox are gone too.
+
+## 12. Nostr
+
+Supabase stays the source of truth for this slice, as for posts (the `lib/nostr/publish.ts`
+contract). The relay gets a signed, portable mirror on the device, best-effort, never
+blocking. A user who exports their nsec into any Nostr client (Damus, Amethyst, …) keeps
+their follows and mutes. Only enrolled users take part: users with a Nostr key and
+public-record consent, which today means citizens. Everyone else is Supabase-only.
+
+**Lists, all replaceable and signed with the user's own device key:**
+
+| Kind | NIP | Public part | Private part (NIP-44 encrypted to self) |
+|---|---|---|---|
+| 3 contact list | NIP-02 | `p` tags of followed **orgs** | — |
+| 10000 mute list | NIP-51 | empty | `p` tag per muted org; `netizen_account` tag (account uuid) per muted account |
+| 30000 follow set, `d=netizen-unfollowed` | NIP-51 | empty | `netizen_account` tag per unfollowed account |
+
+**Why persons are not `p`-tagged publicly.**
+- A person's npub is not publicly linked to their account; `nostr_identities` is
+  service-role only.
+- Putting followed persons' npubs into a public contact list would need exactly that public
+  lookup, so person follows stay on Supabase until a person opts into a public binding (the
+  "relay-native bootstrap" in `packages/nostr/src/binding.ts`). Then they join the kind 3
+  automatically.
+- Mutes and unfollows are fully encrypted, so other clients learn only that the list exists.
+  Clients that read NIP-51 private mutes still honour muted orgs.
+
+**Org pubkeys.**
+- The publisher already signs each org's kind 0 under `deriveOrgIdentity(nodeSecret,
+  nodeId, "org-<uuid>")`.
+- It additionally writes a ledger row
+  `nostr_publications(source_type='org_profile', source_id=<account uuid>, pubkey_hex)`.
+  The app resolves followed/muted org pubkeys from it.
+- Org identity is public by design, so this leaks nothing.
+
+**Publishing.**
+- After every successful relations change, `RelationsContext` rebuilds all three lists from
+  the server snapshot and publishes them.
+- The ledger rows are `source_type` `contacts` / `mutes` / `unfollowed`, with
+  `source_id` = own pubkey.
+- `retryPendingPublications` picks up failures.
+- An empty set publishes an empty list, which is how a replaceable list is cleared.
+
+**Protocol.** Tag names and the `d` value are registered as **NSP-15 "Social lists"** in
+`packages/protocol/src/social.ts`, the next free NSP number.
+
+**Not in this slice (N2).** Read-back:
+- the app fetches its own lists at launch, decrypts them, and reconciles edits made in other
+  clients through the edge function;
+- the publisher backfeeds kind 3 like it does kinds 1/6/7.
+
+Until then, edits made in another client are overwritten by the app's next publish. The
+nsec export screen should say so.
+
+**Known existing leak, outside this slice.** `nostr_publications` is anon-readable, and its
+`post` rows map a post id (→ `posts.wallet_address`) to `pubkey_hex`. Every citizen who has
+mirrored a post is therefore already linked wallet↔npub. That needs its own fix; this spec
+does not make it worse.
