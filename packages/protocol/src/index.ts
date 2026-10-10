@@ -54,3 +54,4 @@ export {
   safeParseAction, safeParseContract, safeParsePayoutLine, safeParseTask, taskAddress, validateActionChain,
   type ActionName, type ActorRole, type KasseNotice, type LifecycleStage, type ParsedAction, type ReplayState, type TaskStatus, type VerifyClient,
 } from "./vorhaben.js";
+export { NSP15_ACCOUNT_TAG, NSP15_KINDS, NSP15_ORG_LEDGER_SOURCE, NSP15_UNFOLLOWED_D } from "./social.js";
