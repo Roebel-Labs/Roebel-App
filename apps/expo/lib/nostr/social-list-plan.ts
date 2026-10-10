@@ -23,3 +23,15 @@ export function planSocialLists(s: RelationsSnapshot, orgPubkeyById: Map<string,
 export function nextCreatedAt(nowSec: number, lastSec: number | null): number {
   return lastSec !== null && lastSec >= nowSec ? lastSec + 1 : nowSec;
 }
+
+/**
+ * Resolve org pubkeys first, then plan. If the lookup rejects, nothing is planned and the caller
+ * publishes nothing (an empty replaceable kind 3 would wipe the user's contact list on the relay).
+ */
+export async function resolvePlan(
+  s: RelationsSnapshot,
+  lookup: (ids: string[]) => Promise<Map<string, string>>,
+): Promise<SocialListPlan> {
+  const map = await lookup([...new Set([...s.following, ...s.muted])]);
+  return planSocialLists(s, map);
+}

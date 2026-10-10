@@ -1,4 +1,4 @@
-import { nextCreatedAt, planSocialLists } from '../nostr/social-list-plan';
+import { nextCreatedAt, planSocialLists, resolvePlan } from '../nostr/social-list-plan';
 import { EMPTY_SNAPSHOT } from '../relations-state';
 
 const orgs = new Map([['org-1', 'a'.repeat(64)], ['org-2', 'b'.repeat(64)]]);
@@ -23,5 +23,16 @@ describe('social-list-plan', () => {
     expect(nextCreatedAt(100, null)).toBe(100);
     expect(nextCreatedAt(100, 100)).toBe(101);
     expect(nextCreatedAt(100, 150)).toBe(151);
+  });
+
+  it('resolvePlan rejects when the org lookup fails, so nothing is planned or published', async () => {
+    const lookup = jest.fn().mockRejectedValue(new Error('supabase down'));
+    await expect(resolvePlan({ ...EMPTY_SNAPSHOT, following: ['org-1'] }, lookup)).rejects.toThrow('supabase down');
+  });
+  it('resolvePlan looks up the union of followed and muted ids once', async () => {
+    const lookup = jest.fn().mockResolvedValue(orgs);
+    const plan = await resolvePlan({ ...EMPTY_SNAPSHOT, following: ['org-1'], muted: ['org-1', 'org-2'] }, lookup);
+    expect(lookup).toHaveBeenCalledWith(['org-1', 'org-2']);
+    expect(plan.contacts).toEqual(['a'.repeat(64)]);
   });
 });

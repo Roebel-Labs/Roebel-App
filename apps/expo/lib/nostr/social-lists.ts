@@ -1,3 +1,4 @@
+import type { NostrEvent } from '@netizen-labs/nostr';
 import {
   buildContactListEvent, buildPrivateListEvent, KIND_FOLLOW_SET, KIND_MUTE_LIST, UNFOLLOWED_SET_D,
 } from '@netizen-labs/nostr';
@@ -5,7 +6,7 @@ import { supabase } from '../supabase';
 import type { RelationsSnapshot } from '../relations-state';
 import { loadStoredIdentity } from './identity';
 import { publishSigned } from './publish';
-import { nextCreatedAt, planSocialLists } from './social-list-plan';
+import { nextCreatedAt, resolvePlan } from './social-list-plan';
 
 export const SOCIAL_LIST_SOURCE_TYPES = ['contacts', 'mutes', 'unfollowed'] as const;
 
@@ -15,8 +16,10 @@ let queue: Promise<void> = Promise.resolve();
 // HARD privacy rule: ONLY 'org_profile' rows. Persons are never resolved to a pubkey here.
 async function orgPubkeys(ids: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const { data } = await supabase.from('nostr_publications')
+  const { data, error } = await supabase.from('nostr_publications')
     .select('source_id, pubkey_hex').eq('source_type', 'org_profile').in('source_id', ids);
+  // A failed lookup must abort the whole publish: an empty map would publish an empty kind 3.
+  if (error) throw error;
   return new Map((data ?? []).map((r: { source_id: string; pubkey_hex: string }) => [r.source_id, r.pubkey_hex]));
 }
 
@@ -44,16 +47,23 @@ export function publishSocialLists(s: RelationsSnapshot): Promise<void> {
     try {
       const identity = await loadStoredIdentity();
       if (!identity) return;
-      const plan = planSocialLists(s, await orgPubkeys([...new Set([...s.following, ...s.muted])]));
+      // Resolve first, outside the per-list try blocks: a lookup failure aborts before ANY list is published.
+      const plan = await resolvePlan(s, orgPubkeys);
       const createdAt = nextCreatedAt(Math.floor(Date.now() / 1000), lastCreatedAt);
       lastCreatedAt = createdAt;
       const self = identity.publicKey;
-      await publishSigned(buildContactListEvent(identity.secretKey, plan.contacts, { createdAt }), 'contacts', self);
-      await publishSigned(buildPrivateListEvent(identity.secretKey, KIND_MUTE_LIST, plan.muteItems, { createdAt }), 'mutes', self);
-      await publishSigned(
-        buildPrivateListEvent(identity.secretKey, KIND_FOLLOW_SET, plan.unfollowedItems, { d: UNFOLLOWED_SET_D, createdAt }),
-        'unfollowed', self,
-      );
+      const lists: Array<[string, () => NostrEvent]> = [
+        ['contacts', () => buildContactListEvent(identity.secretKey, plan.contacts, { createdAt })],
+        ['mutes', () => buildPrivateListEvent(identity.secretKey, KIND_MUTE_LIST, plan.muteItems, { createdAt })],
+        ['unfollowed', () => buildPrivateListEvent(identity.secretKey, KIND_FOLLOW_SET, plan.unfollowedItems, { d: UNFOLLOWED_SET_D, createdAt })],
+      ];
+      for (const [sourceType, build] of lists) {
+        try {
+          await publishSigned(build(), sourceType, self);
+        } catch (err) {
+          console.warn(`social list ${sourceType} failed (non-fatal)`, err);
+        }
+      }
     } catch (err) {
       console.warn('social lists publish failed (non-fatal)', err);
     }
