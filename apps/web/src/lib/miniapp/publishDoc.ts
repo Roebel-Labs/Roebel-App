@@ -60,7 +60,7 @@ For Next.js, Vite and Lovable that means the file \`public/.well-known/roebel-mi
 }
 \`\`\`
 - \`owner\`: the builder's Röbel wallet address. If you don't know it, **ask the builder**.
-  They find it in the Röbel App under Profil, or on ${base}/dashboard/mini-apps after logging in.
+  They find it after logging in at ${base}/dashboard/mini-apps → "Per URL hinzufügen" (it shows the address to copy).
 - \`homeUrl\` must be on the same domain as the manifest.
 - \`category\`: community, governance, finance, utility, games, education, news, culture, environment.
 - \`permissions\` (only what you use): wallet, rewards, notifications, circles, share.

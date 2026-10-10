@@ -7,15 +7,11 @@ import { jsonError } from "@/lib/miniapp/http";
 import { MiniAppError } from "@/lib/miniapp/types";
 import { wellKnownUrlFor } from "@/lib/miniapp/safeFetch";
 import { DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
-import { sharedLimiters } from "@/lib/rate-limit/server";
-import { HOUR_MS, MINUTE_MS, takeAll } from "@/lib/rate-limit";
+import { checkRegisterLimits, REGISTER_LIMIT_MESSAGES } from "@/lib/miniapp/registerLimits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-const ipLimiters = sharedLimiters([{ name: "miniapp-register-ip", limit: 10, windowMs: HOUR_MS }]);
-const originLimiters = sharedLimiters([{ name: "miniapp-register-origin", limit: 1, windowMs: MINUTE_MS }]);
 
 export async function POST(req: Request) {
   try {
@@ -23,8 +19,11 @@ export async function POST(req: Request) {
     if (!body.url) throw new MiniAppError("invalid_params", "Feld url fehlt.");
     const { origin } = wellKnownUrlFor(body.url);
     const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
-    if (!(await takeAll(ipLimiters, ip)) || !(await takeAll(originLimiters, origin))) {
-      throw new MiniAppError("rate_limited", "Zu viele Registrierungen — bitte kurz warten.", 429);
+    const refused = await checkRegisterLimits(ip, origin);
+    if (refused) {
+      const res = jsonError(new MiniAppError("rate_limited", REGISTER_LIMIT_MESSAGES[refused], 429));
+      res.headers.set("Retry-After", refused === "ip" ? "3600" : "60");
+      return res;
     }
 
     const { app, outcome } = await indexOrigin(body.url, { expectedOwner: body.expectedOwner });

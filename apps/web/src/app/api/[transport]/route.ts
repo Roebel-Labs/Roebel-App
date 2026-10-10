@@ -36,6 +36,8 @@ import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
 import { validateManifest } from "@/lib/miniapp/manifest";
 import { indexOrigin } from "@/lib/miniapp/indexing";
+import { wellKnownUrlFor } from "@/lib/miniapp/safeFetch";
+import { checkRegisterLimits, REGISTER_LIMIT_MESSAGES } from "@/lib/miniapp/registerLimits";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
 import type { DeveloperRow, MiniAppRow } from "@/lib/miniapp/types";
 
@@ -271,7 +273,11 @@ const handler = createMcpHandler(
       "Register or re-index a SELF-HOSTED mini app: the app's origin must serve /.well-known/roebel-miniapp.json ({ owner, miniapp:{…} }). No API key needed. Recipe: " +
         `${DOCS_BASE_URL}/mini-apps/publish.md`,
       { url: z.string().min(1).describe("Any URL on the app's origin, e.g. https://my-app.vercel.app") },
-      async ({ url }) => {
+      async ({ url }, extra) => {
+        const xff = extra.requestInfo?.headers?.["x-forwarded-for"];
+        const ip = (Array.isArray(xff) ? xff[0] : xff ?? "").split(",")[0].trim() || "mcp";
+        const refused = await checkRegisterLimits(ip, wellKnownUrlFor(url).origin);
+        if (refused) throw new Error(REGISTER_LIMIT_MESSAGES[refused]);
         const { app, outcome } = await indexOrigin(url);
         return json({
           outcome,
