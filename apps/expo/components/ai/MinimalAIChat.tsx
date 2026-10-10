@@ -640,9 +640,9 @@ const previewStyles = StyleSheet.create({
 
 export function MinimalAIChat() {
   const thirdwebAccount = useActiveAccount();
-  const signingAccount: SigningAccount | null = thirdwebAccount
-    ? { address: thirdwebAccount.address, signMessage: (args) => thirdwebAccount.signMessage(args) }
-    : null;
+  // Pass the account object itself: a passkey session marks it (lib/passkey/active.ts), and a
+  // copied { address, signMessage } would lose that and fall back to a passkey signature.
+  const signingAccount: SigningAccount | null = thirdwebAccount ?? null;
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const { user } = useUser();

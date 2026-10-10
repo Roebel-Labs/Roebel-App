@@ -25,7 +25,10 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string; me
 const DEFAULT_API_BASE_URL = 'https://www.roebel.app';
 export function getApiBaseUrl(): string {
   const env = process.env.EXPO_PUBLIC_API_BASE_URL;
-  return env && env.length > 0 ? env.replace(/\/$/, '') : DEFAULT_API_BASE_URL;
+  const base = env && env.length > 0 ? env.replace(/\/$/, '') : DEFAULT_API_BASE_URL;
+  // The apex 307-redirects to www, and fetch drops the Authorization header on a cross-host
+  // redirect: every Bearer call (chat session, AI proxy) would then 401.
+  return base.replace(/^https:\/\/roebel\.app(?=\/|$)/, 'https://www.roebel.app');
 }
 
 async function hashPayload(payload: Record<string, unknown>): Promise<string> {

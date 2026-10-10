@@ -425,9 +425,7 @@ export default function SubmitEventScreen() {
 
       // Through the web proxy (POST /api/ai/anthropic): the app holds no API key.
       const data = await createAnthropicMessage(
-        thirdwebAccount
-          ? { address: thirdwebAccount.address, signMessage: (args) => thirdwebAccount.signMessage(args) }
-          : null,
+        thirdwebAccount ?? null,
         {
           model: 'claude-sonnet-4-6',
           max_tokens: 300,

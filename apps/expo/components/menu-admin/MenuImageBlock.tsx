@@ -58,9 +58,7 @@ export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onC
     }
     setGenerating(true);
     const result = await regenerateMenuItemImage(
-      activeAccount
-        ? { address: activeAccount.address, signMessage: (args) => activeAccount.signMessage(args) }
-        : null,
+      activeAccount ?? null,
       {
         menu_item_id: menuItemId,
         prompt_hint: promptHint.trim() || undefined,
