@@ -35,6 +35,7 @@ import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/d
 import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
 import { validateManifest } from "@/lib/miniapp/manifest";
+import { indexOrigin } from "@/lib/miniapp/indexing";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
 import type { DeveloperRow, MiniAppRow } from "@/lib/miniapp/types";
 
@@ -151,7 +152,8 @@ const handler = createMcpHandler(
             `2. Build ONE self-contained HTML document following it.\n` +
             `3. validate_html {html} — fix everything it reports.\n` +
             `4. publish_html_app {html, manifest} — creates/updates your app, serves it at https://<slug>.${MINI_APPS_SITE_DOMAIN}, status "pending" until an admin approves.\n\n` +
-            `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n\n` +
+            `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n` +
+            `Self-hosted (recommended for Vercel/Lovable/own server): serve /.well-known/roebel-miniapp.json, then register_app_url {url} — recipe ${DOCS_BASE_URL}/mini-apps/publish.md.\n\n` +
             `Auth for publishing tools: Authorization: Bearer nz_<api-key> — create at ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
         ),
     );
@@ -261,6 +263,21 @@ const handler = createMcpHandler(
         const clean = validateManifest(manifest);
         const app = await submitApp({ manifest: clean, developerId, source: "external" });
         return json({ submitted: true, app: appSummary(app), status: "pending" });
+      },
+    );
+
+    server.tool(
+      "register_app_url",
+      "Register or re-index a SELF-HOSTED mini app: the app's origin must serve /.well-known/roebel-miniapp.json ({ owner, miniapp:{…} }). No API key needed. Recipe: " +
+        `${DOCS_BASE_URL}/mini-apps/publish.md`,
+      { url: z.string().min(1).describe("Any URL on the app's origin, e.g. https://my-app.vercel.app") },
+      async ({ url }) => {
+        const { app, outcome } = await indexOrigin(url);
+        return json({
+          outcome,
+          app: appSummary(app),
+          dashboardUrl: `${DOCS_BASE_URL}/dashboard/mini-apps/${app.id}`,
+        });
       },
     );
 

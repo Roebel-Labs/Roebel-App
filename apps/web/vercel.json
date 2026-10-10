@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/mini-apps-reindex",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/mecky",
       "schedule": "0 6 * * *"
     },
