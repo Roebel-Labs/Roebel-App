@@ -53,7 +53,15 @@ export interface MiniAppRow {
   reward_budget: number;
   reward_spent: number;
   review_notes: string | null;
-  source: "external" | "ai_builder" | "first_party";
+  source: "external" | "ai_builder" | "first_party" | "indexed";
+  /** Self-hosted (indexed) apps: https origin the manifest lives on. */
+  origin?: string | null;
+  manifest_url?: string | null;
+  last_indexed_at?: string | null;
+  /** Last fetch/validation failure; null when the last index succeeded. */
+  index_error?: string | null;
+  /** A live app has a newer pending version awaiting review. */
+  pending_update?: boolean;
 }
 
 export interface MiniAppVersionRow {
@@ -68,6 +76,8 @@ export interface MiniAppVersionRow {
   reviewed_at: string | null;
   /** Single-file apps (ai_builder / HTML import): the published document. */
   html?: string | null;
+  /** Indexed apps: sha256 of the canonical miniapp JSON (skip unchanged). */
+  manifest_hash?: string | null;
 }
 
 export interface MiniAppEventRow {
@@ -105,6 +115,8 @@ export interface ListAppsFilter {
   /** free-text over name/slug/description */
   search?: string;
   limit?: number;
+  /** Review queue: status in pending/approved/draft OR a live app with a pending update. */
+  needsReview?: boolean;
 }
 
 /** `reset` puts an already-reviewed app back into the review queue (`pending`). */
