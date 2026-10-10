@@ -130,6 +130,11 @@ describe("organisation mapping", () => {
   it("refuses personal accounts outright", () => {
     assert.equal(orgToSpec({ ...ORG_ROW, account_type: "personal" }, "roebel"), null);
   });
+
+  it("orgToSpec records the org profile in the ledger so apps can resolve the org pubkey", () => {
+    const spec = orgToSpec(ORG_ROW, "roebel")!;
+    assert.deepEqual(spec.ledger, { sourceType: "org_profile", sourceId: ORG_ROW.id });
+  });
 });
 
 describe("Berlin wall-clock conversion", () => {
