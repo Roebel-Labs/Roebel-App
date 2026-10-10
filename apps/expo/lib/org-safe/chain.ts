@@ -33,6 +33,8 @@ const registrationRequested = parseAbiItem(
   'event RegistrationRequested(uint256 indexed requestId, bytes32 indexed orgId, address indexed safe, string metadataURI, uint32 requiredApprovals, uint32 requiredRejections, uint64 expiresAt)',
 );
 
+const roleSet = parseAbiItem('event RoleSet(bytes32 indexed orgId, address indexed account, uint8 role)');
+
 const ROLES: (OrgRole | 'none')[] = ['none', 'member', 'admin'];
 const cacheKey = (orgId: Hex) => `org-safe:v1:${orgRegistryGnosisAddress.toLowerCase()}:${orgId}`;
 
@@ -134,6 +136,23 @@ export async function readOrgSafeStatus(orgId: Hex, owners: readonly string[] = 
     expiresAt: Number(r.expiresAt),
     open: r.orgId.toLowerCase() === orgId.toLowerCase(),
   };
+}
+
+/**
+ * Every account the org's Safe ever gave a role to (RoleSet logs). Lets a sync
+ * clear the role of someone who left the org since: they are no longer in the
+ * member list, so the database alone cannot name them.
+ */
+export async function readRoleAccounts(orgId: Hex): Promise<string[]> {
+  const registry = orgRegistryGnosisAddress as Address;
+  const head = await client.getBlockNumber();
+  const seen = new Set<string>();
+  for (let from = BigInt(orgRegistryDeployBlock); from <= head; from += 10_000n) {
+    const to = from + 9_999n > head ? head : from + 9_999n;
+    const logs = await client.getLogs({ address: registry, event: roleSet, args: { orgId }, fromBlock: from, toBlock: to });
+    for (const l of logs) seen.add(String(l.args.account).toLowerCase());
+  }
+  return [...seen];
 }
 
 /** Owners, threshold and the onchain role of every account we care about. */

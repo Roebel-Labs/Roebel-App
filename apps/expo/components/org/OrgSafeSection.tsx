@@ -11,7 +11,7 @@ import BottomDrawer from '@/components/BottomDrawer';
 import { fetchMembersWithProfiles, leaveOrg } from '@/lib/supabase-member-management';
 import type { MemberWithProfile } from '@/lib/types';
 import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
-import { isDeployed, orgsNeedingSafe, readOrgChainState, readOrgSafeStatus, rememberOrgSafe, type OrgSafeStatus } from '@/lib/org-safe/chain';
+import { isDeployed, orgsNeedingSafe, readOrgChainState, readRoleAccounts, readOrgSafeStatus, rememberOrgSafe, type OrgSafeStatus } from '@/lib/org-safe/chain';
 import { fetchOwnedOrgsWithOwners, type OwnedOrg } from '@/lib/org-safe/members';
 import { sendOrgCalls } from '@/lib/org-safe/send';
 import {
@@ -77,7 +77,9 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
     );
     setStatus(s);
     if (s.kind === 'registered') {
-      const accounts = [...m.map((x) => x.wallet_address), ...(me ? [me] : [])];
+      // Former members too, so a sync clears roles of people who left.
+      const former = await readRoleAccounts(orgId).catch(() => [] as string[]);
+      const accounts = [...m.map((x) => x.wallet_address), ...(me ? [me] : []), ...former];
       setChain(await readOrgChainState(orgId, s.safe, accounts));
     } else {
       setChain(null);
