@@ -13,14 +13,31 @@ export const SOCIAL_LIST_SOURCE_TYPES = ['contacts', 'mutes', 'unfollowed'] as c
 let lastCreatedAt: number | null = null;
 let queue: Promise<void> = Promise.resolve();
 
-// HARD privacy rule: ONLY 'org_profile' rows. Persons are never resolved to a pubkey here.
+const IN_CHUNK = 100;
+
+async function selectInChunks<T>(ids: string[], run: (chunk: string[]) => PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const { data, error } = await run(ids.slice(i, i + IN_CHUNK));
+    // A failed lookup must abort the whole publish: an empty map would publish an empty kind 3.
+    if (error) throw error;
+    out.push(...((data ?? []) as T[]));
+  }
+  return out;
+}
+
+// HARD privacy rule: ONLY organisation accounts, and ONLY 'org_profile' rows. Persons are never
+// resolved to a pubkey here — the account type is checked first, so a stray org_profile row keyed
+// by a person's account id can never leak into the public contact list.
 async function orgPubkeys(ids: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const { data, error } = await supabase.from('nostr_publications')
-    .select('source_id, pubkey_hex').eq('source_type', 'org_profile').in('source_id', ids);
-  // A failed lookup must abort the whole publish: an empty map would publish an empty kind 3.
-  if (error) throw error;
-  return new Map((data ?? []).map((r: { source_id: string; pubkey_hex: string }) => [r.source_id, r.pubkey_hex]));
+  const orgs = await selectInChunks<{ id: string }>(ids, (chunk) => supabase.from('accounts')
+    .select('id').eq('account_type', 'organisation').in('id', chunk));
+  const orgIds = orgs.map((r) => r.id);
+  if (orgIds.length === 0) return new Map();
+  const rows = await selectInChunks<{ source_id: string; pubkey_hex: string }>(orgIds, (chunk) => supabase.from('nostr_publications')
+    .select('source_id, pubkey_hex').eq('source_type', 'org_profile').in('source_id', chunk));
+  return new Map(rows.map((r) => [r.source_id, r.pubkey_hex]));
 }
 
 /** True when one of the viewer's own social-list publications is still pending (relay was unreachable). */
