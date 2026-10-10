@@ -92,7 +92,7 @@ function sessionLookup() {
 
 type Admin = ReturnType<typeof createClient>;
 
-// ── Message hashing — MUST mirror apps/web/src/lib/relations/message.ts
+// ── Message hashing — MUST mirror the client signer (same as org-membership)
 //    byte-for-byte: ordinal key sort (not localeCompare), JSON.stringify,
 //    SHA-256 hex. ──────────────────────────────────────────────────────
 
