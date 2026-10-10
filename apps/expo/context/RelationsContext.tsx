@@ -25,6 +25,8 @@ type Ctx = {
   unmute: (id: string, wallet?: string | null) => Promise<boolean>;
 };
 
+const RESTORE_TIMEOUT_MS = 5000;
+
 const RelationsContext = createContext<Ctx | null>(null);
 
 export function RelationsProvider({ children }: { children: React.ReactNode }) {
@@ -34,7 +36,16 @@ export function RelationsProvider({ children }: { children: React.ReactNode }) {
   const { autoConnectFinished } = useWalletBoot();
   // While a stored session is still being restored, "no wallet" is not yet "guest": stay not-ready so
   // the feed does not fetch unfiltered before the wallet and its cached snapshot arrive.
-  const walletPending = connectionStatus === 'connecting' || (!wallet && !autoConnectFinished);
+  const restoring = connectionStatus === 'connecting' || (!wallet && !autoConnectFinished);
+  // autoConnect has no timeout of its own (RN fetch can hang): after 5 s stop waiting, so a slow
+  // restore shows the feed unfiltered rather than an endless skeleton.
+  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  useEffect(() => {
+    if (!restoring) { setRestoreTimedOut(false); return; }
+    const timer = setTimeout(() => setRestoreTimedOut(true), RESTORE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [restoring]);
+  const walletPending = restoring && !restoreTimedOut;
   const queryClient = useQueryClient();
   const { showSnackbar } = useSnackbar();
   const [snapshot, setSnapshot] = useState<RelationsSnapshot>(EMPTY_SNAPSHOT);
