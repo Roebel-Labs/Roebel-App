@@ -45,6 +45,9 @@ Hard rules (apps violating these fail review):
 
 ## Four ways to build & ship
 
+0) **Self-hosted + manifest (recommended for Claude Code / Codex / Lovable)** — ${DOCS_BASE_URL}/mini-apps/publish.md
+   Deploy anywhere, serve /.well-known/roebel-miniapp.json, register with one call.
+
 A) **AI editor (KI-Baukasten)** — ${DOCS_BASE_URL}/editor
    Chat (with image upload: mockups/screenshots/logos) → single-file HTML app →
    one-click publish into admin review. Served from ${SERVED_AT}.
@@ -151,6 +154,7 @@ export function buildLlmsIndexTxt(): string {
 
 ## Docs
 
+- [Publish a self-hosted app](${DOCS_BASE_URL}/mini-apps/publish.md): deploy anywhere, add /.well-known/roebel-miniapp.json, register with one call
 - [Full developer guide](${DOCS_BASE_URL}/mini-apps/llms-full.txt): everything —
   SDK reference, bridge, screens contract, design system, copy rules,
   single-file boilerplate, publishing API, MCP server.
