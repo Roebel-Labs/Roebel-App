@@ -115,8 +115,36 @@ export async function fetchManifestJson(
       const type = res.headers.get("content-type") ?? "";
       if (!type.includes("json")) fail(`Manifest muss JSON sein (content-type war "${type || "leer"}").`);
 
-      const buf = await res.arrayBuffer();
-      if (buf.byteLength > MAX_BYTES) fail("Manifest ist größer als 64 KB.");
+      const declared = Number(res.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > MAX_BYTES) fail("Manifest ist größer als 64 KB.");
+
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      if (res.body) {
+        const reader = res.body.getReader();
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > MAX_BYTES) {
+              controller.abort();
+              void reader.cancel().catch(() => {});
+              break;
+            }
+            chunks.push(value);
+          }
+        } catch {
+          fail(`Manifest unter ${current} nicht erreichbar (Zeitüberschreitung oder Netzwerkfehler).`);
+        }
+      }
+      if (total > MAX_BYTES) fail("Manifest ist größer als 64 KB.");
+      const buf = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        buf.set(c, off);
+        off += c.byteLength;
+      }
       try {
         return JSON.parse(new TextDecoder().decode(buf));
       } catch {

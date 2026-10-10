@@ -111,3 +111,54 @@ test("404, wrong content-type, oversize, invalid JSON, timeout", async () => {
     /nicht erreichbar|Zeit/,
   );
 });
+
+test("body stall past the timeout fails with a German MiniAppError", async () => {
+  await assert.rejects(
+    fetchManifestJson("https://app.example/.well-known/roebel-miniapp.json", {
+      lookup: publicLookup,
+      timeoutMs: 20,
+      fetch: async (_u, init) =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              init.signal.addEventListener("abort", () => c.error(new Error("aborted")));
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    }),
+    (e: Error & { code?: string }) => e.code === "invalid_params" && /nicht erreichbar|Zeit/.test(e.message),
+  );
+});
+
+test("streamed oversize body without content-length is cut off", async () => {
+  let pulled = 0;
+  await assert.rejects(
+    fetchManifestJson("https://app.example/.well-known/roebel-miniapp.json", {
+      lookup: publicLookup,
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            pull(c) {
+              pulled++;
+              c.enqueue(new Uint8Array(16 * 1024));
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    }),
+    /64 KB/,
+  );
+  assert.ok(pulled < 20);
+});
+
+test("content-length above the cap is rejected early", async () => {
+  await assert.rejects(
+    fetchManifestJson("https://app.example/.well-known/roebel-miniapp.json", {
+      lookup: publicLookup,
+      fetch: async () =>
+        new Response("{}", { headers: { "content-type": "application/json", "content-length": "999999" } }),
+    }),
+    /64 KB/,
+  );
+});
