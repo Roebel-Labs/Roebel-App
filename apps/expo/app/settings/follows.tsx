@@ -124,7 +124,7 @@ export default function FollowsSettingsScreen() {
             accessibilityRole="tab"
             accessibilityState={{ selected: segment === key }}
           >
-            <Text style={[styles.segmentText, { color: segment === key ? colors.white ?? '#fff' : colors.textPrimary }]}>{label}</Text>
+            <Text style={[styles.segmentText, { color: segment === key ? '#fff' : colors.textPrimary }]}>{label}</Text>
           </Pressable>
         ))}
       </View>
