@@ -383,6 +383,24 @@ export default function NotificationsScreen() {
           />
         </Section>
 
+        {/* Follows & mutes: who appears in the feed and who can reach you */}
+        <Section title="Folgen & Stummschalten" colors={colors}>
+          <Pressable
+            style={[styles.categorySelector, { borderBottomWidth: 0 }]}
+            onPress={() => router.push('/settings/follows' as any)}
+            accessibilityRole="button"
+          >
+            <View style={styles.categorySelectorTextContainer}>
+              <Text style={[styles.categorySelectorLabel, { color: colors.textPrimary }]}>
+                Konten verwalten
+              </Text>
+            </View>
+            <View style={styles.categorySelectorRight}>
+              <ChevronRightIcon width={20} height={20} style={styles.chevronIcon} />
+            </View>
+          </Pressable>
+        </Section>
+
         {/* Info Section */}
         <View style={styles.infoSection}>
           <Text style={[styles.infoText, { color: colors.textTertiary }]}>
