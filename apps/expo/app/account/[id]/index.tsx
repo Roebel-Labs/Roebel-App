@@ -64,6 +64,9 @@ import {
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
 
+/** Wallets left out of the public member list (they keep their role). */
+const HIDDEN_MEMBER_WALLETS = new Set(['0xc49de63ccfee46c6c5c3e393293f66779799fb28']);
+
 const STICKY_OFFSET = 56;
 
 type TabKey = 'menu' | 'info' | 'posts';
@@ -288,6 +291,15 @@ function PublicAccountScreenInner() {
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+  // Max keeps owner/admin rights on many orgs to manage them, but should not
+  // be presented as part of their team on the public org page.
+  const visibleMembers = useMemo(
+    () =>
+      members.filter(
+        (m) => typeof m?.wallet_address !== 'string' || !HIDDEN_MEMBER_WALLETS.has(m.wallet_address.toLowerCase())
+      ),
+    [members]
+  );
 
   const safeEvents = useMemo(
     () => events.filter((e) => e && e.id && typeof e.title === 'string'),
@@ -323,7 +335,7 @@ function PublicAccountScreenInner() {
     );
   }
 
-  const memberAvatars = members.slice(0, 3).map((m) => ({
+  const memberAvatars = visibleMembers.slice(0, 3).map((m) => ({
     avatar_url: m.user?.profile_picture_url ?? null,
     username: m.user?.username ?? null,
   }));
@@ -455,7 +467,7 @@ function PublicAccountScreenInner() {
           account={account}
           hero={hero}
           followRow={followRow}
-          members={members}
+          members={visibleMembers}
           services={services}
           products={products}
           deals={safeDeals}
@@ -500,18 +512,18 @@ function PublicAccountScreenInner() {
       ) : null}
 
       {/* Members */}
-      {members.length > 0 && (
+      {visibleMembers.length > 0 && (
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder</Text>
           <View style={styles.membersRow}>
             <AvatarStack
               users={memberAvatars}
-              totalCount={members.length}
+              totalCount={visibleMembers.length}
               maxVisible={3}
               size="large"
             />
             <Text style={[styles.membersCount, { color: colors.textSecondary }]}>
-              {members.length} {members.length === 1 ? 'Mitglied' : 'Mitglieder'}
+              {visibleMembers.length} {visibleMembers.length === 1 ? 'Mitglied' : 'Mitglieder'}
             </Text>
           </View>
         </View>
