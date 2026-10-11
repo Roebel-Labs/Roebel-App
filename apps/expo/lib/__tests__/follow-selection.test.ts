@@ -1,4 +1,4 @@
-import { splitSelection, filterSuggestions, submitFollowSelection, orgsFirst } from '../follow-selection';
+import { splitSelection, filterSuggestions, submitFollowSelection, orgsFirst, collapsedSuggestions } from '../follow-selection';
 
 describe('follow-selection', () => {
   it('everything ticked by default; unticked become explicit unfollows', () => {
@@ -48,5 +48,18 @@ describe('orgsFirst', () => {
       { account_id: 'o2', account_type: 'organisation' },
     ];
     expect(orgsFirst(list).map((s) => s.account_id)).toEqual(['o1', 'o2', 'p1', 'p2']);
+  });
+});
+
+describe('collapsedSuggestions', () => {
+  const org = (id: string) => ({ account_id: id, account_type: 'organisation' });
+  const person = (id: string) => ({ account_id: id, account_type: 'personal' });
+  it('shows the first n organisations only', () => {
+    const list = [org('o1'), org('o2'), org('o3'), org('o4'), org('o5'), org('o6'), person('p1')];
+    expect(collapsedSuggestions(list, 5).map((s) => s.account_id)).toEqual(['o1', 'o2', 'o3', 'o4', 'o5']);
+  });
+  it('tops up with people when there are fewer organisations', () => {
+    const list = [org('o1'), person('p1'), person('p2')];
+    expect(collapsedSuggestions(list, 2).map((s) => s.account_id)).toEqual(['o1', 'p1']);
   });
 });

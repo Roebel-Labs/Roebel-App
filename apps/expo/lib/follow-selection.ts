@@ -11,6 +11,12 @@ export function orgsFirst<T extends { account_type: string }>(list: T[]): T[] {
   return [...list].sort((a, b) => Number(b.account_type === 'organisation') - Number(a.account_type === 'organisation'));
 }
 
+/** The short list shown before "Alle anzeigen": the first `n` organisations, topped up with others if there are fewer. */
+export function collapsedSuggestions<T extends { account_type: string }>(list: T[], n: number): T[] {
+  const orgs = list.filter((s) => s.account_type === 'organisation').slice(0, n);
+  return orgs.length >= n ? orgs : [...orgs, ...list.filter((s) => s.account_type !== 'organisation').slice(0, n - orgs.length)];
+}
+
 export function filterSuggestions(list: FollowSuggestion[], query: string): FollowSuggestion[] {
   const q = fold(query.trim());
   return q ? list.filter((s) => fold(s.name).includes(q)) : list;

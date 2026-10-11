@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import type { FollowSuggestion } from '@/lib/supabase-follows';
-import { filterSuggestions } from '@/lib/follow-selection';
+import { collapsedSuggestions, filterSuggestions } from '@/lib/follow-selection';
 
 type Props = {
   suggestions: FollowSuggestion[];
@@ -13,6 +13,8 @@ type Props = {
   onAll: () => void;
   onNone: () => void;
   header?: React.ReactElement;
+  /** Start collapsed to this many organisations (no search/bulk row) with an "Alle anzeigen" footer. */
+  collapsedCount?: number;
 };
 
 const SUB_TYPE_LABEL: Record<string, string> = {
@@ -27,10 +29,15 @@ function secondaryLine(s: FollowSuggestion): string {
   return `${kind} · ${s.followers} Follower`;
 }
 
-export default function FollowList({ suggestions, unticked, onToggle, onAll, onNone, header }: Props) {
+export default function FollowList({ suggestions, unticked, onToggle, onAll, onNone, header, collapsedCount }: Props) {
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
-  const data = useMemo(() => filterSuggestions(suggestions, query), [suggestions, query]);
+  const [expanded, setExpanded] = useState(collapsedCount === undefined);
+  const collapsed = !expanded && collapsedCount !== undefined && suggestions.length > collapsedCount;
+  const data = useMemo(
+    () => (collapsed ? collapsedSuggestions(suggestions, collapsedCount!) : filterSuggestions(suggestions, query)),
+    [collapsed, collapsedCount, suggestions, query],
+  );
 
   return (
     <FlatList
@@ -40,6 +47,7 @@ export default function FollowList({ suggestions, unticked, onToggle, onAll, onN
       windowSize={7}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={
+        collapsed ? header ?? null : (
         <View>
           {header}
           <TextInput
@@ -60,6 +68,21 @@ export default function FollowList({ suggestions, unticked, onToggle, onAll, onN
             </Pressable>
           </View>
         </View>
+        )
+      }
+      ListFooterComponent={
+        collapsed ? (
+          <Pressable
+            onPress={() => setExpanded(true)}
+            style={[styles.more, { borderColor: colors.border }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.moreText, { color: colors.primary }]}>
+              Alle {suggestions.length} Konten anzeigen
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={colors.primary} />
+          </Pressable>
+        ) : null
       }
       renderItem={({ item }) => {
         const ticked = !unticked.has(item.account_id);
@@ -113,4 +136,14 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   name: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
   sub: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 1 },
+  more: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  moreText: { fontSize: 14, fontFamily: 'Inter-Medium' },
 });

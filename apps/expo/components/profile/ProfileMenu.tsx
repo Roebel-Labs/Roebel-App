@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
+import { Ionicons } from '@expo/vector-icons';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import { useTheme } from '@/context/ThemeContext';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -67,6 +68,9 @@ export default function ProfileMenu({ variant, gridless = false }: Props) {
       {divider}
       <View style={styles.group}>
         <ProfileMenuItem icon={<NotificationIcon width={ICON} height={ICON} color={c} />} label="Benachrichtigungen" onPress={push('/notifications' as Href)} />
+        {!isGuest && (
+          <ProfileMenuItem icon={<Ionicons name="people-outline" size={ICON} color={c} />} label="Folgen & Stummschalten" onPress={push('/settings/follows' as Href)} />
+        )}
         <ProfileMenuItem icon={<SettingsIcon width={ICON} height={ICON} color={c} />} label="Einstellungen" onPress={push('/settings' as Href)} />
         <ProfileMenuItem icon={<HelpCircleIcon width={ICON} height={ICON} color={c} />} label="Hilfe" onPress={push('/help' as Href)} />
         {isGuest && (

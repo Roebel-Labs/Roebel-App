@@ -104,6 +104,7 @@ export default function FollowIntroSheet() {
             onToggle={toggle}
             onAll={() => setUnticked(new Set())}
             onNone={() => setUnticked(new Set(allIds))}
+            collapsedCount={5}
           />
         </View>
         <Pressable
