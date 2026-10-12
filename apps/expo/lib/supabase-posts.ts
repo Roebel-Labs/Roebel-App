@@ -233,11 +233,14 @@ export async function fetchUserPosts(
   const wallet = walletAddress.toLowerCase();
 
   // Find the org account ids this wallet has posted as, so we can exclude them.
-  const { data: orgRows } = await supabase
+  // FK pinned: posts has a second FK to accounts (linked_account_id), and a bare
+  // `accounts!inner` embed fails with PGRST201, which silently disabled this filter.
+  const { data: orgRows, error: orgError } = await supabase
     .from('posts')
-    .select('account_id, accounts!inner(account_type)')
+    .select('account_id, accounts!posts_account_id_fkey!inner(account_type)')
     .eq('wallet_address', wallet)
     .eq('accounts.account_type', 'organisation');
+  if (orgError) console.error('Error resolving org posts to exclude:', orgError);
 
   const orgAccountIds = Array.from(
     new Set((orgRows ?? []).map((r: any) => r.account_id).filter(Boolean)),
