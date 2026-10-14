@@ -21,8 +21,10 @@ export default function WelcomeCitizenDataScreen() {
   const { colors } = useTheme();
   const { state, dispatch } = useWelcomeWizard();
 
-  const [firstName, setFirstName] = useState(state.citizenData?.firstName ?? '');
-  const [lastName, setLastName] = useState(state.citizenData?.lastName ?? '');
+  // No citizen data yet: start from the name typed in the name step, so it is never asked twice.
+  const [nameFirst, ...nameRest] = state.displayName.replace(/\s+/g, ' ').trim().split(' ');
+  const [firstName, setFirstName] = useState(state.citizenData?.firstName ?? nameFirst ?? '');
+  const [lastName, setLastName] = useState(state.citizenData?.lastName ?? nameRest.join(' '));
   const [birthDate, setBirthDate] = useState<Date | null>(
     state.citizenData?.birthdate ? new Date(state.citizenData.birthdate) : null,
   );
