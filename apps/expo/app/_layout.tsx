@@ -11,6 +11,7 @@ import {
   storePendingReferralCode,
 } from '@/lib/referral-deeplink';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
+import { routeForNotification } from '@/lib/navigation/notificationRoute';
 import { noTransition } from '@/lib/navigation/transitionPresets';
 import { AuthGateProvider } from '@/context/AuthGateContext';
 import { BookmarksProvider } from '@/context/BookmarksContext';
@@ -70,102 +71,67 @@ if (Platform.OS !== 'web') {
 }
 
 /**
- * Component to handle notification deep linking (native only)
+ * Opens the screen a tapped push notification points to (native only).
+ *
+ * Cold start: the tap is read synchronously on mount, but navigation waits until
+ * the boot navigation has settled (pathname off `/`). On a cold boot into `/`,
+ * app/index.tsx replaces it with /explore; a push made before that replace was
+ * swapped out by it, so the tap landed on Erkunden instead of the post. Pushing
+ * after it keeps Erkunden underneath, so "back" leads there.
  */
-function vorhabenRoute(data: { screen?: string; proposalId?: string; taskId?: string }): string {
-  if (data.screen === 'auszaehlung') return `/auszaehlung/${data.proposalId}`;
-  if (data.screen === 'aufgabe' && data.taskId) return `/aufgabe/${data.taskId}`;
-  if (data.screen === 'vertrag') return `/vertrag/${data.proposalId}`;
-  return `/proposal/${data.proposalId}`;
-}
+const NOTIFICATION_BOOT_FALLBACK_MS = 1500;
 
 function NotificationHandler() {
   const router = useRouter();
+  const pathname = usePathname();
+  const pendingRoute = React.useRef<string | null>(null);
+  const handledId = React.useRef<string | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
     const Notifications = require('expo-notifications');
 
-    // Handle notification response when app is open
+    // Cold start: the response that opened the app. Cleared once taken, so a
+    // later launch from the app icon does not route to the same push again.
+    const last = Notifications.getLastNotificationResponse?.() ?? null;
+    const lastRoute = last ? routeForNotification(last.notification.request.content.data) : null;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    if (last) {
+      handledId.current = last.notification.request.identifier;
+      Notifications.clearLastNotificationResponse?.();
+    }
+    if (lastRoute) {
+      pendingRoute.current = lastRoute;
+      // Boot never left `/` (no redirect happened): navigate anyway.
+      fallback = setTimeout(() => {
+        const route = pendingRoute.current;
+        pendingRoute.current = null;
+        if (route) router.push(route as any);
+      }, NOTIFICATION_BOOT_FALLBACK_MS);
+    }
+
+    // Warm tap while the app is running. The cold-start response can arrive here
+    // too; it is already handled above.
     const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
-      const data = response.notification.request.content.data;
-
-      if (data?.type === 'event' && data?.eventId) {
-        router.push(`/event/${data.eventId}` as any);
-      } else if (data?.type === 'news' && data?.slug) {
-        router.push(`/news/${data.slug}` as any);
-      } else if (data?.type === 'post' && data?.postId) {
-        router.push(`/post/${data.postId}` as any);
-      } else if (data?.type === 'forum_thread' && data?.threadId) {
-        router.push(`/forum/thread/${data.threadId}` as any);
-      } else if (data?.type === 'direct_message' && data?.conversationId) {
-        router.push(`/messages/${data.conversationId}` as any);
-      } else if (data?.type === 'chat_thread' && data?.threadId) {
-        router.push(`/chat/${data.threadId}` as any);
-      } else if (data?.type === 'vorhaben' && data?.proposalId) {
-        router.push(vorhabenRoute(data as any) as any);
-      } else if (data?.type === 'org_invite') {
-        router.push('/notifications' as any);
-      } else if (data?.type === 'reward') {
-        router.push('/rewards' as any);
-      } else if (data?.type === 'org' && data?.accountId) {
-        // Weekly follower digest for org owners/admins.
-        router.push(`/account/${data.accountId}` as any);
-      }
+      if (response.notification.request.identifier === handledId.current) return;
+      handledId.current = response.notification.request.identifier;
+      const route = routeForNotification(response.notification.request.content.data);
+      if (route) router.push(route as any);
     });
 
-    // Handle notification that opened the app from closed state
-    Notifications.getLastNotificationResponseAsync().then((response: any) => {
-      if (response) {
-        const data = response.notification.request.content.data;
-
-        if (data?.type === 'event' && data?.eventId) {
-          setTimeout(() => {
-            router.push(`/event/${data.eventId}` as any);
-          }, 100);
-        } else if (data?.type === 'news' && data?.slug) {
-          setTimeout(() => {
-            router.push(`/news/${data.slug}` as any);
-          }, 100);
-        } else if (data?.type === 'post' && data?.postId) {
-          setTimeout(() => {
-            router.push(`/post/${data.postId}` as any);
-          }, 100);
-        } else if (data?.type === 'forum_thread' && data?.threadId) {
-          setTimeout(() => {
-            router.push(`/forum/thread/${data.threadId}` as any);
-          }, 100);
-        } else if (data?.type === 'direct_message' && data?.conversationId) {
-          setTimeout(() => {
-            router.push(`/messages/${data.conversationId}` as any);
-          }, 100);
-        } else if (data?.type === 'chat_thread' && data?.threadId) {
-          setTimeout(() => {
-            router.push(`/chat/${data.threadId}` as any);
-          }, 100);
-        } else if (data?.type === 'vorhaben' && data?.proposalId) {
-          setTimeout(() => {
-            router.push(vorhabenRoute(data as any) as any);
-          }, 100);
-        } else if (data?.type === 'org_invite') {
-          setTimeout(() => {
-            router.push('/notifications' as any);
-          }, 100);
-        } else if (data?.type === 'reward') {
-          setTimeout(() => {
-            router.push('/rewards' as any);
-          }, 100);
-        } else if (data?.type === 'org' && data?.accountId) {
-          setTimeout(() => {
-            router.push(`/account/${data.accountId}` as any);
-          }, 100);
-        }
-      }
-    });
-
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      if (fallback) clearTimeout(fallback);
+    };
   }, [router]);
+
+  useEffect(() => {
+    const route = pendingRoute.current;
+    if (!route || pathname === '/') return;
+    pendingRoute.current = null;
+    router.push(route as any);
+  }, [pathname, router]);
 
   return null;
 }
