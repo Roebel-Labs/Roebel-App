@@ -182,7 +182,11 @@ Nachweise (§ 4).
 4. Kanzlei-Review; Benennung DSB prüfen (voraussichtlich nicht pflichtig bei aktueller
    Größe — bestätigen lassen).
 5. Bei Vereinsgründung: Verantwortlichen-Angaben aktualisieren.
-6. Hinweistext `ChainRecordNotice` angleichen: er sagt, Attester „sehen dafür die
-   Antragsdaten"; seit dem Commitment-Modell sehen sie in der App keine (§ 2.5).
-7. Nostr-Einrichtung für alle Konten (nicht nur Bürger:innen) erst mit einer
-   Policy-Version, deren Klausel zum öffentlichen Register alle Konten nennt.
+6. ~~Hinweistext `ChainRecordNotice` angleichen~~ — erledigt 2026-10-14 („Deine
+   Antragsdaten bleiben auf deinem Gerät — sie werden ihnen in der App nicht angezeigt.").
+7. Nostr-Einrichtung für alle Konten (nicht nur Bürger:innen) braucht drei Dinge zusammen:
+   (a) eine Policy-Version, deren Klausel zum öffentlichen Register alle Konten nennt,
+   (b) eine Relay-Allow-List, die nicht nur Bürger-NFT-Halter:innen zulässt (heute prüft
+   der Syncer die Mitgliedschaft bei jedem Lauf), (c) Registrierung für noch nicht
+   deployte Smart Accounts (ERC-6492; heute `wallet-not-deployed`). Ohne (b) und (c)
+   würde (a) nur eine Re-Consent-Abfrage ohne Wirkung auslösen.

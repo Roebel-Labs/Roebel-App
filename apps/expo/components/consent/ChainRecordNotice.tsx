@@ -24,7 +24,7 @@ const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const POINTS = [
   'Mit der Verifizierung entsteht ein dauerhafter, pseudonymer Eintrag auf einer öffentlichen Blockchain. Er zeigt nur eine Wallet-Adresse — nie Name, Adresse oder Geburtsdatum — kann aber technisch nicht gelöscht werden.',
   'Beim Löschen des Kontos entfernen wir alles, was die Wallet mit der Person verbindet. Der Blockchain-Eintrag ist danach niemandem mehr zuordenbar.',
-  'Den Antrag bestätigen andere verifizierte Bürger:innen mit ihrer Unterschrift — sie sehen dafür die Antragsdaten.',
+  'Den Antrag bestätigen andere verifizierte Bürger:innen mit ihrer Unterschrift. Deine Antragsdaten bleiben auf deinem Gerät — sie werden ihnen in der App nicht angezeigt.',
 ];
 
 export default function ChainRecordNotice() {
