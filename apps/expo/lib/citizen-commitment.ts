@@ -129,6 +129,17 @@ export async function storeCitizenPreimage(
   await SecureStore.setItemAsync(preimageKey(address), JSON.stringify(preimage));
 }
 
+/**
+ * Forget this account's citizen data on the device: the preimage (name,
+ * birthdate, address, salt) and the passkey-session salt. Used on account
+ * deletion; the on-chain commitment stays, but without the preimage it can no
+ * longer be linked back to the person.
+ */
+export async function clearCitizenPreimage(address: string): Promise<void> {
+  await SecureStore.deleteItemAsync(preimageKey(address));
+  await SecureStore.deleteItemAsync(passkeySaltKey(address));
+}
+
 /** Load the on-device preimage, or null if absent (e.g. fresh device). */
 export async function loadCitizenPreimage(
   address: string

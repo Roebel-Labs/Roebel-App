@@ -55,6 +55,27 @@ async function requestNostrErasure(): Promise<void> {
 }
 
 /**
+ * Forget the personal data this device holds for the account: the citizen
+ * preimage and salt (SecureStore) and the onboarding identity draft. Runs only
+ * after the server confirmed the deletion — before that the account still exists
+ * and the preimage is the only copy of what its commitment was built from.
+ * Never throws: the account is already gone, a local hiccup must not surface as
+ * "deletion failed".
+ */
+async function clearLocalPersonalData(wallet: string): Promise<void> {
+  try {
+    const [{ clearCitizenPreimage }, { clearCitizenDraft }] = await Promise.all([
+      import('./citizen-commitment'),
+      import('./onboarding-storage'),
+    ]);
+    await clearCitizenPreimage(wallet);
+    await clearCitizenDraft();
+  } catch (err) {
+    console.warn('local personal-data wipe incomplete', (err as Error)?.message);
+  }
+}
+
+/**
  * Calls the delete-user-account Edge Function with a wallet-signed message
  * proving control of the wallet. The server purges the user row, all
  * solely-owned org accounts, and every user-scoped row.
@@ -107,4 +128,6 @@ export async function deleteUserAccount(account: Account): Promise<void> {
       payload?.error ?? `Account deletion failed (HTTP ${response.status})`,
     );
   }
+
+  await clearLocalPersonalData(wallet);
 }

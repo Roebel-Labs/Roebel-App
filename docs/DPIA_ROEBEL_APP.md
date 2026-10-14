@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Verantwortlicher** | Röbel App / M. Brych (bei Vereinsgründung: auf den e. V. übertragen) |
-| **Version / Datum** | 1.0-ENTWURF · 2026-07-31 |
+| **Version / Datum** | 1.1-ENTWURF · 2026-10-14 (1.0: 2026-07-31; 1.1: Antragsdaten nur auf dem Gerät, § 2.3/2.5, Nostr-Einrichtung beim Willkommens-Assistenten, § 2.2) |
 | **Status** | **Entwurf** — inhaltlich vollständig aus Code/Migrationen abgeleitet; vor Verwendung gegenüber Aufsicht/Externen durch eine Datenschutz-Kanzlei prüfen lassen |
 | **Turnus** | laufende DPIA (EDPB 02/2025 § 99): fortschreiben bei jeder neuen On-Chain-/Nostr-Verarbeitung, neuem KI-System, neuem Auftragsverarbeiter |
 
@@ -44,11 +44,20 @@ Opt-in-Publikation ohnehin öffentlicher App-Inhalte (kind-0-Profile, kind-1-Pos
 signiert mit wallet-abgeleitetem Schlüssel. Die Zuordnung Wallet↔npub liegt ausschließlich
 in der zugriffsgesperrten Tabelle `nostr_identities` (RLS ohne Policies + REVOKE).
 KI-Agenten-Beiträge sind maschinenlesbar gekennzeichnet (`bot: true`, `netizen_agent`).
+Einwilligungsmoment ist das „Akzeptieren" der Datenschutzerklärung (Erststart-Screen,
+Re-Consent-Sheet und seit 2026-10-14 auch der Willkommens-Assistent). Eingerichtet wird
+danach automatisch nur für **verifizierte Bürger:innen**, weil die akzeptierte
+Policy-Version 1.1.0 nur diese nennt (`ENROLL_NON_CITIZENS = false`); bei allen anderen
+wird nur die Einwilligung auf dem Gerät vermerkt und die Einrichtung erst nach der
+Verifizierung nachgeholt. Das kind-0-Profil enthält nur Nutzername, Bio und Profilbild,
+nie den bürgerlichen Namen, die Adresse oder das Geburtsdatum.
 
 ### 2.3 Off-chain — die löschbare Identitätsbrücke (Supabase)
 
-Nutzerkonten (Wallet ↔ E-Mail via thirdweb-Login, Anzeigename), Antrags-/Attestierungsdaten
-(Name, Adresse, Geburtsdatum — Ende-zu-Ende-verschlüsselt für die Attester),
+Nutzerkonten (Wallet ↔ E-Mail via thirdweb-Login, Anzeigename), Antrags-/Attestierungs-
+nachweise **ohne Klartext**: seit 2026-06-17 nur das nicht umkehrbare Poseidon-Commitment
+über Name, Adresse, Geburtsdatum und Salt (`request_evidence`, `redacted: true`); die
+Antragsdaten selbst verlassen das Gerät nicht (§ 2.5),
 Consent-Präferenzen + Audit-Log (Policy-Version 1.1.0), Teilnahme-Mirror `vote_history`
 (**nur Teilnahme — die Stimmwahl wird seit 2026-07-31 weder gespeichert noch an Analytics
 gesendet**), Inhalte (Posts, Kommentare, Events), Push-Tokens, Punkte/Münzen-Caches,
@@ -61,6 +70,24 @@ Mecky (Claude/Anthropic; permanent als KI gekennzeichnet, Einwilligungs-Kategori
 `ai_assistant`), Story-/Newsletter-Ko-Erstellung (sichtbar gelabelt, redaktionell geprüft),
 Bildgenerierung (maschinenlesbar IPTC `trainedAlgorithmicMedia` markiert). Keine
 automatisierten Einzelentscheidungen i. S. v. Art. 22.
+
+### 2.5 Auf dem Gerät der Person (nicht beim Betreiber)
+
+- **Antragsdaten** (Vorname, Nachname, Geburtsdatum, Adresse + wallet-gebundenes Salt):
+  verschlüsselt im Geräte-Schlüsselspeicher (iOS Keychain / Android
+  EncryptedSharedPreferences, `citizen-preimage.<adresse>`). Sie sind die einzige Kopie
+  dessen, woraus das On-Chain-Commitment gebildet wurde.
+- **Antragsentwurf**, nur wenn das automatische Absenden im Willkommens-Assistenten
+  scheitert: ebenfalls im Schlüsselspeicher (`citizen_draft_v1`), gelöscht beim
+  erfolgreichen Absenden, **spätestens nach 30 Tagen** (Stand 2026-10-14; ältere Builds
+  hielten ihn unverschlüsselt in AsyncStorage, er wird beim nächsten Lesen umgezogen).
+- **Konto löschen** entfernt Antragsdaten, Passkey-Salt und Entwurf vom Gerät, sobald
+  der Server die Löschung bestätigt hat; der Nostr-Schlüssel wird vorher gelöscht.
+- Attester sehen in der App **keine** Antragsdaten; sie bestätigen auf Grundlage
+  persönlicher Bekanntschaft. Die Person kann ihre gespeicherten Angaben auf dem eigenen
+  Gerät anzeigen.
+- Web-Version (PWA): der Schlüsselspeicher fällt dort auf namespaced `localStorage`
+  zurück (`lib/storage/secureStorage.web.ts`).
 
 ## 3. Zwecke und Rechtsgrundlagen (Art. 35 Abs. 7 lit. a/b)
 
@@ -117,8 +144,8 @@ Betreibers gerade nicht bietet; hinzu kommen Datenhoheit ohne Zentralstelle und
 Forkability als Governance-Garantie für die Kommune. Abgleich mit der Checkliste des
 IT-Planungsrats: [Recherche §3](future-research/2026-07-29_ITPLR_BLOCKCHAIN_REGULATORY_LANDSCAPE.md).
 
-**Datenminimierung:** on-chain nur Adresse + Status/Commitments; Antragsdaten E2E-
-verschlüsselt; Stimmwahl nirgends off-chain; UI zeigt nie Wallet-Adressen; Analytics
+**Datenminimierung:** on-chain nur Adresse + Status/Commitments; Antragsdaten nur auf
+dem Gerät, serverseitig nur das Commitment; Stimmwahl nirgends off-chain; UI zeigt nie Wallet-Adressen; Analytics
 consent-gated und ohne Stimmdaten. **Speicherbegrenzung:** Brücke vollständig löschbar
 (Runbook); On-Chain-Rest nach Löschung anonym (EDPB § 103).
 
@@ -131,7 +158,7 @@ Skalen: Eintritt (niedrig/mittel/hoch) × Schwere (niedrig/mittel/hoch).
 | R1 | Verkettung/Profiling: eine Adresse trägt Identität + Zahlungsgraph + Governance + Messaging | mittel | hoch | `nostr_identities` gesperrt; keine Adress-Anzeige; Governance-Metadaten nicht aggregiert angezeigt; geplant: Semaphore-ZK-Nachweise | mittel — größtes strukturelles Risiko, aktiv zu reduzieren |
 | R2 | Politische Meinung ableitbar (Art.-9-Nähe) aus Teilnahme-Metadaten | mittel | hoch | MACI verbirgt Stimminhalt; `vote_history` speichert nur Teilnahme (Fix 2026-07-31); Abstimmungen als „Meinungsbild" gerahmt | niedrig–mittel |
 | R3 | Permanenz: Betroffene verstehen Unlöschbarkeit nicht | mittel | mittel | `ChainRecordNotice` + Public-Record-Consent VOR der Verarbeitung; Datenschutzerklärung § 5; Löschpfad macht Rest anonym | niedrig |
-| R4 | Breach der Off-Chain-Brücke (Supabase) deanonymisiert On-Chain-Historie | niedrig | hoch | RLS-Härtung, gesperrte Registry, Service-Key nur serverseitig, E2E für Antragsdaten | niedrig–mittel |
+| R4 | Breach der Off-Chain-Brücke (Supabase) deanonymisiert On-Chain-Historie | niedrig | hoch | RLS-Härtung, gesperrte Registry, Service-Key nur serverseitig, Antragsdaten nie serverseitig (nur Commitment) | niedrig–mittel |
 | R5 | Kleinstadt-Sozialwissen: Attester kennen Antragsteller | hoch | niedrig | systembedingt (soziales Attestierungsmodell); vorab offengelegt (Notice Punkt c) | akzeptiert, nicht technisch mitigierbar |
 | R6 | Koordinator entschlüsselt Stimmen | niedrig | hoch | Shamir 3-of-5 über Attester; Schlüssel existiert zwischen Tallies nicht | niedrig |
 | R7 | Drittland-/Node-Replikation | niedrig | mittel | Pseudonymie + löschbare Brücke; SCC/DPF bei Prozessoren | niedrig **[Offen: EDPB-Linie]** |
@@ -155,3 +182,7 @@ Nachweise (§ 4).
 4. Kanzlei-Review; Benennung DSB prüfen (voraussichtlich nicht pflichtig bei aktueller
    Größe — bestätigen lassen).
 5. Bei Vereinsgründung: Verantwortlichen-Angaben aktualisieren.
+6. Hinweistext `ChainRecordNotice` angleichen: er sagt, Attester „sehen dafür die
+   Antragsdaten"; seit dem Commitment-Modell sehen sie in der App keine (§ 2.5).
+7. Nostr-Einrichtung für alle Konten (nicht nur Bürger:innen) erst mit einer
+   Policy-Version, deren Klausel zum öffentlichen Register alle Konten nennt.
