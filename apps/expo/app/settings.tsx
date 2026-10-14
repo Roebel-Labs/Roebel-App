@@ -310,6 +310,23 @@ export default function SettingsScreen() {
           </Section>
         ) : null}
 
+        <Section title="FOLGEN" colors={colors}>
+          <Pressable
+            style={styles.themeOptionRow}
+            onPress={() => router.push('/settings/follows' as any)}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Folgen & Stummschalten
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Konten, denen du folgst, und stummgeschaltete Konten verwalten.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
+        </Section>
+
         <Section title="DATENSCHUTZ" colors={colors}>
           <Pressable
             style={[

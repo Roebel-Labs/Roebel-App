@@ -26,7 +26,8 @@ interface NotificationPayload {
     | 'post_comment'
     | 'post_reply'
     | 'comment_like'
-    | 'org_invite';
+    | 'org_invite'
+    | 'follower_digest';
   title: string;
   body: string;
   data?: {
@@ -63,6 +64,7 @@ interface ExpoPushTicket {
 interface PushToken {
   device_id: string;
   expo_push_token: string;
+  wallet_address?: string | null;
 }
 
 interface NotificationPreference {
@@ -77,6 +79,7 @@ interface NotificationPreference {
   likes_enabled: boolean;
   comments_enabled: boolean;
   org_invites_enabled: boolean;
+  follower_digest_enabled?: boolean;
 }
 
 serve(async (req: Request) => {
@@ -123,7 +126,7 @@ serve(async (req: Request) => {
     // messages), scope to the devices of those users; otherwise broadcast.
     let tokensQuery = supabase
       .from('push_tokens')
-      .select('device_id, expo_push_token')
+      .select('device_id, expo_push_token, wallet_address')
       .eq('is_active', true);
 
     if (walletAddresses && walletAddresses.length > 0) {
@@ -214,26 +217,53 @@ serve(async (req: Request) => {
           // Organisation invitation — opt-out per device (defaults to on)
           return pref.org_invites_enabled !== false;
 
+        case 'follower_digest':
+          // Weekly "N neue Follower" for org owners/admins — opt-out per device (defaults to on)
+          return pref.follower_digest_enabled !== false;
+
         default:
           return true;
       }
     });
 
-    if (eligibleTokens.length === 0) {
+    // Drop viewers who hid the author of a post_new: pushing a post the feed hides would contradict the feed.
+    let deliverable = eligibleTokens;
+    if (type === 'post_new' && (data?.accountId || data?.actorWallet)) {
+      let target = data?.accountId as string | undefined;
+      if (!target && data?.actorWallet) {
+        const { data: pid } = await supabase.rpc('personal_account_id', { p_wallet: data.actorWallet as string });
+        target = (pid as string | null) ?? undefined;
+      }
+      if (target) {
+        const { data: hides } = await supabase.from('account_hides').select('viewer_wallet').eq('target_account_id', target);
+        const hiders = new Set((hides ?? []).map((h: { viewer_wallet: string }) => h.viewer_wallet));
+        deliverable = eligibleTokens.filter((t: PushToken) => !t.wallet_address || !hiders.has(t.wallet_address.toLowerCase()));
+      }
+    }
+
+    if (deliverable.length === 0) {
       return new Response(
         JSON.stringify({ success: true, message: 'No eligible recipients', sent: 0 }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // post_new carries actorWallet/accountId only for the hide filter above: they never reach the
+    // device payload or notification_log. Other types keep accountId (org_invite / follower_digest route by it).
+    let outData: Record<string, unknown> | undefined = data;
+    if (type === 'post_new' && data) {
+      const { actorWallet: _actorWallet, accountId: _accountId, ...rest } = data as Record<string, unknown>;
+      outData = rest;
+    }
+
     // Build Expo push messages
-    const messages: ExpoPushMessage[] = eligibleTokens.map((token: PushToken) => ({
+    const messages: ExpoPushMessage[] = deliverable.map((token: PushToken) => ({
       to: token.expo_push_token,
       title,
       body,
       data: {
         type,
-        ...data,
+        ...outData,
       },
       sound: 'default',
       channelId: 'default',
@@ -290,7 +320,7 @@ serve(async (req: Request) => {
       notification_type: type,
       title,
       body,
-      data,
+      data: outData,
       tokens_sent: successful,
       tokens_failed: failed,
       status: failed === 0 ? 'sent' : successful > 0 ? 'partial' : 'failed',
@@ -307,7 +337,7 @@ serve(async (req: Request) => {
 
     if (invalidTokenIndices.length > 0) {
       const invalidDeviceIds = invalidTokenIndices
-        .map((index) => eligibleTokens[index]?.device_id)
+        .map((index) => deliverable[index]?.device_id)
         .filter(Boolean);
 
       if (invalidDeviceIds.length > 0) {
@@ -327,8 +357,8 @@ serve(async (req: Request) => {
     // gets nothing. Runs after the response via waitUntil.
     const receiptToDevice = new Map<string, string>();
     allTickets.forEach((ticket, index) => {
-      if (ticket.status === 'ok' && ticket.id && eligibleTokens[index]) {
-        receiptToDevice.set(ticket.id, eligibleTokens[index].device_id);
+      if (ticket.status === 'ok' && ticket.id && deliverable[index]) {
+        receiptToDevice.set(ticket.id, deliverable[index].device_id);
       }
     });
     if (receiptToDevice.size > 0) {
@@ -371,7 +401,7 @@ serve(async (req: Request) => {
         success: true,
         sent: successful,
         failed,
-        total: eligibleTokens.length,
+        total: deliverable.length,
         receiptIds: receiptIds.slice(0, 10), // Return first 10 for reference
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -379,7 +409,7 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error('Error sending notification:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Failed to send notification' }),
+      JSON.stringify({ error: (error as Error)?.message || 'Failed to send notification' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

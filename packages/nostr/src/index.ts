@@ -80,3 +80,16 @@ export type { ForumCategoryInput, ForumEventRef, ForumThreadInput } from "./foru
 
 export { RelayClient } from "./relay";
 export type { Filter, PublishResult, RelayOptions } from "./relay";
+
+export { calcPaddedLen, getConversationKey, nip44Decrypt, nip44Encrypt } from "./nip44";
+
+export {
+  KIND_CONTACTS,
+  KIND_FOLLOW_SET,
+  KIND_MUTE_LIST,
+  NETIZEN_ACCOUNT_TAG,
+  UNFOLLOWED_SET_D,
+  buildContactListEvent,
+  buildPrivateListEvent,
+  readPrivateItems,
+} from "./social";

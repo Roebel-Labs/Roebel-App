@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,10 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useRelations } from '@/context/RelationsContext';
+import FollowButton from '@/components/follow/FollowButton';
+import { FollowCounts } from '@/components/follow/FollowersDrawer';
+import { fetchPersonalAccountId } from '@/lib/supabase-follows';
 import { supabase } from '@/lib/supabase';
 import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
@@ -48,6 +52,7 @@ export default function PublicUserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { colors } = useTheme();
   const { user: currentUser } = useUser();
+  const { isFollowing } = useRelations();
 
   const [profile, setProfile] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +111,16 @@ export default function PublicUserProfileScreen() {
     if (!currentUser || !profile) return false;
     return currentUser.wallet_address.toLowerCase() === profile.wallet_address.toLowerCase();
   }, [currentUser, profile]);
+
+  const [personalId, setPersonalId] = useState<string | null>(null);
+  const profileWallet = profile?.wallet_address;
+  useEffect(() => {
+    setPersonalId(null);
+    if (!profileWallet) return;
+    let cancelled = false;
+    void fetchPersonalAccountId(profileWallet.toLowerCase()).then((id) => { if (!cancelled) setPersonalId(id); });
+    return () => { cancelled = true; };
+  }, [profileWallet]);
 
   const bannerReward = useMemo<LootboxReward | null>(() => {
     const hit = equipped.find((r) => r.reward?.type === 'profile_banner');
@@ -210,6 +225,15 @@ export default function PublicUserProfileScreen() {
             />
           </View>
 
+          {personalId ? (
+            <View style={styles.followRow}>
+              <FollowCounts accountId={personalId} showFollowing canOpenList={isOwner} refreshKey={isFollowing(personalId)} />
+              {!isOwner ? (
+                <FollowButton accountId={personalId} muteWallet={profile.wallet_address} ownAccountIds={isOwner ? [personalId] : []} />
+              ) : null}
+            </View>
+          ) : null}
+
           {isFieldVisible(privacy, 'bio') && profile.bio ? (
             <Text style={[styles.bio, { color: colors.textPrimary }]}>{profile.bio}</Text>
           ) : null}
@@ -289,6 +313,7 @@ export default function PublicUserProfileScreen() {
 const AVATAR_SIZE = 96;
 
 const styles = StyleSheet.create({
+  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   container: {
     flex: 1,
   },

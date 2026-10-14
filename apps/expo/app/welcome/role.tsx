@@ -59,7 +59,7 @@ export default function WelcomeRoleScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {!single && <StoryProgress step={2} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />}
+        {!single && <StoryProgress step={2} totalSteps={state.preferredRole === 'buerger' ? 5 : 4} />}
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Was trifft auf dich zu?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wir zeigen dir passende Funktionen. Du kannst die Auswahl später ändern.
@@ -101,7 +101,7 @@ export default function WelcomeRoleScreen() {
             return;
           }
           if (state.preferredRole) {
-            router.push((state.preferredRole === 'buerger' ? '/welcome/citizen-data' : '/welcome/consent') as any);
+            router.push((state.preferredRole === 'buerger' ? '/welcome/citizen-data' : '/welcome/follow') as any);
           }
         }}
         nextLabel={single ? 'Speichern' : 'Weiter'}

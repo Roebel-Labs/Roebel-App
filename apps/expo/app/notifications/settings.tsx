@@ -371,9 +371,34 @@ export default function NotificationsScreen() {
             description="Benachrichtigung bei Einladungen in eine Organisation"
             value={preferences?.org_invites_enabled ?? true}
             onValueChange={(value) => updatePreference('org_invites_enabled', value)}
+            colors={colors}
+          />
+          <ToggleRow
+            label="Wöchentliche Follower-Übersicht (Organisationen)"
+            description="Einmal pro Woche: neue Follower deiner Organisationen"
+            value={preferences?.follower_digest_enabled ?? true}
+            onValueChange={(value) => updatePreference('follower_digest_enabled', value)}
             isLast
             colors={colors}
           />
+        </Section>
+
+        {/* Follows & mutes: who appears in the feed and who can reach you */}
+        <Section title="Folgen & Stummschalten" colors={colors}>
+          <Pressable
+            style={[styles.categorySelector, { borderBottomWidth: 0 }]}
+            onPress={() => router.push('/settings/follows' as any)}
+            accessibilityRole="button"
+          >
+            <View style={styles.categorySelectorTextContainer}>
+              <Text style={[styles.categorySelectorLabel, { color: colors.textPrimary }]}>
+                Konten verwalten
+              </Text>
+            </View>
+            <View style={styles.categorySelectorRight}>
+              <ChevronRightIcon width={20} height={20} style={styles.chevronIcon} />
+            </View>
+          </Pressable>
         </Section>
 
         {/* Info Section */}

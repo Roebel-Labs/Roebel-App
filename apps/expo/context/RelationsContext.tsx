@@ -1,0 +1,139 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useActiveAccount, useActiveWalletConnectionStatus } from 'thirdweb/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { callRelations, loadCachedSnapshot, saveCachedSnapshot } from '@/lib/account-relations';
+import { canSignSilently } from '@/lib/passkey/api-session-runtime';
+import {
+  EMPTY_SNAPSHOT, applyRelationChange, buildHiddenIndex, hiddenAccountIds,
+  type HiddenIndex, type RelationChange, type RelationsSnapshot,
+} from '@/lib/relations-state';
+import { useSnackbar } from '@/context/SnackbarContext';
+import { useWalletBoot } from '@/context/WalletBootContext';
+import { createSerialRunner } from '@/lib/serial-runner';
+import { hasPendingSocialLists, publishSocialLists } from '@/lib/nostr/social-lists';
+
+type FollowSource = 'onboarding' | 'manual' | 'intro';
+type Ctx = {
+  ready: boolean;
+  /** True once the snapshot reflects the server for this wallet: a successful `list`, or a cached snapshot. */
+  serverLoaded: boolean;
+  snapshot: RelationsSnapshot; index: HiddenIndex; hiddenIds: string[];
+  isFollowing: (id: string) => boolean; isMuted: (id: string) => boolean;
+  follow: (ids: string[], source: FollowSource) => Promise<boolean>;
+  unfollow: (ids: string[]) => Promise<boolean>;
+  mute: (id: string, wallet?: string | null) => Promise<boolean>;
+  unmute: (id: string, wallet?: string | null) => Promise<boolean>;
+};
+
+const RESTORE_TIMEOUT_MS = 5000;
+
+const RelationsContext = createContext<Ctx | null>(null);
+
+export function RelationsProvider({ children }: { children: React.ReactNode }) {
+  const account = useActiveAccount();
+  const wallet = account?.address?.toLowerCase() ?? null;
+  const connectionStatus = useActiveWalletConnectionStatus();
+  const { autoConnectFinished } = useWalletBoot();
+  // While a stored session is still being restored, "no wallet" is not yet "guest": stay not-ready so
+  // the feed does not fetch unfiltered before the wallet and its cached snapshot arrive.
+  const restoring = connectionStatus === 'connecting' || (!wallet && !autoConnectFinished);
+  // autoConnect has no timeout of its own (RN fetch can hang): after 5 s stop waiting, so a slow
+  // restore shows the feed unfiltered rather than an endless skeleton.
+  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  useEffect(() => {
+    if (!restoring) { setRestoreTimedOut(false); return; }
+    const timer = setTimeout(() => setRestoreTimedOut(true), RESTORE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [restoring]);
+  const walletPending = restoring && !restoreTimedOut;
+  const queryClient = useQueryClient();
+  const { showSnackbar } = useSnackbar();
+  const [snapshot, setSnapshot] = useState<RelationsSnapshot>(EMPTY_SNAPSHOT);
+  const [ready, setReady] = useState(false);
+  const [serverLoaded, setServerLoaded] = useState(false);
+  const snapRef = useRef(snapshot);
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
+  const enqueue = useRef(createSerialRunner()).current;
+
+  // Cache first (no flash of muted posts), then a silent server refresh. Never prompts a passkey at launch.
+  useEffect(() => {
+    let cancelled = false;
+    setReady(false);
+    setServerLoaded(false);
+    setSnapshot(EMPTY_SNAPSHOT);
+    snapRef.current = EMPTY_SNAPSHOT;
+    if (walletPending) return;
+    if (!wallet || !account) { setReady(true); return; }
+    void (async () => {
+      const cached = await loadCachedSnapshot(wallet);
+      if (cancelled) return;
+      if (cached) { snapRef.current = cached; setSnapshot(cached); setServerLoaded(true); }
+      setReady(true);
+      try {
+        if (!(await canSignSilently(account))) return;
+        const res = await callRelations(account, 'list', {});
+        if (cancelled || !res.ok) return;
+        snapRef.current = res.data;
+        setSnapshot(res.data);
+        setServerLoaded(true);
+        void saveCachedSnapshot(wallet, res.data);
+        // Retry path: a previous social-list publish never reached the relay.
+        const fresh = res.data;
+        void hasPendingSocialLists().then((pending) => {
+          if (pending && !cancelled && walletRef.current === wallet) void publishSocialLists(fresh);
+        });
+      } catch { /* keep the cached snapshot */ }
+    })();
+    return () => { cancelled = true; };
+  }, [wallet, walletPending]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const run = useCallback((change: RelationChange, action: 'follow' | 'unfollow' | 'mute' | 'unmute', payload: Record<string, unknown>) => {
+    if (!account || !wallet) return Promise.resolve(false);
+    return enqueue(async () => {
+      if (walletRef.current !== wallet) return false;
+      const before = snapRef.current;
+      const optimistic = applyRelationChange(before, change);
+      snapRef.current = optimistic;
+      setSnapshot(optimistic);
+      let res: Awaited<ReturnType<typeof callRelations>> | null = null;
+      try { res = await callRelations(account, action, payload); } catch { res = null; }
+      if (walletRef.current !== wallet) return false; // account switched meanwhile; the effect already reset state
+      if (!res || !res.ok) {
+        snapRef.current = before;
+        setSnapshot(before);
+        showSnackbar({ message: 'Das hat nicht geklappt. Bitte versuche es erneut.' });
+        return false;
+      }
+      snapRef.current = res.data;
+      setSnapshot(res.data);
+      setServerLoaded(true);
+      void saveCachedSnapshot(wallet, res.data);
+      void publishSocialLists(res.data);
+      void queryClient.invalidateQueries({ queryKey: ['feed', 'posts'] });
+      return true;
+    });
+  }, [account, wallet, queryClient, showSnackbar, enqueue]);
+
+  const value = useMemo<Ctx>(() => {
+    const index = buildHiddenIndex(snapshot);
+    const followingSet = new Set(snapshot.following);
+    return {
+      ready, serverLoaded, snapshot, index, hiddenIds: hiddenAccountIds(snapshot),
+      isFollowing: (id) => followingSet.has(id),
+      isMuted: (id) => index.mutedIds.has(id),
+      follow: (ids, source) => run({ kind: 'follow', ids }, 'follow', { targets: ids, source }),
+      unfollow: (ids) => run({ kind: 'unfollow', ids }, 'unfollow', { targets: ids }),
+      mute: (id, w) => run({ kind: 'mute', id, wallet: w }, 'mute', { target: id }),
+      unmute: (id, w) => run({ kind: 'unmute', id, wallet: w }, 'unmute', { target: id }),
+    };
+  }, [snapshot, ready, serverLoaded, run]);
+
+  return <RelationsContext.Provider value={value}>{children}</RelationsContext.Provider>;
+}
+
+export function useRelations(): Ctx {
+  const ctx = useContext(RelationsContext);
+  if (!ctx) throw new Error('useRelations must be used inside RelationsProvider');
+  return ctx;
+}

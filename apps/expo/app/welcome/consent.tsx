@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
+import { useRelations } from '@/context/RelationsContext';
+import { submitFollowSelection } from '@/lib/follow-selection';
+import { followIntroSeenKey } from '@/components/follow/FollowIntroSheet';
 import { useUser } from '@/context/UserContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
@@ -31,6 +35,7 @@ export default function WelcomeConsentScreen() {
   const { createRequest, stage } = useCreateCitizenRequest();
   const { hasCitizenNFT, activePendingRequest, refresh: refreshVerification } = useVerificationContext();
   const { showSnackbar } = useSnackbar();
+  const { follow, unfollow } = useRelations();
 
   const dismissToProfile = () => {
     dispatch({ type: 'RESET' });
@@ -97,6 +102,27 @@ export default function WelcomeConsentScreen() {
       }
 
       await refreshUser();
+
+      // Default follows: never blocks onboarding — a failure only means the feed shows everyone, as today.
+      // Only when the person went through the follow step (followAll is filled there); the standalone
+      // single-step consent screen must not follow anyone on their behalf.
+      try {
+        if (!single && state.followAll.length > 0) {
+          // Bounded wait: a hanging request must not hold the person on this screen.
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const ok = await Promise.race([
+            submitFollowSelection(state.followAll, new Set(state.followUnticked), 'onboarding', follow, unfollow),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(false), 8000);
+            }),
+          ]);
+          if (timer) clearTimeout(timer);
+          // Only a confirmed submission retires the intro sheet; otherwise it can offer it again.
+          if (ok && user?.wallet_address) await AsyncStorage.setItem(followIntroSeenKey(user.wallet_address), '1');
+        }
+      } catch (err) {
+        console.error('onboarding follows failed (non-fatal):', err);
+      }
 
       // Bürger path: fire the verification request automatically so the data
       // from the citizen-data step is never typed twice. Never blocks onboarding.
@@ -171,8 +197,8 @@ export default function WelcomeConsentScreen() {
       >
         {!single && (
           <StoryProgress
-            step={state.preferredRole === 'buerger' ? 4 : 3}
-            totalSteps={state.preferredRole === 'buerger' ? 4 : 3}
+            step={state.preferredRole === 'buerger' ? 5 : 4}
+            totalSteps={state.preferredRole === 'buerger' ? 5 : 4}
           />
         )}
         <Image

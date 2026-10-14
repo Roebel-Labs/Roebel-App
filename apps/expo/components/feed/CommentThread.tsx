@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import CommentItem from '@/components/feed/CommentItem';
+import { useRelations } from '@/context/RelationsContext';
+import { filterMutedComments } from '@/lib/inbox-visibility';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -38,7 +40,8 @@ export default function CommentThread({
   const isOwner = (c: PostCommentRecord) =>
     !!viewerWallet && c.wallet_address?.toLowerCase() === viewerWallet.toLowerCase();
 
-  const replies = comment.replies ?? [];
+  const { index } = useRelations();
+  const replies = filterMutedComments(comment.replies ?? [], index);
   const replyCount = comment.reply_count ?? 0;
 
   return (

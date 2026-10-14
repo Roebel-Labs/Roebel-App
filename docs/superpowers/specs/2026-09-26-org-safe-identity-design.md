@@ -199,3 +199,22 @@ Max's rule is as much on-chain as possible with as few passkey prompts as possib
   - a fork run: bulk deploy as Max's account, then `--predict`, then execute as the impersonated Attester Safe against the production registry. All 3 orgs were registered.
 
 **Budget:** the sponsor's per-identity cap was raised temporarily to 0.15 xDAI/day. The preview paymaster needs a top-up before the 36 creations.
+
+## 11. Every org a Safe: create flow, attester inbox, production switch (2026-10-10)
+
+Max's decisions (2026-10-10): new orgs get their Safe **in the create flow**; the existing orgs migrate with their **real owners, not Max**; production opens after a **preview device pass, without an external audit** (due before orgs hold money in their Safe).
+
+**R3 gate revised.** §6 gated R3 on passkey tranche 1 "so owner addresses are stable". The passkey design is "wrap, don't move": every identity keeps its thirdweb smart-account address, so a Safe owned by today's addresses stays valid. The gate is dropped.
+
+**Built:**
+- `create-org/review.tsx`: after the org row exists (its uuid fixes the orgId), one sponsored batch deploys the Safe (owner = creator, threshold 1) and files `requestRegistration`. Failure never fails org creation: the success screen says so and the owner retries from Einstellungen → Onchain-Organisation.
+- Attester inbox `app/verification/orgs.tsx` (entry: attester card → "Organisationen bestätigen"). Reads `requestCount()` + `getRequest` for the last 200 ids, keeps pending unexpired registrations, resolves names by hashing every app org's uuid, shows the attester's vote and SelfVote state (`lib/org-safe/requests.ts`, `chain.ts readOpenOrgRequests`). An id no app org hashes to is shown as "Unbekannte Organisation" with reject only.
+- Gate (`lib/org-safe/gate.ts`): `org_safes_enabled` everywhere, plus `org_safes_enabled_production` on the production channel. Production opens by flipping the second key, no OTA.
+- `org-registry-batch-register.cjs --predict orgs.json --deploy`: deploys missing Safes from any funded EOA (creation is permissionless; owners are fixed by the initializer), then writes the `migrationRegister` Transaction Builder file as before.
+
+**Migration batches (prod, 37 orgs on 2026-10-10):** the 2026-09-26 "two onboarding wallets" are Max and Guido.
+- Batch 1 (20): orgs with a real owner other than Max/Guido (incl. Stadtbibliothek, created 10-02). Owners = DB owners minus Max.
+- Batch 2 (17): Max's own 8 and Guido's 9 — each needs its real operator as owner first.
+- `finalizeMigration()` only after batch 2.
+
+**Open checks:** the thirdweb sponsorship policy (dashboard) must cover the Safe factory, every org Safe (arbitrary addresses) and the registry for non-passkey users; the passkey sponsor already allowlists them.

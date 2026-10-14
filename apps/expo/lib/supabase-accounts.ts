@@ -274,3 +274,34 @@ export async function updateAccount(
 
   return res.data ?? (await fetchAccountById(accountId));
 }
+
+/** Opt the personal account in/out of the "suggested to new users" follow list. */
+export async function setSuggestToNewUsers(
+  account: SigningAccount,
+  accountId: string,
+  value: boolean
+): Promise<boolean> {
+  const res = await callOrgMembership(account, 'update_account', {
+    accountId,
+    updates: { suggest_to_new_users: value },
+  });
+  if (!res.ok) {
+    console.error('setSuggestToNewUsers error:', res.code, res.message);
+    return false;
+  }
+  return true;
+}
+
+/** The stored opt-in, or null when it could not be loaded (error / missing row / column not migrated yet). */
+export async function fetchSuggestToNewUsers(accountId: string): Promise<boolean | null> {
+  const { data, error } = await (supabase as any)
+    .from('accounts')
+    .select('suggest_to_new_users')
+    .eq('id', accountId)
+    .maybeSingle();
+  if (error) {
+    console.error('fetchSuggestToNewUsers error:', error);
+    return null;
+  }
+  return typeof data?.suggest_to_new_users === 'boolean' ? data.suggest_to_new_users : null;
+}

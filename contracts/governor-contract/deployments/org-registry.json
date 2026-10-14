@@ -26,5 +26,19 @@
     }
   },
   "migrationFinalized": false,
-  "note": "NSP-14. Owner may only tune bands and run migrationRegister until finalizeMigration(); hand ownership to the Timelock after bootstrap."
+  "note": "NSP-14. Owner may only tune bands and run migrationRegister until finalizeMigration(); hand ownership to the Timelock after bootstrap.",
+  "migration": {
+    "batch1": {
+      "deployedAt": "2026-10-10",
+      "deployer": "0xd5028284017A32C672CbD73Fe35aCD897bA874cf",
+      "orgs": 20,
+      "note": "Safes deployed by scripts/org-registry-batch-register.cjs --deploy (owners = each org DB owner, Max excluded). migrationRegister pending: Attester Safe signs the Transaction Builder file.",
+      "migrationRegisterCalldataKeccak": "0x5abffb09d7291a06bee26beafef11fcf53325ad3b1cb1f5c5830ca11ef241438",
+      "registered": false
+    },
+    "batch2": {
+      "orgs": 17,
+      "status": "waiting for real operators (Max own 8 + Guido 9)"
+    }
+  }
 }

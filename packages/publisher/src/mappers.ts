@@ -242,6 +242,8 @@ export function orgToSpec(row: Row, nodeId: string): PublishSpec | null {
     content: JSON.stringify(profile),
     tags: [["netizen_org", str(row, "slug") ?? id, nodeId]],
     createdAt: unixFromUpdatedAt(row),
+    // NSP-15: apps resolve a followed/muted org's pubkey from this ledger row.
+    ledger: { sourceType: "org_profile", sourceId: id },
   };
 }
 

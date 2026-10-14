@@ -12,11 +12,16 @@
  *     table against the app, collect the signatures.
  *   test env (owner = burner): --send submits directly.
  *
- *   node scripts/org-registry-batch-register.cjs --registry 0x… --from-block N [--only uuid,uuid] [--predict orgs.json] [--send]
+ *   node scripts/org-registry-batch-register.cjs --registry 0x… --from-block N [--only uuid,uuid] [--predict orgs.json [--deploy]] [--send]
  *
  * --predict orgs.json: [{ "uuid": "…", "owners": ["0x…"] }] — also finds Safes the
  * app's bulk action deployed WITHOUT a registration request, at their CREATE2
  * address (same formula as apps/expo/lib/org-safe/ops.ts predictOrgSafeAddress).
+ *
+ * --deploy (with --predict): first deploys every predicted Safe that has no code
+ * yet, from DEPLOYER_PRIVATE_KEY (any funded EOA; Safe creation is permissionless
+ * and the owners are fixed by the initializer, so the deployer gains no control).
+ * Lets the operator migrate orgs whose owners never open the app.
  *
  * Only KNOWN orgs are registered: those named in --only or --predict. A claim for
  * an org id nobody named (anyone can file one — e.g. a squatter) is listed as
@@ -42,14 +47,18 @@ const setupIface = new ethers.Interface([
   "function setup(address[] _owners,uint256 _threshold,address to,bytes data,address fallbackHandler,address paymentToken,uint256 payment,address paymentReceiver)",
 ]);
 
-/** predictOrgSafeAddress: owners checksummed, de-duplicated, sorted; threshold 1; salt = orgId. */
-async function predictOrgSafe(provider, orgId, owners) {
+function initializerFor(owners) {
   const list = [...new Map(owners.map((o) => [o.toLowerCase(), ethers.getAddress(o)])).values()].sort((a, b) =>
     a.toLowerCase().localeCompare(b.toLowerCase()),
   );
-  const initializer = setupIface.encodeFunctionData("setup", [
+  return setupIface.encodeFunctionData("setup", [
     list, 1, ethers.ZeroAddress, "0x", FALLBACK_HANDLER, ethers.ZeroAddress, 0, ethers.ZeroAddress,
   ]);
+}
+
+/** predictOrgSafeAddress: owners checksummed, de-duplicated, sorted; threshold 1; salt = orgId. */
+async function predictOrgSafe(provider, orgId, owners) {
+  const initializer = initializerFor(owners);
   const factory = new ethers.Contract(SAFE_PROXY_FACTORY, ["function proxyCreationCode() pure returns (bytes)"], provider);
   const salt = ethers.keccak256(ethers.solidityPacked(["bytes32", "uint256"], [ethers.keccak256(initializer), BigInt(orgId)]));
   const initCode = ethers.concat([await factory.proxyCreationCode(), ethers.zeroPadValue(SAFE_L2_SINGLETON, 32)]);
@@ -85,9 +94,32 @@ async function main() {
     for (const o of JSON.parse(fs.readFileSync(predictFile, "utf8"))) {
       const orgId = orgIdOf(o.uuid);
       const safe = await predictOrgSafe(provider, orgId, o.owners);
-      predicted.set(orgId, { uuid: o.uuid, safe });
+      predicted.set(orgId, { uuid: o.uuid, safe, owners: o.owners });
       if (only && !only.has(orgId)) only.set(orgId, o.uuid);
     }
+  }
+
+  if (process.argv.includes("--deploy")) {
+    if (!predictFile) throw new Error("--deploy needs --predict orgs.json");
+    const raw = process.env.DEPLOYER_PRIVATE_KEY;
+    if (!raw) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+    const wallet = new ethers.Wallet(raw.startsWith("0x") ? raw : "0x" + raw, provider);
+    const factory = new ethers.Contract(
+      SAFE_PROXY_FACTORY,
+      ["function createProxyWithNonce(address _singleton, bytes initializer, uint256 saltNonce) returns (address)"],
+      wallet,
+    );
+    let deployed = 0;
+    for (const [orgId, p] of predicted) {
+      if ((await provider.getCode(p.safe)) !== "0x") continue;
+      if (await registry.isRegistered(orgId)) continue;
+      const tx = await factory.createProxyWithNonce(SAFE_L2_SINGLETON, initializerFor(p.owners), BigInt(orgId));
+      await tx.wait();
+      if ((await provider.getCode(p.safe)) === "0x") throw new Error(`deploy of ${p.uuid} did not land at ${p.safe}`);
+      deployed++;
+      console.log(`  ✓ Safe for ${p.uuid} at ${p.safe} (${tx.hash})`);
+    }
+    console.log(`deployed ${deployed} Safe(s) from ${wallet.address}`);
   }
 
   const rows = [];

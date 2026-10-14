@@ -122,11 +122,16 @@ export async function fetchPasskeyAccountsEnabledProduction(): Promise<boolean> 
 }
 
 /**
- * Preview gate for NSP-14 org Safes. A NEW surface: missing key = OFF, only an
- * explicit 'true' enables it. Also fenced to non-production channels (lib/org-safe/gate.ts).
+ * Gate for NSP-14 org Safes. A NEW surface: missing key = OFF, only an
+ * explicit 'true' enables it (lib/org-safe/gate.ts).
  */
 export async function fetchOrgSafesEnabled(): Promise<boolean> {
   return (await fetchAppSetting('org_safes_enabled')) === 'true';
+}
+
+/** Production switch for org Safes, on top of `org_safes_enabled`. Missing key = OFF. */
+export async function fetchOrgSafesEnabledProduction(): Promise<boolean> {
+  return (await fetchAppSetting('org_safes_enabled_production')) === 'true';
 }
 
 /**

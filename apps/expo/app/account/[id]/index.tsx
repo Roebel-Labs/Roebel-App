@@ -15,6 +15,10 @@ import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useRelations } from '@/context/RelationsContext';
+import FollowButton from '@/components/follow/FollowButton';
+import { FollowCounts } from '@/components/follow/FollowersDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
@@ -59,6 +63,9 @@ import {
   type BusinessDealRecord,
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
+
+/** Wallets left out of the public member list (they keep their role). */
+const HIDDEN_MEMBER_WALLETS = new Set(['0xc49de63ccfee46c6c5c3e393293f66779799fb28']);
 
 const STICKY_OFFSET = 56;
 
@@ -118,6 +125,7 @@ function PublicAccountScreenInner() {
   const { colors } = useTheme();
   const { switchAccount } = useAccount();
   const { user } = useUser();
+  const { isFollowing, isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -283,6 +291,15 @@ function PublicAccountScreenInner() {
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+  // Max keeps owner/admin rights on many orgs to manage them, but should not
+  // be presented as part of their team on the public org page.
+  const visibleMembers = useMemo(
+    () =>
+      members.filter(
+        (m) => typeof m?.wallet_address !== 'string' || !HIDDEN_MEMBER_WALLETS.has(m.wallet_address.toLowerCase())
+      ),
+    [members]
+  );
 
   const safeEvents = useMemo(
     () => events.filter((e) => e && e.id && typeof e.title === 'string'),
@@ -318,7 +335,7 @@ function PublicAccountScreenInner() {
     );
   }
 
-  const memberAvatars = members.slice(0, 3).map((m) => ({
+  const memberAvatars = visibleMembers.slice(0, 3).map((m) => ({
     avatar_url: m.user?.profile_picture_url ?? null,
     username: m.user?.username ?? null,
   }));
@@ -406,7 +423,22 @@ function PublicAccountScreenInner() {
           accessibilityLabel: 'Profil bearbeiten',
         }]
       : []),
+    ...(!canEdit && user
+      ? [{
+          key: 'mute',
+          icon: <Ionicons name={isMuted(account.id) ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color={colors.textPrimary} />,
+          onPress: () => void (isMuted(account.id) ? unmute(account.id, null) : mute(account.id, null)),
+          accessibilityLabel: isMuted(account.id) ? 'Stummschaltung aufheben' : 'Stummschalten',
+        }]
+      : []),
   ];
+
+  const followRow = (
+    <View style={styles.followRow}>
+      <FollowCounts accountId={account.id} canOpenList={canEdit} refreshKey={isFollowing(account.id)} />
+      <FollowButton accountId={account.id} muteWallet={null} ownAccountIds={canEdit ? [account.id] : []} />
+    </View>
+  );
 
   const hero = (
     <OrgProfileHero
@@ -434,7 +466,8 @@ function PublicAccountScreenInner() {
         <BusinessProfileView
           account={account}
           hero={hero}
-          members={members}
+          followRow={followRow}
+          members={visibleMembers}
           services={services}
           products={products}
           deals={safeDeals}
@@ -479,18 +512,18 @@ function PublicAccountScreenInner() {
       ) : null}
 
       {/* Members */}
-      {members.length > 0 && (
+      {visibleMembers.length > 0 && (
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder</Text>
           <View style={styles.membersRow}>
             <AvatarStack
               users={memberAvatars}
-              totalCount={members.length}
+              totalCount={visibleMembers.length}
               maxVisible={3}
               size="large"
             />
             <Text style={[styles.membersCount, { color: colors.textSecondary }]}>
-              {members.length} {members.length === 1 ? 'Mitglied' : 'Mitglieder'}
+              {visibleMembers.length} {visibleMembers.length === 1 ? 'Mitglied' : 'Mitglieder'}
             </Text>
           </View>
         </View>
@@ -824,6 +857,7 @@ function PublicAccountScreenInner() {
 
         {/* Extern status, bio and thumbs vote under the identity header */}
         <View style={styles.identityBlock}>
+          {followRow}
           {showExternBadge && (
             <View style={styles.pillRow}>
               <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
@@ -1188,6 +1222,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
+  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
   identityBlock: {
     paddingHorizontal: 16,
     paddingTop: 16,

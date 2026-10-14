@@ -6,7 +6,7 @@ import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { WelcomeWizardProvider, useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 
-const STEP_SCREENS = ['name', 'role', 'citizen-data', 'consent'];
+const STEP_SCREENS = ['name', 'role', 'citizen-data', 'follow', 'consent'];
 
 function WizardHeader() {
   const { colors } = useTheme();
@@ -35,6 +35,7 @@ export default function WelcomeLayout() {
         <TransitionStack.Screen name="name" />
         <TransitionStack.Screen name="role" />
         <TransitionStack.Screen name="citizen-data" />
+        <TransitionStack.Screen name="follow" />
         <TransitionStack.Screen name="consent" />
       </TransitionStack>
     </WelcomeWizardProvider>

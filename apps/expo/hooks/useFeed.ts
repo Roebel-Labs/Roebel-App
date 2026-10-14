@@ -12,6 +12,8 @@ import { fetchFeedPosts } from '@/lib/supabase-posts';
 import { fetchFeedSections } from '@/lib/feed-sections';
 import { assembleFeed } from '@/lib/feed-assembler';
 import { useUser } from '@/context/UserContext';
+import { useRelations } from '@/context/RelationsContext';
+import { filterVisiblePosts } from '@/lib/feed-visibility';
 import type { SupabaseProposal } from '@/lib/supabase-proposals';
 
 function buildGovernanceNudges(proposals: SupabaseProposal[]): GovernanceNudgeData[] {
@@ -59,17 +61,24 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
   const walletRef = useRef<string | null>(null);
   walletRef.current = user?.wallet_address ?? null;
 
+  const { hiddenIds, index, ready: relationsReady } = useRelations();
+  // Latest hidden ids via ref (not in the key): RelationsContext invalidates
+  // ['feed','posts'] after each change, which refetches with the new ids, and
+  // the client-side filter below applies the change instantly.
+  const hiddenIdsRef = useRef<string[]>(hiddenIds);
+  hiddenIdsRef.current = hiddenIds;
   const postsKey = ['feed', 'posts', feedType] as const;
 
   const postsQuery = useInfiniteQuery({
     queryKey: postsKey,
-    enabled,
+    enabled: enabled && relationsReady,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       fetchFeedPosts({
         feedType,
         page: pageParam as number,
         walletAddress: walletRef.current ?? undefined,
+        excludeAccountIds: hiddenIdsRef.current,
       }),
     getNextPageParam: (last, _pages, lastPageParam) =>
       last.hasMore ? (lastPageParam as number) + 1 : undefined,
@@ -88,10 +97,13 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
     // De-dupe by id: a pinned post prepended on page 0 can reappear at its
     // natural chronological position on a later page.
     const seen = new Set<string>();
-    return (postsQuery.data?.pages ?? [])
+    const deduped = (postsQuery.data?.pages ?? [])
       .flatMap((p) => p.data)
       .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
-  }, [postsQuery.data]);
+    // Client twin of the server exclusion: applies instantly and covers legacy
+    // null-account_id rows and servers that predate p_exclude_account_ids.
+    return filterVisiblePosts(deduped, index);
+  }, [postsQuery.data, index]);
 
   const items: FeedItem[] = useMemo(() => {
     const s = sectionsQuery.data;
@@ -148,6 +160,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
           feedType,
           page: 0,
           walletAddress: walletRef.current ?? undefined,
+          excludeAccountIds: hiddenIdsRef.current,
         }),
         sectionsQuery.refetch(),
       ]);

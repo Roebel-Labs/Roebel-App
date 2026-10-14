@@ -96,6 +96,11 @@ async function publish(
   }
 }
 
+/** Publish an already-signed event with ledger bookkeeping (social lists, NSP-15). Best-effort. */
+export function publishSigned(event: NostrEvent, sourceType: string, sourceId: string): Promise<PublicationStatus> {
+  return publish(event, sourceType, sourceId);
+}
+
 /**
  * Mirror a public feed post to the relay.
  *

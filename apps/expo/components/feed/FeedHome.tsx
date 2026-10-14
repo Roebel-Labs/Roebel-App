@@ -37,10 +37,12 @@ import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
 import PostOptionsDrawer from './PostOptionsDrawer';
+import { usePostAuthorActions } from '@/hooks/usePostAuthorActions';
 import RepostDrawer from './RepostDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
+import FollowIntroSheet from '@/components/follow/FollowIntroSheet';
 import MailIcon from '@/assets/icons/mail-01.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
@@ -260,6 +262,7 @@ export default function FeedHome() {
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [optionsDrawerVisible, setOptionsDrawerVisible] = useState(false);
   const [selectedPost, setSelectedPost] = useState<PostRecord | null>(null);
+  const authorActions = usePostAuthorActions(selectedPost);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [editComposerVisible, setEditComposerVisible] = useState(false);
   const [repostTarget, setRepostTarget] = useState<{ post: PostRecord; reposted: boolean } | null>(
@@ -695,6 +698,10 @@ export default function FeedHome() {
         onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onReport={handleOpenReport}
+        author={authorActions.author}
+        isFollowing={authorActions.isFollowing}
+        onToggleFollow={authorActions.onToggleFollow}
+        onMute={authorActions.onMute}
       />
 
       <ReportDrawer
@@ -710,6 +717,8 @@ export default function FeedHome() {
         onRepost={handleConfirmRepost}
         onQuote={handleQuote}
       />
+
+      <FollowIntroSheet />
 
       <ConfirmationDrawer
         visible={deleteConfirmVisible}

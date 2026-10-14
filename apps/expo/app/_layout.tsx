@@ -22,6 +22,7 @@ import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
+import { RelationsProvider } from '@/context/RelationsContext';
 import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider } from '@/context/UserContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
@@ -108,6 +109,9 @@ function NotificationHandler() {
         router.push('/notifications' as any);
       } else if (data?.type === 'reward') {
         router.push('/rewards' as any);
+      } else if (data?.type === 'org' && data?.accountId) {
+        // Weekly follower digest for org owners/admins.
+        router.push(`/account/${data.accountId}` as any);
       }
     });
 
@@ -151,6 +155,10 @@ function NotificationHandler() {
         } else if (data?.type === 'reward') {
           setTimeout(() => {
             router.push('/rewards' as any);
+          }, 100);
+        } else if (data?.type === 'org' && data?.accountId) {
+          setTimeout(() => {
+            router.push(`/account/${data.accountId}` as any);
           }, 100);
         }
       }
@@ -352,6 +360,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/consent/index" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/follows" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
@@ -451,6 +460,7 @@ function Layout() {
                       <BookmarksProvider>
                         <LocationProvider>
                           <SnackbarProvider>
+                          <RelationsProvider>
                             <RoebelTalerProvider>
                             <RewardCelebrationProvider>
                             <PendingPostFeedbackProvider>
@@ -464,6 +474,7 @@ function Layout() {
                             </PendingPostFeedbackProvider>
                             </RewardCelebrationProvider>
                             </RoebelTalerProvider>
+                          </RelationsProvider>
                           </SnackbarProvider>
                         </LocationProvider>
                       </BookmarksProvider>

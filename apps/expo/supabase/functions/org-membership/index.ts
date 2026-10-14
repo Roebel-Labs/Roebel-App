@@ -92,7 +92,7 @@ const ACCOUNT_TYPES = ['personal', 'organisation'] as const;
 // allows them, but this endpoint must not let any wallet self-assign them —
 // those accounts are created through admin flows on the service role).
 const SELF_SERVICE_SUB_TYPES = ['restaurant', 'unternehmen', 'verein', 'journalist'] as const;
-const UPDATE_WHITELIST = ['name', 'bio', 'avatar_url', 'cover_url', 'contact_email', 'opening_hours'] as const;
+const UPDATE_WHITELIST = ['name', 'bio', 'avatar_url', 'cover_url', 'contact_email', 'opening_hours', 'suggest_to_new_users'] as const;
 const URL_FIELDS = ['avatar_url', 'cover_url'] as const;
 
 const corsHeaders = {
@@ -709,6 +709,10 @@ async function handleUpdateAccount(
     if (typeof v !== 'string' || v.length > 254 || !EMAIL_RE.test(v)) {
       return fail('BAD_REQUEST', 400, 'invalid contact_email');
     }
+  }
+
+  if ('suggest_to_new_users' in patch && typeof patch.suggest_to_new_users !== 'boolean') {
+    return fail('BAD_REQUEST', 400, 'suggest_to_new_users must be a boolean');
   }
 
   if (Object.keys(patch).length === 0) {
