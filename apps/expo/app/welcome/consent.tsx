@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet, Image, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useRelations } from '@/context/RelationsContext';
 import { submitFollowSelection } from '@/lib/follow-selection';
@@ -26,7 +27,8 @@ const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 export default function WelcomeConsentScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { user, refreshUser } = useUser();
+  const { user, refreshUser, isCitizen } = useUser();
+  const account = useActiveAccount();
   const { acceptAll, acceptEssential } = useConsent();
   const { state, dispatch } = useWelcomeWizard();
   const [submitting, setSubmitting] = useState(false);
@@ -102,6 +104,21 @@ export default function WelcomeConsentScreen() {
       }
 
       await refreshUser();
+
+      // Accepting the policy IS the public-record consent, exactly as on the
+      // standalone /consent screen. Remember it and set up the public profile
+      // silently in the background, after the name above is saved (the profile
+      // is built from it). enrollNow only acts for verified citizens (the
+      // accepted policy text covers no one else); for everyone else the
+      // remembered consent lets the ConsentGate self-heal enroll them once
+      // they are verified.
+      const acct = account;
+      void import('@/lib/nostr/enroll')
+        .then(async ({ markPublicRecordConsent, enrollNow }) => {
+          await markPublicRecordConsent();
+          if (acct) await enrollNow(acct, isCitizen);
+        })
+        .catch(() => {});
 
       // Default follows: never blocks onboarding — a failure only means the feed shows everyone, as today.
       // Only when the person went through the follow step (followAll is filled there); the standalone
