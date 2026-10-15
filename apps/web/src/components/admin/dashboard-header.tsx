@@ -68,6 +68,7 @@ export function DashboardHeader() {
       if (lastSegment === "settings") label = "Einstellungen"
       if (lastSegment === "speisekarten") label = "Speisekarten"
       if (lastSegment === "movies") label = "Kinoprogramm"
+      if (lastSegment === "hoeren") label = "Hören"
 
       breadcrumbs.push({
         label,

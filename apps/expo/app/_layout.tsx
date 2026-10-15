@@ -21,6 +21,7 @@ import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
+import { AudioPlayerProvider } from '@/context/AudioPlayerContext';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { RelationsProvider } from '@/context/RelationsContext';
@@ -332,6 +333,11 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
+          {/* Hören: full-screen player slides up as a sheet over whatever is playing. */}
+          <TransitionStack.Screen
+            name="audio/player"
+            options={{ headerShown: false, presentation: 'modal', gestureEnabled: true }}
+          />
         </TransitionStack>
       </View>
       {/* Preview-only: gate checked first, renders nothing in production. */}
@@ -431,11 +437,13 @@ function Layout() {
                             <RewardCelebrationProvider>
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
+                              <AudioPlayerProvider>
                                 <ConsentGate />
                                 <ObserveConsentGate />
                                 <AppUpdateGate />
                                 <ThemedLayout />
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
+                              </AudioPlayerProvider>
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>
                             </RewardCelebrationProvider>

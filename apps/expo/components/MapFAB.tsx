@@ -28,6 +28,8 @@ type Props = {
   href?: string;
   icon?: React.ReactNode;
   accessibilityLabel?: string;
+  /** Extra lift, e.g. to clear the Hören mini player. */
+  bottomOffset?: number;
 };
 
 export default function MapFAB({
@@ -36,6 +38,7 @@ export default function MapFAB({
   href = '/location',
   icon,
   accessibilityLabel,
+  bottomOffset = 0,
 }: Props) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -79,7 +82,9 @@ export default function MapFAB({
   };
 
   return (
-    <ReanimatedAnimated.View style={[styles.container, animatedStyle]}>
+    <ReanimatedAnimated.View
+      style={[styles.container, bottomOffset ? { bottom: BOTTOM_NAV_HEIGHT + 40 + bottomOffset } : null, animatedStyle]}
+    >
       <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <Pressable
           onPress={() => router.push(href as any)}

@@ -37,6 +37,10 @@ import NearbyOrgAccountsSection, {
 } from '@/components/NearbyOrgAccountsSection';
 import MapFAB from '@/components/MapFAB';
 import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
+import AudioSection, { AUDIO_SHOWS_QUERY_KEY } from '@/components/audio/AudioSection';
+import MiniPlayer from '@/components/audio/MiniPlayer';
+import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
+import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 
@@ -146,6 +150,8 @@ export default function ExploreScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  // Controls context only changes on track switches, never per playback tick.
+  const { track: audioTrack } = useAudioPlayerControls();
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [refreshing, setRefreshing] = useState(false);
@@ -219,6 +225,12 @@ export default function ExploreScreen() {
   useQuery({
     queryKey: ORG_ACCOUNTS_QUERY_KEY,
     queryFn: fetchOrgAccountsSection,
+    meta: { persist: true },
+    notifyOnChangeProps: [],
+  });
+  useQuery({
+    queryKey: AUDIO_SHOWS_QUERY_KEY,
+    queryFn: fetchAudioShows,
     meta: { persist: true },
     notifyOnChangeProps: [],
   });
@@ -331,6 +343,9 @@ export default function ExploreScreen() {
 
         {belowFoldReady ? (
           <>
+            {/* Hören: short stories, audiobooks, podcasts */}
+            <AudioSection />
+
             {/* Mini Apps store entry */}
             <MiniAppsEntry />
 
@@ -380,8 +395,8 @@ export default function ExploreScreen() {
           </>
         )}
 
-        {/* Clearance for the now-overlaying glass BottomNavigation */}
-        <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 }} />
+        {/* Clearance for the now-overlaying glass BottomNavigation (+ mini player) */}
+        <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
       </Animated.ScrollView>
       </GlassBackdrop>
 
@@ -396,7 +411,10 @@ export default function ExploreScreen() {
       />
 
       {/* Map FAB */}
-      <MapFAB visible={fabVisible} />
+      <MapFAB visible={fabVisible} bottomOffset={audioTrack ? 64 : 0} />
+
+      {/* Now-playing bar, floating just above the glass nav */}
+      <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
 
       {/* Bottom Navigation — frosted glass overlaying the scroll content */}
       <View style={styles.navOverlay}>
@@ -426,6 +444,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  miniPlayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   skeletonSection: {
     marginBottom: 32,
