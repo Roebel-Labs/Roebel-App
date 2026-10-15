@@ -20,6 +20,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { anthropicUsage, recordAiUsage } from '../_shared/ai-usage.ts';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -150,6 +151,7 @@ async function classify(content: string, mediaUrls: string[]): Promise<{
   }
 
   const data = await res.json();
+  await recordAiUsage({ feature: 'moderation', provider: 'anthropic', model: MODEL, ...anthropicUsage(data?.usage) });
   const text: string = data?.content?.[0]?.text ?? '';
   return parseLabel(text);
 }

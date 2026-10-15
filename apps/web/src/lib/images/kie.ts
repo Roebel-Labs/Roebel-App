@@ -13,9 +13,11 @@ import {
   NANO_BANANA_2_LITE,
   parseKieTaskResponse,
   type KieCreateInput,
+  resolveKieModel,
   type KieTaskState,
 } from "./kie-payload";
 import { markSyntheticImage } from "./ai-marking";
+import { recordAiUsage } from "@/lib/ai-usage/record";
 
 export {
   NANO_BANANA_2_LITE,
@@ -126,6 +128,17 @@ export async function generateKieImage(
     await sleep(POLL_INTERVAL_MS);
   }
   throw new KieImageError("Die Bildgenerierung hat zu lange gedauert. Bitte erneut versuchen.");
+}
+
+/** Book one generated image in the AI usage ledger (KI-Kosten). */
+export function recordKieImage(feature: string, model?: string): Promise<void> {
+  return recordAiUsage({
+    feature,
+    provider: "kie",
+    model: resolveKieModel(process.env.KIE_IMAGE_MODEL, model),
+    units: 1,
+    unitType: "image",
+  });
 }
 
 /** Download a generated image so we can persist it in our own storage. */

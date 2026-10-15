@@ -1,4 +1,5 @@
 import { openai } from "@ai-sdk/openai"
+import { tracked } from "@/lib/ai-usage/tracked"
 import { generateObject } from "ai"
 import { eventSchema } from "@/lib/schemas/event-schema"
 import { z } from "zod"
@@ -28,7 +29,7 @@ export async function extractEventFromFlyer(
     }
 
     const result = await generateObject({
-      model: openai("gpt-4o"),
+      model: tracked(openai("gpt-4o"), "flyer.extraction"),
       schema: flyerExtractionSchema,
       messages: [
         {
@@ -126,7 +127,7 @@ export async function isEventFlyer(
     })
 
     const result = await generateObject({
-      model: openai("gpt-4o"),
+      model: tracked(openai("gpt-4o"), "flyer.extraction"),
       schema: flyerClassificationSchema,
       messages: [
         {

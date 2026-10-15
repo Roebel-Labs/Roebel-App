@@ -34,6 +34,65 @@ export interface AnthropicProxyDeps {
   limiters: RateLimiter[];
   apiKey: string | undefined;
   fetchImpl?: typeof fetch;
+  /** Called once per successful upstream response with the billed token usage. */
+  onUsage?: (usage: MessagesUsage, model: string) => Promise<void> | void;
+  /** Keeps the usage read alive after the response was returned (Next's `after`). */
+  waitUntil?: (task: Promise<unknown>) => void;
+}
+
+export interface MessagesUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+type RawUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+};
+
+function addUsage(acc: MessagesUsage, u: RawUsage | undefined): void {
+  if (!u) return;
+  // message_start carries the input side, message_delta the (cumulative) output count.
+  if (u.input_tokens != null) acc.inputTokens = u.input_tokens;
+  if (u.cache_read_input_tokens != null) acc.cacheReadTokens = u.cache_read_input_tokens;
+  if (u.cache_creation_input_tokens != null) acc.cacheWriteTokens = u.cache_creation_input_tokens;
+  if (u.output_tokens != null) acc.outputTokens = u.output_tokens;
+}
+
+/** Usage from a Messages response body: plain JSON or a raw SSE stream. */
+export function extractMessagesUsage(body: string): MessagesUsage | null {
+  const acc: MessagesUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  let found = false;
+  const trimmed = body.trimStart();
+  if (trimmed.startsWith("{")) {
+    try {
+      const json = JSON.parse(trimmed) as { usage?: RawUsage };
+      if (json.usage) {
+        addUsage(acc, json.usage);
+        found = true;
+      }
+    } catch {
+      return null;
+    }
+    return found ? acc : null;
+  }
+  for (const line of body.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    try {
+      const evt = JSON.parse(line.slice(5).trim()) as { type?: string; usage?: RawUsage; message?: { usage?: RawUsage } };
+      if (evt.type === "message_start") addUsage(acc, evt.message?.usage);
+      else if (evt.type === "message_delta") addUsage(acc, evt.usage);
+      else continue;
+      found = true;
+    } catch {
+      // partial or non-JSON line
+    }
+  }
+  return found ? acc : null;
 }
 
 /** Anthropic-shaped error, so the existing client code (`error.error?.message`) reads it. */
@@ -127,7 +186,23 @@ export async function handleAnthropicProxy(request: Request, deps: AnthropicProx
     "cache-control": "no-store",
   });
   if (clean.body.stream === true) headers.set("x-accel-buffering", "no");
-  return new Response(upstream.body, { status: upstream.status, headers });
+
+  let body = upstream.body;
+  if (body && upstream.ok && deps.onUsage) {
+    const [toClient, toLedger] = body.tee();
+    body = toClient;
+    const onUsage = deps.onUsage;
+    const model = String(clean.body.model);
+    const task = new Response(toLedger)
+      .text()
+      .then(async (text) => {
+        const usage = extractMessagesUsage(text);
+        if (usage) await onUsage(usage, model);
+      })
+      .catch(() => {});
+    deps.waitUntil?.(task);
+  }
+  return new Response(body, { status: upstream.status, headers });
 }
 
 /** Per-wallet windows: bursts for Mecky's tool loop (up to 10 calls per message), a daily cost cap. */

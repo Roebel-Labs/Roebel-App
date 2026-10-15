@@ -33,6 +33,7 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.57.4';
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
+import { anthropicUsage, recordAiUsage } from '../_shared/ai-usage.ts';
 
 const MODEL = 'claude-opus-5';
 const MECKY_WALLET = 'mecky_bot';
@@ -250,6 +251,8 @@ async function openAiTranscript(videoUrl: string): Promise<{ text: string; langu
     body: form,
   });
   if (!tr.ok) return { error: `openai_${tr.status}: ${(await tr.text()).slice(0, 200)}` };
+  // response_format=text carries no usage block: booked as a call so the volume is visible.
+  await recordAiUsage({ feature: 'mecky.comment-reply', provider: 'openai', model: 'gpt-4o-mini-transcribe', unitType: 'second' });
   return { text: (await tr.text()).trim(), language: 'de' };
 }
 
@@ -379,6 +382,15 @@ async function askClaude(context: string, images: string[]): Promise<string> {
       tools,
       messages,
     });
+    // response.model is the model that served the turn (a fallback may have taken over).
+    const usage = response.usage as unknown as Record<string, number> & {
+      server_tool_use?: { web_search_requests?: number };
+    };
+    await recordAiUsage({ feature: 'mecky.comment-reply', provider: 'anthropic', model: response.model, ...anthropicUsage(usage) });
+    const searches = usage?.server_tool_use?.web_search_requests ?? 0;
+    if (searches > 0) {
+      await recordAiUsage({ feature: 'mecky.comment-reply', provider: 'anthropic', model: 'web_search', units: searches, unitType: 'search' });
+    }
 
     if (response.stop_reason === 'refusal') {
       throw new Error(`refusal: ${JSON.stringify(response.stop_details ?? null)}`);

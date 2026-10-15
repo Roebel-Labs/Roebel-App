@@ -3,6 +3,7 @@
 import "server-only";
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTicket, addActivity } from "@/lib/dev-tickets/db";
@@ -94,7 +95,7 @@ export async function triageNewFeedback(limit = 5): Promise<{
 
   for (const row of rows as FeedbackRow[]) {
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model: tracked(anthropic("claude-sonnet-4-6"), "dev-tickets.triage"),
       schema: TriageSchema,
       system: TRIAGE_SYSTEM,
       prompt: `## Feedback-Eintrag

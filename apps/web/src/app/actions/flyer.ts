@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -126,7 +127,7 @@ export async function draftFlyerCopyAction(
     const event = eventId ? await loadEventContext(admin, accountId, eventId) : null;
     const resolvedStyle = resolveStyle(style);
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model: tracked(anthropic("claude-sonnet-4-6"), "flyer.copy"),
       schema: flyerCopySchema,
       system: FLYER_COPY_SYSTEM,
       prompt: buildCopyPrompt(brief, event, resolvedStyle),

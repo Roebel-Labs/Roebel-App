@@ -2,6 +2,7 @@
 // and optional copy). Model id follows the repo convention (claude-sonnet-4-6).
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { z } from "zod";
 import { LOW_RES_MIN_SIDE } from "./constants";
 import { buildPosterCopyPrompt, normalizePosterCopy, posterCopySchema, POSTER_COPY_SYSTEM } from "./copy";
@@ -35,7 +36,7 @@ Antworte exakt gemäß Schema.`;
 
 export async function classifyImage(img: FetchedImage): Promise<PosterAnalysis> {
   const { object } = await generateObject({
-    model: anthropic(MODEL),
+    model: tracked(anthropic(MODEL), "poster.copy"),
     schema: posterAnalysisSchema,
     messages: [
       {
@@ -63,7 +64,7 @@ export async function draftPosterCopy(
 ): Promise<PosterCopy> {
   try {
     const { object } = await generateObject({
-      model: anthropic(MODEL),
+      model: tracked(anthropic(MODEL), "poster.copy"),
       schema: posterCopySchema,
       system: POSTER_COPY_SYSTEM,
       prompt: buildPosterCopyPrompt(event, content),

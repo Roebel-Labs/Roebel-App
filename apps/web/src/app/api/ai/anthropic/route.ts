@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { requireWallet } from "../../chat/_lib/http";
 import { ANTHROPIC_RATE_RULES, handleAnthropicProxy } from "@/lib/ai-proxy/anthropic";
 import { sharedLimiters } from "@/lib/rate-limit/server";
+import { recordAiUsage } from "@/lib/ai-usage/record";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,5 +18,8 @@ export async function POST(request: Request) {
     authenticate: requireWallet,
     limiters,
     apiKey: process.env.ANTHROPIC_API_KEY,
+    onUsage: (usage, model) =>
+      recordAiUsage({ source: "expo", feature: "expo.anthropic-proxy", provider: "anthropic", model, ...usage }),
+    waitUntil: (task) => after(task),
   });
 }

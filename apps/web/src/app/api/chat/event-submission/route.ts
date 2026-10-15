@@ -1,4 +1,5 @@
 import { openai } from "@ai-sdk/openai"
+import { tracked } from "@/lib/ai-usage/tracked"
 import { streamText, stepCountIs } from "ai"
 import { z } from "zod"
 import { geocodeLocation } from "@/lib/utils/geocoding"
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: openai("gpt-4o"),
+      model: tracked(openai("gpt-4o"), "event.submission-chat"),
       messages,
       stopWhen: stepCountIs(5),  // Enable multi-step: tool execution + AI text response
       system: `Du bist ein freundlicher KI-Assistent, der Nutzern hilft, Events auf einer Community-Event-Plattform einzureichen.

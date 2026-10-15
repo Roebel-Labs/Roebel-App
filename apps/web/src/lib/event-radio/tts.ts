@@ -3,6 +3,8 @@
 // bundle small, and the with-timestamps endpoint is a single JSON POST).
 // Docs: https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps
 
+import { recordAiUsage } from "../ai-usage/record";
+
 export const TTS_MODEL_ID = "eleven_multilingual_v2";
 export const TTS_OUTPUT_FORMAT = "mp3_44100_128";
 export const TTS_SEED = 4242;
@@ -102,4 +104,15 @@ export async function synthesizeSpeech(input: {
     if (!retryable) break;
   }
   throw lastError ?? new TtsError("ElevenLabs: unbekannter Fehler", null);
+}
+
+/** Book one synthesis in the AI usage ledger (KI-Kosten): ElevenLabs bills per character. */
+export function recordTtsUsage(feature: string, text: string): Promise<void> {
+  return recordAiUsage({
+    feature,
+    provider: "elevenlabs",
+    model: TTS_MODEL_ID,
+    units: text.length,
+    unitType: "char",
+  });
 }

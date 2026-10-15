@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { STT_MODEL } from "@/lib/chat/models";
+import { recordTranscriptionUsage, type TranscriptionUsage } from "@/lib/ai-usage/record";
 import { badRequest, handleError, jsonError, requireWallet, unauthorized } from "../_lib/http";
 
 export const runtime = "nodejs";
@@ -37,7 +38,8 @@ export async function POST(request: Request) {
       body: upstream,
     });
     if (!res.ok) throw new Error(`OpenAI transcription ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    const data = (await res.json()) as { text?: string };
+    const data = (await res.json()) as { text?: string; usage?: TranscriptionUsage };
+    await recordTranscriptionUsage("chat.transcribe", STT_MODEL, data.usage, "expo");
     return NextResponse.json({ text: (data.text ?? "").trim() });
   } catch (err) {
     return handleError(err, "transcribe");

@@ -2,6 +2,7 @@
 // Claude writes the spoken scripts. Same stack as lib/newsletter/generate.ts.
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { z } from "zod";
 import type { PublicEvent } from "./hash";
 import { buildEventSegmentsPrompt, buildIntroPrompt, buildOutroPrompt } from "./prompts";
@@ -35,7 +36,7 @@ export function cleanScript(script: string): string {
 
 export async function writeIntro(events: PublicEvent[], todayKey: string): Promise<string> {
   const { object } = await generateObject({
-    model: anthropic(SCRIPT_MODEL),
+    model: tracked(anthropic(SCRIPT_MODEL), "event-radio.script"),
     schema: singleScriptSchema,
     prompt: buildIntroPrompt(events, todayKey),
     maxOutputTokens: 2000,
@@ -45,7 +46,7 @@ export async function writeIntro(events: PublicEvent[], todayKey: string): Promi
 
 export async function writeOutro(): Promise<string> {
   const { object } = await generateObject({
-    model: anthropic(SCRIPT_MODEL),
+    model: tracked(anthropic(SCRIPT_MODEL), "event-radio.script"),
     schema: singleScriptSchema,
     prompt: buildOutroPrompt(),
     maxOutputTokens: 1000,
@@ -57,7 +58,7 @@ export async function writeOutro(): Promise<string> {
 export async function writeEventSegments(events: PublicEvent[]): Promise<Map<string, string>> {
   if (events.length === 0) return new Map();
   const { object } = await generateObject({
-    model: anthropic(SCRIPT_MODEL),
+    model: tracked(anthropic(SCRIPT_MODEL), "event-radio.script"),
     schema: segmentsSchema,
     prompt: buildEventSegmentsPrompt(events),
     maxOutputTokens: 6000,

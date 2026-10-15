@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server"
 import { isAuthenticated } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { recordTranscriptionUsage, type TranscriptionUsage } from "@/lib/ai-usage/record"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -86,8 +87,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `OpenAI-Fehler (${res.status})`, detail }, { status: 502 })
     }
 
-    const text =
-      format === "srt" ? (await res.text()).trim() : (((await res.json()) as { text?: string }).text ?? "").trim()
+    const model = format === "srt" ? SRT_MODEL : TEXT_MODEL
+    let text: string
+    if (format === "srt") {
+      // SRT bodies carry no usage block; the call is still booked so it shows up in KI-Kosten.
+      text = (await res.text()).trim()
+      await recordTranscriptionUsage("admin.transcription", model, null)
+    } else {
+      const json = (await res.json()) as { text?: string; usage?: TranscriptionUsage }
+      text = (json.text ?? "").trim()
+      await recordTranscriptionUsage("admin.transcription", model, json.usage)
+    }
     return NextResponse.json({ text, format, model: format === "srt" ? SRT_MODEL : TEXT_MODEL })
   } catch (err) {
     console.error("[transcription] failed:", err)

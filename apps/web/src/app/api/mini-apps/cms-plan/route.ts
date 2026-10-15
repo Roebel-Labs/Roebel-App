@@ -19,6 +19,7 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { tracked } from "@/lib/ai-usage/tracked";
 
 export const maxDuration = 30;
 export const runtime = "nodejs";
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const { text } = await generateText({
-        model: codegenModel(),
+        model: tracked(codegenModel(), "miniapp.cms-plan"),
         system: SYSTEM,
         prompt: `Geplante App:\n${parsed.data.idea}`,
         providerOptions: codegenProviderOptions("default"), // thinking disabled → fast

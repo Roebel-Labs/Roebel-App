@@ -1,5 +1,6 @@
 import { generateObject } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"
+import { tracked } from "@/lib/ai-usage/tracked"
 import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { gatherNewsletterContent, type NewsletterSourceData } from "./gather"
@@ -104,7 +105,7 @@ function sourceCounts(data: NewsletterSourceData): Record<string, number> {
  */
 export async function generateNewsletterContent(data: NewsletterSourceData) {
   const { object } = await generateObject({
-    model: anthropic("claude-sonnet-5"),
+    model: tracked(anthropic("claude-sonnet-5"), "newsletter.draft"),
     schema: newsletterSchema,
     prompt: buildPrompt(data),
     maxOutputTokens: 8000,
@@ -228,7 +229,7 @@ export async function editIssueContentWithAI(
 
   const data = await gatherNewsletterContent()
   const { object } = await generateObject({
-    model: anthropic("claude-sonnet-5"),
+    model: tracked(anthropic("claude-sonnet-5"), "newsletter.draft"),
     schema: editSchema,
     prompt: `Du überarbeitest den wöchentlichen E-Mail-Newsletter der Röbel App nach einer Anweisung der Redaktion.
 

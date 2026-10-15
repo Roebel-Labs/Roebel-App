@@ -9,6 +9,7 @@
  */
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { appendMessage } from "@/lib/mecky/conversation-store";
 import { STORY_INTERVIEW_SYSTEM } from "@/lib/story/prompts";
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: tracked(anthropic("claude-sonnet-4-6"), "mecky.story-chat"),
     system: STORY_INTERVIEW_SYSTEM,
     messages,
     onFinish: async ({ text }) => {

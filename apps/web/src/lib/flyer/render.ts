@@ -4,7 +4,7 @@
 // image-prompt.ts (unit-tested); this file owns the network call.
 
 import "server-only";
-import { generateKieImage, fetchGeneratedImage } from "@/lib/images/kie";
+import { generateKieImage, fetchGeneratedImage, recordKieImage } from "@/lib/images/kie";
 import { A4_PORTRAIT_RATIO } from "@/lib/images/kie-payload";
 
 export { buildFlyerImagePrompt, buildFlyerEditPrompt } from "./image-prompt";
@@ -24,5 +24,6 @@ export async function renderFlyerImage(
     imageUrls: referenceUrls,
     aspectRatio: A4_PORTRAIT_RATIO,
   });
+  await recordKieImage("flyer.image");
   return fetchGeneratedImage(url);
 }

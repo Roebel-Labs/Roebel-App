@@ -7,6 +7,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { ModelRoute } from "./types";
+import { tokenCostMicros } from "../ai-usage/pricing";
 
 export const MODEL_ROUTES: Record<ModelRoute, { anthropic: string }> = {
   "bot-fast": { anthropic: "claude-haiku-4-5-20251001" },
@@ -52,16 +53,7 @@ export function resolveModel(routeInput: unknown, env: NodeJS.ProcessEnv = proce
   return { route, provider: "anthropic", modelId, model: anthropic(modelId) };
 }
 
-/** USD per 1M tokens → we store micro-USD (1e-6 $) in chat_runs.cost_micros. */
-const PRICE_PER_MTOK_USD: Record<string, { input: number; output: number }> = {
-  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-};
-
-/** Rough cost in micro-USD. Gateway (self-hosted) runs count as 0 for now. */
+/** Rough cost in micro-USD (chat_runs.cost_micros), from the shared price table. Gateway (self-hosted) runs count as 0. */
 export function estimateCostMicros(modelId: string, inputTokens: number, outputTokens: number): number {
-  const price = PRICE_PER_MTOK_USD[modelId];
-  if (!price) return 0;
-  // $/MTok × tokens = micro-$ × 1 (1 $/MTok = 1 µ$/token)
-  return Math.round(price.input * inputTokens + price.output * outputTokens);
+  return tokenCostMicros("anthropic", modelId, { inputTokens, outputTokens });
 }

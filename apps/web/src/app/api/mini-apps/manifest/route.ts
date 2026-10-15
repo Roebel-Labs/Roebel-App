@@ -17,6 +17,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { manifestDraftSchema, type ManifestDraft } from "@/lib/miniapp/ai/manifest";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { tracked } from "@/lib/ai-usage/tracked";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const { text } = await generateText({
-        model: codegenModel(),
+        model: tracked(codegenModel(), "miniapp.manifest"),
         system: SYSTEM,
         prompt:
           attempt === 0

@@ -23,6 +23,7 @@ import { z } from "zod";
 import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/htmlPrompt";
 import { writeJobState, type GenerationJobState } from "@/lib/miniapp/ai/jobs";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { analyzeImagesForBrief } from "@/lib/miniapp/ai/vision";
 
 // 800s needs Fluid compute (Pro). Budget: vision ≤75s + GLM thinking (can be
@@ -181,7 +182,7 @@ export async function POST(request: Request) {
         });
 
         const result = streamText({
-          model: codegenModel(),
+          model: tracked(codegenModel(), "miniapp.codegen"),
           system: buildHtmlSystemPrompt(),
           messages: modelMessages,
           providerOptions: codegenProviderOptions(complexity ?? "default"),

@@ -7,6 +7,7 @@ import {
   createKieImageTask,
   pollKieImageTask,
   KieImageError,
+  recordKieImage,
   type KieTaskState,
 } from "@/lib/images/kie";
 import { MiniAppError } from "../types";
@@ -19,11 +20,14 @@ export async function createImageTask(opts: {
 }): Promise<string> {
   try {
     // One model id covers both modes — references simply go in via image_urls.
-    return await createKieImageTask({
+    const taskId = await createKieImageTask({
       prompt: opts.prompt,
       imageUrls: opts.referenceUrls ?? [],
       aspectRatio: opts.aspectRatio ?? "1:1",
     });
+    // Booked at task start: the status route only polls, it never sees the job begin.
+    await recordKieImage("miniapp.image");
+    return taskId;
   } catch (error) {
     if (error instanceof KieImageError) {
       console.error("[miniapp/images] createTask failed:", error.message);

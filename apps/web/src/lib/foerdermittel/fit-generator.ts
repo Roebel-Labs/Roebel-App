@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { z } from "zod";
 import type { MatchInput, FundingProgram, FitResult } from "@/types/foerdermittel";
 import type { GenerateFit } from "./matching";
@@ -19,7 +20,7 @@ export const generateFitWithClaude: GenerateFit = async (
   program: FundingProgram,
 ): Promise<FitResult> => {
   const { object } = await generateObject({
-    model: anthropic("claude-opus-4-8"),
+    model: tracked(anthropic("claude-opus-4-8"), "foerdermittel.fit"),
     schema: FitSchema,
     system: FIT_SYSTEM_PROMPT,
     prompt: buildFitPrompt(input, program),

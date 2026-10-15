@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { readSetting } from "@/lib/event-radio/gather"
 import { SETTING_SPEED, SETTING_VOICE_ID } from "@/lib/event-radio/generate"
 import { RADIO_BUCKET } from "@/lib/event-radio/storage"
-import { clampSpeed, DEFAULT_SPEED, synthesizeSpeech } from "@/lib/event-radio/tts"
+import { clampSpeed, DEFAULT_SPEED, recordTtsUsage, synthesizeSpeech } from "@/lib/event-radio/tts"
 import {
   buildNarrationText,
   chunkText,
@@ -73,6 +73,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ sl
         speed,
         previousText: i > 0 ? chunks[i - 1].slice(-1000) : undefined,
       })
+      await recordTtsUsage("news.vorlesen", chunks[i])
       parts.push(res.audio)
       durationMs += res.durationMs
     }

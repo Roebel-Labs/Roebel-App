@@ -1,5 +1,6 @@
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 
 const MODE_PROMPTS: Record<string, string> = {
   tourist: `Du bist Mecky, der freundliche Stadtführer von Röbel an der Müritz.
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   const systemPrompt = `${BASE_PROMPT}\n\n${modePrompt}`;
 
   const result = streamText({
-    model: anthropic("claude-haiku-4-5-20251001"),
+    model: tracked(anthropic("claude-haiku-4-5-20251001"), "mecky.chat"),
     system: systemPrompt,
     messages,
     maxOutputTokens: 1024,

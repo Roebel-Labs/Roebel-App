@@ -9,7 +9,7 @@ import { planExpiry, planScopes, staleRowsForScope, type ScopePlan } from "./pla
 import { writeEventSegments, writeIntro, writeOutro } from "./scripts";
 import { scopeId } from "./select";
 import { deleteSegmentAudio, segmentObjectPath, uploadSegmentAudio } from "./storage";
-import { clampSpeed, DEFAULT_SPEED, synthesizeSpeech, TTS_MODEL_ID } from "./tts";
+import { clampSpeed, DEFAULT_SPEED, recordTtsUsage, synthesizeSpeech, TTS_MODEL_ID } from "./tts";
 import { berlinToday, previousWeekKey, weekWindow, type WeekWindow } from "./window";
 
 export const SETTING_VOICE_ID = "event_radio_voice_id";
@@ -79,6 +79,7 @@ export async function generateEventRadio(opts: GenerateOptions = {}): Promise<Ge
 
   const settled = await mapWithConcurrency(jobs, concurrencyFromEnv(process.env), async (job) => {
     const tts = await synthesizeSpeech({ text: job.text, voiceId, apiKey, speed, previousText: job.previousText });
+    await recordTtsUsage("event-radio.tts", job.text);
     const path = segmentObjectPath(window.weekKey, job.plan.kind, job.plan.scopeKey, job.plan.hash);
     const audioUrl = await uploadSegmentAudio(supabase, path, tts.audio);
     const { data: saved, error } = await supabase

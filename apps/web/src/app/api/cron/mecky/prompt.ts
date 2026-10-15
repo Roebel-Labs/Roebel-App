@@ -1,5 +1,6 @@
 import { generateObject } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"
+import { tracked } from "@/lib/ai-usage/tracked"
 import { z } from "zod"
 import type { RSSItem } from "./rss"
 
@@ -71,7 +72,7 @@ export async function generateMeckyPosts(
     .join("\n\n")
 
   const { object } = await generateObject({
-    model: anthropic("claude-haiku-4-5"),
+    model: tracked(anthropic("claude-haiku-4-5"), "mecky.outreach"),
     schema: MeckyPostsSchema,
     system: MECKY_SYSTEM_PROMPT,
     prompt: `Hier sind die Nachrichtenartikel aus der Region aus dem Zeitraum "${periodLabel}". Wähle die 3 relevantesten für Röbel/Müritz aus und schreibe jeweils einen Post in Meckys Stimme.
@@ -121,7 +122,7 @@ export async function generateMeckyPostFromLink(article: {
   notes: string | null
 }): Promise<string | null> {
   const { object } = await generateObject({
-    model: anthropic("claude-haiku-4-5"),
+    model: tracked(anthropic("claude-haiku-4-5"), "mecky.outreach"),
     schema: MeckyLinkPostSchema,
     system: MECKY_SYSTEM_PROMPT,
     prompt: `Ein Admin möchte, dass du diesen Artikel in einem Post erwähnst. Schreibe genau EINEN Post in Meckys Stimme.

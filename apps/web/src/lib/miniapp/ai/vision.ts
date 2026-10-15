@@ -12,6 +12,8 @@
  * separate cleanly — the raw API with thinking disabled returns direct content.
  */
 
+import { recordAiUsage } from "@/lib/ai-usage/record";
+
 const VISION_MODEL = "glm-4.6v";
 const ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
 // Hard wall-clock cap for the WHOLE vision call (connect + compute + body read).
@@ -87,7 +89,15 @@ export async function analyzeImagesForBrief(
     }
     const json = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
+    await recordAiUsage({
+      feature: "miniapp.vision",
+      provider: "zai",
+      model: VISION_MODEL,
+      inputTokens: json.usage?.prompt_tokens ?? 0,
+      outputTokens: json.usage?.completion_tokens ?? 0,
+    });
     const brief = json.choices?.[0]?.message?.content?.trim();
     return brief && brief.length > 20 ? brief : null;
   } catch (e) {

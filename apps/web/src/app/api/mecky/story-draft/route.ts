@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { tracked } from "@/lib/ai-usage/tracked";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createStoryDraft, type DraftSources, type GenerateDraft } from "@/lib/story/draft";
 import { getConversationMessages, setDraftArticleId } from "@/lib/mecky/conversation-store";
@@ -54,7 +55,7 @@ async function uniqueSlug(
 
 const generateDraft: GenerateDraft = async (subject, transcript) => {
   const { object } = await generateObject({
-    model: anthropic("claude-opus-4-8"),
+    model: tracked(anthropic("claude-opus-4-8"), "mecky.story-draft", "expo"),
     schema: ARTICLE_DRAFT_SCHEMA,
     system: STORY_INTERVIEW_SYSTEM,
     prompt: buildDraftPrompt(subject, transcript),

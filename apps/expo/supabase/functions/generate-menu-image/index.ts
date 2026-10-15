@@ -22,6 +22,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { recordAiUsage } from '../_shared/ai-usage.ts';
 // ---------------------------------------------------------------------------
 // AI Act Art. 50(2): machine-readable marking of synthetic images.
 // INLINED from apps/web/src/lib/images/ai-marking.ts (keep in sync) because
@@ -465,6 +466,13 @@ serve(async (req: Request) => {
   }
   if (failMsg) return json(502, { ok: false, code: 'KIE_FAIL', error: failMsg, task_id: taskId });
   if (!imageUrl) return json(202, { ok: false, code: 'TIMEOUT', task_id: taskId, prompt });
+  await recordAiUsage({
+    feature: 'menu.image',
+    provider: 'kie',
+    model: String(createBody.model),
+    units: 1,
+    unitType: 'image',
+  });
 
   const imgResp = await fetch(imageUrl);
   if (!imgResp.ok) return json(502, { ok: false, code: 'IMAGE_DOWNLOAD_FAILED' });
