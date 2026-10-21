@@ -45,7 +45,7 @@ export interface TreasuryDeps {
 	getCurrentRate: () => Promise<RateResult | null>;
 	fetchFlows: () => Promise<Flow[]>;
 	getDayRates: (days: string[], currentRate: number) => Promise<Map<string, number>>;
-	readCuration: () => Promise<{ hidden: string[]; balancingTx: string | null }>;
+	readCuration: () => Promise<{ hidden: string[]; balancingTx: string | null; labels?: Record<string, string> }>;
 	readLinks: (txHashes: string[]) => Promise<Map<string, TreasuryLink>>;
 	now?: () => number;
 }
@@ -106,7 +106,9 @@ export async function buildTreasuryResponse(deps: TreasuryDeps): Promise<Treasur
 
 	// Newest first (the order the app renders), then the app's exact curation.
 	rows.sort((a, b) => b.timestamp - a.timestamp);
-	const curation = await deps.readCuration().catch(() => ({ hidden: [] as string[], balancingTx: null }));
+	const curation: Awaited<ReturnType<TreasuryDeps["readCuration"]>> = await deps
+		.readCuration()
+		.catch(() => ({ hidden: [] as string[], balancingTx: null }));
 	const curated = historyAvailable
 		? curateTreasuryHistory(rows, { hidden: curation.hidden, balancingTx: curation.balancingTx, liveTotal: euroTotal })
 		: [];
@@ -121,7 +123,7 @@ export async function buildTreasuryResponse(deps: TreasuryDeps): Promise<Treasur
 			direction: r.direction,
 			euro: toCents(r.amount) / 100,
 			timestamp: r.timestamp,
-			label: r.label,
+			label: curation.labels?.[r.txHash.toLowerCase()] ?? r.label,
 			link: links.get(r.txHash.toLowerCase()) ?? null,
 		}));
 

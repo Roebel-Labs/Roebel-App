@@ -6,7 +6,7 @@ import { HistorySkeleton } from "./skeletons";
 import { initials } from "./MemberRow";
 
 interface Signer { address: string; name: string; avatarUrl: string | null }
-interface Tx { safeTxHash: string; title: string; date: string | null; transactionHash: string | null; signers: Signer[]; counterparty: { name: string; avatarUrl: string | null } | null }
+interface Tx { safeTxHash: string; title: string; date: string | null; transactionHash: string | null; signers: Signer[]; counterparty: { name: string; avatarUrl: string | null } | null; tag?: string | null }
 
 export function Verlauf() {
   const [items, setItems] = useState<Tx[] | null>(null);
@@ -24,6 +24,9 @@ export function Verlauf() {
         <li key={t.safeTxHash} className="py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm truncate">{t.title}</p>
+            {t.tag && (
+              <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">{t.tag}</span>
+            )}
             <div className="flex items-center gap-2 mt-1">
               {t.date && <span className="text-xs text-muted-foreground">{new Date(t.date).toLocaleString("de-DE")}</span>}
               {t.signers.length > 0 && (

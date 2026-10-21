@@ -1,6 +1,6 @@
 // Pure curation of the Gemeinschaftskasse history (no network, no React).
 //
-// Two admin-controlled knobs, both read from `app_settings`:
+// Three admin-controlled knobs, all read from `app_settings`:
 // - `treasury_history_hidden_txs`: tx hashes whose rows are never shown
 //   (test transfers, internal moves between the treasury's own addresses).
 // - `treasury_history_balancing_tx`: ONE tx whose row absorbs the difference
@@ -8,6 +8,9 @@
 //   history always sums exactly to the hero figure. Native xDAI rows are valued
 //   at their own day's rate while the hero is marked to market today, so without
 //   this row the list and the total drift apart with every EUR/USD move.
+// - `treasury_history_tx_labels`: tx hash → label shown instead of the
+//   generic "Eingang"/"Ausgang" (e.g. a planned temporary move, announced as
+//   such). The row stays visible with its real amount; only its title changes.
 //
 // All money math runs in integer cents: the rows as displayed sum to the total
 // as displayed, to the cent.
@@ -72,6 +75,28 @@ export function parseBalancingTx(raw: string | null | undefined): string | null 
 		}
 	}
 	return norm(value) || null;
+}
+
+/**
+ * Parse the `treasury_history_tx_labels` setting value: a JSON object of
+ * tx hash → label. Missing or malformed yields {}; keys are lowercased, blank
+ * labels dropped.
+ */
+export function parseTxLabels(raw: string | null | undefined): Record<string, string> {
+	if (!raw) return {};
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return {};
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+	const out: Record<string, string> = {};
+	for (const [hash, label] of Object.entries(parsed as Record<string, unknown>)) {
+		const h = norm(hash);
+		if (h && typeof label === "string" && label.trim()) out[h] = label.trim();
+	}
+	return out;
 }
 
 /** Drop every row (native AND ERC-20) whose tx hash is in `hidden`, any case. */

@@ -89,3 +89,20 @@ test("linkTitle: first non-empty line, cut at a word with an ellipsis", () => {
 	assert.ok(t.length <= 80 && t.endsWith("…") && !t.includes("  "));
 	assert.equal(linkTitle(null), "");
 });
+
+test("a labelled tx keeps its amount and direction, only the title changes", async () => {
+	const r = await buildTreasuryResponse(
+		deps({
+			readCuration: async () => ({
+				hidden: ["0xhidden"],
+				balancingTx: "0xbal",
+				labels: { "0xnew": "Zwischenanlage · Rückfluss erwartet am 27.10." },
+			}),
+		}),
+	);
+	const row = r.history.find((h) => h.txHash === "0xnew")!;
+	assert.equal(row.label, "Zwischenanlage · Rückfluss erwartet am 27.10.");
+	assert.equal(row.euro, 177.15);
+	assert.equal(row.direction, "in");
+	assert.equal(r.history.find((h) => h.txHash === "0xbal")!.label, "Eingang");
+});

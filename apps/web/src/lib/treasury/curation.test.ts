@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { curateTreasuryHistory, parseBalancingTx, parseHiddenTxs, sumSignedCents, type CuratableRow } from "./curation";
+import { curateTreasuryHistory, parseBalancingTx, parseHiddenTxs, parseTxLabels, sumSignedCents, type CuratableRow } from "./curation";
 
 // The SAME vector the Expo jest test runs (apps/expo/lib/__tests__/treasury-history.test.ts).
 const vectorPath = join(__dirname, "../../../../expo/lib/__tests__/treasury-history.vector.json");
@@ -38,4 +38,11 @@ test("the web port is byte-identical to the app module below its header", () => 
 	const web = readFileSync(join(__dirname, "curation.ts"), "utf8");
 	const app = readFileSync(join(__dirname, "../../../../expo/lib/treasury-history.ts"), "utf8");
 	assert.ok(web.endsWith(app), "apps/web/src/lib/treasury/curation.ts drifted from apps/expo/lib/treasury-history.ts");
+});
+
+test("parseTxLabels: lowercases keys, drops blanks and junk", () => {
+	assert.deepEqual(parseTxLabels('{"0xABC":" Zwischenanlage ","0xdef":"","0x1":5}'), { "0xabc": "Zwischenanlage" });
+	assert.deepEqual(parseTxLabels("[]"), {});
+	assert.deepEqual(parseTxLabels("not json"), {});
+	assert.deepEqual(parseTxLabels(null), {});
 });
