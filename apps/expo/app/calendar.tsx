@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight } from '@/components/Icons';
+import { ChevronLeft, ChevronRight, ListIcon } from '@/components/Icons';
+import MapFAB from '@/components/MapFAB';
 import EventCard from '@/components/EventCard';
 import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
@@ -155,7 +156,7 @@ export default function CalendarScreen() {
       <GlassProvider>
             {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
       <GlassBackdrop style={{ flex: 1 }}>
-<ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+<ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 180 }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
@@ -225,6 +226,15 @@ export default function CalendarScreen() {
         )}
       </ScrollView>
       </GlassBackdrop>
+
+      {/* Back to the list view — mirrors the Kalender pill on /events. */}
+      <MapFAB
+        label="Liste"
+        href="/events"
+        replace
+        icon={<ListIcon size={16} color={colors.textPrimary} />}
+        accessibilityLabel="Listenansicht öffnen"
+      />
 
       <View style={styles.navOverlay}>
         <BottomNavigation
