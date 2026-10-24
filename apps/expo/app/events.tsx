@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   RefreshControl,
   Pressable,
   FlatList,
@@ -12,6 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { resolveEventAuthors } from '@/lib/supabase-posts';
 import { EventRecord } from '@/lib/types';
@@ -19,7 +19,8 @@ import EventListRow from '@/components/EventListRow';
 import { EventListRowSkeleton } from '@/components/SkeletonLoader';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
-import { ArrowLeftIcon } from '@/components/Icons';
+import MapFAB from '@/components/MapFAB';
+import { ArrowLeftIcon, CalendarIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
@@ -85,8 +86,39 @@ export default function EventsScreen() {
     setHeaderHeight(e.nativeEvent.layout.height);
   }, []);
 
-  const filteredEvents =
-    activeFilter === 'Alle' ? events : events.filter((e) => e.category === activeFilter);
+  const filteredEvents = useMemo(
+    () => (activeFilter === 'Alle' ? events : events.filter((e) => e.category === activeFilter)),
+    [events, activeFilter]
+  );
+
+  // Calendar pill hides on scroll-down, returns on scroll-up — same UI-thread
+  // worklet as the Karte pill on Erkunden.
+  const pillVisible = useSharedValue(true);
+  const lastScrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentY = event.contentOffset.y;
+      if (currentY > lastScrollY.value + 10) {
+        pillVisible.value = false;
+      } else if (currentY < lastScrollY.value - 10) {
+        pillVisible.value = true;
+      }
+      lastScrollY.value = currentY;
+    },
+  });
+
+  const renderEvent = useCallback(
+    ({ item, index }: { item: EventRecord; index: number }) => (
+      <EventListRow
+        event={item}
+        // One date chip per day: the rail only marks where a new day starts,
+        // so same-day events hang under it.
+        showDate={index === 0 || filteredEvents[index - 1].date !== item.date}
+        showDivider={index < filteredEvents.length - 1}
+      />
+    ),
+    [filteredEvents]
+  );
 
   const renderPill = ({ item }: { item: PillFilter }) => {
     const isActive = activeFilter === item;
@@ -127,63 +159,62 @@ export default function EventsScreen() {
             The header and bottom nav deliberately sit OUTSIDE it, after it in
             JSX order — see GlassSurface.tsx. */}
         <GlassBackdrop style={styles.flex}>
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={[
-              styles.scrollContent,
-              {
-                paddingTop: headerHeight + 12,
-                paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 24,
-              },
-            ]}
-            showsVerticalScrollIndicator={false}
-            scrollIndicatorInsets={{ top: headerHeight }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary}
-                progressViewOffset={headerHeight}
-              />
-            }
-          >
-            {loading && (
-              <View style={styles.list}>
-                <EventListRowSkeleton />
-                <EventListRowSkeleton />
-                <EventListRowSkeleton />
-              </View>
-            )}
-
-            {!loading && (
-              <View style={styles.list}>
-                {filteredEvents.length > 0 ? (
-                  filteredEvents.map((event, index) => (
-                    <EventListRow
-                      key={event.id}
-                      event={event}
-                      // One date chip per day: the rail only marks where a new
-                      // day starts, so same-day events hang under it.
-                      showDate={index === 0 || filteredEvents[index - 1].date !== event.date}
-                      showDivider={index < filteredEvents.length - 1}
-                    />
-                  ))
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                      Keine Veranstaltungen gefunden.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </ScrollView>
+          {/* Virtualized: the old ScrollView mounted every upcoming event (and
+              its images) at once, and Android's frost re-sampled all of it
+              each frame. */}
+          {loading ? (
+            <View style={[styles.list, { paddingTop: headerHeight + 12 }]}>
+              <EventListRowSkeleton />
+              <EventListRowSkeleton />
+              <EventListRowSkeleton />
+            </View>
+          ) : (
+            <Animated.FlatList
+              style={styles.flex}
+              data={filteredEvents}
+              renderItem={renderEvent}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={[
+                styles.scrollContent,
+                styles.list,
+                {
+                  paddingTop: headerHeight + 12,
+                  paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 88,
+                },
+              ]}
+              onScroll={scrollHandler}
+              scrollEventThrottle={16}
+              initialNumToRender={8}
+              maxToRenderPerBatch={8}
+              windowSize={7}
+              removeClippedSubviews
+              showsVerticalScrollIndicator={false}
+              scrollIndicatorInsets={{ top: headerHeight }}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    Keine Veranstaltungen gefunden.
+                  </Text>
+                </View>
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={colors.primary}
+                  progressViewOffset={headerHeight}
+                />
+              }
+            />
+          )}
         </GlassBackdrop>
 
-        {/* Frosted chrome: title bar + category rail in one floating pane, the
-            same material the home feed uses. */}
+        {/* Frosted chrome: title bar + category rail in one floating pane.
+            Real blur on iOS only — on Android the bottom nav stays the single
+            blur sampler of this screen (see GlassBackdrop); a second sampler
+            over the list made scrolling stutter. */}
         <View style={[styles.headerFloating, { paddingTop: insets.top }]} onLayout={onHeaderLayout}>
-          <GlassSurface edge="bottom" androidExperimentalBlur />
+          <GlassSurface edge="bottom" />
           <View style={styles.header}>
             <Pressable
               onPress={() => router.back()}
@@ -208,6 +239,15 @@ export default function EventsScreen() {
             style={styles.pillRowContainer}
           />
         </View>
+
+        <MapFAB
+          visible={pillVisible}
+          label="Kalender"
+          href="/calendar"
+          replace
+          icon={<CalendarIcon size={16} color={colors.textPrimary} />}
+          accessibilityLabel="Kalenderansicht öffnen"
+        />
 
         <View style={styles.navOverlay}>
           <BottomNavigation
