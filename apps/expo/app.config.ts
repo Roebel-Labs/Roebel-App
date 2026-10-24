@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   // the passkey entitlements (webcredentials:id.ortis.app, ortis:// scheme). The JS
   // guards both (lib/stripe-native.ts, passkey preview gate), but 3.7.0 is already
   // released in the stores, so a new version is required anyway.
-  version: '3.8.0',
+  version: '3.7.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
