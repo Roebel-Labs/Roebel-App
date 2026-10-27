@@ -338,7 +338,10 @@ export default function ListingDetailScreen() {
             <Pressable
               style={({ pressed }) => [styles.sellerInfo, pressed && { opacity: 0.6 }]}
               onPress={() => {
-                if (seller?.accountId) router.push(`/account/${seller.accountId}` as any);
+                // /account/[id] only renders organisations; personal sellers
+                // have their profile at /user/[username].
+                if (seller?.username) router.push(`/user/${seller.username}` as any);
+                else if (seller?.accountId) router.push(`/account/${seller.accountId}` as any);
               }}
               disabled={!seller?.accountId}
               accessibilityRole="button"

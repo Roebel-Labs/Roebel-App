@@ -128,3 +128,53 @@ export async function deleteExperience(
     throw error;
   }
 }
+
+export type ExperienceLikeState = {
+  /** The mirrored feed post — likes live on it so feed + event stay in sync. */
+  postId: string;
+  likesCount: number;
+  liked: boolean;
+};
+
+/**
+ * Resolve like state for experiences via their mirrored feed post
+ * (posts.linked_experience_id). Experiences without a mirror post are absent
+ * from the map and render without a like button.
+ */
+export async function fetchExperienceLikeState(
+  experienceIds: string[],
+  walletAddress: string | null | undefined,
+): Promise<Record<string, ExperienceLikeState>> {
+  if (experienceIds.length === 0) return {};
+
+  const { data: posts, error } = await supabase
+    .from('posts')
+    .select('id, linked_experience_id, likes_count')
+    .in('linked_experience_id', experienceIds);
+  if (error || !posts) {
+    if (error) console.error('[fetchExperienceLikeState]', error);
+    return {};
+  }
+
+  const postIds = posts.map((p: any) => p.id as string);
+  let likedPostIds = new Set<string>();
+  if (walletAddress && postIds.length > 0) {
+    const { data: likes } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .in('post_id', postIds)
+      .eq('wallet_address', walletAddress);
+    likedPostIds = new Set((likes ?? []).map((l: any) => l.post_id as string));
+  }
+
+  const state: Record<string, ExperienceLikeState> = {};
+  for (const p of posts as any[]) {
+    if (!p.linked_experience_id) continue;
+    state[p.linked_experience_id] = {
+      postId: p.id,
+      likesCount: p.likes_count ?? 0,
+      liked: likedPostIds.has(p.id),
+    };
+  }
+  return state;
+}

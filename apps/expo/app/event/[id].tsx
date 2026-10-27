@@ -471,11 +471,6 @@ export default function EventDetails() {
             </Pressable>
           </View>
 
-          {event.category && (
-            <View style={[styles.categoryBadge, { backgroundColor: colors.categoryBackground }]}>
-              <Text style={[styles.categoryText, { color: colors.primary }]}>{event.category}</Text>
-            </View>
-          )}
           <Text style={[styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
 
           <Pressable
@@ -766,17 +761,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: fontFamily.semiBold,
-  },
-  categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontFamily: fontFamily.medium,
   },
   title: {
     fontSize: 30,

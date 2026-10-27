@@ -46,6 +46,7 @@ export default function ProfileOfferRows({ listings, deals, sellingTitle = 'Zu v
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.hScroll}
               contentContainerStyle={styles.hList}
             >
               {safeListings.map((listing) => (
@@ -92,6 +93,7 @@ export default function ProfileOfferRows({ listings, deals, sellingTitle = 'Zu v
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.hScroll}
               contentContainerStyle={styles.hList}
             >
               {safeDeals.map((deal) => (
@@ -125,12 +127,16 @@ export default function ProfileOfferRows({ listings, deals, sellingTitle = 'Zu v
 }
 
 const styles = StyleSheet.create({
+  // Title + first card sit 16px from the screen edge; the card row bleeds
+  // past the section inset so it scrolls edge-to-edge.
   section: {
-    paddingHorizontal: 16,
     paddingVertical: 16,
     borderTopWidth: 1,
     marginHorizontal: 16,
     marginTop: 20,
+  },
+  hScroll: {
+    marginHorizontal: -16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -150,7 +156,7 @@ const styles = StyleSheet.create({
   },
   hList: {
     gap: 12,
-    paddingRight: 16,
+    paddingHorizontal: 16,
   },
   mediaCard: {
     width: 200,

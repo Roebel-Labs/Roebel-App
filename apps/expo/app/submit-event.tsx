@@ -17,7 +17,7 @@ import {
 import { MinimalAIChat } from '@/components/ai/MinimalAIChat';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
@@ -39,6 +39,7 @@ import { useUser } from '@/context/UserContext';
 import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import type { ColorTokens } from '@/constants/theme';
+import { deleteEventDraft, getEventDraft, newEventDraftId, saveEventDraft } from '@/lib/event-drafts';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -125,7 +126,11 @@ export default function SubmitEventScreen() {
   const { user } = useUser();
   const { celebrate } = useRewardCelebration();
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
-  const [mode, setMode] = useState<'ai' | 'manual'>('ai');
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ draftId?: string }>();
+  // Resuming a draft (from "Meine Veranstaltungen") opens straight in the form.
+  const draftIdRef = useRef(params.draftId || newEventDraftId());
+  const [mode, setMode] = useState<'ai' | 'manual'>(params.draftId ? 'manual' : 'ai');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdEventData, setCreatedEventData] = useState<{
@@ -185,6 +190,21 @@ export default function SubmitEventScreen() {
       organizer_phone: user?.phone_number ?? f.organizer_phone,
     }));
   }, [activeAccount?.id, user?.email, user?.phone_number]);
+
+  // Restore a saved draft once the active account is known.
+  const restoredDraftRef = useRef(false);
+  useEffect(() => {
+    if (!params.draftId || !activeAccount?.id || restoredDraftRef.current) return;
+    restoredDraftRef.current = true;
+    void getEventDraft(activeAccount.id, params.draftId).then((draft) => {
+      if (!draft) return;
+      setForm((f) => ({ ...f, ...draft.form }));
+      setIsRecurring(draft.isRecurring);
+      setSelectedDates(draft.selectedDates);
+      setUploadedImage(draft.uploadedImage);
+      if (draft.form.date) setSelectedDate(new Date(draft.form.date));
+    });
+  }, [params.draftId, activeAccount?.id]);
 
   // Error tracking state
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -496,6 +516,57 @@ export default function SubmitEventScreen() {
     }
   };
 
+  // Organizer fields are auto-filled, so only user-entered content counts.
+  const hasDraftContent =
+    !!form.title.trim() ||
+    !!form.description.trim() ||
+    !!form.date ||
+    !!form.location.trim() ||
+    !!uploadedImage ||
+    selectedDates.length > 0;
+
+  const draftSnapshotRef = useRef({ form, isRecurring, selectedDates, uploadedImage });
+  draftSnapshotRef.current = { form, isRecurring, selectedDates, uploadedImage };
+
+  // Leaving an unfinished form (back button, swipe, hardware back) asks
+  // whether to keep it as a draft in "Meine Veranstaltungen".
+  const guardLeave = mode === 'manual' && hasDraftContent && !isSuccess && !isSubmitting;
+  useEffect(() => {
+    if (!guardLeave) return;
+    return navigation.addListener('beforeRemove', (e) => {
+      e.preventDefault();
+      Alert.alert(
+        'Als Entwurf speichern?',
+        'Du kannst die Veranstaltung später unter „Meine Veranstaltungen" fertigstellen.',
+        [
+          { text: 'Weiter bearbeiten', style: 'cancel' },
+          {
+            text: 'Verwerfen',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+          {
+            text: 'Speichern',
+            onPress: async () => {
+              if (activeAccount?.id) {
+                const snap = draftSnapshotRef.current;
+                await saveEventDraft(activeAccount.id, {
+                  id: draftIdRef.current,
+                  updatedAt: new Date().toISOString(),
+                  form: snap.form,
+                  isRecurring: snap.isRecurring,
+                  selectedDates: snap.selectedDates,
+                  uploadedImage: snap.uploadedImage,
+                }).catch((err) => console.error('[submit-event] saveEventDraft', err));
+              }
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ]
+      );
+    });
+  }, [guardLeave, navigation, activeAccount?.id]);
+
   async function handleSubmit() {
     // Clear previous submission error
     setSubmissionError(null);
@@ -618,6 +689,7 @@ export default function SubmitEventScreen() {
         category: eventData.category,
       });
       setIsSuccess(true);
+      if (activeAccount?.id) void deleteEventDraft(activeAccount.id, draftIdRef.current);
       // Reward submitting an event in Röbel Münzen. Celebrate once the funder
       // actually pays (idempotent; a quiet no-op until it's live).
       if (user?.wallet_address)

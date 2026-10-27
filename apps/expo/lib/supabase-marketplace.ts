@@ -5,6 +5,8 @@ export type SellerProfile = {
   accountId: string;
   name: string;
   avatarUrl: string | null;
+  /** Set for personal sellers — their profile lives at /user/[username]. */
+  username?: string | null;
 };
 
 // Never surface a wallet address as a display name. `accounts.name` is
@@ -68,6 +70,7 @@ export async function fetchSellerProfileByWallet(
     accountId: personal.accounts.id,
     name,
     avatarUrl: user?.profile_picture_url || personal.accounts.avatar_url,
+    username: user?.username ?? null,
   };
 }
 
