@@ -334,6 +334,20 @@ export default function ExploreScreen() {
           <ThisWeekEventsHorizontal events={eventBuckets.thisWeek} />
         )}
 
+        {/* All Events - Horizontal */}
+        {eventsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="50%" />
+        ) : (
+          <AllEventsHorizontal events={eventBuckets.later} />
+        )}
+
+        {/* Nearby Events */}
+        {eventsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="30%" />
+        ) : (
+          <NearbyEventsSection events={eventBuckets.nearby} />
+        )}
+
         {/* Movies */}
         {moviesQuery.isPending ? (
           <SectionRailSkeleton titleWidth="25%" />
@@ -370,22 +384,8 @@ export default function ExploreScreen() {
               <RestaurantSection restaurants={restaurants} />
             )}
 
-            {/* Nearby Events */}
-            {eventsQuery.isPending ? (
-              <SectionRailSkeleton titleWidth="30%" />
-            ) : (
-              <NearbyEventsSection events={eventBuckets.nearby} />
-            )}
-
             {/* Nearby Org Accounts (Unternehmen) */}
             <NearbyOrgAccountsSection />
-
-            {/* All Events - Horizontal */}
-            {eventsQuery.isPending ? (
-              <SectionRailSkeleton titleWidth="50%" />
-            ) : (
-              <AllEventsHorizontal events={eventBuckets.later} />
-            )}
           </>
         ) : (
           <>
