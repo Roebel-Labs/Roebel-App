@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useMecky } from '@/context/MeckyContext';
 import { useConsent } from '@/context/ConsentContext';
@@ -61,6 +61,24 @@ export default function MeckyScreen() {
   const wallet = user?.wallet_address;
   const listRef = useRef<FlatList>(null);
   const [showConversations, setShowConversations] = useState(false);
+
+  // `?intent=layout` (Profil → Darstellung → "Mit Mecky anpassen"): open a
+  // fresh chat and start the layout conversation. The send waits for the
+  // cleared state so it lands in the new thread, not the previous one.
+  const { intent } = useLocalSearchParams<{ intent?: string }>();
+  const [pendingIntent, setPendingIntent] = useState<string | null>(null);
+  const intentConsumed = useRef(false);
+  useEffect(() => {
+    if (intent !== 'layout' || !isEnabled || intentConsumed.current) return;
+    intentConsumed.current = true;
+    setPendingIntent('Ich möchte meine Erkunden-Startseite anpassen. Was kann ich ändern?');
+    newConversation();
+  }, [intent, isEnabled, newConversation]);
+  useEffect(() => {
+    if (!pendingIntent || isStreaming || messages.length > 0 || currentConversationId !== null) return;
+    setPendingIntent(null);
+    void sendMessage(pendingIntent);
+  }, [pendingIntent, messages.length, isStreaming, currentConversationId, sendMessage]);
 
   // Story action-bar state (draft → preview → publish). Reset whenever the
   // thread changes so switching away from a story and back doesn't carry a

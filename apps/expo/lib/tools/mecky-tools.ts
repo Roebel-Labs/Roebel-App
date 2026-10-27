@@ -46,6 +46,18 @@ import { Platform } from "react-native";
 import * as Device from "expo-device";
 import * as Application from "expo-application";
 import { submitFeedback } from "../supabase-feedback";
+import { fetchExploreLayoutSetting } from "../supabase-app-settings";
+import {
+  EXPLORE_BLOCK_IDS,
+  applyPresetLayout,
+  completeLayout,
+  getExploreBlock,
+  getStoredExploreLayout,
+  miniAppSlugOf,
+  parseExploreServerConfig,
+  type ExploreBlockId,
+  type ExploreLayout,
+} from "../explore-layout";
 
 // ── Schemas ──────────────────────────────────────────────────────────
 
@@ -183,6 +195,27 @@ const reportProblemSchema = z.object({
 
 // ── Tool definitions ─────────────────────────────────────────────────
 
+
+const exploreBlockEnum = z.enum(EXPLORE_BLOCK_IDS as [ExploreBlockId, ...ExploreBlockId[]]);
+
+const getExploreLayoutSchema = z.object({});
+
+const proposeExploreLayoutSchema = z.object({
+  preset: z
+    .string()
+    .optional()
+    .describe("ID einer Vorlage aus getExploreLayout als Ausgangspunkt (optional)"),
+  order: z
+    .array(exploreBlockEnum)
+    .optional()
+    .describe("Diese Bereiche in genau dieser Reihenfolge nach oben stellen; der Rest folgt in bisheriger Reihenfolge"),
+  hide: z.array(exploreBlockEnum).optional().describe("Bereiche ausblenden"),
+  show: z.array(exploreBlockEnum).optional().describe("Bereiche wieder einblenden"),
+  summary: z.string().describe("Ein Satz auf Deutsch: was sich ändert und warum"),
+});
+
+// ── Tool Definitions ─────────────────────────────────────────────────
+
 const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
   {
     name: "searchEvents",
@@ -273,6 +306,18 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Meldet einen Fehler, ein Problem oder einen Wunsch des Nutzers ans Röbel-App-Team. WICHTIG: Erst die Zusammenfassung vom Nutzer bestätigen lassen, DANN dieses Tool aufrufen — nie ohne Zustimmung melden.",
     input_schema: zodToToolInputSchema(reportProblemSchema),
+  },
+  {
+    name: "getExploreLayout",
+    description:
+      "Liest die aktuelle Erkunden-Startseite des Nutzers: Bereiche in Reihenfolge (sichtbar/ausgeblendet), angeheftete Mini-Apps und verfügbare Vorlagen. Immer zuerst aufrufen, wenn der Nutzer die App-Darstellung ändern möchte.",
+    input_schema: zodToToolInputSchema(getExploreLayoutSchema),
+  },
+  {
+    name: "proposeExploreLayout",
+    description:
+      "Schlägt eine neue Anordnung der Erkunden-Startseite vor (Reihenfolge, ein-/ausblenden, Vorlage). Ändert NICHTS selbst: der Nutzer sieht eine Vorschau und muss „Übernehmen“ tippen. Nur für die Startseiten-Bereiche; andere App-Teile lassen sich nicht umbauen.",
+    input_schema: zodToToolInputSchema(proposeExploreLayoutSchema),
   },
 ];
 
@@ -879,6 +924,97 @@ async function executeReportProblem(
   }
 }
 
+// ── Erkunden layout (personalised start page) ────────────────────────
+
+async function loadCurrentExploreLayout() {
+  const config = parseExploreServerConfig(await fetchExploreLayoutSetting());
+  const stored = await getStoredExploreLayout();
+  const current = stored ? completeLayout(stored, config.base, "insert") : config.base;
+  return { config, stored, current };
+}
+
+async function executeGetExploreLayout(): Promise<ToolResult> {
+  try {
+    const { config, stored, current } = await loadCurrentExploreLayout();
+    const hidden = new Set(current.hidden);
+    return {
+      success: true,
+      data: {
+        blocks: current.order.flatMap((id) => {
+          const def = getExploreBlock(id);
+          if (!def) return [];
+          return [{ id, label: def.label, description: def.description, visible: !hidden.has(id), locked: !!def.locked }];
+        }),
+        pinnedMiniApps: current.order.map(miniAppSlugOf).filter(Boolean),
+        presets: config.presets.map((p) => ({ id: p.id, label: p.label, description: p.description })),
+        activePreset: stored ? stored.presetId : "standard",
+        message:
+          "Suchleiste und Kategorien oben sind fest. Nutzer kann alles auch selbst unter Profil → Darstellung ändern.",
+      },
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+async function executeProposeExploreLayout(
+  input: z.infer<typeof proposeExploreLayoutSchema>
+): Promise<ToolResult> {
+  try {
+    const { config, current } = await loadCurrentExploreLayout();
+    let next: ExploreLayout = current;
+    let presetId: string | null = null;
+    if (input.preset) {
+      const preset = config.presets.find((p) => p.id === input.preset);
+      if (!preset) {
+        return {
+          success: false,
+          error: `Unbekannte Vorlage "${input.preset}". Verfügbar: ${config.presets.map((p) => p.id).join(", ")}`,
+        };
+      }
+      next = applyPresetLayout(preset, current, config.base);
+      presetId = preset.id;
+    }
+    if (input.order?.length) {
+      const pins = next.order.filter((id) => miniAppSlugOf(id));
+      const front = [...new Set(input.order)];
+      next = {
+        ...next,
+        order: [...pins, ...front, ...next.order.filter((id) => !pins.includes(id) && !front.includes(id as ExploreBlockId))],
+      };
+    }
+    const hidden = new Set(next.hidden);
+    input.hide?.forEach((id) => {
+      if (!getExploreBlock(id)?.locked) hidden.add(id);
+    });
+    input.show?.forEach((id) => hidden.delete(id));
+    next = { ...next, hidden: [...hidden] };
+    // A preset tweaked further is no longer that preset.
+    if (input.order?.length || input.hide?.length || input.show?.length) presetId = null;
+
+    if (next.order.every((id, i) => id === current.order[i]) &&
+        next.hidden.length === current.hidden.length &&
+        next.hidden.every((id) => current.hidden.includes(id))) {
+      return {
+        success: true,
+        data: { message: "Der Vorschlag entspricht schon der aktuellen Darstellung — nichts zu ändern." },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        displayType: "layout",
+        items: [{ id: `layout-${Date.now()}`, order: next.order, hidden: next.hidden, presetId, summary: input.summary }],
+        message:
+          "Der Vorschlag wird dem Nutzer als Vorschau mit „Übernehmen“-Knopf angezeigt. Er ist erst gespeichert, wenn der Nutzer tippt — sag das kurz.",
+      },
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 export const meckyToolDefinitions: AnthropicToolDefinition[] = [
@@ -907,6 +1043,8 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   searchWildlife: executeSearchWildlife,
   seasonalCalendar: executeSeasonalCalendar,
   reportProblem: executeReportProblem,
+  getExploreLayout: executeGetExploreLayout,
+  proposeExploreLayout: executeProposeExploreLayout,
 };
 
 export async function executeMeckyTool(

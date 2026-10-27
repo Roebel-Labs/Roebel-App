@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
-import { useTheme, ThemePreference } from '@/context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useUser } from '@/context/UserContext';
@@ -17,6 +17,7 @@ import BottomDrawer from '@/components/BottomDrawer';
 import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
+import { THEME_OPTIONS } from '@/constants/theme-options';
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
@@ -69,12 +70,7 @@ function ThemeOption({ label, description, isSelected, onPress, isLast, colors }
   );
 }
 
-const themeOptions: { value: ThemePreference; label: string; description?: string }[] = [
-  { value: 'system', label: 'System', description: 'Folgt den Geräteeinstellungen' },
-  { value: 'light', label: 'Hell' },
-  { value: 'dim', label: 'Gedimmt', description: 'Dunkles Grau, schont die Augen' },
-  { value: 'dark', label: 'Dunkel', description: 'Reines Schwarz, spart Akku bei OLED-Displays' },
-];
+const themeOptions = THEME_OPTIONS;
 
 // Same options and copy as the onboarding role screen (app/welcome/role.tsx).
 const roleOptions: { value: PreferredRole; label: string; desc: string }[] = [

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -11,6 +11,14 @@ import { fetchExploreListings } from '@/lib/supabase-marketplace';
 import { fetchLiveMiniApps } from '@/lib/miniapps';
 import { partitionExploreEvents, selectHeroEvents } from '@/lib/explore-events';
 import { useAfterInteractions } from '@/hooks/useAfterInteractions';
+import { fontFamily } from '@/constants/theme';
+import {
+  useExploreLayout,
+  visibleBlockIds,
+  miniAppSlugOf,
+  type ExploreBlockId,
+} from '@/lib/explore-layout';
+import PinnedMiniAppBlock from '@/components/explore/PinnedMiniAppBlock';
 import type {
   EventRecord,
   NewsArticle,
@@ -51,6 +59,9 @@ const EMPTY_MOVIES: MovieRecord[] = [];
 const EMPTY_RESTAURANTS: RestaurantRecord[] = [];
 
 const todayISO = () => new Date().toISOString().split('T')[0];
+
+// Hero + the first four rails, matching the old fixed first paint.
+const ABOVE_FOLD_BLOCKS = 5;
 
 async function fetchExploreEvents() {
   const { data } = await supabase
@@ -280,6 +291,78 @@ export default function ExploreScreen() {
   const heroEvents = useMemo(() => selectHeroEvents(popularEvents), [popularEvents]);
   const eventBuckets = useMemo(() => partitionExploreEvents(events), [events]);
 
+  // Progressive first paint keeps working with any order: the first
+  // ABOVE_FOLD_BLOCKS visible blocks mount immediately, the rest after
+  // interactions settle.
+  const { layout } = useExploreLayout();
+  const visible = useMemo(() => visibleBlockIds(layout), [layout]);
+  const aboveFold = visible.slice(0, ABOVE_FOLD_BLOCKS);
+  const belowFold = visible.slice(ABOVE_FOLD_BLOCKS);
+
+  const renderBlock = (id: string) => {
+    const pinnedSlug = miniAppSlugOf(id);
+    if (pinnedSlug) return <PinnedMiniAppBlock key={id} slug={pinnedSlug} />;
+    switch (id as ExploreBlockId) {
+      case 'hero':
+        // Popular events, neighbours teased at both edges
+        return popularQuery.isPending ? (
+          <HeroCarouselSkeleton key={id} />
+        ) : (
+          <HeroCarousel key={id} events={heroEvents} showPagination containerStyle={styles.hero} />
+        );
+      case 'this_week':
+        return eventsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="35%" />
+        ) : (
+          <ThisWeekEventsHorizontal key={id} events={eventBuckets.thisWeek} />
+        );
+      case 'all_events':
+        return eventsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="50%" />
+        ) : (
+          <AllEventsHorizontal key={id} events={eventBuckets.later} />
+        );
+      case 'nearby_events':
+        return eventsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="30%" />
+        ) : (
+          <NearbyEventsSection key={id} events={eventBuckets.nearby} />
+        );
+      case 'movies':
+        return moviesQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="25%" />
+        ) : (
+          <MovieSection key={id} movies={movies} />
+        );
+      case 'mini_apps':
+        return <MiniAppsEntry key={id} />;
+      case 'marketplace':
+        // Listings + promotional deals in one rail
+        return listingsQuery.isPending || dealsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="35%" />
+        ) : (
+          <MarketplaceSection key={id} listings={listings ?? []} deals={deals} />
+        );
+      case 'news':
+        return newsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="40%" />
+        ) : (
+          <NewsSection key={id} articles={newsArticles} />
+        );
+      case 'restaurants':
+        return restaurantsQuery.isPending ? (
+          <SectionRailSkeleton key={id} titleWidth="40%" />
+        ) : (
+          <RestaurantSection key={id} restaurants={restaurants} />
+        );
+      case 'businesses':
+        // Nearby Org Accounts (Unternehmen)
+        return <NearbyOrgAccountsSection key={id} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -308,77 +391,33 @@ export default function ExploreScreen() {
         {/* Category tiles */}
         <ExploreCategoryChips />
 
-        {/* Hero carousel: popular events, neighbours teased at both edges */}
-        {popularQuery.isPending ? (
-          <HeroCarouselSkeleton />
-        ) : (
-          <HeroCarousel events={heroEvents} showPagination containerStyle={styles.hero} />
-        )}
-
-        {/* This Week Events - Horizontal */}
-        {eventsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="35%" />
-        ) : (
-          <ThisWeekEventsHorizontal events={eventBuckets.thisWeek} />
-        )}
-
-        {/* All Events - Horizontal */}
-        {eventsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="50%" />
-        ) : (
-          <AllEventsHorizontal events={eventBuckets.later} />
-        )}
-
-        {/* Nearby Events */}
-        {eventsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="30%" />
-        ) : (
-          <NearbyEventsSection events={eventBuckets.nearby} />
-        )}
-
-        {/* Movies */}
-        {moviesQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="25%" />
-        ) : (
-          <MovieSection movies={movies} />
-        )}
+        {/* Personalised blocks (lib/explore-layout.ts): order + visibility
+            come from the user's layout, falling back to the default. */}
+        {aboveFold.map(renderBlock)}
 
         {belowFoldReady ? (
-          <>
-            {/* Mini Apps store entry */}
-            <MiniAppsEntry />
-
-            {/* Marketplace (listings + promotional deals in one rail) */}
-            {listingsQuery.isPending || dealsQuery.isPending ? (
-              <SectionRailSkeleton titleWidth="35%" />
-            ) : (
-              <MarketplaceSection listings={listings ?? []} deals={deals} />
-            )}
-
-            {/* News */}
-            {newsQuery.isPending ? (
-              <SectionRailSkeleton titleWidth="40%" />
-            ) : (
-              <NewsSection articles={newsArticles} />
-            )}
-
-            {/* Restaurants */}
-            {restaurantsQuery.isPending ? (
-              <SectionRailSkeleton titleWidth="40%" />
-            ) : (
-              <RestaurantSection restaurants={restaurants} />
-            )}
-
-            {/* Nearby Org Accounts (Unternehmen) */}
-            <NearbyOrgAccountsSection />
-          </>
-        ) : (
+          belowFold.map(renderBlock)
+        ) : belowFold.length > 0 ? (
           <>
             <SectionRailSkeleton titleWidth="35%" />
             <SectionRailSkeleton titleWidth="40%" />
             <SectionRailSkeleton titleWidth="40%" />
           </>
-        )}
+        ) : null}
+
+        {/* Gateway into the layout editor (second one: Profil → Darstellung) */}
+        <Pressable
+          onPress={() => router.push('/settings/darstellung' as any)}
+          style={({ pressed }) => [
+            styles.customize,
+            { borderColor: colors.border },
+            pressed && { opacity: 0.7 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Erkunden anpassen"
+        >
+          <Text style={[styles.customizeText, { color: colors.textSecondary }]}>Erkunden anpassen</Text>
+        </Pressable>
 
         {/* Clearance for the now-overlaying glass BottomNavigation */}
         <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 }} />
@@ -429,6 +468,19 @@ const styles = StyleSheet.create({
   },
   skeletonSection: {
     marginBottom: 32,
+  },
+  customize: {
+    alignSelf: 'center',
+    marginTop: 24,
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+  },
+  customizeText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
   },
   skeletonRow: {
     flexDirection: 'row',
