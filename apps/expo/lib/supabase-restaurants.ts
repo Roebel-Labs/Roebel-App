@@ -3,7 +3,7 @@ import type {
   RestaurantRecord,
   RestaurantWithMenus,
   OpeningHours,
-  SpecialMenuRecord,
+  SpecialMenuWithItems,
   SpecialMenuWithDetails,
 } from './types';
 
@@ -123,12 +123,12 @@ export async function fetchSpecialMenuById(id: string): Promise<SpecialMenuWithD
 /**
  * Fetch active special menus for feed integration
  */
-export async function fetchActiveSpecialMenus(limit: number = 3): Promise<SpecialMenuRecord[]> {
+export async function fetchActiveSpecialMenus(limit: number = 3): Promise<SpecialMenuWithItems[]> {
   const today = new Date().toISOString().split('T')[0];
 
   const { data, error } = await supabase
     .from('special_menus')
-    .select('*')
+    .select('*, restaurant:restaurants (name, slug), special_menu_items (*)')
     .eq('status', 'published')
     .or(`end_date.is.null,end_date.gte.${today}`)
     .order('sort_order', { ascending: true })
@@ -139,7 +139,11 @@ export async function fetchActiveSpecialMenus(limit: number = 3): Promise<Specia
     return [];
   }
 
-  return data as SpecialMenuRecord[];
+  const menus = (data ?? []) as SpecialMenuWithItems[];
+  menus.forEach((menu) => {
+    menu.special_menu_items = (menu.special_menu_items ?? []).sort((a, b) => a.sort_order - b.sort_order);
+  });
+  return menus;
 }
 
 /**

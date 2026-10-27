@@ -33,7 +33,7 @@ import type {
   NewsArticle,
   MovieRecord,
   RestaurantRecord,
-  SpecialMenuRecord,
+  SpecialMenuWithItems,
 } from '@/lib/types';
 import FeedPostCard from './FeedPostCard';
 import FeedAlertCard from './FeedAlertCard';
@@ -535,7 +535,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         case 'special_menu_section':
           return (
             <View style={styles.moduleWrap}>
-              <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />
+              <FeedSpecialMenuSection menus={item.data as SpecialMenuWithItems[]} />
             </View>
           );
 

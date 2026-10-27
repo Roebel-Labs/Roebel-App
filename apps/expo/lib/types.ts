@@ -450,6 +450,14 @@ export type SpecialMenuItemRecord = {
   price: number | null;
   is_vegetarian: boolean;
   sort_order: number;
+  image_url?: string | null;
+  image_thumb_url?: string | null;
+};
+
+/** Active Mittagstisch for the Erkunden rail: menu + its dishes + the restaurant name. */
+export type SpecialMenuWithItems = SpecialMenuRecord & {
+  restaurant: Pick<RestaurantRecord, 'name' | 'slug'> | null;
+  special_menu_items: SpecialMenuItemRecord[];
 };
 
 // Extended types with relations

@@ -14,7 +14,7 @@ import type {
   NewsArticle,
   MovieRecord,
   RestaurantRecord,
-  SpecialMenuRecord,
+  SpecialMenuWithItems,
 } from '@/lib/types';
 import { fetchActiveServiceAlerts, fetchUpcomingEventsForFeed } from '@/lib/supabase-posts';
 import { fetchActiveDeals } from '@/lib/supabase-deals';
@@ -34,7 +34,7 @@ export type FeedSections = {
   news: NewsArticle[];
   movies: MovieRecord[];
   restaurants: RestaurantRecord[];
-  specialMenus: SpecialMenuRecord[];
+  specialMenus: SpecialMenuWithItems[];
   proposals: SupabaseProposal[];
   proposalComments: ProposalCommentFeedRecord[];
   forumThreads: ForumThreadRecord[];
@@ -89,7 +89,7 @@ export async function fetchFeedSections(feedType: FeedType): Promise<FeedSection
     news: news as NewsArticle[],
     movies: movies as MovieRecord[],
     restaurants: restaurants as RestaurantRecord[],
-    specialMenus: specialMenus as SpecialMenuRecord[],
+    specialMenus: specialMenus as SpecialMenuWithItems[],
     proposals: proposals as SupabaseProposal[],
     proposalComments: proposalComments as ProposalCommentFeedRecord[],
     forumThreads: forumThreads as ForumThreadRecord[],
