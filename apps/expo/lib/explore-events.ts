@@ -5,7 +5,7 @@ import { isEventInRoebel } from './utils';
 export type ExploreEventBuckets = {
   /** Upcoming events this ISO week (Mon–Sun) that take place in Röbel. */
   thisWeek: EventRecord[];
-  /** Upcoming non-popular events beyond this week, anywhere. */
+  /** Upcoming non-popular events beyond this week that take place in Röbel. */
   later: EventRecord[];
   /** Upcoming non-popular events outside Röbel, any week. */
   nearby: EventRecord[];
@@ -43,7 +43,7 @@ export function partitionExploreEvents(
     const popular = event.is_popular === true;
 
     if (inWeek && inRoebel) thisWeek.push(event);
-    if (!inWeek && !popular) later.push(event);
+    if (!inWeek && !popular && inRoebel) later.push(event);
     if (!inRoebel && !popular) nearby.push(event);
   }
 

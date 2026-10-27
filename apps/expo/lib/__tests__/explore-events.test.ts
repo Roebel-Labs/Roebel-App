@@ -58,7 +58,7 @@ describe('partitionExploreEvents', () => {
     expect(ids(nearby)).toEqual([]);
   });
 
-  it('lists an out-of-town event under nearby, and under later when it is not this week', () => {
+  it('lists an out-of-town event under nearby only, whatever the week', () => {
     const { thisWeek, later, nearby } = partitionExploreEvents(
       [
         ev({ id: 'waren-thisweek', date: '2026-09-18', location: 'Waren' }),
@@ -68,7 +68,34 @@ describe('partitionExploreEvents', () => {
     );
     expect(ids(thisWeek)).toEqual([]);
     expect(ids(nearby)).toEqual(['waren-thisweek', 'waren-later']);
-    expect(ids(later)).toEqual(['waren-later']);
+    expect(ids(later)).toEqual([]);
+  });
+
+  it('treats a neighbouring village with the 17207 postcode as nearby (Google locality wins)', () => {
+    const { later, nearby } = partitionExploreEvents(
+      [
+        ev({
+          id: 'bollewick',
+          date: '2026-10-02',
+          location: 'DIE SCHEUNE Bollewick, Dudel 1, 17207 Röbel/Bollewick',
+          formatted_address: 'Röbel/Müritz DE, Dudel 1, 17207 Bollewick, Germany',
+          address_components: [
+            { long_name: 'Bollewick', short_name: 'Bollewick', types: ['locality', 'political'] },
+            { long_name: '17207', short_name: '17207', types: ['postal_code'] },
+          ],
+        }),
+        ev({
+          id: 'roebel',
+          date: '2026-10-02',
+          address_components: [
+            { long_name: 'Röbel/Müritz', short_name: 'Röbel/Müritz', types: ['locality', 'political'] },
+          ],
+        }),
+      ],
+      NOW
+    );
+    expect(ids(nearby)).toEqual(['bollewick']);
+    expect(ids(later)).toEqual(['roebel']);
   });
 
   it('keeps popular events out of nearby and later but inside thisWeek', () => {
