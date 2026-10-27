@@ -2,7 +2,9 @@ import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +21,7 @@ import {
   type ExploreBlockId,
 } from '@/lib/explore-layout';
 import PinnedMiniAppBlock from '@/components/explore/PinnedMiniAppBlock';
+import ExploreEditBoard from '@/components/explore/ExploreEditBoard';
 import type {
   EventRecord,
   NewsArticle,
@@ -307,6 +310,31 @@ export default function ExploreScreen() {
   // ABOVE_FOLD_BLOCKS visible blocks mount immediately, the rest after
   // interactions settle.
   const { layout } = useExploreLayout();
+
+  // Edit mode (components/explore/ExploreEditBoard.tsx). Entered by a
+  // long-press anywhere on the sections or the button at the bottom; left via
+  // Fertig, Android back, or leaving the screen.
+  const [editing, setEditing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const scrollRef = useRef<Animated.ScrollView>(null);
+  const enterEdit = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setEditing(true);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
+  const exitEdit = useCallback(() => {
+    setEditing(false);
+    setDragging(false);
+  }, []);
+  useFocusEffect(useCallback(() => exitEdit, [exitEdit]));
+  // maxDistance: a finger that starts scrolling a rail never counts as a long-press.
+  const editLongPress = Gesture.LongPress()
+    .minDuration(450)
+    .maxDistance(12)
+    .onStart(() => {
+      'worklet';
+      runOnJS(enterEdit)();
+    });
   const visible = useMemo(() => visibleBlockIds(layout), [layout]);
   const aboveFold = visible.slice(0, ABOVE_FOLD_BLOCKS);
   const belowFold = visible.slice(ABOVE_FOLD_BLOCKS);
@@ -392,7 +420,9 @@ export default function ExploreScreen() {
         // ScrollView to its content, so `overflow-y: auto` never has anything
         // to scroll and the page (body has overflow:hidden) just clips it.
         // Native bounds it regardless, which is why this only broke the PWA.
+        ref={scrollRef}
         style={styles.scrollView}
+        scrollEnabled={!dragging}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
@@ -406,33 +436,45 @@ export default function ExploreScreen() {
         {/* Category tiles */}
         <ExploreCategoryChips />
 
-        {/* Personalised blocks (lib/explore-layout.ts): order + visibility
-            come from the user's layout, falling back to the default. */}
-        {aboveFold.map(renderBlock)}
-
-        {belowFoldReady ? (
-          belowFold.map(renderBlock)
-        ) : belowFold.length > 0 ? (
+        {editing ? (
+          // iOS-style edit mode: every section as a wiggling card
+          <ExploreEditBoard onDone={exitEdit} onDragActive={setDragging} />
+        ) : (
           <>
-            <SectionRailSkeleton titleWidth="35%" />
-            <SectionRailSkeleton titleWidth="40%" />
-            <SectionRailSkeleton titleWidth="40%" />
-          </>
-        ) : null}
+            {/* Personalised blocks (lib/explore-layout.ts): order + visibility
+                come from the user's layout, falling back to the default.
+                Long-press anywhere on them enters edit mode for the whole screen. */}
+            <GestureDetector gesture={editLongPress}>
+              <View collapsable={false}>
+                {aboveFold.map(renderBlock)}
 
-        {/* Gateway into the layout editor (second one: Profil → Darstellung) */}
-        <Pressable
-          onPress={() => router.push('/settings/darstellung' as any)}
-          style={({ pressed }) => [
-            styles.customize,
-            { borderColor: colors.border },
-            pressed && { opacity: 0.7 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Erkunden anpassen"
-        >
-          <Text style={[styles.customizeText, { color: colors.textSecondary }]}>Erkunden anpassen</Text>
-        </Pressable>
+                {belowFoldReady ? (
+                  belowFold.map(renderBlock)
+                ) : belowFold.length > 0 ? (
+                  <>
+                    <SectionRailSkeleton titleWidth="35%" />
+                    <SectionRailSkeleton titleWidth="40%" />
+                    <SectionRailSkeleton titleWidth="40%" />
+                  </>
+                ) : null}
+              </View>
+            </GestureDetector>
+
+            {/* Visible way into edit mode (Profil → Darstellung is the other) */}
+            <Pressable
+              onPress={enterEdit}
+              style={({ pressed }) => [
+                styles.customize,
+                { borderColor: colors.border },
+                pressed && { opacity: 0.7 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Erkunden bearbeiten"
+            >
+              <Text style={[styles.customizeText, { color: colors.textSecondary }]}>Erkunden bearbeiten</Text>
+            </Pressable>
+          </>
+        )}
 
         {/* Clearance for the now-overlaying glass BottomNavigation (+ mini player) */}
         <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
@@ -450,7 +492,7 @@ export default function ExploreScreen() {
       />
 
       {/* Map FAB */}
-      <MapFAB visible={fabVisible} bottomOffset={audioTrack ? 64 : 0} />
+      {!editing && <MapFAB visible={fabVisible} bottomOffset={audioTrack ? 64 : 0} />}
 
       {/* Now-playing bar, floating just above the glass nav */}
       <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
