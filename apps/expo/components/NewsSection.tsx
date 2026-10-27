@@ -18,7 +18,7 @@ function NewsSection({ articles }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  // Get the 3 most recent published articles
+  // Get the 5 most recent published articles
   const recentArticles = useMemo(() => {
     return articles
       .filter(article => article.status === 'published')
@@ -27,7 +27,7 @@ function NewsSection({ articles }: Props) {
         const dateB = new Date(b.published_at || b.created_at).getTime();
         return dateB - dateA;
       })
-      .slice(0, 3);
+      .slice(0, 5);
   }, [articles]);
 
   if (recentArticles.length === 0) {
