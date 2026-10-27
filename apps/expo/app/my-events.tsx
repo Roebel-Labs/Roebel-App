@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
@@ -15,13 +15,20 @@ import { formatDate } from '@/lib/utils';
 import { getInterestCount } from '@/lib/supabase-interests';
 import { getViewCount } from '@/lib/supabase-event-views';
 import { getAccountRole, canEditEvents, AccountRole } from '@/lib/supabase-account-roles';
+import { listEventDrafts, deleteEventDraft, type EventDraft } from '@/lib/event-drafts';
 
 type EventWithStats = EventRecord & {
+  kind: 'event';
   viewCount: number;
   interestCount: number;
 };
 
+type DraftRow = { kind: 'draft'; id: string; draft: EventDraft };
+
+type Row = EventWithStats | DraftRow;
+
 const STATUS_CONFIG = {
+  draft: { label: 'Entwurf', color: '#6B7280' },
   approved: { label: 'Genehmigt', color: '#4CAF50' },
   pending: { label: 'Ausstehend', color: '#FFA726' },
   rejected: { label: 'Abgelehnt', color: '#E53935' },
@@ -35,10 +42,10 @@ export default function MyEventsScreen() {
   const { hasCitizenNFT } = useVerificationContext();
 
   const [events, setEvents] = useState<EventWithStats[]>([]);
+  const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<AccountRole | null>(null);
 
-  const isOrg = activeAccount?.account_type === 'organisation';
   // Only CitizenNFT holders may create reward-bearing event QRs. Gate on the LIVE on-chain
   // check (useVerificationContext), not the DB is_verified_citizen flag — that flag is stale
   // for citizens verified on Gnosis. The mini-app + edge fn re-check CitizenNFT server-side too.
@@ -64,16 +71,16 @@ export default function MyEventsScreen() {
       setRole(userRole);
     }
 
-    // Org accounts see only their own events (newest first).
-    // Personal/citizen accounts see ALL events (every status), upcoming first.
-    let query = supabase.from('events').select('*');
-    if (isOrg) {
-      query = query.eq('account_id', activeAccount.id).order('date', { ascending: false });
-    } else {
-      query = query.order('date', { ascending: true });
-    }
-
-    const { data, error } = await query;
+    // Only events created by the active account (personal or org), newest first.
+    const [{ data, error }, localDrafts] = await Promise.all([
+      supabase
+        .from('events')
+        .select('*')
+        .eq('account_id', activeAccount.id)
+        .order('date', { ascending: false }),
+      listEventDrafts(activeAccount.id),
+    ]);
+    setDrafts(localDrafts.map((draft) => ({ kind: 'draft', id: draft.id, draft })));
 
     if (error || !data) {
       setEvents([]);
@@ -88,27 +95,91 @@ export default function MyEventsScreen() {
           getViewCount(event.id),
           getInterestCount(event.id),
         ]);
-        return { ...event, viewCount, interestCount };
+        return { ...event, kind: 'event' as const, viewCount, interestCount };
       })
     );
 
     setEvents(eventsWithStats);
     setLoading(false);
-  }, [activeAccount?.id, account?.address, isOrg]);
+  }, [activeAccount?.id, account?.address]);
 
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+  // Refetch on focus so edits and freshly saved drafts show up on return.
+  useFocusEffect(
+    useCallback(() => {
+      fetchEvents();
+    }, [fetchEvents])
+  );
 
-  const renderEventRow = ({ item }: { item: EventWithStats }) => {
+  const confirmDeleteDraft = (row: DraftRow) => {
+    if (!activeAccount?.id) return;
+    const accountId = activeAccount.id;
+    Alert.alert('Entwurf löschen?', row.draft.form.title || 'Unbenannter Entwurf', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Löschen',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteEventDraft(accountId, row.id);
+          setDrafts((prev) => prev.filter((d) => d.id !== row.id));
+        },
+      },
+    ]);
+  };
+
+  const renderDraftRow = (item: DraftRow) => {
+    const { form, uploadedImage } = item.draft;
+    const status = STATUS_CONFIG.draft;
+    return (
+      <Pressable
+        onPress={() => router.push({ pathname: '/submit-event', params: { draftId: item.id } })}
+        onLongPress={() => confirmDeleteDraft(item)}
+        style={({ pressed }) => [
+          styles.eventRow,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          pressed && styles.eventRowPressed,
+        ]}
+        accessibilityHint="Lange drücken zum Löschen"
+      >
+        <View style={styles.thumbnailWrap}>
+          {uploadedImage ? (
+            <Image
+              source={{ uri: uploadedImage }}
+              style={[styles.thumbnail, { backgroundColor: colors.cardPlaceholder }]}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.thumbnail, { backgroundColor: colors.cardPlaceholder }]} />
+          )}
+        </View>
+        <View style={styles.eventInfo}>
+          <Text style={[styles.eventTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+            {form.title || 'Unbenannter Entwurf'}
+          </Text>
+          <Text style={[styles.eventDate, { color: colors.textSecondary }]}>
+            {form.date ? formatDate(form.date) : 'Kein Datum'}
+          </Text>
+          <View style={styles.statusStatsRow}>
+            <View style={[styles.statusBadge, { backgroundColor: status.color + '20' }]}>
+              <View style={[styles.statusDot, { backgroundColor: status.color }]} />
+              <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const renderRow = ({ item }: { item: Row }) =>
+    item.kind === 'draft' ? renderDraftRow(item) : renderEventRow(item);
+
+  const renderEventRow = (item: EventWithStats) => {
     const status = STATUS_CONFIG[item.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
 
     return (
       <Pressable
         onPress={() => {
-          // Only org accounts may edit their own events; the citizen "all events"
-          // view is read-only since those events belong to other accounts.
-          if (isOrg && canEditEvents(role)) {
+          // Every row belongs to the active account; owners/admins edit it.
+          if (canEditEvents(role)) {
             router.push({ pathname: '/edit-event/[id]', params: { id: item.id } });
           } else {
             router.push({ pathname: '/event/[id]', params: { id: item.id } });
@@ -202,16 +273,16 @@ export default function MyEventsScreen() {
             </View>
           ))}
         </View>
-      ) : events.length === 0 ? (
+      ) : events.length === 0 && drafts.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            {isOrg ? 'Noch keine Veranstaltungen erstellt' : 'Keine Veranstaltungen vorhanden'}
+            Noch keine Veranstaltungen erstellt
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={events}
-          renderItem={renderEventRow}
+        <FlatList<Row>
+          data={[...drafts, ...events]}
+          renderItem={renderRow}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

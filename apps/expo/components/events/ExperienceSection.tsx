@@ -3,7 +3,13 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet, ScrollView, Image
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
-import { fetchEventExperiences, deleteExperience } from '@/lib/supabase-experiences';
+import {
+  fetchEventExperiences,
+  deleteExperience,
+  fetchExperienceLikeState,
+  type ExperienceLikeState,
+} from '@/lib/supabase-experiences';
+import { togglePostLike } from '@/lib/supabase-posts';
 import ExperienceItem from './ExperienceItem';
 import ImageIcon from '@/assets/icons/image-01.svg';
 import type { EventExperience } from '@/lib/types/feed';
@@ -38,6 +44,7 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [likeState, setLikeState] = useState<Record<string, ExperienceLikeState>>({});
 
   const loadExperiences = useCallback(async (pageNum: number, append: boolean = false) => {
     if (pageNum === 0) setLoading(true);
@@ -59,6 +66,44 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
   useEffect(() => {
     loadExperiences(0);
   }, [loadExperiences]);
+
+  // Likes live on each experience's mirrored feed post; refetch when the
+  // visible set or the viewer changes.
+  const walletAddress = user?.wallet_address ?? null;
+  const experienceIdsKey = experiences.map((e) => e.id).join(',');
+  useEffect(() => {
+    if (!experienceIdsKey) {
+      setLikeState({});
+      return;
+    }
+    let cancelled = false;
+    fetchExperienceLikeState(experienceIdsKey.split(','), walletAddress).then((state) => {
+      if (!cancelled) setLikeState(state);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [experienceIdsKey, walletAddress]);
+
+  const handleToggleLike = async (experience: EventExperience) => {
+    const current = likeState[experience.id];
+    if (!walletAddress || !current) return;
+    const optimistic = {
+      ...current,
+      liked: !current.liked,
+      likesCount: Math.max(0, current.likesCount + (current.liked ? -1 : 1)),
+    };
+    setLikeState((prev) => ({ ...prev, [experience.id]: optimistic }));
+    try {
+      const liked = await togglePostLike(current.postId, walletAddress);
+      if (liked !== optimistic.liked) {
+        setLikeState((prev) => ({ ...prev, [experience.id]: current }));
+      }
+    } catch (e) {
+      console.error('[ExperienceSection.handleToggleLike]', e);
+      setLikeState((prev) => ({ ...prev, [experience.id]: current }));
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     refresh: () => {
@@ -106,11 +151,6 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Erlebnisse</Text>
-          {experiences.length > 0 && (
-            <View style={[styles.countBadge, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.countText, { color: colors.primary }]}>{experiences.length}</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -168,6 +208,11 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
               onDelete={handleDelete}
               isHighlighted={experience.id === highlightExperienceId}
               scrollViewRef={scrollViewRef}
+              liked={likeState[experience.id]?.liked ?? false}
+              likesCount={likeState[experience.id]?.likesCount ?? 0}
+              onToggleLike={
+                walletAddress && likeState[experience.id] ? handleToggleLike : undefined
+              }
             />
           ))}
         </View>
@@ -191,6 +236,7 @@ export default ExperienceSection;
 const styles = StyleSheet.create({
   section: {
     marginTop: 24,
+    marginBottom: 32,
     gap: 12,
   },
   header: {
@@ -206,15 +252,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'MonaSansSemiCondensed-SemiBold',
-  },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  countText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
   },
   trigger: {
     flexDirection: 'row',

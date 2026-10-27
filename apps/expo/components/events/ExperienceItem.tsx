@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import HeartIcon from '@/assets/icons/heart-02.svg';
+import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
 import type { EventExperience } from '@/lib/types/feed';
 
 type Props = {
@@ -14,6 +16,10 @@ type Props = {
   onDelete?: (experience: EventExperience) => void;
   isHighlighted?: boolean;
   scrollViewRef?: RefObject<ScrollView | null>;
+  liked?: boolean;
+  likesCount?: number;
+  /** Omitted when the viewer is signed out or the experience has no feed mirror. */
+  onToggleLike?: (experience: EventExperience) => void;
 };
 
 export default function ExperienceItem({
@@ -22,6 +28,9 @@ export default function ExperienceItem({
   onDelete,
   isHighlighted = false,
   scrollViewRef,
+  liked = false,
+  likesCount = 0,
+  onToggleLike,
 }: Props) {
   const { colors } = useTheme();
   const [menuVisible, setMenuVisible] = useState(false);
@@ -152,6 +161,28 @@ export default function ExperienceItem({
             <Text style={[styles.videoLabel, { color: colors.textSecondary }]}>Video abspielen</Text>
           </Pressable>
         )}
+
+        {/* Like — same heart treatment as feed comments */}
+        {onToggleLike && (
+          <Pressable
+            onPress={() => onToggleLike(experience)}
+            style={styles.likeButton}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={liked ? 'Like entfernen' : 'Erlebnis liken'}
+          >
+            {liked ? (
+              <HeartFilledIcon width={18} height={18} color={colors.error} />
+            ) : (
+              <HeartIcon width={18} height={18} color={colors.textTertiary} />
+            )}
+            {likesCount > 0 && (
+              <Text style={[styles.likeCount, { color: liked ? colors.error : colors.textTertiary }]}>
+                {likesCount}
+              </Text>
+            )}
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -179,6 +210,16 @@ const styles = StyleSheet.create({
   },
   authorContainer: {
     flex: 1,
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  likeCount: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   menuButton: {
     paddingLeft: 8,

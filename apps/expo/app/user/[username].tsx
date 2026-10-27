@@ -22,6 +22,7 @@ import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
 import TierBadge from '@/components/RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
+import VerifiedCitizenSheet from '@/components/profile/VerifiedCitizenSheet';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
@@ -59,6 +60,7 @@ export default function PublicUserProfileScreen() {
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
+  const [verifiedSheetOpen, setVerifiedSheetOpen] = useState(false);
 
   const loadProfile = useCallback(
     (signal: { cancelled: boolean }) => {
@@ -214,16 +216,29 @@ export default function PublicUserProfileScreen() {
             <Text style={[styles.displayName, { color: colors.textPrimary }]} numberOfLines={1}>
               {profile.username ?? displayName}
             </Text>
-            {profile.is_verified_citizen && <VerifiedBadge size={20} />}
+            {profile.is_verified_citizen && (
+              <Pressable
+                onPress={() => setVerifiedSheetOpen(true)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Verifizierte:r Bürger:in – mehr erfahren"
+              >
+                <VerifiedBadge size={20} />
+              </Pressable>
+            )}
           </View>
-          <View style={styles.subRow}>
-            <TierBadge
-              tier={profile.tier}
-              size="medium"
-              preferredRole={profile.preferred_role}
-              isVerifiedCitizen={profile.is_verified_citizen}
-            />
-          </View>
+          {/* The gold seal already signals citizenship, so the tier pill is
+              only shown for everyone else (Besucher / Nicht verifiziert). */}
+          {!profile.is_verified_citizen && (
+            <View style={styles.subRow}>
+              <TierBadge
+                tier={profile.tier}
+                size="medium"
+                preferredRole={profile.preferred_role}
+                isVerifiedCitizen={profile.is_verified_citizen}
+              />
+            </View>
+          )}
 
           {personalId ? (
             <View style={styles.followRow}>
@@ -306,6 +321,7 @@ export default function PublicUserProfileScreen() {
           )}
         </View>
       </ScrollView>
+      <VerifiedCitizenSheet visible={verifiedSheetOpen} onClose={() => setVerifiedSheetOpen(false)} />
     </SafeAreaView>
   );
 }
