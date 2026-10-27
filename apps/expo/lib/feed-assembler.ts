@@ -11,7 +11,7 @@ import type {
   ForumThreadRecord,
   BuergerratSummary,
 } from './types/feed';
-import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from './types';
+import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuWithItems } from './types';
 
 const FIRST_SPONSORED_POSITION = 3;
 const SPONSORED_INTERVAL = 5;
@@ -61,7 +61,7 @@ export function assembleFeed(params: {
   newsArticles?: NewsArticle[];
   movies?: MovieRecord[];
   restaurants?: RestaurantRecord[];
-  specialMenus?: SpecialMenuRecord[];
+  specialMenus?: SpecialMenuWithItems[];
   governanceNudges?: GovernanceNudgeData[];
   meckyTips?: MeckyTipData[];
   proposals?: ProposalFeedRecord[];
