@@ -8,12 +8,13 @@ import { recordAiUsage } from "../ai-usage/record";
 export const TTS_MODEL_ID = "eleven_multilingual_v2";
 export const TTS_OUTPUT_FORMAT = "mp3_44100_128";
 export const TTS_SEED = 4242;
-// Stability 0.5 let the voice shout its way through the show; 0.75 keeps the
-// delivery even. Style stays at 0 (no exaggeration). These values are part of
-// every clip's content hash (see hash.ts), so changing them re-renders all
-// clips on the next run.
+// Stability 0.75 flattened the voice into an obviously synthetic monotone;
+// 0.5 sounds natural. The old shouting came from exclamation marks, which
+// cleanScript() now strips, not from stability. Style stays at 0 (no
+// exaggeration). These values are part of every clip's content hash (see
+// hash.ts), so changing them re-renders all clips on the next run.
 export const VOICE_SETTINGS = {
-  stability: 0.75,
+  stability: 0.5,
   similarity_boost: 0.75,
   style: 0,
   use_speaker_boost: true,
