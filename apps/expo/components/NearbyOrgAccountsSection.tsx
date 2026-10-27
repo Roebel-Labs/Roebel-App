@@ -1,12 +1,14 @@
 import React, { memo, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchOrgAccountCards } from '@/lib/supabase-accounts';
 import { fetchAccountRatingSummaries, fetchAccountVoteSummaries } from '@/lib/supabase-ratings';
 import OrgAccountCard from '@/components/OrgAccountCard';
 import type { AccountRatingSummary, AccountVoteSummary, OrgAccountCardRecord } from '@/lib/types';
 import { RAIL_LIST_PROPS } from './railListProps';
+import { ArrowRight02Icon } from './Icons';
 import { useShuffled } from '@/hooks/useShuffled';
 
 type OrgAccountsSection = {
@@ -36,6 +38,7 @@ const EMPTY_ACCOUNTS: OrgAccountCardRecord[] = [];
  * "In der Nähe" section, in a random order per visit.
  */
 function NearbyOrgAccountsSection() {
+  const router = useRouter();
   const { colors } = useTheme();
 
   const { data } = useQuery({
@@ -67,6 +70,14 @@ function NearbyOrgAccountsSection() {
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
           Unternehmen in der Nähe
         </Text>
+        <Pressable
+          style={[styles.showAllButton, { backgroundColor: colors.surfaceSecondary }]}
+          onPress={() => router.push('/businesses' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Unternehmen anzeigen"
+        >
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
+        </Pressable>
       </View>
       <FlatList
         horizontal
@@ -89,12 +100,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 22,
     fontFamily: 'MonaSansSemiCondensed-Medium',
+  },
+  showAllButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
     paddingHorizontal: 16,
