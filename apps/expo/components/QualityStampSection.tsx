@@ -7,7 +7,7 @@ type Props = {
 };
 
 const DEFAULT_BODY =
-  'Inhalte werden vom Ausschuss für Kultur und Tourismus auf Qualität für Röbel geprüft.';
+  'Inhalte werden von Bürgern auf Qualität für Röbel geprüft.';
 
 export function QualityStampSection({ title, body = DEFAULT_BODY }: Props) {
   const { colors } = useTheme();
