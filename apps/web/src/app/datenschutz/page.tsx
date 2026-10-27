@@ -75,17 +75,17 @@ export default async function DatenschutzPage() {
               <p className="text-gray-700 dark:text-gray-300">
                 <strong>E-Mail:</strong>{" "}
                 <a
-                  href="mailto:mueritzphone@gmail.com"
+                  href="mailto:info@roebel.app"
                   className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  mueritzphone@gmail.com
+                  info@roebel.app
                 </a>
               </p>
               <p className="text-gray-700 dark:text-gray-300">
-                <strong>Telefon:</strong> 039931 148019
+                <strong>Telefon:</strong> 039931 140428
               </p>
               <p className="text-gray-700 dark:text-gray-300">
-                <strong>Adresse:</strong> MüritzPhone, Hohe Straße 2, 17207
+                <strong>Adresse:</strong> Röbel-APP-Team, Hohe Straße 2, 17207
                 Röbel/Müritz
               </p>
             </div>

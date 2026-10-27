@@ -37,15 +37,13 @@ Wir nehmen den Schutz Ihrer persönlichen Daten sehr ernst und behandeln Ihre pe
 
 Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:
 
-**MüritzPhone**
+**Röbel-APP-Team**
 Hohe Straße 2
 17207 Röbel/Müritz
 Deutschland
 
-**E-Mail:** mueritzphone@gmail.com
-**Telefon:** 039931 148019
-
-**Inhaber:** Max Brych
+**E-Mail:** info@roebel.app
+**Telefon:** 039931 140428
 
 ---
 

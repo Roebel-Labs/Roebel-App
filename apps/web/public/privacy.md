@@ -36,15 +36,13 @@ We take the protection of your personal data very seriously and handle your pers
 
 The data controller within the meaning of the General Data Protection Regulation (GDPR) is:
 
-**MüritzPhone**
+**Röbel-APP-Team**
 Hohe Straße 2
 17207 Röbel/Müritz
 Germany
 
-**Email:** mueritzphone@gmail.com
-**Phone:** 039931 148019
-
-**Owner:** Max Brych
+**Email:** info@roebel.app
+**Phone:** 039931 140428
 
 ---
 

@@ -74,17 +74,17 @@ export default async function PrivacyPage() {
               <p className="text-gray-700 dark:text-gray-300">
                 <strong>Email:</strong>{" "}
                 <a
-                  href="mailto:mueritzphone@gmail.com"
+                  href="mailto:info@roebel.app"
                   className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  mueritzphone@gmail.com
+                  info@roebel.app
                 </a>
               </p>
               <p className="text-gray-700 dark:text-gray-300">
-                <strong>Phone:</strong> 039931 148019
+                <strong>Phone:</strong> 039931 140428
               </p>
               <p className="text-gray-700 dark:text-gray-300">
-                <strong>Address:</strong> MüritzPhone, Hohe Straße 2, 17207
+                <strong>Address:</strong> Röbel-APP-Team, Hohe Straße 2, 17207
                 Röbel/Müritz, Germany
               </p>
             </div>
