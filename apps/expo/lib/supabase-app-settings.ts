@@ -28,6 +28,14 @@ export function fetchEventStoriesAudioUrl(): Promise<string | null> {
 }
 
 /**
+ * Server default + presets for the personalised Erkunden layout (JSON; parsed
+ * and sanitised in lib/explore-layout.ts). Missing key = code defaults.
+ */
+export function fetchExploreLayoutSetting(): Promise<string | null> {
+  return fetchAppSetting('explore_layout');
+}
+
+/**
  * Remote kill switch for the XMTP DM rail. Missing key (or any fetch error)
  * counts as ENABLED so the feature works without seeding the table; setting
  * the key to 'false' flips every client back to Supabase-only sends without

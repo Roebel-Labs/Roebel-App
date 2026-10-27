@@ -24,7 +24,8 @@ export type RichCardType =
   | 'tours'
   | 'wildlife'
   | 'wildlife_calendar'
-  | 'advisories';
+  | 'advisories'
+  | 'layout';
 
 export interface RichCardData {
   type: RichCardType;

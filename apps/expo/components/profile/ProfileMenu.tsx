@@ -13,6 +13,7 @@ import SettingsIcon from '@/assets/icons/settings-01.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import TrashIcon from '@/assets/icons/profile/trash.svg';
+import GridViewIcon from '@/assets/icons/grid-view.svg';
 
 type Props = {
   variant: 'guest' | 'personal' | 'org';
@@ -43,6 +44,7 @@ export default function ProfileMenu({ variant, gridless = false }: Props) {
         {divider}
         <View style={styles.group}>
           <ProfileMenuItem icon={<NotificationIcon width={ICON} height={ICON} color={c} />} label="Benachrichtigungen" onPress={push('/notifications' as Href)} />
+          <ProfileMenuItem icon={<GridViewIcon width={ICON} height={ICON} color={c} />} label="Darstellung" onPress={push('/settings/darstellung' as Href)} />
           <ProfileMenuItem icon={<SettingsIcon width={ICON} height={ICON} color={c} />} label="Einstellungen" onPress={push('/org/settings' as Href)} />
           <ProfileMenuItem icon={<HelpCircleIcon width={ICON} height={ICON} color={c} />} label="Hilfe" onPress={push('/help' as Href)} />
           <ProfileMenuItem icon={<ShieldUserIcon width={ICON} height={ICON} color={c} />} label="Datenschutz" onPress={open('https://www.roebel.app/datenschutz')} />
@@ -67,6 +69,7 @@ export default function ProfileMenu({ variant, gridless = false }: Props) {
       {divider}
       <View style={styles.group}>
         <ProfileMenuItem icon={<NotificationIcon width={ICON} height={ICON} color={c} />} label="Benachrichtigungen" onPress={push('/notifications' as Href)} />
+        <ProfileMenuItem icon={<GridViewIcon width={ICON} height={ICON} color={c} />} label="Darstellung" onPress={push('/settings/darstellung' as Href)} />
         <ProfileMenuItem icon={<SettingsIcon width={ICON} height={ICON} color={c} />} label="Einstellungen" onPress={push('/settings' as Href)} />
         <ProfileMenuItem icon={<HelpCircleIcon width={ICON} height={ICON} color={c} />} label="Hilfe" onPress={push('/help' as Href)} />
         {isGuest && (

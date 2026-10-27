@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import MeckyResultCard from './MeckyResultCard';
+import LayoutProposalCard from './LayoutProposalCard';
 import type { MeckyMessage } from '@/lib/types/mecky';
 
 type Props = {
@@ -56,7 +57,9 @@ export default function MeckyChatBubble({ message }: Props) {
         ) : null}
 
         {/* Rich cards */}
-        {message.richCards && message.richCards.items.length > 0 && (
+        {message.richCards?.type === 'layout' && message.richCards.items[0] ? (
+          <LayoutProposalCard proposal={message.richCards.items[0]} />
+        ) : message.richCards && message.richCards.items.length > 0 && (
           <View style={styles.cardsGrid}>
             {message.richCards.items.map((item: any, idx: number) => (
               <MeckyResultCard
