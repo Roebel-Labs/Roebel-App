@@ -6,6 +6,7 @@ import GastroCard from './GastroCard';
 import { fetchAccountRatingSummaries } from '@/lib/supabase-ratings';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useShuffled } from '@/hooks/useShuffled';
 import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
 
@@ -13,9 +14,11 @@ type Props = {
   restaurants: RestaurantRecord[];
 };
 
-function RestaurantSection({ restaurants }: Props) {
+function RestaurantSection({ restaurants: fetched }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
+  // Random order per visit so the rail doesn't always open on the same places.
+  const restaurants = useShuffled(fetched, restaurantKey);
 
   // Star ratings live on the linked org account. Sorted (and de-duped) so the
   // query key is stable across re-renders regardless of restaurant order.

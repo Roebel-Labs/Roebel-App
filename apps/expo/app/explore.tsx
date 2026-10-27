@@ -203,12 +203,12 @@ export default function ExploreScreen() {
   });
   const dealsQuery = useQuery({
     queryKey: ['explore', 'deals'],
-    queryFn: () => fetchExploreDeals(),
+    queryFn: () => fetchExploreDeals(12), // pool; the rail shows a random 4
     meta: { persist: true },
   });
   const listingsQuery = useQuery({
     queryKey: ['explore', 'listings'],
-    queryFn: () => fetchExploreListings(),
+    queryFn: () => fetchExploreListings(24), // pool; the rail shows a random 6
     meta: { persist: true },
   });
   // The org-accounts and mini-apps rails own their queries, but they mount

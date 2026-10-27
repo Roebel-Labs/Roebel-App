@@ -7,6 +7,7 @@ import { fetchAccountRatingSummaries, fetchAccountVoteSummaries } from '@/lib/su
 import OrgAccountCard from '@/components/OrgAccountCard';
 import type { AccountRatingSummary, AccountVoteSummary, OrgAccountCardRecord } from '@/lib/types';
 import { RAIL_LIST_PROPS } from './railListProps';
+import { useShuffled } from '@/hooks/useShuffled';
 
 type OrgAccountsSection = {
   accounts: OrgAccountCardRecord[];
@@ -24,20 +25,15 @@ export async function fetchOrgAccountsSection(): Promise<OrgAccountsSection> {
     fetchAccountVoteSummaries(ids),
     fetchAccountRatingSummaries(ids),
   ]);
-  const accounts = [...data].sort((a, b) => {
-    const ua = summaries[a.id]?.up_count ?? 0;
-    const ub = summaries[b.id]?.up_count ?? 0;
-    if (ub !== ua) return ub - ua;
-    return a.name.localeCompare(b.name);
-  });
-  return { accounts, summaries, ratings };
+  return { accounts: data, summaries, ratings };
 }
 
 const accountKey = (account: OrgAccountCardRecord) => account.id;
+const EMPTY_ACCOUNTS: OrgAccountCardRecord[] = [];
 
 /**
  * Horizontal row of org accounts (sub_type 'unternehmen') shown under the
- * "In der Nähe" section, ordered by most thumbs-up first.
+ * "In der Nähe" section, in a random order per visit.
  */
 function NearbyOrgAccountsSection() {
   const { colors } = useTheme();
@@ -47,7 +43,7 @@ function NearbyOrgAccountsSection() {
     queryFn: fetchOrgAccountsSection,
     meta: { persist: true },
   });
-  const accounts = data?.accounts ?? [];
+  const accounts = useShuffled(data?.accounts ?? EMPTY_ACCOUNTS, accountKey);
   const summaries = data?.summaries;
   // Persisted cache entries from before ratings were added lack this key.
   const ratings = data?.ratings;

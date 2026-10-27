@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { RAIL_LIST_PROPS } from './railListProps';
+import { useShuffled } from '@/hooks/useShuffled';
 import { ArrowRight02Icon } from './Icons';
 import MarketplaceCard from './MarketplaceCard';
 import BusinessDealCard from './BusinessDealCard';
@@ -21,8 +22,19 @@ function MarketplaceSection({ listings, deals }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const displayDeals = useMemo(() => (deals ?? []).slice(0, 4), [deals]);
-  const displayListings = useMemo(() => listings.slice(0, 6), [listings]);
+  // The screen fetches a larger pool than the rail shows; a random pick per
+  // visit rotates which listings and deals get seen. Boosted deals stay ahead.
+  const shuffledDeals = useShuffled(deals ?? EMPTY_DEALS, dealKey);
+  const shuffledListings = useShuffled(listings, listingKey);
+  const displayDeals = useMemo(
+    () =>
+      [...shuffledDeals.filter((d) => d.is_boosted), ...shuffledDeals.filter((d) => !d.is_boosted)].slice(
+        0,
+        RAIL_DEALS
+      ),
+    [shuffledDeals]
+  );
+  const displayListings = useMemo(() => shuffledListings.slice(0, RAIL_LISTINGS), [shuffledListings]);
 
   // Deals are promotional, so they lead the rail; listings follow.
   const railItems: RailItem[] = useMemo(
@@ -101,5 +113,10 @@ const renderRailItem = ({ item }: { item: RailItem }) =>
     <MarketplaceCard listing={item.data} compact style={RAIL_CARD_STYLE} />
   );
 const railItemKey = (item: RailItem) => item.id;
+const dealKey = (deal: BusinessDealWithBusiness) => deal.id;
+const listingKey = (listing: MarketplaceListingRecord) => listing.id;
+const EMPTY_DEALS: BusinessDealWithBusiness[] = [];
+const RAIL_DEALS = 4;
+const RAIL_LISTINGS = 6;
 
 export default memo(MarketplaceSection);
