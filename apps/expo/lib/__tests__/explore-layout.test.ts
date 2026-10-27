@@ -31,13 +31,14 @@ describe('explore layout', () => {
   });
 
   it('inserts a block a saved layout does not know after its predecessor', () => {
-    // Saved before 'audio' existed, with news moved to the top.
-    const saved = { order: ['news', ...EXPLORE_BLOCK_IDS.filter((id) => id !== 'audio' && id !== 'news')], hidden: [] };
+    // Saved before 'news' existed, with restaurants moved to the top.
+    const rest = EXPLORE_BLOCK_IDS.filter((id) => id !== 'news' && id !== 'restaurants');
+    const saved = { order: ['restaurants', ...rest], hidden: [] };
     const done = completeLayout(saved, CODE_DEFAULT_LAYOUT, 'insert');
     expect(done.order).toHaveLength(EXPLORE_BLOCK_IDS.length);
-    // audio follows movies in the default, so it lands right after it
-    expect(done.order.indexOf('audio')).toBe(done.order.indexOf('movies') + 1);
-    expect(done.order[0]).toBe('news');
+    // news follows marketplace in the default, so it lands right after it
+    expect(done.order.indexOf('news')).toBe(done.order.indexOf('marketplace') + 1);
+    expect(done.order[0]).toBe('restaurants');
   });
 
   it('keeps a partial order on top and appends the rest', () => {
