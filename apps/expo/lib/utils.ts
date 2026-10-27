@@ -119,6 +119,19 @@ export function isEventInRoebel(
     );
   };
 
+  // Google's locality is authoritative when present. The string heuristics
+  // below misfire on neighbouring villages that share the 17207 postcode and
+  // the "Röbel/..." prefix (e.g. "17207 Röbel/Bollewick").
+  if (addressComponents && Array.isArray(addressComponents)) {
+    const locality = addressComponents.find(
+      (component) => Array.isArray(component?.types) && component.types.includes('locality')
+    );
+    if (locality) {
+      const name = String(locality.long_name || locality.short_name || '').toLowerCase();
+      return name.includes('röbel') || name.includes('roebel');
+    }
+  }
+
   // Check location string
   if (containsRoebel(location)) return true;
 
