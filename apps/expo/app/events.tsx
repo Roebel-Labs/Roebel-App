@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,25 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { resolveEventAuthors } from '@/lib/supabase-posts';
 import { EventRecord } from '@/lib/types';
-import EventListRow from '@/components/EventListRow';
+import EventListRow, { DATE_RAIL_WIDTH, EventDateChip } from '@/components/EventListRow';
+import EventMonthCalendar from '@/components/events/EventMonthCalendar';
 import { EventListRowSkeleton } from '@/components/SkeletonLoader';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
-import MapFAB from '@/components/MapFAB';
-import { ArrowLeftIcon, CalendarIcon } from '@/components/Icons';
+import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
@@ -31,6 +40,41 @@ const PILLS: PillFilter[] = ['Alle', ...EVENT_CATEGORIES];
 
 /** Gutter for the whole screen — header, filter rail and list share it. */
 const GUTTER = 16;
+/** Space between the header and the calendar at the top of the list. */
+const LIST_TOP_GAP = 12;
+
+// Sticky date strip under the category pills: date chips (78pt tall) with
+// 8pt above and 12pt below.
+const STRIP_HEIGHT = 98;
+const STRIP_CHIP_GAP = 8;
+
+// The calendar wants a scroll to land a date's first row right under the strip.
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<EventRecord>);
+
+/**
+ * Reports each list cell's y in the list's content coordinates, which is
+ * what the sticky strip needs to follow the section under it. A module-level
+ * cell component (an inline one would remount every cell on each render)
+ * that gets its callback through context.
+ */
+const CellLayoutContext = createContext<((id: string, y: number) => void) | null>(null);
+
+function TrackedCell({ cellKey, index, item, onLayout, children, ...rest }: any) {
+  const record = useContext(CellLayoutContext);
+  return (
+    <View
+      {...rest}
+      onLayout={(e: LayoutChangeEvent) => {
+        onLayout?.(e);
+        if (item) record?.(String(item.id), e.nativeEvent.layout.y);
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+type DayStart = { date: string; id: string; index: number };
 
 export default function EventsScreen() {
   const router = useRouter();
@@ -40,19 +84,23 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<PillFilter>('Alle');
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [activeDate, setActiveDate] = useState<string | null>(null);
   // Measured, not guessed: the chrome floats over the list, so the scroll
   // content has to reserve exactly the height the header ends up taking
-  // (the filter rail wraps differently across font scales).
+  // (the filter rail wraps differently across font scales). This is the
+  // title + pills part only; the date strip below grows on top of the list.
   const [headerHeight, setHeaderHeight] = useState(0);
+
+  const listRef = useRef<FlatList<EventRecord>>(null);
+  const stripRef = useRef<FlatList<DayStart>>(null);
 
   useEffect(() => {
     fetchEvents();
   }, []);
 
   async function fetchEvents() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayString = today.toISOString().split('T')[0];
+    const todayString = format(new Date(), 'yyyy-MM-dd');
 
     const { data, error } = await supabase
       .from('events')
@@ -91,35 +139,152 @@ export default function EventsScreen() {
     [events, activeFilter]
   );
 
-  // Calendar pill hides on scroll-down, returns on scroll-up — same UI-thread
-  // worklet as the Karte pill on Erkunden.
-  const pillVisible = useSharedValue(true);
-  const lastScrollY = useSharedValue(0);
+  // First event of every day: the strip's chips and the scroll targets.
+  const dayStarts = useMemo(() => {
+    const starts: DayStart[] = [];
+    filteredEvents.forEach((e, index) => {
+      if (index === 0 || filteredEvents[index - 1].date !== e.date) {
+        starts.push({ date: e.date, id: String(e.id), index });
+      }
+    });
+    return starts;
+  }, [filteredEvents]);
+
+  const markedDates = useMemo(() => new Set(dayStarts.map((d) => d.date)), [dayStarts]);
+
+  // ---- Scroll tracking (UI thread) ----------------------------------------
+  // Day-start offsets live in a shared value so the scroll worklet can work
+  // out the current section without a JS round trip per frame; it only
+  // calls back into JS when the section actually changes.
+  const cellOffsets = useRef(new Map<string, number>());
+  const dayStartsRef = useRef(dayStarts);
+  dayStartsRef.current = dayStarts;
+  const dayOffsets = useSharedValue<{ y: number; date: string }[]>([]);
+  const calendarHeight = useSharedValue(0);
+  const chromeHeight = useSharedValue(0);
+  const stripShown = useSharedValue(false);
+  const activeDateShared = useSharedValue('');
+  const rebuildQueued = useRef(false);
+
+  useEffect(() => {
+    chromeHeight.value = headerHeight + STRIP_HEIGHT;
+  }, [headerHeight, chromeHeight]);
+
+  const rebuildDayOffsets = useCallback(() => {
+    rebuildQueued.current = false;
+    const next: { y: number; date: string }[] = [];
+    for (const d of dayStartsRef.current) {
+      const y = cellOffsets.current.get(d.id);
+      if (y != null) next.push({ y, date: d.date });
+    }
+    dayOffsets.value = next;
+  }, [dayOffsets]);
+
+  const recordCellLayout = useCallback(
+    (id: string, y: number) => {
+      cellOffsets.current.set(id, y);
+      if (!rebuildQueued.current) {
+        rebuildQueued.current = true;
+        requestAnimationFrame(rebuildDayOffsets);
+      }
+    },
+    [rebuildDayOffsets]
+  );
+
+  // A new filter remounts the list (see `key` below) — start from clean offsets.
+  useEffect(() => {
+    cellOffsets.current.clear();
+    dayOffsets.value = [];
+    activeDateShared.value = '';
+    setActiveDate(dayStarts[0]?.date ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter]);
+
+  useEffect(() => {
+    rebuildDayOffsets();
+  }, [dayStarts, rebuildDayOffsets]);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
-      const currentY = event.contentOffset.y;
-      if (currentY > lastScrollY.value + 10) {
-        pillVisible.value = false;
-      } else if (currentY < lastScrollY.value - 10) {
-        pillVisible.value = true;
+      const y = event.contentOffset.y;
+      // The strip slides in once the calendar's bottom edge has passed under
+      // where the strip sits — so a jump that parks a date right below the
+      // strip always has the strip showing.
+      stripShown.value =
+        calendarHeight.value > 0 && y >= LIST_TOP_GAP + calendarHeight.value - STRIP_HEIGHT - 1;
+
+      const probe = y + chromeHeight.value + 1;
+      const offsets = dayOffsets.value;
+      let current = '';
+      for (let i = 0; i < offsets.length; i++) {
+        if (offsets[i].y <= probe) current = offsets[i].date;
       }
-      lastScrollY.value = currentY;
+      if (current !== '' && current !== activeDateShared.value) {
+        activeDateShared.value = current;
+        runOnJS(setActiveDate)(current);
+      }
     },
   });
 
-  const renderEvent = useCallback(
-    ({ item, index }: { item: EventRecord; index: number }) => (
-      <EventListRow
-        event={item}
-        // One date chip per day: the rail only marks where a new day starts,
-        // so same-day events hang under it.
-        showDate={index === 0 || filteredEvents[index - 1].date !== item.date}
-        showDivider={index < filteredEvents.length - 1}
-      />
-    ),
-    [filteredEvents]
+  const stripProgress = useDerivedValue(() =>
+    withTiming(stripShown.value ? 1 : 0, { duration: 200 })
+  );
+  const stripStyle = useAnimatedStyle(() => ({
+    height: stripProgress.value * STRIP_HEIGHT,
+    opacity: stripProgress.value,
+  }));
+
+  // Keep the active chip in view as the sections go by.
+  useEffect(() => {
+    if (!activeDate) return;
+    const index = dayStarts.findIndex((d) => d.date === activeDate);
+    if (index >= 0) {
+      stripRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    }
+  }, [activeDate, dayStarts]);
+
+  // ---- Jumping to a date ---------------------------------------------------
+  const scrollInset = headerHeight + STRIP_HEIGHT;
+
+  const scrollToDate = useCallback(
+    (dateISO: string) => {
+      // The day itself, or the next one that has events.
+      const target =
+        dayStarts.find((d) => d.date >= dateISO) ?? dayStarts[dayStarts.length - 1];
+      if (!target) return;
+      activeDateShared.value = target.date;
+      setActiveDate(target.date);
+      const y = cellOffsets.current.get(target.id);
+      if (y != null) {
+        listRef.current?.scrollToOffset({ offset: Math.max(0, y - scrollInset), animated: true });
+      } else {
+        listRef.current?.scrollToIndex({ index: target.index, viewOffset: scrollInset, animated: true });
+      }
+    },
+    [dayStarts, scrollInset, activeDateShared]
   );
 
+  const onScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      // The row isn't measured yet: get close on the average row height,
+      // then retry once the rows around it have rendered.
+      listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: info.index, viewOffset: scrollInset, animated: true });
+      }, 150);
+    },
+    [scrollInset]
+  );
+
+  const onSelectDate = useCallback(
+    (dateISO: string) => {
+      setSelectedDate(dateISO);
+      scrollToDate(dateISO);
+    },
+    [scrollToDate]
+  );
+
+  // ---- Rendering -----------------------------------------------------------
   const renderPill = ({ item }: { item: PillFilter }) => {
     const isActive = activeFilter === item;
     const meta = item === 'Alle' ? null : CATEGORY_METADATA[item];
@@ -152,6 +317,46 @@ export default function EventsScreen() {
     );
   };
 
+  const renderEvent = useCallback(
+    ({ item, index }: { item: EventRecord; index: number }) => (
+      <EventListRow
+        event={item}
+        // One date chip per day: the rail only marks where a new day starts,
+        // so same-day events hang under it.
+        showDate={index === 0 || filteredEvents[index - 1].date !== item.date}
+        showDivider={index < filteredEvents.length - 1}
+      />
+    ),
+    [filteredEvents]
+  );
+
+  const renderStripChip = ({ item }: { item: DayStart }) => (
+    <Pressable
+      onPress={() => scrollToDate(item.date)}
+      style={({ pressed }) => [styles.stripChip, pressed && styles.pillPressed]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: item.date === activeDate }}
+      accessibilityLabel={`Zu ${format(new Date(`${item.date}T12:00:00`), 'EEEE, d. MMMM', { locale: de })} springen`}
+    >
+      <EventDateChip date={item.date} active={item.date === activeDate} />
+    </Pressable>
+  );
+
+  const calendar = (
+    <View
+      style={styles.calendar}
+      onLayout={(e) => {
+        calendarHeight.value = e.nativeEvent.layout.height;
+      }}
+    >
+      <EventMonthCalendar
+        selectedDate={selectedDate}
+        onSelectDate={onSelectDate}
+        markedDates={markedDates}
+      />
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <GlassProvider>
@@ -159,43 +364,47 @@ export default function EventsScreen() {
             The header and bottom nav deliberately sit OUTSIDE it, after it in
             JSX order — see GlassSurface.tsx. */}
         <GlassBackdrop style={styles.flex}>
-          {/* Virtualized: the old ScrollView mounted every upcoming event (and
-              its images) at once, and Android's frost re-sampled all of it
-              each frame. */}
-          {loading ? (
-            <View style={[styles.list, { paddingTop: headerHeight + 12 }]}>
-              <EventListRowSkeleton />
-              <EventListRowSkeleton />
-              <EventListRowSkeleton />
-            </View>
-          ) : (
-            <Animated.FlatList
+          <CellLayoutContext.Provider value={recordCellLayout}>
+            <AnimatedFlatList
+              // Remount per filter: fresh cells, fresh offsets, back to the top.
+              key={activeFilter}
+              ref={listRef as any}
               style={styles.flex}
-              data={filteredEvents}
+              data={loading ? [] : filteredEvents}
               renderItem={renderEvent}
               keyExtractor={(item) => String(item.id)}
+              CellRendererComponent={TrackedCell}
+              ListHeaderComponent={calendar}
               contentContainerStyle={[
                 styles.scrollContent,
                 styles.list,
                 {
-                  paddingTop: headerHeight + 12,
-                  paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 88,
+                  paddingTop: headerHeight + LIST_TOP_GAP,
+                  paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 24,
                 },
               ]}
               onScroll={scrollHandler}
               scrollEventThrottle={16}
-              initialNumToRender={8}
+              onScrollToIndexFailed={onScrollToIndexFailed}
+              initialNumToRender={6}
               maxToRenderPerBatch={8}
-              windowSize={7}
-              removeClippedSubviews
+              windowSize={9}
               showsVerticalScrollIndicator={false}
               scrollIndicatorInsets={{ top: headerHeight }}
               ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    Keine Veranstaltungen gefunden.
-                  </Text>
-                </View>
+                loading ? (
+                  <View>
+                    <EventListRowSkeleton />
+                    <EventListRowSkeleton />
+                    <EventListRowSkeleton />
+                  </View>
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      Keine Veranstaltungen gefunden.
+                    </Text>
+                  </View>
+                )
               }
               refreshControl={
                 <RefreshControl
@@ -206,48 +415,57 @@ export default function EventsScreen() {
                 />
               }
             />
-          )}
+          </CellLayoutContext.Provider>
         </GlassBackdrop>
 
-        {/* Frosted chrome: title bar + category rail in one floating pane.
-            Real blur on iOS only — on Android the bottom nav stays the single
-            blur sampler of this screen (see GlassBackdrop); a second sampler
-            over the list made scrolling stutter. */}
-        <View style={[styles.headerFloating, { paddingTop: insets.top }]} onLayout={onHeaderLayout}>
-          <GlassSurface edge="bottom" />
-          <View style={styles.header}>
-            <Pressable
-              onPress={() => router.back()}
-              style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Zurück"
-            >
-              <ArrowLeftIcon size={24} color={colors.textPrimary} />
-            </Pressable>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
-            <View style={styles.headerSpacer} />
+        {/* Frosted chrome: title bar + category rail + (once the calendar has
+            scrolled away) the date strip, all in one floating pane — the same
+            real blur as the bottom nav. */}
+        <View style={styles.headerFloating}>
+          <GlassSurface edge="bottom" androidExperimentalBlur />
+          <View style={{ paddingTop: insets.top }} onLayout={onHeaderLayout}>
+            <View style={styles.header}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Zurück"
+              >
+                <ArrowLeftIcon size={24} color={colors.textPrimary} />
+              </Pressable>
+              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
+              <View style={styles.headerSpacer} />
+            </View>
+
+            <FlatList
+              horizontal
+              data={PILLS}
+              renderItem={renderPill}
+              keyExtractor={(item) => item}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pillRow}
+              style={styles.pillRowContainer}
+            />
           </View>
 
-          <FlatList
-            horizontal
-            data={PILLS}
-            renderItem={renderPill}
-            keyExtractor={(item) => item}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-            style={styles.pillRowContainer}
-          />
+          <Animated.View style={[styles.strip, stripStyle]}>
+            <FlatList
+              ref={stripRef}
+              horizontal
+              data={dayStarts}
+              renderItem={renderStripChip}
+              keyExtractor={(item) => item.date}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stripRow}
+              getItemLayout={(_, index) => ({
+                length: DATE_RAIL_WIDTH + STRIP_CHIP_GAP,
+                offset: GUTTER + index * (DATE_RAIL_WIDTH + STRIP_CHIP_GAP),
+                index,
+              })}
+            />
+          </Animated.View>
         </View>
-
-        <MapFAB
-          visible={pillVisible}
-          label="Kalender"
-          href="/calendar"
-          replace
-          icon={<CalendarIcon size={16} color={colors.textPrimary} />}
-          accessibilityLabel="Kalenderansicht öffnen"
-        />
 
         <View style={styles.navOverlay}>
           <BottomNavigation
@@ -333,6 +551,21 @@ const styles = StyleSheet.create({
   pillLabel: {
     fontSize: 14,
     fontFamily: fontFamily.medium,
+  },
+  strip: {
+    overflow: 'hidden',
+  },
+  stripRow: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  stripChip: {
+    width: DATE_RAIL_WIDTH,
+    marginRight: STRIP_CHIP_GAP,
+  },
+  calendar: {
+    marginBottom: 16,
   },
   scrollContent: {
     flexGrow: 1,

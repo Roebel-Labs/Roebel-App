@@ -28,8 +28,6 @@ type Props = {
   href?: string;
   icon?: React.ReactNode;
   accessibilityLabel?: string;
-  /** Swap the current screen instead of stacking — for view toggles (Liste ↔ Kalender). */
-  replace?: boolean;
 };
 
 export default function MapFAB({
@@ -38,7 +36,6 @@ export default function MapFAB({
   href = '/location',
   icon,
   accessibilityLabel,
-  replace = false,
 }: Props) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -85,7 +82,7 @@ export default function MapFAB({
     <ReanimatedAnimated.View style={[styles.container, animatedStyle]}>
       <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <Pressable
-          onPress={() => (replace ? router.replace(href as any) : router.push(href as any))}
+          onPress={() => router.push(href as any)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           style={[styles.pill, softShadow(2, isDark)]}

@@ -29,10 +29,10 @@ export const DATE_RAIL_GAP = 16;
 // the evening runs. Amber-700 on white, amber-400 on the dark surface.
 const END_TIME_ACCENT = { light: '#B45309', dark: '#FBBF24' };
 
-// Row dividers and the date chip's border. Light mode uses the design
-// system's border grey (CLAUDE.md: borders #B4B8C1) — the theme's `border`
-// token is too faint at 1px on white; dark mode keeps the surface border.
-const LINE_COLOR = { light: '#B4B8C1', dark: '#3c4043' };
+// Row dividers and the date chip's border. Light mode sits between the
+// theme's `border` (#E5E7EB, too faint at 1px on white) and the old
+// #B4B8C1 (read too dark, Max 2026-10-28); dark mode keeps the surface border.
+export const LINE_COLOR = { light: '#DFE1E5', dark: '#3c4043' };
 
 type Props = {
   event: EventRecord;
@@ -42,11 +42,37 @@ type Props = {
   showDivider?: boolean;
 };
 
+/**
+ * The OKT / 27 / DI chip of the date rail — also the chips of the sticky
+ * date strip on the events page, where `active` marks the current section.
+ */
+export function EventDateChip({ date, active = false }: { date: string; active?: boolean }) {
+  const { colors, isDark } = useTheme();
+  const rail = formatEventRailDate(date);
+  const lineColor = isDark ? LINE_COLOR.dark : LINE_COLOR.light;
+  const secondary = active ? colors.textInverted : colors.textSecondary;
+  return (
+    <View
+      style={[
+        styles.dateChip,
+        active
+          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+          : { borderColor: lineColor },
+      ]}
+    >
+      <Text style={[styles.dateMonth, { color: secondary }]}>{rail.month}</Text>
+      <Text style={[styles.dateDay, { color: active ? colors.textInverted : colors.textPrimary }]}>
+        {rail.day}
+      </Text>
+      <Text style={[styles.dateWeekday, { color: secondary }]}>{rail.weekday}</Text>
+    </View>
+  );
+}
+
 export default function EventListRow({ event, showDate = true, showDivider = true }: Props) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
 
-  const rail = formatEventRailDate(event.date);
   const startTime = formatTime(event.time);
   const endTime = formatTime(event.end_time);
   const isCancelled = !!event.is_cancelled;
@@ -61,13 +87,7 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
     <>
     <View style={styles.row}>
       <View style={styles.rail}>
-        {showDate && (
-          <View style={[styles.dateChip, { borderColor: lineColor }]}>
-            <Text style={[styles.dateMonth, { color: colors.textSecondary }]}>{rail.month}</Text>
-            <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{rail.day}</Text>
-            <Text style={[styles.dateWeekday, { color: colors.textSecondary }]}>{rail.weekday}</Text>
-          </View>
-        )}
+        {showDate && <EventDateChip date={event.date} />}
       </View>
 
       <View style={styles.content}>
