@@ -526,7 +526,7 @@ export default function FeedHome() {
           <Pressable
             style={styles.headerIconBtn}
             accessibilityLabel="Kalender"
-            onPress={() => router.push('/calendar' as any)}
+            onPress={() => router.push('/events')}
           >
             <CalendarIcon width={22} height={22} color={colors.textPrimary} />
           </Pressable>

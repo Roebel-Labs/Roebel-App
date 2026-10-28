@@ -30,8 +30,6 @@ type Props = {
   accessibilityLabel?: string;
   /** Extra lift, e.g. to clear the Hören mini player. */
   bottomOffset?: number;
-  /** Swap the current screen instead of stacking — for view toggles (Liste ↔ Kalender). */
-  replace?: boolean;
 };
 
 export default function MapFAB({
@@ -41,7 +39,6 @@ export default function MapFAB({
   icon,
   accessibilityLabel,
   bottomOffset = 0,
-  replace = false,
 }: Props) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -90,7 +87,7 @@ export default function MapFAB({
     >
       <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <Pressable
-          onPress={() => (replace ? router.replace(href as any) : router.push(href as any))}
+          onPress={() => router.push(href as any)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           style={[styles.pill, softShadow(2, isDark)]}
