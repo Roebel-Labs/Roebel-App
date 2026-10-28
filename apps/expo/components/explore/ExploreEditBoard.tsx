@@ -1,7 +1,7 @@
 /**
  * Erkunden edit mode — iOS home-screen style. Long-press anywhere on Erkunden
  * (or tap "Erkunden bearbeiten" at the bottom) and every section collapses
- * into a compact, wiggling card:
+ * into a compact card (a few short wiggles on entry, then still):
  *   – badge     → hide the section (it moves to the "Hinzufügen" tray)
  *   hold + drag → reorder
  *   + in tray   → show a hidden section again / pin a mini app
@@ -50,6 +50,8 @@ const CARD_H = 60;
 const GAP = 10;
 const STEP = CARD_H + GAP;
 const WIGGLE_DEG = 1.4;
+// Back-and-forth wiggles on entering edit mode (~0.6 s), then the cards rest.
+const WIGGLE_CYCLES = 3;
 
 const BLOCK_EMOJI: Record<string, string> = {
   hero: '🌟',
@@ -152,15 +154,20 @@ function SortableCard({
   const active = useSharedValue(false);
   const rot = useSharedValue(0);
 
-  // Wiggle with a random phase so the cards don't move in lockstep.
+  // A few short wiggles on entering edit mode, then settle — a cue that the
+  // cards are editable, not a permanent animation. Random phase so the cards
+  // don't move in lockstep.
   useEffect(() => {
     if (reduceMotion) return;
     rot.value = withDelay(
-      Math.round(Math.random() * 180),
-      withRepeat(
-        withSequence(withTiming(-WIGGLE_DEG, { duration: 120 }), withTiming(WIGGLE_DEG, { duration: 120 })),
-        -1,
-        true,
+      Math.round(Math.random() * 120),
+      withSequence(
+        withRepeat(
+          withSequence(withTiming(-WIGGLE_DEG, { duration: 90 }), withTiming(WIGGLE_DEG, { duration: 90 })),
+          WIGGLE_CYCLES,
+          true,
+        ),
+        withTiming(0, { duration: 90 }),
       ),
     );
     return () => {
