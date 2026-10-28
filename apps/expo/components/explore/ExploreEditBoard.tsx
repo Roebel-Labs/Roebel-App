@@ -111,7 +111,7 @@ type CardInfo = { label: string; subtitle: string; emoji?: string; iconUrl?: str
 
 function CardFace({ info, colors }: { info: CardInfo; colors: ReturnType<typeof useTheme>['colors'] }) {
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
+    <View style={[styles.card, { backgroundColor: colors.surface }]}>
       {info.iconUrl ? (
         <Image source={{ uri: info.iconUrl }} style={styles.icon} contentFit="cover" />
       ) : (
@@ -380,8 +380,8 @@ export default function ExploreEditBoard({
             <Animated.View key={id} entering={FadeIn.duration(180)} layout={LinearTransition.duration(180)}>
               <Pressable onPress={() => showBlock(id)} accessibilityRole="button" accessibilityLabel={`${infoOf(id).label} einblenden`}>
                 <CardFace info={infoOf(id)} colors={colors} />
-                <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.badgeText, { color: colors.onPrimary }]}>+</Text>
+                <View style={[styles.badge, { backgroundColor: colors.textPrimary }]}>
+                  <Text style={[styles.badgeText, { color: colors.background }]}>+</Text>
                 </View>
               </Pressable>
             </Animated.View>
@@ -393,8 +393,8 @@ export default function ExploreEditBoard({
                   info={{ label: app.name, subtitle: 'Mini-App anheften', iconUrl: app.iconUrl, removable: false }}
                   colors={colors}
                 />
-                <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.badgeText, { color: colors.onPrimary }]}>+</Text>
+                <View style={[styles.badge, { backgroundColor: colors.textPrimary }]}>
+                  <Text style={[styles.badgeText, { color: colors.background }]}>+</Text>
                 </View>
               </Pressable>
             </Animated.View>
@@ -433,7 +433,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     borderRadius: 14,
-    borderWidth: 1,
   },
   icon: { width: 38, height: 38, borderRadius: 10 },
   emojiBox: { alignItems: 'center', justifyContent: 'center' },
