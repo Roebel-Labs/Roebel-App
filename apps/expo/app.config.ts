@@ -1,6 +1,13 @@
 import 'dotenv/config';
 import type { ExpoConfig } from 'expo/config';
 
+// Several plugins write these iOS strings (expo-camera, expo-audio, webrtc);
+// whichever runs last wins, so they all get the same text.
+const CAMERA_PERMISSION =
+  'Röbel nutzt deine Kamera, um Bestätigungs-QR-Codes zu scannen und wenn du einem Livestream beitrittst.';
+const MICROPHONE_PERMISSION =
+  'Röbel nutzt dein Mikrofon, wenn du einem Livestream beitrittst.';
+
 const config: ExpoConfig = {
   name: 'Röbel',
   slug: 'roebel-onchain',
@@ -25,7 +32,12 @@ const config: ExpoConfig = {
   // the passkey entitlements (webcredentials:id.ortis.app, ortis:// scheme). The JS
   // guards both (lib/stripe-native.ts, passkey preview gate), but 3.7.0 is already
   // released in the stores, so a new version is required anyway.
-  version: '3.8.0',
+  //
+  // 3.9.0 = first binary with LiveKit/WebRTC (phone guests join a livestream) and
+  // background audio (livestream PiP, Hören on the lock screen). 3.8.0 only ever
+  // shipped as preview builds without WebRTC, so JS that imports
+  // @livekit/react-native must never be published to runtime 3.8.0 or 3.7.0.
+  version: '3.9.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -78,7 +90,8 @@ const config: ExpoConfig = {
     [
       'expo-camera',
       {
-        cameraPermission: 'Allow $(PRODUCT_NAME) to access your camera to scan verification QR codes.'
+        cameraPermission: CAMERA_PERMISSION,
+        microphonePermission: MICROPHONE_PERMISSION,
       }
     ],
     [
@@ -122,11 +135,30 @@ const config: ExpoConfig = {
     [
       'expo-video',
       {
-        supportsBackgroundPlayback: false,
+        // Livestream keeps playing in PiP / with the screen locked. iOS PiP
+        // needs the `audio` background mode, which this also adds.
+        supportsBackgroundPlayback: true,
         supportsPictureInPicture: true,
       },
     ],
-    'expo-audio',
+    [
+      'expo-audio',
+      {
+        microphonePermission: MICROPHONE_PERMISSION,
+        // Hören (podcasts/audiobooks) keeps playing on the lock screen.
+        enableBackgroundPlayback: true,
+      },
+    ],
+    // LiveKit: phone guests join a livestream. Adds the livekit/podspecs source
+    // for LiveKitWebRTC; the webrtc plugin adds camera/mic permissions.
+    '@livekit/react-native-expo-plugin',
+    [
+      '@config-plugins/react-native-webrtc',
+      {
+        cameraPermission: CAMERA_PERMISSION,
+        microphonePermission: MICROPHONE_PERMISSION,
+      },
+    ],
     [
       '@sentry/react-native/expo',
       {
@@ -139,10 +171,6 @@ const config: ExpoConfig = {
     // XMTP pulls SQLCipher — switch expo-updates off the system SQLite3
     // module or the iOS build fails (see plugin header).
     './plugins/withXmtpThirdPartySQLite',
-    // Strips `audio` from UIBackgroundModes that expo-audio adds by default.
-    // Story audio is foreground-only — Apple review 2.5.4 rejects the entry
-    // otherwise. MUST run after expo-audio above.
-    './plugins/withRemoveAudioBackgroundMode',
     [
       'expo-build-properties',
       {
@@ -189,8 +217,8 @@ const config: ExpoConfig = {
     // app.json, which this file overrides, so it re-incremented from the same
     // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
     // builds sharing one number, and App Store Connect rejects duplicates.
-    // Last submitted: 34 (v3.7.0).
-    buildNumber: '35',
+    // Last submitted: 34 (v3.7.0). 35/40 = 3.8.0 preview builds only, never submitted.
+    buildNumber: '36',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -211,7 +239,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 40,
+    versionCode: 41,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
@@ -221,6 +249,9 @@ const config: ExpoConfig = {
       'android.permission.READ_CALENDAR',
       'android.permission.WRITE_CALENDAR',
     ],
+    // The webrtc config plugin adds "draw over other apps"; LiveKit camera/mic
+    // calls don't need it and Play shows it as a scary permission.
+    blockedPermissions: ['android.permission.SYSTEM_ALERT_WINDOW'],
     intentFilters: [
       {
         autoVerify: true,
