@@ -171,6 +171,8 @@ const config: ExpoConfig = {
     // XMTP pulls SQLCipher — switch expo-updates off the system SQLite3
     // module or the iOS build fails (see plugin header).
     './plugins/withXmtpThirdPartySQLite',
+    // Stripe via CocoaPods, not SPM: SPM needs dynamic frameworks (plugin header).
+    './plugins/withStripeDisableSPM',
     [
       'expo-build-properties',
       {
