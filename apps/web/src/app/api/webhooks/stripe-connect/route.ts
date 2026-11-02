@@ -4,6 +4,7 @@ import { stripeConnect } from "@/lib/stripe-connect";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { settleOrder } from "@/lib/tickets/settle";
 import { syncConnectedAccount } from "@/lib/tickets/connect-status";
+import { settleSponsoringSession, expireSponsoringSession, refundSponsoringPayment } from "@/lib/sponsoring-settle";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,13 @@ export async function POST(request: NextRequest) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
+        if (s.metadata?.kind === "sponsoring") {
+          if (!(await settleSponsoringSession(admin, s, event.account))) {
+            await admin.from("stripe_events").update({ error: "settlement_mismatch" }).eq("id", event.id);
+            return NextResponse.json({ received: true, settled: false });
+          }
+          break;
+        }
         if (s.metadata?.kind === "event_ticket" && s.metadata.order_id && s.payment_status === "paid") {
           const orderId = s.metadata.order_id;
           const { data: order } = await admin.from("ticket_orders")
@@ -73,6 +81,10 @@ export async function POST(request: NextRequest) {
       case "checkout.session.async_payment_failed":
       case "checkout.session.expired": {
         const s = event.data.object as Stripe.Checkout.Session;
+        if (s.metadata?.kind === "sponsoring") {
+          await expireSponsoringSession(admin, s, event.type === "checkout.session.async_payment_failed");
+          break;
+        }
         if (s.metadata?.kind === "event_ticket" && s.metadata.order_id) {
           await admin.from("ticket_orders").update({ status: event.type === "checkout.session.expired" ? "expired" : "cancelled" })
             .eq("id", s.metadata.order_id).eq("status", "pending");
@@ -83,6 +95,7 @@ export async function POST(request: NextRequest) {
         const c = event.data.object as Stripe.Charge;
         const pi = typeof c.payment_intent === "string" ? c.payment_intent : c.payment_intent?.id;
         if (pi && c.refunded) {
+          await refundSponsoringPayment(admin, pi);
           const { data: order } = await admin.from("ticket_orders").select("id").eq("stripe_payment_intent_id", pi).maybeSingle();
           if (order) {
             await admin.from("ticket_orders").update({ status: "refunded", refunded_at: new Date().toISOString() }).eq("id", order.id);

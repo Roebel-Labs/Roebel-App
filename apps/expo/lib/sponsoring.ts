@@ -2,6 +2,7 @@
 // Campaign + packages + slot counts are public reads; booking and "my bookings" go through
 // the signed web route /api/sponsoring (owner/admin check on the server).
 import * as FileSystem from 'expo-file-system/legacy';
+import * as WebBrowser from 'expo-web-browser';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 import { postSigned, SPONSORING_SCOPE, type ApiResult, type SigningAccount } from './signed-request';
@@ -10,7 +11,7 @@ import { uploadVideoToStream } from './stream-upload';
 export const DANCECUP_SLUG = 'dancecup-2026';
 
 export type MediaKind = 'image' | 'video';
-export type BookingStatus = 'requested' | 'paid' | 'approved' | 'rejected' | 'cancelled';
+export type BookingStatus = 'requested' | 'pending_payment' | 'paid' | 'approved' | 'rejected' | 'cancelled' | 'expired' | 'refunded';
 
 export interface SponsoringCampaign {
   id: string; slug: string; title: string; subtitle: string | null; description: string | null;
@@ -24,8 +25,10 @@ export interface SponsoringPackage {
 }
 export interface SponsoringBooking {
   id: string; package_id: string; status: BookingStatus; media_kind: MediaKind | null; media_url: string | null;
-  note: string | null; amount_cents: number; review_note: string | null; created_at: string;
+  creative_id: string | null; amount_cents: number; review_note: string | null; created_at: string; paid_at: string | null;
 }
+export interface SponsoringCreative { id: string; image_url: string; variant: number; source: 'ai_logo' | 'ai_wordmark' | 'upload' }
+export interface Supporter { org_account_id: string; name: string; avatar_url: string | null; package_id: string; paid_at: string | null }
 export interface CampaignView {
   campaign: SponsoringCampaign;
   packages: (SponsoringPackage & { taken: number })[];
@@ -75,17 +78,60 @@ export function fetchMyBookings(account: SigningAccount, orgAccountId: string, s
   );
 }
 
-export function bookPackage(
+/** The org's personal AI ad cards for this campaign (pre-generated, public). */
+export async function fetchCreatives(campaignId: string, orgAccountId: string): Promise<SponsoringCreative[]> {
+  const { data } = await db.from('sponsoring_creatives')
+    .select('id, image_url, variant, source')
+    .eq('campaign_id', campaignId).eq('org_account_id', orgAccountId)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as SponsoringCreative[];
+}
+
+/** Orgs that already paid (name, logo, package). Also tells the app, without a signature, what the own org bought. */
+export async function fetchSupporters(campaignId: string): Promise<Supporter[]> {
+  const { data } = await db.rpc('sponsoring_supporters', { p_campaign_id: campaignId });
+  return (data ?? []) as Supporter[];
+}
+
+export type AdMaterial =
+  | { creativeId: string }
+  | { mediaKind: MediaKind; mediaUrl: string }
+  | null;
+
+function materialPayload(m: AdMaterial): Record<string, unknown> {
+  if (!m) return {};
+  return 'creativeId' in m ? { creative_id: m.creativeId } : { media_kind: m.mediaKind, media_url: m.mediaUrl };
+}
+
+export function startCheckout(
   account: SigningAccount,
-  input: { orgAccountId: string; packageId: string; mediaKind: MediaKind | null; mediaUrl: string | null; note: string },
-): Promise<ApiResult<{ booking: SponsoringBooking; payment_link_url: string | null }>> {
-  return postSigned('/api/sponsoring', account, 'sponsoring_book', {
+  input: { orgAccountId: string; packageId: string; material: AdMaterial; upgradeBookingId?: string | null },
+): Promise<ApiResult<{ booking_id: string; url: string; amount_cents: number; expires_at: string }>> {
+  return postSigned('/api/sponsoring', account, 'sponsoring_checkout', {
     org_account_id: input.orgAccountId,
     package_id: input.packageId,
-    media_kind: input.mediaKind,
-    media_url: input.mediaUrl,
-    note: input.note.trim() || null,
+    ...materialPayload(input.material),
+    ...(input.upgradeBookingId ? { upgrade_booking_id: input.upgradeBookingId } : {}),
   }, SPONSORING_SCOPE);
+}
+
+/** Stripe Checkout in the in-app browser; it closes itself on the roebel://org/sponsoring/<slug> return. */
+export async function openSponsoringCheckout(url: string, slug: string): Promise<void> {
+  await WebBrowser.openAuthSessionAsync(url, `roebel://org/sponsoring/${slug}`, { showInRecents: true });
+}
+
+export function setBookingCreative(account: SigningAccount, orgAccountId: string, bookingId: string, material: Exclude<AdMaterial, null>) {
+  return postSigned<{ booking: SponsoringBooking }>('/api/sponsoring', account, 'sponsoring_set_creative', {
+    org_account_id: orgAccountId, booking_id: bookingId, ...materialPayload(material),
+  }, SPONSORING_SCOPE);
+}
+
+/** The package we pre-select: the one marked recommended (logo banner), else the cheapest image package. */
+export function recommendedPackageId(packages: { id: string; name: string; price_cents: number; accepts: MediaKind[] }[]): string | null {
+  const logo = packages.find((p) => /werbebanner/i.test(p.name));
+  if (logo) return logo.id;
+  const sorted = [...packages].sort((a, b) => a.price_cents - b.price_cents);
+  return sorted.find((p) => p.accepts.includes('image') && !isMediaOptional(p as any))?.id ?? sorted[0]?.id ?? null;
 }
 
 export const IMAGE_MIMES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
@@ -126,10 +172,13 @@ export function formatEuro(cents: number): string {
 export function bookingStatusLabel(status: BookingStatus): string {
   switch (status) {
     case 'requested': return 'Angefragt';
+    case 'pending_payment': return 'Zahlung offen';
     case 'paid': return 'Bezahlt';
     case 'approved': return 'Freigegeben';
     case 'rejected': return 'Abgelehnt';
     case 'cancelled': return 'Storniert';
+    case 'expired': return 'Abgelaufen';
+    case 'refunded': return 'Erstattet';
   }
 }
 
