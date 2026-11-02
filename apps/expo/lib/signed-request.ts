@@ -16,7 +16,7 @@ export type VorhabenAction =
   | 'payout_record_card';
 /** Livestream sponsoring bookings (apps/web/src/lib/signed-request/message.ts); signed under SPONSORING_SCOPE. */
 export const SPONSORING_SCOPE = 'roebel-sponsoring-v1';
-export type SponsoringAction = 'sponsoring_book' | 'sponsoring_mine';
+export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'sponsoring_set_creative';
 export type SignedAction = TicketAction | VorhabenAction | SponsoringAction;
 
 export interface SigningAccount {

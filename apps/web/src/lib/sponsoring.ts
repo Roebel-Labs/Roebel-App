@@ -6,9 +6,19 @@ export const BOOK_ERRORS: Record<string, [number, string]> = {
   not_on_sale: [409, "Dieses Paket ist gerade nicht buchbar."],
   deadline_passed: [409, "Die Buchungsfrist ist abgelaufen."],
   media_kind_not_accepted: [400, "Dieses Paket erlaubt diese Dateiart nicht."],
-  already_booked: [409, "Ihr habt dieses Paket schon angefragt."],
+  already_booked: [409, "Ihr habt dieses Paket schon gebucht."],
   sold_out: [409, "Leider ausgebucht."],
+  bad_creative: [400, "Dieses Werbebild gehört nicht zu eurer Organisation."],
 };
+
+/** Invoice footer for Max's Kleinunternehmen (MüritzPhone). */
+export const KLEINUNTERNEHMER_FOOTER = "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.";
+
+/** Deep link back into the app after Stripe Checkout (allow-listed on /sponsoring/return). */
+export function sponsoringReturnUrl(slug: string): string {
+  return `roebel://org/sponsoring/${slug}`;
+}
+export const SPONSORING_RETURN_ALLOW = /^roebel:\/\/org\/sponsoring\/[a-z0-9-]{3,60}$/;
 
 /** The RPC error code inside a Postgres error message, if it is one of ours. */
 export function bookErrorCode(message: string | null | undefined): string | null {

@@ -3,39 +3,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySignedRequest, failResponse, jsonOk, jsonFail } from "@/lib/signed-request/verify";
 import { SPONSORING_SCOPE, type SponsoringAction } from "@/lib/signed-request/message";
 import { roleInAccount, canManage } from "@/lib/tickets/authz";
-import { BOOK_ERRORS, bookErrorCode, bookingNotifyWallets, formatEuro, isAllowedMediaUrl } from "@/lib/sponsoring";
+import { connectedAccountRow } from "@/lib/tickets/connect-status";
+import { stripeConnect, isConnectLivemode, webBaseUrl } from "@/lib/stripe-connect";
+import { BOOK_ERRORS, bookErrorCode, isAllowedMediaUrl, sponsoringReturnUrl, KLEINUNTERNEHMER_FOOTER } from "@/lib/sponsoring";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ACTIONS: readonly SponsoringAction[] = ["sponsoring_book", "sponsoring_mine"];
+const ACTIONS: readonly SponsoringAction[] = ["sponsoring_checkout", "sponsoring_mine", "sponsoring_set_creative"];
+const HOLD_MINUTES = 35; // Stripe Checkout needs ≥ 30 min until expires_at.
+/** Above this amount the invoice needs the buyer's address (§ 33 UStDV small-amount limit is 250 €). */
+const ADDRESS_FROM_CENTS = 25000;
 
-/** Best effort push to Max (never fails the booking). */
-async function notifyNewBooking(title: string, body: string, slug: string): Promise<void> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return;
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        type: "sponsoring",
-        walletAddresses: bookingNotifyWallets(process.env.SPONSORING_NOTIFY_WALLETS),
-        title: title.slice(0, 60),
-        body: body.slice(0, 140),
-        data: { type: "sponsoring", slug },
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) console.error("[sponsoring] push", res.status, await res.text().catch(() => ""));
-  } catch (err) {
-    console.error("[sponsoring] push failed (non-fatal)", err);
-  }
-}
-
-// POST signed (scope roebel-sponsoring-v1), both behind the org owner/admin check:
-//   sponsoring_book { org_account_id, package_id, media_kind?, media_url?, note? } → { booking }
-//   sponsoring_mine { org_account_id, campaign_slug }                               → { bookings }
+// POST signed (scope roebel-sponsoring-v1), all behind the org owner/admin check:
+//   sponsoring_checkout     { org_account_id, package_id, creative_id? | media_kind+media_url?, note?, upgrade_booking_id? } → { booking_id, url }
+//   sponsoring_mine         { org_account_id, campaign_slug }                                         → { bookings }
+//   sponsoring_set_creative { org_account_id, booking_id, creative_id? | media_kind+media_url? }       → { booking }
 export async function POST(request: NextRequest) {
   const v = await verifySignedRequest<SponsoringAction>(await request.json().catch(() => null), {
     scope: SPONSORING_SCOPE, actions: ACTIONS, headers: request.headers,
@@ -58,43 +40,126 @@ export async function POST(request: NextRequest) {
     if (!campaign) return jsonOk({ bookings: [] });
     const { data, error } = await admin
       .from("sponsoring_bookings")
-      .select("id, package_id, status, media_kind, media_url, note, amount_cents, review_note, created_at")
+      .select("id, package_id, status, media_kind, media_url, creative_id, amount_cents, review_note, created_at, paid_at")
       .eq("campaign_id", campaign.id).eq("org_account_id", orgId)
+      .in("status", ["requested", "pending_payment", "paid", "approved", "rejected", "refunded"])
       .order("created_at", { ascending: false });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ bookings: data ?? [] });
   }
 
-  const packageId = String(v.payload.package_id ?? "");
-  if (!UUID_RE.test(packageId)) return jsonFail(400, "BAD_REQUEST", "package_id fehlt");
-  const mediaKind = v.payload.media_kind == null ? null : String(v.payload.media_kind);
-  const mediaUrl = v.payload.media_url == null ? null : String(v.payload.media_url);
+  // Ad material: one of the org's own creatives, or an upload from our storage.
+  const creativeId = typeof v.payload.creative_id === "string" && UUID_RE.test(v.payload.creative_id) ? v.payload.creative_id : null;
+  const mediaKind = creativeId || v.payload.media_kind == null ? null : String(v.payload.media_kind);
+  const mediaUrl = creativeId || v.payload.media_url == null ? null : String(v.payload.media_url);
   if ((mediaKind === null) !== (mediaUrl === null)) return jsonFail(400, "BAD_REQUEST", "Datei unvollständig");
   if (mediaKind !== null && mediaKind !== "image" && mediaKind !== "video") return jsonFail(400, "BAD_REQUEST", "Dateiart ungültig");
   if (mediaUrl !== null && !isAllowedMediaUrl(mediaUrl, process.env.NEXT_PUBLIC_SUPABASE_URL)) {
     return jsonFail(400, "BAD_MEDIA", "Die Datei muss über die App hochgeladen werden.");
   }
+  if (creativeId) {
+    const { data: c } = await admin.from("sponsoring_creatives").select("id").eq("id", creativeId).eq("org_account_id", orgId).maybeSingle();
+    if (!c) return jsonFail(400, "BAD_CREATIVE", "Dieses Werbebild gehört nicht zu eurer Organisation.");
+  }
+
+  if (v.action === "sponsoring_set_creative") {
+    const bookingId = String(v.payload.booking_id ?? "");
+    if (!UUID_RE.test(bookingId)) return jsonFail(400, "BAD_REQUEST", "booking_id fehlt");
+    if (!creativeId && !mediaUrl) return jsonFail(400, "BAD_REQUEST", "Kein Werbebild gewählt");
+    const { data: b } = await admin.from("sponsoring_bookings")
+      .select("id, org_account_id, status, sponsoring_campaigns(booking_deadline)").eq("id", bookingId).maybeSingle();
+    if (!b || b.org_account_id !== orgId) return jsonFail(404, "NOT_FOUND", "Buchung nicht gefunden");
+    const deadline = (b.sponsoring_campaigns as { booking_deadline?: string } | null)?.booking_deadline;
+    if (deadline && Date.now() > Date.parse(deadline)) return jsonFail(409, "DEADLINE_PASSED", "Nach der Buchungsfrist kann das Werbebild nicht mehr geändert werden.");
+    if (!["pending_payment", "paid", "approved"].includes(b.status)) return jsonFail(409, "BAD_STATE", "Diese Buchung ist nicht mehr aktiv.");
+    const { data: updated, error } = await admin.from("sponsoring_bookings")
+      .update({ creative_id: creativeId, media_kind: mediaKind, media_url: mediaUrl, updated_at: new Date().toISOString() })
+      .eq("id", bookingId).select("id, package_id, status, media_kind, media_url, creative_id, amount_cents, created_at, paid_at").single();
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    return jsonOk({ booking: updated });
+  }
+
+  // sponsoring_checkout
+  const packageId = String(v.payload.package_id ?? "");
+  if (!UUID_RE.test(packageId)) return jsonFail(400, "BAD_REQUEST", "package_id fehlt");
   const note = typeof v.payload.note === "string" ? v.payload.note.trim().slice(0, 500) : null;
+
+  const { data: pkg } = await admin.from("sponsoring_packages")
+    .select("id, name, sponsoring_campaigns(id, slug, title, beneficiary_account_id)").eq("id", packageId).maybeSingle();
+  const campaign = pkg?.sponsoring_campaigns as unknown as { id: string; slug: string; title: string; beneficiary_account_id: string | null } | null;
+  if (!pkg || !campaign?.beneficiary_account_id) return jsonFail(409, "NOT_ON_SALE", BOOK_ERRORS.not_on_sale[1]);
+  const connected = await connectedAccountRow(admin, campaign.beneficiary_account_id);
+  if (!connected?.charges_enabled) return jsonFail(503, "PAYMENTS_UNAVAILABLE", "Zahlungen sind gerade nicht möglich. Bitte versucht es später erneut.");
 
   const { data: booking, error } = await admin.rpc("book_sponsoring_package", {
     p_package_id: packageId, p_org_account_id: orgId, p_wallet: v.wallet,
     p_media_kind: mediaKind, p_media_url: mediaUrl, p_note: note,
+    p_creative_id: creativeId, p_hold_minutes: HOLD_MINUTES,
   });
-  if (error) {
-    const code = bookErrorCode(error.message);
+  if (error || !booking) {
+    const code = bookErrorCode(error?.message);
     if (code) return jsonFail(BOOK_ERRORS[code][0], code.toUpperCase(), BOOK_ERRORS[code][1]);
-    console.error("[sponsoring] book failed", error);
-    return jsonFail(500, "DB_ERROR", "Buchung fehlgeschlagen. Bitte versuche es erneut.");
+    console.error("[sponsoring] reserve failed", error);
+    return jsonFail(500, "DB_ERROR", "Reservierung fehlgeschlagen. Bitte versuche es erneut.");
   }
 
-  const { data: pkg } = await admin
-    .from("sponsoring_packages").select("name, payment_link_url, sponsoring_campaigns(slug)")
-    .eq("id", packageId).maybeSingle();
-  const slug = (pkg?.sponsoring_campaigns as { slug?: string } | null)?.slug ?? "";
-  await notifyNewBooking(
-    "Neue Werbeplatz-Anfrage",
-    `${org.name}: ${pkg?.name ?? "Paket"} (${formatEuro(booking.amount_cents)})`,
-    slug,
-  );
-  return jsonOk({ booking, payment_link_url: pkg?.payment_link_url ?? null });
+  // Upgrade: the org already paid for a cheaper package of this campaign → pay only the difference.
+  // The earlier booking is closed only when this payment settles (lib/sponsoring-settle.ts).
+  const upgradeId = typeof v.payload.upgrade_booking_id === "string" && UUID_RE.test(v.payload.upgrade_booking_id) ? v.payload.upgrade_booking_id : null;
+  if (upgradeId) {
+    const { data: prev } = await admin.from("sponsoring_bookings")
+      .select("id, org_account_id, campaign_id, status, amount_cents").eq("id", upgradeId).maybeSingle();
+    const ok = !!prev && prev.org_account_id === orgId && prev.campaign_id === campaign.id
+      && ["paid", "approved"].includes(prev.status) && prev.amount_cents < booking.amount_cents;
+    if (!ok) {
+      await admin.from("sponsoring_bookings").update({ status: "cancelled" }).eq("id", booking.id);
+      return jsonFail(400, "BAD_UPGRADE", "Dieses Upgrade ist nicht möglich.");
+    }
+    booking.amount_cents -= prev.amount_cents;
+    await admin.from("sponsoring_bookings").update({ amount_cents: booking.amount_cents, upgraded_from_booking_id: prev.id }).eq("id", booking.id);
+  }
+
+  const returnTo = sponsoringReturnUrl(campaign.slug);
+  try {
+    const session = await stripeConnect.checkout.sessions.create(
+      {
+        mode: "payment", locale: "de", submit_type: "pay",
+        // Card covers Apple Pay / Google Pay in Checkout; async methods would outlive the hold.
+        payment_method_types: ["card"],
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: "eur", unit_amount: booking.amount_cents,
+            product_data: {
+              name: `${pkg.name} – ${campaign.title}${upgradeId ? " (Upgrade)" : ""}`,
+              description: `Werbeplatz für ${org.name}`,
+            },
+          },
+        }],
+        billing_address_collection: booking.amount_cents >= ADDRESS_FROM_CENTS ? "required" : "auto",
+        invoice_creation: {
+          enabled: true,
+          invoice_data: {
+            description: `${pkg.name} – ${campaign.title} (${org.name})`,
+            footer: KLEINUNTERNEHMER_FOOTER,
+            metadata: { booking_id: booking.id },
+          },
+        },
+        expires_at: Math.floor(new Date(booking.expires_at).getTime() / 1000),
+        client_reference_id: booking.id,
+        metadata: { kind: "sponsoring", booking_id: booking.id, org_account_id: orgId },
+        success_url: `${webBaseUrl()}/sponsoring/return?booking_id=${booking.id}&return_to=${encodeURIComponent(returnTo)}`,
+        cancel_url: `${webBaseUrl()}/sponsoring/return?cancelled=true&booking_id=${booking.id}&return_to=${encodeURIComponent(returnTo)}`,
+      },
+      { stripeAccount: connected.stripe_account_id },
+    );
+    await admin.from("sponsoring_bookings").update({
+      stripe_checkout_session_id: session.id, stripe_account_id: connected.stripe_account_id, livemode: isConnectLivemode(),
+    }).eq("id", booking.id);
+    return jsonOk({ booking_id: booking.id, url: session.url, amount_cents: booking.amount_cents, expires_at: booking.expires_at });
+  } catch (err) {
+    await admin.from("sponsoring_bookings").update({ status: "cancelled" }).eq("id", booking.id);
+    console.error("[sponsoring] stripe", err);
+    return jsonFail(502, "STRIPE_ERROR", "Die Zahlung konnte nicht gestartet werden. Bitte versucht es erneut.");
+  }
 }

@@ -17,7 +17,7 @@ export type VorhabenAction =
 
 /** Livestream sponsoring bookings (orgs book ad slots); own scope like the task actions. */
 export const SPONSORING_SCOPE = "roebel-sponsoring-v1" as const;
-export type SponsoringAction = "sponsoring_book" | "sponsoring_mine";
+export type SponsoringAction = "sponsoring_checkout" | "sponsoring_mine" | "sponsoring_set_creative";
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"

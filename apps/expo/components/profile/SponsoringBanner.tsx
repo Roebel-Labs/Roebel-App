@@ -35,7 +35,7 @@ export default function SponsoringBanner({ slug }: Props) {
     <PressableScale
       onPress={() => router.push(`/org/sponsoring/${slug}` as any)}
       accessibilityRole="button"
-      accessibilityLabel={`${view.campaign.title}. Mehr erfahren`}
+      accessibilityLabel={`${view.campaign.title}. Eure Werbung ansehen`}
       scaleTo={0.98}
       style={styles.wrap}
     >
@@ -49,7 +49,7 @@ export default function SponsoringBanner({ slug }: Props) {
           {minPrice != null ? `Werbeplätze ab ${formatEuro(minPrice)}` : 'Werbeplätze jetzt buchbar'}
         </Text>
         <View style={styles.cta}>
-          <Text style={styles.ctaText}>Mehr erfahren</Text>
+          <Text style={styles.ctaText}>Eure Werbung ansehen</Text>
         </View>
       </LinearGradient>
     </PressableScale>
