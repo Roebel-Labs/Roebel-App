@@ -14,7 +14,10 @@ export type VorhabenAction =
   | 'task_create' | 'task_apply' | 'task_withdraw' | 'task_assign' | 'task_start' | 'task_comment'
   | 'task_proof' | 'task_submit' | 'task_approve' | 'task_request_changes' | 'task_cancel' | 'payout_record_manual'
   | 'payout_record_card';
-export type SignedAction = TicketAction | VorhabenAction;
+/** Livestream sponsoring bookings (apps/web/src/lib/signed-request/message.ts); signed under SPONSORING_SCOPE. */
+export const SPONSORING_SCOPE = 'roebel-sponsoring-v1';
+export type SponsoringAction = 'sponsoring_book' | 'sponsoring_mine';
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction;
 
 export interface SigningAccount {
   address: string;

@@ -15,6 +15,10 @@ export type VorhabenAction =
   | "task_proof" | "task_submit" | "task_approve" | "task_request_changes" | "task_cancel" | "payout_record_manual"
   | "payout_record_card";
 
+/** Livestream sponsoring bookings (orgs book ad slots); own scope like the task actions. */
+export const SPONSORING_SCOPE = "roebel-sponsoring-v1" as const;
+export type SponsoringAction = "sponsoring_book" | "sponsoring_mine";
+
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
   | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order";

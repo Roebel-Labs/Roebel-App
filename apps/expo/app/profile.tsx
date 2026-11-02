@@ -36,6 +36,8 @@ import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
 import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
+import SponsoringBanner from '@/components/profile/SponsoringBanner';
+import { DANCECUP_SLUG } from '@/lib/sponsoring';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
@@ -184,6 +186,7 @@ export default function ProfileScreen() {
                     />
                   </View>
                 )}
+                <SponsoringBanner slug={DANCECUP_SLUG} />
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
                 <ProfileMenu variant="org" />
               </ProfileSheet>
