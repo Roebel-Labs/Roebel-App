@@ -91,7 +91,7 @@ async function main() {
     : { data: null };
   if (OUT) fs.mkdirSync(OUT, { recursive: true });
 
-  for (const org of orgs) {
+  const one = async (org) => {
     const hasLogo = !!org.avatar_url;
     for (let v = 0; v < VARIANTS; v++) {
       const t0 = Date.now();
@@ -120,7 +120,10 @@ async function main() {
         console.log(`FAIL ${org.name} #${v}: ${err.message}`);
       }
     }
-  }
+  };
+  // 4 orgs at a time: kie.ai handles parallel tasks; keeps the full run around 10 minutes.
+  const queue = [...orgs];
+  await Promise.all(Array.from({ length: 4 }, async () => { while (queue.length) await one(queue.shift()); }));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
