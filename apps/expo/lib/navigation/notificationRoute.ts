@@ -37,6 +37,8 @@ export function routeForNotification(data: NotificationData): string | null {
       return vorhabenRoute(data);
     case 'org_invite':
       return '/notifications';
+    case 'sponsoring':
+      return str(data.slug) && `/org/sponsoring/${data.slug}`;
     case 'reward':
       return '/rewards';
     case 'org':
