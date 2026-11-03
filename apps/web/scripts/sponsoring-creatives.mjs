@@ -7,11 +7,14 @@
 //
 //   node scripts/sponsoring-creatives.mjs --orgs <id,id,...> [--variants 2] [--out <dir>] [--store]
 //   node scripts/sponsoring-creatives.mjs --all [--variants 2] --store
+//   node scripts/sponsoring-creatives.mjs --all --variants 2 --store --missing   (only variants an org lacks)
 //
 // --out   writes PNGs locally (for review); --store uploads to the public `images` bucket under
 //         sponsoring/creatives/ and inserts rows into sponsoring_creatives.
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
 import { createClient } from "@supabase/supabase-js";
 
 const env = Object.fromEntries(
@@ -56,8 +59,28 @@ function prompt(org, hasLogo, variant) {
   ].join(" ");
 }
 
+/** fetch with 3 tries: the network here drops DNS now and then ("fetch failed"). */
+async function fetchRetry(url, init) {
+  for (let i = 0; ; i++) {
+    try { return await fetch(url, init); } catch (err) { if (i >= 2) throw err; await new Promise((r) => setTimeout(r, 3000 * (i + 1))); }
+  }
+}
+
+/** kie.ai rejects AVIF: convert such logos to PNG (macOS sips) and host them in our storage. */
+async function referenceLogo(org) {
+  if (!/\.avif(\?|$)/i.test(org.avatar_url)) return org.avatar_url;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "logo-"));
+  const src = path.join(dir, "in.avif"), out = path.join(dir, "out.png");
+  fs.writeFileSync(src, Buffer.from(await (await fetchRetry(org.avatar_url)).arrayBuffer()));
+  execFileSync("sips", ["-s", "format", "png", src, "--out", out], { stdio: "ignore" });
+  const p = `sponsoring/logos/${org.id}.png`;
+  const up = await db.storage.from("images").upload(p, fs.readFileSync(out), { contentType: "image/png", upsert: true });
+  if (up.error) throw up.error;
+  return db.storage.from("images").getPublicUrl(p).data.publicUrl;
+}
+
 async function kie(req) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/kie-proxy`, {
+  const res = await fetchRetry(`${SUPABASE_URL}/functions/v1/kie-proxy`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-seed-token": env.SUPABASE_SEED_TOKEN },
     body: JSON.stringify(req),
@@ -90,14 +113,21 @@ async function main() {
     ? await db.from("sponsoring_campaigns").select("id").eq("slug", CAMPAIGN_SLUG).single()
     : { data: null };
   if (OUT) fs.mkdirSync(OUT, { recursive: true });
+  // --missing: skip variants an org already has.
+  const have = new Map();
+  if (args.includes("--missing") && campaign) {
+    const { data: rows } = await db.from("sponsoring_creatives").select("org_account_id, variant").eq("campaign_id", campaign.id);
+    for (const r of rows ?? []) { if (!have.has(r.org_account_id)) have.set(r.org_account_id, new Set()); have.get(r.org_account_id).add(r.variant); }
+  }
 
   const one = async (org) => {
     const hasLogo = !!org.avatar_url;
     for (let v = 0; v < VARIANTS; v++) {
       const t0 = Date.now();
       try {
-        const url = await generate(prompt(org, hasLogo, v), hasLogo ? [org.avatar_url] : []);
-        const bytes = Buffer.from(await (await fetch(url)).arrayBuffer());
+        if (have.get(org.id)?.has(v)) continue;
+        const url = await generate(prompt(org, hasLogo, v), hasLogo ? [await referenceLogo(org)] : []);
+        const bytes = Buffer.from(await (await fetchRetry(url)).arrayBuffer());
         // KI-Kosten ledger: same pricing as lib/ai-usage/pricing.ts (kie:nano-banana-2-lite = $0.02/image).
         await db.from("ai_usage_events").insert({
           source: "web", feature: "sponsoring.creative", provider: "kie", model: MODEL,
