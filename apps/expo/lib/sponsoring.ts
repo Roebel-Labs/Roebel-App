@@ -126,12 +126,35 @@ export function setBookingCreative(account: SigningAccount, orgAccountId: string
   }, SPONSORING_SCOPE);
 }
 
-/** The package we pre-select: the one marked recommended (logo banner), else the cheapest image package. */
-export function recommendedPackageId(packages: { id: string; name: string; price_cents: number; accepts: MediaKind[] }[]): string | null {
-  const logo = packages.find((p) => /werbebanner/i.test(p.name));
-  if (logo) return logo.id;
-  const sorted = [...packages].sort((a, b) => a.price_cents - b.price_cents);
-  return sorted.find((p) => p.accepts.includes('image') && !isMediaOptional(p as any))?.id ?? sorted[0]?.id ?? null;
+/** The produced 15 s spot ("Werbespot nach Maß"); every other package is the automatic logo spot. */
+export function isCustomSpot(pkg: Pick<SponsoringPackage, 'name'>): boolean {
+  return /nach ma(ß|ss)/i.test(pkg.name);
+}
+
+/** Pre-selection: the produced spot for orgs with dish photos (restaurants), else the cheapest package. */
+export function recommendedPackageId(packages: { id: string; name: string; price_cents: number }[], hasDishes: boolean): string | null {
+  const custom = packages.find((p) => isCustomSpot(p));
+  if (hasDishes && custom) return custom.id;
+  return [...packages].sort((a, b) => a.price_cents - b.price_cents)[0]?.id ?? null;
+}
+
+export interface DishPhoto { name: string; price: number | null; image_url: string }
+
+/** Up to `limit` menu photos of the org's restaurant(s): the material of its personal spot preview. */
+export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<DishPhoto[]> {
+  const { data: restaurants } = await db.from('restaurants').select('id').eq('account_id', orgAccountId);
+  const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
+  if (!ids.length) return [];
+  const { data } = await db.from('menu_items')
+    .select('name, price, image_url')
+    .in('restaurant_id', ids)
+    .not('image_url', 'is', null)
+    .order('sort_order', { ascending: true })
+    .limit(40);
+  const rows = (data ?? []) as DishPhoto[];
+  // Spread the picks over the menu instead of four starters in a row.
+  const step = Math.max(1, Math.floor(rows.length / limit));
+  return rows.filter((_, i) => i % step === 0).slice(0, limit);
 }
 
 export const IMAGE_MIMES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
