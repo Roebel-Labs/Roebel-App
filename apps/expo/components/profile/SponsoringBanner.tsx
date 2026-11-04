@@ -35,7 +35,7 @@ export default function SponsoringBanner({ slug }: Props) {
     <PressableScale
       onPress={() => router.push(`/org/sponsoring/${slug}` as any)}
       accessibilityRole="button"
-      accessibilityLabel={`${view.campaign.title}. Eure Werbung ansehen`}
+      accessibilityLabel={`${view.campaign.title}. Euren Spot ansehen`}
       scaleTo={0.98}
       style={styles.wrap}
     >
@@ -44,12 +44,12 @@ export default function SponsoringBanner({ slug }: Props) {
           <View style={styles.liveDot} />
           <Text style={styles.eyebrow}>DanceCup Livestream · Sa 7.11.</Text>
         </View>
-        <Text style={styles.title}>Zeigt euren Verein im Stream</Text>
+        <Text style={styles.title}>Euer Spot in den Pausen</Text>
         <Text style={styles.body}>
-          {minPrice != null ? `Werbeplätze ab ${formatEuro(minPrice)}` : 'Werbeplätze jetzt buchbar'}
+          {minPrice != null ? `Vollbild-Werbung im Livestream ab ${formatEuro(minPrice)}` : 'Vollbild-Werbung im Livestream'}
         </Text>
         <View style={styles.cta}>
-          <Text style={styles.ctaText}>Eure Werbung ansehen</Text>
+          <Text style={styles.ctaText}>Euren Spot ansehen</Text>
         </View>
       </LinearGradient>
     </PressableScale>
