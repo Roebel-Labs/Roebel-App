@@ -33,6 +33,10 @@ export type Action =
   | { type: 'updateCell'; rowId: string; column: string; value: string }
   | { type: 'addRow'; values?: Record<string, string> }
   | { type: 'removeRow'; rowId: string }
+  | { type: 'addColumn'; name: string }
+  | { type: 'renameColumn'; from: string; to: string }
+  | { type: 'removeColumn'; name: string }
+  | { type: 'moveRow'; rowId: string; delta: number }
   | { type: 'selectRow'; rowId: string | null }
   | { type: 'nextRow' }
   | { type: 'updateSettings'; patch: Partial<Settings> };
@@ -198,6 +202,49 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       const currentRowId =
         s.table.currentRowId === a.rowId ? (rows[i] ?? rows[i - 1] ?? null)?.id ?? null : s.table.currentRowId;
       return { ...s, table: { ...s.table, rows, currentRowId } };
+    }
+    case 'addColumn': {
+      const name = a.name.trim();
+      if (name === '' || s.table.columns.includes(name)) return s;
+      return { ...s, table: { ...s.table, columns: [...s.table.columns, name] } };
+    }
+    case 'renameColumn': {
+      const to = a.to.trim();
+      if (to === '' || to === a.from || !s.table.columns.includes(a.from) || s.table.columns.includes(to)) return s;
+      return {
+        ...s,
+        table: {
+          ...s.table,
+          columns: s.table.columns.map((c) => (c === a.from ? to : c)),
+          rows: s.table.rows.map((r) => {
+            const { [a.from]: moved, ...rest } = r.values;
+            return { ...r, values: moved === undefined ? rest : { ...rest, [to]: moved } };
+          }),
+        },
+      };
+    }
+    case 'removeColumn': {
+      if (!s.table.columns.includes(a.name)) return s;
+      return {
+        ...s,
+        table: {
+          ...s.table,
+          columns: s.table.columns.filter((c) => c !== a.name),
+          rows: s.table.rows.map((r) => {
+            const { [a.name]: _gone, ...rest } = r.values;
+            return { ...r, values: rest };
+          }),
+        },
+      };
+    }
+    case 'moveRow': {
+      const rows = s.table.rows;
+      const i = rows.findIndex((r) => r.id === a.rowId);
+      const j = i + a.delta;
+      if (i < 0 || j < 0 || j >= rows.length || j === i) return s;
+      const next = rows.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return { ...s, table: { ...s.table, rows: next } };
     }
     case 'selectRow':
       if (a.rowId !== null && !s.table.rows.some((r) => r.id === a.rowId)) return s;

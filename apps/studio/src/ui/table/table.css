@@ -1,0 +1,30 @@
+.tbl { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; padding: 16px; color: var(--text); }
+.tbl-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tbl-bar .spacer { flex: 1; }
+.tbl button { background: var(--raised); color: var(--text); border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.tbl button:hover:not(:disabled) { background: var(--raised-hover); }
+.tbl button:disabled { opacity: 0.4; cursor: default; }
+.tbl button.primary { background: var(--navy); border-color: var(--navy); }
+.tbl button.primary:hover:not(:disabled) { background: var(--navy-hover); }
+.tbl button.icon { padding: 4px 7px; line-height: 1; }
+.tbl-hint { color: var(--text-3); font-size: 12px; }
+.tbl-import { display: flex; flex-direction: column; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px; }
+.tbl-import textarea { width: 100%; min-height: 90px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px; font: 12px ui-monospace, Menlo, monospace; }
+.tbl-preview { overflow: auto; max-height: 180px; border: 1px solid var(--line); border-radius: 4px; }
+.tbl-preview table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.tbl-preview th, .tbl-preview td { padding: 3px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.tbl-preview th { color: var(--text-2); font-weight: 600; }
+.tbl-scroll { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.tbl-grid { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.tbl-grid th { position: sticky; top: 0; z-index: 1; background: var(--raised); border-bottom: 1px solid var(--line-strong); text-align: left; padding: 0; }
+.tbl-grid td { padding: 0; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+.tbl-grid .hd { display: flex; align-items: center; gap: 2px; }
+.tbl-grid .hd input { flex: 1; min-width: 110px; background: transparent; border: 0; color: var(--text-2); font: inherit; font-weight: 600; padding: 7px 8px; }
+.tbl-grid .hd button { border: 0; background: transparent; color: var(--text-3); padding: 4px 6px; }
+.tbl-grid input.cell { width: 100%; min-width: 110px; background: transparent; border: 0; border-radius: 0; color: var(--text); font: inherit; padding: 7px 8px; outline: none; }
+.tbl-grid input.cell:focus { background: var(--bg); box-shadow: inset 0 0 0 2px var(--navy); }
+.tbl-grid tr.current td { background: rgba(0, 73, 139, 0.18); }
+.tbl-grid tr.current td:first-child { box-shadow: inset 4px 0 0 var(--navy); }
+.tbl-grid td.act { white-space: nowrap; padding: 3px 6px; border-right: 0; }
+.tbl-grid td.act button + button { margin-left: 4px; }
+.tbl-grid .num { color: var(--text-3); text-align: right; padding: 0 8px; min-width: 32px; }

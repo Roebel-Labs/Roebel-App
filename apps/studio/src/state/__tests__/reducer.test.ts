@@ -301,3 +301,40 @@ describe('switcher edge cases', () => {
     expect(s.table.currentRowId).toBe(s.table.rows[0].id);
   });
 });
+
+describe('table structure actions', () => {
+  const mk = () => {
+    let s = initialState();
+    s = showReducer(s, { type: 'setTable', table: { columns: ['A', 'B'], rows: [], currentRowId: null } });
+    s = showReducer(s, { type: 'addRow', values: { A: '1', B: 'x' } });
+    s = showReducer(s, { type: 'addRow', values: { A: '2', B: 'y' } });
+    s = showReducer(s, { type: 'addRow', values: { A: '3', B: 'z' } });
+    return s;
+  };
+  it('addColumn appends once, ignores blank or duplicate names', () => {
+    let s = showReducer(mk(), { type: 'addColumn', name: 'C' });
+    expect(s.table.columns).toEqual(['A', 'B', 'C']);
+    s = showReducer(s, { type: 'addColumn', name: 'C' });
+    s = showReducer(s, { type: 'addColumn', name: '  ' });
+    expect(s.table.columns).toEqual(['A', 'B', 'C']);
+  });
+  it('renameColumn moves values and rejects collisions', () => {
+    let s = showReducer(mk(), { type: 'renameColumn', from: 'A', to: 'Gruppe' });
+    expect(s.table.columns).toEqual(['Gruppe', 'B']);
+    expect(s.table.rows[0].values).toEqual({ Gruppe: '1', B: 'x' });
+    const same = showReducer(s, { type: 'renameColumn', from: 'Gruppe', to: 'B' });
+    expect(same).toBe(s);
+  });
+  it('removeColumn drops the column and its values', () => {
+    const s = showReducer(mk(), { type: 'removeColumn', name: 'B' });
+    expect(s.table.columns).toEqual(['A']);
+    expect(s.table.rows[1].values).toEqual({ A: '2' });
+  });
+  it('moveRow shifts by delta and clamps at the ends', () => {
+    const s = mk();
+    const [r1, r2, r3] = s.table.rows.map((r) => r.id);
+    expect(showReducer(s, { type: 'moveRow', rowId: r3, delta: -1 }).table.rows.map((r) => r.id)).toEqual([r1, r3, r2]);
+    expect(showReducer(s, { type: 'moveRow', rowId: r1, delta: -1 })).toBe(s);
+    expect(showReducer(s, { type: 'moveRow', rowId: r3, delta: 1 })).toBe(s);
+  });
+});
