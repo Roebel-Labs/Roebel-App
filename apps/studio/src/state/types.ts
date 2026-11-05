@@ -146,3 +146,8 @@ export type ShowState = {
   settings: Settings;
   sponsors: { rotationSeconds: number; items: SponsorItem[] };
 };
+
+// ---- Renderer (Task 3) ----
+
+/** Resolves a source id to a drawable element and its health. */
+export type MediaLookup = (sourceId: string) => { el: CanvasImageSource | null; status: 'ok' | 'loading' | 'lost' };

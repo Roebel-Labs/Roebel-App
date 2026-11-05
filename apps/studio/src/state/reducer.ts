@@ -1,5 +1,5 @@
+import { starterTemplates } from '../render/templates';
 import type {
-
   OverlayInstance,
   Scene,
   Settings,
@@ -25,6 +25,8 @@ export type Action =
   | { type: 'savePreset'; preset: Omit<TransitionPreset, 'id'> & { id?: string } }
   | { type: 'toggleOverlay'; id: string; now: number }
   | { type: 'setOverlay'; id: string; visible: boolean; now: number }
+  | { type: 'addOverlay'; templateId: string; id?: string }
+  | { type: 'removeOverlay'; id: string }
   | { type: 'updateTemplate'; template: Template }
   | { type: 'setTable'; table: Table }
   | { type: 'updateCell'; rowId: string; column: string; value: string }
@@ -53,7 +55,12 @@ export function defaultSettings(): Settings {
   };
 }
 
+function starterOverlays(templates: Template[]): OverlayInstance[] {
+  return templates.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0 }));
+}
+
 export function initialState(): ShowState {
+  const templates = starterTemplates();
   return {
     version: 1,
     sources: [],
@@ -62,8 +69,8 @@ export function initialState(): ShowState {
     programSceneId: null,
     transition: { presetId: 'preset-fade', startedAt: null, fromSceneId: null },
     presets: STORAGE_PRESETS.map((p) => ({ ...p })),
-    overlays: [],
-    templates: [],
+    overlays: starterOverlays(templates),
+    templates,
     table: { columns: [], rows: [], currentRowId: null },
     settings: defaultSettings(),
     sponsors: { rotationSeconds: 8, items: [] },
@@ -146,6 +153,13 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       return patchOverlay(s, a.id, (o) => ({ ...o, visible: !o.visible, changedAt: a.now }));
     case 'setOverlay':
       return patchOverlay(s, a.id, (o) => ({ ...o, visible: a.visible, changedAt: a.now }));
+    case 'addOverlay': {
+      const id = a.id ?? uid();
+      if (!s.templates.some((t) => t.id === a.templateId) || s.overlays.some((o) => o.id === id)) return s;
+      return { ...s, overlays: [...s.overlays, { id, templateId: a.templateId, visible: false, changedAt: 0 }] };
+    }
+    case 'removeOverlay':
+      return { ...s, overlays: s.overlays.filter((o) => o.id !== a.id) };
     case 'updateTemplate':
       return { ...s, templates: s.templates.map((t) => (t.id === a.template.id ? a.template : t)) };
     case 'setTable':
@@ -281,7 +295,9 @@ export function restore(json: string | null): ShowState {
       ...(sc as unknown as Scene),
       sourceIds: arr<unknown>(sc.sourceIds, []).filter((x): x is string => typeof x === 'string'),
     }));
-  const overlays = arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[];
+  // An absent field (state saved before starters existed) gets the starters; an empty array is the operator's choice.
+  const overlays =
+    raw.overlays === undefined ? d.overlays : (arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[]);
   const sceneOrNull = (id: string | null) => (id !== null && scenes.some((sc) => sc.id === id) ? id : null);
   const table = restoreTable(raw.table);
   if (table.currentRowId !== null && !table.rows.some((r) => r.id === table.currentRowId)) table.currentRowId = null;
@@ -303,7 +319,7 @@ export function restore(json: string | null): ShowState {
     },
     presets,
     overlays,
-    templates: restoreTemplates(raw.templates),
+    templates: raw.templates === undefined ? d.templates : restoreTemplates(raw.templates),
     table,
     settings: restoreSettings(raw.settings),
     sponsors: restoreSponsors(raw.sponsors),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialState, restore, serialize, showReducer } from '../reducer';
 import type { ShowState } from '../types';
+import { STARTER_TEMPLATES } from '../../render/templates';
 
 function withScenes(): ShowState {
   let s = initialState();
@@ -98,8 +99,44 @@ describe('initialState', () => {
     expect(s.settings.ffmpegPath).toBe('/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg');
     expect(s.presets.map((p) => p.id)).toEqual(['preset-cut', 'preset-fade', 'preset-wipe', 'preset-slide', 'preset-zoom']);
     expect(s.transition.presetId).toBe('preset-fade');
-    expect(s.templates).toEqual([]);
-    expect(s.overlays).toEqual([]);
+    expect(s.templates).toEqual(STARTER_TEMPLATES);
+    expect(s.overlays).toEqual(
+      STARTER_TEMPLATES.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0 })),
+    );
+  });
+
+  it('ships the seven starter kinds as deep copies', () => {
+    const s = initialState();
+    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'donation']);
+    s.templates[0].nodes[0].x = 9999;
+    expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
+    expect(initialState().templates[0].nodes[0].x).not.toBe(9999);
+  });
+});
+
+describe('addOverlay / removeOverlay', () => {
+  it('adds a hidden instance of an existing template', () => {
+    const s0 = initialState();
+    const t = s0.templates[0].id;
+    let s = showReducer(s0, { type: 'addOverlay', templateId: t, id: 'mine' });
+    expect(s.overlays.at(-1)).toEqual({ id: 'mine', templateId: t, visible: false, changedAt: 0 });
+    s = showReducer(s, { type: 'addOverlay', templateId: t });
+    expect(s.overlays).toHaveLength(s0.overlays.length + 2);
+    expect(typeof s.overlays.at(-1)!.id).toBe('string');
+    expect(s.overlays.at(-1)!.id).not.toBe('mine');
+  });
+
+  it('ignores unknown templates and duplicate ids', () => {
+    const s0 = initialState();
+    expect(showReducer(s0, { type: 'addOverlay', templateId: 'nope' })).toBe(s0);
+    expect(showReducer(s0, { type: 'addOverlay', templateId: s0.templates[0].id, id: s0.overlays[0].id })).toBe(s0);
+  });
+
+  it('removes by id', () => {
+    const s0 = initialState();
+    const s = showReducer(s0, { type: 'removeOverlay', id: s0.overlays[0].id });
+    expect(s.overlays.map((o) => o.id)).toEqual(s0.overlays.slice(1).map((o) => o.id));
+    expect(showReducer(s0, { type: 'removeOverlay', id: 'nope' }).overlays).toEqual(s0.overlays);
   });
 });
 
@@ -118,6 +155,18 @@ describe('serialize / restore', () => {
     const r = restore(serialize(s));
     expect(r).toEqual({ ...s, transition: { ...s.transition, startedAt: null, fromSceneId: null } });
     expect(r.overlays[0].visible).toBe(true);
+  });
+
+  it('keeps deliberately emptied templates/overlays but seeds starters when the fields are absent', () => {
+    const emptied = restore(JSON.stringify({ ...initialState(), templates: [], overlays: [] }));
+    expect(emptied.templates).toEqual([]);
+    expect(emptied.overlays).toEqual([]);
+    const o: Record<string, unknown> = JSON.parse(serialize(initialState()));
+    delete o.templates;
+    delete o.overlays;
+    const seeded = restore(JSON.stringify(o));
+    expect(seeded.templates).toEqual(initialState().templates);
+    expect(seeded.overlays).toEqual(initialState().overlays);
   });
 
   it('fills defaults for missing newer fields', () => {
