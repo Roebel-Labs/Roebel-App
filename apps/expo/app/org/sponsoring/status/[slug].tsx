@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
@@ -11,8 +11,8 @@ import { useMySponsoring } from '@/components/sponsoring/useMySponsoring';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import { canSignSilently } from '@/lib/signed-request';
 import {
-  fetchMenuDishes, fetchMyBookings, formatEuro, MAX_SPOT_DISHES, parseDishNote, setSpotDishes, sponsoringWhatsAppUrl,
-  type DishPhoto,
+  fetchSpotCatalog, fetchMyBookings, formatEuro, MAX_SPOT_DISHES, parseDishNote, setSpotDishes, sponsoringWhatsAppUrl,
+  type DishPhoto, type SpotSource,
 } from '@/lib/sponsoring';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -38,6 +38,8 @@ export default function SponsoringStatusScreen() {
   signerRef.current = thirdwebAccount;
 
   const [menu, setMenu] = useState<DishPhoto[]>([]);
+  const [source, setSource] = useState<SpotSource | null>(null);
+  const [hasRestaurant, setHasRestaurant] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [saved, setSaved] = useState<string[] | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
@@ -59,19 +61,23 @@ export default function SponsoringStatusScreen() {
     return b.id;
   }, [s.orgId, s.paidPackage, slug]);
 
-  useEffect(() => {
+  // On focus, so a listing or menu photo created from here shows up when the org comes back.
+  useFocusEffect(useCallback(() => {
     if (!isCustom || !s.orgId) return;
     let alive = true;
-    fetchMenuDishes(s.orgId).then((m) => {
+    fetchSpotCatalog(s.orgId).then((c) => {
       if (!alive) return;
+      const m = c.items;
       setMenu(m);
+      setSource(c.source);
+      setHasRestaurant(c.hasRestaurant);
       // Until a choice is stored, start with the first dishes of the menu (what the preview showed before).
       setSelected((cur) => (cur.length ? cur : m.slice(0, DEFAULT_PICKS).map((d) => d.id)));
     }).catch(() => undefined);
     // Only read the stored choice when it costs no prompt (thirdweb or a live passkey session).
     canSignSilently(signerRef.current).then((ok) => { if (ok && alive) loadBooking().catch(() => undefined); });
     return () => { alive = false; };
-  }, [isCustom, s.orgId, loadBooking]);
+  }, [isCustom, s.orgId, loadBooking]));
 
   const previewDishes = useMemo(() => {
     const byId = new Map(menu.map((d) => [d.id, d]));
@@ -114,7 +120,7 @@ export default function SponsoringStatusScreen() {
   const steps: Step[] = isCustom
     ? [
       { label: 'Gebucht und bezahlt', hint: formatDay(s.paidAt) ? `am ${formatDay(s.paidAt)}` : undefined, done: true },
-      { label: 'Gerichte ausgewählt', hint: menu.length ? 'Ihr könnt die Auswahl bis zur Übertragung ändern' : 'Schickt uns eure Fotos per WhatsApp', done: !!saved?.length },
+      { label: source === 'listings' ? 'Angebote ausgewählt' : 'Gerichte ausgewählt', hint: menu.length ? 'Ihr könnt die Auswahl bis zur Übertragung ändern' : 'Legt ein Angebot an oder schickt uns Fotos per WhatsApp', done: !!saved?.length },
       { label: 'Wir schneiden euren Spot', hint: 'Ihr bekommt ihn vorher per WhatsApp zur Freigabe', done: false },
       { label: 'Live am Samstag, 7. November', hint: 'In jeder Pause zwischen den Runden', done: false },
     ]
@@ -193,9 +199,9 @@ export default function SponsoringStatusScreen() {
 
             {isCustom && menu.length ? (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gerichte für euren Spot</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{source === 'listings' ? 'Angebote' : 'Gerichte'} für euren Spot</Text>
                 <Text style={[styles.small, { color: colors.textSecondary }]}>
-                  Wählt bis zu {MAX_SPOT_DISHES} Gerichte aus eurer Speisekarte. Die Reihenfolge der Auswahl ist die Reihenfolge im Spot.
+                  Wählt bis zu {MAX_SPOT_DISHES} {source === 'listings' ? 'Angebote aus eurem Marktplatz' : 'Gerichte aus eurer Speisekarte'}. Die Reihenfolge der Auswahl ist die Reihenfolge im Spot.
                 </Text>
                 <View style={styles.grid}>
                   {menu.map((d) => {
@@ -220,6 +226,22 @@ export default function SponsoringStatusScreen() {
                   <Text style={[styles.ctaText, { color: colors.onPrimary }]}>
                     {saving ? 'Wird gespeichert …' : dirty ? `Auswahl speichern (${selected.length})` : 'Auswahl gespeichert'}
                   </Text>
+                </Pressable>
+              </View>
+            ) : isCustom && source === 'none' ? (
+              <View style={[styles.card, { borderColor: colors.border }]}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Was soll in euren Spot?</Text>
+                <Text style={[styles.small, { color: colors.textSecondary }]}>
+                  {hasRestaurant
+                    ? 'Eure Speisekarte hat noch keine Fotos. Fügt Gerichte mit Fotos hinzu – dann könnt ihr sie hier auswählen.'
+                    : 'Legt ein Produkt oder Angebot mit Foto an – dann könnt ihr es hier für euren Spot auswählen. Oder schickt uns Fotos per WhatsApp.'}
+                </Text>
+                <Pressable
+                  onPress={() => (hasRestaurant
+                    ? router.push('/org/menu' as any)
+                    : router.push({ pathname: '/create-listing', params: { listingType: 'product', accountId: s.orgId ?? undefined } } as any))}
+                  style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
+                  <Text style={[styles.ctaText, { color: colors.onPrimary }]}>{hasRestaurant ? 'Speisekarte bearbeiten' : 'Produkt oder Angebot anlegen'}</Text>
                 </Pressable>
               </View>
             ) : null}

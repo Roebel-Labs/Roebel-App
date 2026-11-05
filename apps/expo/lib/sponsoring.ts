@@ -140,35 +140,42 @@ export function recommendedPackageId(packages: { id: string; name: string; price
 
 export interface DishPhoto { id: string; name: string; price: number | null; image_url: string }
 
-/** Up to `limit` menu photos of the org's restaurant(s): the material of its personal spot preview. */
-export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<DishPhoto[]> {
+/** Where the produced spot's pictures come from: restaurant menu photos, else active marketplace listings. */
+export type SpotSource = 'menu' | 'listings' | 'none';
+export interface SpotCatalog { source: SpotSource; hasRestaurant: boolean; items: DishPhoto[] }
+
+/** Every picture the org could show in its produced spot (menu photos first, else its active marketplace listings). */
+export async function fetchSpotCatalog(orgAccountId: string): Promise<SpotCatalog> {
   const { data: restaurants } = await db.from('restaurants').select('id').eq('account_id', orgAccountId);
   const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
-  if (!ids.length) return [];
-  const { data } = await db.from('menu_items')
-    .select('id, name, price, image_url')
-    .in('restaurant_id', ids)
-    .not('image_url', 'is', null)
-    .order('sort_order', { ascending: true })
+  if (ids.length) {
+    const { data } = await db.from('menu_items')
+      .select('id, name, price, image_url')
+      .in('restaurant_id', ids)
+      .not('image_url', 'is', null)
+      .order('sort_order', { ascending: true })
+      .limit(80);
+    const items = (data ?? []) as DishPhoto[];
+    if (items.length) return { source: 'menu', hasRestaurant: true, items };
+  }
+  const { data: listings } = await db.from('marketplace_listings')
+    .select('id, title, price, media_urls')
+    .eq('account_id', orgAccountId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
     .limit(40);
-  const rows = (data ?? []) as DishPhoto[];
-  // Spread the picks over the menu instead of four starters in a row.
-  const step = Math.max(1, Math.floor(rows.length / limit));
-  return rows.filter((_, i) => i % step === 0).slice(0, limit);
+  const items: DishPhoto[] = [];
+  for (const l of (listings ?? []) as { id: string; title: string; price: number | null; media_urls: string[] | null }[]) {
+    const image = l.media_urls?.[0];
+    if (image) items.push({ id: l.id, name: l.title, price: l.price && l.price > 0 ? l.price : null, image_url: image });
+  }
+  return { source: items.length ? 'listings' : 'none', hasRestaurant: ids.length > 0, items };
 }
 
-/** Every menu photo of the org's restaurant(s), for picking the dishes of the produced spot. */
-export async function fetchMenuDishes(orgAccountId: string): Promise<DishPhoto[]> {
-  const { data: restaurants } = await db.from('restaurants').select('id').eq('account_id', orgAccountId);
-  const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
-  if (!ids.length) return [];
-  const { data } = await db.from('menu_items')
-    .select('id, name, price, image_url')
-    .in('restaurant_id', ids)
-    .not('image_url', 'is', null)
-    .order('sort_order', { ascending: true })
-    .limit(80);
-  return (data ?? []) as DishPhoto[];
+/** Up to `limit` pictures for the spot preview, spread over the catalog instead of four starters in a row. */
+export function pickSpotItems(items: DishPhoto[], limit = 4): DishPhoto[] {
+  const step = Math.max(1, Math.floor(items.length / limit));
+  return items.filter((_, i) => i % step === 0).slice(0, limit);
 }
 
 export const MAX_SPOT_DISHES = 4;

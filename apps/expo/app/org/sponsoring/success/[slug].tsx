@@ -8,7 +8,7 @@ import { fontFamily } from '@/constants/theme';
 import BreakSpotPreview from '@/components/sponsoring/BreakSpotPreview';
 import { useMySponsoring } from '@/components/sponsoring/useMySponsoring';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
-import { fetchDishPhotos, type DishPhoto } from '@/lib/sponsoring';
+import { fetchSpotCatalog, pickSpotItems, type DishPhoto } from '@/lib/sponsoring';
 
 /** Shown once right after the Stripe payment settled: the bought spot playing, then on to the status page. */
 export default function SponsoringSuccessScreen() {
@@ -24,7 +24,7 @@ export default function SponsoringSuccessScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   }, []);
   useEffect(() => {
-    if (s.orgId && s.kind === 'custom') fetchDishPhotos(s.orgId).then(setDishes).catch(() => undefined);
+    if (s.orgId && s.kind === 'custom') fetchSpotCatalog(s.orgId).then((c) => setDishes(pickSpotItems(c.items))).catch(() => undefined);
   }, [s.orgId, s.kind]);
 
   const toStatus = () => router.replace(`/org/sponsoring/status/${slug}` as any);

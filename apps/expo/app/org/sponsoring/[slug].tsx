@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
@@ -9,9 +9,9 @@ import { useAccount } from '@/context/AccountContext';
 import { fontFamily } from '@/constants/theme';
 import BreakSpotPreview from '@/components/sponsoring/BreakSpotPreview';
 import {
-  fetchCampaign, fetchDishPhotos, fetchLogoColor, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
+  fetchCampaign, fetchLogoColor, fetchSpotCatalog, pickSpotItems, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
   openSponsoringCheckout, recommendedPackageId, slotsLeft, startCheckout,
-  type AdMaterial, type CampaignView, type DishPhoto, type Supporter,
+  type AdMaterial, type CampaignView, type DishPhoto, type SpotCatalog, type Supporter,
 } from '@/lib/sponsoring';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
@@ -50,6 +50,7 @@ export default function SponsoringDetailScreen() {
   const [view, setView] = useState<CampaignView | null>(null);
   const [supporters, setSupporters] = useState<Supporter[]>([]);
   const [dishes, setDishes] = useState<DishPhoto[]>([]);
+  const [catalog, setCatalog] = useState<SpotCatalog | null>(null);
   const [logoColor, setLogoColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [packageId, setPackageId] = useState<string | null>(null);
@@ -68,17 +69,19 @@ export default function SponsoringDetailScreen() {
     if (v) {
       const [s, d, c] = await Promise.all([
         fetchSupporters(v.campaign.id),
-        orgId ? fetchDishPhotos(orgId).catch(() => []) : Promise.resolve([] as DishPhoto[]),
+        orgId ? fetchSpotCatalog(orgId).catch(() => null) : Promise.resolve(null),
         fetchLogoColor(orgLogo),
       ]);
       setSupporters(s);
-      setDishes(d);
+      setCatalog(d);
+      setDishes(d ? pickSpotItems(d.items) : []);
       setLogoColor(c);
-      setPackageId((cur) => cur ?? recommendedPackageId(v.packages, d.length > 0));
+      setPackageId((cur) => cur ?? recommendedPackageId(v.packages, (d?.items.length ?? 0) > 0));
     }
     setLoading(false);
   }, [slug, orgId, orgLogo]);
-  useEffect(() => { load(); }, [load]);
+  // Reload on focus too: an org may come back from creating its first listing for the spot.
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const pkg = view?.packages.find((p) => p.id === packageId) ?? null;
   const custom = view?.packages.find((p) => isCustomSpot(p)) ?? null;
@@ -187,9 +190,16 @@ export default function SponsoringDetailScreen() {
   const canBuy = open && isOrg && !!pkg && left !== 0 && !bought;
   const previewNote = kind === 'logo'
     ? 'Vorschau: So erscheint euer Logo-Spot in jeder Pause.'
-    : dishes.length
+    : catalog?.source === 'menu'
       ? 'Vorschau mit Gerichten aus eurer Speisekarte. Den echten Spot schneiden wir für euch.'
-      : 'Vorschau. Den echten Spot schneiden wir mit euren Fotos, Produkten oder Videos.';
+      : catalog?.source === 'listings'
+        ? 'Vorschau mit euren Angeboten aus dem Marktplatz. Den echten Spot schneiden wir für euch.'
+        : 'Vorschau. Legt ein Produkt oder Angebot an – damit schneiden wir euren Spot.';
+  /** Without menu photos or listings the produced spot has no material: send the org to the right form. */
+  const createMaterial = () => {
+    if (catalog?.hasRestaurant) router.push('/org/menu' as any);
+    else router.push({ pathname: '/create-listing', params: { listingType: 'product', accountId: orgId ?? undefined } } as any);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -226,7 +236,7 @@ export default function SponsoringDetailScreen() {
           <View style={[styles.upgrade, { borderColor: colors.primary }]}>
             <Text style={[styles.pkgName, { color: colors.textPrimary }]}>Lieber einen richtigen Werbespot?</Text>
             <Text style={[styles.body, { color: colors.textSecondary }]}>
-              Wir schneiden euch 15 Sekunden {dishes.length ? 'mit euren Gerichten' : 'mit euren Fotos und Produkten'} – wie im Fernsehen. Ihr zahlt nur die Differenz.
+              Wir schneiden euch 15 Sekunden {catalog?.source === 'menu' ? 'mit euren Gerichten' : catalog?.source === 'listings' ? 'mit euren Angeboten' : 'mit euren Fotos und Produkten'} – wie im Fernsehen. Ihr zahlt nur die Differenz.
             </Text>
             <Pressable onPress={startUpgrade} disabled={!!busy} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
               <Text style={[styles.ctaText, { color: colors.onPrimary }]}>
@@ -251,7 +261,9 @@ export default function SponsoringDetailScreen() {
                   }]}
                   accessibilityRole="radio" accessibilityState={{ selected: sel }}>
                   {isCustom && dishes.length ? (
-                    <View style={[styles.badge, { backgroundColor: colors.primary }]}><Text style={styles.badgeText}>Empfohlen für Restaurants</Text></View>
+                    <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.badgeText}>{catalog?.source === 'menu' ? 'Empfohlen für Restaurants' : 'Mit euren Angeboten'}</Text>
+                    </View>
                   ) : null}
                   <View style={styles.optionHead}>
                     <View style={[styles.radio, { borderColor: sel ? colors.primary : colors.border }]}>
@@ -273,6 +285,13 @@ export default function SponsoringDetailScreen() {
                     <Text style={[styles.small, { color: pLeft <= 2 ? colors.error : colors.textTertiary }]}>
                       {pLeft === 0 ? 'Ausgebucht' : `Noch ${pLeft} von ${p.capacity} frei`}
                     </Text>
+                  ) : null}
+                  {isCustom && isOrg && catalog?.source === 'none' ? (
+                    <Pressable onPress={createMaterial} style={[styles.materialBtn, { borderColor: colors.primary }]} accessibilityRole="button">
+                      <Text style={[styles.materialText, { color: colors.primary }]}>
+                        {catalog.hasRestaurant ? 'Speisekarte mit Fotos füllen' : 'Produkt oder Angebot anlegen'}
+                      </Text>
+                    </Pressable>
                   ) : null}
                 </Pressable>
               );
@@ -327,6 +346,8 @@ const styles = StyleSheet.create({
   small: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17 },
   label: { fontFamily: fontFamily.medium, fontSize: 13, marginBottom: 8 },
   previewWrap: { gap: 8 },
+  materialBtn: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, marginTop: 4 },
+  materialText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   skeletonLines: { gap: 8 },
   options: { gap: 12 },
   option: { borderWidth: 1.5, borderRadius: 14, padding: 16, gap: 8 },
