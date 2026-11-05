@@ -15,6 +15,8 @@ const EBML_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 const MAX_STDIN_BACKLOG = 32 * 1024 * 1024;
 // A session that stays live this long resets the backoff attempt counter.
 const STABLE_MS = 20000;
+// After a recording write error, ask the renderer for a fresh header at most this often.
+const RECORDING_RETRY_MS = 5000;
 
 function expandHome(p) {
   if (p === '~') return os.homedir();
@@ -60,6 +62,9 @@ function createOutput(hooks) {
   let stderrTail = '';
   let progressLines = 0;
   let held = null; // short chunk that may be the start of an EBML header
+  let lastHeaderRequest = 0;
+  const openedFiles = new Set();
+  let headerRequestTimer = null;
 
   /** @type {import('../src/state/types').OutputStatus} */
   let status = { state: 'idle', since: Date.now(), recordingBytes: 0, restarts: 0 };
@@ -72,17 +77,52 @@ function createOutput(hooks) {
 
   function openRecording() {
     closeRecording();
+    try {
+      // Re-create the directory in case it vanished after start (e.g. unplugged drive).
+      fs.mkdirSync(cfg.recordDir, { recursive: true });
+    } catch (err) {
+      onRecordingError(err);
+      return;
+    }
     let file = path.join(cfg.recordDir, `${timestampName()}.mkv`);
-    for (let i = 2; fs.existsSync(file); i++) {
+    // existsSync misses files whose async open is still pending, so also
+    // check the names opened in this process.
+    for (let i = 2; fs.existsSync(file) || openedFiles.has(file); i++) {
       file = path.join(cfg.recordDir, `${timestampName()}-${i}.mkv`);
     }
-    recordStream = fs.createWriteStream(file, { flags: 'a' });
-    recordStream.on('error', (err) => {
-      log(`recording write error: ${err.message}`);
-      status.lastError = `Aufnahme: ${err.message}`;
+    openedFiles.add(file);
+    const stream = fs.createWriteStream(file, { flags: 'a' });
+    stream.on('error', (err) => {
+      if (stream !== recordStream) return;
+      onRecordingError(err);
     });
+    recordStream = stream;
     status.recordingFile = file;
     log(`recording → ${file}`);
+  }
+
+  // A failed stream is destroyed. Drop it and ask the renderer for a new
+  // MediaRecorder session, so the next file starts with a Matroska header
+  // and stays playable. recordingError is sticky until the next start().
+  function onRecordingError(err) {
+    log(`recording write error: ${err.message}`);
+    status.recordingError = `Aufnahme: ${err.message}`;
+    recordStream = null;
+    hooks.sendStatus({ ...status });
+    requestHeader();
+  }
+
+  function requestHeader() {
+    if (!started || headerRequestTimer) return;
+    const wait = lastHeaderRequest + RECORDING_RETRY_MS - Date.now();
+    const fire = () => {
+      headerRequestTimer = null;
+      if (!started) return;
+      lastHeaderRequest = Date.now();
+      hooks.onNeedHeader();
+    };
+    if (wait <= 0) fire();
+    else headerRequestTimer = setTimeout(fire, wait);
   }
 
   function closeRecording() {
@@ -167,6 +207,7 @@ function createOutput(hooks) {
     started = true;
     held = null;
     attempt = 0;
+    lastHeaderRequest = 0;
     status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0 };
     hooks.sendStatus({ ...status });
     spawnFfmpeg();
@@ -192,12 +233,27 @@ function createOutput(hooks) {
     const isHeader = buf.length >= 4 && buf.subarray(0, 4).equals(EBML_MAGIC);
 
     // 1) Recording first, so an ffmpeg failure never loses footage.
-    //    Each recorder session (fresh header) gets its own file.
-    if (isHeader || !recordStream) openRecording();
-    recordStream.write(buf);
-    status.recordingBytes += buf.length;
+    //    Each recorder session (fresh header) gets its own file. Without a
+    //    header there is no playable file to start, so after a write error
+    //    chunks are skipped until the requested new session arrives.
+    if (isHeader) openRecording();
+    if (recordStream) {
+      recordStream.write(buf);
+      status.recordingBytes += buf.length;
+    }
 
     // 2) Then the encoder.
+    if (isHeader && proc && !awaitingHeader) {
+      // A new recorder session while ffmpeg is mid-stream (e.g. after a
+      // recording error): ffmpeg cannot take a second header, so hand the
+      // new session to a fresh process. Not counted as a restart.
+      const old = proc;
+      proc = null;
+      log('new recorder session, restarting encoder');
+      old.stdin.end();
+      old.kill('SIGTERM');
+      spawnFfmpeg();
+    }
     if (!proc || !proc.stdin.writable) return;
     if (awaitingHeader) {
       if (!isHeader) return;
@@ -215,6 +271,8 @@ function createOutput(hooks) {
     if (held && recordStream) recordStream.write(held);
     held = null;
     started = false;
+    clearTimeout(headerRequestTimer);
+    headerRequestTimer = null;
     clearTimeout(restartTimer);
     restartTimer = null;
     clearInterval(statusTimer);

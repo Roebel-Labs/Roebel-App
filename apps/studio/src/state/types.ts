@@ -22,4 +22,6 @@ export type OutputStatus = {
   recordingBytes: number;
   restarts: number;
   lastError?: string;
+  /** Sticky until the next start: the local recording hit a write error. */
+  recordingError?: string;
 };
