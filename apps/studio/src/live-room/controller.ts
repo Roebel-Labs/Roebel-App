@@ -4,7 +4,7 @@
 
 import type { Action } from '../state/reducer';
 import type { ShowState, Table, Template } from '../state/types';
-import { AlertQueue, type SupportAlert } from './alerts';
+import { AlertQueue, displayName, safeAvatarUrl, type SupportAlert } from './alerts';
 import { adminCall, errorMessage, fetchChat, fetchRundown, fetchShow, fetchShows, LiveApiError } from './api';
 import { LIVE_ROOM_STORAGE_KEY } from './config';
 import { isJoined, joinGuest, leaveGuest, resyncGuestSources } from './guests';
@@ -374,17 +374,24 @@ class LiveRoomController {
     const b = this.bound;
     const tpl = b ? chatHighlightTemplate(b.getState()) : undefined;
     if (!m || !b || !tpl) return;
-    liveRoomChatHighlight.set({ name: m.display_name?.trim() || 'Jemand', body: m.body, avatarUrl: m.avatar_url ?? '' });
+    this.highlightGen++;
+    liveRoomChatHighlight.set({ name: displayName(m.display_name), body: m.body, avatarUrl: safeAvatarUrl(m.avatar_url) });
     const ov = this.ensureOverlay(tpl, 'ov-liveroom-chat');
     if (ov) b.dispatch({ type: 'setOverlay', id: ov, visible: true, now: Date.now() });
   }
 
+  /** Bumped on every new highlight, so a pending clear never wipes a message featured after it. */
+  private highlightGen = 0;
+
   private clearHighlight() {
     const b = this.bound;
     const tpl = b ? chatHighlightTemplate(b.getState()) : undefined;
+    const gen = ++this.highlightGen;
     if (b && tpl) {
       for (const o of b.getState().overlays) if (o.templateId === tpl.id && o.visible) b.dispatch({ type: 'setOverlay', id: o.id, visible: false, now: Date.now() });
-      setTimeout(() => liveRoomChatHighlight.set(null), tpl.animOut.durationMs + 300);
+      setTimeout(() => {
+        if (this.highlightGen === gen) liveRoomChatHighlight.set(null);
+      }, tpl.animOut.durationMs + 300);
     } else liveRoomChatHighlight.set(null);
   }
 
@@ -648,6 +655,8 @@ class LiveRoomController {
       liveRoomDonation.set(null);
       this.playing = false;
       this.set({ currentAlert: null });
+      // Auto mode keeps working through the queue after an early stop.
+      this.alertTimer = setTimeout(() => this.playNext(), 800);
     }, (tpl?.animOut.durationMs ?? 300) + 300);
   }
 
@@ -681,7 +690,7 @@ class LiveRoomController {
 
   async acceptGuest(g: GuestRequest) {
     const join = await this.call<GuestJoin>(g.status === 'accepted' ? 'guest_studio_token' : 'guest_accept', { request_id: g.id });
-    await joinGuest(join, `📱 ${g.display_name?.trim() || join.display_name?.trim() || 'Gast'}`);
+    await joinGuest(join, `📱 ${displayName(g.display_name, displayName(join.display_name, 'Gast'))}`);
     void this.pollGuests();
   }
 

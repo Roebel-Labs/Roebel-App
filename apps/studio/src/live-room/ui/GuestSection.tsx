@@ -1,6 +1,7 @@
 // Phone guests: doorbell (guest_list every 2 s), accept → LiveKit room, local preview tile.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { displayName } from '../alerts';
 import { liveRoom } from '../controller';
 import { liveRoomGuests, liveRoomSeams, type LiveGuest } from '../seams';
 import type { GuestRequest } from '../types';
@@ -29,7 +30,7 @@ function Preview({ guest }: { guest: LiveGuest | undefined }) {
 
 function Guest({ g, live }: { g: GuestRequest; live: LiveGuest | undefined }) {
   const r = useRun();
-  const name = g.display_name?.trim() || 'Gast';
+  const name = displayName(g.display_name, 'Gast');
   const accepted = g.status === 'accepted';
   return (
     <div className={`lr-guest ${accepted ? 'accepted' : ''}`}>

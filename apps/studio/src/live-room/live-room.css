@@ -221,7 +221,7 @@
 
 .lr-tag {
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--r);
   background: var(--raised);
   color: var(--text-2);
   font: 600 11px/1.5 var(--font-body);

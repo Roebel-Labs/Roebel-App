@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AlertQueue, formatEuro } from '../alerts';
+import { AlertQueue, formatEuro, displayName, safeAvatarUrl } from '../alerts';
 import { cfDestinations, srtFullUrl } from '../destinations';
 import type { ChatMessage } from '../types';
 
@@ -71,5 +71,20 @@ describe('Cloudflare destinations', () => {
     });
     expect(d.srt).toEqual({ kind: 'srt', label: 'Röbel App (Cloudflare SRT)', url: 'srt://live.cloudflare.com:778?streamid=s&passphrase=p' });
     expect(d.rtmps).toMatchObject({ kind: 'rtmp', key: 'k' });
+  });
+});
+
+describe('displayName / safeAvatarUrl', () => {
+  it('never shows a raw wallet address', () => {
+    expect(displayName('0x5e6528D2aBcDeF0123456789abcdef0123456789')).toBe('Jemand');
+    expect(displayName('0x5e6528')).toBe('Jemand');
+    expect(displayName('  ', 'Gast')).toBe('Gast');
+    expect(displayName(' Anna ')).toBe('Anna');
+  });
+  it('only lets https avatars through', () => {
+    expect(safeAvatarUrl('https://x.supabase.co/a.png')).toBe('https://x.supabase.co/a.png');
+    expect(safeAvatarUrl('http://127.0.0.1:7311/media/abc')).toBe('');
+    expect(safeAvatarUrl('javascript:alert(1)')).toBe('');
+    expect(safeAvatarUrl(null)).toBe('');
   });
 });

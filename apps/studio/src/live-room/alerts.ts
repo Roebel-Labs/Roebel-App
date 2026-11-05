@@ -12,11 +12,24 @@ export function formatEuro(cents: number): string {
   return rest === 0 ? `${whole} €` : `${whole},${String(rest).padStart(2, '0')} €`;
 }
 
+/** Display name for screen and overlay: never a raw wallet address, never empty. */
+export function displayName(raw: string | null | undefined, fallback = 'Jemand'): string {
+  const n = (raw ?? '').trim();
+  if (!n || /^0x[0-9a-f]{6,}/i.test(n) || /0x[0-9a-f]{40}/i.test(n)) return fallback;
+  return n;
+}
+
+/** Avatar URLs come from app users: only https images may be loaded into the program. */
+export function safeAvatarUrl(raw: string | null | undefined): string {
+  const u = (raw ?? '').trim();
+  return /^https:\/\/[^\s]+$/i.test(u) ? u : '';
+}
+
 export function toAlert(m: ChatMessage): SupportAlert {
   const cents = m.amount_cents ?? 0;
   return {
     id: m.id,
-    name: (m.display_name ?? '').trim() || 'Jemand',
+    name: displayName(m.display_name),
     amount: formatEuro(cents),
     amountCents: cents,
     message: (m.body ?? '').trim(),

@@ -31,13 +31,14 @@ function hasVideo(stream: MediaStream) {
 function syncSource(s: Session) {
   const seams = liveRoomSeams.get();
   const id = guestSourceId(s.requestId);
-  if (s.registered) {
-    seams.unregisterExternalSource?.(id);
-    s.registered = false;
-  }
+  // Re-registering an existing id refreshes the stream in place: unregistering first would drop the
+  // guest's scene (or flash "Signal verloren" on air) every time a track arrives.
   if (!s.closing && hasVideo(s.stream) && seams.registerExternalSource) {
     seams.registerExternalSource(id, s.label, s.stream);
     s.registered = true;
+  } else if (s.registered) {
+    seams.unregisterExternalSource?.(id);
+    s.registered = false;
   }
 }
 

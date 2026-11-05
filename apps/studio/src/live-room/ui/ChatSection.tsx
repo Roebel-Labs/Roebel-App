@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ConfirmDialog } from '../../ui/Dialog';
-import { formatEuro } from '../alerts';
+import { displayName, formatEuro } from '../alerts';
 import { fetchResults } from '../api';
 import { liveRoom } from '../controller';
 import type { ChatMessage, VoteResults } from '../types';
@@ -12,7 +12,7 @@ const SLOW_MODES = [0, 3, 10, 30, 60];
 
 function Message({ m, featured, run }: { m: ChatMessage; featured: boolean; run: (f: () => Promise<unknown>) => void }) {
   const [askMute, setAskMute] = useState(false);
-  const name = m.display_name?.trim() || 'Jemand';
+  const name = displayName(m.display_name);
   return (
     <div className={`lr-msg ${m.kind} ${featured ? 'featured' : ''}`}>
       <div className="lr-msg-head">
