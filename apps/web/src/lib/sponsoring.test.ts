@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bookErrorCode, isAllowedMediaUrl, bookingNotifyWallets, formatEuro, BOOK_ERRORS } from "./sponsoring";
+import { bookErrorCode, isAllowedMediaUrl, bookingNotifyWallets, formatEuro, BOOK_ERRORS, logoEdgeColor } from "./sponsoring";
 
 const SB = "https://wwbeqhkslxdxhktqzqti.supabase.co";
 
@@ -32,4 +32,14 @@ test("formatEuro", () => {
   assert.equal(formatEuro(2900), "29 €");
   assert.equal(formatEuro(44900), "449 €");
   assert.equal(formatEuro(1050), "10,50 €");
+});
+
+test("logoEdgeColor picks the dominant opaque border colour", () => {
+  const w = 4, h = 4;
+  const px = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) px.set([220, 30, 40, 255], i * 4); // red logo background
+  px.set([255, 255, 255, 255], 0); // one white corner (part of the artwork)
+  px.set([10, 10, 10, 255], (1 * w + 1) * 4); // centre pixel is ignored
+  assert.equal(logoEdgeColor(px, w, h), "#DC1E28");
+  assert.equal(logoEdgeColor(new Uint8Array(w * h * 4), w, h), null); // fully transparent → null
 });
