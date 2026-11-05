@@ -254,9 +254,9 @@ export default function FeedHome() {
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
-  // While a finger is on the horizontal story rail, the pager's own
-  // horizontal gesture is disabled so a story swipe can never fall through
-  // and flip the feed tab instead.
+  // While a finger is on a horizontal rail (stories, Mittagstisch), the
+  // pager's own horizontal gesture is disabled so a rail swipe can never
+  // fall through and flip the feed tab instead.
   const [storyRailActive, setStoryRailActive] = useState(false);
   const [reportDrawerVisible, setReportDrawerVisible] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
@@ -621,6 +621,7 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             listHeader={<HomeStoryBar onRailTouchActive={setStoryRailActive} />}
+            onRailTouchActive={setStoryRailActive}
             showProposalHero={canSeeProposals}
             onOpenUmfragen={
               canAccessCityTabs
