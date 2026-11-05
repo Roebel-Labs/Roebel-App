@@ -277,6 +277,19 @@ ipcMain.on('app:quit-confirmed', () => {
   app.quit();
 });
 
+app.whenReady().then(() => {
+  setupPermissions();
+  setupMenu();
+  overlay = createOverlayServer({
+    userDataDir: app.getPath('userData'),
+    log: (msg) => console.log(`${new Date().toISOString()} [overlay] ${msg}`),
+  });
+  overlay.start().catch((e) => console.log(`${new Date().toISOString()} [overlay] start failed: ${e.message}`));
+  createWindow();
+  // Never block window creation on the macOS permission dialog.
+  void askMacMediaAccess();
+});
+
 // Quit: while on air the operator confirms first (Cmd+Q, window close). Then the renderer
 // stops its MediaRecorder (final chunk flushed), then ffmpeg + the recording file stop.
 // Waits at most QUIT_GRACE_MS for the renderer and QUIT_HARD_CAP_MS overall.
