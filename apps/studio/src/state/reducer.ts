@@ -2,6 +2,7 @@ import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
 import { starterTemplates } from '../render/templates';
 import type {
+  AudioChannel,
   OverlayInstance,
   Scene,
   Settings,
@@ -40,7 +41,11 @@ export type Action =
   | { type: 'moveRow'; rowId: string; delta: number }
   | { type: 'selectRow'; rowId: string | null }
   | { type: 'nextRow' }
-  | { type: 'updateSettings'; patch: Partial<Settings> };
+  | { type: 'updateSettings'; patch: Partial<Settings> }
+  | { type: 'addAudioChannel'; channel: Omit<AudioChannel, 'id'> & { id?: string } }
+  | { type: 'updateAudioChannel'; id: string; patch: Partial<Omit<AudioChannel, 'id'>> }
+  | { type: 'removeAudioChannel'; id: string }
+  | { type: 'setMasterDb'; db: number };
 
 const STORAGE_PRESETS: TransitionPreset[] = [
   { id: 'preset-cut', name: 'Cut', kind: 'cut', durationMs: 0, easing: 'linear' },
@@ -81,6 +86,7 @@ export function initialState(): ShowState {
     table: { columns: [], rows: [], currentRowId: null },
     settings: defaultSettings(),
     sponsors: { rotationSeconds: 8, items: [] },
+    audio: { channels: [], masterDb: 0 },
   };
 }
 
@@ -259,6 +265,20 @@ export function showReducer(s: ShowState, a: Action): ShowState {
     }
     case 'updateSettings':
       return { ...s, settings: { ...s.settings, ...a.patch } };
+    case 'addAudioChannel': {
+      const channel: AudioChannel = { ...a.channel, id: a.channel.id ?? uid() };
+      if (s.audio.channels.some((c) => c.id === channel.id)) return s;
+      return { ...s, audio: { ...s.audio, channels: [...s.audio.channels, channel] } };
+    }
+    case 'updateAudioChannel':
+      return {
+        ...s,
+        audio: { ...s.audio, channels: s.audio.channels.map((c) => (c.id === a.id ? { ...c, ...a.patch } : c)) },
+      };
+    case 'removeAudioChannel':
+      return { ...s, audio: { ...s.audio, channels: s.audio.channels.filter((c) => c.id !== a.id) } };
+    case 'setMasterDb':
+      return { ...s, audio: { ...s.audio, masterDb: a.db } };
   }
 }
 
@@ -336,6 +356,34 @@ function restoreTemplates(v: unknown): Template[] {
     }));
 }
 
+function restoreAudio(v: unknown): ShowState['audio'] {
+  const d = initialState().audio;
+  if (!isObj(v)) return d;
+  const channels: AudioChannel[] = [];
+  for (const c of arr<unknown>(v.channels, [])) {
+    if (!hasId(c) || !isObj(c.input)) continue;
+    const i = c.input;
+    const input: AudioChannel['input'] | null =
+      i.kind === 'device' && typeof i.deviceId === 'string'
+        ? { kind: 'device', deviceId: i.deviceId }
+        : i.kind === 'source' && typeof i.sourceId === 'string'
+          ? { kind: 'source', sourceId: i.sourceId }
+          : null;
+    if (!input || channels.some((x) => x.id === c.id)) continue;
+    const ch: AudioChannel = {
+      id: c.id,
+      label: str(c.label, ''),
+      input,
+      gainDb: num(c.gainDb, 0),
+      muted: c.muted === true,
+      delayMs: Math.min(500, Math.max(0, num(c.delayMs, 0))),
+    };
+    if (typeof c.followsVideoSourceId === 'string') ch.followsVideoSourceId = c.followsVideoSourceId;
+    channels.push(ch);
+  }
+  return { channels, masterDb: num(v.masterDb, d.masterDb) };
+}
+
 export function restore(json: string | null): ShowState {
   const d = initialState();
   if (!json) return d;
@@ -384,5 +432,6 @@ export function restore(json: string | null): ShowState {
     table,
     settings: restoreSettings(raw.settings),
     sponsors: restoreSponsors(raw.sponsors),
+    audio: restoreAudio(raw.audio),
   };
 }

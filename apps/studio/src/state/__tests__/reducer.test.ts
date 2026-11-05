@@ -347,3 +347,51 @@ describe('table structure actions', () => {
     expect(s2.templates[0].nodes[0].text).toBe('{{row.Tanzgruppe}} / {{ next.Tanzgruppe }} / {{row.Other}}');
   });
 });
+
+describe('audio', () => {
+  const ch = { id: 'a1', label: 'Mic', input: { kind: 'device' as const, deviceId: 'd1' }, gainDb: 0, muted: false, delayMs: 0 };
+
+  it('defaults to no channels and 0 dB master', () => {
+    expect(initialState().audio).toEqual({ channels: [], masterDb: 0 });
+    expect(restore(null).audio).toEqual({ channels: [], masterDb: 0 });
+  });
+
+  it('adds, patches and removes channels; ignores duplicate ids', () => {
+    let s = showReducer(initialState(), { type: 'addAudioChannel', channel: ch });
+    s = showReducer(s, { type: 'addAudioChannel', channel: ch });
+    expect(s.audio.channels).toHaveLength(1);
+    s = showReducer(s, { type: 'updateAudioChannel', id: 'a1', patch: { gainDb: -6, muted: true } });
+    expect(s.audio.channels[0]).toMatchObject({ gainDb: -6, muted: true, delayMs: 0 });
+    s = showReducer(s, { type: 'removeAudioChannel', id: 'a1' });
+    expect(s.audio.channels).toEqual([]);
+  });
+
+  it('addAudioChannel generates an id when none is given', () => {
+    const { id: _id, ...rest } = ch;
+    const s = showReducer(initialState(), { type: 'addAudioChannel', channel: rest });
+    expect(s.audio.channels[0].id).toBeTruthy();
+  });
+
+  it('setMasterDb stores the value', () => {
+    expect(showReducer(initialState(), { type: 'setMasterDb', db: -3 }).audio.masterDb).toBe(-3);
+  });
+
+  it('restore round-trips channels and validates each element', () => {
+    let s = showReducer(initialState(), { type: 'addAudioChannel', channel: { ...ch, followsVideoSourceId: 'cam1', delayMs: 120 } });
+    s = showReducer(s, { type: 'setMasterDb', db: -2 });
+    expect(restore(serialize(s)).audio).toEqual(s.audio);
+    const raw = JSON.parse(serialize(s));
+    raw.audio.channels.push({ id: 'bad', input: { kind: 'nope' } }, 'x', { id: 'b2', input: { kind: 'source', sourceId: 's' }, gainDb: 'loud', delayMs: 9999 });
+    raw.audio.masterDb = 'x';
+    const r = restore(JSON.stringify(raw)).audio;
+    expect(r.masterDb).toBe(0);
+    expect(r.channels.map((c) => c.id)).toEqual(['a1', 'b2']);
+    expect(r.channels[1]).toMatchObject({ gainDb: 0, muted: false, delayMs: 500, label: '' });
+  });
+
+  it('restore of a state saved before audio existed gets the default', () => {
+    const raw = JSON.parse(serialize(initialState()));
+    delete raw.audio;
+    expect(restore(JSON.stringify(raw)).audio).toEqual({ channels: [], masterDb: 0 });
+  });
+});

@@ -1,0 +1,38 @@
+/* Audio strip: compact row of vertical channel strips. No shadows, 4 px radii. */
+.au { background: var(--panel, #1e2125); border: 1px solid var(--line, #33383e); border-radius: 4px; padding: 8px 10px; }
+.au-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.au-title { font: 600 12px/1 var(--font-head, 'Plus Jakarta Sans', system-ui, sans-serif); color: var(--text-2, #b4b8c1); letter-spacing: 0.02em; }
+.au-add { position: relative; }
+.au-row { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; padding-bottom: 2px; }
+.au-empty { align-self: center; color: var(--text-3, #6b7280); font-size: 12px; max-width: 280px; padding: 0 8px; }
+
+.au-strip { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--raised, #272b30); border: 1px solid var(--line, #33383e); border-radius: 4px; }
+.au-strip.muted .au-meter { opacity: 0.45; }
+.au-master { margin-left: auto; border-color: var(--border-brand, #b4b8c1); }
+.au-label { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.au-body { display: flex; gap: 8px; height: 120px; justify-content: center; }
+.au-meter-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.au-meter { position: relative; flex: 1; width: 10px; background: var(--bg, #17191c); border: 1px solid var(--line, #33383e); border-radius: 4px; overflow: hidden; }
+.au-meter-bar { position: absolute; inset: 0; transform: scaleY(0); transform-origin: bottom; background: var(--pvw, #2fa866); will-change: transform; }
+.au-tick { position: absolute; left: 0; right: 0; height: 1px; background: var(--line-strong, #4a5058); }
+.au-read { font: 500 10px/1 var(--font-body, Inter, system-ui, sans-serif); color: var(--text-3, #6b7280); min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Vertical fader: a native range turned upright. */
+.au-fader { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 100%; margin: 0; accent-color: var(--border-brand, #b4b8c1); background: transparent; }
+.au-db { text-align: center; font-size: 11px; color: var(--text-2, #b4b8c1); font-variant-numeric: tabular-nums; }
+
+.au-btn { background: var(--raised, #272b30); border: 1px solid var(--border-brand, #b4b8c1); border-radius: 4px; padding: 4px 8px; font-size: 12px; color: var(--text, #eceef1); }
+.au-btn:hover:not(:disabled) { background: var(--raised-hover, #30353b); }
+.au-btn:disabled { opacity: 0.45; cursor: default; }
+.au-btn.on { background: var(--amber, #e8a33d); border-color: var(--amber, #e8a33d); color: #1b1d20; }
+
+.au-field { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: var(--text-3, #6b7280); }
+.au-field input, .au-field select { width: 100%; background: var(--bg, #17191c); border: 1px solid var(--border-brand, #b4b8c1); border-radius: 4px; padding: 3px 4px; font-size: 12px; color: var(--text, #eceef1); }
+.au-num { display: flex; align-items: center; gap: 4px; color: var(--text-2, #b4b8c1); font-size: 11px; }
+
+.au-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; min-width: 240px; max-height: 320px; overflow-y: auto; background: var(--raised, #272b30); border: 1px solid var(--border-brand, #b4b8c1); border-radius: 4px; padding: 4px; }
+.au-menu-sub { padding: 6px 8px 2px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3, #6b7280); }
+.au-menu-empty { padding: 4px 8px; font-size: 12px; color: var(--text-3, #6b7280); }
+.au-menu-item { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 4px; padding: 6px 8px; font-size: 12px; color: var(--text, #eceef1); }
+.au-menu-item:hover { background: var(--raised-hover, #30353b); }

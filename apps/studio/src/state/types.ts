@@ -136,6 +136,17 @@ export type Settings = {
 
 export type SponsorItem = { id: string; name: string; logoUrl: string | null };
 
+export type AudioChannel = {
+  id: string;
+  label: string;
+  input: { kind: 'device'; deviceId: string } | { kind: 'source'; sourceId: string };
+  gainDb: number;
+  muted: boolean;
+  delayMs: number;
+  /** Channel is audible only while this source is part of the program picture. */
+  followsVideoSourceId?: string;
+};
+
 export type ShowState = {
   version: 1;
   sources: Source[];
@@ -149,6 +160,7 @@ export type ShowState = {
   table: Table;
   settings: Settings;
   sponsors: { rotationSeconds: number; items: SponsorItem[] };
+  audio: { channels: AudioChannel[]; masterDb: number };
 };
 
 // ---- Renderer (Task 3) ----
