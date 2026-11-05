@@ -337,4 +337,13 @@ describe('table structure actions', () => {
     expect(showReducer(s, { type: 'moveRow', rowId: r1, delta: -1 })).toBe(s);
     expect(showReducer(s, { type: 'moveRow', rowId: r3, delta: 1 })).toBe(s);
   });
+  it('renameColumn rewrites row/next bindings in templates', () => {
+    let s = mk();
+    s = showReducer(s, { type: 'renameColumn', from: 'A', to: 'Gruppe' });
+    const s2 = showReducer(
+      { ...s, templates: [{ ...s.templates[0], nodes: [{ id: 'n', type: 'text', x: 0, y: 0, w: 1, h: 1, text: '{{row.Gruppe}} / {{ next.Gruppe }} / {{row.Other}}' }] }] },
+      { type: 'renameColumn', from: 'Gruppe', to: 'Tanzgruppe' },
+    );
+    expect(s2.templates[0].nodes[0].text).toBe('{{row.Tanzgruppe}} / {{ next.Tanzgruppe }} / {{row.Other}}');
+  });
 });

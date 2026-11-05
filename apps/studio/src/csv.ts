@@ -1,6 +1,21 @@
 /** Parses pasted spreadsheet text or a CSV file. Auto-detects `,` / `;` / tab (German Excel uses `;`). */
-export type ParsedCsv = { columns: string[]; rows: Record<string, string>[] };
+export type ParsedCsv = {
+  columns: string[];
+  rows: Record<string, string>[];
+  /** Rows that had non-empty values beyond the header width (those values are ignored). */
+  overflowRows: number;
+};
 
+/** Decodes file bytes: UTF-8 when valid, else Windows-1252 (German Excel). */
+export function decodeText(buf: ArrayBuffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+}
+
+/** Returns '' (never splits) when the header line has no separator, e.g. a single-column file. */
 function detectDelimiter(text: string): string {
   // Look only at the first record, ignoring quoted sections.
   let inQuotes = false;
@@ -13,7 +28,8 @@ function detectDelimiter(text: string): string {
   // Tab wins (Sheets paste), then semicolon (German Excel), then comma.
   if (counts['\t'] > 0) return '\t';
   if (counts[';'] > 0) return ';';
-  return ',';
+  if (counts[','] > 0) return ',';
+  return '';
 }
 
 function parseRecords(text: string, delim: string): string[][] {
@@ -65,17 +81,37 @@ function uniqueHeaders(raw: string[]): string[] {
 }
 
 export function parseCsv(text: string): ParsedCsv {
-  const clean = text.replace(/^﻿/, '');
-  if (clean.trim() === '') return { columns: [], rows: [] };
+  const empty: ParsedCsv = { columns: [], rows: [], overflowRows: 0 };
+  // Strip BOM and leading blank lines so delimiter detection sees the header.
+  const clean = text.replace(/^\uFEFF/, '').replace(/^(?:[ \t]*\r?\n)+/, '');
+  if (clean.trim() === '') return empty;
   const records = parseRecords(clean, detectDelimiter(clean)).filter((r) => r.some((c) => c.trim() !== ''));
-  if (records.length === 0) return { columns: [], rows: [] };
-  const columns = uniqueHeaders(records[0]);
-  const rows = records.slice(1).map((r) => {
+  if (records.length === 0) return empty;
+  const headers = uniqueHeaders(records[0]);
+  const body = records.slice(1);
+  // A trailing separator yields a nameless column: drop it when it holds no data, else name it.
+  const keep: number[] = [];
+  const columns: string[] = [];
+  headers.forEach((h, i) => {
+    if (h === '') {
+      if (!body.some((r) => (r[i] ?? '').trim() !== '')) return;
+      let name = `Spalte ${i + 1}`;
+      while (headers.includes(name) || columns.includes(name)) name = `${name}*`;
+      keep.push(i);
+      columns.push(name);
+    } else {
+      keep.push(i);
+      columns.push(h);
+    }
+  });
+  let overflowRows = 0;
+  const rows = body.map((r) => {
+    if (r.slice(headers.length).some((c) => c.trim() !== '')) overflowRows++;
     const values: Record<string, string> = {};
-    columns.forEach((c, i) => {
-      values[c] = r[i] ?? '';
+    columns.forEach((c, k) => {
+      values[c] = r[keep[k]] ?? '';
     });
     return values;
   });
-  return { columns, rows };
+  return { columns, rows, overflowRows };
 }

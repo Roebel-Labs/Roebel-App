@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { parseCsv, type ParsedCsv } from '../../csv';
+import { decodeText, parseCsv, type ParsedCsv } from '../../csv';
+import { templatesUsingColumn } from '../../state/columns';
+import { commitValue } from './edit';
 import type { Action } from '../../state/reducer';
 import { useShow } from '../../state/store';
 import type { Table } from '../../state/types';
@@ -22,17 +24,18 @@ function focusNeighbour(el: HTMLElement, dir: 1 | -1) {
 const Cell = memo(function Cell({ rowId, column, value, dispatch }: { rowId: string; column: string; value: string; dispatch: Dispatch }) {
   const [draft, setDraft] = useState(value);
   const editing = useRef(false);
+  const cancelled = useRef(false);
   useEffect(() => {
     if (!editing.current) setDraft(value);
   }, [value]);
-  const commit = (v: string) => {
-    if (v !== value) dispatch({ type: 'updateCell', rowId, column, value: v });
-  };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      commit(draft);
-      focusNeighbour(e.currentTarget, e.shiftKey ? -1 : 1);
+      // Moving focus triggers onBlur, which commits exactly once.
+      const el = e.currentTarget;
+      focusNeighbour(el, e.shiftKey ? -1 : 1);
+      if (document.activeElement === el) el.blur();
     } else if (e.key === 'Escape') {
+      cancelled.current = true;
       setDraft(value);
       e.currentTarget.blur();
     }
@@ -49,7 +52,9 @@ const Cell = memo(function Cell({ rowId, column, value, dispatch }: { rowId: str
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         editing.current = false;
-        commit(draft);
+        const v = commitValue(draft, value, cancelled.current);
+        cancelled.current = false;
+        if (v !== null) dispatch({ type: 'updateCell', rowId, column, value: v });
       }}
       onKeyDown={onKey}
     />
@@ -80,8 +85,8 @@ const DataRow = memo(function DataRow({
         </td>
       ))}
       <td className="act">
-        <button className={current ? undefined : 'primary'} disabled={current} onClick={() => dispatch({ type: 'selectRow', rowId: row.id })}>
-          {current ? 'Auf Sendung' : 'Auf Sendung: Zeile setzen'}
+        <button disabled={current} onClick={() => dispatch({ type: 'selectRow', rowId: row.id })}>
+          Auf Sendung
         </button>
         <button className="icon" title="Nach oben" disabled={index === 0} onClick={() => dispatch({ type: 'moveRow', rowId: row.id, delta: -1 })}>
           ↑
@@ -97,29 +102,35 @@ const DataRow = memo(function DataRow({
   );
 });
 
-function ColumnHeader({ name, dispatch }: { name: string; dispatch: Dispatch }) {
+function ColumnHeader({ name, usedBy, dispatch }: { name: string; usedBy: string[]; dispatch: Dispatch }) {
   const [draft, setDraft] = useState(name);
+  const cancelled = useRef(false);
   useEffect(() => setDraft(name), [name]);
-  const commit = () => {
-    const v = draft.trim();
-    if (v !== name) dispatch({ type: 'renameColumn', from: name, to: v });
-    setDraft(name); // reducer rejects blanks/collisions; the effect re-syncs on success
+  const remove = () => {
+    const uses = usedBy.length > 0 ? `\n\nVerwendet in: ${usedBy.join(', ')}. Diese Platzhalter bleiben dann leer.` : '';
+    if (window.confirm(`Spalte „${name}“ mit allen Werten löschen?${uses}`)) dispatch({ type: 'removeColumn', name });
   };
   return (
     <div className="hd">
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onBlur={() => {
+          const v = commitValue(draft.trim(), name, cancelled.current);
+          cancelled.current = false;
+          if (v !== null) dispatch({ type: 'renameColumn', from: name, to: v });
+          setDraft(name); // reducer rejects blanks/collisions; the effect re-syncs on success
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
           if (e.key === 'Escape') {
+            cancelled.current = true;
             setDraft(name);
             e.currentTarget.blur();
           }
         }}
       />
-      <button title="Spalte löschen" onClick={() => dispatch({ type: 'removeColumn', name })}>
+      <button title="Spalte löschen" onClick={remove}>
         ✕
       </button>
     </div>
@@ -136,17 +147,18 @@ function ImportPanel({ table, dispatch, onClose }: { table: Table; dispatch: Dis
     if (!f) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const t = String(reader.result ?? '');
+      const t = decodeText(reader.result as ArrayBuffer);
       setText(t);
       analyse(t);
     };
-    reader.readAsText(f);
+    reader.readAsArrayBuffer(f);
     if (fileRef.current) fileRef.current.value = '';
   };
 
   const toRows = (p: ParsedCsv): Row[] => p.rows.map((values) => ({ id: crypto.randomUUID(), values }));
   const replace = () => {
     if (!parsed) return;
+    if (table.rows.length > 0 && !window.confirm(`Die aktuelle Tabelle (${table.rows.length} Zeilen) wird ersetzt. Fortfahren?`)) return;
     const rows = toRows(parsed);
     dispatch({ type: 'setTable', table: { columns: parsed.columns, rows, currentRowId: rows[0]?.id ?? null } });
     onClose();
@@ -179,11 +191,16 @@ function ImportPanel({ table, dispatch, onClose }: { table: Table; dispatch: Dis
             {parsed.rows.length} Zeilen, {parsed.columns.length} Spalten
           </span>
         )}
+        {parsed && parsed.overflowRows > 0 && (
+          <span className="tbl-hint" style={{ color: 'var(--amber)' }}>
+            {parsed.overflowRows} Zeilen haben mehr Felder als Spalten — überzählige Werte ignoriert
+          </span>
+        )}
         <span className="spacer" />
         <button disabled={empty} onClick={append}>
           Anhängen
         </button>
-        <button className="primary" disabled={empty} onClick={replace}>
+        <button disabled={empty} onClick={replace}>
           Ersetzen
         </button>
         <button onClick={onClose}>Abbrechen</button>
@@ -246,7 +263,7 @@ export function TableTab() {
         <span className="tbl-hint">
           {rows.length === 0 ? 'Keine Zeilen' : idx >= 0 ? `Auf Sendung: Zeile ${idx + 1} von ${rows.length}` : 'Keine Zeile auf Sendung'}
         </span>
-        <button className="primary" disabled={idx < 0 || idx >= rows.length - 1} onClick={() => stable({ type: 'nextRow' })}>
+        <button className="primary" disabled={rows.length === 0 || idx >= rows.length - 1} onClick={() => stable({ type: 'nextRow' })}>
           Weiter ▸
         </button>
       </div>
@@ -261,7 +278,7 @@ export function TableTab() {
                 <th />
                 {columns.map((c) => (
                   <th key={c}>
-                    <ColumnHeader name={c} dispatch={stable} />
+                    <ColumnHeader name={c} usedBy={templatesUsingColumn(state.templates, c)} dispatch={stable} />
                   </th>
                 ))}
                 <th />

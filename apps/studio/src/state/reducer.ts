@@ -1,4 +1,5 @@
 import { overlayProgress } from '../render/anim';
+import { renameInTemplates } from './columns';
 import { starterTemplates } from '../render/templates';
 import type {
   OverlayInstance,
@@ -213,6 +214,7 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       if (to === '' || to === a.from || !s.table.columns.includes(a.from) || s.table.columns.includes(to)) return s;
       return {
         ...s,
+        templates: renameInTemplates(s.templates, a.from, to),
         table: {
           ...s.table,
           columns: s.table.columns.map((c) => (c === a.from ? to : c)),
