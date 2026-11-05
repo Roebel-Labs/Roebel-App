@@ -294,30 +294,38 @@ The riskiest part comes first. At the end of this task a test-pattern canvas str
 - [ ] **Step 5: Manual check:** OBS → Browser source `http://127.0.0.1:7311/overlay.html`, 1920×1080 → toggling the lower third in the studio shows it in OBS within ~200 ms, animations included.
 - [ ] **Step 6: Commit** `feat(studio): OBS browser-source overlay page driven by the studio state`.
 
-### Task 10: Sponsor break spots from the app's bookings
+### Task 10: Sponsor break spots (local ad list — studio is standalone, Ruling N)
 
 **Files:**
-- Create: `src/sponsors/supporters.ts`, `src/ui/show/SponsorPanel.tsx`
-- Modify: `src/render/draw.ts` (RenderContext.sponsor from rotation), `electron/main.cjs` (append air-time log)
-- Test: `src/sponsors/__tests__/rotation.test.ts`
+- Create: `src/sponsors/rotation.ts`, `src/ui/show/SponsorPanel.tsx`
+- Modify: `src/render/draw.ts` (RenderContext.sponsor from rotation), `electron/main.cjs` + `preload.cjs` (append air-time log), reducer (`addSponsor`, `updateSponsor`, `removeSponsor`, `moveSponsor`, `setRotationSeconds`)
+- Test: `src/sponsors/__tests__/rotation.test.ts`, reducer tests for the new actions
 
 **Interfaces:**
-- Consumes: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (`apps/studio/.env.local`, `.env.example` committed with placeholders); `sponsoring_campaigns` select by `slug` (anon-readable when active) → `rpc('sponsoring_supporters', { p_campaign_id })` → `{ org_account_id, name, avatar_url, package_id, paid_at }[]`
-- Produces: `fetchSupporters(slug: string): Promise<Sponsor[]>`, `type Sponsor = { id: string; name: string; logoUrl: string | null; packageId: string }`; `nextSpot(sponsors: Sponsor[], failedIds: Set<string>, lastIndex: number): number` (−1 if none usable); air log `window.studio.fs.appendAirLog({ sponsorId, name, startedAt, endedAt })` → `<recordDir>/werbung-airtime.jsonl`
+- Consumes: `ShowState.sponsors = { rotationSeconds: number; items: { id: string; name: string; logoUrl: string | null }[] }`; `window.studio.media.allow(absPath)` → `/media/` URL (Task 4)
+- Produces: `nextSpot(items: SponsorItem[], failedIds: Set<string>, lastIndex: number): number` (−1 if none usable); air log `window.studio.fs.appendAirLog({ sponsorId, name, startedAt, endedAt })` → `<recordDir>/werbung-airtime.jsonl`
+- No Supabase, no network, no keys.
 
-- [ ] **Step 1: Write failing tests:** rotation skips sponsors without a logo and ids in `failedIds`; wraps around; returns −1 for an empty list or all failed.
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement:** SponsorPanel in the Show tab ("Werbung · 7 Partner · neu laden"), "Werbeblock starten" puts the breakSpot overlay on air and rotates every `sponsors.rotationSeconds` (default 8 s) until "Werbeblock beenden"; each spot is logged with start/end. The list is cached in the state so the break works offline. Custom spots ("Werbespot nach Maß", produced by Max) are plain video sources. **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(studio): sponsor break spots from DanceCup bookings with air-time log`.
+- [ ] **Step 1: Write failing tests:** rotation skips items without a logo and ids in `failedIds`; wraps around; returns −1 for an empty list or all failed. Reducer: add/update/remove/move sponsor; rotationSeconds clamped 3–60.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement:** SponsorPanel in the Show tab: list of partners (name + logo thumbnail), "+ Partner" (name + logo file picker → `/media/`), reorder ↑↓, remove; "Werbeblock starten" puts the breakSpot overlay on air and rotates every `rotationSeconds` (default 8 s) until "Werbeblock beenden"; each spot logged with start/end. Custom video spots are plain video sources. **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat(studio): sponsor break spots from a local partner list with air-time log`.
 
-### Task 11: Settings, runbook, rehearsal checklist
+### Task 11: Multi-destination output, Settings, runbook (Ruling S)
 
 **Files:**
-- Create: `src/ui/settings/SettingsTab.tsx`, `docs/STUDIO_RUNBOOK.md`, `apps/studio/.env.example`
-- Modify: `apps/studio/package.json` (README-style `start` works from a clean clone), root `package.json` (`studio` script)
+- Modify: `electron/ffmpeg-args.cjs` + tests, `electron/output.cjs` + tests, `src/state/types.ts` + reducer (`Settings.destinations`), `src/ui/show/HealthBar.tsx` (per-destination status)
+- Create: `src/ui/settings/SettingsTab.tsx`, `docs/STUDIO_RUNBOOK.md`, root `package.json` script `studio`
 
-- [ ] **Step 1: Implement** the Settings tab: target kind (SRT / RTMPS / keiner), URL, key (password field; stored only in local state, never logged), fps 30/50, video kbps 2500–9000, audio kbps, recording folder (folder picker via IPC), ffmpeg path + "Prüfen" (runs `ffmpeg -version` and checks the srt protocol + videotoolbox encoder), campaign slug, "Testbild senden (60 s)".
-- [ ] **Step 2: Write `docs/STUDIO_RUNBOOK.md`:** install (nvm, pnpm, brew ffmpeg), start; Cloudflare: create a live input (dashboard → Stream → Live inputs → recording on), copy the SRT URL into Settings, add live outputs for YouTube + Facebook (their RTMP URL + key); OBS fallback: same Cloudflare RTMPS input, the browser source URL, the scene list; and if Cloudflare is down, OBS streams straight to YouTube; rehearsal checklist (venue upload test ≥ 15–20 Mbit/s, capture card + Continuity Camera over the long USB cable, clap test, 60-min soak, network-pull test, minimise test); the go/no-go criteria from spec §2 copied verbatim.
-- [ ] **Step 3: Commit** `docs(studio): settings tab + runbook with Cloudflare, OBS fallback and rehearsal checklist`.
+**Interfaces:**
+- `Destination = { id: string; name: string; enabled: boolean; target: OutputTarget }`; `Settings.destinations: Destination[]` replaces the single `Settings.target` (restore migrates an old `target` into one destination named "Cloudflare").
+- Presets in the "+ Ziel" menu: Cloudflare SRT (paste full srt:// URL), Cloudflare RTMPS (`rtmps://live.cloudflare.com:443/live/` + key), YouTube (`rtmp://a.rtmp.youtube.com/live2` + key), Facebook (`rtmps://live-api-s.facebook.com:443/rtmp/` + key), Eigenes RTMP.
+- `buildFfmpegArgs(o: { destinations: OutputTarget[]; fps; videoKbps; audioKbps })`: 1 destination → as today; ≥2 → encode once, `-f tee` with `-map 0:v -map 0:a`, each slave `[f=mpegts:onfail=ignore]srt://…` or `[f=flv:onfail=ignore]rtmp…`, `|`-joined, with `|`, `[`, `]` in URLs escaped per ffmpeg tee rules. 0 enabled → throws `'no_target'`.
+- `OutputStatus.destinations?: { id: string; state: 'ok' | 'failed'; lastError?: string }[]` parsed from ffmpeg stderr (tee slave failure lines name the URL → match by masked URL).
+
+- [ ] **Step 1: Write failing tests** (ffmpeg-args): 2 destinations SRT + YouTube → one `-f tee` arg containing `onfail=ignore` for both, `f=mpegts` for SRT and `f=flv` for RTMP; a URL containing `|` is escaped; a disabled destination is excluded; old single-target tests still pass. Restore migration of `settings.target` → one destination. maskSecrets masks every destination's key.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** + SettingsTab: destination list (name, on/off, URL, key as password field, "Testen" = 20 s test pattern to just that destination), upload estimate "≈ N × (Video + Audio) kbit/s Upload nötig" with a warning when >1 destination; fps 30/50; video kbps 2500–9000; audio kbps; recording folder (folder picker via IPC); ffmpeg path + "Prüfen" (ffmpeg -version, srt protocol, h264_videotoolbox). Keys are stored only in localStorage, never logged. **Step 4: Run** → PASS.
+- [ ] **Step 5: Write `docs/STUDIO_RUNBOOK.md`:** install (nvm, pnpm, `brew install ffmpeg-full`, do NOT `brew upgrade` before the show — freetype pin), start (`pnpm studio`); destinations (Cloudflare input + its own live outputs vs. direct YouTube/Facebook keys; upload needs); OBS fallback (same destinations, browser source URL); recording files (one .mkv per session; remux `ffmpeg -i x.mkv -c copy x.mp4`); rehearsal checklist (venue upload ≥ 15–20 Mbit/s, capture card + Continuity Camera over the long USB cable, clap test, 60-min soak, network-pull test, minimise test); the go/no-go criteria from spec §2 verbatim.
+- [ ] **Step 6: Commit** `feat(studio): multi-destination output (YouTube/Facebook/Cloudflare) + settings + runbook`.
 
 ### Task 12: Soak test + go/no-go dry run (on the 8 GB M3)
 
