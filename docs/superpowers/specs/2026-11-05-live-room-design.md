@@ -75,7 +75,7 @@ results. Entry points: LivestreamBanner, event page CTA, deep link `roebel://liv
 `live_shows` row open the live room instead of the YouTube embed.
 
 **Web**: `/live/<slug>/overlay` (1920×1080, transparent, OBS browser source: lower third of the on-stage item, "Als Nächstes",
-logo bug + "Live in der Röbel App" QR, support alerts, featured chat message, poll results, on-air reactions).
+logo bug + "Live in der Röbel App" QR, featured chat message, poll results, on-air reactions). **No Unterstützen on air** (see below).
 `/admin/dashboard/live` operator console. `/live/support/return` landing.
 
 ## Rules carried over
@@ -102,3 +102,10 @@ operator pastes it once into the studio's Live-Raum panel (own localStorage key,
 app's developer settings. act `test_support { show_id, amount_cents, body? }` posts a fake support (no money) and
 `test_next { show_id }` advances the on-stage item (wraps around, sends the reminder pushes) — both refused on real shows.
 Unterstützen with real money stays off on the test show (no beneficiary).
+
+## Decision 2026-11-05 (Max): Unterstützen never on air
+Unterstützen must not appear in the stream picture or the recording (dancers watch the recording later). It exists only as an
+in-app layer for app viewers: the gold alert over the player (`components/live/SupportAlertLayer.tsx`) and the support card in
+the chat. The OBS overlay never renders support alerts (`SUPPORT_ON_AIR = false`), the console has no alerts switch, and Ortis
+Studio has no on-air donation graphic (the Live-Raum panel lists Unterstützungen for the operator only). The operator-picked chat
+highlight still goes on air.
