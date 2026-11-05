@@ -18,7 +18,7 @@ const ADDRESS_FROM_CENTS = 25000;
 //   sponsoring_checkout     { org_account_id, package_id, creative_id? | media_kind+media_url?, note?, upgrade_booking_id? } → { booking_id, url }
 //   sponsoring_mine         { org_account_id, campaign_slug }                                         → { bookings }
 //   sponsoring_set_creative { org_account_id, booking_id, creative_id? | media_kind+media_url? }       → { booking }
-//   sponsoring_set_dishes   { org_account_id, booking_id, dish_ids: uuid[] (1–4, own menu) }          → { note }
+//   sponsoring_set_dishes   { org_account_id, booking_id, dish_ids: uuid[] (1–4, own menu or listings) } → { note }
 export async function POST(request: NextRequest) {
   const v = await verifySignedRequest<SponsoringAction>(await request.json().catch(() => null), {
     scope: SPONSORING_SCOPE, actions: ACTIONS, headers: request.headers,
@@ -65,11 +65,17 @@ export async function POST(request: NextRequest) {
     const c = b.sponsoring_campaigns as { event_starts_at?: string | null; booking_deadline?: string } | null;
     const lockAt = c?.event_starts_at ?? c?.booking_deadline;
     if (lockAt && Date.now() > Date.parse(lockAt)) return jsonFail(409, "DEADLINE_PASSED", "Die Übertragung läuft schon – die Auswahl ist jetzt fest.");
+    // Restaurants pick menu dishes; other orgs pick their own active marketplace listings.
     const { data: restaurants } = await admin.from("restaurants").select("id").eq("account_id", orgId);
-    const { data: items } = await admin.from("menu_items").select("id, name")
+    const { data: dishes } = await admin.from("menu_items").select("id, name")
       .in("restaurant_id", (restaurants ?? []).map((r) => r.id)).in("id", ids);
-    if ((items ?? []).length !== ids.length) return jsonFail(400, "BAD_DISH", "Diese Gerichte gehören nicht zu eurer Speisekarte.");
-    const byId = new Map((items ?? []).map((i) => [i.id as string, i.name as string]));
+    const { data: listings } = await admin.from("marketplace_listings").select("id, title")
+      .eq("account_id", orgId).eq("status", "active").in("id", ids);
+    const byId = new Map<string, string>([
+      ...(dishes ?? []).map((i) => [i.id as string, i.name as string] as [string, string]),
+      ...(listings ?? []).map((l) => [l.id as string, l.title as string] as [string, string]),
+    ]);
+    if (!ids.every((id) => byId.has(id))) return jsonFail(400, "BAD_DISH", "Diese Auswahl gehört nicht zu eurer Speisekarte oder euren Angeboten.");
     const note = dishNote(ids.map((id) => ({ id, name: byId.get(id) ?? "" })));
     const { error } = await admin.from("sponsoring_bookings").update({ note, updated_at: new Date().toISOString() }).eq("id", bookingId);
     if (error) return jsonFail(500, "DB_ERROR", error.message);
