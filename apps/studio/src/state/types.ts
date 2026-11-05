@@ -18,6 +18,8 @@ export type OutputStatus = {
   fps?: number;
   kbps?: number;
   speed?: number;
+  /** Frames ffmpeg dropped (cumulative, from its progress line). */
+  dropped?: number;
   recordingFile?: string;
   recordingBytes: number;
   restarts: number;

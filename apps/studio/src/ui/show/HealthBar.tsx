@@ -1,0 +1,100 @@
+import { useEffect, useState } from 'react';
+import { hms, useOnAir, useStudio, useTick } from '../studio';
+
+const STATE_TEXT = {
+  idle: 'Bereit',
+  connecting: 'Verbinde…',
+  live: 'Live',
+  reconnecting: 'Verbinde neu…',
+  error: 'Fehler',
+} as const;
+
+function mb(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+  return `${Math.round(bytes / 1e6)} MB`;
+}
+
+function Item({ label, value, bad, title }: { label: string; value: string; bad?: boolean; title?: string }) {
+  return (
+    <span className={`health-item${bad ? ' bad' : ''}`} title={title}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </span>
+  );
+}
+
+/** Pure health thresholds (also used for the red state). */
+export function healthFlags(o: { speed?: number; renderFps: number; targetFps: number; live: boolean }) {
+  return {
+    speedBad: o.live && o.speed !== undefined && o.speed < 0.95,
+    renderBad: o.renderFps > 0 && o.renderFps < 0.9 * o.targetFps,
+  };
+}
+
+export function HealthBar() {
+  const { engine } = useStudio();
+  const air = useOnAir();
+  const now = useTick(1000);
+  const [usage, setUsage] = useState<{ cpu: number; memMb: number } | null>(null);
+  const [server, setServer] = useState<{ ok: boolean; error: string | null } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () =>
+      window.studio.sys
+        .usage()
+        .then((u) => alive && setUsage(u))
+        .catch(() => {});
+    const pollServer = () =>
+      window.studio.overlay
+        .status()
+        .then((r) => alive && setServer(r))
+        .catch((e) => alive && setServer({ ok: false, error: String(e) }));
+    poll();
+    pollServer();
+    const t = setInterval(poll, 1000);
+    const t2 = setInterval(pollServer, 5000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      clearInterval(t2);
+    };
+  }, []);
+
+  const clock = engine.program.clock.stats();
+  const st = air.status;
+  const onAir = air.phase !== 'off';
+  const live = onAir && st?.state === 'live';
+  const { speedBad, renderBad } = healthFlags({ speed: st?.speed, renderFps: clock.fps, targetFps: engine.fps, live });
+  const outState = !onAir ? 'Aus' : st ? STATE_TEXT[st.state] : 'Startet…';
+
+  return (
+    <footer className="health" aria-label="Zustand">
+      <Item label="Ausgang" value={outState} bad={onAir && (st?.state === 'error' || st?.state === 'reconnecting')} title={st?.lastError} />
+      <Item label="Render" value={`${clock.fps.toFixed(1)} fps`} bad={renderBad} title={`Ziel: ${engine.fps} fps`} />
+      <Item label="Aussetzer" value={String(clock.overruns)} title="Ausgelassene Render-Takte seit dem Start" />
+      {onAir && (
+        <>
+          <Item label="Encoder" value={st?.fps !== undefined ? `${st.fps.toFixed(0)} fps` : '–'} />
+          <Item label="Bitrate" value={st?.kbps !== undefined ? `${Math.round(st.kbps)} kbit/s` : '–'} />
+          <Item label="Tempo" value={st?.speed !== undefined ? `${st.speed.toFixed(2)}×` : '–'} bad={speedBad} title="Unter 0,95× kommt der Rechner nicht mit" />
+          <Item label="Verworfen" value={String(st?.dropped ?? 0)} bad={(st?.dropped ?? 0) > 0} />
+          <Item
+            label="Aufnahme"
+            value={st?.recordingError ? 'unterbrochen' : mb(st?.recordingBytes ?? 0)}
+            bad={!!st?.recordingError}
+            title={st?.recordingFile}
+          />
+          {air.recorderError && <Item label="Kodierer" value={`neu gestartet (${air.recorderRestarts}×)`} bad title={air.recorderError} />}
+        </>
+      )}
+      {server && !server.ok && (
+        <Item label="Medienserver" value={server.error ?? 'nicht erreichbar'} bad title="Videos, Bilder und die OBS-Einblendungsseite brauchen ihn" />
+      )}
+      <span className="health-end" />
+      <Item label="CPU" value={usage ? `${Math.round(usage.cpu)} %` : '–'} title="Anteil der gesamten Rechenleistung des Macs (alle Studio-Prozesse)" />
+      <Item label="Speicher" value={usage ? `${Math.round(usage.memMb)} MB` : '–'} />
+      <Item label="Sendezeit" value={air.startedAt ? hms(now - air.startedAt) : '–'} />
+    </footer>
+  );
+}

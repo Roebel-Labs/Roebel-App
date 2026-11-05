@@ -18,15 +18,16 @@ declare global {
         /** Listen state of the local media/overlay server (127.0.0.1). */
         status(): Promise<{ ok: boolean; port: number | null; error: string | null }>;
       };
-      /** TEMPORARY (Task 1 spike): dev-only env passthrough. */
-      spike: {
-        autostart: string | null;
-        rtmp: { url: string; key: string } | null;
-        ffmpegPath: string | null;
-        recordDir: string | null;
-        camera: boolean;
-        fps: 30 | 50;
-        simulateLossMs: number;
+      dialog: {
+        pickFile(kind: 'video' | 'image'): Promise<string | null>;
+        pickFolder(): Promise<string | null>;
+      };
+      sys: {
+        usage(): Promise<{ cpu: number; memMb: number; mainCpu: number }>;
+      };
+      app: {
+        onWillQuit(cb: () => void): () => void;
+        quitReady(): void;
       };
     };
   }

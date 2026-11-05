@@ -12,7 +12,7 @@ export function pickRecorderMime(): string {
 
 export function startRecorder(
   stream: MediaStream,
-  opts: { videoKbps: number },
+  opts: { videoKbps: number; onError?: (message: string) => void },
 ): { stop(): Promise<void>; mimeType: string } {
   const mimeType = pickRecorderMime();
   const rec = new MediaRecorder(stream, {
@@ -35,6 +35,11 @@ export function startRecorder(
   const stopped = new Promise<void>((resolve) => {
     rec.onstop = () => resolve();
   });
+
+  rec.onerror = (ev: Event) => {
+    const err = (ev as Event & { error?: DOMException }).error;
+    opts.onError?.(err?.message || err?.name || 'MediaRecorder-Fehler');
+  };
 
   rec.start(250);
 

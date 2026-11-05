@@ -1,12 +1,12 @@
 'use strict';
 // Electron main process for Röbel Studio.
 
-const { app, BrowserWindow, ipcMain, session, systemPreferences } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
 const path = require('node:path');
 const { createOutput } = require('./output.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 
-// Program audio (e.g. the spike's oscillator) must run without a click.
+// Program audio (silent track, later the mixer) must run without a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let win = null;
@@ -21,8 +21,27 @@ const output = createOutput({
   log: (msg) => console.log(`${new Date().toISOString()} [output] ${msg}`),
 });
 
-ipcMain.handle('output:start', (_e, cfg) => output.start(cfg));
-ipcMain.handle('output:stop', () => output.stop());
+// The display must not sleep while on air (macOS would throttle the renderer).
+let blockerId = null;
+function setOnAir(on) {
+  if (on && blockerId === null) blockerId = powerSaveBlocker.start('prevent-display-sleep');
+  if (!on && blockerId !== null) {
+    powerSaveBlocker.stop(blockerId);
+    blockerId = null;
+  }
+}
+
+ipcMain.handle('output:start', async (_e, cfg) => {
+  await output.start(cfg);
+  setOnAir(true);
+});
+ipcMain.handle('output:stop', async () => {
+  try {
+    await output.stop();
+  } finally {
+    setOnAir(false);
+  }
+});
 ipcMain.on('output:chunk', (_e, buf) => output.chunk(buf));
 
 let overlay = null;
@@ -34,6 +53,35 @@ ipcMain.handle('media:allow', (_e, absPath) => {
 ipcMain.handle('overlay:status', () =>
   overlay ? overlay.status() : { ok: false, port: null, error: 'Medienserver nicht gestartet' },
 );
+
+const FILE_FILTERS = {
+  video: [{ name: 'Video', extensions: ['mp4', 'mov', 'm4v', 'webm', 'mkv'] }],
+  image: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }],
+};
+
+ipcMain.handle('dialog:pickFile', async (_e, kind) => {
+  const filters = FILE_FILTERS[kind];
+  if (!filters) throw new Error(`unknown file kind ${kind}`);
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
+  return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+});
+
+ipcMain.handle('dialog:pickFolder', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
+  return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+});
+
+// Whole-app CPU (percent of one core, summed over all processes) + memory.
+ipcMain.handle('sys:usage', () => {
+  const metrics = app.getAppMetrics();
+  let cpu = 0;
+  let memKb = 0;
+  for (const m of metrics) {
+    cpu += m.cpu.percentCPUUsage;
+    memKb += m.memory.workingSetSize;
+  }
+  return { cpu, memMb: memKb / 1024, mainCpu: process.getCPUUsage().percentCPUUsage };
+});
 
 // Only our own page may use cameras/microphones.
 function isOwnOrigin(url) {
@@ -78,11 +126,11 @@ function createWindow() {
     width: 1600,
     height: 1000,
     title: 'Röbel Studio',
-    backgroundColor: '#111111',
+    backgroundColor: '#17191C',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      sandbox: false, // preload needs ipcRenderer + process.env
+      sandbox: false,
       nodeIntegration: false,
       backgroundThrottling: false, // keep rendering/encoding when hidden
     },
@@ -90,17 +138,6 @@ function createWindow() {
   const devUrl = process.env.STUDIO_DEV_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  // TEMPORARY (spike): STUDIO_SPIKE_MINIMIZE=<ms> minimises the window after load to measure hidden-window fps.
-  const minimizeMs = Number(process.env.STUDIO_SPIKE_MINIMIZE) || 0;
-  if (minimizeMs) {
-    win.webContents.once('did-finish-load', () =>
-      setTimeout(() => {
-        if (!win) return;
-        win.minimize();
-        setInterval(() => win && console.log(`[spike] main: minimized=${win.isMinimized()} visible=${win.isVisible()}`), 10000);
-      }, minimizeMs),
-    );
-  }
   win.on('closed', () => {
     win = null;
   });
@@ -118,12 +155,29 @@ app.whenReady().then(() => {
   void askMacMediaAccess();
 });
 
+// Quit: first let the renderer stop its MediaRecorder (final chunk flushed), then
+// stop ffmpeg + the recording file. Waits at most QUIT_GRACE_MS for the renderer.
+const QUIT_GRACE_MS = 3000;
 let quitting = false;
 app.on('before-quit', (e) => {
   if (quitting) return;
   quitting = true;
   e.preventDefault();
-  Promise.allSettled([output.stop(), overlay ? overlay.stop() : null]).finally(() => app.quit());
+  const rendererDone = new Promise((resolve) => {
+    if (!win || win.isDestroyed()) return resolve();
+    const timer = setTimeout(resolve, QUIT_GRACE_MS);
+    ipcMain.once('app:quit-ready', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    win.webContents.send('app:will-quit');
+  });
+  rendererDone
+    .then(() => Promise.allSettled([output.stop(), overlay ? overlay.stop() : null]))
+    .finally(() => {
+      setOnAir(false);
+      app.quit();
+    });
 });
 
 app.on('window-all-closed', () => app.quit());

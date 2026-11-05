@@ -26,19 +26,17 @@ contextBridge.exposeInMainWorld('studio', {
     // { ok, port, error }: whether the local media/overlay server is listening.
     status: () => ipcRenderer.invoke('overlay:status'),
   },
-  // TEMPORARY (Task 1 spike): dev-only env passthrough for the test-pattern page.
-  spike: {
-    // STUDIO_SPIKE_AUTOSTART=srt://... or STUDIO_SPIKE_RTMP_URL + STUDIO_SPIKE_RTMP_KEY (secrets via env only).
-    autostart: process.env.STUDIO_SPIKE_AUTOSTART || null,
-    rtmp: process.env.STUDIO_SPIKE_RTMP_URL
-      ? { url: process.env.STUDIO_SPIKE_RTMP_URL, key: process.env.STUDIO_SPIKE_RTMP_KEY || '' }
-      : null,
-    ffmpegPath: process.env.STUDIO_FFMPEG_PATH || null,
-    recordDir: process.env.STUDIO_RECORD_DIR || null,
-    // STUDIO_SPIKE_CAMERA=1: program = first camera via createProgramOutput; fps from STUDIO_SPIKE_FPS.
-    camera: process.env.STUDIO_SPIKE_CAMERA === '1',
-    fps: process.env.STUDIO_SPIKE_FPS === '50' ? 50 : 30,
-    // STUDIO_SPIKE_SIMULATE_LOSS=<ms>: end the camera track after that many ms.
-    simulateLossMs: Number(process.env.STUDIO_SPIKE_SIMULATE_LOSS) || 0,
+  dialog: {
+    // Resolves to an absolute path, or null when cancelled.
+    pickFile: (kind) => ipcRenderer.invoke('dialog:pickFile', kind),
+    pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  },
+  sys: {
+    usage: () => ipcRenderer.invoke('sys:usage'),
+  },
+  app: {
+    // Main asks the renderer to end the broadcast cleanly before quitting.
+    onWillQuit: (cb) => subscribe('app:will-quit', () => cb()),
+    quitReady: () => ipcRenderer.send('app:quit-ready'),
   },
 });
