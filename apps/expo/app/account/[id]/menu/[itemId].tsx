@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import MenuImage from '@/components/MenuImage';
 import { hasMenuPrice } from '@/lib/utils';
-import { View, Text, ScrollView, Pressable, StyleSheet, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import type { MenuItemRecord, MenuItemVoteSummary } from '@/lib/types';
 import { fetchMenuItemVoteSummaries } from '@/lib/supabase-menu';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
+import DishComments from '@/components/DishComments';
 
 export default function MenuItemDetailScreen() {
   return (
@@ -32,7 +33,6 @@ function MenuItemDetailScreenInner() {
   const { item, loading, userVote, isSignedIn, setVote, clearVote } = useMenuItemDetail(itemId);
   const [selectedSide, setSelectedSide] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [note, setNote] = useState('');
   const [related, setRelated] = useState<MenuItemRecord[]>([]);
   const [relatedVotes, setRelatedVotes] = useState<Record<string, MenuItemVoteSummary>>({});
 
@@ -181,19 +181,7 @@ function MenuItemDetailScreenInner() {
           />
         )}
 
-        {/* Special Instructions */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Special Instructions</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Add a note"
-            placeholderTextColor={colors.textTertiary}
-            multiline
-            style={[styles.noteInput, { borderColor: colors.borderSecondary, color: colors.textPrimary, backgroundColor: colors.surface }]}
-          />
-          <Text style={[styles.hint, { color: colors.textTertiary }]}>You may be charged for extras.</Text>
-        </View>
+        <DishComments target={{ kind: 'menu_item', id: item.id }} />
 
         {/* Frequently bought together */}
         {related.length > 0 && (
@@ -243,7 +231,6 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
   section: { paddingHorizontal: 16, paddingTop: 28 },
   sectionTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 12 },
-  noteInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },
   relCard: { width: 140 },
   relImg: { width: 140, height: 140, borderRadius: 12 },
   relName: { fontSize: 14, fontFamily: 'Inter-Medium', marginTop: 8 },
