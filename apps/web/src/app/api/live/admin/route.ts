@@ -1,49 +1,19 @@
 import { NextRequest } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { isAuthenticated } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { jsonOk, jsonFail } from "@/lib/signed-request/verify";
-import { UUID_RE, pushToWallets, cfConfig, cfApi, cfHlsUrl, cfLifecycle } from "@/lib/live/server";
+import { UUID_RE, cfConfig, cfApi, cfHlsUrl, cfLifecycle } from "@/lib/live/server";
+import { setOnStage, advance } from "@/lib/live/stage";
+import { isStudioRequest } from "@/lib/live/studio-auth";
+import { livekitConfig, livekitToken, guestRoomName } from "@/lib/live/livekit";
 
 export const dynamic = "force-dynamic";
 
 const OVERLAY_KEYS = ["lower_third", "next_up", "bug", "qr", "poll", "alerts", "reactions"] as const;
 
-type Item = { id: string; position: number; title: string; subtitle: string | null; status: string };
-
-/** Pushes reminder holders of `item` once (sent_at marks it). */
-async function notifyReminders(admin: SupabaseClient, item: Item, slug: string, title: string, body: string) {
-  const { data: rows } = await admin.from("live_reminders").select("wallet").eq("item_id", item.id).is("sent_at", null);
-  const wallets = (rows ?? []).map((r) => r.wallet as string);
-  if (wallets.length === 0) return 0;
-  await admin.from("live_reminders").update({ sent_at: new Date().toISOString() }).eq("item_id", item.id).in("wallet", wallets);
-  await pushToWallets(wallets, title, body, { liveSlug: slug, url: `/live/${slug}` });
-  return wallets.length;
-}
-
-async function setOnStage(admin: SupabaseClient, show: { id: string; slug: string }, itemId: string | null) {
-  const now = new Date().toISOString();
-  await admin.from("live_rundown_items").update({ status: "done" }).eq("show_id", show.id).eq("status", "on_stage");
-  if (!itemId) {
-    await admin.from("live_shows").update({ current_item_id: null, updated_at: now }).eq("id", show.id);
-    return { current: null, notified: 0 };
-  }
-  const { data: item } = await admin.from("live_rundown_items")
-    .update({ status: "on_stage", on_stage_at: now }).eq("id", itemId).eq("show_id", show.id)
-    .select("id, position, title, subtitle, status").single();
-  if (!item) throw new Error("Programmpunkt nicht gefunden");
-  await admin.from("live_shows").update({ current_item_id: item.id, updated_at: now }).eq("id", show.id);
-  // Reminders: holders of the item on stage now (if not told yet) and of the next one (lead time).
-  let notified = await notifyReminders(admin, item, show.slug, `Jetzt live: ${item.title}`, "Gerade auf der Fläche – schau in der Röbel App zu.");
-  const { data: next } = await admin.from("live_rundown_items").select("id, position, title, subtitle, status")
-    .eq("show_id", show.id).eq("status", "upcoming").gt("position", item.position).order("position").limit(1).maybeSingle();
-  if (next) notified += await notifyReminders(admin, next, show.slug, `Gleich dran: ${next.title}`, "Als Nächstes auf der Fläche – jetzt einschalten.");
-  return { current: item, notified };
-}
-
-// POST (admin dashboard cookie) { action, show_id, ... } — see docs/superpowers/specs/2026-11-05-live-room-design.md
+// POST (admin dashboard cookie, or `Authorization: Studio <LIVE_STUDIO_TOKEN>` from Röbel Studio) { action, show_id, ... } — see docs/superpowers/specs/2026-11-05-live-room-design.md
 export async function POST(request: NextRequest) {
-  if (!(await isAuthenticated())) return jsonFail(401, "UNAUTHORIZED", "Bitte im Admin-Bereich anmelden.");
+  if (!isStudioRequest(request.headers) && !(await isAuthenticated())) return jsonFail(401, "UNAUTHORIZED", "Bitte im Admin-Bereich anmelden.");
   const b = ((await request.json().catch(() => null)) ?? {}) as Record<string, unknown>;
   const action = String(b.action ?? "");
   const showId = String(b.show_id ?? "");
@@ -80,14 +50,9 @@ export async function POST(request: NextRequest) {
         return jsonOk(await setOnStage(admin, show, itemId));
       }
       case "next": {
-        const { data: cur } = show.current_item_id
-          ? await admin.from("live_rundown_items").select("position").eq("id", show.current_item_id).maybeSingle()
-          : { data: null };
-        const { data: next } = await admin.from("live_rundown_items").select("id")
-          .eq("show_id", showId).eq("status", "upcoming").gt("position", cur?.position ?? -1)
-          .order("position").limit(1).maybeSingle();
-        if (!next) return jsonFail(409, "END_OF_RUNDOWN", "Kein weiterer Programmpunkt.");
-        return jsonOk(await setOnStage(admin, show, next.id));
+        const r = await advance(admin, show);
+        if (!r) return jsonFail(409, "END_OF_RUNDOWN", "Kein weiterer Programmpunkt.");
+        return jsonOk(r);
       }
       case "rundown_replace": {
         const rows = Array.isArray(b.rows) ? (b.rows as Record<string, unknown>[]) : [];
@@ -259,6 +224,40 @@ export async function POST(request: NextRequest) {
         if (!/^[a-f0-9]{32}$/.test(outputId)) return jsonFail(400, "BAD_REQUEST", "output_id ungültig");
         await cfApi(cfg, `/live_inputs/${show.cf_live_input_id}/outputs/${outputId}`, { method: "DELETE" });
         return jsonOk({ deleted: outputId });
+      }
+      case "guest_list": {
+        // Doorbell for the studio: open requests + the guests currently on. Never the wallet.
+        const { data } = await admin.from("live_guest_requests")
+          .select("id, display_name, avatar_url, note, status, room, created_at, decided_at")
+          .eq("show_id", showId).in("status", ["requested", "accepted"]).order("created_at");
+        return jsonOk({ requests: data ?? [], livekit: !!livekitConfig() });
+      }
+      case "guest_accept":
+      case "guest_studio_token": {
+        const lk = livekitConfig();
+        if (!lk) return jsonFail(503, "LIVEKIT_NOT_CONFIGURED", "LiveKit ist auf Vercel nicht konfiguriert (LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET).");
+        const id = String(b.request_id ?? "");
+        if (!UUID_RE.test(id)) return jsonFail(400, "BAD_REQUEST", "request_id fehlt");
+        const { data: req } = await admin.from("live_guest_requests").select("id, status, display_name").eq("id", id).eq("show_id", showId).maybeSingle();
+        if (!req) return jsonFail(404, "NOT_FOUND", "Anfrage nicht gefunden");
+        const room = guestRoomName(showId, id);
+        if (action === "guest_accept") {
+          if (req.status !== "requested" && req.status !== "accepted") return jsonFail(409, "BAD_STATE", "Diese Anfrage ist nicht mehr offen.");
+          await admin.from("live_guest_requests").update({ status: "accepted", room, decided_at: now }).eq("id", id);
+        } else if (req.status !== "accepted") {
+          return jsonFail(409, "BAD_STATE", "Gast ist nicht zugeschaltet.");
+        }
+        const token = await livekitToken(lk, { identity: `studio-${id.slice(0, 8)}`, name: "Röbel Studio", room, canPublish: true });
+        return jsonOk({ request_id: id, display_name: req.display_name, room, livekit_url: lk.url, token });
+      }
+      case "guest_decline":
+      case "guest_end": {
+        const id = String(b.request_id ?? "");
+        if (!UUID_RE.test(id)) return jsonFail(400, "BAD_REQUEST", "request_id fehlt");
+        const status = action === "guest_decline" ? "declined" : "ended";
+        await admin.from("live_guest_requests").update(action === "guest_decline" ? { status, decided_at: now } : { status, ended_at: now })
+          .eq("id", id).eq("show_id", showId).in("status", ["requested", "accepted"]);
+        return jsonOk({ status });
       }
       default:
         return jsonFail(400, "BAD_REQUEST", "unknown action");

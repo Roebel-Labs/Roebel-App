@@ -81,3 +81,24 @@ logo bug + "Live in der Röbel App" QR, support alerts, featured chat message, p
 ## Rules carried over
 UI German, code English · no wallet addresses on screen · "Unterstützen", never "Spende" · votes are a "Meinungsbild" ·
 Expo: StyleSheet + useTheme · Stripe: direct charges only, never Münzen through Stripe · no secrets in clients.
+
+## Part 2 (2026-11-05 evening): Röbel Studio first, guests, test show
+
+Max: "everything runs fully functional by only using Röbel Studio". OBS + the web console stay as the fallback.
+Migration `20261106_live_guests_test_show.sql`: `live_shows.is_test`, `live_shows.guests_enabled`, `live_guest_requests`, show `testlauf`.
+
+**Studio auth:** `/api/live/admin` also accepts `Authorization: Studio <LIVE_STUDIO_TOKEN>` (Vercel env, ≥ 24 chars). The
+operator pastes it once into the studio's Live-Raum panel (own localStorage key, never in ShowState).
+
+**Guests (LiveKit, Vercel env `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`):** one LiveKit room per accepted request.
+- Phone (3.9.0 runtime only, `@livekit/react-native`): act `guest_request { show_id, note? }` → `{ request }`; poll
+  `guest_status { show_id, request_id }` every 2 s → once `accepted`: `{ status, room, livekit_url, token }` → join, publish
+  camera + mic, show the studio's return feed if any; `guest_cancel` to leave. Status `declined`/`ended` → close.
+- Studio: admin `guest_list` (poll 2 s) → `{ requests: [{ id, display_name, avatar_url, note, status, room, created_at }], livekit }`;
+  `guest_accept { request_id }` → `{ room, livekit_url, token }` (studio joins the room, guest video becomes a source);
+  `guest_studio_token` (re-join), `guest_decline`, `guest_end`.
+
+**Test show `testlauf`** (`is_test`, always live on a public test HLS stream, sample rundown, voting open): reachable from the
+app's developer settings. act `test_support { show_id, amount_cents, body? }` posts a fake support (no money) and
+`test_next { show_id }` advances the on-stage item (wraps around, sends the reminder pushes) — both refused on real shows.
+Unterstützen with real money stays off on the test show (no beneficiary).

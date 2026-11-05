@@ -5,6 +5,8 @@ import { verifyLiveToken } from "@/lib/live/token";
 import { viewerProfile, UUID_RE, CHAT_MAX } from "@/lib/live/server";
 import { sharedLimiters } from "@/lib/rate-limit/server";
 import { MINUTE_MS, takeAll } from "@/lib/rate-limit";
+import { livekitConfig, livekitToken } from "@/lib/live/livekit";
+import { advance } from "@/lib/live/stage";
 
 export const dynamic = "force-dynamic";
 const chatLimiters = sharedLimiters([{ name: "live-chat-wallet", limit: 20, windowMs: MINUTE_MS }]);
@@ -14,6 +16,11 @@ const chatLimiters = sharedLimiters([{ name: "live-chat-wallet", limit: 20, wind
 //   vote     { show_id, item_id }       → { item_id }
 //   remind   { item_id, on }            → { on }
 //   my_state { show_id }                → { vote_item_id, reminder_item_ids }
+//   guest_request { show_id, note? }   → { request }            (join the stream from the phone)
+//   guest_status  { show_id, request_id } → { status, livekit_url?, token?, room? } (token once accepted)
+//   guest_cancel  { show_id, request_id } → { status }
+//   test_support  { show_id, amount_cents, body? } → { message }   (test shows only, no money)
+//   test_next     { show_id }           → { current }            (test shows only)
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization") ?? "";
   const session = verifyLiveToken(auth.startsWith("Live ") ? auth.slice(5).trim() : null);
@@ -40,7 +47,7 @@ export async function POST(request: NextRequest) {
   const showId = String(b.show_id ?? "");
   if (showId !== session.showId) return jsonFail(403, "WRONG_SHOW", "Diese Sitzung gehört zu einer anderen Übertragung.");
   const { data: show } = await admin.from("live_shows")
-    .select("id, status, chat_enabled, slow_mode_seconds, voting_open").eq("id", showId).maybeSingle();
+    .select("*").eq("id", showId).maybeSingle();
   if (!show) return jsonFail(404, "NOT_FOUND", "Übertragung nicht gefunden");
 
   if (action === "my_state") {
@@ -61,6 +68,53 @@ export async function POST(request: NextRequest) {
       .upsert({ show_id: showId, item_id: itemId, wallet, created_at: new Date().toISOString() }, { onConflict: "show_id,wallet" });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ item_id: itemId });
+  }
+
+  if (action === "guest_request") {
+    if (show.guests_enabled === false || show.status === "ended") return jsonFail(403, "GUESTS_CLOSED", "Dazuschalten ist gerade nicht möglich.");
+    if (!livekitConfig()) return jsonFail(503, "GUESTS_UNAVAILABLE", "Dazuschalten ist noch nicht eingerichtet.");
+    const { data: open } = await admin.from("live_guest_requests").select("id, status, room, created_at")
+      .eq("show_id", showId).eq("wallet", wallet).in("status", ["requested", "accepted"]).maybeSingle();
+    if (open) return jsonOk({ request: open });
+    const profile = await viewerProfile(admin, wallet);
+    const note = typeof b.note === "string" ? b.note.replace(/\s+/g, " ").trim().slice(0, 140) || null : null;
+    const { data: request, error } = await admin.from("live_guest_requests")
+      .insert({ show_id: showId, wallet, ...profile, note }).select("id, status, room, created_at").single();
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    return jsonOk({ request });
+  }
+
+  if (action === "guest_status" || action === "guest_cancel") {
+    const id = String(b.request_id ?? "");
+    if (!UUID_RE.test(id)) return jsonFail(400, "BAD_REQUEST", "request_id fehlt");
+    const { data: req } = await admin.from("live_guest_requests").select("id, status, room, display_name")
+      .eq("id", id).eq("show_id", showId).eq("wallet", wallet).maybeSingle();
+    if (!req) return jsonFail(404, "NOT_FOUND", "Anfrage nicht gefunden");
+    if (action === "guest_cancel") {
+      const status = req.status === "accepted" ? "ended" : "cancelled";
+      if (req.status === "requested" || req.status === "accepted") {
+        await admin.from("live_guest_requests").update({ status, ended_at: new Date().toISOString() }).eq("id", id);
+        return jsonOk({ status });
+      }
+      return jsonOk({ status: req.status });
+    }
+    const lk = livekitConfig();
+    if (req.status !== "accepted" || !req.room || !lk) return jsonOk({ status: req.status });
+    const token = await livekitToken(lk, { identity: `guest-${id.slice(0, 8)}`, name: req.display_name, room: req.room, canPublish: true });
+    return jsonOk({ status: req.status, room: req.room, livekit_url: lk.url, token });
+  }
+
+  if (action === "test_support" || action === "test_next") {
+    if (!show.is_test) return jsonFail(403, "NOT_A_TEST", "Nur im Testlauf möglich.");
+    if (action === "test_next") return jsonOk(await advance(admin, show, true));
+    const amount = Math.min(50000, Math.max(100, Math.round(Number(b.amount_cents) || 500)));
+    const profile = await viewerProfile(admin, wallet);
+    const body = typeof b.body === "string" ? b.body.replace(/\s+/g, " ").trim().slice(0, 140) : "";
+    const { data: message, error } = await admin.from("live_chat_messages")
+      .insert({ show_id: showId, wallet, display_name: profile.display_name, avatar_url: profile.avatar_url, body, kind: "support", amount_cents: amount })
+      .select("id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at").single();
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    return jsonOk({ message });
   }
 
   if (action === "chat") {
