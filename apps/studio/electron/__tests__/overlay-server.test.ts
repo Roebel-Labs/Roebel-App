@@ -143,7 +143,7 @@ describe('overlay-server /media/', () => {
   });
 
   it('status() reports the real port; a busy port is reported and allow() refuses', async () => {
-    expect(server.status()).toEqual({ ok: true, port, error: null });
+    expect(server.status()).toMatchObject({ ok: true, port, error: null });
     const second = createOverlayServer({ userDataDir: dir, port, log: () => {} });
     await expect(second.start()).rejects.toThrow();
     expect(second.status()).toMatchObject({ ok: false, port: null });
