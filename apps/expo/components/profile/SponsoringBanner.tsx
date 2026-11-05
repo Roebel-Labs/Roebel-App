@@ -1,23 +1,24 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import PressableScale from '@/components/PressableScale';
+import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { fetchCampaign, formatEuro, isBookingOpen, type CampaignView } from '@/lib/sponsoring';
+import { fetchCampaign, isBookingOpen, type CampaignView } from '@/lib/sponsoring';
 
-const NAVY = '#00498B';
-const NAVY_DEEP = '#002B55';
+const ILLUSTRATION = require('@/assets/illustration/dancecup/dancecup_illu.png');
 
 type Props = { slug: string };
 
 /**
- * Org-only profile banner for a sponsoring campaign (DanceCup livestream). Renders nothing while
+ * Org-only profile card for a sponsoring campaign (DanceCup livestream). Renders nothing while
  * loading, when the campaign is missing/inactive (e.g. migration not applied) or after the
  * booking deadline, so it can never block the profile.
  */
 export default function SponsoringBanner({ slug }: Props) {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [view, setView] = useState<CampaignView | null>(null);
 
   useFocusEffect(
@@ -29,44 +30,43 @@ export default function SponsoringBanner({ slug }: Props) {
   );
 
   if (!view || !isBookingOpen(view.campaign)) return null;
-  const minPrice = view.packages.reduce<number | null>((m, p) => (m == null || p.price_cents < m ? p.price_cents : m), null);
 
   return (
     <PressableScale
       onPress={() => router.push(`/org/sponsoring/${slug}` as any)}
       accessibilityRole="button"
-      accessibilityLabel={`${view.campaign.title}. Euren Spot ansehen`}
+      accessibilityLabel="Ihre Werbung beim Müritz DanceCup. Mehr erfahren"
       scaleTo={0.98}
       style={styles.wrap}
     >
-      <LinearGradient colors={[NAVY, NAVY_DEEP]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-        <View style={styles.liveRow}>
-          <View style={styles.liveDot} />
-          <Text style={styles.eyebrow}>DanceCup Livestream · Sa 7.11.</Text>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+          Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0.2 : 0.1, shadowRadius: 12 },
+            android: { elevation: 3 },
+          }),
+        ]}
+      >
+        <View style={styles.textBlock}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Ihre Werbung beim Müritz DanceCup</Text>
+          <View style={[styles.cta, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Mehr erfahren</Text>
+          </View>
         </View>
-        <Text style={styles.title}>Euer Spot in den Pausen</Text>
-        <Text style={styles.body}>
-          {minPrice != null ? `Vollbild-Werbung im Livestream ab ${formatEuro(minPrice)}` : 'Vollbild-Werbung im Livestream'}
-        </Text>
-        <View style={styles.cta}>
-          <Text style={styles.ctaText}>Euren Spot ansehen</Text>
-        </View>
-      </LinearGradient>
+        <Image source={ILLUSTRATION} style={styles.illustration} contentFit="contain" accessible={false} />
+      </View>
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginTop: 16 },
-  card: { borderRadius: 14, paddingVertical: 18, paddingHorizontal: 20, gap: 6 },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4D4F' },
-  eyebrow: { fontFamily: fontFamily.medium, fontSize: 13, color: 'rgba(255,255,255,0.8)' },
-  title: { fontFamily: fontFamily.heading, fontSize: 20, color: '#FFFFFF' },
-  body: { fontFamily: fontFamily.regular, fontSize: 14, color: 'rgba(255,255,255,0.85)' },
-  cta: {
-    alignSelf: 'flex-start', marginTop: 8, paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 999, backgroundColor: '#FFFFFF',
-  },
-  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 14, color: NAVY },
+  card: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingVertical: 16, paddingLeft: 16, paddingRight: 12, gap: 8 },
+  textBlock: { flex: 1, gap: 12, alignItems: 'flex-start' },
+  title: { fontFamily: fontFamily.heading, fontSize: 17, lineHeight: 21 },
+  cta: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
+  illustration: { width: 112, height: 87 },
 });
