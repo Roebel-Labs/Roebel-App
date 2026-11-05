@@ -23,6 +23,7 @@ import {
 } from '@/lib/live';
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import Doorbell from '@/components/live/guest/Doorbell';
+import LoginDrawer from '@/components/LoginDrawer';
 import { F, LIVE } from '@/components/live/tokens';
 // Type-only: erased at compile time, does not load the module.
 import type { GuestStageProps } from '@/components/live/guest/GuestStage';
@@ -74,6 +75,7 @@ export default function LiveGuestJoinScreen() {
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>('intro');
   const [note, setNote] = useState('');
+  const [loginOpen, setLoginOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [conn, setConn] = useState<{ url: string; token: string } | null>(null);
@@ -187,7 +189,7 @@ export default function LiveGuestJoinScreen() {
     const signer = signerRef.current;
     const s = show;
     if (!s || phase === 'requesting') return;
-    if (!signer) { router.push('/login' as any); return; }
+    if (!signer) { setLoginOpen(true); return; }
     setError(null);
     if (!(await ensurePermissions())) return;
     setPhase('requesting');
@@ -300,8 +302,13 @@ export default function LiveGuestJoinScreen() {
     return message('videocam-off-outline', 'Livestream nicht gefunden', 'Vielleicht ist die Übertragung schon vorbei.');
   }
   if (!account) {
-    return message('person-circle-outline', 'Bitte anmelden', 'Zum Dazuschalten musst du angemeldet sein.',
-      { label: 'Anmelden', onPress: () => router.push('/login' as any) });
+    return (
+      <>
+        {message('person-circle-outline', 'Bitte anmelden', 'Zum Dazuschalten musst du angemeldet sein.',
+          { label: 'Anmelden', onPress: () => setLoginOpen(true) })}
+        <LoginDrawer visible={loginOpen} onClose={() => setLoginOpen(false)} />
+      </>
+    );
   }
   if (phase === 'declined') {
     return message('hand-left-outline', 'Diesmal hat es nicht gepasst',

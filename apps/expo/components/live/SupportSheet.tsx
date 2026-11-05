@@ -16,6 +16,8 @@ type Props = {
   busy: boolean;
   error: string | null;
   onSubmit: (draft: SupportDraft) => void;
+  /** Test show: the payment is real (to test Stripe end to end), so say so. */
+  testMode?: boolean;
 };
 
 function parseEuro(text: string): number | null {
@@ -23,7 +25,7 @@ function parseEuro(text: string): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
 }
 
-export default function SupportSheet({ visible, onClose, defaultName, busy, error, onSubmit }: Props) {
+export default function SupportSheet({ visible, onClose, defaultName, busy, error, onSubmit, testMode = false }: Props) {
   const [preset, setPreset] = useState<number | null>(500);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
@@ -121,6 +123,13 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
           </View>
         ) : null}
 
+        {testMode ? (
+          <View style={styles.testNote}>
+            <Ionicons name="construct-outline" size={14} color={LIVE.gold} />
+            <Text style={styles.testNoteText}>Testlauf: Das ist eine echte Zahlung über Stripe, damit der ganze Ablauf getestet werden kann. Ab 1 € möglich.</Text>
+          </View>
+        ) : null}
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -151,6 +160,10 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
 }
 
 const styles = StyleSheet.create({
+  testNote: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: 12, backgroundColor: LIVE.goldSoft,
+  },
+  testNoteText: { flex: 1, color: LIVE.gold, fontSize: 13, lineHeight: 18, fontFamily: F.medium },
   content: { paddingHorizontal: 20, paddingBottom: 12, gap: 10 },
   chips: { flexDirection: 'row', gap: 8 },
   chip: {

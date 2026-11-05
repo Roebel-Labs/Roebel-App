@@ -3,7 +3,7 @@
 // Spec: docs/superpowers/specs/2026-11-05-live-room-design.md. Deep link: roebel://live/<slug>.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StatusBar, StyleSheet, Text, TextInput,
+  ActivityIndicator, AppState, Dimensions, FlatList, Keyboard, Platform, Pressable, StatusBar, StyleSheet, Text, TextInput,
   useWindowDimensions, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,7 @@ import ProgramSheet from '@/components/live/ProgramSheet';
 import SupportSheet, { type SupportDraft } from '@/components/live/SupportSheet';
 import VoteSheet from '@/components/live/VoteSheet';
 import TestPanel from '@/components/live/TestPanel';
+import LoginDrawer from '@/components/LoginDrawer';
 // Guard only (no LiveKit import): the join route itself is reached via router.push, never imported.
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import type { FloatingReactionsHandle } from '@/components/live/FloatingReactions';
@@ -111,6 +112,34 @@ export default function LiveRoomScreen() {
   const [guestsNative] = useState(() => hasLiveKitNative());
 
   const reactionsRef = useRef<FloatingReactionsHandle>(null);
+  const inputRef = useRef<TextInput>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  // Close the login drawer as soon as the account is there; the room continues where you were.
+  useEffect(() => {
+    if (loggedIn) setLoginOpen(false);
+  }, [loggedIn]);
+
+  // Composer rides on the keyboard (same approach as the DM screen): track the real keyboard top edge
+  // instead of KeyboardAvoidingView, which leaves gaps on Android edge-to-edge. While it is up, only
+  // video + chat + composer show, so your message lands right above the keyboard.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      const screenY = e.endCoordinates?.screenY;
+      const overlap = typeof screenY === 'number'
+        ? Math.max(0, Dimensions.get('screen').height - screenY)
+        : e.endCoordinates?.height ?? 0;
+      setKeyboardHeight(overlap);
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+      // Android back closes the keyboard without blurring: blur so the room returns to its normal layout.
+      inputRef.current?.blur();
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const roomRef = useRef<LiveRoomChannel | null>(null);
 
   // ─── Keep awake while watching ───
@@ -268,11 +297,14 @@ export default function LiveRoomScreen() {
   }, [chat, show?.overlay?.featured_message_id]);
 
   // ─── Actions ───
+  // Login opens in place (the app's login drawer), so the stream keeps playing.
   const goLogin = useCallback(() => {
     setProgramOpen(false);
     setVoteOpen(false);
-    router.push('/login' as any);
-  }, [router]);
+    setSupportOpen(false);
+    Keyboard.dismiss();
+    setLoginOpen(true);
+  }, []);
 
   const react = useCallback((e: LiveReaction) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
@@ -381,17 +413,12 @@ export default function LiveRoomScreen() {
     }
   }, [testBusy, refetchAll]);
 
+  // Real Stripe Checkout everywhere, the test show included (it tests the whole flow; the sheet says so).
+  // "Unterstützung simulieren" in the test tools stays the free way to see an alert.
   const pressSupport = useCallback(() => {
-    if (showRef.current?.is_test === true) {
-      // No real money on the test show: simulate instead of opening Stripe.
-      if (!signerRef.current) { setToast('Zum Testen bitte anmelden'); return; }
-      setToast('Im Testlauf wird nur simuliert');
-      void simulateSupport();
-      return;
-    }
     setSupportError(null);
     setSupportOpen(true);
-  }, [simulateSupport]);
+  }, []);
 
   const openGuestJoin = useCallback(() => {
     const s = showRef.current;
@@ -449,14 +476,15 @@ export default function LiveRoomScreen() {
   const isTest = show.is_test === true;
   const canJoinAsGuest = guestsNative && show.guests_enabled !== false && show.status === 'live';
   const typing = focused || text.length > 0;
+  const keyboardUp = keyboardHeight > 0;
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
       <LivePlayer ref={reactionsRef} show={show} width={width} topInset={insets.top} viewers={viewers} onClose={goBack} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {!focused ? (
+      <View style={styles.flex}>
+        {!keyboardUp ? (
           <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
             <NowOnStageCard current={current} next={next} showTitle={show.title} onOpenProgram={() => setProgramOpen(true)} />
             <View style={styles.actions}>
@@ -495,7 +523,7 @@ export default function LiveRoomScreen() {
           </Animated.View>
         ) : null}
 
-        {isTest && !focused ? (
+        {isTest && !keyboardUp ? (
           <TestPanel
             loggedIn={loggedIn}
             busy={testBusy}
@@ -505,7 +533,7 @@ export default function LiveRoomScreen() {
           />
         ) : null}
 
-        {pinned ? <PinnedMessage m={pinned} /> : null}
+        {pinned && !keyboardUp ? <PinnedMessage m={pinned} /> : null}
 
         <View style={styles.chatWrap}>
           <FlatList
@@ -540,7 +568,7 @@ export default function LiveRoomScreen() {
           </Pressable>
         ) : null}
 
-        <View style={[styles.inputBar, { paddingBottom: focused ? 8 : Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.inputBar, { paddingBottom: keyboardUp ? keyboardHeight + 8 : Math.max(insets.bottom, 10) }]}>
           {!loggedIn ? (
             <Pressable onPress={goLogin} style={({ pressed }) => [styles.loginBtn, pressed && styles.pressed]} accessibilityRole="button">
               <Text style={styles.loginText} numberOfLines={1}>Anmelden zum Mitschreiben</Text>
@@ -553,6 +581,7 @@ export default function LiveRoomScreen() {
           ) : (
             <View style={styles.inputPill}>
               <TextInput
+                ref={inputRef}
                 value={text}
                 onChangeText={(t) => { setText(t.slice(0, CHAT_MAX_LENGTH)); if (chatError) setChatError(null); }}
                 onFocus={() => setFocused(true)}
@@ -596,7 +625,7 @@ export default function LiveRoomScreen() {
             </View>
           ) : null}
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <ProgramSheet
         visible={programOpen}
@@ -613,7 +642,9 @@ export default function LiveRoomScreen() {
         busy={supportBusy}
         error={supportError}
         onSubmit={(d) => { void submitSupport(d); }}
+        testMode={isTest}
       />
+      <LoginDrawer visible={loginOpen} onClose={() => setLoginOpen(false)} />
       <VoteSheet
         visible={voteOpen}
         onClose={() => setVoteOpen(false)}
