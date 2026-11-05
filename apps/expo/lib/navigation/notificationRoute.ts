@@ -20,6 +20,9 @@ export function vorhabenRoute(data: { screen?: unknown; proposalId?: unknown; ta
 
 export function routeForNotification(data: NotificationData): string | null {
   if (!data) return null;
+  // Live room reminders ("Jetzt auf der Fläche: …") carry the show slug, whatever their type.
+  const liveSlug = str(data.liveSlug);
+  if (liveSlug) return `/live/${liveSlug}`;
   switch (data.type) {
     case 'event':
       return str(data.eventId) && `/event/${data.eventId}`;

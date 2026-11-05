@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { EventRecord } from '@/lib/types';
+import { useLiveShowForEvent } from '@/lib/live';
 
 type Props = {
   event: EventRecord;
@@ -13,6 +14,8 @@ export default function LivestreamBanner({ event }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Events with a live room open the app-native player directly; others keep the event page (YouTube embed).
+  const liveSlug = useLiveShowForEvent(event.id);
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -35,7 +38,10 @@ export default function LivestreamBanner({ event }: Props) {
 
   return (
     <Pressable
-      onPress={() => router.push(`/event/${event.id}` as any)}
+      onPress={() => {
+        if (liveSlug) router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } });
+        else router.push(`/event/${event.id}` as any);
+      }}
       style={({ pressed }) => [
         styles.container,
         { backgroundColor: colors.surface },
@@ -59,7 +65,7 @@ export default function LivestreamBanner({ event }: Props) {
           {event.title}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-          Jetzt live
+          {liveSlug ? 'Jetzt live in der App ansehen' : 'Jetzt live'}
         </Text>
       </View>
 

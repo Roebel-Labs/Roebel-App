@@ -50,6 +50,7 @@ import { fontFamily } from '@/constants/theme';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
 import { isTicketSalesEnabled } from '@/lib/supabase-app-settings';
 import { fetchTicketTypes, formatCents, type TicketTypeRow } from '@/lib/tickets';
+import { useLiveShowForEvent } from '@/lib/live';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -95,6 +96,7 @@ export default function EventDetails() {
   const goBack = useGoBack();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const liveSlug = useLiveShowForEvent(typeof id === 'string' ? id : null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
@@ -329,7 +331,8 @@ export default function EventDetails() {
     (startTime ? ` • ${startTime}${endTime ? ` – ${endTime}` : ''} Uhr` : '');
   const priceLine = event.ticket_price == null ? null : currency(event.ticket_price);
   const minTicketPrice = ticketTypes.length > 0 ? Math.min(...ticketTypes.map((t) => t.price_cents)) : 0;
-  const showLivestream = !!(event.livestream_active && event.livestream_url);
+  // Events with a live room (live_shows row) open the app-native player; the YouTube embed stays for the rest.
+  const showLivestream = !liveSlug && !!(event.livestream_active && event.livestream_url);
   const hasAmbient = !!event.image_url;
 
   // Flyer box: full width inside the gutters unless that would make a tall
@@ -519,6 +522,16 @@ export default function EventDetails() {
         </View>
 
         <View style={styles.sections}>
+          {liveSlug ? (
+            <Pressable
+              style={[styles.livestreamCta, { backgroundColor: colors.primary }]}
+              onPress={() => router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } })}
+              accessibilityRole="button"
+            >
+              <PlayIcon size={20} color={colors.onPrimary} />
+              <Text style={[styles.livestreamCtaText, { color: colors.onPrimary }]}>Live ansehen</Text>
+            </Pressable>
+          ) : null}
           {showLivestream && (
             <Pressable
               style={[styles.livestreamCta, { backgroundColor: colors.primary }]}

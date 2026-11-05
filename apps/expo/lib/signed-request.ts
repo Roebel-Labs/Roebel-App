@@ -17,7 +17,10 @@ export type VorhabenAction =
 /** Livestream sponsoring bookings (apps/web/src/lib/signed-request/message.ts); signed under SPONSORING_SCOPE. */
 export const SPONSORING_SCOPE = 'roebel-sponsoring-v1';
 export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'sponsoring_set_creative' | 'sponsoring_set_dishes';
-export type SignedAction = TicketAction | VorhabenAction | SponsoringAction;
+/** Live room session (apps/web /api/live); signed under LIVE_SCOPE, returns a short-lived chat/vote token. */
+export const LIVE_SCOPE = 'roebel-live-v1';
+export type LiveAction = 'live_session';
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction;
 
 export interface SigningAccount {
   address: string;
