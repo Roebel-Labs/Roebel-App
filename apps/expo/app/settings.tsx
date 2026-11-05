@@ -380,7 +380,7 @@ export default function SettingsScreen() {
           </View>
           {isDeveloperMode && (
             <Pressable
-              style={styles.themeOptionRow}
+              style={[styles.themeOptionRow, { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }]}
               onPress={() => router.push('/settings/dev-mini-app' as any)}
             >
               <View style={styles.themeOptionTextContainer}>
@@ -389,6 +389,19 @@ export default function SettingsScreen() {
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
                   URL eingeben und im Mini-App-Host öffnen.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          )}
+          {isDeveloperMode && (
+            <Pressable style={styles.themeOptionRow} onPress={() => router.push('/live/testlauf' as any)}>
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Livestream testen
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Öffnet einen Test-Livestream mit allen Funktionen – nichts hier ist echt.
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>

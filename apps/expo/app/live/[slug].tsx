@@ -17,7 +17,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import {
   CHAT_MAX_LENGTH, LIVE_REACTIONS, fetchChat, fetchResults, fetchRundown, fetchShow, joinLiveRoom, liveAct, liveActAs,
-  liveErrorText, openSupportCheckout, peekLiveSession, startSupport, subscribeShowChanges,
+  liveErrorText, openSupportCheckout, peekLiveSession, randomTestSupport, startSupport, subscribeShowChanges,
   type ChatMessage, type LiveReaction, type LiveRoomChannel, type LiveShow, type MyLiveState, type RundownItem, type VoteResults,
 } from '@/lib/live';
 import LivePlayer from '@/components/live/LivePlayer';
@@ -26,6 +26,9 @@ import ChatRow, { PinnedMessage } from '@/components/live/ChatRow';
 import ProgramSheet from '@/components/live/ProgramSheet';
 import SupportSheet, { type SupportDraft } from '@/components/live/SupportSheet';
 import VoteSheet from '@/components/live/VoteSheet';
+import TestPanel from '@/components/live/TestPanel';
+// Guard only (no LiveKit import): the join route itself is reached via router.push, never imported.
+import { hasLiveKitNative } from '@/lib/live-guest-support';
 import type { FloatingReactionsHandle } from '@/components/live/FloatingReactions';
 import { F, LIVE } from '@/components/live/tokens';
 
@@ -103,6 +106,9 @@ export default function LiveRoomScreen() {
   const [voteError, setVoteError] = useState<string | null>(null);
   const [results, setResults] = useState<VoteResults | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState<'support' | 'next' | null>(null);
+  // Phone guests need the LiveKit native modules (3.9.0+ binaries); constant per process.
+  const [guestsNative] = useState(() => hasLiveKitNative());
 
   const reactionsRef = useRef<FloatingReactionsHandle>(null);
   const roomRef = useRef<LiveRoomChannel | null>(null);
@@ -341,6 +347,58 @@ export default function LiveRoomScreen() {
     }
   }, [goLogin]);
 
+  // ─── Test show tools (show.is_test): fake support + advance on-stage; refused by the API on real shows ───
+  const simulateSupport = useCallback(async () => {
+    const account = signerRef.current;
+    const s = showRef.current;
+    if (!s || testBusy) return;
+    if (!account) { setToast('Zum Testen bitte anmelden'); return; }
+    setTestBusy('support');
+    const pick = randomTestSupport();
+    const r = await liveActAs<{ message: ChatMessage }>(account, s.id, {
+      action: 'test_support', show_id: s.id, amount_cents: pick.amount_cents, body: pick.body,
+    });
+    setTestBusy(null);
+    // The card itself arrives via Realtime, exactly like a real Unterstützung.
+    if (r.ok) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    else setToast(liveErrorText(r.code, r.message));
+  }, [testBusy]);
+
+  const nextGroup = useCallback(async () => {
+    const account = signerRef.current;
+    const s = showRef.current;
+    if (!s || testBusy) return;
+    if (!account) { setToast('Zum Testen bitte anmelden'); return; }
+    setTestBusy('next');
+    const r = await liveActAs<{ current?: RundownItem | null }>(account, s.id, { action: 'test_next', show_id: s.id });
+    setTestBusy(null);
+    if (r.ok) {
+      const title = r.data?.current?.title;
+      setToast(title ? `Jetzt auf der Bühne: ${title}` : 'Nächste Gruppe ist dran.');
+      void refetchAll();
+    } else {
+      setToast(liveErrorText(r.code, r.message));
+    }
+  }, [testBusy, refetchAll]);
+
+  const pressSupport = useCallback(() => {
+    if (showRef.current?.is_test === true) {
+      // No real money on the test show: simulate instead of opening Stripe.
+      if (!signerRef.current) { setToast('Zum Testen bitte anmelden'); return; }
+      setToast('Im Testlauf wird nur simuliert');
+      void simulateSupport();
+      return;
+    }
+    setSupportError(null);
+    setSupportOpen(true);
+  }, [simulateSupport]);
+
+  const openGuestJoin = useCallback(() => {
+    const s = showRef.current;
+    if (!s) return;
+    router.push(`/live/join/${encodeURIComponent(s.slug)}` as any);
+  }, [router]);
+
   const submitSupport = useCallback(async (d: SupportDraft) => {
     const s = showRef.current;
     if (!s) return;
@@ -388,6 +446,8 @@ export default function LiveRoomScreen() {
   }
 
   const chatOpen = show.chat_enabled !== false;
+  const isTest = show.is_test === true;
+  const canJoinAsGuest = guestsNative && show.guests_enabled !== false && show.status === 'live';
   const typing = focused || text.length > 0;
 
   return (
@@ -401,7 +461,7 @@ export default function LiveRoomScreen() {
             <NowOnStageCard current={current} next={next} showTitle={show.title} onOpenProgram={() => setProgramOpen(true)} />
             <View style={styles.actions}>
               <Pressable
-                onPress={() => { setSupportError(null); setSupportOpen(true); }}
+                onPress={pressSupport}
                 style={({ pressed }) => [styles.supportBtn, pressed && styles.pressed]}
                 accessibilityRole="button"
               >
@@ -420,8 +480,29 @@ export default function LiveRoomScreen() {
                   </Pressable>
                 </Animated.View>
               ) : null}
+              {canJoinAsGuest ? (
+                <Pressable
+                  onPress={openGuestJoin}
+                  style={({ pressed }) => [show.voting_open ? styles.guestRound : styles.guestBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Live dazuschalten"
+                >
+                  <Ionicons name="videocam-outline" size={17} color={LIVE.text} />
+                  {!show.voting_open ? <Text style={styles.voteText} numberOfLines={1}>Dazuschalten</Text> : null}
+                </Pressable>
+              ) : null}
             </View>
           </Animated.View>
+        ) : null}
+
+        {isTest && !focused ? (
+          <TestPanel
+            loggedIn={loggedIn}
+            busy={testBusy}
+            onSimulateSupport={() => { void simulateSupport(); }}
+            onNextGroup={() => { void nextGroup(); }}
+            onLogin={goLogin}
+          />
         ) : null}
 
         {pinned ? <PinnedMessage m={pinned} /> : null}
@@ -564,6 +645,14 @@ const styles = StyleSheet.create({
     backgroundColor: LIVE.navy, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(122,187,242,0.4)',
   },
   voteText: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
+  guestBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 16,
+    borderRadius: 21, backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+  },
+  guestRound: {
+    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+  },
   chatWrap: { flex: 1, marginTop: 6 },
   chatContent: { paddingVertical: 8 },
   chatWelcome: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', paddingHorizontal: 24, paddingVertical: 12 },

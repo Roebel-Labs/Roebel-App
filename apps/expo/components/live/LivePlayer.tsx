@@ -208,6 +208,11 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
                 <Text style={styles.mutedPillText}>{show.status === 'scheduled' ? 'BALD LIVE' : isReplay ? 'AUFZEICHNUNG' : 'BEENDET'}</Text>
               </View>
             )}
+            {show.is_test === true ? (
+              <View style={styles.testPill} accessibilityLabel="Testlauf">
+                <Text style={styles.testPillText}>TESTLAUF</Text>
+              </View>
+            ) : null}
             {viewers > 0 ? (
               <View style={styles.viewerPill}>
                 <Ionicons name="eye-outline" size={13} color={LIVE.text} />
@@ -249,6 +254,8 @@ const styles = StyleSheet.create({
   livePillText: { color: '#fff', fontSize: 12, fontFamily: F.bold, letterSpacing: 0.8 },
   mutedPill: { backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 8, height: 24, borderRadius: 6, justifyContent: 'center' },
   mutedPillText: { color: '#fff', fontSize: 11, fontFamily: F.semiBold, letterSpacing: 0.8 },
+  testPill: { backgroundColor: LIVE.gold, paddingHorizontal: 8, height: 24, borderRadius: 6, justifyContent: 'center' },
+  testPillText: { color: '#1B1B1B', fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
   viewerPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 8, height: 24, borderRadius: 6,
   },

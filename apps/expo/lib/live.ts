@@ -24,6 +24,8 @@ export interface LiveShow {
   hls_url: string | null; replay_url: string | null; poster_url: string | null; starts_at: string | null;
   current_item_id: string | null; chat_enabled: boolean; slow_mode_seconds: number; voting_open: boolean;
   overlay: LiveOverlay | null; updated_at: string | null;
+  /** Part 2 columns: may be missing on rows/DBs from before the migration (treat undefined as false / true). */
+  is_test?: boolean; guests_enabled?: boolean;
 }
 
 export interface RundownItem {
@@ -55,8 +57,9 @@ const REQUEST_TIMEOUT_MS = 15000;
 // Tables are newer than the generated Supabase types: untyped client, rows cast below.
 const db = supabase as any;
 
-const SHOW_COLUMNS =
-  'id, slug, event_id, title, subtitle, status, hls_url, replay_url, poster_url, starts_at, current_item_id, chat_enabled, slow_mode_seconds, voting_open, overlay, updated_at';
+// `*` rather than a column list: the Part 2 columns (is_test, guests_enabled) may not exist yet, and naming a
+// missing column fails the whole select.
+const SHOW_COLUMNS = '*';
 const ITEM_COLUMNS = 'id, show_id, position, title, subtitle, detail, org_account_id, image_url, planned_at, status, on_stage_at';
 const CHAT_COLUMNS = 'id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at';
 
@@ -302,25 +305,56 @@ export type LiveActBody =
   | { action: 'chat'; show_id: string; body: string }
   | { action: 'vote'; show_id: string; item_id: string }
   | { action: 'remind'; item_id: string; on: boolean }
-  | { action: 'my_state'; show_id: string };
+  | { action: 'my_state'; show_id: string }
+  | { action: 'guest_request'; show_id: string; note?: string }
+  | { action: 'guest_status'; show_id: string; request_id: string }
+  | { action: 'guest_cancel'; show_id: string; request_id: string }
+  | { action: 'test_support'; show_id: string; amount_cents: number; body?: string }
+  | { action: 'test_next'; show_id: string };
 
-export function liveAct<T>(token: string, body: LiveActBody): Promise<ApiResult<T>> {
-  return requestJson<T>('/api/live/act', { method: 'POST', body, headers: { Authorization: `Live ${token}` } });
+export function liveAct<T>(token: string, body: LiveActBody, timeoutMs?: number): Promise<ApiResult<T>> {
+  return requestJson<T>('/api/live/act', { method: 'POST', body, headers: { Authorization: `Live ${token}` } }, timeoutMs);
 }
 
 /**
  * liveAct with the session handled: cached token or one signed live_session; on 401 SESSION_INVALID the
  * cached token is dropped and the session is re-created once.
  */
-export async function liveActAs<T>(account: SigningAccount, showId: string, body: LiveActBody): Promise<ApiResult<T>> {
+export async function liveActAs<T>(
+  account: SigningAccount, showId: string, body: LiveActBody, timeoutMs?: number,
+): Promise<ApiResult<T>> {
   const s = await getLiveSession(account, showId);
   if (!s.ok) return s;
-  const r = await liveAct<T>(s.data.token, body);
+  const r = await liveAct<T>(s.data.token, body, timeoutMs);
   if (r.ok || (r.code !== 'SESSION_INVALID' && r.code !== '401' && r.code !== 'UNAUTHORIZED')) return r;
   await clearLiveSession(account.address, showId);
   const again = await getLiveSession(account, showId);
   if (!again.ok) return again;
-  return liveAct<T>(again.data.token, body);
+  return liveAct<T>(again.data.token, body, timeoutMs);
+}
+
+// ─── Phone guests ("Live dazuschalten") ─────────────────────────
+
+export const GUEST_NOTE_MAX = 140;
+export type GuestRequestStatus = 'requested' | 'accepted' | 'declined' | 'ended' | 'cancelled';
+export interface GuestRequest { id: string; status: GuestRequestStatus; room: string | null; created_at: string }
+export interface GuestStatus { status: GuestRequestStatus; room?: string; livekit_url?: string; token?: string }
+
+// ─── Test show ("testlauf") ─────────────────────────────────────
+
+export const TEST_SUPPORT_AMOUNTS = [200, 500, 1000, 2000] as const;
+export const TEST_SUPPORT_LINES = [
+  'Viel Erfolg euch allen!',
+  'Grüße aus Röbel – ihr seid super!',
+  'Toi, toi, toi für alle Gruppen!',
+  'Was für ein Auftritt, Gänsehaut!',
+  'Danke für die tolle Übertragung!',
+  'Weiter so, wir drücken die Daumen!',
+] as const;
+
+export function randomTestSupport(): { amount_cents: number; body: string } {
+  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
+  return { amount_cents: pick(TEST_SUPPORT_AMOUNTS), body: pick(TEST_SUPPORT_LINES) };
 }
 
 /** German copy for an act error: the server's message (already German) wins, codes are the fallback. */
@@ -333,6 +367,9 @@ export function liveErrorText(code: string, serverMessage?: string): string {
     case 'MUTED': return 'Du kannst in diesem Chat gerade nicht schreiben.';
     case 'CHAT_CLOSED': return 'Der Chat ist gerade geschlossen.';
     case 'VOTING_CLOSED': return 'Das Meinungsbild ist gerade geschlossen.';
+    case 'GUESTS_UNAVAILABLE': return 'Dazuschalten ist noch nicht eingerichtet.';
+    case 'GUESTS_CLOSED': return 'Dazuschalten ist gerade nicht möglich.';
+    case 'NOT_A_TEST': return 'Nur im Testlauf möglich.';
     case 'NETWORK_ERROR': return 'Keine Verbindung. Bitte versuche es gleich noch einmal.';
     case 'SIGN_FAILED': return 'Anmeldung am Chat abgebrochen.';
     case 'UNAUTHORIZED': case '401': return 'Sitzung abgelaufen. Bitte erneut versuchen.';

@@ -339,6 +339,11 @@ function ThemedLayout() {
             name="live/[slug]"
             options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#18191B' } }}
           />
+          {/* Live dazuschalten (phone guest via LiveKit, 3.9.0+ binaries only — the screen guards itself). */}
+          <TransitionStack.Screen
+            name="live/join/[slug]"
+            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#18191B' } }}
+          />
           {/* Hören: full-screen player slides up as a sheet over whatever is playing. */}
           <TransitionStack.Screen
             name="audio/player"
