@@ -5,6 +5,7 @@
 // Everything here degrades to null / [] when the tables or routes do not exist yet.
 import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
@@ -17,6 +18,10 @@ export type ChatKind = 'chat' | 'support' | 'system';
 export interface LiveOverlay {
   lower_third?: boolean; next_up?: boolean; bug?: boolean; qr?: boolean; poll?: boolean; alerts?: boolean;
   reactions?: boolean; featured_message_id?: string | null; message?: string | null;
+  /** Part 3: ISO time the show went live (running time in the player). */
+  live_since?: string | null;
+  /** Part 3: operator-set YouTube link ("Auf dem Fernseher ansehen" fallback). */
+  youtube_url?: string | null;
 }
 
 export interface LiveShow {
@@ -37,6 +42,8 @@ export interface RundownItem {
 export interface ChatMessage {
   id: string; show_id: string; display_name: string | null; avatar_url: string | null; body: string;
   kind: ChatKind; amount_cents: number | null; created_at: string; hidden_at: string | null; featured_at: string | null;
+  /** Part 3: stable per person per show, never reversible to a wallet. Missing before the moderation migration. */
+  author_key?: string | null;
 }
 
 export interface LiveSession { token: string; expires_at: string; display_name: string | null; avatar_url: string | null }
@@ -44,8 +51,11 @@ export interface VoteResult { item_id: string; title: string; subtitle: string |
 export interface VoteResults { voting_open: boolean; total: number; items: VoteResult[] }
 export interface MyLiveState { vote_item_id: string | null; reminder_item_ids: string[] }
 
-export const LIVE_REACTIONS = ['❤️', '🔥', '👏', '💃', '🎉'] as const;
+/** The picker set (YouTube Live style); ❤️ first = the one-tap / double-tap reaction. */
+export const LIVE_REACTIONS = ['❤️', '😄', '🎉', '😳', '💯'] as const;
 export type LiveReaction = (typeof LIVE_REACTIONS)[number];
+/** Received reactions: the picker set plus the earlier set (older app builds still send these). */
+const RECEIVED_REACTIONS: readonly string[] = [...LIVE_REACTIONS, '🔥', '👏', '💃'];
 
 export const CHAT_MAX_LENGTH = 280;
 export const SUPPORT_MESSAGE_MAX = 140;
@@ -61,7 +71,10 @@ const db = supabase as any;
 // missing column fails the whole select.
 const SHOW_COLUMNS = '*';
 const ITEM_COLUMNS = 'id, show_id, position, title, subtitle, detail, org_account_id, image_url, planned_at, status, on_stage_at';
-const CHAT_COLUMNS = 'id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at';
+const CHAT_COLUMNS_BASE = 'id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at';
+const CHAT_COLUMNS = `${CHAT_COLUMNS_BASE}, author_key`;
+// Until the moderation migration (author_key) is applied, naming the column fails the select: fall back once, then stick.
+let chatHasAuthorKey = true;
 
 // ─── Reads ─────────────────────────────────────────────────
 
@@ -88,9 +101,14 @@ export async function fetchRundown(showId: string): Promise<RundownItem[]> {
 /** The latest messages, oldest first. */
 export async function fetchChat(showId: string): Promise<ChatMessage[]> {
   try {
-    const { data } = await db.from('live_chat_messages').select(CHAT_COLUMNS)
+    const run = (cols: string) => db.from('live_chat_messages').select(cols)
       .eq('show_id', showId).is('hidden_at', null)
       .order('created_at', { ascending: false }).limit(CHAT_HISTORY);
+    let { data, error } = await run(chatHasAuthorKey ? CHAT_COLUMNS : CHAT_COLUMNS_BASE);
+    if (error && chatHasAuthorKey) {
+      chatHasAuthorKey = false;
+      ({ data } = await run(CHAT_COLUMNS_BASE));
+    }
     return ((data ?? []) as ChatMessage[]).reverse();
   } catch {
     return [];
@@ -191,7 +209,7 @@ export function joinLiveRoom(
       })
       .on('broadcast', { event: 'react' }, (msg: any) => {
         const e = msg?.payload?.e;
-        if (typeof e === 'string' && (LIVE_REACTIONS as readonly string[]).includes(e)) handlers.onReaction?.(e as LiveReaction);
+        if (typeof e === 'string' && RECEIVED_REACTIONS.includes(e)) handlers.onReaction?.(e as LiveReaction);
       })
       .subscribe((status: string) => {
         if (status === 'SUBSCRIBED') void channel?.track({ k: key }).catch(() => undefined);
@@ -310,7 +328,8 @@ export type LiveActBody =
   | { action: 'guest_status'; show_id: string; request_id: string }
   | { action: 'guest_cancel'; show_id: string; request_id: string }
   | { action: 'test_support'; show_id: string; amount_cents: number; body?: string }
-  | { action: 'test_next'; show_id: string };
+  | { action: 'test_next'; show_id: string }
+  | { action: 'report'; show_id: string; message_id: string; reason: ReportReason };
 
 export function liveAct<T>(token: string, body: LiveActBody, timeoutMs?: number): Promise<ApiResult<T>> {
   return requestJson<T>('/api/live/act', { method: 'POST', body, headers: { Authorization: `Live ${token}` } }, timeoutMs);
@@ -365,6 +384,11 @@ export function liveErrorText(code: string, serverMessage?: string): string {
   switch (code) {
     case 'SLOW_MODE': return 'Langsam-Modus: Bitte warte kurz vor der nächsten Nachricht.';
     case 'MUTED': return 'Du kannst in diesem Chat gerade nicht schreiben.';
+    case 'SPAM_DUPLICATE': return 'Diese Nachricht hast du gerade schon geschickt.';
+    case 'SPAM_LINK': return 'Links sind im Live-Chat nicht erlaubt.';
+    case 'SPAM_FLOOD': return 'Du schreibst gerade sehr schnell. Bitte warte einen Moment.';
+    case 'SPAM_WORDS': return 'Diese Nachricht können wir so nicht anzeigen. Bitte bleib freundlich.';
+    case 'SPAM_SHOUT': return 'Bitte nicht so laut: weniger Großbuchstaben, dann klappt es.';
     case 'CHAT_CLOSED': return 'Der Chat ist gerade geschlossen.';
     case 'VOTING_CLOSED': return 'Das Meinungsbild ist gerade geschlossen.';
     case 'GUESTS_UNAVAILABLE': return 'Dazuschalten ist noch nicht eingerichtet.';
@@ -375,6 +399,83 @@ export function liveErrorText(code: string, serverMessage?: string): string {
     case 'UNAUTHORIZED': case '401': return 'Sitzung abgelaufen. Bitte erneut versuchen.';
     default: return 'Das hat nicht geklappt. Bitte versuche es erneut.';
   }
+}
+
+// ─── Chat moderation (client side) ──────────────────────────────
+
+export type ReportReason = 'spam' | 'abuse' | 'other';
+
+const LINK_RE = /(https?:\/\/|www\.|\bt\.me\b|\bwa\.me\b|\b[a-z0-9-]+\.(de|com)\b)/i;
+const DUPLICATE_WINDOW_MS = 30_000;
+
+/**
+ * Pre-checks before a chat send (saves a round trip; the server checks the same and more).
+ * Returns the German error, or null when the message may go out.
+ */
+export function precheckChat(body: string, last: { body: string; at: number } | null, now = Date.now()): string | null {
+  if (last && now - last.at < DUPLICATE_WINDOW_MS && last.body.trim().toLowerCase() === body.trim().toLowerCase()) {
+    return 'Diese Nachricht hast du gerade schon geschickt.';
+  }
+  if (LINK_RE.test(body)) return 'Links sind im Live-Chat nicht erlaubt.';
+  return null;
+}
+
+/** Who wrote a message, for local blocking: the server's author_key, else name + avatar (pre-migration rows). */
+export function authorKeyOf(m: Pick<ChatMessage, 'author_key' | 'display_name' | 'avatar_url'>): string {
+  if (m.author_key) return m.author_key;
+  return `n:${(m.display_name ?? '').trim().toLowerCase()}|${m.avatar_url ?? ''}`;
+}
+
+const blockedKey = (showId: string) => `live:blocked:${showId}`;
+const lastSeenKey = (showId: string) => `live:lastSeen:${showId}`;
+
+export async function loadBlocked(showId: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(blockedKey(showId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveBlocked(showId: string, keys: string[]): Promise<void> {
+  await AsyncStorage.setItem(blockedKey(showId), JSON.stringify(keys.slice(-500))).catch(() => undefined);
+}
+
+/** ISO timestamp of the newest message the viewer saw when they last left this show's room. */
+export async function loadLastSeen(showId: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(lastSeenKey(showId));
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastSeen(showId: string, iso: string): Promise<void> {
+  await AsyncStorage.setItem(lastSeenKey(showId), iso).catch(() => undefined);
+}
+
+export interface Supporter { key: string; name: string; totalCents: number; lastMessageId: string }
+
+/** Supporters of this show from the loaded support rows: named only, summed, highest first. */
+export function topSupporters(chat: ChatMessage[], limit = 10): Supporter[] {
+  const by = new Map<string, Supporter>();
+  for (const m of chat) {
+    if (m.kind !== 'support' || !m.amount_cents) continue;
+    const name = m.display_name?.trim();
+    if (!name || name === 'Jemand') continue;
+    const key = authorKeyOf(m);
+    const cur = by.get(key);
+    if (cur) { cur.totalCents += m.amount_cents; cur.lastMessageId = m.id; }
+    else by.set(key, { key, name, totalCents: m.amount_cents, lastMessageId: m.id });
+  }
+  return [...by.values()].sort((a, b) => b.totalCents - a.totalCents).slice(0, limit);
+}
+
+/** Public web link of a live room (share sheet). */
+export function liveShareUrl(slug: string): string {
+  return `${getApiBaseUrl()}/live/${encodeURIComponent(slug)}`;
 }
 
 // ─── Unterstützen (Stripe Checkout) ───────────────────────────

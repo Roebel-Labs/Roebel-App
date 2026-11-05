@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { formatClock, type RundownItem } from '@/lib/live';
@@ -13,70 +12,57 @@ type Props = {
   onOpenProgram: () => void;
 };
 
-/** "Jetzt auf der Fläche" + "Als Nächstes"; the current item slides in fresh whenever it changes. */
+/** Slim on-stage row (≈ 52 px): dot · group + subtitle · "Als Nächstes" line · Programm chip. */
 export default function NowOnStageCard({ current, next, showTitle, onOpenProgram }: Props) {
   const L = useLivePalette();
   const styles = liveStyles(makeStyles, L);
+  const nextClock = next ? formatClock(next.planned_at) : null;
   return (
-    <Animated.View layout={LinearTransition.duration(220)} style={styles.card}>
-      <View style={styles.row}>
-        <View style={styles.main}>
-          <View style={styles.kickerRow}>
-            <View style={[styles.kickerDot, !current && { backgroundColor: L.textTertiary }]} />
-            <Text style={styles.kicker}>{current ? 'JETZT AUF DER FLÄCHE' : 'PROGRAMM'}</Text>
-          </View>
-          <Animated.View key={current?.id ?? 'none'} entering={FadeInDown.duration(320)} exiting={FadeOutUp.duration(180)} style={styles.titleRow}>
-            {current?.image_url ? (
-              <Image source={{ uri: current.image_url }} style={styles.thumb} contentFit="cover" transition={150} />
-            ) : null}
-            <View style={styles.titleText}>
-              <Text style={styles.title} numberOfLines={2}>{current?.title ?? showTitle}</Text>
-              {current?.subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{current.subtitle}</Text> : null}
-            </View>
-          </Animated.View>
-        </View>
-        <Pressable onPress={onOpenProgram} hitSlop={6} style={({ pressed }) => [styles.programBtn, pressed && styles.pressed]} accessibilityRole="button">
-          <Ionicons name="list" size={16} color={L.text} />
-          <Text style={styles.programText}>Programm</Text>
-        </Pressable>
-      </View>
-      {next ? (
-        <Animated.View key={`next-${next.id}`} entering={FadeInDown.delay(120).duration(280)} style={styles.nextRow}>
-          <Text style={styles.nextLabel}>Als Nächstes</Text>
-          <Text style={styles.nextTitle} numberOfLines={1}>{next.title}</Text>
-          {formatClock(next.planned_at) ? <Text style={styles.nextTime}>{`ca. ${formatClock(next.planned_at)}`}</Text> : null}
+    <Animated.View layout={LinearTransition.duration(220)} style={styles.bar}>
+      <View style={[styles.dot, !current && styles.dotIdle]} />
+      <View style={styles.main}>
+        <Animated.View key={current?.id ?? 'none'} entering={FadeInDown.duration(280)} exiting={FadeOutUp.duration(160)}>
+          <Text style={styles.titleLine} numberOfLines={1}>
+            <Text style={styles.title}>{current?.title ?? showTitle}</Text>
+            {current?.subtitle ? <Text style={styles.subtitle}>{`  ${current.subtitle}`}</Text> : null}
+          </Text>
         </Animated.View>
-      ) : null}
+        {next ? (
+          <Text key={`next-${next.id}`} style={styles.next} numberOfLines={1}>
+            {`Als Nächstes: ${next.title}${nextClock ? ` · ca. ${nextClock}` : ''}`}
+          </Text>
+        ) : null}
+      </View>
+      <Pressable
+        onPress={onOpenProgram}
+        hitSlop={8}
+        style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Programm öffnen"
+      >
+        <Ionicons name="list" size={14} color={L.text} />
+        <Text style={styles.chipText}>Programm</Text>
+      </Pressable>
     </Animated.View>
   );
 }
 
 const makeStyles = (L: LivePalette) => StyleSheet.create({
-  card: {
-    marginHorizontal: 12, marginTop: 12, padding: 14, borderRadius: 16, backgroundColor: L.surface,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: L.border, overflow: 'hidden',
+  bar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: L.border,
   },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  main: { flex: 1, gap: 8 },
-  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  kickerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: L.accent },
-  kicker: { color: L.accent, fontSize: 11, fontFamily: F.bold, letterSpacing: 1.2 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  thumb: { width: 44, height: 44, borderRadius: 10, backgroundColor: L.surfaceRaised },
-  titleText: { flex: 1, gap: 2 },
-  title: { color: L.text, fontSize: 20, lineHeight: 24, fontFamily: F.heading },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: L.red },
+  dotIdle: { backgroundColor: L.textTertiary },
+  main: { flex: 1, gap: 1, overflow: 'hidden' },
+  titleLine: { fontSize: 15, lineHeight: 20 },
+  title: { color: L.text, fontSize: 15, fontFamily: F.bold },
   subtitle: { color: L.textSecondary, fontSize: 13, fontFamily: F.medium },
-  programBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderRadius: 17,
+  next: { color: L.textTertiary, fontSize: 12, lineHeight: 16, fontFamily: F.medium },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: 14,
     backgroundColor: L.surfaceRaised,
   },
-  programText: { color: L.text, fontSize: 13, fontFamily: F.semiBold },
+  chipText: { color: L.text, fontSize: 12, fontFamily: F.semiBold },
   pressed: { opacity: 0.7 },
-  nextRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: L.border,
-  },
-  nextLabel: { color: L.textTertiary, fontSize: 12, fontFamily: F.semiBold },
-  nextTitle: { flex: 1, color: L.textSecondary, fontSize: 13, fontFamily: F.semiBold },
-  nextTime: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium, fontVariant: ['tabular-nums'] },
 });

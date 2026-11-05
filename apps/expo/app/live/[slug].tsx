@@ -3,7 +3,7 @@
 // Spec: docs/superpowers/specs/2026-11-05-live-room-design.md. Deep link: roebel://live/<slug>.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, AppState, Dimensions, FlatList, Keyboard, Platform, Pressable, StatusBar, StyleSheet, Text, TextInput,
+  ActivityIndicator, AppState, Dimensions, FlatList, Keyboard, Platform, Pressable, Share, StatusBar, StyleSheet, Text, TextInput,
   useWindowDimensions, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,9 +16,11 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import {
-  CHAT_MAX_LENGTH, LIVE_REACTIONS, fetchChat, fetchResults, fetchRundown, fetchShow, joinLiveRoom, liveAct, liveActAs,
-  liveErrorText, openSupportCheckout, peekLiveSession, randomTestSupport, startSupport, subscribeShowChanges,
-  type ChatMessage, type LiveReaction, type LiveRoomChannel, type LiveShow, type MyLiveState, type RundownItem, type VoteResults,
+  CHAT_MAX_LENGTH, authorKeyOf, fetchChat, fetchResults, fetchShow, joinLiveRoom, liveAct, liveActAs,
+  liveErrorText, liveShareUrl, loadBlocked, loadLastSeen, openSupportCheckout, peekLiveSession, precheckChat, randomTestSupport,
+  saveBlocked, saveLastSeen, startSupport, subscribeShowChanges, topSupporters,
+  type ChatMessage, type LiveReaction, type LiveRoomChannel, type LiveShow, type MyLiveState, type ReportReason, type RundownItem,
+  type Supporter, type VoteResults,
 } from '@/lib/live';
 import LivePlayer from '@/components/live/LivePlayer';
 import NowOnStageCard from '@/components/live/NowOnStageCard';
@@ -27,6 +29,12 @@ import ProgramSheet from '@/components/live/ProgramSheet';
 import SupportSheet, { type SupportDraft } from '@/components/live/SupportSheet';
 import VoteSheet from '@/components/live/VoteSheet';
 import TestPanel from '@/components/live/TestPanel';
+import FullscreenOverlay, { type FullscreenOverlayApi } from '@/components/live/FullscreenOverlay';
+import ReactionPicker from '@/components/live/chat/ReactionPicker';
+import SupportersStrip from '@/components/live/chat/SupportersStrip';
+import NewDivider from '@/components/live/chat/NewDivider';
+import MessageActionsSheet from '@/components/live/chat/MessageActionsSheet';
+import UndoSnackbar from '@/components/live/chat/UndoSnackbar';
 import SupportAlertLayer, { type SupportAlertHandle } from '@/components/live/SupportAlertLayer';
 import LoginDrawer from '@/components/LoginDrawer';
 // Guard only (no LiveKit import): the join route itself is reached via router.push, never imported.
@@ -51,6 +59,8 @@ const KEEP_AWAKE_TAG = 'roebel-live-room';
 const MAX_CHAT = 200;
 const SHOW_POLL_MS = 30_000;
 const RESULTS_POLL_MS = 10_000;
+/** The "Neu" divider goes away on its own after this long. */
+const NEW_DIVIDER_MS = 120_000;
 
 function sortRundown(items: RundownItem[]): RundownItem[] {
   return [...items].sort((a, b) => a.position - b.position);
@@ -114,7 +124,18 @@ export default function LiveRoomScreen() {
   // Phone guests need the LiveKit native modules (3.9.0+ binaries); constant per process.
   const [guestsNative] = useState(() => hasLiveKitNative());
 
+  // Moderation (local block list per show, report sheet) + "Neu" divider
+  const [blocked, setBlocked] = useState<Set<string>>(() => new Set());
+  const [actionMsg, setActionMsg] = useState<ChatMessage | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [snack, setSnack] = useState<{ text: string; undoKey: string } | null>(null);
+  const [newDividerId, setNewDividerId] = useState<string | null>(null);
+  const lastSentRef = useRef<{ body: string; at: number } | null>(null);
+  const chatRef = useRef<ChatMessage[]>([]);
+  chatRef.current = chat;
+
   const reactionsRef = useRef<FloatingReactionsHandle>(null);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
   const supportAlertRef = useRef<SupportAlertHandle>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -162,8 +183,15 @@ export default function LiveRoomScreen() {
       if (r) {
         setShow(r.show);
         setRundown(sortRundown(r.rundown));
-        const history = await fetchChat(r.show.id);
-        if (alive) setChat(history);
+        const [history, lastSeen] = await Promise.all([fetchChat(r.show.id), loadLastSeen(r.show.id)]);
+        if (alive) {
+          setChat(history);
+          const seenAt = lastSeen ? Date.parse(lastSeen) : NaN;
+          if (Number.isFinite(seenAt)) {
+            const firstNew = history.find((m) => Date.parse(m.created_at) > seenAt);
+            if (firstNew) setNewDividerId(firstNew.id);
+          }
+        }
       }
       setLoading(false);
     })();
@@ -235,6 +263,30 @@ export default function LiveRoomScreen() {
     return () => { room.close(); roomRef.current = null; };
   }, [showId]);
 
+  // ─── Local block list ───
+  useEffect(() => {
+    if (!showId) return;
+    let alive = true;
+    void loadBlocked(showId).then((keys) => { if (alive) setBlocked(new Set(keys)); });
+    return () => { alive = false; };
+  }, [showId]);
+
+  // ─── "Neu" divider: remember the newest message seen on leave / background; drop the divider after 2 min ───
+  useEffect(() => {
+    if (!showId) return;
+    const persist = () => {
+      const newest = chatRef.current[chatRef.current.length - 1];
+      if (newest?.created_at) void saveLastSeen(showId, newest.created_at);
+    };
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'background' || st === 'inactive') persist(); });
+    return () => { sub.remove(); persist(); };
+  }, [showId]);
+  useEffect(() => {
+    if (!newDividerId) return;
+    const t = setTimeout(() => setNewDividerId(null), NEW_DIVIDER_MS);
+    return () => clearTimeout(t);
+  }, [newDividerId]);
+
   // ─── Personal state from a cached session (never prompts for a signature on open) ───
   const applyMyState = useCallback((s: MyLiveState | null | undefined) => {
     if (!s) return;
@@ -302,6 +354,11 @@ export default function LiveRoomScreen() {
     return chat.find((m) => m.id === id) ?? null;
   }, [chat, show?.overlay?.featured_message_id]);
 
+  const supporters = useMemo(() => topSupporters(chat), [chat]);
+  const isBlocked = useCallback((m: ChatMessage) => blocked.size > 0 && blocked.has(authorKeyOf(m)), [blocked]);
+  /** Re-render chat cells when anything renderItem reads (besides the row itself) changes. */
+  const listExtra = useMemo(() => ({ newDividerId, blocked, ownIds }), [newDividerId, blocked, ownIds]);
+
   // ─── Actions ───
   // Login opens in place (the app's login drawer), so the stream keeps playing.
   const goLogin = useCallback(() => {
@@ -318,30 +375,111 @@ export default function LiveRoomScreen() {
     roomRef.current?.sendReaction(e);
   }, []);
 
-  const sendChat = useCallback(async () => {
+  /** Shared by the room composer and the fullscreen pill: German error text, or null once sent. */
+  /** Fullscreen double-tap: the player already drew the heart; only haptic + broadcast here. */
+  const sendDoubleTapHeart = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    roomRef.current?.sendReaction('❤️');
+  }, []);
+
+  const sendBody = useCallback(async (raw: string): Promise<string | null> => {
     const account = signerRef.current;
     const s = showRef.current;
-    const body = text.trim();
-    if (!s || !body || sending) return;
-    if (!account) { goLogin(); return; }
+    const body = raw.trim();
+    if (!s || !body) return null;
+    if (!account) { goLogin(); return null; }
+    const pre = precheckChat(body, lastSentRef.current);
+    if (pre) return pre;
+    const r = await liveActAs<{ message: ChatMessage }>(account, s.id, { action: 'chat', show_id: s.id, body });
+    if (!r.ok) return liveErrorText(r.code, r.message);
+    lastSentRef.current = { body, at: Date.now() };
+    const m = r.data?.message;
+    if (m?.id) {
+      freshIds.current.add(m.id);
+      setOwnIds((cur) => new Set(cur).add(m.id));
+      setChat((cur) => upsertById(cur, m).slice(-MAX_CHAT));
+    }
+    setNewDividerId(null);
+    void Haptics.selectionAsync().catch(() => undefined);
+    void ensureMyState();
+    return null;
+  }, [goLogin, ensureMyState]);
+
+  const sendChat = useCallback(async () => {
+    if (!text.trim() || sending) return;
+    if (!signerRef.current) { goLogin(); return; }
     setSending(true);
     setChatError(null);
-    const r = await liveActAs<{ message: ChatMessage }>(account, s.id, { action: 'chat', show_id: s.id, body });
+    const err = await sendBody(text);
     setSending(false);
-    if (r.ok) {
-      const m = r.data?.message;
-      if (m?.id) {
-        freshIds.current.add(m.id);
-        setOwnIds((cur) => new Set(cur).add(m.id));
-        setChat((cur) => upsertById(cur, m).slice(-MAX_CHAT));
-      }
-      setText('');
-      void Haptics.selectionAsync().catch(() => undefined);
-      void ensureMyState();
-    } else {
-      setChatError(liveErrorText(r.code, r.message));
-    }
-  }, [text, sending, goLogin, ensureMyState]);
+    if (err) setChatError(err);
+    else setText('');
+  }, [text, sending, goLogin, sendBody]);
+
+  // ─── Report + block ───
+  const openActions = useCallback((m: ChatMessage) => {
+    if (m.kind === 'system') return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    Keyboard.dismiss();
+    setActionMsg(m);
+  }, []);
+
+  const report = useCallback(async (m: ChatMessage, reason: ReportReason) => {
+    const account = signerRef.current;
+    const s = showRef.current;
+    if (!s) return;
+    if (!account) { setActionMsg(null); goLogin(); return; }
+    setReportBusy(true);
+    const r = await liveActAs<{ reported: boolean }>(account, s.id, { action: 'report', show_id: s.id, message_id: m.id, reason });
+    setReportBusy(false);
+    setActionMsg(null);
+    setToast(r.ok ? 'Danke, wir schauen uns das an.' : liveErrorText(r.code, r.message));
+    if (r.ok) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  }, [goLogin]);
+
+  const setBlockedKey = useCallback((key: string, on: boolean) => {
+    const s = showRef.current;
+    setBlocked((cur) => {
+      const nextSet = new Set(cur);
+      if (on) nextSet.add(key); else nextSet.delete(key);
+      if (s) void saveBlocked(s.id, [...nextSet]);
+      return nextSet;
+    });
+  }, []);
+
+  const toggleBlock = useCallback((m: ChatMessage) => {
+    const key = authorKeyOf(m);
+    const on = !blocked.has(key);
+    setBlockedKey(key, on);
+    setActionMsg(null);
+    const name = m.display_name?.trim() || 'Jemand';
+    if (on) setSnack({ text: `${name} wurde blockiert`, undoKey: key });
+    else setToast(`${name} ist nicht mehr blockiert.`);
+  }, [blocked, setBlockedKey]);
+
+  const undoBlock = useCallback(() => {
+    if (snack) setBlockedKey(snack.undoKey, false);
+    setSnack(null);
+  }, [snack, setBlockedKey]);
+  const dismissSnack = useCallback(() => setSnack(null), []);
+
+  const scrollToSupporter = useCallback((sup: Supporter) => {
+    const index = listData.findIndex((m) => m.id === sup.lastMessageId);
+    if (index < 0) return;
+    try { listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }); } catch { /* not laid out yet */ }
+  }, [listData]);
+
+  const share = useCallback(() => {
+    const s = showRef.current;
+    if (!s) return;
+    void Share.share({ message: `${s.title}: jetzt live in der Röbel App. ${liveShareUrl(s.slug)}` }).catch(() => undefined);
+  }, []);
+
+  const openVote = useCallback(() => {
+    setVoteError(null);
+    setVoteOpen(true);
+    if (signerRef.current) void ensureMyState();
+  }, [ensureMyState]);
 
   const toggleReminder = useCallback(async (item: RundownItem) => {
     const account = signerRef.current;
@@ -487,7 +625,34 @@ export default function LiveRoomScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <LivePlayer ref={reactionsRef} show={show} width={width} topInset={insets.top} viewers={viewers} onClose={goBack} />
+      <LivePlayer
+        ref={reactionsRef}
+        show={show}
+        width={width}
+        topInset={insets.top}
+        viewers={viewers}
+        onClose={goBack}
+        onDoubleTapReact={sendDoubleTapHeart}
+        fullscreenOverlay={(api: FullscreenOverlayApi) => (
+          <FullscreenOverlay
+            api={api}
+            messages={chat}
+            isBlocked={isBlocked}
+            ownIds={ownIds}
+            loggedIn={loggedIn}
+            chatOpen={chatOpen}
+            votingOpen={show.voting_open}
+            slowModeSeconds={show.slow_mode_seconds}
+            onSend={sendBody}
+            onReact={react}
+            onSupport={pressSupport}
+            onVote={openVote}
+            onShare={share}
+            onOpenProgram={() => setProgramOpen(true)}
+            onLogin={goLogin}
+          />
+        )}
+      />
       <SupportAlertLayer ref={supportAlertRef} top={insets.top} height={Math.round((width * 9) / 16)} />
 
       <View style={styles.flex}>
@@ -500,17 +665,17 @@ export default function LiveRoomScreen() {
                 style={({ pressed }) => [styles.supportBtn, pressed && styles.pressed]}
                 accessibilityRole="button"
               >
-                <Ionicons name="heart" size={16} color="#1B1B1B" />
+                <Ionicons name="heart" size={14} color="#1B1B1B" />
                 <Text style={styles.supportText}>Unterstützen</Text>
               </Pressable>
               {show.voting_open ? (
                 <Animated.View entering={FadeIn} style={styles.flex}>
                   <Pressable
-                    onPress={() => { setVoteError(null); setVoteOpen(true); if (loggedIn) void ensureMyState(); }}
+                    onPress={openVote}
                     style={({ pressed }) => [styles.voteBtn, pressed && styles.pressed]}
                     accessibilityRole="button"
                   >
-                    <Ionicons name="trophy-outline" size={16} color={L.onNavy} />
+                    <Ionicons name="trophy-outline" size={14} color={L.onNavy} />
                     <Text style={[styles.voteText, styles.onNavyText]} numberOfLines={1}>Publikumsliebling</Text>
                   </Pressable>
                 </Animated.View>
@@ -522,7 +687,7 @@ export default function LiveRoomScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Live dazuschalten"
                 >
-                  <Ionicons name="videocam-outline" size={17} color={L.text} />
+                  <Ionicons name="videocam-outline" size={15} color={L.text} />
                   {!show.voting_open ? <Text style={styles.voteText} numberOfLines={1}>Dazuschalten</Text> : null}
                 </Pressable>
               ) : null}
@@ -543,11 +708,27 @@ export default function LiveRoomScreen() {
         {pinned && !keyboardUp ? <PinnedMessage m={pinned} /> : null}
 
         <View style={styles.chatWrap}>
+          <SupportersStrip supporters={supporters} onPress={scrollToSupporter} />
           <FlatList
+            ref={listRef}
             data={listData}
             inverted
             keyExtractor={(m) => m.id}
-            renderItem={({ item }) => <ChatRow m={item} own={ownIds.has(item.id)} animate={freshIds.current.has(item.id)} />}
+            renderItem={({ item }) => {
+              const row = (
+                <ChatRow
+                  m={item}
+                  own={ownIds.has(item.id)}
+                  animate={freshIds.current.has(item.id)}
+                  blocked={isBlocked(item)}
+                  onLongPress={openActions}
+                />
+              );
+              if (item.id !== newDividerId) return row;
+              // Cells of an inverted list are flipped back, so this order shows the line above the message.
+              return <View><NewDivider />{row}</View>;
+            }}
+            extraData={listExtra}
             contentContainerStyle={styles.chatContent}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
@@ -555,17 +736,22 @@ export default function LiveRoomScreen() {
             initialNumToRender={20}
             maxToRenderPerBatch={12}
             windowSize={9}
+            onScrollToIndexFailed={(info) => {
+              listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            }}
             ListFooterComponent={
               <Text style={styles.chatWelcome}>
                 {chatOpen ? 'Willkommen im Live-Chat. Bleib freundlich, wir moderieren.' : 'Der Chat ist gerade pausiert.'}
               </Text>
             }
           />
+          <ReactionPicker onReact={react} style={styles.reactionPicker} />
           {toast ? (
             <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutDown.duration(180)} style={styles.toast} pointerEvents="none">
               <Text style={styles.toastText}>{toast}</Text>
             </Animated.View>
           ) : null}
+          <UndoSnackbar message={snack?.text ?? null} actionLabel="Rückgängig" onAction={undoBlock} onDismiss={dismissSnack} />
         </View>
 
         {chatError ? (
@@ -615,22 +801,6 @@ export default function LiveRoomScreen() {
               ) : null}
             </View>
           )}
-          {!typing ? (
-            <View style={styles.reactions}>
-              {LIVE_REACTIONS.map((e) => (
-                <Pressable
-                  key={e}
-                  onPress={() => react(e)}
-                  hitSlop={4}
-                  style={({ pressed }) => [styles.reactBtn, pressed && styles.reactPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Reaktion ${e}`}
-                >
-                  <Text style={styles.reactEmoji}>{e}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
         </View>
       </View>
 
@@ -650,6 +820,14 @@ export default function LiveRoomScreen() {
         error={supportError}
         onSubmit={(d) => { void submitSupport(d); }}
         testMode={isTest}
+      />
+      <MessageActionsSheet
+        message={actionMsg}
+        onClose={() => setActionMsg(null)}
+        blocked={actionMsg ? isBlocked(actionMsg) : false}
+        reportBusy={reportBusy}
+        onReport={(m, reason) => { void report(m, reason); }}
+        onToggleBlock={toggleBlock}
       />
       <LoginDrawer visible={loginOpen} onClose={() => setLoginOpen(false)} />
       <VoteSheet
@@ -672,31 +850,32 @@ const makeStyles = (L: LivePalette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: L.bg },
   flex: { flex: 1 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-  actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, marginTop: 10 },
+  actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   supportBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 18, borderRadius: 21,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, height: 34, paddingHorizontal: 14, borderRadius: 17,
     backgroundColor: L.gold,
   },
-  supportText: { color: '#1B1B1B', fontSize: 15, fontFamily: F.bold },
+  supportText: { color: '#1B1B1B', fontSize: 13, fontFamily: F.bold },
   voteBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 16, borderRadius: 21,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, height: 34, paddingHorizontal: 12, borderRadius: 17,
     backgroundColor: L.navy, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(122,187,242,0.4)',
   },
-  voteText: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
+  voteText: { color: L.text, fontSize: 13, fontFamily: F.semiBold },
   onNavyText: { color: L.onNavy },
   guestBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 16,
-    borderRadius: 21, backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, height: 34, paddingHorizontal: 12,
+    borderRadius: 17, backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
   guestRound: {
-    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+    width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
-  chatWrap: { flex: 1, marginTop: 6 },
+  chatWrap: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: L.border },
+  reactionPicker: { position: 'absolute', right: 12, bottom: 10 },
   chatContent: { paddingVertical: 8 },
   chatWelcome: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', paddingHorizontal: 24, paddingVertical: 12 },
   toast: {
-    position: 'absolute', left: 16, right: 16, bottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+    position: 'absolute', left: 16, right: 68, bottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
     backgroundColor: 'rgba(30,107,184,0.95)',
   },
   toastText: { color: '#fff', fontSize: 13, fontFamily: F.semiBold, textAlign: 'center' },
@@ -722,10 +901,6 @@ const makeStyles = (L: LivePalette) => StyleSheet.create({
     backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
   loginText: { color: L.text, fontSize: 13, fontFamily: F.semiBold },
-  reactions: { flexDirection: 'row' },
-  reactBtn: { width: 33, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 17 },
-  reactPressed: { backgroundColor: L.surfaceRaised, transform: [{ scale: 1.2 }] },
-  reactEmoji: { fontSize: 22 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
   notFoundTitle: { color: L.text, fontSize: 18, fontFamily: F.heading },
   notFoundSub: { color: L.textSecondary, fontSize: 14, fontFamily: F.regular, textAlign: 'center' },

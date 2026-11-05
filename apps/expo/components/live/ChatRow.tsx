@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ function nameColor(name: string, colors: readonly string[]): string {
 /** Avatar fallbacks keep the bright dark-theme colours in every theme (dark initial on a light disc). */
 const AVATAR_COLORS = ['#7ABBF2', '#F2C14E', '#8BD3A6', '#F29E7A', '#C3A6F2', '#F27AB0', '#7AE0F2'] as const;
 
-function Avatar({ uri, name, size }: { uri: string | null; name: string; size: number }) {
+export function Avatar({ uri, name, size }: { uri: string | null; name: string; size: number }) {
   if (uri) return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" />;
   return (
     <View style={[staticStyles.avatarFallback, { width: size, height: size, borderRadius: size / 2, backgroundColor: nameColor(name, AVATAR_COLORS) }]}>
@@ -28,45 +28,58 @@ function Avatar({ uri, name, size }: { uri: string | null; name: string; size: n
   );
 }
 
-/** `animate` only for messages that arrive while watching (history and recycled rows mount still). */
-function ChatRowImpl({ m, own, animate }: { m: ChatMessage; own: boolean; animate: boolean }) {
+type RowProps = {
+  m: ChatMessage;
+  own: boolean;
+  /** Only for messages that arrive while watching (history and recycled rows mount still). */
+  animate: boolean;
+  /** Author blocked on this device: keep the name, hide the text. */
+  blocked?: boolean;
+  /** Long-press → report / block sheet (not passed for your own rows). */
+  onLongPress?: (m: ChatMessage) => void;
+};
+
+/** YouTube-Live-style row: avatar + muted name + message inline, no bubbles. */
+function ChatRowImpl({ m, own, animate, blocked = false, onLongPress }: RowProps) {
   const L = useLivePalette();
   const styles = liveStyles(makeStyles, L);
   const name = m.display_name?.trim() || 'Jemand';
 
-  if (m.kind === 'support') {
-    return (
-      <Animated.View entering={animate ? FadeInDown.duration(260) : undefined} style={styles.supportCard}>
-        <View style={styles.supportHead}>
-          <View style={styles.supportBadge}><Ionicons name="heart" size={13} color="#1B1B1B" /></View>
-          <Text style={styles.supportTitle} numberOfLines={2}>
-            <Text style={styles.supportName}>{name}</Text>
-            {` unterstützt mit ${formatSupportAmount(m.amount_cents)}`}
-          </Text>
-        </View>
-        {m.body ? <Text style={styles.supportBody}>{m.body}</Text> : null}
-      </Animated.View>
-    );
-  }
-
   if (m.kind === 'system') {
     return (
       <Animated.View entering={animate ? FadeInDown.duration(220) : undefined} style={styles.systemRow}>
-        <Ionicons name="megaphone-outline" size={14} color={L.accent} />
+        <Ionicons name="megaphone-outline" size={13} color={L.textTertiary} />
         <Text style={styles.systemText}>{m.body}</Text>
       </Animated.View>
     );
   }
 
+  const support = m.kind === 'support';
+  const longPress = onLongPress && !own ? () => onLongPress(m) : undefined;
   return (
-    <Animated.View entering={animate ? FadeInDown.duration(200) : undefined} style={[styles.row, m.featured_at ? styles.rowFeatured : null]}>
-      <Avatar uri={m.avatar_url} name={name} size={26} />
-      <Text style={styles.text}>
-        <Text style={[styles.name, { color: own ? L.text : nameColor(name, L.nameColors) }]}>{own ? `${name} (du)` : name}</Text>
-        {'  '}
-        <Text style={styles.body}>{m.body}</Text>
-      </Text>
-      {m.featured_at ? <Ionicons name="pin" size={13} color={L.goldText} style={styles.pin} /> : null}
+    <Animated.View entering={animate ? FadeInDown.duration(200) : undefined}>
+      <Pressable
+        onLongPress={longPress}
+        delayLongPress={350}
+        disabled={!longPress}
+        style={({ pressed }) => [
+          styles.row,
+          support && styles.rowSupport,
+          m.featured_at ? styles.rowFeatured : null,
+          pressed && longPress ? styles.rowPressed : null,
+        ]}
+      >
+        <Avatar uri={blocked ? null : m.avatar_url} name={name} size={24} />
+        <Text style={styles.text}>
+          <Text style={[styles.name, own && styles.nameOwn]}>{own ? `${name} (du)` : name}</Text>
+          {support ? <Text style={styles.moneyChip}>{`  ${formatSupportAmount(m.amount_cents)}  `}</Text> : null}
+          {'  '}
+          {blocked
+            ? <Text style={styles.hidden}>[Nachricht ausgeblendet]</Text>
+            : <Text style={styles.body}>{m.body}</Text>}
+        </Text>
+        {m.featured_at ? <Ionicons name="pin" size={13} color={L.goldText} style={styles.pin} /> : null}
+      </Pressable>
     </Animated.View>
   );
 }
@@ -98,26 +111,23 @@ const staticStyles = StyleSheet.create({
 });
 
 const makeStyles = (L: LivePalette) => StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 5 },
+  row: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingLeft: 14, paddingRight: 14, paddingVertical: 4,
+    borderLeftWidth: 2, borderLeftColor: 'transparent',
+  },
+  rowSupport: { borderLeftColor: L.goldBorder, backgroundColor: L.isDark ? 'rgba(242,193,78,0.05)' : 'rgba(242,193,78,0.08)' },
   rowFeatured: { backgroundColor: L.goldSoft },
-  text: { flex: 1, fontSize: 14, lineHeight: 20 },
-  name: { fontFamily: F.semiBold, fontSize: 14 },
+  rowPressed: { backgroundColor: L.surfaceRaised },
+  text: { flex: 1, fontSize: 14, lineHeight: 20, paddingTop: 1 },
+  name: { color: L.textSecondary, fontFamily: F.semiBold, fontSize: 13 },
+  nameOwn: { color: L.text },
+  // Inline gold chip: background on a nested Text renders as a highlight (no border radius on nested text).
+  moneyChip: { color: '#1B1B1B', backgroundColor: L.gold, fontFamily: F.bold, fontSize: 12 },
   body: { color: L.text, fontFamily: F.regular, fontSize: 14 },
+  hidden: { color: L.textTertiary, fontFamily: F.regular, fontStyle: 'italic', fontSize: 13 },
   pin: { marginTop: 3 },
-  supportCard: {
-    marginHorizontal: 12, marginVertical: 6, padding: 12, borderRadius: 14, backgroundColor: L.navy,
-    borderWidth: 1, borderColor: 'rgba(242,193,78,0.55)', gap: 6,
-  },
-  supportHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  supportBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: L.gold, alignItems: 'center', justifyContent: 'center' },
-  supportTitle: { flex: 1, color: L.onNavy, fontSize: 14, fontFamily: F.medium },
-  supportName: { color: L.gold, fontFamily: F.bold },
-  supportBody: { color: L.onNavy, fontSize: 14, lineHeight: 20, fontFamily: F.regular, paddingLeft: 30 },
-  systemRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginVertical: 4, paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 10, backgroundColor: L.infoSoft,
-  },
-  systemText: { flex: 1, color: L.textSecondary, fontSize: 13, fontFamily: F.medium },
+  systemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 16, paddingVertical: 5 },
+  systemText: { flex: 1, color: L.textTertiary, fontSize: 13, lineHeight: 18, fontFamily: F.regular, fontStyle: 'italic' },
   pinned: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginTop: 8, paddingHorizontal: 12, paddingVertical: 9,
     borderRadius: 12, backgroundColor: L.goldSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: L.goldBorder,

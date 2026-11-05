@@ -22,6 +22,7 @@ import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { AudioPlayerProvider } from '@/context/AudioPlayerContext';
+import { LivePlayerProvider } from '@/components/live/player/LivePlayerProvider';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { RelationsProvider } from '@/context/RelationsContext';
@@ -449,11 +450,14 @@ function Layout() {
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
                               <AudioPlayerProvider>
+                              {/* Live room: one shared video player + the floating mini player (renders over the stack). */}
+                              <LivePlayerProvider>
                                 <ConsentGate />
                                 <ObserveConsentGate />
                                 <AppUpdateGate />
                                 <ThemedLayout />
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
+                              </LivePlayerProvider>
                               </AudioPlayerProvider>
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>
