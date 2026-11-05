@@ -454,10 +454,14 @@ export type SpecialMenuItemRecord = {
   image_thumb_url?: string | null;
 };
 
-/** Active Mittagstisch for the Erkunden rail: menu + its dishes + the restaurant name. */
+/** Active Mittagstisch for the Erkunden rail: menu + its dishes (with their day category) + the restaurant. */
 export type SpecialMenuWithItems = SpecialMenuRecord & {
-  restaurant: Pick<RestaurantRecord, 'name' | 'slug'> | null;
-  special_menu_items: SpecialMenuItemRecord[];
+  restaurant:
+    | (Pick<RestaurantRecord, 'name' | 'slug' | 'logo_url'> & {
+        account?: Pick<Account, 'avatar_url'> | null;
+      })
+    | null;
+  special_menu_items: (SpecialMenuItemRecord & { category?: { name: string } | null })[];
 };
 
 // Extended types with relations

@@ -128,7 +128,9 @@ export async function fetchActiveSpecialMenus(limit: number = 3): Promise<Specia
 
   const { data, error } = await supabase
     .from('special_menus')
-    .select('*, restaurant:restaurants (name, slug), special_menu_items (*)')
+    .select(
+      '*, restaurant:restaurants (name, slug, logo_url, account:account_id (avatar_url)), special_menu_items (*, category:category_id (name))'
+    )
     .eq('status', 'published')
     .or(`end_date.is.null,end_date.gte.${today}`)
     .order('sort_order', { ascending: true })
