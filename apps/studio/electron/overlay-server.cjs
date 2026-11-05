@@ -37,7 +37,12 @@ const TYPES = {
 const MAX_STATE_BYTES = 5 * 1024 * 1024;
 // Origins allowed to open /state. OBS's CEF sends the page origin; Electron file:// pages send
 // `null` or nothing; the Vite dev server is localhost:5175.
-const STATIC_ORIGINS = new Set(['null', 'file://', 'http://localhost:5175', 'http://127.0.0.1:7311']);
+// Subscribers (OBS pages) must present one of these; `null`/absent Origins (sandboxed iframes, bare
+// local processes) are refused. The publisher (studio) is token-authenticated and may omit Origin.
+const SUBSCRIBER_ORIGINS = new Set(['http://localhost:5175', 'http://127.0.0.1:7311']);
+const PUBLISHER_EXTRA_ORIGINS = new Set(['null', 'file://']);
+const SLOW_SUBSCRIBER_BYTES = 2 * 1024 * 1024;
+const DEAD_SUBSCRIBER_BYTES = 16 * 1024 * 1024;
 
 function contentType(p) {
   return TYPES[path.extname(p).toLowerCase()] || 'application/octet-stream';
@@ -95,6 +100,8 @@ function createOverlayServer({
 
   /** Real listen state; the UI shows it (IPC overlay:status). */
   const state = { ok: false, port: null, error: null };
+  /** Per-launch secret the studio presents to publish on /state. */
+  const publisherToken = crypto.randomBytes(16).toString('hex');
 
   function allow(absPath) {
     if (!state.ok) throw new Error(`Medienserver nicht gestartet${state.error ? `: ${state.error}` : ''}`);
@@ -207,10 +214,17 @@ function createOverlayServer({
   /** Latest publisher snapshot (raw JSON), replayed to every new subscriber. */
   let snapshot = null;
 
-  function originOk(origin) {
-    if (!origin) return true;
-    if (STATIC_ORIGINS.has(origin)) return true;
-    return state.port != null && origin === `http://${HOST}:${state.port}`;
+  function originOk(origin, publisher) {
+    if (!origin) return publisher;
+    if (SUBSCRIBER_ORIGINS.has(origin)) return true;
+    if (state.port != null && origin === `http://${HOST}:${state.port}`) return true;
+    return publisher && PUBLISHER_EXTRA_ORIGINS.has(origin);
+  }
+
+  function tokenOk(given) {
+    const a = Buffer.from(String(given ?? ''));
+    const b = Buffer.from(publisherToken);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 
   server.on('upgrade', (req, socket, head) => {
@@ -220,30 +234,40 @@ function createOverlayServer({
     } catch {
       return socket.destroy();
     }
-    if (url.pathname !== '/state' || !originOk(req.headers.origin)) {
+    const publisher = url.searchParams.get('role') === 'publisher';
+    if (url.pathname !== '/state' || !originOk(req.headers.origin, publisher)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       return socket.destroy();
     }
-    const publisher = url.searchParams.get('role') === 'publisher';
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.on('error', () => {});
       if (!publisher) {
         if (snapshot) ws.send(snapshot);
         return; // subscribers never write
       }
+      if (!tokenOk(url.searchParams.get('token'))) return ws.close(4401, 'unauthorized');
+      ws._publisher = true;
       ws.on('message', (data) => {
         const text = data.toString();
+        if (!text.startsWith('{"type":"state"')) return;
         try {
           const msg = JSON.parse(text);
           if (!msg || typeof msg !== 'object' || msg.type !== 'state') return;
+          // Defence in depth: the stream key lives in settings and must never be relayed.
+          if ('settings' in msg || (msg.state && typeof msg.state === 'object' && 'settings' in msg.state)) {
+            log('overlay relay: rejected a message containing settings');
+            return;
+          }
         } catch {
           return; // malformed: drop
         }
         snapshot = text;
-        // Subscribers = every open client that is not a publisher.
-        for (const c of wss.clients) if (c !== ws && c.readyState === 1 && !c._publisher) c.send(text);
+        for (const c of wss.clients) {
+          if (c === ws || c.readyState !== 1 || c._publisher) continue;
+          if (c.bufferedAmount > DEAD_SUBSCRIBER_BYTES) c.terminate();
+          else if (c.bufferedAmount <= SLOW_SUBSCRIBER_BYTES) c.send(text); // else: latest wins, skip
+        }
       });
-      ws._publisher = true;
     });
   });
 
@@ -270,7 +294,7 @@ function createOverlayServer({
   }
 
   function status() {
-    return { ...state };
+    return { ...state, publisherToken };
   }
 
   function stop() {

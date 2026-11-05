@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('studio', {
     quitReady: () => ipcRenderer.send('app:quit-ready'),
     // Main asks "Sendung läuft – wirklich beenden?" (window close / Cmd+Q while on air).
     onConfirmQuit: (cb) => subscribe('app:confirm-quit', () => cb()),
+    // Tells main the question is on screen (otherwise main asks natively after a few seconds).
+    confirmShown: () => ipcRenderer.send('app:confirm-shown'),
     confirmQuit: () => ipcRenderer.send('app:quit-confirmed'),
   },
 });

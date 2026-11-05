@@ -195,22 +195,24 @@ const silent = (ws: any, ms = 150): Promise<boolean> =>
   });
 
 describe('/state relay', () => {
-  const url = (role?: string) => `ws://127.0.0.1:${port}/state${role ? `?role=${role}` : ''}`;
+  const url = (role?: string) =>
+    `ws://127.0.0.1:${port}/state${role ? `?role=${role}&token=${server.status().publisherToken}` : ''}`;
+  const O = 'http://127.0.0.1:7311';
 
   it('replays the latest publisher snapshot to a new subscriber first', async () => {
-    const pub = await wsOpen(url('publisher'));
+    const pub = await wsOpen(url('publisher'), O);
     pub.send(JSON.stringify({ type: 'state', state: { n: 1 }, sentAt: 1 }));
     pub.send(JSON.stringify({ type: 'state', state: { n: 2 }, sentAt: 2 }));
     await new Promise((r) => setTimeout(r, 100));
-    const sub = await wsOpen(url());
+    const sub = await wsOpen(url(), O);
     expect((await nextMsg(sub)).state).toEqual({ n: 2 });
     pub.close();
     sub.close();
   });
 
   it('relays live publisher messages to subscribers', async () => {
-    const sub = await wsOpen(url());
-    const pub = await wsOpen(url('publisher'));
+    const sub = await wsOpen(url(), O);
+    const pub = await wsOpen(url('publisher'), O);
     const p = nextMsg(sub);
     pub.send(JSON.stringify({ type: 'state', state: { n: 7 }, sentAt: 3 }));
     expect((await p).state).toEqual({ n: 7 });
@@ -219,23 +221,52 @@ describe('/state relay', () => {
   });
 
   it('ignores subscriber messages and malformed JSON', async () => {
-    const a = await wsOpen(url());
-    const b = await wsOpen(url());
-    const pub = await wsOpen(url('publisher'));
+    const a = await wsOpen(url(), O);
+    const b = await wsOpen(url(), O);
+    const pub = await wsOpen(url('publisher'), O);
     const quiet = silent(b);
     a.send(JSON.stringify({ type: 'state', state: { evil: true }, sentAt: 1 }));
     pub.send('{not json');
     expect(await quiet).toBe(true);
-    const late = await wsOpen(url());
+    const late = await wsOpen(url(), O);
     expect(await silent(late)).toBe(true); // nothing stored, nothing replayed
     [a, b, pub, late].forEach((w) => w.close());
   });
 
   it('rejects foreign origins and wrong paths', async () => {
     await expect(wsOpen(url(), 'http://evil.example')).rejects.toThrow();
+    await expect(wsOpen(url())).rejects.toThrow(); // subscriber without Origin
+    await expect(wsOpen(url(), 'null')).rejects.toThrow(); // sandboxed iframe
     await expect(wsOpen(`ws://127.0.0.1:${port}/other`)).rejects.toThrow();
     const ok = await wsOpen(url(), 'http://127.0.0.1:7311');
     ok.close();
+  });
+});
+
+describe('/state auth + safety', () => {
+  const O = 'http://127.0.0.1:7311';
+  const closeCode = (u: string) =>
+    new Promise<number>((resolve) => {
+      const ws = new WebSocket(u, { origin: O });
+      ws.on('close', (c: number) => resolve(c));
+      ws.on('error', () => {});
+    });
+
+  it('closes a publisher with a wrong or missing token with 4401', async () => {
+    expect(await closeCode(`ws://127.0.0.1:${port}/state?role=publisher&token=nope`)).toBe(4401);
+    expect(await closeCode(`ws://127.0.0.1:${port}/state?role=publisher`)).toBe(4401);
+  });
+
+  it('refuses to relay a message carrying settings', async () => {
+    const tok = server.status().publisherToken;
+    const sub = await wsOpen(`ws://127.0.0.1:${port}/state`, O);
+    const pub = await wsOpen(`ws://127.0.0.1:${port}/state?role=publisher&token=${tok}`, O);
+    pub.send(JSON.stringify({ type: 'state', state: { settings: { key: 'K' } }, sentAt: 1 }));
+    pub.send(JSON.stringify({ type: 'state', settings: {}, state: {}, sentAt: 1 }));
+    expect(await silent(sub)).toBe(true);
+    const late = await wsOpen(`ws://127.0.0.1:${port}/state`, O);
+    expect(await silent(late)).toBe(true);
+    [sub, pub, late].forEach((w) => w.close());
   });
 });
 

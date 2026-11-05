@@ -4,7 +4,8 @@ import { loadFonts } from '../render/fonts';
 import { defaultRenderContext } from '../media/program';
 import type { ShowState } from '../state/types';
 
-const STATE_URL = `ws://${location.hostname || '127.0.0.1'}:${location.port || '7311'}/state`;
+// Always the studio's server (also works when this page is served by the vite dev server).
+const STATE_URL = 'ws://127.0.0.1:7311/state';
 const RECONNECT_MS = 1000;
 const FRAME_MS = 1000 / 30;
 
@@ -17,7 +18,7 @@ function connect() {
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(String(e.data));
-      if (msg && msg.type === 'state' && msg.state) state = msg.state as ShowState;
+      if (msg && msg.type === 'state' && msg.state) state = msg.state as ShowState; // projection: overlays, templates, table, sponsors only
     } catch {
       /* ignore garbage */
     }

@@ -157,8 +157,26 @@ function createWindow() {
   });
   // A crashed renderer must not leave main "on air" with nobody feeding ffmpeg: reload, the new page adopts.
   win.webContents.on('render-process-gone', (_e, details) => {
-    log(`renderer gone: ${details.reason}${session_ ? ' (on air, reloading)' : ''}`);
-    if (details.reason !== 'clean-exit' && win && !win.isDestroyed()) win.reload();
+    log(`renderer gone: ${details.reason}${session_ ? ' (on air)' : ''}`);
+    if (details.reason === 'clean-exit' || !win || win.isDestroyed()) return;
+    if (allowReload(Date.now())) {
+      win.reload();
+      return;
+    }
+    // Crash loop: stop reloading, keep the broadcast running, tell the operator.
+    log('renderer crash loop, not reloading');
+    void dialog.showMessageBox({
+      type: 'error',
+      message: 'Die Oberfläche ist wiederholt abgestürzt.',
+      detail: session_
+        ? 'Die Sendung läuft weiter, das Bild bleibt aber stehen. Röbel Studio beenden (⌘Q) schließt die Aufnahme ab.'
+        : 'Bitte Röbel Studio neu starten.',
+    });
+  });
+  // A frozen page cannot answer the close confirmation: ask natively instead.
+  win.webContents.on('unresponsive', () => {
+    log('renderer unresponsive');
+    if (confirmPending) void nativeConfirmEnd();
   });
   win.on('closed', () => {
     win = null;
@@ -181,7 +199,31 @@ function setupMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-/** Asks the renderer to confirm ending the broadcast; it answers with app:quit-confirmed. */
+// At most RELOAD_MAX automatic reloads per RELOAD_WINDOW_MS after renderer crashes.
+const RELOAD_MAX = 3;
+const RELOAD_WINDOW_MS = 60_000;
+const reloads = [];
+function allowReload(now) {
+  while (reloads.length && now - reloads[0] > RELOAD_WINDOW_MS) reloads.shift();
+  if (reloads.length >= RELOAD_MAX) return false;
+  reloads.push(now);
+  return true;
+}
+
+// The page must acknowledge the close question within this time, or main asks natively
+// (frozen page, or a freshly reloaded page whose dialog is not mounted yet).
+const CONFIRM_ACK_MS = 4000;
+let confirmPending = false;
+let confirmTimer = null;
+let nativeConfirmOpen = false;
+
+function clearConfirm() {
+  confirmPending = false;
+  if (confirmTimer) clearTimeout(confirmTimer);
+  confirmTimer = null;
+}
+
+/** Asks the renderer to confirm ending the broadcast; it acks with app:confirm-shown, answers with app:quit-confirmed. */
 function askToEndBroadcast() {
   if (!win || win.isDestroyed() || win.webContents.isCrashed()) {
     confirmedQuit = true;
@@ -190,25 +232,49 @@ function askToEndBroadcast() {
   }
   win.show();
   win.focus();
+  if (nativeConfirmOpen) return;
+  confirmPending = true;
   win.webContents.send('app:confirm-quit');
+  if (!confirmTimer) {
+    confirmTimer = setTimeout(() => {
+      confirmTimer = null;
+      if (confirmPending) void nativeConfirmEnd();
+    }, CONFIRM_ACK_MS);
+  }
 }
 
-ipcMain.on('app:quit-confirmed', () => {
-  confirmedQuit = true;
-  app.quit();
+async function nativeConfirmEnd() {
+  if (nativeConfirmOpen || confirmedQuit) return;
+  nativeConfirmOpen = true;
+  clearConfirm();
+  try {
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Abbrechen', 'Sendung beenden'],
+      defaultId: 0,
+      cancelId: 0,
+      message: 'Sendung läuft – wirklich beenden?',
+      detail: 'Die Oberfläche reagiert nicht. Der Livestream endet für alle Zuschauer, die Aufnahme wird so sauber wie möglich abgeschlossen.',
+    });
+    if (response === 1) {
+      confirmedQuit = true;
+      app.quit();
+    }
+  } finally {
+    nativeConfirmOpen = false;
+  }
+}
+
+ipcMain.on('app:confirm-shown', () => {
+  // The page shows its own dialog; the operator may take as long as needed.
+  if (confirmTimer) clearTimeout(confirmTimer);
+  confirmTimer = null;
 });
 
-app.whenReady().then(() => {
-  setupPermissions();
-  setupMenu();
-  overlay = createOverlayServer({
-    userDataDir: app.getPath('userData'),
-    log: (msg) => console.log(`${new Date().toISOString()} [overlay] ${msg}`),
-  });
-  overlay.start().catch((e) => console.log(`${new Date().toISOString()} [overlay] start failed: ${e.message}`));
-  createWindow();
-  // Never block window creation on the macOS permission dialog.
-  void askMacMediaAccess();
+ipcMain.on('app:quit-confirmed', () => {
+  clearConfirm();
+  confirmedQuit = true;
+  app.quit();
 });
 
 // Quit: while on air the operator confirms first (Cmd+Q, window close). Then the renderer
@@ -216,6 +282,7 @@ app.whenReady().then(() => {
 // Waits at most QUIT_GRACE_MS for the renderer and QUIT_HARD_CAP_MS overall.
 const QUIT_GRACE_MS = 3000;
 const QUIT_HARD_CAP_MS = 5000;
+const OUTPUT_STOP_CAP_MS = 1500;
 let quitting = false;
 let confirmedQuit = false;
 app.on('before-quit', (e) => {
@@ -227,9 +294,12 @@ app.on('before-quit', (e) => {
   }
   quitting = true;
   const cap = setTimeout(() => {
-    log('quit took too long, exiting');
-    setOnAir(false);
-    app.exit(0);
+    log('quit took too long, closing the output and exiting');
+    // Give ffmpeg + the recording file one short chance to close cleanly.
+    Promise.race([output.stop().catch(() => {}), new Promise((r) => setTimeout(r, OUTPUT_STOP_CAP_MS))]).finally(() => {
+      setOnAir(false);
+      app.exit(0);
+    });
   }, QUIT_HARD_CAP_MS);
   const rendererDone = new Promise((resolve) => {
     if (!win || win.isDestroyed()) return resolve();
