@@ -152,3 +152,141 @@ describe('overlay-server /media/', () => {
     await second.stop();
   });
 });
+
+// ---- /state relay + static dist ----
+const WebSocket = require('ws');
+
+/** Connects and queues every incoming message from the first tick (a replay can arrive with the handshake). */
+function wsOpen(url: string, origin?: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url, origin ? { origin } : undefined);
+    ws.inbox = [] as string[];
+    ws.waiter = null as null | ((m: string) => void);
+    ws.on('message', (d: Buffer) => {
+      const m = d.toString();
+      if (ws.waiter) {
+        const w = ws.waiter;
+        ws.waiter = null;
+        w(m);
+      } else ws.inbox.push(m);
+    });
+    ws.once('open', () => resolve(ws));
+    ws.once('error', reject);
+    ws.once('unexpected-response', (_r: unknown, res: http.IncomingMessage) => reject(new Error(`http ${res.statusCode}`)));
+  });
+}
+const nextMsg = (ws: any, ms = 1000): Promise<any> =>
+  new Promise((resolve, reject) => {
+    if (ws.inbox.length) return resolve(JSON.parse(ws.inbox.shift()));
+    const t = setTimeout(() => reject(new Error('no message')), ms);
+    ws.waiter = (m: string) => {
+      clearTimeout(t);
+      resolve(JSON.parse(m));
+    };
+  });
+const silent = (ws: any, ms = 150): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (ws.inbox.length) return resolve(false);
+    ws.waiter = () => resolve(false);
+    setTimeout(() => {
+      ws.waiter = null;
+      resolve(true);
+    }, ms);
+  });
+
+describe('/state relay', () => {
+  const url = (role?: string) => `ws://127.0.0.1:${port}/state${role ? `?role=${role}` : ''}`;
+
+  it('replays the latest publisher snapshot to a new subscriber first', async () => {
+    const pub = await wsOpen(url('publisher'));
+    pub.send(JSON.stringify({ type: 'state', state: { n: 1 }, sentAt: 1 }));
+    pub.send(JSON.stringify({ type: 'state', state: { n: 2 }, sentAt: 2 }));
+    await new Promise((r) => setTimeout(r, 100));
+    const sub = await wsOpen(url());
+    expect((await nextMsg(sub)).state).toEqual({ n: 2 });
+    pub.close();
+    sub.close();
+  });
+
+  it('relays live publisher messages to subscribers', async () => {
+    const sub = await wsOpen(url());
+    const pub = await wsOpen(url('publisher'));
+    const p = nextMsg(sub);
+    pub.send(JSON.stringify({ type: 'state', state: { n: 7 }, sentAt: 3 }));
+    expect((await p).state).toEqual({ n: 7 });
+    pub.close();
+    sub.close();
+  });
+
+  it('ignores subscriber messages and malformed JSON', async () => {
+    const a = await wsOpen(url());
+    const b = await wsOpen(url());
+    const pub = await wsOpen(url('publisher'));
+    const quiet = silent(b);
+    a.send(JSON.stringify({ type: 'state', state: { evil: true }, sentAt: 1 }));
+    pub.send('{not json');
+    expect(await quiet).toBe(true);
+    const late = await wsOpen(url());
+    expect(await silent(late)).toBe(true); // nothing stored, nothing replayed
+    [a, b, pub, late].forEach((w) => w.close());
+  });
+
+  it('rejects foreign origins and wrong paths', async () => {
+    await expect(wsOpen(url(), 'http://evil.example')).rejects.toThrow();
+    await expect(wsOpen(`ws://127.0.0.1:${port}/other`)).rejects.toThrow();
+    const ok = await wsOpen(url(), 'http://127.0.0.1:7311');
+    ok.close();
+  });
+});
+
+describe('static dist', () => {
+  let dist: string;
+  let s2: ReturnType<typeof createOverlayServer>;
+  let p2: number;
+  beforeEach(async () => {
+    dist = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-dist-'));
+    fs.mkdirSync(path.join(dist, 'assets'));
+    fs.writeFileSync(path.join(dist, 'overlay.html'), '<!doctype html><title>o</title>');
+    fs.writeFileSync(path.join(dist, 'assets', 'a.js'), 'x');
+    fs.writeFileSync(path.join(dist, 'assets', 'f.woff2'), 'x');
+    fs.writeFileSync(path.join(dir, 'secret.txt'), 's');
+    s2 = createOverlayServer({ userDataDir: dir, port: 0, distDir: dist, log: () => {} });
+    p2 = await s2.start();
+  });
+  afterEach(async () => {
+    await s2.stop();
+    fs.rmSync(dist, { recursive: true, force: true });
+  });
+  const get = (t: string) =>
+    new Promise<{ status: number; type?: string }>((resolve, reject) => {
+      http
+        .request({ host: '127.0.0.1', port: p2, path: t }, (res) => {
+          res.resume();
+          resolve({ status: res.statusCode ?? 0, type: res.headers['content-type'] as string });
+        })
+        .on('error', reject)
+        .end();
+    });
+
+  it('serves overlay.html and assets with content types', async () => {
+    expect(await get('/overlay.html')).toMatchObject({ status: 200, type: expect.stringContaining('text/html') });
+    expect(await get('/assets/a.js')).toMatchObject({ status: 200, type: expect.stringContaining('javascript') });
+    expect(await get('/assets/f.woff2')).toMatchObject({ status: 200, type: 'font/woff2' });
+  });
+
+  it('blocks traversal and unknown files', async () => {
+    expect((await get('/assets/../../package.json')).status).toBe(404);
+    expect((await get('/assets/%2e%2e/%2e%2e/package.json')).status).toBe(404);
+    expect((await get('/assets/nope.js')).status).toBe(404);
+    expect((await get('/index.html')).status).toBe(404);
+  });
+
+  it('answers 503 with a hint when dist is missing', async () => {
+    const s3 = createOverlayServer({ userDataDir: dir, port: 0, distDir: path.join(dist, 'missing'), log: () => {} });
+    const p3 = await s3.start();
+    const r = await fetch(`http://127.0.0.1:${p3}/overlay.html`);
+    expect(r.status).toBe(503);
+    expect(await r.text()).toContain('pnpm build');
+    await s3.stop();
+  });
+});

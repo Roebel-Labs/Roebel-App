@@ -8,6 +8,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { WebSocketServer } = require('ws');
 
 const OVERLAY_PORT = 7311;
 const HOST = '127.0.0.1';
@@ -23,7 +24,20 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.map': 'application/json; charset=utf-8',
 };
+
+const MAX_STATE_BYTES = 5 * 1024 * 1024;
+// Origins allowed to open /state. OBS's CEF sends the page origin; Electron file:// pages send
+// `null` or nothing; the Vite dev server is localhost:5175.
+const STATIC_ORIGINS = new Set(['null', 'file://', 'http://localhost:5175', 'http://127.0.0.1:7311']);
 
 function contentType(p) {
   return TYPES[path.extname(p).toLowerCase()] || 'application/octet-stream';
@@ -50,7 +64,12 @@ function parseRange(header, size) {
   return { start, end };
 }
 
-function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} }) {
+function createOverlayServer({
+  userDataDir,
+  port = OVERLAY_PORT,
+  distDir = path.resolve(__dirname, '..', 'dist'),
+  log = () => {},
+}) {
   const tokenFile = path.join(userDataDir, 'media-tokens.json');
   /** token → absolute path */
   const tokens = new Map();
@@ -123,6 +142,37 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
     });
   }
 
+  /** Serves the built renderer (overlay.html + /assets/*) for the OBS browser source. */
+  function handleStatic(req, res, pathname) {
+    if (!fs.existsSync(distDir)) {
+      return send(res, 503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Renderer nicht gebaut: pnpm build ausführen');
+    }
+    let rel;
+    try {
+      rel = decodeURIComponent(pathname);
+    } catch {
+      return send(res, 400, {}, 'bad request');
+    }
+    if (rel !== '/overlay.html' && !rel.startsWith('/assets/')) return send(res, 404, {}, 'not found');
+    const root = path.resolve(distDir);
+    const file = path.resolve(root, `.${rel}`);
+    if (!file.startsWith(root + path.sep)) return send(res, 404, {}, 'not found');
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) return send(res, 404, {}, 'not found');
+      res.writeHead(200, {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': contentType(file),
+        'Content-Length': String(st.size),
+        'Cache-Control': 'no-cache',
+      });
+      if (req.method === 'HEAD') return res.end();
+      const stream = fs.createReadStream(file);
+      stream.on('error', () => res.destroy());
+      res.on('close', () => stream.destroy());
+      stream.pipe(res);
+    });
+  }
+
   const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') {
       return send(res, 204, {
@@ -140,6 +190,9 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
     // Strict token shape: traversal (`..`, `%2e%2e`) and other casing simply do not match.
     const m = /^\/media\/([a-f0-9]{32})$/.exec(url.pathname);
     if (m) return handleMedia(req, res, m[1]);
+    if (url.pathname === '/overlay.html' || url.pathname.startsWith('/assets/')) {
+      return handleStatic(req, res, url.pathname);
+    }
     return send(res, 404, {}, 'not found');
   });
   server.keepAliveTimeout = 5000;
@@ -147,6 +200,51 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
   server.on('clientError', (_err, socket) => {
     if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
     else socket.destroy();
+  });
+
+  // ---- /state: studio (publisher) → OBS browser sources (subscribers) ----
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_STATE_BYTES });
+  /** Latest publisher snapshot (raw JSON), replayed to every new subscriber. */
+  let snapshot = null;
+
+  function originOk(origin) {
+    if (!origin) return true;
+    if (STATIC_ORIGINS.has(origin)) return true;
+    return state.port != null && origin === `http://${HOST}:${state.port}`;
+  }
+
+  server.on('upgrade', (req, socket, head) => {
+    let url;
+    try {
+      url = new URL(req.url || '/', `http://${HOST}`);
+    } catch {
+      return socket.destroy();
+    }
+    if (url.pathname !== '/state' || !originOk(req.headers.origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      return socket.destroy();
+    }
+    const publisher = url.searchParams.get('role') === 'publisher';
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      ws.on('error', () => {});
+      if (!publisher) {
+        if (snapshot) ws.send(snapshot);
+        return; // subscribers never write
+      }
+      ws.on('message', (data) => {
+        const text = data.toString();
+        try {
+          const msg = JSON.parse(text);
+          if (!msg || typeof msg !== 'object' || msg.type !== 'state') return;
+        } catch {
+          return; // malformed: drop
+        }
+        snapshot = text;
+        // Subscribers = every open client that is not a publisher.
+        for (const c of wss.clients) if (c !== ws && c.readyState === 1 && !c._publisher) c.send(text);
+      });
+      ws._publisher = true;
+    });
   });
 
   function start() {
@@ -179,6 +277,7 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
     state.ok = false;
     return new Promise((resolve) => {
       if (!server.listening) return resolve();
+      for (const c of wss.clients) c.terminate();
       server.close(() => resolve());
       server.closeAllConnections?.();
     });
