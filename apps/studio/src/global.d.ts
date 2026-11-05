@@ -15,6 +15,16 @@ declare global {
         /** Grants the renderer access to a local file; resolves to http://127.0.0.1:7311/media/<token>. */
         allow(absPath: string): Promise<string>;
       };
+      fs: {
+        /** Appends one spot to <recordDir>/werbung-airtime.jsonl; never rejects. */
+        appendAirLog(entry: {
+          recordDir: string;
+          sponsorId: string;
+          name: string;
+          startedAt: string;
+          endedAt: string;
+        }): Promise<{ ok: boolean; error?: string }>;
+      };
       overlay: {
         /** Listen state of the local media/overlay server (127.0.0.1). */
         status(): Promise<{ ok: boolean; port: number | null; error: string | null }>;

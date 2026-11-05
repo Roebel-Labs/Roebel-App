@@ -1,5 +1,6 @@
 import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
+import { nextSpot } from '../sponsors/rotation';
 import { STARTER_TEMPLATES, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
@@ -48,7 +49,15 @@ export type Action =
   | { type: 'addAudioChannel'; channel: Omit<AudioChannel, 'id'> & { id?: string } }
   | { type: 'updateAudioChannel'; id: string; patch: Partial<Omit<AudioChannel, 'id'>> }
   | { type: 'removeAudioChannel'; id: string }
-  | { type: 'setMasterDb'; db: number };
+  | { type: 'setMasterDb'; db: number }
+  | { type: 'addSponsor'; sponsor: Omit<SponsorItem, 'id'> & { id?: string } }
+  | { type: 'updateSponsor'; id: string; patch: Partial<Omit<SponsorItem, 'id'>> }
+  | { type: 'removeSponsor'; id: string; now: number; failedIds?: string[] }
+  | { type: 'moveSponsor'; id: string; delta: number }
+  | { type: 'setRotationSeconds'; seconds: number }
+  | { type: 'startBreak'; now: number; failedIds?: string[] }
+  | { type: 'stopBreak'; now: number }
+  | { type: 'nextSpot'; failedIds?: string[] };
 
 const STORAGE_PRESETS: TransitionPreset[] = [
   { id: 'preset-cut', name: 'Cut', kind: 'cut', durationMs: 0, easing: 'linear' },
@@ -88,7 +97,7 @@ export function initialState(): ShowState {
     templates,
     table: { columns: [], rows: [], currentRowId: null },
     settings: defaultSettings(),
-    sponsors: { rotationSeconds: 8, items: [] },
+    sponsors: { rotationSeconds: 8, items: [], breakActive: false, currentId: null },
     audio: { channels: [], masterDb: 0 },
   };
 }
@@ -136,6 +145,23 @@ function dropScenes(s: ShowState, gone: Set<string>): ShowState {
     programSceneId: clear(s.programSceneId),
     transition: hit ? { ...s.transition, startedAt: null, fromSceneId: null } : s.transition,
   };
+}
+
+/** Sponsor logos are broadcast to the OBS page: only /media/ capability URLs from media.allow() are accepted. */
+const MEDIA_URL = /^http:\/\/127\.0\.0\.1:\d+\/media\/[\w-]+/;
+const safeLogo = (u: unknown): string | null => (typeof u === 'string' && MEDIA_URL.test(u) ? u : null);
+
+/** Hides (or shows) the break-spot overlay(s). */
+function setBreakOverlays(s: ShowState, visible: boolean, now: number): ShowState {
+  const kindOf = (o: OverlayInstance) => s.templates.find((t) => t.id === o.templateId)?.kind;
+  return {
+    ...s,
+    overlays: s.overlays.map((o) => (kindOf(o) === 'breakSpot' && o.visible !== visible ? setVisible(s, o, visible, now) : o)),
+  };
+}
+
+function endBreak(s: ShowState, now: number): ShowState {
+  return { ...setBreakOverlays(s, false, now), sponsors: { ...s.sponsors, breakActive: false, currentId: null } };
 }
 
 export function showReducer(s: ShowState, a: Action): ShowState {
@@ -300,6 +326,60 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       return { ...s, audio: { ...s.audio, channels: s.audio.channels.filter((c) => c.id !== a.id) } };
     case 'setMasterDb':
       return { ...s, audio: { ...s.audio, masterDb: a.db } };
+    case 'addSponsor': {
+      const item: SponsorItem = { ...a.sponsor, logoUrl: safeLogo(a.sponsor.logoUrl), id: a.sponsor.id ?? uid() };
+      if (s.sponsors.items.some((x) => x.id === item.id)) return s;
+      return { ...s, sponsors: { ...s.sponsors, items: [...s.sponsors.items, item] } };
+    }
+    case 'updateSponsor':
+      return {
+        ...s,
+        sponsors: { ...s.sponsors, items: s.sponsors.items.map((x) => {
+            if (x.id !== a.id) return x;
+            const m = { ...x, ...a.patch, id: x.id };
+            return 'logoUrl' in a.patch ? { ...m, logoUrl: safeLogo(a.patch.logoUrl) } : m;
+          }),
+        },
+      };
+    case 'removeSponsor': {
+      if (!s.sponsors.items.some((x) => x.id === a.id)) return s;
+      const items = s.sponsors.items.filter((x) => x.id !== a.id);
+      const removed: ShowState = { ...s, sponsors: { ...s.sponsors, items } };
+      if (!s.sponsors.breakActive || s.sponsors.currentId !== a.id) return removed;
+      const at = s.sponsors.items.findIndex((x) => x.id === a.id);
+      const i = nextSpot(items, new Set(a.failedIds ?? []), at - 1);
+      if (i < 0) return endBreak(removed, a.now);
+      return { ...removed, sponsors: { ...removed.sponsors, currentId: items[i].id } };
+    }
+    case 'moveSponsor': {
+      const items = s.sponsors.items;
+      const i = items.findIndex((x) => x.id === a.id);
+      const j = i + a.delta;
+      if (i < 0 || j < 0 || j >= items.length || j === i) return s;
+      const next = items.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return { ...s, sponsors: { ...s.sponsors, items: next } };
+    }
+    case 'setRotationSeconds': {
+      const sec = Number.isFinite(a.seconds) ? Math.min(60, Math.max(3, Math.round(a.seconds))) : 8;
+      return { ...s, sponsors: { ...s.sponsors, rotationSeconds: sec } };
+    }
+    case 'startBreak': {
+      if (s.sponsors.breakActive) return s;
+      const i = nextSpot(s.sponsors.items, new Set(a.failedIds ?? []), -1);
+      if (i < 0) return s;
+      const shown = setBreakOverlays(s, true, a.now);
+      return { ...shown, sponsors: { ...shown.sponsors, breakActive: true, currentId: s.sponsors.items[i].id } };
+    }
+    case 'stopBreak':
+      return s.sponsors.breakActive ? endBreak(s, a.now) : s;
+    case 'nextSpot': {
+      if (!s.sponsors.breakActive) return s;
+      const at = s.sponsors.items.findIndex((x) => x.id === s.sponsors.currentId);
+      const i = nextSpot(s.sponsors.items, new Set(a.failedIds ?? []), at);
+      if (i < 0 || s.sponsors.items[i].id === s.sponsors.currentId) return s;
+      return { ...s, sponsors: { ...s.sponsors, currentId: s.sponsors.items[i].id } };
+    }
   }
 }
 
@@ -351,9 +431,16 @@ function restoreTable(v: unknown): Table {
 function restoreSponsors(v: unknown): ShowState['sponsors'] {
   const d = initialState().sponsors;
   if (!isObj(v)) return d;
+  const items = arr<SponsorItem>(v.items, d.items)
+    .filter((i) => isObj(i) && typeof i.id === 'string')
+    .map((i) => ({ id: i.id, name: str(i.name, ''), logoUrl: safeLogo(i.logoUrl) }));
+  const currentId = typeof v.currentId === 'string' && items.some((i) => i.id === v.currentId) ? v.currentId : null;
   return {
-    rotationSeconds: num(v.rotationSeconds, d.rotationSeconds),
-    items: arr<SponsorItem>(v.items, d.items).filter((i) => isObj(i) && typeof i.id === 'string'),
+    rotationSeconds: Math.min(60, Math.max(3, num(v.rotationSeconds, d.rotationSeconds))),
+    items,
+    // A break only resumes with a valid current spot.
+    breakActive: v.breakActive === true && currentId !== null,
+    currentId: v.breakActive === true ? currentId : null,
   };
 }
 

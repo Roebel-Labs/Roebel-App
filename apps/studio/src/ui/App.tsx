@@ -6,7 +6,9 @@ import { errorText, maskedTarget } from './engine';
 import { hotkeyAction, targetKind } from './hotkeys';
 import { SettingsTab } from './SettingsTab';
 import { HealthBar } from './show/HealthBar';
+import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
+import { useSponsorRuntime } from './show/sponsor-runtime';
 import { TableTab } from './table/TableTab';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
@@ -265,6 +267,7 @@ function QuitConfirm() {
 function Shell() {
   const [tab, setTab] = useState<Tab>('show');
   useShowRuntime(tab);
+  useSponsorRuntime();
   return (
     <div className="app">
       <header className="topbar">
@@ -284,7 +287,7 @@ function Shell() {
       <RecordingBanner />
       <main className="content">
         {tab === 'show' && <ShowTab />}
-        {tab === 'design' && <div className="placeholder">Design kommt gleich.</div>}
+        {tab === 'design' && <DesignTab />}
         {tab === 'table' && <TableTab />}
         {tab === 'settings' && <SettingsTab />}
       </main>

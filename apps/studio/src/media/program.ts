@@ -19,15 +19,16 @@ export type ProgramOutput = {
   dispose(): void;
 };
 
-/** Current + next table row, wall clock; sponsor/donation are filled in by later tasks. */
+/** Current + next table row, wall clock; the sponsor is the spot of a running Werbeblock; donation is filled in by a later task. */
 export function defaultRenderContext(state: ShowState): RenderContext {
   const rows = state.table.rows;
   const i = rows.findIndex((r) => r.id === state.table.currentRowId);
+  const sp = state.sponsors.breakActive ? state.sponsors.items.find((x) => x.id === state.sponsors.currentId) : undefined;
   return {
     row: i >= 0 ? rows[i].values : null,
     next: i >= 0 && i + 1 < rows.length ? rows[i + 1].values : null,
     now: new Date(),
-    sponsor: null,
+    sponsor: sp ? { name: sp.name, logoUrl: sp.logoUrl ?? '' } : null,
     donation: null,
   };
 }

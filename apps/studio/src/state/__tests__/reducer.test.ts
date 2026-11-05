@@ -395,3 +395,107 @@ describe('audio', () => {
     expect(restore(JSON.stringify(raw)).audio).toEqual({ channels: [], masterDb: 0 });
   });
 });
+
+describe('sponsors', () => {
+  const sp = (id: string, logoUrl: string | null = `http://127.0.0.1:7311/media/${id}`) => ({ id, name: id.toUpperCase(), logoUrl });
+  const withSponsors = (...ids: string[]) =>
+    ids.reduce((s, id) => showReducer(s, { type: 'addSponsor', sponsor: sp(id) }), initialState());
+  const breakOverlay = (s: ShowState) => s.overlays.find((o) => s.templates.find((t) => t.id === o.templateId)?.kind === 'breakSpot')!;
+
+  it('adds, updates and removes partners', () => {
+    let s = withSponsors('a', 'b');
+    expect(s.sponsors.items.map((i) => i.id)).toEqual(['a', 'b']);
+    s = showReducer(s, { type: 'updateSponsor', id: 'a', patch: { name: 'Neu' } });
+    expect(s.sponsors.items[0].name).toBe('Neu');
+    s = showReducer(s, { type: 'removeSponsor', id: 'a', now: 1 });
+    expect(s.sponsors.items.map((i) => i.id)).toEqual(['b']);
+  });
+
+  it('addSponsor generates an id when none is given', () => {
+    const s = showReducer(initialState(), { type: 'addSponsor', sponsor: { name: 'X', logoUrl: null } });
+    expect(s.sponsors.items[0].id).toBeTruthy();
+  });
+
+  it('moves partners and ignores out-of-range moves', () => {
+    let s = withSponsors('a', 'b', 'c');
+    s = showReducer(s, { type: 'moveSponsor', id: 'c', delta: -1 });
+    expect(s.sponsors.items.map((i) => i.id)).toEqual(['a', 'c', 'b']);
+    expect(showReducer(s, { type: 'moveSponsor', id: 'a', delta: -1 })).toBe(s);
+  });
+
+  it('clamps rotationSeconds to 3-60', () => {
+    expect(showReducer(initialState(), { type: 'setRotationSeconds', seconds: 1 }).sponsors.rotationSeconds).toBe(3);
+    expect(showReducer(initialState(), { type: 'setRotationSeconds', seconds: 500 }).sponsors.rotationSeconds).toBe(60);
+    expect(showReducer(initialState(), { type: 'setRotationSeconds', seconds: 12 }).sponsors.rotationSeconds).toBe(12);
+    expect(showReducer(initialState(), { type: 'setRotationSeconds', seconds: NaN }).sponsors.rotationSeconds).toBe(8);
+  });
+
+  it('startBreak picks the first usable partner and shows the break overlay', () => {
+    let s = showReducer(initialState(), { type: 'addSponsor', sponsor: sp('a', null) });
+    s = showReducer(s, { type: 'addSponsor', sponsor: sp('b') });
+    s = showReducer(s, { type: 'startBreak', now: 100 });
+    expect(s.sponsors.breakActive).toBe(true);
+    expect(s.sponsors.currentId).toBe('b');
+    expect(breakOverlay(s).visible).toBe(true);
+  });
+
+  it('startBreak does nothing without a usable partner', () => {
+    const s = showReducer(initialState(), { type: 'addSponsor', sponsor: sp('a', null) });
+    expect(showReducer(s, { type: 'startBreak', now: 1 })).toBe(s);
+    expect(showReducer(s, { type: 'startBreak', now: 1, failedIds: [] }).sponsors.breakActive).toBe(false);
+  });
+
+  it('nextSpot rotates and wraps while a break is active, skipping failed ids', () => {
+    let s = showReducer(withSponsors('a', 'b', 'c'), { type: 'startBreak', now: 1 });
+    s = showReducer(s, { type: 'nextSpot' });
+    expect(s.sponsors.currentId).toBe('b');
+    s = showReducer(s, { type: 'nextSpot', failedIds: ['c'] });
+    expect(s.sponsors.currentId).toBe('a');
+  });
+
+  it('nextSpot is a no-op outside a break', () => {
+    const s = withSponsors('a', 'b');
+    expect(showReducer(s, { type: 'nextSpot' })).toBe(s);
+  });
+
+  it('stopBreak hides the overlay and clears the spot', () => {
+    let s = showReducer(withSponsors('a'), { type: 'startBreak', now: 1 });
+    s = showReducer(s, { type: 'stopBreak', now: 2 });
+    expect(s.sponsors).toMatchObject({ breakActive: false, currentId: null });
+    expect(breakOverlay(s).visible).toBe(false);
+  });
+
+  it('removing the current partner during a break advances, or ends the break when none is left', () => {
+    let s = showReducer(withSponsors('a', 'b'), { type: 'startBreak', now: 1 });
+    s = showReducer(s, { type: 'removeSponsor', id: 'a', now: 2 });
+    expect(s.sponsors.currentId).toBe('b');
+    expect(s.sponsors.breakActive).toBe(true);
+    s = showReducer(s, { type: 'removeSponsor', id: 'b', now: 3 });
+    expect(s.sponsors).toMatchObject({ breakActive: false, currentId: null });
+    expect(breakOverlay(s).visible).toBe(false);
+  });
+
+  it('restore validates the current spot', () => {
+    const base = JSON.parse(serialize(withSponsors('a')));
+    base.sponsors.breakActive = true;
+    base.sponsors.currentId = 'a';
+    expect(restore(JSON.stringify(base)).sponsors).toMatchObject({ breakActive: true, currentId: 'a' });
+    base.sponsors.currentId = 'ghost';
+    expect(restore(JSON.stringify(base)).sponsors).toMatchObject({ breakActive: false, currentId: null });
+    base.sponsors.rotationSeconds = 999;
+    expect(restore(JSON.stringify(base)).sponsors.rotationSeconds).toBe(60);
+  });
+});
+
+describe('sponsor logo safety', () => {
+  it('only keeps /media/ capability URLs', () => {
+    let s = showReducer(initialState(), { type: 'addSponsor', sponsor: { id: 'a', name: 'A', logoUrl: 'file:///etc/passwd' } });
+    expect(s.sponsors.items[0].logoUrl).toBeNull();
+    s = showReducer(s, { type: 'updateSponsor', id: 'a', patch: { logoUrl: '/Users/x/logo.png' } });
+    expect(s.sponsors.items[0].logoUrl).toBeNull();
+    s = showReducer(s, { type: 'updateSponsor', id: 'a', patch: { logoUrl: 'http://127.0.0.1:7311/media/abc' } });
+    expect(s.sponsors.items[0].logoUrl).toBe('http://127.0.0.1:7311/media/abc');
+    const r = restore(JSON.stringify({ ...s, sponsors: { ...s.sponsors, items: [{ id: 'b', name: 'B', logoUrl: 'file:///x' }] } }));
+    expect(r.sponsors.items[0].logoUrl).toBeNull();
+  });
+});

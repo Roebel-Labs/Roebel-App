@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, sy
 const path = require('node:path');
 const { createOutput } = require('./output.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
+const { appendAirLog } = require('./airlog.cjs');
 
 // Program audio (silent track, later the mixer) must run without a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -54,6 +55,9 @@ ipcMain.handle('output:getStatus', () => ({
   status: output.getStatus(),
 }));
 ipcMain.on('output:chunk', (_e, buf) => output.chunk(buf));
+
+// Sponsor air-time log (append-only JSONL in the recording folder); never rejects.
+ipcMain.handle('fs:appendAirLog', (_e, payload) => appendAirLog(payload));
 
 let overlay = null;
 ipcMain.handle('media:allow', (_e, absPath) => {

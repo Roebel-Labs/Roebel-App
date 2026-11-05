@@ -159,7 +159,13 @@ export type ShowState = {
   templates: Template[];
   table: Table;
   settings: Settings;
-  sponsors: { rotationSeconds: number; items: SponsorItem[] };
+  sponsors: {
+    rotationSeconds: number;
+    items: SponsorItem[];
+    /** A Werbeblock is running; the spot on air is `currentId`. Lives in the state so the OBS overlay page sees it too. */
+    breakActive: boolean;
+    currentId: string | null;
+  };
   audio: { channels: AudioChannel[]; masterDb: number };
 };
 

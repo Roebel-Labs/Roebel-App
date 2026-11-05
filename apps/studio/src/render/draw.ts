@@ -553,6 +553,11 @@ export function cachedImage(src: string): HTMLImageElement | null {
   return entry.state === 'ok' ? entry.img : null;
 }
 
+/** True while the last load of `src` failed (used to skip partners whose logo is gone). */
+export function imageFailed(src: string): boolean {
+  return images.get(src)?.state === 'failed';
+}
+
 /** Test/dev helper. */
 export function clearImageCache() {
   images.clear();

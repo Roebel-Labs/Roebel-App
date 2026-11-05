@@ -3,6 +3,7 @@ import { AudioStrip } from './AudioStrip';
 import { Monitors } from './Monitors';
 import { OverlayRow } from './OverlayRow';
 import { SourceRow } from './SourceRow';
+import { SponsorPanel } from './SponsorPanel';
 
 /** Layout A: monitors + TAKE on top; sources and overlays left, audio right underneath (meters always visible). */
 export function ShowTab() {
@@ -15,7 +16,10 @@ export function ShowTab() {
           <SourceRow />
           <OverlayRow />
         </div>
-        <AudioStrip mixer={mixer} />
+        <div className="show-side">
+          <AudioStrip mixer={mixer} />
+          <SponsorPanel />
+        </div>
       </div>
     </div>
   );

@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('studio', {
     // Returns http://127.0.0.1:7311/media/<token> for a local file.
     allow: (absPath) => ipcRenderer.invoke('media:allow', absPath),
   },
+  fs: {
+    // { recordDir, sponsorId, name, startedAt, endedAt } -> { ok, error? }; appends to <recordDir>/werbung-airtime.jsonl.
+    appendAirLog: (entry) => ipcRenderer.invoke('fs:appendAirLog', entry),
+  },
   overlay: {
     // { ok, port, error }: whether the local media/overlay server is listening.
     status: () => ipcRenderer.invoke('overlay:status'),
