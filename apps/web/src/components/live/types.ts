@@ -122,8 +122,9 @@ export async function fetchLiveResults(slug: string): Promise<LiveResultItem[] |
   }
 }
 
-export type LiveReactionEmoji = "❤️" | "🔥" | "👏" | "💃" | "🎉";
-export const LIVE_REACTIONS: LiveReactionEmoji[] = ["❤️", "🔥", "👏", "💃", "🎉"];
+export type LiveReactionEmoji = "❤️" | "😄" | "🎉" | "😳" | "💯" | "🔥" | "👏" | "💃";
+// App picker (YouTube-style) sends ❤️ 😄 🎉 😳 💯; older app versions still send 🔥 👏 💃 → accept both.
+export const LIVE_REACTIONS: LiveReactionEmoji[] = ["❤️", "😄", "🎉", "😳", "💯", "🔥", "👏", "💃"];
 
 export function normalizeShow(row: Record<string, unknown>): LiveShow {
   const r = row as unknown as LiveShow;
