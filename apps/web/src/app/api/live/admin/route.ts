@@ -191,6 +191,14 @@ export async function POST(request: NextRequest) {
         await admin.from("live_mutes").upsert({ show_id: showId, wallet: msg.wallet }, { onConflict: "show_id,wallet", ignoreDuplicates: true });
         // Hide everything this person wrote in the show.
         await admin.from("live_chat_messages").update({ hidden_at: now }).eq("show_id", showId).eq("wallet", msg.wallet).eq("kind", "chat").is("hidden_at", null);
+        // If one of their messages is on air, take it off.
+        const overlay = show.overlay as Record<string, unknown>;
+        if (typeof overlay?.featured_message_id === "string") {
+          const { data: f } = await admin.from("live_chat_messages").select("wallet").eq("id", overlay.featured_message_id).maybeSingle();
+          if (f?.wallet === msg.wallet) {
+            await admin.from("live_shows").update({ overlay: { ...overlay, featured_message_id: null }, updated_at: now }).eq("id", showId);
+          }
+        }
         return jsonOk({ muted: true });
       }
       case "system_message": {
