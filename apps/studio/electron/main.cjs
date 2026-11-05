@@ -247,6 +247,7 @@ async function nativeConfirmEnd() {
   if (nativeConfirmOpen || confirmedQuit) return;
   nativeConfirmOpen = true;
   clearConfirm();
+  log('page did not answer the close question, asking natively');
   try {
     const { response } = await dialog.showMessageBox({
       type: 'warning',
@@ -266,9 +267,10 @@ async function nativeConfirmEnd() {
 }
 
 ipcMain.on('app:confirm-shown', () => {
-  // The page shows its own dialog; the operator may take as long as needed.
-  if (confirmTimer) clearTimeout(confirmTimer);
-  confirmTimer = null;
+  // The page shows its own dialog: the question is answered there (confirm → app:quit-confirmed,
+  // cancel → nothing), so nothing is pending any more and a later 'unresponsive' must not pop
+  // a native dialog. The operator may take as long as needed.
+  clearConfirm();
 });
 
 ipcMain.on('app:quit-confirmed', () => {

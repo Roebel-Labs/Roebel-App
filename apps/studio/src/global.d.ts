@@ -30,6 +30,7 @@ declare global {
         onWillQuit(cb: () => void): () => void;
         quitReady(): void;
         onConfirmQuit(cb: () => void): () => void;
+        confirmShown(): void;
         confirmQuit(): void;
       };
     };

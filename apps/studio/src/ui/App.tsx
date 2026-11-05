@@ -238,7 +238,14 @@ function useShowRuntime(tab: Tab) {
 /** Window close / Cmd+Q while on air: main asks, the operator confirms, main then quits gracefully. */
 function QuitConfirm() {
   const [open, setOpen] = useState(false);
-  useEffect(() => window.studio.app.onConfirmQuit(() => setOpen(true)), []);
+  useEffect(
+    () =>
+      window.studio.app.onConfirmQuit(() => {
+        setOpen(true);
+        window.studio.app.confirmShown();
+      }),
+    [],
+  );
   if (!open) return null;
   return (
     <ConfirmDialog
