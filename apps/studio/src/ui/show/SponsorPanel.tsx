@@ -62,6 +62,12 @@ export function SponsorPanel() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sp = state.sponsors;
+  // Typing "5" on the way to "15" must not clamp mid-edit: commit on blur / Enter.
+  const [draft, setDraft] = useState<string | null>(null);
+  const commitRotation = () => {
+    if (draft !== null && draft.trim() !== '') dispatch({ type: 'setRotationSeconds', seconds: Number(draft) });
+    setDraft(null);
+  };
   const failed = new Set(failedSponsorIds(state));
   const usable = sp.items.some((i) => i.logoUrl && !failed.has(i.id));
   const hasOverlay = state.overlays.some((o) => state.templates.find((t) => t.id === o.templateId)?.kind === 'breakSpot');
@@ -70,7 +76,7 @@ export function SponsorPanel() {
     setError(null);
     try {
       const url = await pickLogo();
-      if (url) dispatch({ type: 'updateSponsor', id, patch: { logoUrl: url } });
+      if (url) dispatch({ type: 'updateSponsor', id, patch: { logoUrl: url }, now: Date.now(), failedIds: [...failed] });
     } catch (e) {
       setError(errorText(e));
     }
@@ -102,8 +108,13 @@ export function SponsorPanel() {
             type="number"
             min={3}
             max={60}
-            value={sp.rotationSeconds}
-            onChange={(e) => dispatch({ type: 'setRotationSeconds', seconds: Number(e.target.value) })}
+            value={draft ?? String(sp.rotationSeconds)}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitRotation}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setDraft(null);
+            }}
           />
           <span className="hint">Sekunden</span>
         </label>

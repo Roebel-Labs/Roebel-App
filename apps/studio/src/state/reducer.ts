@@ -1,5 +1,6 @@
 import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
+import { OVERLAY_PORT } from '../overlay/constants';
 import { nextSpot } from '../sponsors/rotation';
 import { STARTER_TEMPLATES, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
@@ -51,7 +52,7 @@ export type Action =
   | { type: 'removeAudioChannel'; id: string }
   | { type: 'setMasterDb'; db: number }
   | { type: 'addSponsor'; sponsor: Omit<SponsorItem, 'id'> & { id?: string } }
-  | { type: 'updateSponsor'; id: string; patch: Partial<Omit<SponsorItem, 'id'>> }
+  | { type: 'updateSponsor'; id: string; patch: Partial<Omit<SponsorItem, 'id'>>; now?: number; failedIds?: string[] }
   | { type: 'removeSponsor'; id: string; now: number; failedIds?: string[] }
   | { type: 'moveSponsor'; id: string; delta: number }
   | { type: 'setRotationSeconds'; seconds: number }
@@ -148,7 +149,7 @@ function dropScenes(s: ShowState, gone: Set<string>): ShowState {
 }
 
 /** Sponsor logos are broadcast to the OBS page: only /media/ capability URLs from media.allow() are accepted. */
-const MEDIA_URL = /^http:\/\/127\.0\.0\.1:\d+\/media\/[\w-]+/;
+const MEDIA_URL = new RegExp(`^http://127\\.0\\.0\\.1:${OVERLAY_PORT}/media/[0-9a-f]{32}$`);
 const safeLogo = (u: unknown): string | null => (typeof u === 'string' && MEDIA_URL.test(u) ? u : null);
 
 /** Hides (or shows) the break-spot overlay(s). */
@@ -158,6 +159,15 @@ function setBreakOverlays(s: ShowState, visible: boolean, now: number): ShowStat
     ...s,
     overlays: s.overlays.map((o) => (kindOf(o) === 'breakSpot' && o.visible !== visible ? setVisible(s, o, visible, now) : o)),
   };
+}
+
+/** Hiding the break-spot overlay by hand ends the Werbeblock (no rotation or logging of spots nobody sees). */
+function syncBreak(next: ShowState, before: OverlayInstance | undefined): ShowState {
+  if (!before || !next.sponsors.breakActive) return next;
+  const isBreak = next.templates.find((t) => t.id === before.templateId)?.kind === 'breakSpot';
+  const after = next.overlays.find((x) => x.id === before.id);
+  if (!isBreak || !after || after.visible) return next;
+  return { ...next, sponsors: { ...next.sponsors, breakActive: false, currentId: null } };
 }
 
 function endBreak(s: ShowState, now: number): ShowState {
@@ -201,10 +211,14 @@ export function showReducer(s: ShowState, a: Action): ShowState {
         presets: exists ? s.presets.map((p) => (p.id === preset.id ? preset : p)) : [...s.presets, preset],
       };
     }
-    case 'toggleOverlay':
-      return patchOverlay(s, a.id, (o) => setVisible(s, o, !o.visible, a.now));
-    case 'setOverlay':
-      return patchOverlay(s, a.id, (o) => setVisible(s, o, a.visible, a.now));
+    case 'toggleOverlay': {
+      const o = s.overlays.find((x) => x.id === a.id);
+      return syncBreak(patchOverlay(s, a.id, (x) => setVisible(s, x, !x.visible, a.now)), o);
+    }
+    case 'setOverlay': {
+      const o = s.overlays.find((x) => x.id === a.id);
+      return syncBreak(patchOverlay(s, a.id, (x) => setVisible(s, x, a.visible, a.now)), o);
+    }
     case 'addOverlay': {
       const id = a.id ?? uid();
       if (!s.templates.some((t) => t.id === a.templateId) || s.overlays.some((o) => o.id === id)) return s;
@@ -331,8 +345,8 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       if (s.sponsors.items.some((x) => x.id === item.id)) return s;
       return { ...s, sponsors: { ...s.sponsors, items: [...s.sponsors.items, item] } };
     }
-    case 'updateSponsor':
-      return {
+    case 'updateSponsor': {
+      const updated: ShowState = {
         ...s,
         sponsors: { ...s.sponsors, items: s.sponsors.items.map((x) => {
             if (x.id !== a.id) return x;
@@ -341,6 +355,14 @@ export function showReducer(s: ShowState, a: Action): ShowState {
           }),
         },
       };
+      const cur = updated.sponsors.items.find((x) => x.id === a.id);
+      if (!updated.sponsors.breakActive || updated.sponsors.currentId !== a.id || (cur && cur.logoUrl)) return updated;
+      // The spot on air lost its logo: move on (or end the break).
+      const at = updated.sponsors.items.findIndex((x) => x.id === a.id);
+      const i = nextSpot(updated.sponsors.items, new Set(a.failedIds ?? []), at);
+      if (i < 0 || updated.sponsors.items[i].id === a.id) return endBreak(updated, a.now ?? Date.now());
+      return { ...updated, sponsors: { ...updated.sponsors, currentId: updated.sponsors.items[i].id } };
+    }
     case 'removeSponsor': {
       if (!s.sponsors.items.some((x) => x.id === a.id)) return s;
       const items = s.sponsors.items.filter((x) => x.id !== a.id);

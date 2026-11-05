@@ -1,8 +1,9 @@
 // Studio side of the OBS fallback: pushes a key-free projection of the show to the overlay server's /state relay.
+import { OVERLAY_PORT } from './constants';
 import { overlayProjection } from './projection';
 import type { ShowState } from '../state/types';
 
-export const OVERLAY_STATE_URL = 'ws://127.0.0.1:7311/state';
+export const OVERLAY_STATE_URL = `ws://127.0.0.1:${OVERLAY_PORT}/state`;
 const THROTTLE_MS = 100;
 const RECONNECT_MS = 1000;
 const MAX_BYTES = 4.5 * 1024 * 1024; // server limit is 5 MB

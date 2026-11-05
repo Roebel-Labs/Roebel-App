@@ -8,7 +8,7 @@ import { SettingsTab } from './SettingsTab';
 import { HealthBar } from './show/HealthBar';
 import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
-import { useSponsorRuntime } from './show/sponsor-runtime';
+import { flushSponsorLog, useSponsorRuntime } from './show/sponsor-runtime';
 import { TableTab } from './table/TableTab';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
@@ -228,10 +228,9 @@ function useShowRuntime(tab: Tab) {
   useEffect(
     () =>
       window.studio.app.onWillQuit(() => {
-        void onAir
-          .stop()
-          .catch(() => {})
-          .finally(() => window.studio.app.quitReady());
+        // Bounded: main's own grace timer still applies; never let the log hold up the quit.
+        const logged = Promise.race([flushSponsorLog(), new Promise((r) => setTimeout(r, 1500))]).catch(() => {});
+        void Promise.all([onAir.stop().catch(() => {}), logged]).finally(() => window.studio.app.quitReady());
       }),
     [onAir],
   );
