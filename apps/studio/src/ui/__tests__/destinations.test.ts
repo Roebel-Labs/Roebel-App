@@ -32,3 +32,30 @@ describe('uploadEstimate', () => {
     expect(uploadEstimate(2, 6000, 160)).toMatchObject({ totalKbps: 12320, warn: true });
   });
 });
+
+describe('destinationPills', () => {
+  it('follows the running encoder, not the settings toggles, and shows amber while reconnecting', async () => {
+    const { destinationPills } = await import('../show/HealthBar');
+    const settings = {
+      ...(await import('../../state/reducer')).defaultSettings(),
+      destinations: [
+        { ...newDestination('youtube', 'yt'), enabled: false },
+        { ...newDestination('cloudflare-srt', 'cf'), enabled: true },
+      ],
+    };
+    const live = { state: 'live' as const, since: 0, recordingBytes: 0, restarts: 0 };
+    const pills = destinationPills(settings, {
+      ...live,
+      destinations: [
+        { id: 'cf', state: 'ok' },
+        { id: 'yt', state: 'failed', lastError: 'Operation timed out' },
+      ],
+    });
+    expect(pills.map((p) => [p.name, p.tone])).toEqual([
+      ['Cloudflare', 'ok'],
+      ['YouTube', 'lost'],
+    ]);
+    const restarting = destinationPills(settings, { ...live, state: 'reconnecting', destinations: [{ id: 'cf', state: 'ok' }] });
+    expect(restarting.map((p) => p.tone)).toEqual(['loading']);
+  });
+});

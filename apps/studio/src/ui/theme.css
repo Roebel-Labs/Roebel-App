@@ -1202,6 +1202,8 @@ input[type='color'].input {
 
 .dest-add {
   position: relative;
+  display: flex;
+  gap: 8px;
   width: max-content;
 }
 

@@ -52,13 +52,18 @@ function toBuffer(chunk) {
   return null;
 }
 
+/** Destinations keep their renderer ids; missing ids fall back to the position. */
+function withIds(list) {
+  return list.map((d, i) => ({ ...d, id: typeof d.id === 'string' ? d.id : String(i) }));
+}
+
 /**
  * @param {{ sendStatus: (s: object) => void, onNeedHeader: () => void, log?: (msg: string) => void }} hooks
  */
 function createOutput(hooks) {
   const rawLog = hooks.log || (() => {});
   // Never let ingest secrets (stream key, SRT passphrase) reach logs or status.
-  const mask = (s) => maskSecrets(s, cfg && cfg.destinations);
+  const mask = (s) => maskSecrets(s, cfg ? [...cfg.destinations, ...(cfg.previousDestinations || [])] : null);
   const log = (msg) => rawLog(mask(msg));
   let cfg = null;
   let started = false;
@@ -74,6 +79,7 @@ function createOutput(hooks) {
   let held = null; // short chunk that may be the start of an EBML header
   let recordOnly = false;
   let reconnecting = null; // pending reconnect() promise
+  let generation = 0; // bumped by start()/stop(): a reconnect from an older session must not spawn
   const openedFiles = new Set();
 
   /** @type {import('../src/state/types').OutputStatus} */
@@ -191,8 +197,8 @@ function createOutput(hooks) {
       proc = null;
       log(`ffmpeg exited code=${code} signal=${signal}`);
       if (!started || status.state === 'error') return;
-      // A single destination fails with its process (tee reports its own slaves).
-      if (cfg.destinations.length === 1) markDestinationFailed(0, stderrTail || `ffmpeg beendet (${signal || code})`);
+      // A single destination is not marked failed here: it reconnects on its own and
+      // shows 'reconnecting' meanwhile (tee reports its own failed slaves).
       const delay = nextRestartDelay(attempt);
       attempt += 1;
       setState('reconnecting', {
@@ -216,7 +222,8 @@ function createOutput(hooks) {
   async function start(newCfg) {
     if (started) await stop();
     if (!newCfg) throw new Error('no_target');
-    const destinations = usableDestinations(newCfg).map((d, i) => ({ ...d, id: typeof d.id === 'string' ? d.id : String(i) }));
+    generation += 1;
+    const destinations = withIds(usableDestinations(newCfg));
     cfg = { ...newCfg, destinations, recordDir: expandHome(newCfg.recordDir) };
     delete cfg.target;
     fs.mkdirSync(cfg.recordDir, { recursive: true });
@@ -308,10 +315,21 @@ function createOutput(hooks) {
    * "Ziel neu verbinden": a failed tee slave is never retried by ffmpeg, so
    * restart the whole encoder (brief gap on every destination). Waits for the
    * old process to close its connections before the new one opens them.
+   * `destinations` (optional) replaces the set, so the operator can switch a hung
+   * destination off and drop it without ending the session; at least one must stay.
+   * @param {object[]} [destinations]
    */
-  function reconnect() {
+  function reconnect(destinations) {
     if (!started || recordOnly) return Promise.resolve();
     if (reconnecting) return reconnecting;
+    if (destinations !== undefined) {
+      const next = withIds(usableDestinations({ destinations }));
+      if (next.length === 0) return Promise.reject(new Error('no_target'));
+      buildFfmpegArgs({ ...cfg, destinations: next }); // validate before touching the running encoder
+      // Keep the old secrets maskable while the old process may still log.
+      cfg = { ...cfg, destinations: next, previousDestinations: cfg.destinations };
+    }
+    const gen = generation;
     reconnecting = (async () => {
       const old = proc;
       proc = null;
@@ -333,7 +351,7 @@ function createOutput(hooks) {
           old.kill('SIGTERM');
         });
       }
-      if (!started) return;
+      if (!started || gen !== generation) return; // stopped or restarted meanwhile
       attempt = 0;
       spawnFfmpeg();
       hooks.sendStatus({ ...status, destinations: status.destinations.map((d) => ({ ...d })) });
@@ -350,6 +368,7 @@ function createOutput(hooks) {
     held = null;
     started = false;
     recordOnly = false;
+    generation += 1;
     clearTimeout(restartTimer);
     restartTimer = null;
     clearInterval(statusTimer);
@@ -388,7 +407,7 @@ function createOutput(hooks) {
  * `seconds` (default 20) with the show encoder settings. Independent of the UI
  * and of a running show. Errors are masked; the key never reaches the result.
  * @param {{ destination: object, fps: 30 | 50, videoKbps: number, audioKbps: number, ffmpegPath: string,
- *           seconds?: number, log?: (msg: string) => void }} o
+ *           seconds?: number, log?: (msg: string) => void, signal?: AbortSignal, env?: object }} o
  * @returns {Promise<{ ok: boolean, error?: string, seconds?: number }>}
  */
 function testDestination(o) {
@@ -410,16 +429,26 @@ function testDestination(o) {
       if (done) return;
       done = true;
       clearTimeout(watchdog);
+      if (o.signal) o.signal.removeEventListener('abort', onAbort);
       log(`test finished: ${JSON.stringify(r)}`);
       resolve(r);
     };
     log(`test spawn ${o.ffmpegPath} ${args.join(' ')}`);
-    const p = spawn(o.ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const p = spawn(o.ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'], env: o.env || process.env });
     // Connect timeouts + the run itself; never hang the Settings tab.
     const watchdog = setTimeout(() => {
       p.kill('SIGKILL');
       finish({ ok: false, error: 'Zeitüberschreitung' });
     }, (seconds + 20) * 1000);
+    // Going live kills a running test: the same key must never be pushed twice.
+    const onAbort = () => {
+      p.kill('SIGKILL');
+      finish({ ok: false, error: 'Test abgebrochen (Sendung gestartet)' });
+    };
+    if (o.signal) {
+      if (o.signal.aborted) onAbort();
+      else o.signal.addEventListener('abort', onAbort, { once: true });
+    }
     p.stderr.setEncoding('utf8');
     p.stderr.on('data', (data) => {
       for (const line of String(data).split(/[\r\n]+/)) {

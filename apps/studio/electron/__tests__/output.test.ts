@@ -275,6 +275,66 @@ describe('createOutput', () => {
     expect(pids()).toHaveLength(2);
   });
 
+  it('reconnect(destinations) drops a destination the operator switched off, without ending the session', async () => {
+    const argsFile = path.join(dir, 'args.txt');
+    process.env.FAKE_FFMPEG_ARGS = argsFile;
+    const argvs = () => fs.readFileSync(argsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as string[]);
+    await out.start({
+      ...cfg(),
+      destinations: [
+        { id: 'a', kind: 'srt', url: 'srt://127.0.0.1:9000' },
+        { id: 'b', kind: 'rtmp', url: 'rtmp://hung.example/live', key: 'K' },
+      ],
+    });
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    await out.reconnect([{ id: 'a', kind: 'srt', url: 'srt://127.0.0.1:9000' }]);
+    await waitFor(() => fs.existsSync(argsFile) && argvs().length === 2);
+    const second = argvs()[1];
+    expect(second).not.toContain('tee');
+    expect(second[second.length - 1]).toBe('srt://127.0.0.1:9000');
+    expect(out.getStatus().destinations).toEqual([{ id: 'a', state: 'ok' }]);
+    expect(needHeader).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnect() refuses to drop every destination (stays on air with the old set)', async () => {
+    await out.start(cfg());
+    await expect(out.reconnect([])).rejects.toThrow('no_target');
+    expect(out.getStatus().destinations).toEqual([{ id: 'cf', state: 'ok' }]);
+  });
+
+  it('a stop()+start() during the reconnect wait never leaves an orphan encoder', async () => {
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    const pids = () => fs.readFileSync(pidsFile, 'utf8').trim().split('\n').map(Number);
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    await out.start(cfg());
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    const r = out.reconnect(); // waits for the old process to exit
+    await out.stop();
+    await out.start(cfg());
+    await r;
+    await sleep(300);
+    const living = pids().filter(alive);
+    expect(living).toHaveLength(1); // only the new session's encoder
+  });
+
+  it('a single destination is not marked failed while the encoder restarts (it shows reconnecting)', async () => {
+    process.env.FAKE_FFMPEG_EXIT_MS = '150';
+    await out.start(cfg());
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'reconnecting');
+    expect(last().destinations).toEqual([{ id: 'cf', state: 'ok' }]);
+  });
+
   it('reconnect() is a no-op in record-only mode', async () => {
     const pidsFile = path.join(dir, 'pids.txt');
     process.env.FAKE_FFMPEG_PIDS = pidsFile;
@@ -319,6 +379,26 @@ describe('testDestination', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBeTruthy();
     expect(r.error).not.toContain('topsecret1');
+  });
+
+  it('can be aborted (going live kills a running test)', async () => {
+    const ac = new AbortController();
+    const p = testDestination({
+      destination: { kind: 'srt', url: 'srt://h:1' },
+      fps: 30,
+      videoKbps: 6000,
+      audioKbps: 160,
+      ffmpegPath: FAKE_FFMPEG,
+      seconds: 20,
+      signal: ac.signal,
+      // stdin is ignored, so the fake would exit at once; keep it running like a real push
+      env: { ...process.env, FAKE_FFMPEG_EXIT_MS: '60000' },
+    });
+    await sleep(150);
+    ac.abort();
+    const r = await p;
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/abgebrochen/i);
   });
 
   it('reports a missing ffmpeg binary', async () => {

@@ -26,16 +26,19 @@ cd ~/Documents/privat/side_projects/DAO_test && pnpm install
 
 ## 2. Starten
 
+Im Repo-Wurzelordner:
+
 ```bash
-cd ~/Documents/privat/side_projects/DAO_test/.worktrees/roebel-studio
+cd ~/Documents/privat/side_projects/DAO_test
 source ~/.nvm/nvm.sh
-env -u ELECTRON_RUN_AS_NODE pnpm --filter @roebel/studio start
+pnpm studio
 ```
 
-Kurzform vom Repo-Wurzelordner: `pnpm studio`.
+`pnpm studio` baut die Oberfläche und startet Ortis Studio. Es setzt `env -u ELECTRON_RUN_AS_NODE` selbst (nötig,
+wenn das Terminal aus VS Code/Cursor kommt – sonst startet Electron als reines Node und es passiert nichts).
 
-`env -u ELECTRON_RUN_AS_NODE` ist nötig, wenn das Terminal aus VS Code/Cursor kommt – sonst startet Electron als
-reines Node und es passiert nichts.
+Entwickler-Hinweis: Solange der Branch nicht gemergt ist, liegt der Code im Worktree
+`.worktrees/roebel-studio`; dort genauso `pnpm studio` ausführen.
 
 ## 3. macOS-Berechtigungen
 
@@ -60,7 +63,16 @@ Zwei Wege:
 - Fällt ein Ziel aus, laufen die anderen weiter. In der Statusleiste wird die Pille des Ziels rot, oben erscheint
   „Ziel ausgefallen". **„Ziel neu verbinden"** startet den Encoder neu: **alle** Ziele haben dann ein paar Sekunden
   Pause (im Test ~2 s), die Aufnahme geht in einer neuen Datei weiter. Nur in einer ruhigen Minute drücken.
-- Bei nur einem Ziel verbindet das Studio von selbst neu.
+- **Tempo fällt gegen 0 → ein Ziel hängt → Ziel ausschalten → Ziel neu verbinden.** Während der Sendung lassen
+  sich in den Einstellungen nur die Ziele an- und ausschalten; erst „Ziel neu verbinden" übernimmt das. Mindestens
+  ein Ziel muss an bleiben (sonst „Sendung beenden").
+- Ein hängendes Ziel bremst die anderen nur kurz: Jedes Ziel hat seinen eigenen Puffer; ein RTMP-Ziel ohne
+  Antwort gilt nach ~2 s als ausgefallen (im Test: ~2 s Ruckler bei den anderen, danach normal weiter).
+- Bei nur einem Ziel verbindet das Studio von selbst neu (Pille gelb, solange es neu verbindet).
+- **Cloudflare SRT und Cloudflare RTMPS nie gleichzeitig auf denselben Cloudflare-Input** – das ist derselbe
+  Eingang zweimal; Cloudflare wirft dann eine der beiden Verbindungen raus (im Test: „Broken pipe").
+- „Testen" und „Auf Sendung gehen" schließen sich aus: Solange ein Test läuft, zeigt der Knopf „Test läuft noch …";
+  wer trotzdem live geht, bricht den Test ab.
 - Upload-Bedarf steht in den Einstellungen: „≈ N × (Video + Audio) kbit/s". Bei 6000 + 160 kbit/s:
   1 Ziel ≈ 6,2 Mbit/s, 2 Ziele ≈ 12,3 Mbit/s, 3 Ziele ≈ 18,5 Mbit/s.
 - Bei mehreren Zielen zeigt die Statusleiste keine Bitrate („–"); maßgeblich sind **Tempo** (≈ 1,00×) und
@@ -110,7 +122,8 @@ Läuft das Studio nicht, sendet OBS – die Einblendungen (Bauchbinden, Werbung,
 
 ## 9. Probe (Checkliste)
 
-- [ ] Upload im Saal gemessen: **≥ 15–20 Mbit/s pro Stream** (bei Paralleltest: für beide zusammen).
+- [ ] Upload im Saal gemessen: **Upload gesamt ≥ 15–20 Mbit/s bzw. ≥ 1,5 × Bedarf** (ein Stream ≈ 6,2 Mbit/s;
+      Bedarf = alle Ziele des Studios + OBS zusammen).
 - [ ] Jede Kamera einzeln getestet (Capture-Karte, iPhone über das lange USB-Kabel, Osmo Pocket), auch parallel mit OBS.
 - [ ] **Klatschtest**: vor der Kamera klatschen, im Stream prüfen, ob Bild und Ton zusammenpassen; Mischpult-Verzögerung
       in der Audiospur einstellen.

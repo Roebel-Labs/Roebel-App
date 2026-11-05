@@ -15,7 +15,8 @@ contextBridge.exposeInMainWorld('studio', {
     chunk: (buf) => ipcRenderer.send('output:chunk', buf),
     stop: () => ipcRenderer.invoke('output:stop'),
     // Restart the encoder so failed destinations reconnect (all destinations see a short gap).
-    reconnect: () => ipcRenderer.invoke('output:reconnect'),
+    // cfg (optional): the destinations switched on right now; a switched-off one is dropped.
+    reconnect: (cfg) => ipcRenderer.invoke('output:reconnect', cfg),
     // 20 s test pattern to one destination -> { ok, error? } (never contains the key).
     test: (req) => ipcRenderer.invoke('output:test', req),
     // { started, startedAt, videoKbps, status }: lets a reloaded page adopt a running broadcast.

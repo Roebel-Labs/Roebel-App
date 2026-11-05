@@ -50,6 +50,20 @@ function encodeArgs({ fps, videoKbps, audioKbps }) {
   ];
 }
 
+// Socket timeout (µs) for a single RTMP(S) destination: a silent ingest ends the
+// encoder, and the normal backoff reconnect takes over.
+const SINGLE_RTMP_RW_TIMEOUT_US = 5000000;
+// Socket timeout (µs) for an RTMP(S) tee slave. Measured on 2026-11-05 against a
+// stopped RTMP server: the others stalled 2.2 s with fifo + 2 s, 9.7 s with fifo + 5 s,
+// 19.8 s with 5 s and no fifo. rw_timeout reaches TCP under rtmp:// and rtmps:// (TLS).
+const SLAVE_RTMP_RW_TIMEOUT_US = 2000000;
+// Every tee slave writes from its own fifo thread, so a slow or hung destination
+// (or one hanging in its RTMP/TLS handshake at open) cannot block the encoder or
+// the other destinations; when its queue is full it drops packets instead of
+// waiting. The colon inside fifo_options is escaped twice: once for the slave
+// list, once for the slave option parser.
+const SLAVE_FIFO = 'use_fifo=1:fifo_options=drop_pkts_on_overflow=1\\\\:queue_size=300';
+
 /**
  * Output part: one destination writes straight to it; two or more encode once
  * and fan out through the tee muxer. A failing tee slave (onfail=ignore) is
@@ -58,12 +72,16 @@ function encodeArgs({ fps, videoKbps, audioKbps }) {
 function outputArgs(dests) {
   if (dests.length === 1) {
     const { format, url } = destinationOutput(dests[0]);
-    return ['-flush_packets', '1', '-f', format, url];
+    const timeout = format === 'flv' ? ['-rw_timeout', String(SINGLE_RTMP_RW_TIMEOUT_US)] : [];
+    return ['-flush_packets', '1', ...timeout, '-f', format, url];
   }
   const slaves = dests.map((d) => {
     const { format, url } = destinationOutput(d);
     // flv cannot seek back on a network stream to write duration/filesize.
-    const opts = format === 'flv' ? 'f=flv:onfail=ignore:flvflags=no_duration_filesize' : `f=${format}:onfail=ignore`;
+    const opts =
+      format === 'flv'
+        ? `f=flv:onfail=ignore:${SLAVE_FIFO}:flvflags=no_duration_filesize:rw_timeout=${SLAVE_RTMP_RW_TIMEOUT_US}`
+        : `f=${format}:onfail=ignore:${SLAVE_FIFO}`;
     return `[${opts}]${teeEscape(url)}`;
   });
   return ['-flush_packets', '1', '-f', 'tee', slaves.join('|')];
@@ -208,7 +226,9 @@ function maskSecrets(text, targets) {
   // Tee slave lists carry escaped copies; mask those first (they are longer).
   const all = [...secrets.map(teeEscape), ...secrets].filter(Boolean).sort((a, b) => b.length - a.length);
   for (const s of all) out = out.split(s).join('***');
-  // Belt and braces for URLs not derived from the configured targets.
+  // Belt and braces for URLs not derived from the configured targets: everything after
+  // the RTMP app path is the key (Facebook keys also carry ?…&… parts).
+  out = out.replace(/(rtmps?:\/\/[^/\s'"|]+\/[^/\s'"|?]+\/)[^\s'"|\]]+?(?=[:,]?(?:[\s'"|\]]|$))/gi, '$1***');
   return out.replace(/\b(passphrase|streamid)=[^&\s'"|\]]+/gi, '$1=***');
 }
 

@@ -4,6 +4,8 @@ import { ConfirmDialog, Dialog } from './Dialog';
 import { errorText, maskedTarget, outputConfig } from './engine';
 import { hotkeyAction, targetKind } from './hotkeys';
 import { destinationsProblem, enabledDestinations, uploadEstimate } from './settings/destinations';
+import { ReconnectButton } from './settings/ReconnectButton';
+import { useTestRunning } from './settings/test-runs';
 import { SettingsTab } from './settings/SettingsTab';
 import { HealthBar } from './show/HealthBar';
 import { DesignTab } from './design/DesignTab';
@@ -151,13 +153,19 @@ function OnAirButton({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { state } = useShow();
   const recordOnlyNext = enabledDestinations(state.settings.destinations).length === 0;
   const recordOnly = !!air.status?.recordOnly;
+  const testing = useTestRunning();
   const [dialog, setDialog] = useState<'start' | 'stop' | null>(null);
   if (air.phase === 'off' || air.phase === 'starting') {
     return (
       <>
-        <button className="btn" onClick={() => setDialog('start')} disabled={air.phase === 'starting'}>
+        <button
+          className="btn"
+          onClick={() => setDialog('start')}
+          disabled={air.phase === 'starting' || testing}
+          title={testing ? 'Ein Ziel-Test läuft noch (bis zu 20 s)' : undefined}
+        >
           <span className="golive-dot" />
-          {recordOnlyNext ? 'Nur aufnehmen' : 'Auf Sendung gehen'}
+          {testing ? 'Test läuft noch …' : recordOnlyNext ? 'Nur aufnehmen' : 'Auf Sendung gehen'}
         </button>
         {dialog === 'start' && <GoLiveDialog onClose={() => setDialog(null)} onOpenSettings={onOpenSettings} />}
       </>
@@ -228,10 +236,7 @@ function RecordingBanner() {
 /** A destination dropped out of the tee: ffmpeg never retries it on its own. */
 function DestinationBanner() {
   const air = useOnAir();
-  const { onAir } = useStudio();
   const { state } = useShow();
-  const [confirm, setConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
   const failed = air.phase === 'on' ? (air.status?.destinations ?? []).filter((d) => d.state === 'failed') : [];
   // A single destination reconnects on its own (the whole encoder restarts with backoff).
   if (failed.length === 0 || (air.status?.destinations?.length ?? 0) < 2) return null;
@@ -239,28 +244,11 @@ function DestinationBanner() {
   return (
     <div className="banner" role="alert">
       <strong>Ziel ausgefallen: {names}</strong>
-      <span>{failed[0].lastError ?? 'Verbindung verloren'}. Die anderen Ziele laufen weiter.</span>
-      <button className="btn" onClick={() => setConfirm(true)} disabled={busy}>
-        {busy ? 'Verbinde neu…' : 'Ziel neu verbinden'}
-      </button>
-      {confirm && (
-        <ConfirmDialog
-          title="Ziel neu verbinden?"
-          body={
-            <p>
-              Dafür startet der Encoder neu. ALLE Ziele sind für einige Sekunden unterbrochen, auch die, die gerade laufen. Die
-              Aufnahme geht in einer neuen Datei weiter.
-            </p>
-          }
-          confirmLabel="Neu verbinden"
-          onConfirm={() => {
-            setConfirm(false);
-            setBusy(true);
-            void onAir.reconnect().finally(() => setBusy(false));
-          }}
-          onCancel={() => setConfirm(false)}
-        />
-      )}
+      <span>
+        {failed[0].lastError ?? 'Verbindung verloren'}. Die anderen Ziele laufen weiter. Hängt es weiter: in den Einstellungen
+        ausschalten, dann neu verbinden.
+      </span>
+      <ReconnectButton />
     </div>
   );
 }

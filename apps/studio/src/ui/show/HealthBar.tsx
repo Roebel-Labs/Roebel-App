@@ -25,17 +25,22 @@ function Item({ label, value, bad, title }: { label: string; value: string; bad?
   );
 }
 
-/** One small pill per enabled destination: name + ok / failed (failed slaves stay failed until "Ziel neu verbinden"). */
+/**
+ * One small pill per destination of the running encoder (falls back to the enabled ones
+ * before main reports): name + ok / failed. A destination switched off on air keeps its
+ * pill until "Ziel neu verbinden" really drops it.
+ */
 export function destinationPills(settings: Settings, st: OutputStatus | null) {
-  const byId = new Map((st?.destinations ?? []).map((d) => [d.id, d]));
-  return settings.destinations
-    .filter((d) => d.enabled && d.target.kind !== 'none')
-    .map((d) => {
-      const ds = byId.get(d.id);
-      const failed = ds?.state === 'failed';
-      const tone: 'ok' | 'loading' | 'lost' = failed ? 'lost' : st?.state === 'live' && ds ? 'ok' : 'loading';
-      return { id: d.id, name: d.name.trim() || 'Ziel', failed, tone, lastError: ds?.lastError };
-    });
+  const nameOf = (id: string) => settings.destinations.find((d) => d.id === id)?.name.trim() || 'Ziel';
+  const running = st?.destinations?.length
+    ? st.destinations
+    : settings.destinations.filter((d) => d.enabled && d.target.kind !== 'none').map((d) => ({ id: d.id, state: 'ok' as const }));
+  return running.map((ds) => {
+    const failed = ds.state === 'failed';
+    // Amber while (re)connecting, so a single destination's restart never flickers to "failed".
+    const tone: 'ok' | 'loading' | 'lost' = failed ? 'lost' : st?.state === 'live' && st.destinations?.length ? 'ok' : 'loading';
+    return { id: ds.id, name: nameOf(ds.id), failed, tone, lastError: 'lastError' in ds ? ds.lastError : undefined };
+  });
 }
 
 /** Pure health thresholds (also used for the red state). */

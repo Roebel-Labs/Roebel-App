@@ -191,9 +191,9 @@ export class OnAir {
   }
 
   /** "Ziel neu verbinden": main restarts the encoder (all destinations), then asks for a fresh header. */
-  reconnect(): Promise<void> {
+  reconnect(cfg?: Pick<OutputConfig, 'destinations'>): Promise<void> {
     if (this.snap.phase !== 'on') return Promise.resolve();
-    return window.studio.output.reconnect();
+    return window.studio.output.reconnect(cfg ? { destinations: cfg.destinations } : undefined);
   }
 
   /** New MediaRecorder session → fresh header → main opens a new recording file and re-feeds ffmpeg. */

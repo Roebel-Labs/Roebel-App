@@ -8,6 +8,8 @@ import type { Destination, OutputTarget, Settings } from '../../state/types';
 import { errorText } from '../engine';
 import { useOnAir } from '../studio';
 import { clean, destinationProblem, enabledDestinations, newDestination, PRESETS, uploadEstimate, type PresetId } from './destinations';
+import { ReconnectButton } from './ReconnectButton';
+import { trackTest } from './test-runs';
 
 const KBPS_MIN = 2500;
 const KBPS_MAX = 9000;
@@ -18,7 +20,19 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 /** Password field with a show/hide toggle. */
-function SecretInput({ value, onChange, placeholder, label }: { value: string; onChange: (v: string) => void; placeholder?: string; label: string }) {
+function SecretInput({
+  value,
+  onChange,
+  placeholder,
+  label,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  label: string;
+  disabled?: boolean;
+}) {
   const [shown, setShown] = useState(false);
   return (
     <div className="with-btn">
@@ -29,11 +43,12 @@ function SecretInput({ value, onChange, placeholder, label }: { value: string; o
         spellCheck={false}
         aria-label={label}
         placeholder={placeholder}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(clean(e.target.value))}
         onBlur={() => setShown(false)}
       />
-      <button className="btn ghost" type="button" onClick={() => setShown((v) => !v)} aria-pressed={shown}>
+      <button className="btn ghost" type="button" onClick={() => setShown((v) => !v)} aria-pressed={shown} disabled={disabled}>
         {shown ? 'Verbergen' : 'Zeigen'}
       </button>
     </div>
@@ -99,13 +114,15 @@ function DestinationCard({
     if (t.kind === 'none') return;
     setTest({ phase: 'running', startedAt: Date.now() });
     try {
-      const r = await window.studio.output.test({
-        destination: t,
-        fps: settings.fps,
-        videoKbps: settings.videoKbps,
-        audioKbps: settings.audioKbps,
-        ffmpegPath: settings.ffmpegPath,
-      });
+      const r = await trackTest(
+        window.studio.output.test({
+          destination: t,
+          fps: settings.fps,
+          videoKbps: settings.videoKbps,
+          audioKbps: settings.audioKbps,
+          ffmpegPath: settings.ffmpegPath,
+        }),
+      );
       setTest({ phase: 'done', ok: r.ok, error: r.error });
     } catch (e) {
       setTest({ phase: 'done', ok: false, error: errorText(e) });
@@ -123,10 +140,11 @@ function DestinationCard({
           className="input dest-name"
           aria-label="Name des Ziels"
           value={d.name}
+          disabled={locked}
           onChange={(e) => onChange({ ...d, name: e.target.value })}
         />
         <span className="dest-kind">{t.kind === 'srt' ? 'SRT' : t.kind === 'rtmp' ? (t.url.startsWith('rtmps') ? 'RTMPS' : 'RTMP') : '–'}</span>
-        <button className="btn ghost" onClick={onRemove}>
+        <button className="btn ghost" onClick={onRemove} disabled={locked}>
           Entfernen
         </button>
       </div>
@@ -134,7 +152,7 @@ function DestinationCard({
       {t.kind === 'srt' && (
         <label className="field">
           <span>SRT-Adresse</span>
-          <SecretInput label="SRT-Adresse" placeholder="srt://live.cloudflare.com:778?passphrase=…&streamid=…" value={t.url} onChange={(url) => setTarget({ kind: 'srt', url })} />
+          <SecretInput disabled={locked} label="SRT-Adresse" placeholder="srt://live.cloudflare.com:778?passphrase=…&streamid=…" value={t.url} onChange={(url) => setTarget({ kind: 'srt', url })} />
         </label>
       )}
       {t.kind === 'rtmp' && (
@@ -145,13 +163,14 @@ function DestinationCard({
               className="input"
               spellCheck={false}
               placeholder="rtmps://…"
+              disabled={locked}
               value={t.url}
               onChange={(e) => setTarget({ ...t, url: clean(e.target.value) })}
             />
           </label>
           <label className="field">
             <span>Streamschlüssel</span>
-            <SecretInput label="Streamschlüssel" value={t.key} onChange={(key) => setTarget({ ...t, key })} />
+            <SecretInput disabled={locked} label="Streamschlüssel" value={t.key} onChange={(key) => setTarget({ ...t, key })} />
           </label>
         </div>
       )}
@@ -176,6 +195,7 @@ export function SettingsTab() {
   const air = useOnAir();
   const s = state.settings;
   const locked = air.phase !== 'off';
+  const streaming = air.phase === 'on' && !air.status?.recordOnly;
   const set = (patch: Partial<Settings>) => dispatch({ type: 'updateSettings', patch });
   const [menu, setMenu] = useState(false);
   const [check, setCheck] = useState<FfmpegCheck>(null);
@@ -203,35 +223,47 @@ export function SettingsTab() {
     <div className="settings">
       <h2>Einstellungen</h2>
       <p>Wohin gesendet wird und wo die Aufnahme landet. Änderungen gelten ab dem nächsten Sendestart.</p>
-      {locked && <div className="locked">Während der Sendung gesperrt. Beende die Sendung, um etwas zu ändern.</div>}
+      {locked && (
+        <div className="locked">
+          Während der Sendung gesperrt. Nur Ziele lassen sich an- und ausschalten; das wirkt erst mit „Ziel neu verbinden“.
+        </div>
+      )}
+
+      {/* Outside the locked fieldset: on air, the destination on/off toggles stay usable. */}
+      <section>
+        <h3>Sendeziele</h3>
+        <span className="hint">
+          Alle eingeschalteten Ziele bekommen gleichzeitig dasselbe Bild. Jedes Ziel braucht seinen eigenen Schlüssel: denselben
+          Schlüssel nie zweimal verwenden (auch nicht parallel in OBS).
+        </span>
+        {s.destinations.map((d) => (
+          <DestinationCard key={d.id} d={d} settings={s} locked={locked} onChange={setDest} onRemove={() => removeDest(d.id)} />
+        ))}
+        <div className="dest-add">
+          <button className="btn" onClick={() => setMenu((v) => !v)} aria-expanded={menu} disabled={locked}>
+            + Ziel
+          </button>
+          {menu && !locked && <AddDestinationMenu onPick={addDest} onClose={() => setMenu(false)} />}
+          {streaming && <ReconnectButton />}
+        </div>
+        {streaming && (
+          <span className="hint">
+            Tempo fällt gegen 0 oder ein Ziel ist ausgefallen: das Ziel ausschalten, dann „Ziel neu verbinden“. Alle Ziele sind
+            dabei kurz unterbrochen.
+          </span>
+        )}
+        {n === 0 ? (
+          <span className="hint">Kein Ziel eingeschaltet: „Nur aufnehmen“ speichert die Sendung lokal, ohne zu streamen.</span>
+        ) : (
+          <span className={up.warn ? 'warn-text' : 'hint'}>
+            ≈ {n} × ({s.videoKbps} + {s.audioKbps}) kbit/s = {up.mbit.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s Upload
+            nötig.
+            {up.warn && ` ${n === 2 ? 'Zwei Ziele brauchen' : `${n} Ziele brauchen`} ${n === 2 ? 'doppelte' : `${n}-fache`} Upload-Bandbreite.`}
+          </span>
+        )}
+      </section>
 
       <fieldset disabled={locked} style={{ all: 'unset', display: 'block' }}>
-        <section>
-          <h3>Sendeziele</h3>
-          <span className="hint">
-            Alle eingeschalteten Ziele bekommen gleichzeitig dasselbe Bild. Jedes Ziel braucht seinen eigenen Schlüssel: denselben
-            Schlüssel nie zweimal verwenden (auch nicht parallel in OBS).
-          </span>
-          {s.destinations.map((d) => (
-            <DestinationCard key={d.id} d={d} settings={s} locked={locked} onChange={setDest} onRemove={() => removeDest(d.id)} />
-          ))}
-          <div className="dest-add">
-            <button className="btn" onClick={() => setMenu((v) => !v)} aria-expanded={menu}>
-              + Ziel
-            </button>
-            {menu && <AddDestinationMenu onPick={addDest} onClose={() => setMenu(false)} />}
-          </div>
-          {n === 0 ? (
-            <span className="hint">Kein Ziel eingeschaltet: „Nur aufnehmen“ speichert die Sendung lokal, ohne zu streamen.</span>
-          ) : (
-            <span className={up.warn ? 'warn-text' : 'hint'}>
-              ≈ {n} × ({s.videoKbps} + {s.audioKbps}) kbit/s = {up.mbit.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s Upload
-              nötig.
-              {up.warn && ` ${n === 2 ? 'Zwei Ziele brauchen' : `${n} Ziele brauchen`} ${n === 2 ? 'doppelte' : `${n}-fache`} Upload-Bandbreite.`}
-            </span>
-          )}
-        </section>
-
         <section>
           <h3>Bild und Ton</h3>
           <div className="grid2">

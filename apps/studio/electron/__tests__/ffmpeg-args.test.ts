@@ -71,6 +71,20 @@ describe('buildFfmpegArgs', () => {
     expect(args[args.length - 1]).toBe('rtmps://live.cloudflare.com:443/live/abc');
   });
 
+  it('gives a single RTMP(S) destination a 5 s socket timeout so a hung ingest ends the encoder', () => {
+    const args: string[] = buildFfmpegArgs({
+      target: { kind: 'rtmp', url: 'rtmps://live.cloudflare.com:443/live/', key: 'abc' },
+      fps: 30,
+      videoKbps: 6000,
+      audioKbps: 160,
+    });
+    const i = args.indexOf('-rw_timeout');
+    expect(args[i + 1]).toBe('5000000');
+    expect(i).toBeLessThan(args.lastIndexOf('-f')); // output option, before the URL
+    const srt: string[] = buildFfmpegArgs({ target: { kind: 'srt', url: SRT_URL }, fps: 30, videoKbps: 6000, audioKbps: 160 });
+    expect(srt).not.toContain('-rw_timeout');
+  });
+
   it("throws 'no_target' for kind none", () => {
     expect(() =>
       buildFfmpegArgs({ target: { kind: 'none' }, fps: 30, videoKbps: 6000, audioKbps: 160 }),
@@ -100,8 +114,13 @@ describe('buildFfmpegArgs with destinations', () => {
     const tee = args[args.length - 1];
     const slaves = tee.split(/(?<!\\)\|/);
     expect(slaves).toHaveLength(2);
-    expect(slaves[0]).toBe(`[f=mpegts:onfail=ignore]${SRT_URL}`);
-    expect(slaves[1]).toBe('[f=flv:onfail=ignore:flvflags=no_duration_filesize]rtmp://a.rtmp.youtube.com/live2/yt-key-1234');
+    // Each slave runs behind its own fifo thread (a hung destination cannot block the others) and
+    // drops packets when its queue is full; RTMP slaves give up after 2 s without socket progress.
+    const fifo = 'use_fifo=1:fifo_options=drop_pkts_on_overflow=1\\\\:queue_size=300';
+    expect(slaves[0]).toBe(`[f=mpegts:onfail=ignore:${fifo}]${SRT_URL}`);
+    expect(slaves[1]).toBe(
+      `[f=flv:onfail=ignore:${fifo}:flvflags=no_duration_filesize:rw_timeout=2000000]rtmp://a.rtmp.youtube.com/live2/yt-key-1234`,
+    );
   });
 
   it('escapes tee special characters inside slave URLs', () => {
@@ -111,7 +130,7 @@ describe('buildFfmpegArgs with destinations', () => {
       ...base,
       destinations: [{ kind: 'srt', url: 'srt://h:1?streamid=a|b[c]' }, YT],
     });
-    expect(args[args.length - 1]).toContain('[f=mpegts:onfail=ignore]srt://h:1?streamid=a\\|b\\[c\\]|[f=flv');
+    expect(args[args.length - 1]).toContain(']srt://h:1?streamid=a\\|b\\[c\\]|[f=flv');
   });
 
   it('excludes disabled destinations and kind none', () => {
@@ -208,6 +227,19 @@ describe('maskSecrets', () => {
     const out = maskSecrets(line, dests);
     for (const secret of ['pass1111', 'sid2222', 'ytkey3333', 'FB-4444', 'xyz']) expect(out).not.toContain(secret);
     expect(out).toContain('rtmp://a.rtmp.youtube.com/live2/***');
+  });
+
+  it('masks everything after the RTMP app path, even for keys it was not told about', () => {
+    const line =
+      "[tee] Slave '[f=flv:onfail=ignore]rtmps://live-api-s.facebook.com:443/rtmp/FB-123-0-Abc?s_bl=1&s_sw=0&a=Xyz': error opening: I/O error";
+    const out = maskSecrets(line, []);
+    expect(out).toContain('rtmps://live-api-s.facebook.com:443/rtmp/***');
+    expect(out).not.toMatch(/FB-123|Xyz|s_sw/);
+    expect(maskSecrets('rtmp://a.rtmp.youtube.com/live2/abcd-efgh-ijkl: Broken pipe', null)).toBe(
+      'rtmp://a.rtmp.youtube.com/live2/***: Broken pipe',
+    );
+    // server URLs without a key stay readable
+    expect(maskSecrets('rtmps://live.cloudflare.com:443/live/ ok', null)).toBe('rtmps://live.cloudflare.com:443/live/ ok');
   });
 
   it('masks tee-escaped forms of the secrets too', () => {

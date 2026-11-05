@@ -35,10 +35,25 @@ function setOnAir(on) {
 // The broadcast session as main sees it. Survives a renderer reload/crash so the new page can adopt it.
 let session_ = null; // { startedAt, videoKbps } while started
 
+// "Testen" run in progress: { abort: AbortController, done: Promise } | null.
+let test_ = null;
+let starting = false;
+
 ipcMain.handle('output:start', async (_e, cfg) => {
-  await output.start(cfg);
-  session_ = { startedAt: Date.now(), videoKbps: cfg.videoKbps };
-  setOnAir(true);
+  starting = true;
+  try {
+    // Going live kills a running test first: the same key must never be pushed twice.
+    if (test_) {
+      log('output:start while a destination test runs: aborting the test');
+      test_.abort.abort();
+      await Promise.race([test_.done, new Promise((r) => setTimeout(r, 2000))]);
+    }
+    await output.start(cfg);
+    session_ = { startedAt: Date.now(), videoKbps: cfg.videoKbps };
+    setOnAir(true);
+  } finally {
+    starting = false;
+  }
 });
 ipcMain.handle('output:stop', async () => {
   try {
@@ -56,27 +71,30 @@ ipcMain.handle('output:getStatus', () => ({
 }));
 ipcMain.on('output:chunk', (_e, buf) => output.chunk(buf));
 // "Ziel neu verbinden": restart the encoder so failed destinations reconnect (brief gap on all).
-ipcMain.handle('output:reconnect', () => output.reconnect());
+// The renderer sends the destinations currently switched on, so a hung one can be dropped.
+ipcMain.handle('output:reconnect', (_e, cfg) => output.reconnect(cfg && Array.isArray(cfg.destinations) ? cfg.destinations : undefined));
 
 // "Testen": 20 s test pattern to one destination; one at a time, never during a show
 // (the same key would collide with the live stream). The result never contains the key.
-let testRunning = false;
 ipcMain.handle('output:test', async (_e, req) => {
-  if (session_) return { ok: false, error: 'Während der Sendung nicht möglich' };
-  if (testRunning) return { ok: false, error: 'Es läuft bereits ein Test' };
-  testRunning = true;
+  if (session_ || starting) return { ok: false, error: 'Während der Sendung nicht möglich' };
+  if (test_) return { ok: false, error: 'Es läuft bereits ein Test' };
+  const abort = new AbortController();
+  const run = testDestination({
+    destination: req.destination,
+    fps: req.fps,
+    videoKbps: req.videoKbps,
+    audioKbps: req.audioKbps,
+    ffmpegPath: req.ffmpegPath,
+    seconds: 20,
+    signal: abort.signal,
+    log: (msg) => console.log(`${new Date().toISOString()} [test] ${msg}`),
+  });
+  test_ = { abort, done: run };
   try {
-    return await testDestination({
-      destination: req.destination,
-      fps: req.fps,
-      videoKbps: req.videoKbps,
-      audioKbps: req.audioKbps,
-      ffmpegPath: req.ffmpegPath,
-      seconds: 20,
-      log: (msg) => console.log(`${new Date().toISOString()} [test] ${msg}`),
-    });
+    return await run;
   } finally {
-    testRunning = false;
+    test_ = null;
   }
 });
 ipcMain.handle('ffmpeg:check', (_e, ffmpegPath) => checkFfmpeg(String(ffmpegPath || '')));

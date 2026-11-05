@@ -7,8 +7,8 @@ declare global {
         start(cfg: OutputConfig): Promise<void>;
         chunk(buf: ArrayBuffer): void;
         stop(): Promise<void>;
-        /** Restarts the encoder so failed destinations reconnect (short gap on all of them). */
-        reconnect(): Promise<void>;
+        /** Restarts the encoder so failed destinations reconnect (short gap on all of them); `cfg` replaces the destination set. */
+        reconnect(cfg?: Pick<OutputConfig, 'destinations'>): Promise<void>;
         /** 20 s test pattern to this destination only. */
         test(req: {
           destination: StreamTarget;
