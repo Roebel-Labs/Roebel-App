@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadFonts } from '../../render/fonts';
 import { renderFrame } from '../../render/draw';
+import { isStarterTemplate } from '../../render/templates';
 import { useShow } from '../../state/store';
 import type { OverlayAnim, RenderContext, ShowState, Template, TemplateNode } from '../../state/types';
 import { applyNodeEdit, duplicateTemplate, insertAtCursor, isProtectedNode, removeNode } from './edit';
@@ -59,19 +60,70 @@ function Thumb({ state, template, rc }: { state: ShowState; template: Template; 
 }
 
 function Num({ label, value, onChange, step = 1 }: { label: string; value: number | undefined; onChange: (v: number) => void; step?: number }) {
+  // Draft while typing; commit (and clamp) on blur/Enter so "24" never passes through "2".
+  const [draft, setDraft] = useState(String(value ?? ''));
+  const [resync, setResync] = useState(0);
+  useEffect(() => setDraft(String(value ?? '')), [value, resync]);
+  const commit = () => {
+    const v = Number(draft);
+    if (draft.trim() !== '' && Number.isFinite(v)) onChange(v);
+    setResync((n) => n + 1);
+  };
   return (
     <label className="ds-f ds-num">
       <span>{label}</span>
       <input
         type="number"
         step={step}
-        value={value ?? ''}
-        onChange={(e) => {
-          if (e.target.value !== '') onChange(Number(e.target.value));
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          else if (e.key === 'Escape') {
+            setDraft(String(value ?? ''));
+            e.currentTarget.blur();
+          }
         }}
       />
     </label>
   );
+}
+
+/** Text input/textarea with a local draft; the on-air graphic only changes on blur/Enter. */
+function DraftText({
+  value,
+  onCommit,
+  multiline,
+  ...rest
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  multiline?: boolean;
+  'data-field': string;
+  onFocus: (e: React.FocusEvent<Field>) => void;
+  spellCheck?: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const common = {
+    value: draft,
+    ...rest,
+    onChange: (e: React.ChangeEvent<Field>) => setDraft(e.target.value),
+    onBlur: () => {
+      if (draft !== value) onCommit(draft);
+    },
+    onKeyDown: (e: React.KeyboardEvent<Field>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.currentTarget.blur();
+      } else if (e.key === 'Escape') {
+        setDraft(value);
+        e.currentTarget.blur();
+      }
+    },
+  };
+  return multiline ? <textarea rows={2} {...common} /> : <input type="text" {...common} />;
 }
 
 function Colour({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string) => void }) {
@@ -88,6 +140,7 @@ function Colour({ label, value, onChange }: { label: string; value: string | und
           type="text"
           value={draft}
           spellCheck={false}
+          onBlur={() => setDraft(v)}
           onChange={(e) => {
             setDraft(e.target.value);
             if (valid(e.target.value)) onChange(e.target.value.toUpperCase());
@@ -154,14 +207,20 @@ export function DesignTab() {
   const focused = useRef<{ el: Field; nodeId: string } | null>(null);
 
   const node = template?.nodes.find((n) => n.id === nodeId) ?? null;
-  const isStarter = template ? !template.id.startsWith('custom-') : false;
+  const isStarter = template ? isStarterTemplate(template.id) : false;
 
   // Big preview: rAF only while mounted.
   useEffect(() => {
     let raf = 0;
     let alive = true;
+    let last = 0;
     const tick = () => {
       if (!alive) return;
+      if (performance.now() - last < 33) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      last = performance.now();
       const c = canvasRef.current?.getContext('2d');
       const tid = template?.id;
       if (c && tid) {
@@ -223,9 +282,10 @@ export function DesignTab() {
     if (!f || !template.nodes.some((n) => n.id === f.nodeId)) return;
     const cur = template.nodes.find((n) => n.id === f.nodeId);
     const field = f.el.dataset.field === 'src' ? 'src' : 'text';
-    const base = (field === 'src' ? cur?.src : cur?.text) ?? '';
+    const base = f.el.value ?? (field === 'src' ? cur?.src : cur?.text) ?? '';
     const r = insertAtCursor(base, f.el.selectionStart ?? base.length, f.el.selectionEnd ?? base.length, b);
     edit(f.nodeId, field === 'src' ? { src: r.value } : { text: r.value });
+    f.el.value = r.value;
     requestAnimationFrame(() => {
       f.el.focus();
       f.el.setSelectionRange(r.caret, r.caret);
@@ -243,6 +303,15 @@ export function DesignTab() {
     const id = `custom-${crypto.randomUUID().slice(0, 8)}`;
     dispatch({ type: 'addTemplate', template: duplicateTemplate(template, id) });
     setSelId(id);
+    setNodeId(null);
+  };
+
+  const removeCustom = () => {
+    const live = state.overlays.some((o) => o.templateId === template.id && o.visible);
+    const msg = `„${template.name}“ wirklich löschen?${live ? '\n\nDiese Grafik ist gerade eingeblendet.' : ''}`;
+    if (!window.confirm(msg)) return;
+    dispatch({ type: 'removeTemplate', id: template.id });
+    setSelId(state.templates[0]?.id ?? '');
     setNodeId(null);
   };
 
@@ -280,7 +349,7 @@ export function DesignTab() {
               Zurücksetzen
             </button>
           ) : (
-            <button className="btn danger" onClick={() => dispatch({ type: 'removeTemplate', id: template.id })}>
+            <button className="btn danger" onClick={removeCustom}>
               Löschen
             </button>
           )}
@@ -317,7 +386,7 @@ export function DesignTab() {
               <>
                 <label className="ds-f">
                   <span>Text</span>
-                  <textarea rows={2} value={node.text ?? ''} data-field="text" {...trackFocus(node)} onChange={(e) => edit(node.id, { text: e.target.value })} />
+                  <DraftText key={node.id} multiline value={node.text ?? ''} data-field="text" {...trackFocus(node)} onCommit={(v) => edit(node.id, { text: v })} />
                 </label>
                 <div className="ds-bindings">
                   <span className="ds-label">Platzhalter einfügen</span>
@@ -367,7 +436,7 @@ export function DesignTab() {
               <>
                 <label className="ds-f">
                   <span>Bild (Datei-URL oder Platzhalter)</span>
-                  <input type="text" value={node.src ?? ''} data-field="src" spellCheck={false} {...trackFocus(node)} onChange={(e) => edit(node.id, { src: e.target.value })} />
+                  <DraftText key={node.id} value={node.src ?? ''} data-field="src" spellCheck={false} {...trackFocus(node)} onCommit={(v) => edit(node.id, { src: v })} />
                 </label>
                 <div className="ds-bindings">
                   <button className="btn" onClick={() => void pickImage(node)}>

@@ -1,6 +1,6 @@
 import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
-import { STARTER_TEMPLATES, starterTemplates } from '../render/templates';
+import { STARTER_TEMPLATES, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
   OverlayInstance,
@@ -198,7 +198,7 @@ export function showReducer(s: ShowState, a: Action): ShowState {
     }
     case 'removeTemplate': {
       // Starters can be reset but never deleted; the show depends on them.
-      if (STARTER_TEMPLATES.some((t) => t.id === a.id) || !s.templates.some((t) => t.id === a.id)) return s;
+      if (isStarterTemplate(a.id) || !s.templates.some((t) => t.id === a.id)) return s;
       return { ...s, templates: s.templates.filter((t) => t.id !== a.id), overlays: s.overlays.filter((o) => o.templateId !== a.id) };
     }
     case 'resetTemplate': {

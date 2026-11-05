@@ -40,7 +40,7 @@ describe('duplicateTemplate', () => {
     const d = duplicateTemplate(t, 'copy-1');
     expect(d.id).toBe('copy-1');
     expect(d.name).toBe('Bauchbinde Kopie');
-    expect(d.kind).toBe('custom');
+    expect(d.kind).toBe(t.kind);
     expect(d.nodes).toEqual(t.nodes);
     expect(d.nodes).not.toBe(t.nodes);
     expect(d.nodes[0]).not.toBe(t.nodes[0]);
@@ -49,6 +49,12 @@ describe('duplicateTemplate', () => {
 });
 
 describe('removeNode / protection', () => {
+  it('a duplicated ad template stays protected', () => {
+    const ad = STARTER_TEMPLATES.find((t) => t.id === 'break-spot')!;
+    const d = duplicateTemplate(ad, 'custom-1');
+    expect(isProtectedNode(d, 'tag')).toBe(true);
+    expect(removeNode(d, 'tag')).toBe(d);
+  });
   it('protects the Werbung label of the break spot', () => {
     const ad = STARTER_TEMPLATES.find((t) => t.id === 'break-spot')!;
     expect(isProtectedNode(ad, 'tag')).toBe(true);

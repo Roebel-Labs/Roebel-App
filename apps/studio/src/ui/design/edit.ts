@@ -32,7 +32,7 @@ export function applyNodeEdit(t: Template, nodeId: string, patch: Partial<Templa
 }
 
 export function duplicateTemplate(t: Template, newId: string): Template {
-  return { ...structuredClone(t), id: newId, name: `${t.name} Kopie`, kind: 'custom' };
+  return { ...structuredClone(t), id: newId, name: `${t.name} Kopie` };
 }
 
 /** The ad template must always keep its "Werbung" label. */

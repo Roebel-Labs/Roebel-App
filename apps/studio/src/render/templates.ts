@@ -143,3 +143,8 @@ export const STARTER_TEMPLATES: Template[] = [
 export function starterTemplates(): Template[] {
   return structuredClone(STARTER_TEMPLATES);
 }
+
+/** True for the built-in templates; duplicates and other custom ones use `custom-` ids. */
+export function isStarterTemplate(id: string): boolean {
+  return STARTER_TEMPLATES.some((t) => t.id === id);
+}
