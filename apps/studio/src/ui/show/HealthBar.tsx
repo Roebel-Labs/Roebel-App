@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useShow } from '../../state/store';
+import type { OutputStatus, Settings } from '../../state/types';
 import { hms, useOnAir, useStudio, useTick } from '../studio';
 
 const STATE_TEXT = {
@@ -23,6 +25,19 @@ function Item({ label, value, bad, title }: { label: string; value: string; bad?
   );
 }
 
+/** One small pill per enabled destination: name + ok / failed (failed slaves stay failed until "Ziel neu verbinden"). */
+export function destinationPills(settings: Settings, st: OutputStatus | null) {
+  const byId = new Map((st?.destinations ?? []).map((d) => [d.id, d]));
+  return settings.destinations
+    .filter((d) => d.enabled && d.target.kind !== 'none')
+    .map((d) => {
+      const ds = byId.get(d.id);
+      const failed = ds?.state === 'failed';
+      const tone: 'ok' | 'loading' | 'lost' = failed ? 'lost' : st?.state === 'live' && ds ? 'ok' : 'loading';
+      return { id: d.id, name: d.name.trim() || 'Ziel', failed, tone, lastError: ds?.lastError };
+    });
+}
+
 /** Pure health thresholds (also used for the red state). */
 export function healthFlags(o: { speed?: number; renderFps: number; targetFps: number; live: boolean }) {
   return {
@@ -33,6 +48,7 @@ export function healthFlags(o: { speed?: number; renderFps: number; targetFps: n
 
 export function HealthBar() {
   const { engine } = useStudio();
+  const { state } = useShow();
   const air = useOnAir();
   const now = useTick(1000);
   const [usage, setUsage] = useState<{ cpu: number; memMb: number } | null>(null);
@@ -66,19 +82,41 @@ export function HealthBar() {
   const onAir = air.phase !== 'off';
   const live = onAir && st?.state === 'live';
   const { speedBad, renderBad } = healthFlags({ speed: st?.speed, renderFps: clock.fps, targetFps: engine.fps, live });
-  const outState = !onAir ? 'Aus' : st ? STATE_TEXT[st.state] : 'Startet…';
+  const recordOnly = onAir && !!st?.recordOnly;
+  const outState = !onAir ? 'Aus' : recordOnly ? 'Nur Aufnahme' : st ? STATE_TEXT[st.state] : 'Startet…';
+  const pills = onAir && !recordOnly ? destinationPills(state.settings, st) : [];
 
   return (
     <footer className="health" aria-label="Zustand">
       <Item label="Ausgang" value={outState} bad={onAir && (st?.state === 'error' || st?.state === 'reconnecting')} title={st?.lastError} />
+      {pills.length > 0 &&
+        pills.map((p) => (
+          <span
+            key={p.id}
+            className={`dest-pill${p.failed ? ' failed' : ''}`}
+            title={p.failed ? `Ausgefallen: ${p.lastError ?? 'Verbindung verloren'}` : 'Verbunden'}
+          >
+            <span className={`dot ${p.tone}`} />
+            {p.name}
+            {p.failed ? ' ausgefallen' : ''}
+          </span>
+        ))}
       <Item label="Render" value={`${clock.fps.toFixed(1)} fps`} bad={renderBad} title={`Ziel: ${engine.fps} fps`} />
       <Item label="Aussetzer" value={String(clock.overruns)} title="Ausgelassene Render-Takte seit dem Start" />
-      {onAir && (
+      {onAir && !recordOnly && (
         <>
           <Item label="Encoder" value={st?.fps !== undefined ? `${st.fps.toFixed(0)} fps` : '–'} />
-          <Item label="Bitrate" value={st?.kbps !== undefined ? `${Math.round(st.kbps)} kbit/s` : '–'} />
+          <Item
+            label="Bitrate"
+            value={st?.kbps !== undefined ? `${Math.round(st.kbps)} kbit/s` : '–'}
+            title={pills.length > 1 ? 'Bei mehreren Zielen meldet ffmpeg keine Bitrate; Tempo und Encoder-fps zeigen, ob es läuft' : undefined}
+          />
           <Item label="Tempo" value={st?.speed !== undefined ? `${st.speed.toFixed(2)}×` : '–'} bad={speedBad} title="Unter 0,95× kommt der Rechner nicht mit" />
           <Item label="Verworfen" value={String(st?.dropped ?? 0)} bad={(st?.dropped ?? 0) > 0} />
+        </>
+      )}
+      {onAir && (
+        <>
           <Item
             label="Aufnahme"
             value={st?.recordingError ? 'unterbrochen' : mb(st?.recordingBytes ?? 0)}

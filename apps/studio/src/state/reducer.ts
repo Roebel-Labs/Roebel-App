@@ -5,6 +5,8 @@ import { nextSpot } from '../sponsors/rotation';
 import { STARTER_TEMPLATES, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
+  Destination,
+  OutputTarget,
   OverlayInstance,
   Scene,
   Settings,
@@ -70,7 +72,7 @@ const STORAGE_PRESETS: TransitionPreset[] = [
 
 export function defaultSettings(): Settings {
   return {
-    target: { kind: 'none' },
+    destinations: [],
     fps: 30,
     videoKbps: 6000,
     audioKbps: 160,
@@ -417,21 +419,38 @@ const str = (v: unknown, d: string) => (typeof v === 'string' ? v : d);
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const strOrNull = (v: unknown, d: string | null) => (typeof v === 'string' ? v : v === null ? null : d);
 
-function restoreTarget(v: unknown, d: Settings['target']): Settings['target'] {
-  if (!isObj(v)) return d;
+function restoreTarget(v: unknown): OutputTarget | null {
+  if (!isObj(v)) return null;
   if (v.kind === 'none') return { kind: 'none' };
   if (v.kind === 'srt' && typeof v.url === 'string') return { kind: 'srt', url: v.url };
   if (v.kind === 'rtmp' && typeof v.url === 'string' && typeof v.key === 'string') {
     return { kind: 'rtmp', url: v.url, key: v.key };
   }
-  return d;
+  return null;
+}
+
+function restoreDestination(v: unknown): Destination | null {
+  if (!isObj(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null;
+  const target = restoreTarget(v.target);
+  if (!target) return null;
+  return { id: v.id, name: v.name, enabled: v.enabled !== false, target };
+}
+
+function restoreDestinations(v: Record<string, unknown>): Destination[] {
+  if (Array.isArray(v.destinations)) {
+    return v.destinations.map(restoreDestination).filter((d): d is Destination => d !== null);
+  }
+  // Before multi-destination output there was one `target` (always Cloudflare in practice).
+  const old = restoreTarget(v.target);
+  if (!old || old.kind === 'none') return [];
+  return [{ id: uid(), name: 'Cloudflare', enabled: true, target: old }];
 }
 
 function restoreSettings(v: unknown): Settings {
   const d = defaultSettings();
   if (!isObj(v)) return d;
   return {
-    target: restoreTarget(v.target, d.target),
+    destinations: restoreDestinations(v),
     fps: v.fps === 50 ? 50 : v.fps === 30 ? 30 : d.fps,
     videoKbps: num(v.videoKbps, d.videoKbps),
     audioKbps: num(v.audioKbps, d.audioKbps),

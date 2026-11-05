@@ -12,7 +12,8 @@
     "clean": "turbo clean",
     "dev:web": "turbo dev --filter=@roebel/web",
     "dev:expo": "turbo dev --filter=@roebel/expo",
-    "build:web": "turbo build --filter=@roebel/web"
+    "build:web": "turbo build --filter=@roebel/web",
+    "studio": "env -u ELECTRON_RUN_AS_NODE pnpm --filter @roebel/studio start"
   },
   "pnpm": {
     "overrides": {

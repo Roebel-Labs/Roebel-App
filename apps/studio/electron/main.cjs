@@ -3,7 +3,7 @@
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
 const path = require('node:path');
-const { createOutput } = require('./output.cjs');
+const { checkFfmpeg, createOutput, testDestination } = require('./output.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
 
@@ -55,6 +55,31 @@ ipcMain.handle('output:getStatus', () => ({
   status: output.getStatus(),
 }));
 ipcMain.on('output:chunk', (_e, buf) => output.chunk(buf));
+// "Ziel neu verbinden": restart the encoder so failed destinations reconnect (brief gap on all).
+ipcMain.handle('output:reconnect', () => output.reconnect());
+
+// "Testen": 20 s test pattern to one destination; one at a time, never during a show
+// (the same key would collide with the live stream). The result never contains the key.
+let testRunning = false;
+ipcMain.handle('output:test', async (_e, req) => {
+  if (session_) return { ok: false, error: 'Während der Sendung nicht möglich' };
+  if (testRunning) return { ok: false, error: 'Es läuft bereits ein Test' };
+  testRunning = true;
+  try {
+    return await testDestination({
+      destination: req.destination,
+      fps: req.fps,
+      videoKbps: req.videoKbps,
+      audioKbps: req.audioKbps,
+      ffmpegPath: req.ffmpegPath,
+      seconds: 20,
+      log: (msg) => console.log(`${new Date().toISOString()} [test] ${msg}`),
+    });
+  } finally {
+    testRunning = false;
+  }
+});
+ipcMain.handle('ffmpeg:check', (_e, ffmpegPath) => checkFfmpeg(String(ffmpegPath || '')));
 
 // Sponsor air-time log (append-only JSONL in the recording folder); never rejects.
 ipcMain.handle('fs:appendAirLog', (_e, payload) => appendAirLog(payload));

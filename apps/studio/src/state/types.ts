@@ -3,14 +3,23 @@ export type OutputTarget =
   | { kind: 'rtmp'; url: string; key: string }
   | { kind: 'none' };
 
+/** A target ffmpeg can actually push to. */
+export type StreamTarget = Exclude<OutputTarget, { kind: 'none' }>;
+
+/** One configured stream destination (Cloudflare, YouTube, Facebook, …). Keys live only in localStorage. */
+export type Destination = { id: string; name: string; enabled: boolean; target: OutputTarget };
+
 export type OutputConfig = {
-  target: OutputTarget;
+  /** Enabled, usable destinations only (resolved in the renderer). Empty = record-only ("Nur aufnehmen"). */
+  destinations: Array<StreamTarget & { id: string }>;
   fps: 30 | 50;
   videoKbps: number;
   audioKbps: number;
   recordDir: string;
   ffmpegPath: string;
 };
+
+export type DestinationStatus = { id: string; state: 'ok' | 'failed'; lastError?: string };
 
 export type OutputStatus = {
   state: 'idle' | 'connecting' | 'live' | 'reconnecting' | 'error';
@@ -26,6 +35,10 @@ export type OutputStatus = {
   lastError?: string;
   /** Set while the local recording is broken ("Aufnahme unterbrochen"); cleared once a write into a new file succeeds. */
   recordingError?: string;
+  /** No destination: the session only records locally (no ffmpeg). */
+  recordOnly?: boolean;
+  /** Per destination, in config order. A failed tee slave stays failed until "Ziel neu verbinden". */
+  destinations?: DestinationStatus[];
 };
 
 // ---- Show state (Task 2) ----
@@ -126,7 +139,7 @@ export type Table = {
 };
 
 export type Settings = {
-  target: OutputTarget;
+  destinations: Destination[];
   fps: 30 | 50;
   videoKbps: number;
   audioKbps: number;

@@ -16,6 +16,9 @@ type Status = {
   recordingBytes: number;
   restarts: number;
   recordingError?: string;
+  recordOnly?: boolean;
+  lastError?: string;
+  destinations?: { id: string; state: 'ok' | 'failed'; lastError?: string }[];
 };
 
 const header = (n = 64) => Buffer.from([...MAGIC, ...new Array(n).fill(0x42)]);
@@ -55,11 +58,13 @@ afterEach(async () => {
   delete process.env.FAKE_FFMPEG_DUMP;
   delete process.env.FAKE_FFMPEG_EXIT_MS;
   delete process.env.FAKE_FFMPEG_PIDS;
+  delete process.env.FAKE_FFMPEG_STDERR;
+  delete process.env.FAKE_FFMPEG_ARGS;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
 const cfg = () => ({
-  target: { kind: 'srt', url: 'srt://127.0.0.1:9000' },
+  destinations: [{ id: 'cf', kind: 'srt', url: 'srt://127.0.0.1:9000' }],
   fps: 30,
   videoKbps: 6000,
   audioKbps: 160,
@@ -182,5 +187,150 @@ describe('createOutput', () => {
     expect(statuses.slice(n).map((s) => s.state)).toContain('connecting');
     await waitFor(() => last()?.state === 'live');
     expect(out.getStatus().restarts).toBe(0);
+  });
+
+  it('record-only mode (no destinations) writes the recording without spawning ffmpeg', async () => {
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    await out.start({ ...cfg(), destinations: [] });
+    expect(out.getStatus().recordOnly).toBe(true);
+    expect(out.getStatus().state).toBe('live');
+    out.chunk(header());
+    out.chunk(cluster());
+    await sleep(200);
+    expect(fs.existsSync(pidsFile)).toBe(false);
+    expect(fs.existsSync(dump)).toBe(false);
+    expect(mkvFiles()).toHaveLength(1);
+    expect(out.getStatus().recordingBytes).toBe(68 + 260);
+    const first = out.getStatus().recordingFile!;
+    // A new recorder session opens a new file; still no encoder.
+    out.chunk(header());
+    await waitFor(() => mkvFiles().length === 2);
+    expect(fs.existsSync(pidsFile)).toBe(false);
+    await out.stop();
+    expect(last().state).toBe('idle');
+    expect(fs.readFileSync(first).length).toBe(68 + 260);
+  });
+
+  it('marks a failed tee slave per destination (masked), the others stay ok', async () => {
+    process.env.FAKE_FFMPEG_STDERR =
+      "[tee @ 0x1] Slave '[f=flv:onfail=ignore]rtmp://a.rtmp.youtube.com/live2/SECRETKEY': error opening: I/O error";
+    const two = {
+      ...cfg(),
+      destinations: [
+        { id: 'cf', kind: 'srt', url: 'srt://127.0.0.1:9000' },
+        { id: 'yt', kind: 'rtmp', url: 'rtmp://a.rtmp.youtube.com/live2', key: 'SECRETKEY' },
+      ],
+    };
+    const logs: string[] = [];
+    out = createOutput({ sendStatus: (s: Status) => statuses.push(s), onNeedHeader: needHeader, log: (m: string) => logs.push(m) });
+    await out.start(two);
+    expect(out.getStatus().destinations).toEqual([
+      { id: 'cf', state: 'ok' },
+      { id: 'yt', state: 'ok' },
+    ]);
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    // fake emits only the open line; the index line comes next in real ffmpeg
+    await out.stop();
+
+    process.env.FAKE_FFMPEG_STDERR = '[tee @ 0x1] Slave muxer #1 failed: I/O error, continuing with 1/2 slaves.';
+    statuses = [];
+    await out.start(two);
+    out.chunk(header());
+    await waitFor(() => out.getStatus().destinations?.[1].state === 'failed');
+    const d = out.getStatus().destinations!;
+    expect(d[0]).toEqual({ id: 'cf', state: 'ok' });
+    expect(d[1]).toEqual({ id: 'yt', state: 'failed', lastError: 'I/O error' });
+    expect(out.getStatus().state).toBe('live');
+    expect(logs.join('\n')).not.toContain('SECRETKEY');
+    expect(JSON.stringify(statuses)).not.toContain('SECRETKEY');
+  });
+
+  it('reconnect() restarts the encoder once, asks for a fresh header and resets destination states', async () => {
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    const pids = () => fs.readFileSync(pidsFile, 'utf8').trim().split('\n').map(Number);
+    process.env.FAKE_FFMPEG_STDERR = '[tee @ 0x1] Slave muxer #0 failed: Connection refused, continuing with 1/2 slaves.';
+    await out.start({
+      ...cfg(),
+      destinations: [
+        { id: 'a', kind: 'srt', url: 'srt://127.0.0.1:9000' },
+        { id: 'b', kind: 'srt', url: 'srt://127.0.0.1:9001' },
+      ],
+    });
+    out.chunk(header());
+    await waitFor(() => out.getStatus().destinations?.[0].state === 'failed');
+    delete process.env.FAKE_FFMPEG_STDERR;
+    await out.reconnect();
+    await waitFor(() => pids().length === 2);
+    expect(needHeader).toHaveBeenCalledTimes(1);
+    expect(out.getStatus().destinations).toEqual([
+      { id: 'a', state: 'ok' },
+      { id: 'b', state: 'ok' },
+    ]);
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    await sleep(1300); // no extra backoff respawn from the killed process
+    expect(pids()).toHaveLength(2);
+  });
+
+  it('reconnect() is a no-op in record-only mode', async () => {
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    await out.start({ ...cfg(), destinations: [] });
+    await out.reconnect();
+    expect(fs.existsSync(pidsFile)).toBe(false);
+    expect(needHeader).not.toHaveBeenCalled();
+  });
+});
+
+describe('testDestination', () => {
+  const { testDestination } = require('../output.cjs');
+
+  it('runs one ffmpeg test-pattern push to that destination only and reports ok', async () => {
+    const argsFile = path.join(dir, 'args.txt');
+    process.env.FAKE_FFMPEG_ARGS = argsFile;
+    const r = await testDestination({
+      destination: { kind: 'rtmp', url: 'rtmp://a.rtmp.youtube.com/live2', key: 'KEY1' },
+      fps: 30,
+      videoKbps: 6000,
+      audioKbps: 160,
+      ffmpegPath: FAKE_FFMPEG,
+      seconds: 1,
+    });
+    expect(r).toEqual({ ok: true });
+    const argv: string[] = JSON.parse(fs.readFileSync(argsFile, 'utf8').trim());
+    expect(argv[argv.length - 1]).toBe('rtmp://a.rtmp.youtube.com/live2/KEY1');
+    expect(argv).toContain('lavfi');
+  });
+
+  it('reports a masked error when ffmpeg fails', async () => {
+    process.env.FAKE_FFMPEG_EXIT_MS = '50';
+    process.env.FAKE_FFMPEG_STDERR = 'x';
+    const r = await testDestination({
+      destination: { kind: 'srt', url: 'srt://h:1?passphrase=topsecret1' },
+      fps: 30,
+      videoKbps: 6000,
+      audioKbps: 160,
+      ffmpegPath: FAKE_FFMPEG,
+      seconds: 5,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBeTruthy();
+    expect(r.error).not.toContain('topsecret1');
+  });
+
+  it('reports a missing ffmpeg binary', async () => {
+    const r = await testDestination({
+      destination: { kind: 'srt', url: 'srt://h:1' },
+      fps: 30,
+      videoKbps: 6000,
+      audioKbps: 160,
+      ffmpegPath: path.join(dir, 'nope'),
+      seconds: 1,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/ENOENT|nicht gefunden/);
   });
 });

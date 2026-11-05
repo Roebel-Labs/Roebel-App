@@ -1,4 +1,4 @@
-import type { OutputConfig, OutputStatus } from './state/types';
+import type { OutputConfig, OutputStatus, StreamTarget } from './state/types';
 
 declare global {
   interface Window {
@@ -7,6 +7,16 @@ declare global {
         start(cfg: OutputConfig): Promise<void>;
         chunk(buf: ArrayBuffer): void;
         stop(): Promise<void>;
+        /** Restarts the encoder so failed destinations reconnect (short gap on all of them). */
+        reconnect(): Promise<void>;
+        /** 20 s test pattern to this destination only. */
+        test(req: {
+          destination: StreamTarget;
+          fps: 30 | 50;
+          videoKbps: number;
+          audioKbps: number;
+          ffmpegPath: string;
+        }): Promise<{ ok: boolean; error?: string }>;
         onStatus(cb: (s: OutputStatus) => void): () => void;
         onNeedHeader(cb: () => void): () => void;
         getStatus(): Promise<{ started: boolean; startedAt: number | null; videoKbps: number | null; status: OutputStatus }>;
@@ -32,6 +42,9 @@ declare global {
       dialog: {
         pickFile(kind: 'video' | 'image'): Promise<string | null>;
         pickFolder(): Promise<string | null>;
+      };
+      ffmpeg: {
+        check(ffmpegPath: string): Promise<{ ok: boolean; version: string | null; srt: boolean; videotoolbox: boolean; error?: string }>;
       };
       sys: {
         usage(): Promise<{ cpu: number; memMb: number; mainCpu: number }>;

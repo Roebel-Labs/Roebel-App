@@ -2,11 +2,21 @@
 'use strict';
 // Stand-in for ffmpeg in output.test.ts. Behaviour comes from env:
 //   FAKE_FFMPEG_DUMP     append every stdin byte to this file
-//   FAKE_FFMPEG_EXIT_MS  exit with code 1 after this many ms (default: run until stdin EOF)
+//   FAKE_FFMPEG_EXIT_MS  exit with code 1 after this many ms, ignoring stdin EOF (default: run until stdin EOF)
 //   FAKE_FFMPEG_PIDS     append this process's pid (one per line) to this file
+//   FAKE_FFMPEG_STDERR   write this line to stderr once, ~120 ms after start
+//   FAKE_FFMPEG_ARGS     append this process's argv (JSON, one per line) to this file
 const fs = require('node:fs');
 
 if (process.env.FAKE_FFMPEG_PIDS) fs.appendFileSync(process.env.FAKE_FFMPEG_PIDS, `${process.pid}\n`);
+
+if (process.env.FAKE_FFMPEG_ARGS) {
+  fs.appendFileSync(process.env.FAKE_FFMPEG_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
+}
+if (process.env.FAKE_FFMPEG_STDERR) {
+  const line = process.env.FAKE_FFMPEG_STDERR;
+  setTimeout(() => process.stderr.write(`${line}\n`), 120);
+}
 
 const dump = process.env.FAKE_FFMPEG_DUMP;
 const exitMs = Number(process.env.FAKE_FFMPEG_EXIT_MS || 0);
@@ -14,7 +24,10 @@ const exitMs = Number(process.env.FAKE_FFMPEG_EXIT_MS || 0);
 process.stdin.on('data', (d) => {
   if (dump) fs.appendFileSync(dump, d);
 });
-process.stdin.on('end', () => process.exit(0));
+// With an exit timer the fake runs until it (EOF on an ignored stdin must not end it early).
+process.stdin.on('end', () => {
+  if (!exitMs) process.exit(0);
+});
 process.stdin.on('error', () => {});
 
 const progress = setInterval(() => {

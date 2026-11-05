@@ -1,13 +1,23 @@
 'use strict';
 // Output controller (Electron main): receives MediaRecorder Matroska chunks
 // from the renderer, appends them to a local recording file and pipes them
-// into ffmpeg, which encodes with VideoToolbox and pushes to SRT/RTMP(S).
+// into ffmpeg, which encodes once with VideoToolbox and pushes to one or more
+// SRT/RTMP(S) destinations (tee muxer for two or more). With no destination it
+// only records (record-only mode, no ffmpeg at all).
 
-const { spawn } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { buildFfmpegArgs, parseProgress, nextRestartDelay, maskSecrets } = require('./ffmpeg-args.cjs');
+const {
+  buildFfmpegArgs,
+  buildTestArgs,
+  parseProgress,
+  parseSlaveFailure,
+  nextRestartDelay,
+  maskSecrets,
+  usableDestinations,
+} = require('./ffmpeg-args.cjs');
 
 // Every MediaRecorder session starts with an EBML header (1A 45 DF A3).
 const EBML_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
@@ -15,6 +25,8 @@ const EBML_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 const MAX_STDIN_BACKLOG = 32 * 1024 * 1024;
 // A session that stays live this long resets the backoff attempt counter.
 const STABLE_MS = 20000;
+// "Ziel neu verbinden" waits at most this long for the old encoder to close its connections.
+const RECONNECT_EXIT_CAP_MS = 2000;
 
 function expandHome(p) {
   if (p === '~') return os.homedir();
@@ -46,7 +58,7 @@ function toBuffer(chunk) {
 function createOutput(hooks) {
   const rawLog = hooks.log || (() => {});
   // Never let ingest secrets (stream key, SRT passphrase) reach logs or status.
-  const mask = (s) => maskSecrets(s, cfg && cfg.target);
+  const mask = (s) => maskSecrets(s, cfg && cfg.destinations);
   const log = (msg) => rawLog(mask(msg));
   let cfg = null;
   let started = false;
@@ -60,6 +72,8 @@ function createOutput(hooks) {
   let stderrTail = '';
   let progressLines = 0;
   let held = null; // short chunk that may be the start of an EBML header
+  let recordOnly = false;
+  let reconnecting = null; // pending reconnect() promise
   const openedFiles = new Set();
 
   /** @type {import('../src/state/types').OutputStatus} */
@@ -118,8 +132,21 @@ function createOutput(hooks) {
     });
   }
 
+  /** Every destination starts 'ok' with each encoder process; tee reports the ones that fail. */
+  function resetDestinations() {
+    status.destinations = cfg.destinations.map((d) => ({ id: d.id, state: 'ok' }));
+  }
+
+  function markDestinationFailed(index, reason) {
+    const list = status.destinations;
+    if (!list || !list[index] || list[index].state === 'failed') return;
+    list[index] = { id: list[index].id, state: 'failed', lastError: mask(reason).slice(0, 200) };
+    hooks.sendStatus({ ...status, destinations: list.map((d) => ({ ...d })) });
+  }
+
   function spawnFfmpeg() {
     const args = buildFfmpegArgs(cfg);
+    resetDestinations();
     log(`spawn ${cfg.ffmpegPath} ${args.join(' ')}`);
     awaitingHeader = true;
     stderrTail = '';
@@ -147,6 +174,8 @@ function createOutput(hooks) {
         } else {
           stderrTail = mask(line).slice(0, 300);
           log(`ffmpeg: ${line}`);
+          const slave = parseSlaveFailure(line);
+          if (slave && p === proc) markDestinationFailed(slave.index, slave.reason);
         }
       }
     });
@@ -162,6 +191,8 @@ function createOutput(hooks) {
       proc = null;
       log(`ffmpeg exited code=${code} signal=${signal}`);
       if (!started || status.state === 'error') return;
+      // A single destination fails with its process (tee reports its own slaves).
+      if (cfg.destinations.length === 1) markDestinationFailed(0, stderrTail || `ffmpeg beendet (${signal || code})`);
       const delay = nextRestartDelay(attempt);
       attempt += 1;
       setState('reconnecting', {
@@ -184,16 +215,26 @@ function createOutput(hooks) {
 
   async function start(newCfg) {
     if (started) await stop();
-    if (!newCfg || !newCfg.target || newCfg.target.kind === 'none') throw new Error('no_target');
-    cfg = { ...newCfg, recordDir: expandHome(newCfg.recordDir) };
+    if (!newCfg) throw new Error('no_target');
+    const destinations = usableDestinations(newCfg).map((d, i) => ({ ...d, id: typeof d.id === 'string' ? d.id : String(i) }));
+    cfg = { ...newCfg, destinations, recordDir: expandHome(newCfg.recordDir) };
+    delete cfg.target;
     fs.mkdirSync(cfg.recordDir, { recursive: true });
-    buildFfmpegArgs(cfg); // validate before flipping state
+    recordOnly = destinations.length === 0;
+    if (!recordOnly) buildFfmpegArgs(cfg); // validate before flipping state
     started = true;
     held = null;
     attempt = 0;
-    status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0 };
-    hooks.sendStatus({ ...status });
-    spawnFfmpeg();
+    if (recordOnly) {
+      // Nur aufnehmen: chunks go to the recording file only, no encoder.
+      log('record-only mode (no destination)');
+      status = { state: 'live', since: Date.now(), recordingBytes: 0, restarts: 0, recordOnly: true, destinations: [] };
+      hooks.sendStatus({ ...status });
+    } else {
+      status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0 };
+      hooks.sendStatus({ ...status });
+      spawnFfmpeg();
+    }
     clearInterval(statusTimer);
     statusTimer = setInterval(() => hooks.sendStatus({ ...status }), 1000);
   }
@@ -263,10 +304,52 @@ function createOutput(hooks) {
     proc.stdin.write(buf);
   }
 
+  /**
+   * "Ziel neu verbinden": a failed tee slave is never retried by ffmpeg, so
+   * restart the whole encoder (brief gap on every destination). Waits for the
+   * old process to close its connections before the new one opens them.
+   */
+  function reconnect() {
+    if (!started || recordOnly) return Promise.resolve();
+    if (reconnecting) return reconnecting;
+    reconnecting = (async () => {
+      const old = proc;
+      proc = null;
+      clearTimeout(restartTimer);
+      restartTimer = null;
+      log('manual reconnect, restarting encoder');
+      setState('connecting', { fps: undefined, kbps: undefined, speed: undefined });
+      if (old) {
+        await new Promise((resolve) => {
+          const killer = setTimeout(() => {
+            old.kill('SIGKILL');
+            resolve();
+          }, RECONNECT_EXIT_CAP_MS);
+          old.once('exit', () => {
+            clearTimeout(killer);
+            resolve();
+          });
+          old.stdin.end();
+          old.kill('SIGTERM');
+        });
+      }
+      if (!started) return;
+      attempt = 0;
+      spawnFfmpeg();
+      hooks.sendStatus({ ...status, destinations: status.destinations.map((d) => ({ ...d })) });
+      // The new process needs a fresh Matroska header.
+      hooks.onNeedHeader();
+    })().finally(() => {
+      reconnecting = null;
+    });
+    return reconnecting;
+  }
+
   async function stop() {
     if (held && recordStream) recordStream.write(held);
     held = null;
     started = false;
+    recordOnly = false;
     clearTimeout(restartTimer);
     restartTimer = null;
     clearInterval(statusTimer);
@@ -291,7 +374,94 @@ function createOutput(hooks) {
     hooks.sendStatus({ ...status });
   }
 
-  return { start, chunk, stop, getStatus: () => ({ ...status }) };
+  return {
+    start,
+    chunk,
+    stop,
+    reconnect,
+    getStatus: () => ({ ...status, destinations: status.destinations && status.destinations.map((d) => ({ ...d })) }),
+  };
 }
 
-module.exports = { createOutput, expandHome, timestampName };
+/**
+ * "Testen": push a generated test pattern + tone to ONE destination for
+ * `seconds` (default 20) with the show encoder settings. Independent of the UI
+ * and of a running show. Errors are masked; the key never reaches the result.
+ * @param {{ destination: object, fps: 30 | 50, videoKbps: number, audioKbps: number, ffmpegPath: string,
+ *           seconds?: number, log?: (msg: string) => void }} o
+ * @returns {Promise<{ ok: boolean, error?: string, seconds?: number }>}
+ */
+function testDestination(o) {
+  const seconds = o.seconds || 20;
+  const mask = (s) => maskSecrets(s, [o.destination]);
+  const log = (msg) => (o.log ? o.log(mask(msg)) : undefined);
+  let args;
+  try {
+    args = buildTestArgs({ ...o, seconds });
+  } catch (e) {
+    return Promise.resolve({ ok: false, error: e.message === 'no_target' ? 'Adresse fehlt' : mask(e.message) });
+  }
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    let tail = '';
+    let progress = false;
+    let done = false;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      clearTimeout(watchdog);
+      log(`test finished: ${JSON.stringify(r)}`);
+      resolve(r);
+    };
+    log(`test spawn ${o.ffmpegPath} ${args.join(' ')}`);
+    const p = spawn(o.ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    // Connect timeouts + the run itself; never hang the Settings tab.
+    const watchdog = setTimeout(() => {
+      p.kill('SIGKILL');
+      finish({ ok: false, error: 'Zeitüberschreitung' });
+    }, (seconds + 20) * 1000);
+    p.stderr.setEncoding('utf8');
+    p.stderr.on('data', (data) => {
+      for (const line of String(data).split(/[\r\n]+/)) {
+        if (!line.trim()) continue;
+        if (parseProgress(line)) progress = true;
+        else tail = mask(line).slice(0, 300);
+      }
+    });
+    p.on('error', (err) =>
+      finish({ ok: false, error: err.code === 'ENOENT' ? `ffmpeg nicht gefunden (ENOENT)` : mask(err.message) }),
+    );
+    p.on('exit', (code, signal) => {
+      const secs = Math.round((Date.now() - t0) / 1000);
+      if (code === 0) finish({ ok: true });
+      else finish({ ok: false, error: tail || `ffmpeg beendet (${signal || code})`, seconds: progress ? secs : 0 });
+    });
+  });
+}
+
+/**
+ * "Prüfen": does this ffmpeg run, speak SRT and have the VideoToolbox H.264 encoder?
+ * @param {string} ffmpegPath
+ * @returns {Promise<{ ok: boolean, version: string | null, srt: boolean, videotoolbox: boolean, error?: string }>}
+ */
+async function checkFfmpeg(ffmpegPath) {
+  const run = (args) =>
+    new Promise((resolve, reject) => {
+      execFile(ffmpegPath, ['-hide_banner', ...args], { timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err && err.code === 'ENOENT') return reject(new Error('ffmpeg nicht gefunden (ENOENT)'));
+        if (err && !stdout) return reject(new Error(String(stderr || err.message).trim().slice(0, 200)));
+        resolve(String(stdout));
+      });
+    });
+  try {
+    const [versionOut, protocols, encoders] = await Promise.all([run(['-version']), run(['-protocols']), run(['-encoders'])]);
+    const version = (/^ffmpeg version (\S+)/m.exec(versionOut) || [])[1] || null;
+    const srt = /^\s*srt\s*$/m.test(protocols);
+    const videotoolbox = /\bh264_videotoolbox\b/.test(encoders);
+    return { ok: srt && videotoolbox, version, srt, videotoolbox };
+  } catch (e) {
+    return { ok: false, version: null, srt: false, videotoolbox: false, error: e.message };
+  }
+}
+
+module.exports = { createOutput, testDestination, checkFfmpeg, expandHome, timestampName };

@@ -5,7 +5,7 @@ import { createProgramOutput, type ProgramOutput } from '../media/program';
 import { SourceRegistry, type SourceHealth } from '../media/sources';
 import { programAudioTrack } from '../output/program-audio';
 import { startRecorder } from '../output/recorder';
-import type { OutputConfig, OutputStatus, ShowState } from '../state/types';
+import type { OutputConfig, OutputStatus, Settings, ShowState, StreamTarget } from '../state/types';
 
 type Listener = () => void;
 
@@ -190,6 +190,12 @@ export class OnAir {
     }
   }
 
+  /** "Ziel neu verbinden": main restarts the encoder (all destinations), then asks for a fresh header. */
+  reconnect(): Promise<void> {
+    if (this.snap.phase !== 'on') return Promise.resolve();
+    return window.studio.output.reconnect();
+  }
+
   /** New MediaRecorder session → fresh header → main opens a new recording file and re-feeds ffmpeg. */
   restartRecorder(): Promise<void> {
     if (!this.stream || this.snap.phase !== 'on') return Promise.resolve();
@@ -240,13 +246,31 @@ export function errorText(e: unknown): string {
   return msg;
 }
 
+/** What main gets for a session: only enabled, usable destinations (none = record-only). */
+export function outputConfig(s: Settings): OutputConfig {
+  const destinations: OutputConfig['destinations'] = [];
+  for (const d of s.destinations) {
+    if (!d.enabled || d.target.kind === 'none') continue;
+    destinations.push({ id: d.id, ...(d.target as StreamTarget) });
+  }
+  return {
+    destinations,
+    fps: s.fps,
+    videoKbps: s.videoKbps,
+    audioKbps: s.audioKbps,
+    recordDir: s.recordDir,
+    ffmpegPath: s.ffmpegPath,
+  };
+}
+
 /** Display form of a target: never the stream key, never SRT query secrets. */
-export function maskedTarget(t: OutputConfig['target']): string {
+export function maskedTarget(t: Settings['destinations'][number]['target']): string {
   if (t.kind === 'none') return 'Kein Ziel';
   if (t.kind === 'srt') {
     const q = t.url.indexOf('?');
     return q === -1 ? t.url : `${t.url.slice(0, q)}?…`;
   }
-  const key = t.key ? `Schlüssel •••• ${t.key.slice(-4)}` : 'ohne Schlüssel';
+  // The last four characters only for long keys, so a short key is never shown whole.
+  const key = !t.key ? 'ohne Schlüssel' : t.key.length >= 12 ? `Schlüssel •••• ${t.key.slice(-4)}` : 'Schlüssel ••••';
   return `${t.url} (${key})`;
 }

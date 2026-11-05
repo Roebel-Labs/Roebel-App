@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('studio', {
     start: (cfg) => ipcRenderer.invoke('output:start', cfg),
     chunk: (buf) => ipcRenderer.send('output:chunk', buf),
     stop: () => ipcRenderer.invoke('output:stop'),
+    // Restart the encoder so failed destinations reconnect (all destinations see a short gap).
+    reconnect: () => ipcRenderer.invoke('output:reconnect'),
+    // 20 s test pattern to one destination -> { ok, error? } (never contains the key).
+    test: (req) => ipcRenderer.invoke('output:test', req),
     // { started, startedAt, videoKbps, status }: lets a reloaded page adopt a running broadcast.
     getStatus: () => ipcRenderer.invoke('output:getStatus'),
     onStatus: (cb) => subscribe('output:status', cb),
@@ -36,6 +40,10 @@ contextBridge.exposeInMainWorld('studio', {
     // Resolves to an absolute path, or null when cancelled.
     pickFile: (kind) => ipcRenderer.invoke('dialog:pickFile', kind),
     pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  },
+  ffmpeg: {
+    // { ok, version, srt, videotoolbox, error? }
+    check: (ffmpegPath) => ipcRenderer.invoke('ffmpeg:check', ffmpegPath),
   },
   sys: {
     usage: () => ipcRenderer.invoke('sys:usage'),

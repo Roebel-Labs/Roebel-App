@@ -214,9 +214,50 @@ describe('serialize / restore', () => {
 
   it('keeps stored values over defaults', () => {
     const base = initialState();
-    const r = restore(JSON.stringify({ ...base, settings: { ...base.settings, fps: 50, target: { kind: 'srt', url: 'srt://x' } } }));
+    const dest = { id: 'd1', name: 'YouTube', enabled: false, target: { kind: 'rtmp', url: 'rtmp://a.rtmp.youtube.com/live2', key: 'k' } };
+    const r = restore(JSON.stringify({ ...base, settings: { ...base.settings, fps: 50, destinations: [dest] } }));
     expect(r.settings.fps).toBe(50);
-    expect(r.settings.target).toEqual({ kind: 'srt', url: 'srt://x' });
+    expect(r.settings.destinations).toEqual([dest]);
+  });
+
+  it('starts with no destinations (record-only until one is added)', () => {
+    expect(initialState().settings.destinations).toEqual([]);
+    expect('target' in initialState().settings).toBe(false);
+  });
+
+  it("migrates an old single settings.target into one destination named 'Cloudflare'", () => {
+    const base = initialState();
+    const old = { ...base.settings, destinations: undefined, target: { kind: 'srt', url: 'srt://live.cloudflare.com:778?streamid=s' } };
+    const r = restore(JSON.stringify({ ...base, settings: old }));
+    expect(r.settings.destinations).toHaveLength(1);
+    expect(r.settings.destinations[0]).toMatchObject({
+      name: 'Cloudflare',
+      enabled: true,
+      target: { kind: 'srt', url: 'srt://live.cloudflare.com:778?streamid=s' },
+    });
+    expect(typeof r.settings.destinations[0].id).toBe('string');
+    expect('target' in r.settings).toBe(false);
+  });
+
+  it("does not migrate an old target of kind 'none'", () => {
+    const base = initialState();
+    const r = restore(JSON.stringify({ ...base, settings: { ...base.settings, target: { kind: 'none' } } }));
+    expect(r.settings.destinations).toEqual([]);
+  });
+
+  it('drops malformed destinations and keeps valid ones', () => {
+    const base = initialState();
+    const ok = { id: 'a', name: 'X', enabled: true, target: { kind: 'srt', url: 'srt://h:1' } };
+    const r = restore(
+      JSON.stringify({
+        ...base,
+        settings: {
+          ...base.settings,
+          destinations: [ok, { id: 'b', name: 'Y', enabled: true, target: { kind: 'rtmp', url: 'rtmp://h' } }, 7, { name: 'no id' }],
+        },
+      }),
+    );
+    expect(r.settings.destinations).toEqual([ok]);
   });
 
   it('drops malformed array elements and coerces nested fields', () => {

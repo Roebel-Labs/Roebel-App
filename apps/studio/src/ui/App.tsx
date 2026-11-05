@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useShow } from '../state/store';
-import type { OutputConfig, Settings } from '../state/types';
 import { ConfirmDialog, Dialog } from './Dialog';
-import { errorText, maskedTarget } from './engine';
+import { errorText, maskedTarget, outputConfig } from './engine';
 import { hotkeyAction, targetKind } from './hotkeys';
-import { SettingsTab } from './SettingsTab';
+import { destinationsProblem, enabledDestinations, uploadEstimate } from './settings/destinations';
+import { SettingsTab } from './settings/SettingsTab';
 import { HealthBar } from './show/HealthBar';
 import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
@@ -21,15 +21,6 @@ const TABS: Array<[Tab, string]> = [
   ['settings', 'Einstellungen'],
 ];
 
-function targetProblem(s: Settings): string | null {
-  const t = s.target;
-  if (t.kind === 'none') return 'Es ist kein Sendeziel eingestellt.';
-  if (t.kind === 'srt' && !/^srt:\/\/.+/.test(t.url)) return 'Die SRT-Adresse fehlt oder beginnt nicht mit srt://.';
-  if (t.kind === 'rtmp' && !/^rtmps?:\/\/.+/.test(t.url)) return 'Die RTMPS-Adresse fehlt oder beginnt nicht mit rtmps://.';
-  if (t.kind === 'rtmp' && !t.key) return 'Der Streamschlüssel fehlt.';
-  return null;
-}
-
 function StatusPill() {
   const air = useOnAir();
   const now = useTick(500);
@@ -41,6 +32,13 @@ function StatusPill() {
     return (
       <span className="pill warn" title={air.status?.lastError}>
         VERBINDE NEU …
+      </span>
+    );
+  if (air.status?.recordOnly && st === 'live')
+    return (
+      <span className="pill on" title="Nur Aufnahme, kein Livestream">
+        <span className="pill-dot" />
+        AUFNAHME {hms(now - (air.startedAt ?? now))}
       </span>
     );
   if (st === 'error')
@@ -63,12 +61,15 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const s = state.settings;
-  const problem = targetProblem(s);
+  const problem = destinationsProblem(s.destinations);
+  const enabled = enabledDestinations(s.destinations);
+  const recordOnly = enabled.length === 0;
+  const up = uploadEstimate(enabled.length, s.videoKbps, s.audioKbps);
 
   const start = async () => {
     setBusy(true);
     setError(null);
-    const cfg: OutputConfig = { ...s };
+    const cfg = outputConfig(s);
     try {
       await onAir.start(cfg, engine.program.stream);
       onClose();
@@ -80,7 +81,7 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
 
   return (
     <Dialog
-      title="Auf Sendung gehen?"
+      title={recordOnly ? 'Nur aufnehmen?' : 'Auf Sendung gehen?'}
       onCancel={busy ? () => {} : onClose}
       actions={
         <>
@@ -99,22 +100,42 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
             </button>
           ) : (
             <button className="btn solid-danger" onClick={start} disabled={busy}>
-              {busy ? 'Verbinde…' : 'Jetzt senden'}
+              {busy ? (recordOnly ? 'Starte…' : 'Verbinde…') : recordOnly ? 'Aufnahme starten' : 'Jetzt senden'}
             </button>
           )}
         </>
       }
     >
-      <p>Das Live-Bild geht an das Sendeziel und wird gleichzeitig lokal aufgenommen.</p>
+      <p>
+        {recordOnly
+          ? 'Kein Sendeziel eingeschaltet: Das Programm wird nur lokal aufgenommen, es geht nichts ins Internet.'
+          : enabled.length > 1
+            ? `Das Live-Bild geht gleichzeitig an ${enabled.length} Ziele und wird lokal aufgenommen.`
+            : 'Das Live-Bild geht an das Sendeziel und wird gleichzeitig lokal aufgenommen.'}
+      </p>
       <dl className="facts">
-        <dt>Ziel</dt>
-        <dd>{maskedTarget(s.target)}</dd>
+        <dt>{enabled.length > 1 ? 'Ziele' : 'Ziel'}</dt>
+        <dd>
+          {recordOnly
+            ? 'Keins (nur Aufnahme)'
+            : enabled.map((d) => (
+                <div key={d.id}>
+                  {d.name}: {maskedTarget(d.target)}
+                </div>
+              ))}
+        </dd>
         <dt>Bild</dt>
         <dd>1920 × 1080, {s.fps} fps</dd>
         <dt>Bitrate</dt>
         <dd>
           Video {s.videoKbps} kbit/s, Audio {s.audioKbps} kbit/s
         </dd>
+        {enabled.length > 1 && (
+          <>
+            <dt>Upload</dt>
+            <dd className="warn-text">≈ {up.mbit.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s ({enabled.length} Ziele)</dd>
+          </>
+        )}
         <dt>Aufnahme</dt>
         <dd>{s.recordDir}</dd>
       </dl>
@@ -127,13 +148,16 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
 function OnAirButton({ onOpenSettings }: { onOpenSettings: () => void }) {
   const air = useOnAir();
   const { onAir } = useStudio();
+  const { state } = useShow();
+  const recordOnlyNext = enabledDestinations(state.settings.destinations).length === 0;
+  const recordOnly = !!air.status?.recordOnly;
   const [dialog, setDialog] = useState<'start' | 'stop' | null>(null);
   if (air.phase === 'off' || air.phase === 'starting') {
     return (
       <>
         <button className="btn" onClick={() => setDialog('start')} disabled={air.phase === 'starting'}>
           <span className="golive-dot" />
-          Auf Sendung gehen
+          {recordOnlyNext ? 'Nur aufnehmen' : 'Auf Sendung gehen'}
         </button>
         {dialog === 'start' && <GoLiveDialog onClose={() => setDialog(null)} onOpenSettings={onOpenSettings} />}
       </>
@@ -142,13 +166,19 @@ function OnAirButton({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <>
       <button className="btn danger" onClick={() => setDialog('stop')} disabled={air.phase === 'stopping'}>
-        Sendung beenden
+        {recordOnly ? 'Aufnahme beenden' : 'Sendung beenden'}
       </button>
       {dialog === 'stop' && (
         <ConfirmDialog
-          title="Sendung beenden?"
-          body={<p>Der Livestream endet für alle Zuschauer. Die Aufnahme wird sauber abgeschlossen.</p>}
-          confirmLabel="Sendung beenden"
+          title={recordOnly ? 'Aufnahme beenden?' : 'Sendung beenden?'}
+          body={
+            <p>
+              {recordOnly
+                ? 'Die Aufnahme wird sauber abgeschlossen.'
+                : 'Der Livestream endet für alle Zuschauer. Die Aufnahme wird sauber abgeschlossen.'}
+            </p>
+          }
+          confirmLabel={recordOnly ? 'Aufnahme beenden' : 'Sendung beenden'}
           danger
           onConfirm={() => {
             setDialog(null);
@@ -187,6 +217,46 @@ function RecordingBanner() {
           onConfirm={() => {
             setConfirm(false);
             void onAir.restartRecorder();
+          }}
+          onCancel={() => setConfirm(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A destination dropped out of the tee: ffmpeg never retries it on its own. */
+function DestinationBanner() {
+  const air = useOnAir();
+  const { onAir } = useStudio();
+  const { state } = useShow();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const failed = air.phase === 'on' ? (air.status?.destinations ?? []).filter((d) => d.state === 'failed') : [];
+  // A single destination reconnects on its own (the whole encoder restarts with backoff).
+  if (failed.length === 0 || (air.status?.destinations?.length ?? 0) < 2) return null;
+  const names = failed.map((f) => state.settings.destinations.find((d) => d.id === f.id)?.name ?? 'Ziel').join(', ');
+  return (
+    <div className="banner" role="alert">
+      <strong>Ziel ausgefallen: {names}</strong>
+      <span>{failed[0].lastError ?? 'Verbindung verloren'}. Die anderen Ziele laufen weiter.</span>
+      <button className="btn" onClick={() => setConfirm(true)} disabled={busy}>
+        {busy ? 'Verbinde neu…' : 'Ziel neu verbinden'}
+      </button>
+      {confirm && (
+        <ConfirmDialog
+          title="Ziel neu verbinden?"
+          body={
+            <p>
+              Dafür startet der Encoder neu. ALLE Ziele sind für einige Sekunden unterbrochen, auch die, die gerade laufen. Die
+              Aufnahme geht in einer neuen Datei weiter.
+            </p>
+          }
+          confirmLabel="Neu verbinden"
+          onConfirm={() => {
+            setConfirm(false);
+            setBusy(true);
+            void onAir.reconnect().finally(() => setBusy(false));
           }}
           onCancel={() => setConfirm(false)}
         />
@@ -284,6 +354,7 @@ function Shell() {
         </div>
       </header>
       <RecordingBanner />
+      <DestinationBanner />
       <main className="content">
         {tab === 'show' && <ShowTab />}
         {tab === 'design' && <DesignTab />}
