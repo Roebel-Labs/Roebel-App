@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { defaultRenderContext } from '../../media/program';
+import { templateHasContent } from '../../render/draw';
 import { useShow } from '../../state/store';
 import type { ShowState } from '../../state/types';
 
@@ -53,6 +55,7 @@ export function OverlayRow() {
   const [menu, setMenu] = useState(false);
   // Several instances of one template get a running number so the tiles stay distinguishable.
   const seen = new Map<string, number>();
+  const rc = defaultRenderContext(state);
 
   return (
     <section>
@@ -67,10 +70,12 @@ export function OverlayRow() {
           seen.set(o.templateId, n);
           const name = `${t?.name ?? 'Unbekannte Vorlage'}${n > 1 ? ` ${n}` : ''}`;
           const key = hotkeyFor(state, o.id);
+          const empty = !!t && !templateHasContent(t, rc);
           return (
             <div key={o.id} className="ovl-wrap">
               <button
                 className={`ovl${o.visible ? ' on' : ''}`}
+                title={empty ? 'Wird erst gezeigt, wenn die Tabelle Daten für diese Einblendung hat.' : undefined}
                 aria-pressed={o.visible}
                 onClick={(e) => {
                   e.currentTarget.blur();
@@ -79,7 +84,7 @@ export function OverlayRow() {
               >
                 <span className="ovl-name">{name}</span>
                 <span className="ovl-state">
-                  {o.visible ? 'Eingeblendet' : 'Aus'}
+                  {empty ? <span className="ovl-empty">Keine Daten – Tabelle füllen</span> : o.visible ? 'Eingeblendet' : 'Aus'}
                   {key && (
                     <span className="key" style={{ marginLeft: 'auto' }}>
                       {key}

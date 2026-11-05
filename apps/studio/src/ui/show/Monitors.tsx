@@ -33,11 +33,15 @@ function PreviewMonitor() {
   useEffect(() => {
     const ctx = ref.current!.getContext('2d', { alpha: false })!;
     let raf = 0;
-    const draw = () => {
+    let last = 0;
+    const minGap = 1000 / engine.fps - 2; // never draw the monitor faster than the output
+    const draw = (t: number) => {
+      raf = requestAnimationFrame(draw);
+      if (t - last < minGap) return;
+      last = t;
       const s = latest.current;
       const shown = asProgram(s, s.previewSceneId);
       renderFrame(ctx, shown, engine.registry.lookup, defaultRenderContext(shown), Date.now(), { scale: MON_W / 1920 });
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
@@ -72,9 +76,13 @@ function LiveMonitor() {
   useEffect(() => {
     const ctx = ref.current!.getContext('2d', { alpha: false })!;
     let raf = 0;
-    const draw = () => {
-      ctx.drawImage(engine.program.canvas, 0, 0, MON_W, MON_H);
+    let last = 0;
+    const minGap = 1000 / engine.fps - 2;
+    const draw = (t: number) => {
       raf = requestAnimationFrame(draw);
+      if (t - last < minGap) return;
+      last = t;
+      ctx.drawImage(engine.program.canvas, 0, 0, MON_W, MON_H);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);

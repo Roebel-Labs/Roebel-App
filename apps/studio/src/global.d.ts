@@ -9,6 +9,7 @@ declare global {
         stop(): Promise<void>;
         onStatus(cb: (s: OutputStatus) => void): () => void;
         onNeedHeader(cb: () => void): () => void;
+        getStatus(): Promise<{ started: boolean; startedAt: number | null; videoKbps: number | null; status: OutputStatus }>;
       };
       media: {
         /** Grants the renderer access to a local file; resolves to http://127.0.0.1:7311/media/<token>. */
@@ -28,6 +29,8 @@ declare global {
       app: {
         onWillQuit(cb: () => void): () => void;
         quitReady(): void;
+        onConfirmQuit(cb: () => void): () => void;
+        confirmQuit(): void;
       };
     };
   }

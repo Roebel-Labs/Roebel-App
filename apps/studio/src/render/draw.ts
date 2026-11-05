@@ -308,9 +308,30 @@ function drawOverlays(ctx: CanvasRenderingContext2D, state: ShowState, rc: Rende
   for (const { o, t } of ordered) guarded(ctx, `overlay ${t.id}`, () => drawOverlay(ctx, o, t, rc, nowMs));
 }
 
+const BINDING_KEYS = /\{\{\s*([^{}]*?)\s*\}\}/g;
+
+/**
+ * False when a non-full-screen template would air as empty boxes: it has text nodes with bindings
+ * and every one of those bindings resolves to ''. Static text (logo bug) and full-screen templates
+ * always count as content.
+ */
+export function templateHasContent(t: Template, rc: RenderContext): boolean {
+  if (t.fullScreen) return true;
+  let bound = false;
+  for (const n of Array.isArray(t.nodes) ? t.nodes : []) {
+    if (n.type !== 'text' || !n.text || n.text.indexOf('{{') < 0) continue;
+    bound = true;
+    for (const m of n.text.matchAll(BINDING_KEYS)) {
+      if (resolveBindings(`{{${m[1]}}}`, rc).trim() !== '') return true;
+    }
+  }
+  return !bound;
+}
+
 function drawOverlay(ctx: CanvasRenderingContext2D, o: OverlayInstance, t: Template, rc: RenderContext, nowMs: number) {
   const nodes = Array.isArray(t.nodes) ? t.nodes : [];
   if (nodes.length === 0) return;
+  if (!templateHasContent(t, rc)) return; // never air empty bars
   const anim = o.visible ? t.animIn : t.animOut;
   if (!anim) return;
   const progress = nodes.map((n, i) => overlayProgress(o, anim, nowMs, nodeDelay(n, i, anim, o.visible)));

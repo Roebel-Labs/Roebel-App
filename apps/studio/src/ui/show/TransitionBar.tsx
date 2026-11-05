@@ -73,6 +73,8 @@ export function TransitionBar() {
           disabled={isCut || !preset}
           value={isCut ? MIN_MS : (preset?.durationMs ?? 600)}
           onChange={(e) => preset && dispatch({ type: 'savePreset', preset: { ...preset, durationMs: Number(e.target.value) } })}
+          // Hand the keyboard back to the hotkeys once the drag is over.
+          onPointerUp={(e) => e.currentTarget.blur()}
         />
       </label>
       <button className="linkbtn" onClick={() => setSaving(true)} disabled={!preset}>
@@ -87,14 +89,13 @@ export function TransitionBar() {
         }}
       >
         TAKE
-        <span className="take-sub">Leertaste</span>
+        <span className="take-sub">Leertaste, C schneidet hart</span>
       </button>
       {running && preset ? (
         <TakeProgress startedAt={state.transition.startedAt!} durationMs={preset.durationMs} />
       ) : (
         <div className="take-progress" aria-hidden="true" />
       )}
-      <span className="hint">C schneidet hart, ohne Übergang.</span>
 
       {saving && (
         <Dialog

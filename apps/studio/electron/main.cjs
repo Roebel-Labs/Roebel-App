@@ -1,7 +1,7 @@
 'use strict';
 // Electron main process for Röbel Studio.
 
-const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
 const path = require('node:path');
 const { createOutput } = require('./output.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
@@ -31,17 +31,28 @@ function setOnAir(on) {
   }
 }
 
+// The broadcast session as main sees it. Survives a renderer reload/crash so the new page can adopt it.
+let session_ = null; // { startedAt, videoKbps } while started
+
 ipcMain.handle('output:start', async (_e, cfg) => {
   await output.start(cfg);
+  session_ = { startedAt: Date.now(), videoKbps: cfg.videoKbps };
   setOnAir(true);
 });
 ipcMain.handle('output:stop', async () => {
   try {
     await output.stop();
   } finally {
+    session_ = null;
     setOnAir(false);
   }
 });
+ipcMain.handle('output:getStatus', () => ({
+  started: session_ !== null,
+  startedAt: session_ ? session_.startedAt : null,
+  videoKbps: session_ ? session_.videoKbps : null,
+  status: output.getStatus(),
+}));
 ipcMain.on('output:chunk', (_e, buf) => output.chunk(buf));
 
 let overlay = null;
@@ -138,13 +149,58 @@ function createWindow() {
   const devUrl = process.env.STUDIO_DEV_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // Closing the window while on air needs a confirmation and the graceful stop (final chunk flushed).
+  win.on('close', (e) => {
+    if (quitting || confirmedQuit || !session_) return;
+    e.preventDefault();
+    askToEndBroadcast();
+  });
+  // A crashed renderer must not leave main "on air" with nobody feeding ffmpeg: reload, the new page adopts.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    log(`renderer gone: ${details.reason}${session_ ? ' (on air, reloading)' : ''}`);
+    if (details.reason !== 'clean-exit' && win && !win.isDestroyed()) win.reload();
+  });
   win.on('closed', () => {
     win = null;
   });
 }
 
+function log(msg) {
+  console.log(`${new Date().toISOString()} [main] ${msg}`);
+}
+
+// Reload / force reload would silently drop the recorder while main stays on air: dev only.
+function setupMenu() {
+  const dev = !!process.env.STUDIO_DEV_URL;
+  const template = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { role: 'editMenu' },
+    dev ? { role: 'viewMenu' } : { label: 'Darstellung', submenu: [{ role: 'togglefullscreen' }] },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/** Asks the renderer to confirm ending the broadcast; it answers with app:quit-confirmed. */
+function askToEndBroadcast() {
+  if (!win || win.isDestroyed() || win.webContents.isCrashed()) {
+    confirmedQuit = true;
+    app.quit();
+    return;
+  }
+  win.show();
+  win.focus();
+  win.webContents.send('app:confirm-quit');
+}
+
+ipcMain.on('app:quit-confirmed', () => {
+  confirmedQuit = true;
+  app.quit();
+});
+
 app.whenReady().then(() => {
   setupPermissions();
+  setupMenu();
   overlay = createOverlayServer({
     userDataDir: app.getPath('userData'),
     log: (msg) => console.log(`${new Date().toISOString()} [overlay] ${msg}`),
@@ -155,14 +211,26 @@ app.whenReady().then(() => {
   void askMacMediaAccess();
 });
 
-// Quit: first let the renderer stop its MediaRecorder (final chunk flushed), then
-// stop ffmpeg + the recording file. Waits at most QUIT_GRACE_MS for the renderer.
+// Quit: while on air the operator confirms first (Cmd+Q, window close). Then the renderer
+// stops its MediaRecorder (final chunk flushed), then ffmpeg + the recording file stop.
+// Waits at most QUIT_GRACE_MS for the renderer and QUIT_HARD_CAP_MS overall.
 const QUIT_GRACE_MS = 3000;
+const QUIT_HARD_CAP_MS = 5000;
 let quitting = false;
+let confirmedQuit = false;
 app.on('before-quit', (e) => {
   if (quitting) return;
-  quitting = true;
   e.preventDefault();
+  if (session_ && !confirmedQuit && win && !win.isDestroyed()) {
+    askToEndBroadcast();
+    return;
+  }
+  quitting = true;
+  const cap = setTimeout(() => {
+    log('quit took too long, exiting');
+    setOnAir(false);
+    app.exit(0);
+  }, QUIT_HARD_CAP_MS);
   const rendererDone = new Promise((resolve) => {
     if (!win || win.isDestroyed()) return resolve();
     const timer = setTimeout(resolve, QUIT_GRACE_MS);
@@ -175,6 +243,8 @@ app.on('before-quit', (e) => {
   rendererDone
     .then(() => Promise.allSettled([output.stop(), overlay ? overlay.stop() : null]))
     .finally(() => {
+      clearTimeout(cap);
+      session_ = null;
       setOnAir(false);
       app.quit();
     });

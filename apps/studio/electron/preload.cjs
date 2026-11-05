@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('studio', {
     start: (cfg) => ipcRenderer.invoke('output:start', cfg),
     chunk: (buf) => ipcRenderer.send('output:chunk', buf),
     stop: () => ipcRenderer.invoke('output:stop'),
+    // { started, startedAt, videoKbps, status }: lets a reloaded page adopt a running broadcast.
+    getStatus: () => ipcRenderer.invoke('output:getStatus'),
     onStatus: (cb) => subscribe('output:status', cb),
     // Main asks for a fresh MediaRecorder (new Matroska header) after an ffmpeg restart.
     onNeedHeader: (cb) => subscribe('output:need-header', () => cb()),
@@ -38,5 +40,8 @@ contextBridge.exposeInMainWorld('studio', {
     // Main asks the renderer to end the broadcast cleanly before quitting.
     onWillQuit: (cb) => subscribe('app:will-quit', () => cb()),
     quitReady: () => ipcRenderer.send('app:quit-ready'),
+    // Main asks "Sendung läuft – wirklich beenden?" (window close / Cmd+Q while on air).
+    onConfirmQuit: (cb) => subscribe('app:confirm-quit', () => cb()),
+    confirmQuit: () => ipcRenderer.send('app:quit-confirmed'),
   },
 });

@@ -61,6 +61,26 @@ export type OnAirSnapshot = {
 
 type Recorder = ReturnType<typeof startRecorder>;
 
+/** A MediaRecorder that never fires 'stop' must not hang "Sendung beenden" or a restart. */
+export const RECORDER_STOP_TIMEOUT_MS = 2000;
+
+/** Resolves true when `p` settled in time, false on timeout. Never rejects. */
+export function settleWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(false), ms);
+    p.then(
+      () => {
+        clearTimeout(t);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(true);
+      },
+    );
+  });
+}
+
 /** Owns the on-air session. Order matters: recorder stops (final chunk flushed) BEFORE output.stop(). */
 export class OnAir {
   private snap: OnAirSnapshot = {
@@ -76,6 +96,8 @@ export class OnAir {
   private stream: MediaStream | null = null;
   private videoKbps = 6000;
   private restarting: Promise<void> | null = null;
+  private starting: Promise<void> | null = null;
+  private cancelStart = false;
   private offs: Array<() => void> = [];
 
   constructor() {
@@ -98,34 +120,67 @@ export class OnAir {
     this.listeners.forEach((l) => l());
   }
 
-  async start(cfg: OutputConfig, programStream: MediaStream): Promise<void> {
-    if (this.snap.phase !== 'off') return;
+  start(cfg: OutputConfig, programStream: MediaStream): Promise<void> {
+    if (this.snap.phase !== 'off') return this.starting ?? Promise.resolve();
+    this.cancelStart = false;
     this.set({ phase: 'starting', startError: null, recorderError: null, recorderRestarts: 0 });
+    this.starting = (async () => {
+      try {
+        await window.studio.output.start(cfg);
+        if (this.cancelStart) {
+          // stop() was requested while main was starting: undo instead of going on air.
+          await window.studio.output.stop().catch(() => {});
+          this.set({ phase: 'off', startedAt: null });
+          return;
+        }
+        this.videoKbps = cfg.videoKbps;
+        this.stream = new MediaStream([...programStream.getVideoTracks(), programAudioTrack()]);
+        this.rec = this.newRecorder();
+        this.set({ phase: 'on', startedAt: Date.now() });
+      } catch (e) {
+        this.rec = null;
+        this.stream = null;
+        await window.studio.output.stop().catch(() => {});
+        this.set({ phase: 'off', startedAt: null, startError: errorText(e) });
+        throw e;
+      } finally {
+        this.starting = null;
+      }
+    })();
+    return this.starting;
+  }
+
+  /**
+   * Main is still broadcasting although this renderer has no session (reload or crash):
+   * take the session over and send a fresh recorder header so ffmpeg is fed again.
+   */
+  async adopt(programStream: MediaStream): Promise<void> {
+    if (this.snap.phase !== 'off') return;
+    const info = await window.studio.output.getStatus().catch(() => null);
+    if (!info?.started || this.snap.phase !== 'off') return;
+    this.videoKbps = info.videoKbps ?? this.videoKbps;
+    this.stream = new MediaStream([...programStream.getVideoTracks(), programAudioTrack()]);
+    this.set({ phase: 'on', startedAt: info.startedAt ?? Date.now(), status: info.status ?? this.snap.status });
     try {
-      await window.studio.output.start(cfg);
-      this.videoKbps = cfg.videoKbps;
-      this.stream = new MediaStream([...programStream.getVideoTracks(), programAudioTrack()]);
       this.rec = this.newRecorder();
-      this.set({ phase: 'on', startedAt: Date.now() });
     } catch (e) {
-      this.rec = null;
-      this.stream = null;
-      await window.studio.output.stop().catch(() => {});
-      this.set({ phase: 'off', startedAt: null, startError: errorText(e) });
-      throw e;
+      this.set({ recorderError: errorText(e) });
     }
   }
 
   async stop(): Promise<void> {
+    if (this.snap.phase === 'starting') {
+      this.cancelStart = true;
+      await this.starting?.catch(() => {});
+    }
     if (this.snap.phase === 'off' || this.snap.phase === 'stopping') return;
     this.set({ phase: 'stopping' });
-    try {
-      if (this.restarting) await this.restarting.catch(() => {});
-      const rec = this.rec;
-      this.rec = null;
-      if (rec) await rec.stop(); // final chunk reaches main before the file is closed
-    } catch (e) {
-      console.error('[onair] recorder stop failed', e);
+    if (this.restarting) await settleWithin(this.restarting, RECORDER_STOP_TIMEOUT_MS);
+    const rec = this.rec;
+    this.rec = null;
+    // The final chunk must reach main before the file is closed, but never wait forever.
+    if (rec && !(await settleWithin(rec.stop(), RECORDER_STOP_TIMEOUT_MS))) {
+      console.error('[onair] recorder did not stop in time; closing the output anyway');
     }
     try {
       await window.studio.output.stop();
@@ -137,17 +192,19 @@ export class OnAir {
 
   /** New MediaRecorder session → fresh header → main opens a new recording file and re-feeds ffmpeg. */
   restartRecorder(): Promise<void> {
-    if (!this.rec || !this.stream || this.snap.phase !== 'on') return Promise.resolve();
+    if (!this.stream || this.snap.phase !== 'on') return Promise.resolve();
     if (this.restarting) return this.restarting;
     this.restarting = (async () => {
       try {
         const old = this.rec;
         this.rec = null;
-        await old?.stop().catch(() => {});
+        if (old) await settleWithin(old.stop(), RECORDER_STOP_TIMEOUT_MS);
         if (this.snap.phase === 'on' && this.stream) {
           this.rec = this.newRecorder();
           this.set({ recorderRestarts: this.snap.recorderRestarts + 1 });
         }
+      } catch (e) {
+        this.set({ recorderError: `Neustart fehlgeschlagen: ${errorText(e)}` });
       } finally {
         this.restarting = null;
       }
@@ -156,14 +213,16 @@ export class OnAir {
   }
 
   private newRecorder(): Recorder {
-    return startRecorder(this.stream!, {
+    const rec: Recorder = startRecorder(this.stream!, {
       videoKbps: this.videoKbps,
       onError: (msg) => {
+        if (this.rec !== rec) return; // an old session that is already being replaced
         console.error('[onair] MediaRecorder error', msg);
         this.set({ recorderError: msg });
         void this.restartRecorder();
       },
     });
+    return rec;
   }
 
   dispose() {

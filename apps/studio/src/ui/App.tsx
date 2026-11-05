@@ -7,6 +7,7 @@ import { hotkeyAction, targetKind } from './hotkeys';
 import { SettingsTab } from './SettingsTab';
 import { HealthBar } from './show/HealthBar';
 import { ShowTab } from './show/ShowTab';
+import { TableTab } from './table/TableTab';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
 
@@ -234,6 +235,26 @@ function useShowRuntime(tab: Tab) {
   );
 }
 
+/** Window close / Cmd+Q while on air: main asks, the operator confirms, main then quits gracefully. */
+function QuitConfirm() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => window.studio.app.onConfirmQuit(() => setOpen(true)), []);
+  if (!open) return null;
+  return (
+    <ConfirmDialog
+      title="Sendung läuft – wirklich beenden?"
+      body={<p>Röbel Studio schließt. Der Livestream endet für alle Zuschauer, die Aufnahme wird vorher sauber abgeschlossen.</p>}
+      confirmLabel="Sendung beenden und schließen"
+      danger
+      onConfirm={() => {
+        setOpen(false);
+        window.studio.app.confirmQuit();
+      }}
+      onCancel={() => setOpen(false)}
+    />
+  );
+}
+
 function Shell() {
   const [tab, setTab] = useState<Tab>('show');
   useShowRuntime(tab);
@@ -257,10 +278,11 @@ function Shell() {
       <main className="content">
         {tab === 'show' && <ShowTab />}
         {tab === 'design' && <div className="placeholder">Design kommt gleich.</div>}
-        {tab === 'table' && <div className="placeholder">Tabelle kommt gleich.</div>}
+        {tab === 'table' && <TableTab />}
         {tab === 'settings' && <SettingsTab />}
       </main>
       <HealthBar />
+      <QuitConfirm />
     </div>
   );
 }

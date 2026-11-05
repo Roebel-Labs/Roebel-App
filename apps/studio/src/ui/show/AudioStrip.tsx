@@ -60,15 +60,26 @@ function useMeters(mixer: Mixer | null) {
     }
     return m;
   };
-  return (id: string): MeterBinding => ({
-    bar: (el) => {
-      if (el) entry(id).bar = el;
-      else meters.current.delete(id);
-    },
-    read: (el) => {
-      if (el) entry(id).read = el;
-    },
-  });
+  // Stable ref callbacks per id: new functions on every render would detach/re-attach each meter
+  // (and reset its fall-back) on every fader move.
+  const bindings = useRef(new Map<string, MeterBinding>());
+  return (id: string): MeterBinding => {
+    let b = bindings.current.get(id);
+    if (!b) {
+      b = {
+        bar: (el) => {
+          entry(id).bar = el;
+          if (!el && !entry(id).read) meters.current.delete(id);
+        },
+        read: (el) => {
+          entry(id).read = el;
+          if (!el && !entry(id).bar) meters.current.delete(id);
+        },
+      };
+      bindings.current.set(id, b);
+    }
+    return b;
+  };
 }
 
 type MeterBinding = { bar: (el: HTMLDivElement | null) => void; read: (el: HTMLSpanElement | null) => void };
@@ -99,8 +110,9 @@ function AddMenu({ onClose }: { onClose: () => void }) {
     listDevices()
       .then((d) => alive && setDevices(d.audio))
       .catch(() => alive && setDevices([]));
+    // The "+ Kanal" button lives in the same wrapper: clicking it toggles instead of close-then-reopen.
     const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
+      if (!ref.current?.parentElement?.contains(e.target as Node)) onClose();
     };
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     document.addEventListener('mousedown', away);
@@ -213,7 +225,8 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
   const { state, dispatch } = useShow();
   const bind = useMeters(mixer);
   const [adding, setAdding] = useState(false);
-  const [monitor, setMonitor] = useState(false);
+  const [, rerender] = useState(0);
+  const monitor = mixer?.monitoring ?? false;
   const { masterDb, channels } = state.audio;
   return (
     <section className="au" aria-label="Audio">
@@ -255,7 +268,7 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
             title="Master auf Kopfhörer / Lautsprecher. Mit Raummikrofon Rückkopplung vermeiden."
             onClick={() => {
               mixer?.setMonitor(!monitor);
-              setMonitor(!monitor);
+              rerender((n) => n + 1);
             }}
           >
             Mithören

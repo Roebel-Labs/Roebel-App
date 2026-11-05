@@ -49,10 +49,23 @@ export function hotkeyAction(e: HotkeyEvent, state: ShowState, now: number = Dat
   return null;
 }
 
+/** Input types that never take typed text: a focused slider/checkbox must not kill the hotkeys. */
+const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'color', 'button', 'submit', 'reset', 'file', 'image']);
+
+/** Pure classification of a focused element for hotkeyAction. */
+export function classifyTarget(t: { tag: string; type?: string; editable?: boolean }): 'input' | 'other' {
+  if (t.editable) return 'input';
+  if (t.tag === 'TEXTAREA' || t.tag === 'SELECT') return 'input';
+  if (t.tag === 'INPUT') return NON_TEXT_INPUTS.has((t.type ?? 'text').toLowerCase()) ? 'other' : 'input';
+  return 'other';
+}
+
 /** Classifies a DOM event target for hotkeyAction. */
 export function targetKind(t: EventTarget | null): 'input' | 'other' {
   if (!(t instanceof HTMLElement)) return 'other';
-  if (t.isContentEditable) return 'input';
-  const tag = t.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ? 'input' : 'other';
+  return classifyTarget({
+    tag: t.tagName,
+    type: t instanceof HTMLInputElement ? t.type : undefined,
+    editable: t.isContentEditable,
+  });
 }

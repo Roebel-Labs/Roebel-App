@@ -6,12 +6,12 @@
 .au-row { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; padding-bottom: 2px; }
 .au-empty { align-self: center; color: var(--text-3, #6b7280); font-size: 12px; max-width: 280px; padding: 0 8px; }
 
-.au-strip { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--raised, #272b30); border: 1px solid var(--line, #33383e); border-radius: 4px; }
+.au-strip { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; gap: 5px; padding: 8px; background: var(--raised, #272b30); border: 1px solid var(--line, #33383e); border-radius: 4px; }
 .au-strip.muted .au-meter { opacity: 0.45; }
 .au-master { margin-left: auto; border-color: var(--border-brand, #b4b8c1); }
 .au-label { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.au-body { display: flex; gap: 8px; height: 120px; justify-content: center; }
+.au-body { display: flex; gap: 8px; height: 104px; justify-content: center; }
 .au-meter-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .au-meter { position: relative; flex: 1; width: 10px; background: var(--bg, #17191c); border: 1px solid var(--line, #33383e); border-radius: 4px; overflow: hidden; }
 .au-meter-bar { position: absolute; inset: 0; transform: scaleY(0); transform-origin: bottom; background: var(--pvw, #2fa866); will-change: transform; }

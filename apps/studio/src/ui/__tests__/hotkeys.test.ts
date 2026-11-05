@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hotkeyAction } from '../hotkeys';
+import { classifyTarget, hotkeyAction } from '../hotkeys';
 import { initialState, showReducer } from '../../state/reducer';
 import type { ShowState } from '../../state/types';
 
@@ -77,5 +77,30 @@ describe('hotkeyAction', () => {
 
   it('unbound keys return null', () => {
     expect(hotkeyAction(key('x', 'KeyX'), s)).toBeNull();
+  });
+});
+
+describe('classifyTarget', () => {
+  it('text-like fields swallow hotkeys', () => {
+    expect(classifyTarget({ tag: 'INPUT', type: 'text' })).toBe('input');
+    expect(classifyTarget({ tag: 'INPUT', type: 'password' })).toBe('input');
+    expect(classifyTarget({ tag: 'INPUT', type: 'number' })).toBe('input');
+    expect(classifyTarget({ tag: 'INPUT' })).toBe('input');
+    expect(classifyTarget({ tag: 'TEXTAREA' })).toBe('input');
+    expect(classifyTarget({ tag: 'SELECT' })).toBe('input');
+    expect(classifyTarget({ tag: 'DIV', editable: true })).toBe('input');
+  });
+
+  it('a focused slider, checkbox or colour well keeps the hotkeys working', () => {
+    for (const type of ['range', 'checkbox', 'radio', 'color', 'button', 'submit', 'reset']) {
+      expect(classifyTarget({ tag: 'INPUT', type })).toBe('other');
+    }
+    expect(classifyTarget({ tag: 'BUTTON' })).toBe('other');
+  });
+
+  it('Space after dragging the duration slider still takes', () => {
+    const s = show();
+    const target = classifyTarget({ tag: 'INPUT', type: 'range' });
+    expect(hotkeyAction(key(' ', 'Space', { target }), s)).toMatchObject({ type: 'take' });
   });
 });

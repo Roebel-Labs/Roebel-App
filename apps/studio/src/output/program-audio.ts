@@ -1,14 +1,17 @@
-// Program audio for the recorder stream.
-//
-// SEAM (Task 6): until the mixer exists, the program carries a silent stereo
-// track so ffmpeg always has an audio stream to encode. Task 6 replaces this
-// function with the mixer's master output track.
+// Program audio for the recorder stream: the mixer's post-limiter master once the
+// mixer is registered (StudioProvider), otherwise a silent stereo track so ffmpeg
+// always has an audio stream to encode.
 
+let provider: (() => MediaStreamTrack) | null = null;
 let ctx: AudioContext | null = null;
-let track: MediaStreamTrack | null = null;
+let silent: MediaStreamTrack | null = null;
 
-export function programAudioTrack(): MediaStreamTrack {
-  if (track && track.readyState === 'live') return track;
+export function setProgramAudioProvider(p: (() => MediaStreamTrack) | null): void {
+  provider = p;
+}
+
+function silentTrack(): MediaStreamTrack {
+  if (silent && silent.readyState === 'live') return silent;
   ctx ??= new AudioContext({ sampleRate: 48000 });
   const src = ctx.createConstantSource();
   const gain = ctx.createGain();
@@ -17,6 +20,10 @@ export function programAudioTrack(): MediaStreamTrack {
   dest.channelCount = 2;
   src.connect(gain).connect(dest);
   src.start();
-  track = dest.stream.getAudioTracks()[0];
-  return track;
+  silent = dest.stream.getAudioTracks()[0];
+  return silent;
+}
+
+export function programAudioTrack(): MediaStreamTrack {
+  return provider ? provider() : silentTrack();
 }

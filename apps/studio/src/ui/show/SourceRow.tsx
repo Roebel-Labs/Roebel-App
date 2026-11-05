@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../Dialog';
 import { errorText } from '../engine';
 import { sceneHealth, useSourceHealth, useStudio } from '../studio';
 import { asProgram } from './Monitors';
+import { removalPlan } from './removal';
 
 const THUMB_W = 192;
 const THUMB_H = 108;
@@ -255,11 +256,8 @@ export function SourceRow() {
   const kindOf = (id: string) => state.sources.find((s) => s.id === id)?.kind;
 
   const remove = (scene: Scene) => {
-    // A full-frame scene is "the source" for the operator: remove both, unless another scene still uses it.
-    const only = scene.layout === 'full' && scene.sourceIds.length === 1 ? scene.sourceIds[0] : null;
-    const usedElsewhere = only !== null && state.scenes.some((sc) => sc.id !== scene.id && sc.sourceIds.includes(only));
-    if (only && !usedElsewhere) dispatch({ type: 'removeSource', id: only });
-    else dispatch({ type: 'removeScene', id: scene.id });
+    const plan = removalPlan(state, scene.id);
+    if (!plan.blockedByLive) dispatch(plan.action); // re-checked: the program may have changed meanwhile
     setRemoving(null);
   };
 
@@ -295,11 +293,20 @@ export function SourceRow() {
               </button>
               {isPgm && <span className="tile-tag pgm">Live</span>}
               {isPvw && !isPgm && <span className="tile-tag pvw">Vorschau</span>}
-              {!isPgm && (
-                <button className="tile-remove" aria-label={`${scene.label} entfernen`} onClick={() => setRemoving(scene)}>
-                  ×
-                </button>
-              )}
+              {(() => {
+                const blocked = removalPlan(state, scene.id).blockedByLive;
+                return (
+                  <button
+                    className="tile-remove"
+                    aria-label={`${scene.label} entfernen`}
+                    title={blocked ? 'Wird gerade live verwendet' : `${scene.label} entfernen`}
+                    disabled={blocked}
+                    onClick={() => setRemoving(scene)}
+                  >
+                    ×
+                  </button>
+                );
+              })()}
             </div>
           );
         })}

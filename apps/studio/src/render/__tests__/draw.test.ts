@@ -131,14 +131,13 @@ describe('renderFrame', () => {
     }
   });
 
-  it('draws a visible lower third with a null row (no binding literals, no throw)', () => {
+  it('draws nothing for a visible lower third with a null row (no empty bars on air)', () => {
     const s = showReducer(base(), { type: 'setOverlay', id: 'ov-lower-third', visible: true, now: 0 });
     const f = fakeCtx();
     renderFrame(f.ctx, s, media, { ...rc, row: null }, 10_000, {});
     expect(f.depth()).toBe(0);
-    // Background bars are drawn; empty texts (incl. a lone separator) are skipped.
     expect(texts(f.calls)).toEqual([]);
-    expect(f.calls.some((c) => c.fn === 'set:fillStyle' && c.args[0] === '#00498B')).toBe(true);
+    expect(f.calls.some((c) => c.fn === 'set:fillStyle' && c.args[0] === '#00498B')).toBe(false);
   });
 
   it('draws the lower third texts from the row', () => {
