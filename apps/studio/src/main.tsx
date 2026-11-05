@@ -4,7 +4,11 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { startRecorder } from './output/recorder';
-import type { OutputConfig, OutputStatus, OutputTarget } from './state/types';
+import type { OutputConfig, OutputStatus, OutputTarget, ShowState } from './state/types';
+import { listDevices } from './media/devices';
+import { SourceRegistry } from './media/sources';
+import { createProgramOutput } from './media/program';
+import { initialState } from './state/reducer';
 
 const W = 1920;
 const H = 1080;
@@ -144,8 +148,100 @@ function Spike() {
   );
 }
 
+// TEMPORARY (Task 4 manual check): program = cameras via SourceRegistry + createProgramOutput.
+let cameraStarted = false;
+function CameraSpike() {
+  const mirrorRef = useRef<HTMLCanvasElement>(null);
+  const [lines, setLines] = useState<string[]>([]);
+  useEffect(() => {
+    if (cameraStarted) return;
+    cameraStarted = true;
+    const fps = window.studio.spike.fps;
+    const log = (msg: string) => {
+      console.log(`[spike] ${msg}`);
+      setLines((l) => [...l.slice(-30), msg]);
+    };
+    void (async () => {
+      // A first getUserMedia unlocks device labels/ids.
+      const probe = await navigator.mediaDevices.getUserMedia({ video: true }).catch((e) => {
+        log(`getUserMedia failed: ${e}`);
+        return null;
+      });
+      probe?.getTracks().forEach((t) => t.stop());
+      const { video, audio } = await listDevices();
+      log(`video devices: ${video.map((d) => d.label || d.deviceId).join(' | ') || '–'}`);
+      log(`audio devices: ${audio.map((d) => d.label || d.deviceId).join(' | ') || '–'}`);
+      const state: ShowState = initialState();
+      state.sources = video.map((d, i) => ({ id: `cam-${i}`, kind: 'camera', label: d.label || `Kamera ${i + 1}`, deviceId: d.deviceId }));
+      state.scenes = state.sources.length
+        ? [{ id: 'sc-1', label: 'Kamera', layout: state.sources.length > 1 ? 'split' : 'full', sourceIds: state.sources.slice(0, 2).map((s) => s.id) }]
+        : [];
+      state.programSceneId = state.scenes[0]?.id ?? null;
+      const registry = new SourceRegistry({ fps });
+      registry.onStatus((id, st) => log(`status ${id} → ${st}`));
+      registry.sync(state.sources);
+      const program = createProgramOutput(() => state, registry, fps);
+      program.clock.start();
+      // Count frames actually delivered by the captured track (what the encoder sees).
+      let delivered = 0;
+      const Processor = (window as unknown as { MediaStreamTrackProcessor?: new (o: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> } }).MediaStreamTrackProcessor;
+      if (Processor) {
+        const reader = new Processor({ track: program.stream.getVideoTracks()[0].clone() }).readable.getReader();
+        void (async () => {
+          for (;;) {
+            const r = await reader.read();
+            if (r.done) break;
+            r.value.close();
+            delivered++;
+          }
+        })();
+      }
+      // Probe via a tiny canvas so getImageData never forces the program canvas onto the CPU.
+      const probeCanvas = document.createElement('canvas');
+      probeCanvas.width = probeCanvas.height = 1;
+      const pctx = probeCanvas.getContext('2d', { willReadFrequently: true })!;
+      let lastFrames = 0;
+      let lastT = performance.now();
+      setInterval(() => {
+        const st = program.clock.stats();
+        const now = performance.now();
+        const trackFps = Processor ? (((delivered - lastFrames) * 1000) / (now - lastT)).toFixed(1) : 'n/a';
+        lastFrames = delivered;
+        lastT = now;
+        pctx.drawImage(program.canvas, 480, 270, 1, 1, 0, 0, 1, 1);
+        const px = pctx.getImageData(0, 0, 1, 1).data;
+        const v = document.querySelector('video');
+        const cam = v ? `cam=${registry.statusOf('cam-0')} ${v.videoWidth}x${v.videoHeight} rs=${v.readyState}` : 'cam=–';
+        const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+        log(
+          `clock fps=${st.fps.toFixed(2)} overruns=${st.overruns} ticks=${st.ticks} trackFps=${trackFps} ` +
+            `${cam} px=${px[0]},${px[1]},${px[2]} heapMB=${mem ? (mem.usedJSHeapSize / 1e6).toFixed(1) : 'n/a'}`,
+        );
+      }, 5000);
+      const lossMs = window.studio.spike.simulateLossMs;
+      if (lossMs && state.sources[0]) {
+        setTimeout(() => {
+          log('simulating loss of cam-0');
+          registry.debugEndTracks('cam-0');
+        }, lossMs);
+      }
+      const mirror = mirrorRef.current!.getContext('2d')!;
+      const draw = () => {
+        mirror.drawImage(program.canvas, 0, 0, 960, 540);
+        requestAnimationFrame(draw);
+      };
+      requestAnimationFrame(draw);
+    })();
+  }, []);
+  return (
+    <div style={{ padding: 16 }}>
+      <h1 style={{ fontSize: 20 }}>Röbel Studio – Kamera-Test ({window.studio.spike.fps} fps)</h1>
+      <canvas ref={mirrorRef} width={960} height={540} style={{ background: '#000' }} />
+      <pre style={{ fontSize: 12 }}>{lines.join('\n')}</pre>
+    </div>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Spike />
-  </StrictMode>,
+  <StrictMode>{window.studio.spike.camera ? <CameraSpike /> : <Spike />}</StrictMode>,
 );
