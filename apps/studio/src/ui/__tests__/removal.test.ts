@@ -44,4 +44,12 @@ describe('removalPlan', () => {
     const { s, fb } = setup();
     expect(removalPlan(live(s, fb), fb).blockedByLive).toBe(true);
   });
+
+  it('marks a Live-Raum guest tile so its owner ends the guest instead of only removing the source', () => {
+    const s = showReducer(initialState(), { type: 'addExternalSource', id: 'liveroom-guest-r1', label: 'Gast' });
+    const p = removalPlan(s, 'scene-liveroom-guest-r1');
+    expect(p.externalSourceId).toBe('liveroom-guest-r1');
+    const { s: plain, fa } = setup();
+    expect(removalPlan(plain, fa).externalSourceId).toBeUndefined();
+  });
 });

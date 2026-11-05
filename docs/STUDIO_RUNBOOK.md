@@ -103,7 +103,8 @@ OBS sendet die Hauptsendung wie gewohnt, das Studio läuft parallel als Test.
 
 ## 7. Notfall: OBS mit den Einblendungen
 
-Läuft das Studio nicht, sendet OBS – die Einblendungen (Bauchbinden, Werbung, Uhr, Unterstützen) kommen trotzdem:
+Läuft das Studio nicht, sendet OBS – die Einblendungen (Bauchbinden, Werbung, Uhr, Chat-Nachricht) kommen trotzdem.
+Unterstützungen erscheinen **nie** im Bild (weder Stream noch Aufnahme), nur im Live-Raum-Tab und in der App:
 
 - OBS → Quelle **Browser** → URL `http://127.0.0.1:7311/overlay.html`, Breite **1920**, Höhe **1080**.
 - **`127.0.0.1` verwenden, nicht `localhost`.**
@@ -154,3 +155,12 @@ Für den 07.11. gilt zusätzlich: OBS sendet die Hauptsendung, das Studio läuft
 - Die OBS-Einblendungsseite enthält keine Einstellungen und keine Schlüssel.
 - Bildschirm teilen/fotografieren nur, wenn kein Schlüssel per „Zeigen" sichtbar ist.
 - Nach der Show bei YouTube/Facebook/Cloudflare den Schlüssel bei Bedarf neu erzeugen.
+
+## 12. Störungen
+
+- **Studio-Fenster neu geladen / abgestürzt, während gesendet wird:** Die Sendung läuft weiter (das Studio übernimmt
+  sie automatisch), aber das **Live-Bild ist leer, bis eine Szene neu genommen wird**. Sofort eine Szene anklicken
+  und **TAKE** (oder Doppelklick auf die Kachel). Handy-Gäste aus dem Live-Raum sind nach dem Neuladen weg: im
+  Live-Raum-Tab **„Neu verbinden“**.
+- **Gast-Kachel „Signal verloren“ auf Sendung:** Der Gast hat aufgelegt oder die Verbindung verloren. Auf eine andere
+  Szene schneiden – die Kachel verschwindet dann von selbst.

@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RETRY_MS, START_TIMEOUT_MS, STALL_TIMEOUT_MS, SourceRegistry } from '../sources';
 import type { Source } from '../../state/types';
 
+let trackSeq = 0;
 class FakeTrack extends EventTarget {
+  id = `t${++trackSeq}`;
   kind = 'video';
   readyState: 'live' | 'ended' = 'live';
   stop() {
@@ -217,6 +219,58 @@ describe('SourceRegistry external sources', () => {
     stream.tracks[0].readyState = 'ended';
     stream.tracks[0].dispatchEvent(new Event('ended'));
     expect(reg.statusOf(guest.id)).toBe('lost');
+    externalMedia.delete(guest.id);
+    reg.dispose();
+  });
+});
+
+describe('SourceRegistry external re-register', () => {
+  const guest: Source = { id: 'liveroom-guest-2', kind: 'external', label: 'Gast' };
+
+  it('re-registering the same stream with the same video track never flashes (no loading, no srcObject reset)', async () => {
+    const { externalMedia } = await import('../external');
+    const reg = new SourceRegistry({ fps: 30 });
+    const seen: string[] = [];
+    reg.onStatus((_id, st) => seen.push(st));
+    const stream = new FakeStream();
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    reg.sync([guest]);
+    videos[0].dispatchEvent(new Event('playing'));
+    expect(reg.statusOf(guest.id)).toBe('ok');
+    let resets = 0;
+    let current: unknown = videos[0].srcObject;
+    Object.defineProperty(videos[0], 'srcObject', {
+      get: () => current,
+      set: (v) => {
+        resets++;
+        current = v;
+      },
+    });
+    seen.length = 0;
+    externalMedia.set(guest.id, stream as unknown as MediaStream); // e.g. the guest's audio track arrived
+    expect(seen).toEqual([]);
+    expect(resets).toBe(0);
+    expect(reg.statusOf(guest.id)).toBe('ok');
+    // Listeners are re-bound: an ending track is still noticed.
+    stream.tracks[0].readyState = 'ended';
+    stream.tracks[0].dispatchEvent(new Event('ended'));
+    expect(reg.statusOf(guest.id)).toBe('lost');
+    externalMedia.delete(guest.id);
+    reg.dispose();
+  });
+
+  it('a new video track re-attaches', async () => {
+    const { externalMedia } = await import('../external');
+    const reg = new SourceRegistry({ fps: 30 });
+    const stream = new FakeStream();
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    reg.sync([guest]);
+    videos[0].dispatchEvent(new Event('playing'));
+    stream.tracks = [new FakeTrack()];
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    expect(reg.statusOf(guest.id)).toBe('loading');
+    videos[0].dispatchEvent(new Event('playing'));
+    expect(reg.statusOf(guest.id)).toBe('ok');
     externalMedia.delete(guest.id);
     reg.dispose();
   });

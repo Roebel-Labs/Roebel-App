@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useShow } from '../state/store';
 import { ConfirmDialog } from '../ui/Dialog';
+import { broadcasting } from '../ui/live-room-seams';
 import { useStudio } from '../ui/studio';
 import { liveRoom } from './controller';
 import type { LiveShowStatus } from './types';
@@ -27,7 +28,8 @@ function useLiveRoomBridge() {
   }, [dispatch]);
 
   useEffect(() => {
-    liveRoom.attachOnAir({ get: () => onAir.get().phase === 'on', subscribe: (cb) => onAir.subscribe(cb) });
+    // Same predicate as the studio's onAir seam: a local-only recording never puts the app on LIVE.
+    liveRoom.attachOnAir({ get: () => broadcasting(onAir), subscribe: (cb) => onAir.subscribe(cb) });
   }, [onAir]);
 
   useEffect(() => {

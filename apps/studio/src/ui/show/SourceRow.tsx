@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../Dialog';
 import { errorText } from '../engine';
 import { sceneHealth, useSourceHealth, useStudio } from '../studio';
 import { asProgram } from './Monitors';
+import { liveRoom } from '../../live-room/controller';
 import { removalPlan } from './removal';
 
 const THUMB_W = 192;
@@ -257,8 +258,18 @@ export function SourceRow() {
 
   const remove = (scene: Scene) => {
     const plan = removalPlan(state, scene.id);
-    if (!plan.blockedByLive) dispatch(plan.action); // re-checked: the program may have changed meanwhile
     setRemoving(null);
+    if (plan.blockedByLive) return; // re-checked: the program may have changed meanwhile
+    if (plan.externalSourceId) {
+      // A Live-Raum guest: end the guest there, which unregisters the source (else the next track event re-adds it).
+      const id = plan.externalSourceId;
+      void liveRoom.endGuestBySource(id).then(
+        (handled) => !handled && dispatch(plan.action),
+        () => dispatch(plan.action),
+      );
+      return;
+    }
+    dispatch(plan.action);
   };
 
   return (
@@ -321,7 +332,13 @@ export function SourceRow() {
       {removing && (
         <ConfirmDialog
           title={`„${removing.label}“ entfernen?`}
-          body={<p>Die Quelle verschwindet aus der Leiste. Split- und Bild-im-Bild-Ansichten mit dieser Quelle werden ebenfalls entfernt.</p>}
+          body={
+            removalPlan(state, removing.id).externalSourceId ? (
+              <p>Der Gast wird aus dem Live-Raum verabschiedet und verschwindet aus der Leiste.</p>
+            ) : (
+              <p>Die Quelle verschwindet aus der Leiste. Split- und Bild-im-Bild-Ansichten mit dieser Quelle werden ebenfalls entfernt.</p>
+            )
+          }
           confirmLabel="Entfernen"
           danger
           onConfirm={() => remove(removing)}

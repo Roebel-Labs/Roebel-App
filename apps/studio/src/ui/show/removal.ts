@@ -3,7 +3,8 @@
 import type { Action } from '../../state/reducer';
 import type { ShowState } from '../../state/types';
 
-export type RemovalPlan = { action: Action; affectedSceneIds: string[]; blockedByLive: boolean };
+/** `externalSourceId`: the tile is a runtime stream (Live-Raum guest); its owner must end it, not just the reducer. */
+export type RemovalPlan = { action: Action; affectedSceneIds: string[]; blockedByLive: boolean; externalSourceId?: string };
 
 /** Scenes on air right now: program, plus the outgoing scene of a running transition. */
 export function liveSceneIds(s: ShowState): Set<string> {
@@ -33,5 +34,7 @@ export function removalPlan(s: ShowState, sceneId: string): RemovalPlan {
     affected = [scene.id];
   }
   const live = liveSceneIds(s);
-  return { action, affectedSceneIds: affected, blockedByLive: affected.some((id) => live.has(id)) };
+  const plan: RemovalPlan = { action, affectedSceneIds: affected, blockedByLive: affected.some((id) => live.has(id)) };
+  if (action.type === 'removeSource' && s.sources.some((x) => x.id === action.id && x.kind === 'external')) plan.externalSourceId = action.id;
+  return plan;
 }

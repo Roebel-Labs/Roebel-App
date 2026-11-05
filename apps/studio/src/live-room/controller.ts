@@ -10,7 +10,7 @@ import { LIVE_ROOM_STORAGE_KEY } from './config';
 import { isJoined, joinGuest, leaveGuest, resyncGuestSources } from './guests';
 import { subscribeShow, type RealtimeState } from './realtime';
 import { guessColumnMap, mapRowsToItems, resolveItemForRow, sanitizeColumnMap, tableToRundown, type ColumnMap } from './rundown';
-import { liveRoomChatHighlight, liveRoomDonation, liveRoomSeams, type OnAirSource } from './seams';
+import { guestSourceId, liveRoomChatHighlight, liveRoomDonation, liveRoomSeams, type OnAirSource } from './seams';
 import { decideOnStage, followOnAir } from './stage-sync';
 import type { ChatMessage, GuestJoin, GuestRequest, LiveShow, LiveShowStatus, RundownItem } from './types';
 
@@ -275,7 +275,7 @@ class LiveRoomController {
     if (this.snap.showId !== showId) return;
     this.unsubRealtime = subscribeShow(showId, {
       onState: (realtime) => this.set({ realtime }),
-      onShow: (s) => this.snap.show && this.set({ show: { ...this.snap.show, ...s } }),
+      onShow: (s) => this.onRealtimeShow(s),
       onRundownChange: () => void fetchRundown(showId).then((rundown) => this.snap.showId === showId && this.set({ rundown })),
       onChat: (m, ev) => this.onRealtimeChat(m, ev),
       onViewers: (viewers) => this.set({ viewers }),
@@ -290,6 +290,8 @@ class LiveRoomController {
   private onRealtimeChat(m: Partial<ChatMessage> & { id: string }, ev: 'INSERT' | 'UPDATE' | 'DELETE') {
     if (ev === 'DELETE' || m.hidden_at) {
       this.set({ chat: this.snap.chat.filter((x) => x.id !== m.id) });
+      // Moderated elsewhere (app admin, mute): the message leaves the program too.
+      if (m.id === this.highlightedId) this.clearHighlight();
       return;
     }
     if (typeof m.body === 'string' && typeof m.kind === 'string' && typeof m.created_at === 'string') {
@@ -321,6 +323,7 @@ class LiveRoomController {
     for (const m of msgs) {
       if (m.hidden_at) {
         byId.delete(m.id);
+        if (m.id === this.highlightedId) this.clearHighlight();
         continue;
       }
       if (!byId.has(m.id) && this.alerts.push(m)) alerted = true;
@@ -366,7 +369,22 @@ class LiveRoomController {
     return !!this.bound && !!chatHighlightTemplate(this.bound.getState());
   }
 
+  /** Show row changed elsewhere: a highlight that is no longer the featured message leaves the program. */
+  onRealtimeShow(s: Partial<LiveShow> & { id: string }) {
+    if (!this.snap.show) return;
+    this.set({ show: { ...this.snap.show, ...s } });
+    if (this.highlightedId !== null && 'overlay' in s && this.featuredId() !== this.highlightedId) this.clearHighlight();
+  }
+
+  /** The chat message currently on air (null when none). */
+  private highlightedId: string | null = null;
+
   async featureMessage(id: string | null) {
+    if (id !== null) {
+      // Only plain chat lines may go on air. Unterstützungen never do (not in stream, not in the recording).
+      const m = this.snap.chat.find((x) => x.id === id);
+      if (!m || m.kind !== 'chat') throw new LiveApiError('NOT_CHAT', 'Nur Chat-Nachrichten können auf Sendung gehen.', 0);
+    }
     const r = await this.call<{ overlay: Record<string, unknown> }>('feature_message', { message_id: id });
     if (this.snap.show) this.set({ show: { ...this.snap.show, overlay: r.overlay } });
     if (id === null) return this.clearHighlight();
@@ -374,7 +392,9 @@ class LiveRoomController {
     const b = this.bound;
     const tpl = b ? chatHighlightTemplate(b.getState()) : undefined;
     if (!m || !b || !tpl) return;
+    if (m.kind !== 'chat') return;
     this.highlightGen++;
+    this.highlightedId = m.id;
     liveRoomChatHighlight.set({ name: displayName(m.display_name), body: m.body, avatarUrl: safeAvatarUrl(m.avatar_url) });
     const ov = this.ensureOverlay(tpl, 'ov-liveroom-chat');
     if (ov) b.dispatch({ type: 'setOverlay', id: ov, visible: true, now: Date.now() });
@@ -387,6 +407,7 @@ class LiveRoomController {
     const b = this.bound;
     const tpl = b ? chatHighlightTemplate(b.getState()) : undefined;
     const gen = ++this.highlightGen;
+    this.highlightedId = null;
     if (b && tpl) {
       for (const o of b.getState().overlays) if (o.templateId === tpl.id && o.visible) b.dispatch({ type: 'setOverlay', id: o.id, visible: false, now: Date.now() });
       setTimeout(() => {
@@ -669,6 +690,20 @@ class LiveRoomController {
   async declineGuest(g: GuestRequest) {
     await this.call('guest_decline', { request_id: g.id });
     this.set({ guests: this.snap.guests.filter((x) => x.id !== g.id) });
+  }
+
+  /**
+   * The operator removed a guest's source tile in the studio: end the guest properly (LiveKit + server),
+   * otherwise the next track event would register the tile again. Returns false if it is not a guest source.
+   */
+  async endGuestBySource(sourceId: string): Promise<boolean> {
+    const prefix = guestSourceId('');
+    if (!sourceId.startsWith(prefix)) return false;
+    const requestId = sourceId.slice(prefix.length);
+    const g = this.snap.guests.find((x) => x.id === requestId);
+    if (g) await this.endGuest(g);
+    else await leaveGuest(requestId);
+    return true;
   }
 
   async endGuest(g: GuestRequest) {

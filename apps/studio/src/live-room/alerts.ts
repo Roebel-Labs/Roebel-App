@@ -19,10 +19,20 @@ export function displayName(raw: string | null | undefined, fallback = 'Jemand')
   return n;
 }
 
-/** Avatar URLs come from app users: only https images may be loaded into the program. */
+/** Hosts avatar images may come from: the app's Supabase storage and roebel.app itself. */
+const AVATAR_HOSTS = [/^wwbeqhkslxdxhktqzqti\.supabase\.co$/i, /^(?:[a-z0-9-]+\.)*roebel\.app$/i];
+
+/** Avatar URLs come from app users: only https images from the app's own hosts are loaded into the program. */
 export function safeAvatarUrl(raw: string | null | undefined): string {
   const u = (raw ?? '').trim();
-  return /^https:\/\/[^\s]+$/i.test(u) ? u : '';
+  if (!/^https:\/\/\S+$/i.test(u)) return '';
+  try {
+    const url = new URL(u);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port) return '';
+    return AVATAR_HOSTS.some((h) => h.test(url.hostname)) ? u : '';
+  } catch {
+    return '';
+  }
 }
 
 export function toAlert(m: ChatMessage): SupportAlert {

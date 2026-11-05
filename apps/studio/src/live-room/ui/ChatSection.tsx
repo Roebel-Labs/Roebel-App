@@ -24,9 +24,12 @@ function Message({ m, featured, run }: { m: ChatMessage; featured: boolean; run:
       {m.body && <div className="lr-msg-body">{m.body}</div>}
       {m.kind !== 'system' && (
         <div className="lr-msg-actions">
-          <button className="btn ghost" onClick={() => run(() => liveRoom.featureMessage(featured ? null : m.id))}>
-            {featured ? 'Von Sendung nehmen' : 'Auf Sendung'}
-          </button>
+          {/* Only chat lines can go on air; Unterstützungen never appear in the stream or the recording. */}
+          {m.kind === 'chat' && (
+            <button className="btn ghost" onClick={() => run(() => liveRoom.featureMessage(featured ? null : m.id))}>
+              {featured ? 'Von Sendung nehmen' : 'Auf Sendung'}
+            </button>
+          )}
           <button className="btn ghost" onClick={() => run(() => liveRoom.hideMessage(m.id))}>
             Ausblenden
           </button>

@@ -81,8 +81,15 @@ describe('displayName / safeAvatarUrl', () => {
     expect(displayName('  ', 'Gast')).toBe('Gast');
     expect(displayName(' Anna ')).toBe('Anna');
   });
-  it('only lets https avatars through', () => {
-    expect(safeAvatarUrl('https://x.supabase.co/a.png')).toBe('https://x.supabase.co/a.png');
+  it('only lets https avatars from the app hosts through', () => {
+    const sb = 'https://wwbeqhkslxdxhktqzqti.supabase.co/storage/v1/object/public/avatars/a.png';
+    expect(safeAvatarUrl(sb)).toBe(sb);
+    expect(safeAvatarUrl('https://www.roebel.app/a.png')).toBe('https://www.roebel.app/a.png');
+    expect(safeAvatarUrl('https://roebel.app/a.png')).toBe('https://roebel.app/a.png');
+    expect(safeAvatarUrl('https://x.supabase.co/a.png')).toBe('');
+    expect(safeAvatarUrl('https://roebel.app.evil.com/a.png')).toBe('');
+    expect(safeAvatarUrl('https://evilroebel.app/a.png')).toBe('');
+    expect(safeAvatarUrl('https://u:p@www.roebel.app/a.png')).toBe('');
     expect(safeAvatarUrl('http://127.0.0.1:7311/media/abc')).toBe('');
     expect(safeAvatarUrl('javascript:alert(1)')).toBe('');
     expect(safeAvatarUrl(null)).toBe('');

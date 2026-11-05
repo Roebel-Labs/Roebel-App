@@ -50,6 +50,8 @@ type Entry = {
   off: () => void;
   /** External sources: detaches the listeners on the current stream's tracks. */
   extOff: () => void;
+  /** External sources: the live video track the element currently shows (re-register without a change = no flash). */
+  extTrackId: string | null;
 };
 
 type StatusListener = (sourceId: string, status: SourceHealth) => void;
@@ -220,6 +222,7 @@ export class SourceRegistry {
       disposed: false,
       off: () => {},
       extOff: () => {},
+      extTrackId: null,
     };
     this.entries.set(s.id, e);
     if (el instanceof HTMLVideoElement) {
@@ -329,9 +332,14 @@ export class SourceRegistry {
     e.extOff = () => {};
     if (!stream || !hasLiveVideo(stream)) {
       video.srcObject = null;
+      e.extTrackId = null;
       this.emit(e, 'ended');
       return;
     }
+    const liveTrack = stream.getVideoTracks().find((t) => t.readyState === 'live')!;
+    // Same stream, same picture (e.g. only the guest's audio track changed): keep showing it untouched.
+    // Resetting srcObject or emitting 'started' here would flash the "Lädt…" slate on program and in the recording.
+    const unchanged = video.srcObject === stream && e.extTrackId === liveTrack.id;
     const offs: Array<() => void> = [];
     for (const t of stream.getVideoTracks()) {
       const onEnded = () => this.emit(e, 'ended');
@@ -347,6 +355,8 @@ export class SourceRegistry {
       });
     }
     e.extOff = () => offs.forEach((f) => f());
+    if (unchanged) return;
+    e.extTrackId = liveTrack.id;
     this.emit(e, 'started');
     // Re-assign even for the same stream: its track set may have changed.
     video.srcObject = null;
