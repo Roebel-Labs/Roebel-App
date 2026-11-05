@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { liveAdminSafe } from "./api";
 import type { LiveShow } from "../types";
 
-type Fields = { title: string; subtitle: string; poster_url: string; hls_url: string; replay_url: string; starts_at: string };
+type Fields = { title: string; subtitle: string; poster_url: string; hls_url: string; replay_url: string; starts_at: string; youtube_url: string };
 
 /** ISO → value for <input type="datetime-local"> in the operator's local time. */
 function toLocalInput(iso: string | null): string {
@@ -27,6 +27,7 @@ function fromShow(show: LiveShow): Fields {
     hls_url: show.hls_url ?? "",
     replay_url: show.replay_url ?? "",
     starts_at: toLocalInput(show.starts_at),
+    youtube_url: show.overlay?.youtube_url ?? "",
   };
 }
 
@@ -37,6 +38,7 @@ const FIELDS: { key: keyof Fields; label: string; placeholder?: string; type?: s
   { key: "poster_url", label: "Vorschaubild (URL)", placeholder: "https://…" },
   { key: "hls_url", label: "HLS-Adresse (manuell)", placeholder: "https://…/manifest/video.m3u8" },
   { key: "replay_url", label: "Aufzeichnung (URL)", placeholder: "https://…" },
+  { key: "youtube_url", label: "YouTube-Link (für „Auf dem Fernseher ansehen“)", placeholder: "https://youtube.com/live/…" },
 ];
 
 export function SettingsPanel({ show, onChanged }: { show: LiveShow; onChanged: () => void }) {

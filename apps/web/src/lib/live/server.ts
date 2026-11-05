@@ -1,9 +1,17 @@
 // Live room server helpers: viewer profiles, push, Cloudflare Stream Live (server only).
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const CHAT_MAX = 280;
+
+/** Public, stable per person per show, not reversible to the wallet (salted with a server secret). */
+export function authorKey(showId: string, wallet: string | null | undefined): string | null {
+  if (!wallet) return null;
+  const salt = process.env.LIVE_TOKEN_SECRET || process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createHash("sha256").update(`${showId}:${wallet.toLowerCase()}:${salt}`).digest("hex").slice(0, 16);
+}
 
 /** Display name + avatar for a wallet. Never falls back to the address (no wallets on screen). */
 export async function viewerProfile(admin: SupabaseClient, wallet: string): Promise<{ display_name: string; avatar_url: string | null }> {

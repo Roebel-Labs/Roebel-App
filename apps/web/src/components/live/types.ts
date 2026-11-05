@@ -15,6 +15,10 @@ export interface LiveOverlay {
   reactions: boolean;
   featured_message_id: string | null;
   message: string | null;
+  /** Set by set_status → live (running time on the player). */
+  live_since?: string | null;
+  /** "Auf dem Fernseher ansehen" fallback (set_flags youtube_url). */
+  youtube_url?: string | null;
 }
 
 export const DEFAULT_OVERLAY: LiveOverlay = {
@@ -42,6 +46,8 @@ export function normalizeOverlay(raw: unknown): LiveOverlay {
     reactions: !!o.reactions,
     featured_message_id: typeof o.featured_message_id === "string" ? o.featured_message_id : null,
     message: typeof o.message === "string" && o.message.trim() ? o.message : null,
+    live_since: typeof o.live_since === "string" ? o.live_since : null,
+    youtube_url: typeof o.youtube_url === "string" && o.youtube_url ? o.youtube_url : null,
   };
 }
 

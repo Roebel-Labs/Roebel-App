@@ -109,3 +109,20 @@ in-app layer for app viewers: the gold alert over the player (`components/live/S
 the chat. The OBS overlay never renders support alerts (`SUPPORT_ON_AIR = false`), the console has no alerts switch, and Ortis
 Studio has no on-air donation graphic (the Live-Raum panel lists Unterstützungen for the operator only). The operator-picked chat
 highlight still goes on air.
+
+## Part 3 (2026-11-05 night): chat moderation, mini player, immersive fullscreen
+
+Migration `20261106b_live_moderation.sql`: `live_chat_messages.author_key` (public: first 16 hex of
+sha256(show_id + wallet + server salt) — stable per person per show, never reversible to a wallet) and `live_reports`.
+
+**Viewer API additions (`/api/live/act`):**
+- `chat` now refuses spam with German messages: `SPAM_DUPLICATE` (same text by you within 2 min), `SPAM_LINK` (links / invites),
+  `SPAM_FLOOD` (burst), `SPAM_WORDS` (blocklist), `SPAM_SHOUT` (mostly caps / repeated chars are normalised, not refused).
+  5 refusals within 10 min → automatic mute for the show (`MUTED`).
+- `report { show_id, message_id, reason: 'spam'|'abuse'|'other' }` → `{ reported: true }`; 3 distinct reporters hide the message.
+- Chat rows carry `author_key`; **blocking is per viewer, on the device** (AsyncStorage list of author_keys per show): blocked
+  people's messages render as "[Nachricht ausgeblendet]"; a toast offers "Rückgängig".
+**Show additions (in `live_shows.overlay` jsonb, no schema change):** `live_since` (ISO, set when status → live, kept on reconnects,
+cleared when → scheduled) → the player shows the running time; `youtube_url` (operator setting) → "Auf dem Fernseher ansehen"
+fallback where native casting is not available.
+**Operator:** `reports_list` → `{ reports: [{ message_id, display_name, body, count, reasons, last_at }] }`, `unmute { message_id }`.

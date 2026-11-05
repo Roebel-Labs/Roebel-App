@@ -26,6 +26,7 @@ import { OverlayPanel } from "./overlay-panel";
 import { ChatPanel, SupportPanel, useLiveChat } from "./chat-panel";
 import { CloudflarePanel } from "./cloudflare-panel";
 import { SettingsPanel } from "./settings-panel";
+import { ReportsPanel } from "./reports-panel";
 
 const STORAGE_KEY = "live-console-show";
 
@@ -197,6 +198,7 @@ function ShowConsole({ showId }: { showId: string }) {
         <div className="space-y-5">
           <OverlayPanel show={show} onLocalPatch={patchOverlay} />
           <SupportPanel messages={messages} />
+          <ReportsPanel show={show} />
           <CloudflarePanel show={show} onChanged={reload} />
           <SettingsPanel show={show} onChanged={reload} />
         </div>

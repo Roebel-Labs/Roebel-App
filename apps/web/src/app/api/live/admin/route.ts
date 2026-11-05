@@ -39,6 +39,11 @@ async function handle(request: NextRequest) {
         const status = String(b.status ?? "");
         if (!["scheduled", "live", "ended"].includes(status)) return jsonFail(400, "BAD_REQUEST", "status ungültig");
         const patch: Record<string, unknown> = { status, updated_at: now };
+        // Running time on the player: set once when going live (kept across reconnects), cleared when back to scheduled.
+        const ov = { ...((show.overlay as Record<string, unknown>) ?? {}) };
+        if (status === "live" && !ov.live_since) ov.live_since = now;
+        if (status === "scheduled") ov.live_since = null;
+        patch.overlay = ov;
         // Ended: the Cloudflare recording becomes the replay (newest video of the input).
         const cfg = cfConfig();
         if (status === "ended" && cfg && show.cf_live_input_id) {
@@ -134,6 +139,11 @@ async function handle(request: NextRequest) {
           if (typeof b[k] === "string") patch[k] = (b[k] as string).trim() || null;
         }
         if (typeof b.starts_at === "string" && !Number.isNaN(Date.parse(b.starts_at))) patch.starts_at = new Date(b.starts_at).toISOString();
+        if (typeof b.youtube_url === "string") {
+          const yt = b.youtube_url.trim();
+          if (yt && !/^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(yt)) return jsonFail(400, "BAD_URL", "Bitte einen YouTube-Link angeben.");
+          patch.overlay = { ...((show.overlay as Record<string, unknown>) ?? {}), youtube_url: yt || null };
+        }
         const { data, error } = await admin.from("live_shows").update(patch).eq("id", showId).select("*").single();
         if (error) throw new Error(error.message);
         return jsonOk({ show: data });
@@ -233,6 +243,33 @@ async function handle(request: NextRequest) {
         if (!/^[a-f0-9]{32}$/.test(outputId)) return jsonFail(400, "BAD_REQUEST", "output_id ungültig");
         await cfApi(cfg, `/live_inputs/${show.cf_live_input_id}/outputs/${outputId}`, { method: "DELETE" });
         return jsonOk({ deleted: outputId });
+      }
+      case "reports_list": {
+        const { data: reps } = await admin.from("live_reports").select("message_id, reason, created_at").eq("show_id", showId)
+          .order("created_at", { ascending: false }).limit(300);
+        const byMsg = new Map<string, { count: number; reasons: Set<string>; last_at: string }>();
+        for (const r of reps ?? []) {
+          const cur = byMsg.get(r.message_id) ?? { count: 0, reasons: new Set<string>(), last_at: r.created_at };
+          cur.count += 1; cur.reasons.add(r.reason);
+          byMsg.set(r.message_id, cur);
+        }
+        const ids = [...byMsg.keys()];
+        const { data: msgs } = ids.length
+          ? await admin.from("live_chat_messages").select("id, display_name, body, hidden_at").in("id", ids)
+          : { data: [] as { id: string; display_name: string; body: string; hidden_at: string | null }[] };
+        const reports = (msgs ?? []).map((m) => {
+          const agg = byMsg.get(m.id)!;
+          return { message_id: m.id, display_name: m.display_name, body: m.body, hidden: !!m.hidden_at, count: agg.count, reasons: [...agg.reasons], last_at: agg.last_at };
+        }).sort((a, b2) => b2.last_at.localeCompare(a.last_at));
+        return jsonOk({ reports });
+      }
+      case "unmute": {
+        const id = String(b.message_id ?? "");
+        if (!UUID_RE.test(id)) return jsonFail(400, "BAD_REQUEST", "message_id fehlt");
+        const { data: msg } = await admin.from("live_chat_messages").select("wallet").eq("id", id).eq("show_id", showId).maybeSingle();
+        if (!msg?.wallet) return jsonFail(404, "NOT_FOUND", "Nachricht nicht gefunden");
+        await admin.from("live_mutes").delete().eq("show_id", showId).eq("wallet", msg.wallet);
+        return jsonOk({ muted: false });
       }
       case "guest_list": {
         // Doorbell for the studio: open requests + the guests currently on. Never the wallet.

@@ -7,9 +7,13 @@ import { sharedLimiters } from "@/lib/rate-limit/server";
 import { MINUTE_MS, takeAll } from "@/lib/rate-limit";
 import { livekitConfig, livekitToken } from "@/lib/live/livekit";
 import { advance } from "@/lib/live/stage";
+import { insertChat } from "@/lib/live/chat";
+import { normaliseChat, spamCheck, isDuplicate, SPAM_MESSAGES } from "@/lib/live/spam";
 
 export const dynamic = "force-dynamic";
 const chatLimiters = sharedLimiters([{ name: "live-chat-wallet", limit: 20, windowMs: MINUTE_MS }]);
+const burstLimiters = sharedLimiters([{ name: "live-chat-burst", limit: 4, windowMs: 10_000 }]);
+const strikeLimiters = sharedLimiters([{ name: "live-chat-strikes", limit: 4, windowMs: 10 * MINUTE_MS }]);
 
 // POST with `Authorization: Live <token>` (from POST /api/live live_session):
 //   chat     { show_id, body }          → { message }
@@ -21,6 +25,7 @@ const chatLimiters = sharedLimiters([{ name: "live-chat-wallet", limit: 20, wind
 //   guest_cancel  { show_id, request_id } → { status }
 //   test_support  { show_id, amount_cents, body? } → { message }   (test shows only, no money)
 //   test_next     { show_id }           → { current }            (test shows only)
+//   report        { show_id, message_id, reason } → { reported } (3 reporters hide the message)
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization") ?? "";
   const session = verifyLiveToken(auth.startsWith("Live ") ? auth.slice(5).trim() : null);
@@ -110,34 +115,65 @@ export async function POST(request: NextRequest) {
     const amount = Math.min(50000, Math.max(100, Math.round(Number(b.amount_cents) || 500)));
     const profile = await viewerProfile(admin, wallet);
     const body = typeof b.body === "string" ? b.body.replace(/\s+/g, " ").trim().slice(0, 140) : "";
-    const { data: message, error } = await admin.from("live_chat_messages")
-      .insert({ show_id: showId, wallet, display_name: profile.display_name, avatar_url: profile.avatar_url, body, kind: "support", amount_cents: amount })
-      .select("id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at").single();
+    const { data: message, error } = await insertChat(admin, {
+      show_id: showId, wallet, display_name: profile.display_name, avatar_url: profile.avatar_url, body, kind: "support", amount_cents: amount,
+    });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ message });
   }
 
   if (action === "chat") {
     if (!show.chat_enabled || show.status === "ended") return jsonFail(403, "CHAT_CLOSED", "Der Chat ist gerade geschlossen.");
-    const body = typeof b.body === "string" ? b.body.replace(/\s+/g, " ").trim() : "";
+    const raw = typeof b.body === "string" ? b.body : "";
+    const body = normaliseChat(raw);
     if (!body) return jsonFail(400, "EMPTY", "Nachricht ist leer.");
     if (body.length > CHAT_MAX) return jsonFail(400, "TOO_LONG", `Höchstens ${CHAT_MAX} Zeichen.`);
     const { data: muted } = await admin.from("live_mutes").select("wallet").eq("show_id", showId).eq("wallet", wallet).maybeSingle();
-    if (muted) return jsonFail(403, "MUTED", "Du kannst in diesem Chat gerade nicht schreiben.");
-    if (!(await takeAll(chatLimiters, wallet))) return jsonFail(429, "SLOW_MODE", "Nicht so schnell – kurz warten.");
-    if (show.slow_mode_seconds > 0) {
-      const { data: last } = await admin.from("live_chat_messages").select("created_at")
-        .eq("show_id", showId).eq("wallet", wallet).eq("kind", "chat")
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      const waitMs = last ? Date.parse(last.created_at) + show.slow_mode_seconds * 1000 - Date.now() : 0;
+    if (muted) return jsonFail(403, "MUTED", SPAM_MESSAGES.MUTED);
+
+    // Spam: every refusal is a strike; the 5th strike within 10 minutes mutes the person for this show.
+    const refuse = async (status: number, code: string, message: string) => {
+      if (!(await takeAll(strikeLimiters, `${showId}:${wallet}`))) {
+        await admin.from("live_mutes").upsert({ show_id: showId, wallet }, { onConflict: "show_id,wallet", ignoreDuplicates: true });
+        return jsonFail(403, "MUTED", "Zu viele blockierte Nachrichten – du bist in diesem Chat stummgeschaltet.");
+      }
+      return jsonFail(status, code, message);
+    };
+    const content = spamCheck(body);
+    if (content) return refuse(400, content, SPAM_MESSAGES[content]);
+    if (!(await takeAll(burstLimiters, wallet))) return refuse(429, "SPAM_FLOOD", SPAM_MESSAGES.SPAM_FLOOD);
+    if (!(await takeAll(chatLimiters, wallet))) return refuse(429, "SPAM_FLOOD", SPAM_MESSAGES.SPAM_FLOOD);
+    const { data: recent } = await admin.from("live_chat_messages").select("body, created_at")
+      .eq("show_id", showId).eq("wallet", wallet).eq("kind", "chat")
+      .gte("created_at", new Date(Date.now() - 2 * 60_000).toISOString())
+      .order("created_at", { ascending: false }).limit(5);
+    if (isDuplicate(body, (recent ?? []).map((r) => r.body as string))) return refuse(429, "SPAM_DUPLICATE", SPAM_MESSAGES.SPAM_DUPLICATE);
+    if (show.slow_mode_seconds > 0 && recent?.[0]) {
+      const waitMs = Date.parse(recent[0].created_at) + show.slow_mode_seconds * 1000 - Date.now();
       if (waitMs > 0) return jsonFail(429, "SLOW_MODE", `Langsamer Modus: noch ${Math.ceil(waitMs / 1000)} s warten.`);
     }
     const profile = await viewerProfile(admin, wallet);
-    const { data: message, error } = await admin.from("live_chat_messages")
-      .insert({ show_id: showId, wallet, ...profile, body, kind: "chat" })
-      .select("id, show_id, display_name, avatar_url, body, kind, amount_cents, created_at, hidden_at, featured_at").single();
+    const { data: message, error } = await insertChat(admin, { show_id: showId, wallet, ...profile, body, kind: "chat" });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ message });
+  }
+
+  if (action === "report") {
+    const messageId = String(b.message_id ?? "");
+    if (!UUID_RE.test(messageId)) return jsonFail(400, "BAD_REQUEST", "message_id fehlt");
+    const reason = ["spam", "abuse", "other"].includes(String(b.reason)) ? String(b.reason) : "other";
+    const { data: msg } = await admin.from("live_chat_messages").select("id, wallet, kind").eq("id", messageId).eq("show_id", showId).maybeSingle();
+    if (!msg) return jsonFail(404, "NOT_FOUND", "Nachricht nicht gefunden");
+    if (msg.wallet === wallet) return jsonOk({ reported: true });
+    const { error } = await admin.from("live_reports")
+      .upsert({ show_id: showId, message_id: messageId, reporter_wallet: wallet, reason }, { onConflict: "message_id,reporter_wallet", ignoreDuplicates: true });
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    // Three different people reporting the same message hide it until the operator looks at it.
+    const { count } = await admin.from("live_reports").select("id", { count: "exact", head: true }).eq("message_id", messageId);
+    if ((count ?? 0) >= 3 && msg.kind === "chat") {
+      await admin.from("live_chat_messages").update({ hidden_at: new Date().toISOString() }).eq("id", messageId).is("hidden_at", null);
+    }
+    return jsonOk({ reported: true });
   }
 
   return jsonFail(400, "BAD_REQUEST", "unknown action");

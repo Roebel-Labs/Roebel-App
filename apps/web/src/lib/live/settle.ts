@@ -2,6 +2,7 @@
 import "server-only";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { insertChat } from "./chat";
 
 /**
  * checkout.session.completed for kind=live_support. The metadata only NAMES the support row; the
@@ -29,9 +30,9 @@ export async function settleLiveSupport(admin: SupabaseClient, s: Stripe.Checkou
     .eq("id", row.id).neq("status", "paid").select("id").maybeSingle();
   if (!claimed) return true;
   const name = row.show_name && row.display_name ? row.display_name : "Jemand";
-  const { data: msg, error } = await admin.from("live_chat_messages").insert({
+  const { data: msg, error } = await insertChat(admin, {
     show_id: row.show_id, wallet: row.wallet, display_name: name, body: row.message ?? "", kind: "support", amount_cents: row.amount_cents,
-  }).select("id").single();
+  });
   if (error) throw new Error(`live support chat insert: ${error.message}`);
   await admin.from("live_supports").update({ chat_message_id: msg.id }).eq("id", row.id);
   return true;
