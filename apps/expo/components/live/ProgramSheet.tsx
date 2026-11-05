@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Ionicons } from '@expo/vector-icons';
 import { formatClock, type RundownItem } from '@/lib/live';
 import LiveSheet from './LiveSheet';
-import { F, LIVE } from './tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
 type Props = {
   visible: boolean;
@@ -15,6 +15,8 @@ type Props = {
 };
 
 export default function ProgramSheet({ visible, onClose, rundown, reminders, busyItemId, onToggleReminder }: Props) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   return (
     <LiveSheet
       visible={visible}
@@ -53,11 +55,11 @@ export default function ProgramSheet({ visible, onClose, rundown, reminders, bus
                   accessibilityLabel={on ? 'Erinnerung ausschalten' : 'Erinnern'}
                 >
                   {busyItemId === item.id ? (
-                    <ActivityIndicator size="small" color={LIVE.text} />
+                    <ActivityIndicator size="small" color={L.text} />
                   ) : (
                     <>
-                      <Ionicons name={on ? 'notifications' : 'notifications-outline'} size={15} color={on ? '#fff' : LIVE.text} />
-                      <Text style={styles.bellText}>{on ? 'Erinnert' : 'Erinnern'}</Text>
+                      <Ionicons name={on ? 'notifications' : 'notifications-outline'} size={15} color={on ? L.onNavy : L.text} />
+                      <Text style={[styles.bellText, on && styles.bellTextOn]}>{on ? 'Erinnert' : 'Erinnern'}</Text>
                     </>
                   )}
                 </Pressable>
@@ -70,28 +72,29 @@ export default function ProgramSheet({ visible, onClose, rundown, reminders, bus
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (L: LivePalette) => StyleSheet.create({
   list: { paddingHorizontal: 12, paddingBottom: 12 },
-  empty: { color: LIVE.textSecondary, fontFamily: F.medium, fontSize: 14, padding: 20, textAlign: 'center' },
+  empty: { color: L.textSecondary, fontFamily: F.medium, fontSize: 14, padding: 20, textAlign: 'center' },
   item: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 8, paddingVertical: 10, borderRadius: 14 },
-  itemOnStage: { backgroundColor: 'rgba(0,73,139,0.45)', borderWidth: 1, borderColor: 'rgba(122,187,242,0.35)' },
+  itemOnStage: { backgroundColor: L.navySoft, borderWidth: 1, borderColor: L.navySoftBorder },
   itemDone: { opacity: 0.45 },
   rail: { width: 14, alignItems: 'center', alignSelf: 'stretch', paddingTop: 6 },
-  railDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: LIVE.textTertiary },
-  railDotLive: { backgroundColor: LIVE.red, borderColor: LIVE.red },
-  railDotDone: { backgroundColor: LIVE.textTertiary },
-  railLine: { flex: 1, width: 2, marginTop: 4, marginBottom: -16, backgroundColor: LIVE.border },
+  railDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: L.textTertiary },
+  railDotLive: { backgroundColor: L.red, borderColor: L.red },
+  railDotDone: { backgroundColor: L.textTertiary },
+  railLine: { flex: 1, width: 2, marginTop: 4, marginBottom: -16, backgroundColor: L.border },
   body: { flex: 1, gap: 2 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  liveTag: { color: LIVE.red, fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
-  time: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.medium, fontVariant: ['tabular-nums'] },
-  title: { color: LIVE.text, fontSize: 16, fontFamily: F.semiBold },
-  textDone: { color: LIVE.textSecondary },
-  subtitle: { color: LIVE.textSecondary, fontSize: 13, fontFamily: F.regular },
+  liveTag: { color: L.red, fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
+  time: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium, fontVariant: ['tabular-nums'] },
+  title: { color: L.text, fontSize: 16, fontFamily: F.semiBold },
+  textDone: { color: L.textSecondary },
+  subtitle: { color: L.textSecondary, fontSize: 13, fontFamily: F.regular },
   bell: {
     flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 32, minWidth: 92, justifyContent: 'center',
-    borderRadius: 16, backgroundColor: LIVE.surfaceRaised, alignSelf: 'center',
+    borderRadius: 16, backgroundColor: L.surfaceRaised, alignSelf: 'center',
   },
-  bellOn: { backgroundColor: LIVE.navy },
-  bellText: { color: LIVE.text, fontSize: 12, fontFamily: F.semiBold },
+  bellOn: { backgroundColor: L.navy },
+  bellText: { color: L.text, fontSize: 12, fontFamily: F.semiBold },
+  bellTextOn: { color: L.onNavy },
 });

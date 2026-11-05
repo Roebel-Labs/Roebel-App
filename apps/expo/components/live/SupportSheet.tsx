@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, Tex
 import { Ionicons } from '@expo/vector-icons';
 import { formatSupportAmount, SUPPORT_MAX_CENTS, SUPPORT_MESSAGE_MAX, SUPPORT_MIN_CENTS } from '@/lib/live';
 import LiveSheet from './LiveSheet';
-import { F, LIVE } from './tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
 const PRESETS = [200, 500, 1000, 2000];
 
@@ -26,6 +26,8 @@ function parseEuro(text: string): number | null {
 }
 
 export default function SupportSheet({ visible, onClose, defaultName, busy, error, onSubmit, testMode = false }: Props) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const [preset, setPreset] = useState<number | null>(500);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
@@ -72,7 +74,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
             onChangeText={(t) => { setCustom(t.replace(/[^0-9,.]/g, '')); setPreset(null); }}
             onFocus={() => setPreset(null)}
             placeholder="Eigener Betrag"
-            placeholderTextColor={LIVE.textTertiary}
+            placeholderTextColor={L.textTertiary}
             keyboardType="decimal-pad"
             style={styles.input}
             maxLength={7}
@@ -89,7 +91,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
             value={message}
             onChangeText={(t) => setMessage(t.slice(0, SUPPORT_MESSAGE_MAX))}
             placeholder="Viel Erfolg an alle Paare!"
-            placeholderTextColor={LIVE.textTertiary}
+            placeholderTextColor={L.textTertiary}
             style={[styles.input, styles.multiline]}
             multiline
             maxLength={SUPPORT_MESSAGE_MAX}
@@ -105,7 +107,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
           <Switch
             value={showName}
             onValueChange={setShowName}
-            trackColor={{ false: LIVE.surfaceRaised, true: LIVE.navyBright }}
+            trackColor={{ false: L.surfaceRaised, true: L.navyBright }}
             thumbColor="#fff"
           />
         </View>
@@ -115,7 +117,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
               value={name}
               onChangeText={(t) => setName(t.slice(0, 40))}
               placeholder="Dein Name"
-              placeholderTextColor={LIVE.textTertiary}
+              placeholderTextColor={L.textTertiary}
               style={styles.input}
               maxLength={40}
               autoCapitalize="words"
@@ -125,7 +127,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
 
         {testMode ? (
           <View style={styles.testNote}>
-            <Ionicons name="construct-outline" size={14} color={LIVE.gold} />
+            <Ionicons name="construct-outline" size={14} color={L.goldText} />
             <Text style={styles.testNoteText}>Testlauf: Das ist eine echte Zahlung über Stripe, damit der ganze Ablauf getestet werden kann. Ab 1 € möglich.</Text>
           </View>
         ) : null}
@@ -151,7 +153,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
           )}
         </Pressable>
         <View style={styles.secureRow}>
-          <Ionicons name="lock-closed" size={12} color={LIVE.textTertiary} />
+          <Ionicons name="lock-closed" size={12} color={L.textTertiary} />
           <Text style={styles.secure}>Sichere Kartenzahlung über Stripe. Kein Konto nötig.</Text>
         </View>
       </ScrollView>
@@ -159,41 +161,41 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (L: LivePalette) => StyleSheet.create({
   testNote: {
-    flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: 12, backgroundColor: LIVE.goldSoft,
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: 12, backgroundColor: L.goldSoft,
   },
-  testNoteText: { flex: 1, color: LIVE.gold, fontSize: 13, lineHeight: 18, fontFamily: F.medium },
+  testNoteText: { flex: 1, color: L.goldText, fontSize: 13, lineHeight: 18, fontFamily: F.medium },
   content: { paddingHorizontal: 20, paddingBottom: 12, gap: 10 },
   chips: { flexDirection: 'row', gap: 8 },
   chip: {
-    flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: LIVE.surfaceRaised,
+    flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: L.surfaceRaised,
     borderWidth: 1, borderColor: 'transparent',
   },
-  chipActive: { backgroundColor: 'rgba(242,193,78,0.14)', borderColor: LIVE.gold },
-  chipText: { color: LIVE.text, fontSize: 16, fontFamily: F.semiBold },
-  chipTextActive: { color: LIVE.gold },
+  chipActive: { backgroundColor: L.goldSoft, borderColor: L.gold },
+  chipText: { color: L.text, fontSize: 16, fontFamily: F.semiBold },
+  chipTextActive: { color: L.goldText },
   inputBox: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: LIVE.surfaceRaised, borderRadius: 14, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: L.surfaceRaised, borderRadius: 14, paddingHorizontal: 14,
     borderWidth: 1, borderColor: 'transparent',
   },
-  inputBoxActive: { borderColor: LIVE.gold },
-  input: { flex: 1, color: LIVE.text, fontSize: 16, fontFamily: F.medium, paddingVertical: 12 },
+  inputBoxActive: { borderColor: L.gold },
+  input: { flex: 1, color: L.text, fontSize: 16, fontFamily: F.medium, paddingVertical: 12 },
   multiline: { minHeight: 64, textAlignVertical: 'top' },
-  euro: { color: LIVE.textSecondary, fontSize: 16, fontFamily: F.semiBold },
-  hint: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.medium },
-  label: { color: LIVE.textSecondary, fontSize: 13, fontFamily: F.semiBold, marginTop: 6 },
-  counter: { color: LIVE.textTertiary, fontSize: 11, fontFamily: F.medium, alignSelf: 'flex-end', marginTop: -4 },
+  euro: { color: L.textSecondary, fontSize: 16, fontFamily: F.semiBold },
+  hint: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium },
+  label: { color: L.textSecondary, fontSize: 13, fontFamily: F.semiBold, marginTop: 6 },
+  counter: { color: L.textTertiary, fontSize: 11, fontFamily: F.medium, alignSelf: 'flex-end', marginTop: -4 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
-  switchTitle: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
-  switchSub: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.regular },
-  error: { color: '#FF8A8A', fontSize: 13, fontFamily: F.medium },
+  switchTitle: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
+  switchSub: { color: L.textTertiary, fontSize: 12, fontFamily: F.regular },
+  error: { color: L.isDark ? '#FF8A8A' : '#B91C1C', fontSize: 13, fontFamily: F.medium },
   cta: {
-    marginTop: 8, height: 54, borderRadius: 27, backgroundColor: LIVE.gold, flexDirection: 'row', alignItems: 'center',
+    marginTop: 8, height: 54, borderRadius: 27, backgroundColor: L.gold, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 8,
   },
   ctaDisabled: { opacity: 0.45 },
   ctaText: { color: '#1B1B1B', fontSize: 16, fontFamily: F.bold },
   secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  secure: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.regular },
+  secure: { color: L.textTertiary, fontSize: 12, fontFamily: F.regular },
 });

@@ -13,7 +13,7 @@ import {
   LocalVideoTrack, Room, RoomEvent, Track,
   type Participant, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type TrackPublication,
 } from 'livekit-client';
-import { F, LIVE } from '../tokens';
+import { F, VIDEO as LIVE } from '../tokens';
 
 const FILL = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const;
 

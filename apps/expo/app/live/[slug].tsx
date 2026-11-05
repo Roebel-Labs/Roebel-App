@@ -31,7 +31,7 @@ import LoginDrawer from '@/components/LoginDrawer';
 // Guard only (no LiveKit import): the join route itself is reached via router.push, never imported.
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import type { FloatingReactionsHandle } from '@/components/live/FloatingReactions';
-import { F, LIVE } from '@/components/live/tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from '@/components/live/tokens';
 
 // ─── Defensive expo-keep-awake load (same pattern as FeedAudioPlayerCard) ───
 type KeepAwakeFn = (tag?: string) => Promise<void> | void;
@@ -69,6 +69,8 @@ export default function LiveRoomScreen() {
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const thirdwebAccount = useActiveAccount();
   const signerRef = useRef(thirdwebAccount);
   signerRef.current = thirdwebAccount;
@@ -456,11 +458,11 @@ export default function LiveRoomScreen() {
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
         <View style={{ width, height: (width * 9) / 16, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-          {loading ? <ActivityIndicator color={LIVE.text} /> : null}
+          {loading ? <ActivityIndicator color="#fff" /> : null}
         </View>
         {!loading ? (
           <View style={styles.notFound}>
-            <Ionicons name="videocam-off-outline" size={36} color={LIVE.textTertiary} />
+            <Ionicons name="videocam-off-outline" size={36} color={L.textTertiary} />
             <Text style={styles.notFoundTitle}>Livestream nicht gefunden</Text>
             <Text style={styles.notFoundSub}>Vielleicht ist die Übertragung schon vorbei oder der Link ist nicht mehr gültig.</Text>
             <Pressable onPress={goBack} style={({ pressed }) => [styles.notFoundBtn, pressed && { opacity: 0.8 }]}>
@@ -503,8 +505,8 @@ export default function LiveRoomScreen() {
                     style={({ pressed }) => [styles.voteBtn, pressed && styles.pressed]}
                     accessibilityRole="button"
                   >
-                    <Ionicons name="trophy-outline" size={16} color={LIVE.text} />
-                    <Text style={styles.voteText} numberOfLines={1}>Publikumsliebling</Text>
+                    <Ionicons name="trophy-outline" size={16} color={L.onNavy} />
+                    <Text style={[styles.voteText, styles.onNavyText]} numberOfLines={1}>Publikumsliebling</Text>
                   </Pressable>
                 </Animated.View>
               ) : null}
@@ -515,7 +517,7 @@ export default function LiveRoomScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Live dazuschalten"
                 >
-                  <Ionicons name="videocam-outline" size={17} color={LIVE.text} />
+                  <Ionicons name="videocam-outline" size={17} color={L.text} />
                   {!show.voting_open ? <Text style={styles.voteText} numberOfLines={1}>Dazuschalten</Text> : null}
                 </Pressable>
               ) : null}
@@ -563,7 +565,7 @@ export default function LiveRoomScreen() {
 
         {chatError ? (
           <Pressable onPress={() => setChatError(null)} style={styles.chatError}>
-            <Ionicons name="information-circle-outline" size={15} color="#FFB4B4" />
+            <Ionicons name="information-circle-outline" size={15} color={L.errorText} />
             <Text style={styles.chatErrorText}>{chatError}</Text>
           </Pressable>
         ) : null}
@@ -575,7 +577,7 @@ export default function LiveRoomScreen() {
             </Pressable>
           ) : !chatOpen ? (
             <View style={[styles.inputPill, styles.inputDisabled]}>
-              <Ionicons name="pause-circle-outline" size={16} color={LIVE.textTertiary} />
+              <Ionicons name="pause-circle-outline" size={16} color={L.textTertiary} />
               <Text style={styles.disabledText} numberOfLines={1}>Chat pausiert</Text>
             </View>
           ) : (
@@ -587,7 +589,7 @@ export default function LiveRoomScreen() {
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 placeholder={show.slow_mode_seconds > 0 ? `Nachricht · alle ${show.slow_mode_seconds} s` : 'Nachricht schreiben …'}
-                placeholderTextColor={LIVE.textTertiary}
+                placeholderTextColor={L.textTertiary}
                 style={styles.input}
                 maxLength={CHAT_MAX_LENGTH}
                 returnKeyType="send"
@@ -661,32 +663,33 @@ export default function LiveRoomScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: LIVE.bg },
+const makeStyles = (L: LivePalette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: L.bg },
   flex: { flex: 1 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   actions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, marginTop: 10 },
   supportBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 18, borderRadius: 21,
-    backgroundColor: LIVE.gold,
+    backgroundColor: L.gold,
   },
   supportText: { color: '#1B1B1B', fontSize: 15, fontFamily: F.bold },
   voteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 16, borderRadius: 21,
-    backgroundColor: LIVE.navy, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(122,187,242,0.4)',
+    backgroundColor: L.navy, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(122,187,242,0.4)',
   },
-  voteText: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
+  voteText: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
+  onNavyText: { color: L.onNavy },
   guestBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, paddingHorizontal: 16,
-    borderRadius: 21, backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+    borderRadius: 21, backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
   guestRound: {
     width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+    backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
   chatWrap: { flex: 1, marginTop: 6 },
   chatContent: { paddingVertical: 8 },
-  chatWelcome: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', paddingHorizontal: 24, paddingVertical: 12 },
+  chatWelcome: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', paddingHorizontal: 24, paddingVertical: 12 },
   toast: {
     position: 'absolute', left: 16, right: 16, bottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
     backgroundColor: 'rgba(30,107,184,0.95)',
@@ -694,33 +697,33 @@ const styles = StyleSheet.create({
   toastText: { color: '#fff', fontSize: 13, fontFamily: F.semiBold, textAlign: 'center' },
   chatError: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 10, backgroundColor: 'rgba(229,72,77,0.16)',
+    borderRadius: 10, backgroundColor: L.errorSoft,
   },
-  chatErrorText: { flex: 1, color: '#FFD0D0', fontSize: 13, fontFamily: F.medium },
+  chatErrorText: { flex: 1, color: L.errorText, fontSize: 13, fontFamily: F.medium },
   inputBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LIVE.border, backgroundColor: LIVE.bg,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: L.border, backgroundColor: L.bg,
   },
   inputPill: {
     flex: 1, flexDirection: 'row', alignItems: 'center', minHeight: 42, borderRadius: 21, paddingLeft: 16, paddingRight: 4,
-    backgroundColor: LIVE.surfaceRaised,
+    backgroundColor: L.surfaceRaised,
   },
   inputDisabled: { gap: 6, paddingRight: 16 },
-  disabledText: { color: LIVE.textTertiary, fontSize: 14, fontFamily: F.medium },
-  input: { flex: 1, color: LIVE.text, fontSize: 15, fontFamily: F.regular, paddingVertical: 10 },
-  sendBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: LIVE.navyBright, alignItems: 'center', justifyContent: 'center' },
+  disabledText: { color: L.textTertiary, fontSize: 14, fontFamily: F.medium },
+  input: { flex: 1, color: L.text, fontSize: 15, fontFamily: F.regular, paddingVertical: 10 },
+  sendBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: L.navyBright, alignItems: 'center', justifyContent: 'center' },
   loginBtn: {
     flex: 1, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12,
-    backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+    backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
-  loginText: { color: LIVE.text, fontSize: 13, fontFamily: F.semiBold },
+  loginText: { color: L.text, fontSize: 13, fontFamily: F.semiBold },
   reactions: { flexDirection: 'row' },
   reactBtn: { width: 33, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 17 },
-  reactPressed: { backgroundColor: LIVE.surfaceRaised, transform: [{ scale: 1.2 }] },
+  reactPressed: { backgroundColor: L.surfaceRaised, transform: [{ scale: 1.2 }] },
   reactEmoji: { fontSize: 22 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
-  notFoundTitle: { color: LIVE.text, fontSize: 18, fontFamily: F.heading },
-  notFoundSub: { color: LIVE.textSecondary, fontSize: 14, fontFamily: F.regular, textAlign: 'center' },
-  notFoundBtn: { marginTop: 8, height: 44, paddingHorizontal: 24, borderRadius: 22, backgroundColor: LIVE.surfaceRaised, justifyContent: 'center' },
-  notFoundBtnText: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
+  notFoundTitle: { color: L.text, fontSize: 18, fontFamily: F.heading },
+  notFoundSub: { color: L.textSecondary, fontSize: 14, fontFamily: F.regular, textAlign: 'center' },
+  notFoundBtn: { marginTop: 8, height: 44, paddingHorizontal: 24, borderRadius: 22, backgroundColor: L.surfaceRaised, justifyContent: 'center' },
+  notFoundBtnText: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
 });

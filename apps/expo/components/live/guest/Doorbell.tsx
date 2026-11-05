@@ -6,7 +6,7 @@ import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { LIVE } from '../tokens';
+import { liveStyles, useLivePalette, type LivePalette } from '../tokens';
 
 const SIZE = 132;
 
@@ -19,6 +19,8 @@ function useRing(delay: number): SharedValue<number> {
 }
 
 function Ring({ progress }: { progress: SharedValue<number> }) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const style = useAnimatedStyle(() => ({
     opacity: 0.45 * (1 - progress.value),
     transform: [{ scale: 0.55 + progress.value * 0.65 }],
@@ -27,6 +29,8 @@ function Ring({ progress }: { progress: SharedValue<number> }) {
 }
 
 export default function Doorbell() {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const swing = useSharedValue(0);
   const ringA = useRing(0);
   const ringB = useRing(1300);
@@ -50,18 +54,18 @@ export default function Doorbell() {
       <Ring progress={ringB} />
       <View style={styles.core}>
         <Animated.View style={bellStyle}>
-          <Ionicons name="notifications" size={40} color={LIVE.gold} />
+          <Ionicons name="notifications" size={40} color={L.goldText} />
         </Animated.View>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (L: LivePalette) => StyleSheet.create({
   wrap: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2, borderColor: LIVE.gold },
+  ring: { position: 'absolute', width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2, borderColor: L.gold },
   core: {
-    width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: LIVE.goldSoft,
+    width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: L.goldSoft,
     borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(242,193,78,0.4)',
   },
 });

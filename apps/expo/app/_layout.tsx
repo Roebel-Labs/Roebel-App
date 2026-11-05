@@ -333,16 +333,16 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
-          {/* Live room: immersive dark video screen, slides up. A card push, not a modal, so the
+          {/* Live room: black video on top, the rest follows the app theme; slides up. A card push, not a modal, so the
               login screen it links to stacks on top of it. */}
           <TransitionStack.Screen
             name="live/[slug]"
-            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#18191B' } }}
+            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: colors.background } }}
           />
           {/* Live dazuschalten (phone guest via LiveKit, 3.9.0+ binaries only — the screen guards itself). */}
           <TransitionStack.Screen
             name="live/join/[slug]"
-            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#18191B' } }}
+            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: colors.background } }}
           />
           {/* Hören: full-screen player slides up as a sheet over whatever is playing. */}
           <TransitionStack.Screen

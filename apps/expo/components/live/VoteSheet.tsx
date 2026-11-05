@@ -4,7 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import { Ionicons } from '@expo/vector-icons';
 import type { RundownItem, VoteResults } from '@/lib/live';
 import LiveSheet from './LiveSheet';
-import { F, LIVE } from './tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
 type Props = {
   visible: boolean;
@@ -20,6 +20,8 @@ type Props = {
 };
 
 function Bar({ share, mine }: { share: number; mine: boolean }) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const w = useSharedValue(0);
   useEffect(() => {
     w.value = withTiming(share, { duration: 600, easing: Easing.out(Easing.cubic) });
@@ -33,6 +35,8 @@ function Bar({ share, mine }: { share: number; mine: boolean }) {
 }
 
 export default function VoteSheet({ visible, onClose, items, results, myVote, busyItemId, loggedIn, error, onVote, onLogin }: Props) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const total = results?.total ?? 0;
   const votesFor = (id: string) => results?.items.find((r) => r.item_id === id)?.votes ?? 0;
   return (
@@ -71,7 +75,7 @@ export default function VoteSheet({ visible, onClose, items, results, myVote, bu
                   {item.subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{item.subtitle}</Text> : null}
                 </View>
                 {busyItemId === item.id ? (
-                  <ActivityIndicator size="small" color={LIVE.text} />
+                  <ActivityIndicator size="small" color={L.text} />
                 ) : mine ? (
                   <View style={styles.mineTag}><Ionicons name="checkmark" size={13} color="#fff" /><Text style={styles.mineText}>Deine Stimme</Text></View>
                 ) : (
@@ -88,25 +92,25 @@ export default function VoteSheet({ visible, onClose, items, results, myVote, bu
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (L: LivePalette) => StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
   login: {
-    height: 48, borderRadius: 24, backgroundColor: LIVE.navy, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 48, borderRadius: 24, backgroundColor: L.navy, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     marginBottom: 6,
   },
   loginText: { color: '#fff', fontSize: 15, fontFamily: F.semiBold },
-  error: { color: '#FF8A8A', fontSize: 13, fontFamily: F.medium },
-  empty: { color: LIVE.textSecondary, fontSize: 14, fontFamily: F.medium, textAlign: 'center', padding: 16 },
-  item: { padding: 12, borderRadius: 14, backgroundColor: LIVE.surfaceRaised, gap: 10, borderWidth: 1, borderColor: 'transparent' },
-  itemMine: { borderColor: LIVE.accent, backgroundColor: 'rgba(0,73,139,0.35)' },
+  error: { color: L.isDark ? '#FF8A8A' : '#B91C1C', fontSize: 13, fontFamily: F.medium },
+  empty: { color: L.textSecondary, fontSize: 14, fontFamily: F.medium, textAlign: 'center', padding: 16 },
+  item: { padding: 12, borderRadius: 14, backgroundColor: L.surfaceRaised, gap: 10, borderWidth: 1, borderColor: 'transparent' },
+  itemMine: { borderColor: L.accent, backgroundColor: L.navySoft },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
-  subtitle: { color: LIVE.textSecondary, fontSize: 12, fontFamily: F.regular },
-  pct: { color: LIVE.textSecondary, fontSize: 14, fontFamily: F.semiBold, fontVariant: ['tabular-nums'] },
-  mineTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: LIVE.navyBright, paddingHorizontal: 8, height: 24, borderRadius: 12 },
+  title: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
+  subtitle: { color: L.textSecondary, fontSize: 12, fontFamily: F.regular },
+  pct: { color: L.textSecondary, fontSize: 14, fontFamily: F.semiBold, fontVariant: ['tabular-nums'] },
+  mineTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: L.navyBright, paddingHorizontal: 8, height: 24, borderRadius: 12 },
   mineText: { color: '#fff', fontSize: 11, fontFamily: F.semiBold },
-  barTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
-  barFillMine: { backgroundColor: LIVE.accent },
-  footer: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', marginTop: 4 },
+  barTrack: { height: 6, borderRadius: 3, backgroundColor: L.barTrack, overflow: 'hidden' },
+  barFill: { height: 6, borderRadius: 3, backgroundColor: L.barFill },
+  barFillMine: { backgroundColor: L.accent },
+  footer: { color: L.textTertiary, fontSize: 12, fontFamily: F.medium, textAlign: 'center', marginTop: 4 },
 });

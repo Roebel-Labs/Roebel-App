@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { F, LIVE } from './tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
 type Props = {
   loggedIn: boolean;
@@ -15,6 +15,8 @@ type Props = {
 };
 
 export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGroup, onLogin }: Props) {
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
   const [open, setOpen] = useState(true);
   return (
     <View style={styles.wrap}>
@@ -24,15 +26,15 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
         accessibilityRole="button"
         accessibilityLabel={open ? 'Testlauf-Werkzeuge einklappen' : 'Testlauf-Werkzeuge ausklappen'}
       >
-        <Ionicons name="construct-outline" size={14} color={LIVE.gold} />
+        <Ionicons name="construct-outline" size={14} color={L.goldText} />
         <Text style={styles.headerText}>Testlauf-Werkzeuge</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={LIVE.textSecondary} />
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={L.textSecondary} />
       </Pressable>
       {open ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.body}>
           {!loggedIn ? (
             <Pressable onPress={onLogin} style={({ pressed }) => [styles.btn, styles.btnWide, pressed && styles.pressed]}>
-              <Ionicons name="log-in-outline" size={15} color={LIVE.text} />
+              <Ionicons name="log-in-outline" size={15} color={L.text} />
               <Text style={styles.btnText}>Zum Testen bitte anmelden</Text>
             </Pressable>
           ) : (
@@ -45,8 +47,8 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
                   accessibilityRole="button"
                 >
                   {busy === 'support'
-                    ? <ActivityIndicator size="small" color={LIVE.text} />
-                    : <Ionicons name="heart-outline" size={15} color={LIVE.gold} />}
+                    ? <ActivityIndicator size="small" color={L.text} />
+                    : <Ionicons name="heart-outline" size={15} color={L.goldText} />}
                   <Text style={styles.btnText} numberOfLines={1}>Unterstützung simulieren</Text>
                 </Pressable>
                 <Pressable
@@ -56,8 +58,8 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
                   accessibilityRole="button"
                 >
                   {busy === 'next'
-                    ? <ActivityIndicator size="small" color={LIVE.text} />
-                    : <Ionicons name="play-skip-forward-outline" size={15} color={LIVE.accent} />}
+                    ? <ActivityIndicator size="small" color={L.text} />
+                    : <Ionicons name="play-skip-forward-outline" size={15} color={L.accent} />}
                   <Text style={styles.btnText} numberOfLines={1}>Nächste Gruppe</Text>
                 </Pressable>
               </View>
@@ -72,22 +74,22 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (L: LivePalette) => StyleSheet.create({
   wrap: {
-    marginHorizontal: 12, marginTop: 8, borderRadius: 12, backgroundColor: LIVE.goldSoft,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(242,193,78,0.35)', overflow: 'hidden',
+    marginHorizontal: 12, marginTop: 8, borderRadius: 12, backgroundColor: L.goldSoft,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: L.goldBorder, overflow: 'hidden',
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 32 },
-  headerText: { flex: 1, color: LIVE.gold, fontSize: 12, fontFamily: F.bold, letterSpacing: 0.4 },
+  headerText: { flex: 1, color: L.goldText, fontSize: 12, fontFamily: F.bold, letterSpacing: 0.4 },
   body: { paddingHorizontal: 10, paddingBottom: 10, gap: 6 },
   row: { flexDirection: 'row', gap: 8 },
   btn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 18,
-    paddingHorizontal: 10, backgroundColor: LIVE.surfaceRaised,
+    paddingHorizontal: 10, backgroundColor: L.surfaceRaised,
   },
   btnWide: { flex: 0, alignSelf: 'stretch' },
-  btnText: { flexShrink: 1, color: LIVE.text, fontSize: 13, fontFamily: F.semiBold },
+  btnText: { flexShrink: 1, color: L.text, fontSize: 13, fontFamily: F.semiBold },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.5 },
-  hint: { color: LIVE.textSecondary, fontSize: 11, fontFamily: F.medium, lineHeight: 15, paddingHorizontal: 4 },
+  hint: { color: L.textSecondary, fontSize: 11, fontFamily: F.medium, lineHeight: 15, paddingHorizontal: 4 },
 });

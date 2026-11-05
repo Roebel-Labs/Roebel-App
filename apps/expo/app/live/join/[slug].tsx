@@ -24,7 +24,7 @@ import {
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import Doorbell from '@/components/live/guest/Doorbell';
 import LoginDrawer from '@/components/LoginDrawer';
-import { F, LIVE } from '@/components/live/tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from '@/components/live/tokens';
 // Type-only: erased at compile time, does not load the module.
 import type { GuestStageProps } from '@/components/live/guest/GuestStage';
 
@@ -66,6 +66,9 @@ export default function LiveGuestJoinScreen() {
   const router = useRouter();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
+  const L = useLivePalette();
+  const styles = liveStyles(makeStyles, L);
+  const barStyle = L.isDark ? 'light-content' : 'dark-content';
   const account = useActiveAccount();
   const signerRef = useRef(account);
   signerRef.current = account;
@@ -244,7 +247,7 @@ export default function LiveGuestJoinScreen() {
     const Stage = loadGuestStage();
     if (Stage) {
       return (
-        <View style={styles.root}>
+        <View style={[styles.root, { backgroundColor: '#000' }]}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />
           <Stage
             url={conn.url}
@@ -264,7 +267,7 @@ export default function LiveGuestJoinScreen() {
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
       <Pressable onPress={goBack} hitSlop={10} style={styles.roundBtn} accessibilityRole="button" accessibilityLabel="Zurück">
-        <Ionicons name="chevron-down" size={20} color={LIVE.text} />
+        <Ionicons name="chevron-down" size={20} color={L.text} />
       </Pressable>
       <Text style={styles.headerTitle} numberOfLines={1}>Live dazuschalten</Text>
       <View style={styles.roundBtnSpacer} />
@@ -273,10 +276,10 @@ export default function LiveGuestJoinScreen() {
 
   const message = (icon: React.ComponentProps<typeof Ionicons>['name'], title: string, sub: string, cta?: { label: string; onPress: () => void }) => (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={LIVE.bg} />
+      <StatusBar barStyle={barStyle} backgroundColor={L.bg} />
       {header}
       <Animated.View entering={FadeIn.duration(220)} style={styles.center}>
-        <Ionicons name={icon} size={40} color={LIVE.textSecondary} />
+        <Ionicons name={icon} size={40} color={L.textSecondary} />
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.sub}>{sub}</Text>
         <Pressable onPress={cta?.onPress ?? goBack} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
@@ -294,7 +297,7 @@ export default function LiveGuestJoinScreen() {
     return (
       <View style={styles.root}>
         {header}
-        <View style={styles.center}><ActivityIndicator color={LIVE.text} /></View>
+        <View style={styles.center}><ActivityIndicator color={L.text} /></View>
       </View>
     );
   }
@@ -329,7 +332,7 @@ export default function LiveGuestJoinScreen() {
   if (phase === 'waiting') {
     return (
       <View style={styles.root}>
-        <StatusBar barStyle="light-content" backgroundColor={LIVE.bg} />
+        <StatusBar barStyle={barStyle} backgroundColor={L.bg} />
         {header}
         <Animated.View entering={FadeIn.duration(260)} style={styles.center}>
           <Doorbell />
@@ -343,7 +346,7 @@ export default function LiveGuestJoinScreen() {
             style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed, cancelling && { opacity: 0.6 }]}
             accessibilityRole="button"
           >
-            {cancelling ? <ActivityIndicator size="small" color={LIVE.text} /> : <Text style={styles.secondaryText}>Anfrage zurückziehen</Text>}
+            {cancelling ? <ActivityIndicator size="small" color={L.text} /> : <Text style={styles.secondaryText}>Anfrage zurückziehen</Text>}
           </Pressable>
         </Animated.View>
       </View>
@@ -354,7 +357,7 @@ export default function LiveGuestJoinScreen() {
   const canPreview = !!camPerm?.granted;
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={LIVE.bg} />
+      <StatusBar barStyle={barStyle} backgroundColor={L.bg} />
       {header}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
@@ -363,7 +366,7 @@ export default function LiveGuestJoinScreen() {
               <CameraView style={StyleSheet.absoluteFill} facing="front" />
             ) : (
               <Pressable onPress={() => { void ensurePermissions(); }} style={styles.previewEmpty} accessibilityRole="button">
-                <Ionicons name="videocam-outline" size={34} color={LIVE.textTertiary} />
+                <Ionicons name="videocam-outline" size={34} color={L.textTertiary} />
                 <Text style={styles.previewHint}>Kamera-Vorschau anzeigen</Text>
               </Pressable>
             )}
@@ -379,7 +382,7 @@ export default function LiveGuestJoinScreen() {
             value={note}
             onChangeText={(t) => setNote(t.slice(0, GUEST_NOTE_MAX))}
             placeholder="z. B. Ich bin Trainerin der Wirbelwinde"
-            placeholderTextColor={LIVE.textTertiary}
+            placeholderTextColor={L.textTertiary}
             style={styles.note}
             maxLength={GUEST_NOTE_MAX}
             multiline
@@ -388,7 +391,7 @@ export default function LiveGuestJoinScreen() {
 
           {permDenied ? (
             <Pressable onPress={() => { void Linking.openSettings(); }} style={styles.errorBox}>
-              <Ionicons name="lock-closed-outline" size={15} color="#FFB4B4" />
+              <Ionicons name="lock-closed-outline" size={15} color={L.errorText} />
               <Text style={styles.errorText}>
                 Kamera und Mikrofon sind nicht freigegeben. Tippe hier, um die Einstellungen zu öffnen.
               </Text>
@@ -396,7 +399,7 @@ export default function LiveGuestJoinScreen() {
           ) : null}
           {error ? (
             <View style={styles.errorBox}>
-              <Ionicons name="information-circle-outline" size={15} color="#FFB4B4" />
+              <Ionicons name="information-circle-outline" size={15} color={L.errorText} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
@@ -418,43 +421,43 @@ export default function LiveGuestJoinScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: LIVE.bg },
+const makeStyles = (L: LivePalette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: L.bg },
   flex: { flex: 1 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingBottom: 8 },
-  headerTitle: { flex: 1, color: LIVE.text, fontSize: 16, fontFamily: F.semiBold, textAlign: 'center' },
-  roundBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: LIVE.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, color: L.text, fontSize: 16, fontFamily: F.semiBold, textAlign: 'center' },
+  roundBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: L.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
   roundBtnSpacer: { width: 34 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
-  title: { color: LIVE.text, fontSize: 20, fontFamily: F.heading, textAlign: 'center', marginTop: 8 },
-  sub: { color: LIVE.textSecondary, fontSize: 14, fontFamily: F.regular, textAlign: 'center', lineHeight: 20 },
+  title: { color: L.text, fontSize: 20, fontFamily: F.heading, textAlign: 'center', marginTop: 8 },
+  sub: { color: L.textSecondary, fontSize: 14, fontFamily: F.regular, textAlign: 'center', lineHeight: 20 },
   scroll: { paddingHorizontal: 16, paddingTop: 8, gap: 10 },
   preview: { aspectRatio: 3 / 4, maxHeight: 360, alignSelf: 'center', width: '72%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' },
   previewEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  previewHint: { color: LIVE.textSecondary, fontSize: 13, fontFamily: F.medium },
-  kicker: { color: LIVE.accent, fontSize: 12, fontFamily: F.bold, letterSpacing: 1.2, marginTop: 10, textTransform: 'uppercase' },
-  lead: { color: LIVE.text, fontSize: 16, fontFamily: F.medium, lineHeight: 23 },
-  label: { color: LIVE.textSecondary, fontSize: 13, fontFamily: F.semiBold, marginTop: 6 },
+  previewHint: { color: L.textSecondary, fontSize: 13, fontFamily: F.medium },
+  kicker: { color: L.accent, fontSize: 12, fontFamily: F.bold, letterSpacing: 1.2, marginTop: 10, textTransform: 'uppercase' },
+  lead: { color: L.text, fontSize: 16, fontFamily: F.medium, lineHeight: 23 },
+  label: { color: L.textSecondary, fontSize: 13, fontFamily: F.semiBold, marginTop: 6 },
   note: {
-    minHeight: 64, borderRadius: 12, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, color: LIVE.text, fontSize: 15,
-    fontFamily: F.regular, backgroundColor: LIVE.surfaceRaised, textAlignVertical: 'top',
+    minHeight: 64, borderRadius: 12, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, color: L.text, fontSize: 15,
+    fontFamily: F.regular, backgroundColor: L.surfaceRaised, textAlignVertical: 'top',
   },
-  counter: { alignSelf: 'flex-end', color: LIVE.textTertiary, fontSize: 11, fontFamily: F.medium, marginTop: -4 },
+  counter: { alignSelf: 'flex-end', color: L.textTertiary, fontSize: 11, fontFamily: F.medium, marginTop: -4 },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: 'rgba(229,72,77,0.16)',
+    backgroundColor: L.errorSoft,
   },
-  errorText: { flex: 1, color: '#FFD0D0', fontSize: 13, fontFamily: F.medium },
+  errorText: { flex: 1, color: L.errorText, fontSize: 13, fontFamily: F.medium },
   primaryBtn: {
     marginTop: 6, height: 50, borderRadius: 25, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: LIVE.navyBright,
+    backgroundColor: L.navyBright,
   },
   primaryText: { color: '#fff', fontSize: 16, fontFamily: F.bold },
   secondaryBtn: {
     marginTop: 14, minWidth: 200, height: 46, paddingHorizontal: 22, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: LIVE.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: LIVE.borderStrong,
+    backgroundColor: L.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: L.borderStrong,
   },
-  secondaryText: { color: LIVE.text, fontSize: 15, fontFamily: F.semiBold },
-  fine: { color: LIVE.textTertiary, fontSize: 12, fontFamily: F.regular, textAlign: 'center', marginTop: 4 },
+  secondaryText: { color: L.text, fontSize: 15, fontFamily: F.semiBold },
+  fine: { color: L.textTertiary, fontSize: 12, fontFamily: F.regular, textAlign: 'center', marginTop: 4 },
 });
