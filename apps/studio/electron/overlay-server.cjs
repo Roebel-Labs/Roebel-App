@@ -65,14 +65,20 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
     try {
       fs.mkdirSync(userDataDir, { recursive: true });
       const tmp = `${tokenFile}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(tokens), null, 2));
+      // Owner-only: the map reveals which local files the operator uses.
+      fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(tokens), null, 2), { mode: 0o600 });
+      fs.chmodSync(tmp, 0o600); // a stale tmp from a crash keeps its old mode otherwise
       fs.renameSync(tmp, tokenFile);
     } catch (e) {
       log(`media tokens not persisted: ${e.message}`);
     }
   }
 
+  /** Real listen state; the UI shows it (IPC overlay:status). */
+  const state = { ok: false, port: null, error: null };
+
   function allow(absPath) {
+    if (!state.ok) throw new Error(`Medienserver nicht gestartet${state.error ? `: ${state.error}` : ''}`);
     if (typeof absPath !== 'string' || !path.isAbsolute(absPath)) throw new Error('Pfad muss absolut sein');
     const p = path.normalize(absPath);
     const st = fs.statSync(p); // throws for missing files
@@ -84,7 +90,7 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
       tokens.set(token, p);
       persist();
     }
-    return `http://${HOST}:${OVERLAY_PORT}/media/${token}`;
+    return `http://${HOST}:${state.port}/media/${token}`;
   }
 
   function send(res, status, headers = {}, body) {
@@ -125,26 +131,52 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
       });
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, {}, 'method not allowed');
-    const url = new URL(req.url || '/', `http://${HOST}`);
+    let url;
+    try {
+      url = new URL(req.url || '/', `http://${HOST}`);
+    } catch {
+      return send(res, 400, {}, 'bad request'); // never let a malformed target throw in main
+    }
+    // Strict token shape: traversal (`..`, `%2e%2e`) and other casing simply do not match.
     const m = /^\/media\/([a-f0-9]{32})$/.exec(url.pathname);
     if (m) return handleMedia(req, res, m[1]);
     return send(res, 404, {}, 'not found');
   });
   server.keepAliveTimeout = 5000;
 
+  server.on('clientError', (_err, socket) => {
+    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    else socket.destroy();
+  });
+
   function start() {
     return new Promise((resolve, reject) => {
-      server.once('error', reject);
+      const onError = (e) => {
+        state.ok = false;
+        state.port = null;
+        state.error = e.code === 'EADDRINUSE' ? `Port ${port} ist belegt` : e.message;
+        log(`overlay server failed: ${state.error}`);
+        reject(e);
+      };
+      server.once('error', onError);
       server.listen(port, HOST, () => {
-        server.off('error', reject);
+        server.off('error', onError);
         const addr = server.address();
+        state.ok = true;
+        state.port = addr.port;
+        state.error = null;
         log(`overlay server on http://${HOST}:${addr.port}`);
         resolve(addr.port);
       });
     });
   }
 
+  function status() {
+    return { ...state };
+  }
+
   function stop() {
+    state.ok = false;
     return new Promise((resolve) => {
       if (!server.listening) return resolve();
       server.close(() => resolve());
@@ -152,7 +184,7 @@ function createOverlayServer({ userDataDir, port = OVERLAY_PORT, log = () => {} 
     });
   }
 
-  return { start, stop, allow };
+  return { start, stop, allow, status };
 }
 
 module.exports = { createOverlayServer, OVERLAY_PORT, parseRange, contentType };

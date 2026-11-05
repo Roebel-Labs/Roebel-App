@@ -12,6 +12,8 @@ export class OutputClock {
   private readonly frameMs: number;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** Bumped by start()/stop(): a run belonging to an older generation must not reschedule. */
+  private gen = 0;
   private t0 = 0;
   private n = 0;
   private overruns = 0;
@@ -32,6 +34,7 @@ export class OutputClock {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.gen++;
     this.t0 = performance.now();
     this.n = 0;
     this.winStart = this.t0;
@@ -41,6 +44,7 @@ export class OutputClock {
 
   stop(): void {
     this.running = false;
+    this.gen++;
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
   }
@@ -52,12 +56,13 @@ export class OutputClock {
   private schedule() {
     const due = this.t0 + this.n * this.frameMs;
     const delay = Math.max(0, due - performance.now());
-    this.timer = setTimeout(this.run, delay);
+    const gen = this.gen;
+    this.timer = setTimeout(() => this.run(gen), delay);
   }
 
-  private run = () => {
+  private run(gen: number) {
+    if (gen !== this.gen || !this.running) return;
     this.timer = null;
-    if (!this.running) return;
     const now = performance.now();
     const due = this.t0 + this.n * this.frameMs;
     const lateAtFire = now - due;
@@ -66,7 +71,8 @@ export class OutputClock {
     } catch (e) {
       console.error('[output-clock] tick failed', e);
     }
-    if (!this.running) return; // stop() called from inside the tick
+    // stop() (and maybe start()) called from inside the tick: the new generation owns the timeline.
+    if (gen !== this.gen || !this.running) return;
     this.ticks++;
     this.winTicks++;
     const after = performance.now();
@@ -80,5 +86,5 @@ export class OutputClock {
     if (lateAtFire > this.frameMs || next > this.n + 1) this.overruns++;
     this.n = next;
     this.schedule();
-  };
+  }
 }

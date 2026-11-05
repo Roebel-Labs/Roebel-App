@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('studio', {
     // Returns http://127.0.0.1:7311/media/<token> for a local file.
     allow: (absPath) => ipcRenderer.invoke('media:allow', absPath),
   },
+  overlay: {
+    // { ok, port, error }: whether the local media/overlay server is listening.
+    status: () => ipcRenderer.invoke('overlay:status'),
+  },
   // TEMPORARY (Task 1 spike): dev-only env passthrough for the test-pattern page.
   spike: {
     // STUDIO_SPIKE_AUTOSTART=srt://... or STUDIO_SPIKE_RTMP_URL + STUDIO_SPIKE_RTMP_KEY (secrets via env only).

@@ -90,4 +90,39 @@ describe('OutputClock', () => {
     err.mockRestore();
     expect(calls).toBeGreaterThanOrEqual(29);
   });
+
+  it('stop() + start() inside a tick does not double the clock', () => {
+    let calls = 0;
+    const clock = new OutputClock(30, () => {
+      calls++;
+      if (calls === 3) {
+        clock.stop();
+        clock.start();
+      }
+    });
+    clock.start();
+    vi.advanceTimersByTime(80);
+    expect(calls).toBeGreaterThanOrEqual(3);
+    // Exactly one scheduled tick: no orphaned second timer chain.
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(920);
+    expect(vi.getTimerCount()).toBe(1);
+    clock.stop();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(calls).toBeGreaterThanOrEqual(29);
+    expect(calls).toBeLessThanOrEqual(32);
+  });
+
+  it('a stale timer from before stop()/start() never fires a tick', () => {
+    const tick = vi.fn();
+    const clock = new OutputClock(30, tick);
+    clock.start();
+    clock.stop();
+    clock.start();
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(1000);
+    clock.stop();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(tick.mock.calls.length).toBeLessThanOrEqual(31);
+  });
 });

@@ -29,6 +29,12 @@ export function sourceStatus(prev: SourceHealth, ev: SourceEvent): SourceHealth 
 export const RETRY_MS = 2000;
 /** A camera that opened but delivers no frame within this time is treated as lost (and retried). */
 export const START_TIMEOUT_MS = 10000;
+/**
+ * A source that stalls (track `mute`, video `waiting`) and does not resume within this time is
+ * treated as lost: "Signal verloren" + the retry/re-open path. Covers capture cards that mute on
+ * HDMI loss instead of ending the track.
+ */
+export const STALL_TIMEOUT_MS = 5000;
 
 type Entry = {
   source: Source;
@@ -133,8 +139,10 @@ export class SourceRegistry {
     if (e.disposed) return;
     // A stale 'playing' from an ended stream (Chromium shows a 2×2 placeholder) must not mask a loss.
     if (ev === 'playing' && e.source.kind === 'camera' && !hasLiveVideo(e.stream)) return;
-    const next = sourceStatus(e.status, ev);
+    const prev = e.status;
+    const next = sourceStatus(prev, ev);
     if (next !== 'loading') this.clearWatchdog(e);
+    else if (ev === 'stalled' && prev === 'ok') this.armWatchdog(e, STALL_TIMEOUT_MS, 'stalled');
     if (next === 'lost') {
       this.ensureRetry(e);
       if (e.source.kind === 'camera') this.dropCameraStream(e);
@@ -153,6 +161,18 @@ export class SourceRegistry {
   private ensureRetry(e: Entry) {
     if (e.retry !== null) return;
     e.retry = setInterval(() => void this.recover(e), RETRY_MS);
+  }
+
+  /** If the source is still 'loading' when this fires, it is treated as lost (→ retry loop). */
+  private armWatchdog(e: Entry, ms: number, reason: string) {
+    this.clearWatchdog(e);
+    const stream = e.stream;
+    e.watchdog = setTimeout(() => {
+      e.watchdog = null;
+      if (e.disposed || e.stream !== stream || e.status !== 'loading') return;
+      console.warn(`[sources] ${e.source.label}: ${reason}, no frames within ${ms} ms → lost`);
+      this.emit(e, 'ended');
+    }, ms);
   }
 
   private clearWatchdog(e: Entry) {
@@ -272,14 +292,7 @@ export class SourceRegistry {
         });
       }
       this.emit(e, 'started');
-      this.clearWatchdog(e);
-      e.watchdog = setTimeout(() => {
-        e.watchdog = null;
-        if (e.stream === stream && e.status === 'loading') {
-          console.warn(`[sources] camera ${e.source.label}: no frames within ${START_TIMEOUT_MS} ms`);
-          this.emit(e, 'ended');
-        }
-      }, START_TIMEOUT_MS);
+      this.armWatchdog(e, START_TIMEOUT_MS, 'opened');
       video.srcObject = stream;
       await video.play().catch(() => {});
     } catch (err) {

@@ -30,6 +30,10 @@ ipcMain.handle('media:allow', (_e, absPath) => {
   if (!overlay) throw new Error('Medienserver nicht bereit');
   return overlay.allow(absPath);
 });
+// Media server listen state for the UI: { ok, port, error } (e.g. port 7311 busy).
+ipcMain.handle('overlay:status', () =>
+  overlay ? overlay.status() : { ok: false, port: null, error: 'Medienserver nicht gestartet' },
+);
 
 // Only our own page may use cameras/microphones.
 function isOwnOrigin(url) {

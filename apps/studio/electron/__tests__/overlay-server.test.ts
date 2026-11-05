@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import net from 'node:net';
 
 const require = createRequire(import.meta.url);
 const { createOverlayServer, OVERLAY_PORT } = require('../overlay-server.cjs');
@@ -10,13 +12,14 @@ const { createOverlayServer, OVERLAY_PORT } = require('../overlay-server.cjs');
 let dir: string;
 let server: ReturnType<typeof createOverlayServer>;
 let base: string;
+let port: number;
 
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-overlay-'));
   fs.writeFileSync(path.join(dir, 'clip.mp4'), Buffer.from('0123456789abcdef'));
   fs.writeFileSync(path.join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
   server = createOverlayServer({ userDataDir: dir, port: 0, log: () => {} });
-  const port = await server.start();
+  port = await server.start();
   base = `http://127.0.0.1:${port}`;
 });
 afterEach(async () => {
@@ -24,7 +27,32 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const rewrite = (url: string) => url.replace(`http://127.0.0.1:${OVERLAY_PORT}`, base);
+// The token URL carries the real listen port (port 0 in tests).
+const rewrite = (url: string) => `${base}${new URL(url).pathname}`;
+
+/** Sends the request target verbatim (fetch would normalise `..`). */
+function rawGet(target: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: target, method: 'GET' }, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function rawSocket(request: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(port, '127.0.0.1', () => sock.write(request));
+    let buf = '';
+    sock.on('data', (d) => (buf += d.toString()));
+    sock.on('end', () => resolve(buf));
+    sock.on('close', () => resolve(buf));
+    sock.on('error', reject);
+    setTimeout(() => sock.destroy(), 1000);
+  });
+}
 
 describe('overlay-server /media/', () => {
   it('uses port 7311 by default', () => {
@@ -33,7 +61,7 @@ describe('overlay-server /media/', () => {
 
   it('allow() returns a token URL that serves the file with type + CORS', async () => {
     const url = server.allow(path.join(dir, 'clip.mp4'));
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:7311\/media\/[a-f0-9]{32}$/);
+    expect(url).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${port}/media/[a-f0-9]{32}$`));
     const res = await fetch(rewrite(url));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('video/mp4');
@@ -75,7 +103,7 @@ describe('overlay-server /media/', () => {
     const url = server.allow(path.join(dir, 'clip.mp4'));
     await server.stop();
     server = createOverlayServer({ userDataDir: dir, port: 0, log: () => {} });
-    const port = await server.start();
+    port = await server.start();
     base = `http://127.0.0.1:${port}`;
     const res = await fetch(rewrite(url));
     expect(res.status).toBe(200);
@@ -87,5 +115,40 @@ describe('overlay-server /media/', () => {
     const url = rewrite(server.allow(p));
     fs.unlinkSync(p);
     expect((await fetch(url)).status).toBe(404);
+  });
+
+  it('traversal and wrong token shapes → 404', async () => {
+    const url = server.allow(path.join(dir, 'clip.mp4'));
+    const token = new URL(url).pathname.split('/').pop()!;
+    expect(await rawGet('/media/../x')).toBe(404);
+    expect(await rawGet('/media/%2e%2e/x')).toBe(404);
+    expect(await rawGet('/media/%2e%2e%2fmedia-tokens.json')).toBe(404);
+    expect(await rawGet(`/media/${token.toUpperCase()}`)).toBe(404);
+    expect(await rawGet(`/media/${token}/../${token}x`)).toBe(404);
+    expect(await rawGet(`/media/${token}`)).toBe(200);
+  });
+
+  it('a malformed request target answers 400 and the server keeps serving', async () => {
+    const reply = await rawSocket('GET http://[ HTTP/1.1\r\nHost: x\r\n\r\n');
+    expect(reply).toMatch(/^HTTP\/1\.1 400/);
+    const garbage = await rawSocket('\x00\x01 nonsense\r\n\r\n');
+    expect(garbage).toMatch(/^HTTP\/1\.1 400/);
+    const url = server.allow(path.join(dir, 'clip.mp4'));
+    expect((await fetch(rewrite(url))).status).toBe(200);
+  });
+
+  it('media-tokens.json is owner-only (0600)', () => {
+    server.allow(path.join(dir, 'clip.mp4'));
+    expect(fs.statSync(path.join(dir, 'media-tokens.json')).mode & 0o777).toBe(0o600);
+  });
+
+  it('status() reports the real port; a busy port is reported and allow() refuses', async () => {
+    expect(server.status()).toEqual({ ok: true, port, error: null });
+    const second = createOverlayServer({ userDataDir: dir, port, log: () => {} });
+    await expect(second.start()).rejects.toThrow();
+    expect(second.status()).toMatchObject({ ok: false, port: null });
+    expect(second.status().error).toContain(`Port ${port} ist belegt`);
+    expect(() => second.allow(path.join(dir, 'clip.mp4'))).toThrow(/Medienserver nicht gestartet/);
+    await second.stop();
   });
 });
