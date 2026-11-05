@@ -591,18 +591,28 @@ class LiveRoomController {
   }
 
   private playNext() {
-    if (this.playing || !this.snap.autoAlerts || !this.bound) return;
+    if (this.playing || !this.snap.autoAlerts) return;
     const a = this.alerts.shift();
     if (!a) return;
     this.fire(a);
   }
 
-  private donationOverlay(b: Bound): { overlayId: string; template: Template } | null {
-    const st = b.getState();
-    const tpl = st.templates.find((t) => t.kind === 'donation');
-    if (!tpl) return null;
-    const id = this.ensureOverlay(tpl, 'ov-liveroom-donation');
-    return id ? { overlayId: id, template: tpl } : null;
+  /**
+   * Shows one Unterstützung to the OPERATOR (panel notice + `liveRoomDonation`). It never goes on air:
+   * Unterstützungen are not burned into the stream or the recording; the app shows them in its own layer.
+   */
+  private fire(a: SupportAlert) {
+    this.playing = true;
+    liveRoomDonation.set({ name: a.name, amount: a.amount, message: a.message });
+    this.set({ currentAlert: a, alertError: null, pendingAlerts: this.alerts.pending() });
+    this.alertTimer = setTimeout(() => this.endAlert(), this.snap.alertSeconds * 1000);
+  }
+
+  private endAlert() {
+    liveRoomDonation.set(null);
+    this.playing = false;
+    this.set({ currentAlert: null });
+    this.alertTimer = setTimeout(() => this.playNext(), 800);
   }
 
   private ensureOverlay(tpl: Template, fallbackId: string): string | null {
@@ -615,49 +625,11 @@ class LiveRoomController {
     return fallbackId;
   }
 
-  private fire(a: SupportAlert) {
-    const b = this.bound;
-    this.set({ pendingAlerts: this.alerts.pending() });
-    if (!b) {
-      this.set({ alertError: 'Studio nicht verbunden – Alert konnte nicht gezeigt werden.' });
-      return;
-    }
-    const target = this.donationOverlay(b);
-    if (!target) {
-      this.set({ alertError: 'Keine Unterstützungs-Vorlage im Design gefunden.' });
-      return;
-    }
-    this.playing = true;
-    liveRoomDonation.set({ name: a.name, amount: a.amount, message: a.message });
-    b.dispatch({ type: 'setOverlay', id: target.overlayId, visible: true, now: Date.now() });
-    this.set({ currentAlert: a, alertError: null });
-    const holdMs = this.snap.alertSeconds * 1000 + target.template.animIn.durationMs;
-    this.alertTimer = setTimeout(() => {
-      this.bound?.dispatch({ type: 'setOverlay', id: target.overlayId, visible: false, now: Date.now() });
-      this.alertTimer = setTimeout(() => {
-        liveRoomDonation.set(null);
-        this.playing = false;
-        this.set({ currentAlert: null });
-        this.alertTimer = setTimeout(() => this.playNext(), 800);
-      }, target.template.animOut.durationMs + 300);
-    }, holdMs);
-  }
-
-  /** Takes the running alert off air early. */
+  /** Dismisses the current notice early; auto mode moves on to the next. */
   stopAlert() {
     if (!this.playing) return;
     if (this.alertTimer) clearTimeout(this.alertTimer);
-    const b = this.bound;
-    const st = b?.getState();
-    const tpl = st?.templates.find((t) => t.kind === 'donation');
-    if (b && st && tpl) for (const o of st.overlays) if (o.templateId === tpl.id && o.visible) b.dispatch({ type: 'setOverlay', id: o.id, visible: false, now: Date.now() });
-    this.alertTimer = setTimeout(() => {
-      liveRoomDonation.set(null);
-      this.playing = false;
-      this.set({ currentAlert: null });
-      // Auto mode keeps working through the queue after an early stop.
-      this.alertTimer = setTimeout(() => this.playNext(), 800);
-    }, (tpl?.animOut.durationMs ?? 300) + 300);
+    this.endAlert();
   }
 
   // ---- reactions

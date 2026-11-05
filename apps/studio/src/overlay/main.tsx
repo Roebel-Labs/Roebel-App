@@ -38,8 +38,8 @@ async function main() {
     if (t - last < FRAME_MS - 1) return;
     last = t;
     if (!state) return;
-    // Donation + chat highlight come from the studio's projection, not from this page's (empty) live-room stores.
-    const live = { donation: state.live?.donation ?? null, chatHighlight: state.live?.chatHighlight ?? null };
+    // The chat highlight comes from the studio's projection, not from this page's (empty) live-room store.
+    const live = { chatHighlight: state.live?.chatHighlight ?? null };
     renderFrame(ctx, state, noMedia as never, defaultRenderContext(state, live), Date.now(), { overlaysOnly: true });
   };
   requestAnimationFrame(tick);

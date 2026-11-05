@@ -21,18 +21,19 @@ describe('overlayProjection', () => {
     expect(overlayProjection(toggled)).not.toBe(a);
   });
 
-  it('carries the live-room donation and chat highlight, never the studio token or settings', () => {
-    const live = { donation: { name: 'Anna', amount: '10 €', message: 'Toll' }, chatHighlight: { name: 'Lena', body: 'Hi', avatarUrl: '' } };
+  it('carries the live-room chat highlight only (never Unterstützungen), never the studio token or settings', () => {
+    const live = { chatHighlight: { name: 'Lena', body: 'Hi', avatarUrl: '' } };
     const p = overlayProjection(secret, live);
     expect(p.live).toEqual(live);
     expect(JSON.stringify(p)).not.toContain('SECRET-KEY-123');
-    expect(overlayProjection(restore(null)).live).toEqual({ donation: null, chatHighlight: null });
+    expect(overlayProjection(restore(null)).live).toEqual({ chatHighlight: null });
+    expect(Object.keys(p.live)).toEqual(['chatHighlight']);
   });
 
   it('is memoized on the live values too', () => {
-    const live = { donation: { name: 'Anna', amount: '10 €', message: '' }, chatHighlight: null };
+    const live = { chatHighlight: { name: 'Lena', body: 'Hi', avatarUrl: '' } };
     const a = overlayProjection(secret, live);
     expect(overlayProjection(secret, { ...live })).toBe(a); // same parts, new wrapper
-    expect(overlayProjection(secret, { ...live, donation: { ...live.donation } })).not.toBe(a);
+    expect(overlayProjection(secret, { chatHighlight: { ...live.chatHighlight } })).not.toBe(a);
   });
 });

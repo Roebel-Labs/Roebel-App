@@ -45,7 +45,6 @@ const rc: RenderContext = {
   next: null,
   now: new Date(2026, 10, 7, 14, 5),
   sponsor: null,
-  donation: null,
   chatHighlight: null,
 };
 

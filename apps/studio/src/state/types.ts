@@ -110,7 +110,7 @@ export type TemplateNode = {
 export type Template = {
   id: string;
   name: string;
-  kind: 'lowerThird' | 'logoBug' | 'clock' | 'nextUp' | 'breakSpot' | 'pause' | 'donation' | 'chatHighlight' | 'custom';
+  kind: 'lowerThird' | 'logoBug' | 'clock' | 'nextUp' | 'breakSpot' | 'pause' | 'chatHighlight' | 'custom';
   fullScreen: boolean;
   nodes: TemplateNode[];
   animIn: OverlayAnim;
@@ -122,7 +122,6 @@ export type RenderContext = {
   next: Record<string, string> | null;
   now: Date;
   sponsor: { name: string; logoUrl: string } | null;
-  donation: { name: string; amount: string; message: string } | null;
   /** The chat message the Live-Raum puts on air ({{chat.name}}, {{chat.body}}, {{chat.avatar}}). */
   chatHighlight: { name: string; body: string; avatarUrl: string } | null;
 };

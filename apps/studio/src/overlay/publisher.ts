@@ -1,6 +1,6 @@
 // Studio side of the OBS fallback: pushes a key-free projection of the show to the overlay server's /state relay.
 import { OVERLAY_PORT } from './constants';
-import { liveRoomChatHighlight, liveRoomDonation } from '../live-room/seams';
+import { liveRoomChatHighlight } from '../live-room/seams';
 import { overlayProjection } from './projection';
 import type { ShowState } from '../state/types';
 
@@ -33,7 +33,7 @@ export function startOverlayPublisher(getState: () => ShowState, opts: Options =
 
   const send = () => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const proj = overlayProjection(getState(), { donation: liveRoomDonation.get(), chatHighlight: liveRoomChatHighlight.get() });
+    const proj = overlayProjection(getState(), { chatHighlight: liveRoomChatHighlight.get() });
     if (proj === lastSent) return;
     lastSent = proj; // also for oversize: do not retry the same snapshot
     lastAt = Date.now();

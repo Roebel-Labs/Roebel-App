@@ -22,9 +22,6 @@ function lookup(key: string, rc: RenderContext): string {
     case 'sponsor':
       value = field === 'logo' ? rc.sponsor?.logoUrl : field === 'name' ? rc.sponsor?.name : undefined;
       break;
-    case 'donation':
-      value = field === 'name' || field === 'amount' || field === 'message' ? rc.donation?.[field] : undefined;
-      break;
     case 'chat':
       value =
         field === 'name' ? rc.chatHighlight?.name : field === 'body' ? rc.chatHighlight?.body : field === 'avatar' ? rc.chatHighlight?.avatarUrl : undefined;

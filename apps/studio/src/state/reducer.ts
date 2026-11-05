@@ -2,7 +2,7 @@ import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
 import { OVERLAY_PORT } from '../overlay/constants';
 import { nextSpot } from '../sponsors/rotation';
-import { STARTER_TEMPLATES, STARTER_VERSION, STARTERS_ADDED_IN, isStarterTemplate, starterTemplates } from '../render/templates';
+import { FORBIDDEN_TEMPLATE_KINDS, STARTER_TEMPLATES, STARTER_VERSION, STARTERS_ADDED_IN, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
   Destination,
@@ -211,6 +211,8 @@ function pruneDetached(s: ShowState): ShowState {
   return out;
 }
 
+const forbiddenKind = (t: { kind?: unknown }) => FORBIDDEN_TEMPLATE_KINDS.includes(String(t.kind));
+
 const sameTarget = (a: OutputTarget, b: OutputTarget) => JSON.stringify(a) === JSON.stringify(b);
 
 export function showReducer(s: ShowState, a: Action): ShowState {
@@ -314,9 +316,10 @@ function reduce(s: ShowState, a: Action): ShowState {
     case 'removeOverlay':
       return { ...s, overlays: s.overlays.filter((o) => o.id !== a.id) };
     case 'updateTemplate':
+      if (forbiddenKind(a.template)) return s;
       return { ...s, templates: s.templates.map((t) => (t.id === a.template.id ? a.template : t)) };
     case 'addTemplate': {
-      if (s.templates.some((t) => t.id === a.template.id)) return s;
+      if (forbiddenKind(a.template) || s.templates.some((t) => t.id === a.template.id)) return s;
       return {
         ...s,
         templates: [...s.templates, a.template],
@@ -646,6 +649,12 @@ export function restore(json: string | null): ShowState {
   let overlays =
     raw.overlays === undefined ? d.overlays : (arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[]);
   let templates = raw.templates === undefined ? d.templates : restoreTemplates(raw.templates);
+  // Unterstützungen are never burned into the stream or the recording: drop those templates and their overlays.
+  const forbidden = new Set(templates.filter(forbiddenKind).map((t) => t.id));
+  if (forbidden.size > 0) {
+    templates = templates.filter((t) => !forbidden.has(t.id));
+    overlays = overlays.filter((o) => !forbidden.has(o.templateId));
+  }
   // Starters introduced after this show was saved are added once (by id, never over a user template).
   const savedVersion = num(raw.starterVersion, 1);
   for (let v = savedVersion + 1; v <= STARTER_VERSION; v++) {

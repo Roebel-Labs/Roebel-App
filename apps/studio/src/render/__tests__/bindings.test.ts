@@ -7,7 +7,6 @@ const rc = (over: Partial<RenderContext> = {}): RenderContext => ({
   next: { Gruppe: 'Dance Queens' },
   now: new Date(2026, 10, 7, 14, 5, 9),
   sponsor: { name: 'Bäckerei Schulz', logoUrl: 'https://x/logo.png' },
-  donation: { name: 'Anna', amount: '10 €', message: 'Viel Erfolg!' },
   chatHighlight: { name: 'Lena', body: 'Super Auftritt!', avatarUrl: 'https://x/a.png' },
   ...over,
 });
@@ -19,7 +18,7 @@ describe('resolveBindings', () => {
 
   it('missing key and null row give empty strings, never the literal or undefined', () => {
     expect(resolveBindings('A{{row.Fehlt}}B', rc())).toBe('AB');
-    const out = resolveBindings('{{row.Gruppe}},{{next.Gruppe}},{{sponsor.name}},{{donation.name}}', rc({ row: null, next: null, sponsor: null, donation: null }));
+    const out = resolveBindings('{{row.Gruppe}},{{next.Gruppe}},{{sponsor.name}},{{donation.name}}', rc({ row: null, next: null, sponsor: null }));
     expect(out).toBe(',,,');
     expect(resolveBindings('{{unbekannt}}{{row}}', rc())).toBe('');
   });
@@ -34,12 +33,13 @@ describe('resolveBindings', () => {
     expect(resolveBindings('{{row.Größe}}', rc())).toBe('12');
   });
 
-  it('resolves next, sponsor and donation bindings', () => {
+  it('resolves next and sponsor bindings', () => {
     expect(resolveBindings('Als Nächstes: {{next.Gruppe}}', rc())).toBe('Als Nächstes: Dance Queens');
     expect(resolveBindings('{{sponsor.name}} {{sponsor.logo}}', rc())).toBe('Bäckerei Schulz https://x/logo.png');
-    expect(resolveBindings('{{donation.name}} unterstützt mit {{donation.amount}}: {{donation.message}}', rc())).toBe(
-      'Anna unterstützt mit 10 €: Viel Erfolg!',
-    );
+  });
+
+  it('never resolves donation bindings: Unterstützungen are never on air', () => {
+    expect(resolveBindings('{{donation.name}} · {{donation.amount}}', rc())).toBe('');
   });
 
   it('drops separators left dangling by empty bindings', () => {

@@ -22,11 +22,14 @@ export class Store<T> {
 
 // ---------------------------------------------------------------- read by the core
 
-/** For RenderContext.donation (program.ts defaultRenderContext): `donation: liveRoomDonation.get()`. */
+/**
+ * The Unterstützung currently shown to the OPERATOR (panel notice). Never read by the renderer, the program,
+ * the recording or the OBS page: Unterstützungen are not burned into the stream.
+ */
 export type DonationContext = { name: string; amount: string; message: string };
 export const liveRoomDonation = new Store<DonationContext | null>(null);
 
-/** For a future RenderContext.chatHighlight + "chatHighlight" template. */
+/** RenderContext.chatHighlight (program.ts defaultRenderContext) + the "chat-highlight" starter: on air by operator choice. */
 export type ChatHighlightContext = { name: string; body: string; avatarUrl: string };
 export const liveRoomChatHighlight = new Store<ChatHighlightContext | null>(null);
 

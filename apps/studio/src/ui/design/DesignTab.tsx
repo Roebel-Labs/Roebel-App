@@ -37,7 +37,6 @@ function useContextFor(s: ShowState): RenderContext {
       next: next ? next.values : { ...SAMPLE_ROW, Gruppe: 'Sternchen' },
       now: new Date(),
       sponsor: { name: sp?.name ?? 'Bäckerei Schulz', logoUrl: sp?.logoUrl ?? '' },
-      donation: { name: 'Familie Krüger', amount: '20 €', message: 'Viel Erfolg!' },
       chatHighlight: { name: 'Lena', body: 'Was für ein Auftritt!', avatarUrl: '' },
     };
   }, [s.table, s.sponsors]);
@@ -281,9 +280,6 @@ export function DesignTab() {
     '{{date}}',
     '{{sponsor.name}}',
     '{{sponsor.logo}}',
-    '{{donation.name}}',
-    '{{donation.amount}}',
-    '{{donation.message}}',
     '{{chat.name}}',
     '{{chat.body}}',
     '{{chat.avatar}}',

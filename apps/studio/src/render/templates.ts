@@ -100,7 +100,7 @@ export const STARTER_TEMPLATES: Template[] = [
       rect('bg', 0, 0, 1920, 1080, WHITE),
       rect('band', 0, 1032, 1920, 48, NAVY),
       // The "Werbung" label sits in the centre column, where no starter overlay (clock, logo bug,
-      // donation, lower third, next up) can ever cover it.
+      // lower third, next up, chat highlight) can ever cover it.
       rect('tag-bg', 872, 200, 176, 48, GREY, { radius: 24 }),
       text('tag', 872, 200, 176, 48, 'Werbung', { size: 24, align: 'center' }),
       { id: 'logo', type: 'image', x: 560, y: 284, w: 800, h: 380, src: '{{sponsor.logo}}', fit: 'contain', delayMs: 120 },
@@ -124,20 +124,6 @@ export const STARTER_TEMPLATES: Template[] = [
     animOut: fadeOut(500),
   },
   {
-    id: 'donation',
-    name: 'Unterstützung',
-    kind: 'donation',
-    fullScreen: false,
-    nodes: [
-      rect('bg', 560, 54, 800, 124, NAVY, { radius: 4 }),
-      rect('accent', 560, 54, 800, 6, ACCENT),
-      text('title', 600, 70, 720, 56, '{{donation.name}} unterstützt mit {{donation.amount}}', { ...title, size: 34, align: 'center' }),
-      text('message', 600, 124, 720, 40, '{{donation.message}}', { weight: 400, size: 26, color: '#DCE6F2', align: 'center' }),
-    ],
-    animIn: { kind: 'scale', durationMs: 450, easing: 'backOut' },
-    animOut: fadeOut(300),
-  },
-  {
     // Live-Raum: one chat message on air. Sits above the lower third; the avatar simply stays empty without a URL.
     id: 'chat-highlight',
     name: 'Chat-Nachricht',
@@ -156,9 +142,15 @@ export const STARTER_TEMPLATES: Template[] = [
 ];
 
 /** Bumped whenever a starter is added; restore() adds the new ones to older saved shows exactly once. */
-export const STARTER_VERSION = 2;
-/** Starter ids introduced per starter version (version 1 = the original set). */
+export const STARTER_VERSION = 3;
+/** Starter ids introduced per starter version (version 1 = the original set; 3 only removed the donation starter). */
 export const STARTERS_ADDED_IN: Record<number, string[]> = { 2: ['chat-highlight'] };
+
+/**
+ * Template kinds that may never exist: Unterstützungen are never burned into the stream or the recording
+ * (dancers watch the recording later). restore() drops them with their overlays.
+ */
+export const FORBIDDEN_TEMPLATE_KINDS: readonly string[] = ['donation'];
 
 /** Deep copy so state never aliases the module constant. */
 export function starterTemplates(): Template[] {

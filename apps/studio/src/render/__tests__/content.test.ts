@@ -8,7 +8,6 @@ const rc = (over: Partial<RenderContext> = {}): RenderContext => ({
   next: null,
   now: new Date(2026, 10, 7, 19, 5),
   sponsor: null,
-  donation: null,
   chatHighlight: null,
   ...over,
 });

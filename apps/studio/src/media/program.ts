@@ -4,7 +4,7 @@
 // tick, independent of rAF (which stops when the window is hidden).
 
 import { safeAvatarUrl } from '../live-room/alerts';
-import { liveRoomChatHighlight, liveRoomDonation } from '../live-room/seams';
+import { liveRoomChatHighlight } from '../live-room/seams';
 import { renderFrame } from '../render/draw';
 import type { RenderContext, ShowState } from '../state/types';
 import { hiddenHost } from './hidden-host';
@@ -21,18 +21,19 @@ export type ProgramOutput = {
   dispose(): void;
 };
 
-/** Live-Raum values for the overlays; null when nothing is on air. */
-export function liveRoomContext(): Pick<RenderContext, 'donation' | 'chatHighlight'> {
-  return { donation: liveRoomDonation.get(), chatHighlight: liveRoomChatHighlight.get() };
+/** Live-Raum values for the overlays (chat highlight only); null when nothing is on air. */
+export function liveRoomContext(): Pick<RenderContext, 'chatHighlight'> {
+  return { chatHighlight: liveRoomChatHighlight.get() };
 }
 
 /**
- * Current + next table row, wall clock; the sponsor is the spot of a running Werbeblock; donation and
- * chat highlight come from the Live-Raum (`live` overrides them, e.g. on the OBS page from the projection).
+ * Current + next table row, wall clock; the sponsor is the spot of a running Werbeblock; the chat highlight
+ * comes from the Live-Raum (`live` overrides it, e.g. on the OBS page from the projection).
+ * Unterstützungen are deliberately absent: they are never burned into the stream or the recording.
  */
 export function defaultRenderContext(
   state: ShowState,
-  live: Pick<RenderContext, 'donation' | 'chatHighlight'> = liveRoomContext(),
+  live: Pick<RenderContext, 'chatHighlight'> = liveRoomContext(),
 ): RenderContext {
   const rows = state.table.rows;
   const i = rows.findIndex((r) => r.id === state.table.currentRowId);
@@ -42,7 +43,6 @@ export function defaultRenderContext(
     next: i >= 0 && i + 1 < rows.length ? rows[i + 1].values : null,
     now: new Date(),
     sponsor: sp ? { name: sp.name, logoUrl: sp.logoUrl ?? '' } : null,
-    donation: live.donation,
     chatHighlight: live.chatHighlight ? { ...live.chatHighlight, avatarUrl: safeAvatarUrl(live.chatHighlight.avatarUrl) } : null,
   };
 }

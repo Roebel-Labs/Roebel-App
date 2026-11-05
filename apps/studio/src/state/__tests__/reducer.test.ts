@@ -107,9 +107,10 @@ describe('initialState', () => {
     );
   });
 
-  it('ships the eight starter kinds as deep copies', () => {
+  it('ships the seven starter kinds as deep copies (no Unterstützung on air)', () => {
     const s = initialState();
-    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'donation', 'chatHighlight']);
+    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight']);
+    expect(s.overlays.some((o) => o.id === 'ov-donation')).toBe(false);
     s.templates[0].nodes[0].x = 9999;
     expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
     expect(initialState().templates[0].nodes[0].x).not.toBe(9999);
@@ -684,7 +685,7 @@ describe('starter migration (chat highlight)', () => {
 
   it('a show saved before the chat highlight gets the starter + its overlay once, user templates kept', () => {
     const r = restore(JSON.stringify(old()));
-    expect(r.starterVersion).toBe(2);
+    expect(r.starterVersion).toBe(3);
     expect(r.templates.find((t) => t.id === 'chat-highlight')?.kind).toBe('chatHighlight');
     expect(r.templates.some((t) => t.id === 'custom-1')).toBe(true);
     expect(r.overlays.filter((o) => o.id === 'ov-chat-highlight')).toHaveLength(1);
@@ -700,7 +701,7 @@ describe('starter migration (chat highlight)', () => {
   });
 
   it('a fresh show is already on the current starter version', () => {
-    expect(initialState().starterVersion).toBe(2);
+    expect(initialState().starterVersion).toBe(3);
     expect(initialState().overlays.some((o) => o.id === 'ov-chat-highlight')).toBe(true);
   });
 });
@@ -727,5 +728,50 @@ describe('addDestination', () => {
     const a = { type: 'addDestination' as const, name: 'X', target: { kind: 'rtmp' as const, url: 'rtmps://h/live/', key: 'k' } };
     const s = showReducer(showReducer(initialState(), { ...a, id: '1' }), { ...a, id: '2' });
     expect(s.settings.destinations).toHaveLength(1);
+  });
+});
+
+describe('Unterstützungen are never on air (donation template removed)', () => {
+  const donationTpl = {
+    id: 'donation',
+    name: 'Unterstützung',
+    kind: 'donation',
+    fullScreen: false,
+    nodes: [{ id: 't', type: 'text', x: 0, y: 0, w: 10, h: 10, text: '{{donation.name}}' }],
+    animIn: { kind: 'fade', durationMs: 300, easing: 'linear' },
+    animOut: { kind: 'fade', durationMs: 300, easing: 'linear' },
+  };
+
+  it('restore drops every donation-kind template and its overlays, also visible ones, keeping the rest', () => {
+    const s = initialState();
+    const saved = {
+      ...s,
+      starterVersion: 2,
+      templates: [...s.templates, donationTpl, { ...donationTpl, id: 'custom-dup', name: 'Kopie' }],
+      overlays: [
+        ...s.overlays,
+        { id: 'ov-donation', templateId: 'donation', visible: true, changedAt: 5 },
+        { id: 'ov-liveroom-donation', templateId: 'donation', visible: false, changedAt: 0 },
+        { id: 'ov-dup', templateId: 'custom-dup', visible: false, changedAt: 0 },
+      ],
+    };
+    const r = restore(JSON.stringify(saved));
+    expect(r.templates.some((t) => (t.kind as string) === 'donation')).toBe(false);
+    expect(r.overlays.map((o) => o.id)).toEqual(s.overlays.map((o) => o.id));
+    expect(r.starterVersion).toBe(3);
+  });
+
+  it('applies at any saved starter version (it is a rule, not a one-off)', () => {
+    const s = initialState();
+    const r = restore(JSON.stringify({ ...s, starterVersion: 3, templates: [...s.templates, donationTpl], overlays: [...s.overlays, { id: 'ov-donation', templateId: 'donation', visible: true, changedAt: 1 }] }));
+    expect(r.templates.some((t) => t.id === 'donation')).toBe(false);
+    expect(r.overlays.some((o) => o.templateId === 'donation')).toBe(false);
+  });
+
+  it('addTemplate / updateTemplate refuse a donation-kind template', () => {
+    const s = initialState();
+    expect(showReducer(s, { type: 'addTemplate', template: donationTpl as never })).toBe(s);
+    const lt = s.templates[0];
+    expect(showReducer(s, { type: 'updateTemplate', template: { ...lt, kind: 'donation' } as never })).toBe(s);
   });
 });
