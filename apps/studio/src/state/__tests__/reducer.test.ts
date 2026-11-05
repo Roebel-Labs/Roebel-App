@@ -116,7 +116,7 @@ describe('serialize / restore', () => {
     s = { ...s, overlays: [{ id: 'o1', templateId: 't', visible: true, changedAt: 3 }] };
     s = showReducer(s, { type: 'addRow' });
     const r = restore(serialize(s));
-    expect(r).toEqual({ ...s, transition: { ...s.transition, startedAt: null } });
+    expect(r).toEqual({ ...s, transition: { ...s.transition, startedAt: null, fromSceneId: null } });
     expect(r.overlays[0].visible).toBe(true);
   });
 
@@ -141,5 +141,87 @@ describe('serialize / restore', () => {
     const r = restore(JSON.stringify({ ...base, settings: { ...base.settings, fps: 50, target: { kind: 'srt', url: 'srt://x' } } }));
     expect(r.settings.fps).toBe(50);
     expect(r.settings.target).toEqual({ kind: 'srt', url: 'srt://x' });
+  });
+
+  it('drops malformed array elements and coerces nested fields', () => {
+    const r = restore(
+      JSON.stringify({
+        version: 1,
+        sources: [null, 5, { id: 3 }, { id: 's', kind: 'color', label: 'x' }],
+        scenes: [{}, null, { id: 'sc', label: 'a', layout: 'full', sourceIds: 'bad' }],
+        overlays: ['x', { id: 'o', templateId: 't', visible: true, changedAt: 1 }],
+        templates: [null, { id: 't', name: 'n', kind: 'custom', fullScreen: false, nodes: 'bad', animIn: 7 }],
+        presets: [null],
+      }),
+    );
+    expect(r.sources.map((x) => x.id)).toEqual(['s']);
+    expect(r.scenes).toHaveLength(1);
+    expect(r.scenes[0].sourceIds).toEqual([]);
+    expect(r.overlays).toHaveLength(1);
+    expect(r.templates[0].nodes).toEqual([]);
+    expect(r.templates[0].animIn.kind).toBe('none');
+    expect(r.presets).toEqual(initialState().presets);
+    expect(() => showReducer(r, { type: 'removeSource', id: 's' })).not.toThrow();
+  });
+
+  it('nulls dangling ids and falls back to the default preset', () => {
+    const r = restore(
+      JSON.stringify({
+        version: 1,
+        scenes: [{ id: 'a', label: 'a', layout: 'full', sourceIds: [] }],
+        previewSceneId: 'a',
+        programSceneId: 'ghost',
+        transition: { presetId: 'ghost', startedAt: 5, fromSceneId: 'a' },
+        table: { columns: [], rows: [{ id: 'r', values: {} }], currentRowId: 'ghost' },
+      }),
+    );
+    expect(r.previewSceneId).toBe('a');
+    expect(r.programSceneId).toBeNull();
+    expect(r.transition).toEqual({ presetId: 'preset-fade', startedAt: null, fromSceneId: null });
+    expect(r.table.currentRowId).toBeNull();
+  });
+});
+
+describe('switcher edge cases', () => {
+  it('take/cut are no-ops when preview equals program or preview is null', () => {
+    let s = withScenes();
+    const a = s.scenes[0].id;
+    const same = { ...s, previewSceneId: a, programSceneId: a };
+    expect(showReducer(same, { type: 'take', now: 1 })).toBe(same);
+    expect(showReducer(same, { type: 'cut' })).toBe(same);
+    s = { ...s, previewSceneId: null, programSceneId: a };
+    expect(showReducer(s, { type: 'take', now: 1 })).toBe(s);
+  });
+
+  it('take with null program is an instant cut', () => {
+    let s = withScenes();
+    s = { ...s, previewSceneId: s.scenes[0].id, programSceneId: null };
+    s = showReducer(s, { type: 'take', now: 1 });
+    expect(s.programSceneId).toBe(s.scenes[0].id);
+    expect(s.transition.startedAt).toBeNull();
+    expect(s.transition.fromSceneId).toBeNull();
+  });
+
+  it('removeScene of the transition source clears the running transition', () => {
+    let s = withScenes();
+    const [a, b] = s.scenes.map((x) => x.id);
+    s = showReducer({ ...s, previewSceneId: a, programSceneId: b }, { type: 'take', now: 1 });
+    s = showReducer(s, { type: 'removeScene', id: b });
+    expect(s.transition.startedAt).toBeNull();
+    expect(s.transition.fromSceneId).toBeNull();
+  });
+
+  it('setPreview and selectRow ignore unknown ids', () => {
+    let s = showReducer(initialState(), { type: 'addRow' });
+    expect(showReducer(s, { type: 'setPreview', sceneId: 'ghost' })).toBe(s);
+    expect(showReducer(s, { type: 'selectRow', rowId: 'ghost' })).toBe(s);
+  });
+
+  it('nextRow with no current row selects row 0', () => {
+    let s = showReducer(initialState(), { type: 'addRow' });
+    s = showReducer(s, { type: 'addRow' });
+    s = showReducer(s, { type: 'selectRow', rowId: null });
+    s = showReducer(s, { type: 'nextRow' });
+    expect(s.table.currentRowId).toBe(s.table.rows[0].id);
   });
 });

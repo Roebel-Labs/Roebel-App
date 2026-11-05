@@ -74,9 +74,9 @@ const uid = () => crypto.randomUUID();
 
 function swap(s: ShowState, now: number | null): ShowState {
   const incoming = s.previewSceneId;
-  if (incoming === null) return s;
+  if (incoming === null || incoming === s.programSceneId) return s;
   const preset = s.presets.find((p) => p.id === s.transition.presetId);
-  const animated = now !== null && !!preset && preset.kind !== 'cut' && preset.durationMs > 0;
+  const animated = now !== null && s.programSceneId !== null && !!preset && preset.kind !== 'cut' && preset.durationMs > 0;
   return {
     ...s,
     programSceneId: incoming,
@@ -93,6 +93,18 @@ function patchOverlay(s: ShowState, id: string, f: (o: OverlayInstance) => Overl
   return { ...s, overlays: s.overlays.map((o) => (o.id === id ? f(o) : o)) };
 }
 
+function dropScenes(s: ShowState, gone: Set<string>): ShowState {
+  const clear = (id: string | null) => (id !== null && gone.has(id) ? null : id);
+  const hit = s.transition.fromSceneId !== null && gone.has(s.transition.fromSceneId);
+  return {
+    ...s,
+    scenes: s.scenes.filter((sc) => !gone.has(sc.id)),
+    previewSceneId: clear(s.previewSceneId),
+    programSceneId: clear(s.programSceneId),
+    transition: hit ? { ...s.transition, startedAt: null, fromSceneId: null } : s.transition,
+  };
+}
+
 export function showReducer(s: ShowState, a: Action): ShowState {
   switch (a.type) {
     case 'addSource': {
@@ -104,27 +116,14 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       return { ...s, sources: s.sources.map((x) => (x.id === a.id ? { ...x, ...a.patch } : x)) };
     case 'removeSource': {
       const gone = new Set(s.scenes.filter((sc) => sc.sourceIds.includes(a.id)).map((sc) => sc.id));
-      const clear = (id: string | null) => (id !== null && gone.has(id) ? null : id);
-      const hit = s.transition.fromSceneId !== null && gone.has(s.transition.fromSceneId);
-      return {
-        ...s,
-        sources: s.sources.filter((x) => x.id !== a.id),
-        scenes: s.scenes.filter((sc) => !gone.has(sc.id)),
-        previewSceneId: clear(s.previewSceneId),
-        programSceneId: clear(s.programSceneId),
-        transition: hit ? { ...s.transition, startedAt: null, fromSceneId: null } : s.transition,
-      };
+      return { ...dropScenes(s, gone), sources: s.sources.filter((x) => x.id !== a.id) };
     }
     case 'addScene':
       return { ...s, scenes: [...s.scenes, { ...a.scene, id: a.scene.id ?? uid() }] };
     case 'removeScene':
-      return {
-        ...s,
-        scenes: s.scenes.filter((sc) => sc.id !== a.id),
-        previewSceneId: s.previewSceneId === a.id ? null : s.previewSceneId,
-        programSceneId: s.programSceneId === a.id ? null : s.programSceneId,
-      };
+      return dropScenes(s, new Set([a.id]));
     case 'setPreview':
+      if (a.sceneId !== null && !s.scenes.some((sc) => sc.id === a.sceneId)) return s;
       return { ...s, previewSceneId: a.sceneId };
     case 'take':
       if (s.transition.startedAt !== null) return s;
@@ -175,6 +174,7 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       return { ...s, table: { ...s.table, rows, currentRowId } };
     }
     case 'selectRow':
+      if (a.rowId !== null && !s.table.rows.some((r) => r.id === a.rowId)) return s;
       return { ...s, table: { ...s.table, currentRowId: a.rowId } };
     case 'nextRow': {
       const { rows, currentRowId } = s.table;
@@ -241,6 +241,26 @@ function restoreSponsors(v: unknown): ShowState['sponsors'] {
   };
 }
 
+const hasId = (v: unknown): v is Record<string, unknown> & { id: string } => isObj(v) && typeof v.id === 'string';
+
+function restoreAnim(v: unknown): Template['animIn'] {
+  const d: Template['animIn'] = { kind: 'none', durationMs: 0, easing: 'linear' };
+  return isObj(v) && typeof v.kind === 'string' && typeof v.durationMs === 'number' && typeof v.easing === 'string'
+    ? (v as Template['animIn'])
+    : d;
+}
+
+function restoreTemplates(v: unknown): Template[] {
+  return arr<unknown>(v, [])
+    .filter(hasId)
+    .map((t) => ({
+      ...(t as unknown as Template),
+      nodes: arr<unknown>(t.nodes, []).filter(hasId) as unknown as Template['nodes'],
+      animIn: restoreAnim(t.animIn),
+      animOut: restoreAnim(t.animOut),
+    }));
+}
+
 export function restore(json: string | null): ShowState {
   const d = initialState();
   if (!json) return d;
@@ -252,24 +272,40 @@ export function restore(json: string | null): ShowState {
   }
   if (!isObj(raw)) return d;
   const tr = isObj(raw.transition) ? raw.transition : {};
-  const presets = arr<TransitionPreset>(raw.presets, d.presets);
+  const presetsRaw = arr<unknown>(raw.presets, []).filter(hasId) as unknown as TransitionPreset[];
+  const presets = presetsRaw.length > 0 ? presetsRaw : d.presets;
+  const sources = arr<unknown>(raw.sources, []).filter(hasId) as unknown as Source[];
+  const scenes = arr<unknown>(raw.scenes, [])
+    .filter(hasId)
+    .map((sc) => ({
+      ...(sc as unknown as Scene),
+      sourceIds: arr<unknown>(sc.sourceIds, []).filter((x): x is string => typeof x === 'string'),
+    }));
+  const overlays = arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[];
+  const sceneOrNull = (id: string | null) => (id !== null && scenes.some((sc) => sc.id === id) ? id : null);
+  const table = restoreTable(raw.table);
+  if (table.currentRowId !== null && !table.rows.some((r) => r.id === table.currentRowId)) table.currentRowId = null;
+  const presetId = str(tr.presetId, d.transition.presetId);
   return {
     version: 1,
-    sources: arr<Source>(raw.sources, d.sources),
-    scenes: arr<Scene>(raw.scenes, d.scenes),
-    previewSceneId: strOrNull(raw.previewSceneId, null),
-    programSceneId: strOrNull(raw.programSceneId, null),
+    sources,
+    scenes,
+    previewSceneId: sceneOrNull(strOrNull(raw.previewSceneId, null)),
+    programSceneId: sceneOrNull(strOrNull(raw.programSceneId, null)),
     transition: {
-      presetId: str(tr.presetId, d.transition.presetId),
+      presetId: presets.some((p) => p.id === presetId)
+        ? presetId
+        : presets.some((p) => p.id === d.transition.presetId)
+          ? d.transition.presetId
+          : presets[0].id,
       startedAt: null,
-      fromSceneId: strOrNull(tr.fromSceneId, null),
+      fromSceneId: null,
     },
-    presets: presets.length > 0 ? presets : d.presets,
-    overlays: arr<OverlayInstance>(raw.overlays, d.overlays),
-    templates: arr<Template>(raw.templates, d.templates),
-    table: restoreTable(raw.table),
+    presets,
+    overlays,
+    templates: restoreTemplates(raw.templates),
+    table,
     settings: restoreSettings(raw.settings),
     sponsors: restoreSponsors(raw.sponsors),
   };
 }
-

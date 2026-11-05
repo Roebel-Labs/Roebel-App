@@ -4,22 +4,38 @@ import type { ShowState } from './types';
 
 export const STORAGE_KEY = 'roebel-studio-v1';
 
+function readStored(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(json: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, json);
+  } catch {
+    // quota / security errors must never crash the show
+  }
+}
+
 type Ctx = { state: ShowState; dispatch: (a: Action) => void };
 const StoreContext = createContext<Ctx | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(showReducer, null, () => restore(localStorage.getItem(STORAGE_KEY)));
+  const [state, dispatch] = useReducer(showReducer, null, () => restore(readStored()));
   const latest = useRef(state);
   latest.current = state;
 
   // Debounced autosave (500 ms) + flush on unload.
   useEffect(() => {
-    const t = setTimeout(() => localStorage.setItem(STORAGE_KEY, serialize(state)), 500);
+    const t = setTimeout(() => writeStored(serialize(state)), 500);
     return () => clearTimeout(t);
   }, [state]);
 
   useEffect(() => {
-    const flush = () => localStorage.setItem(STORAGE_KEY, serialize(latest.current));
+    const flush = () => writeStored(serialize(latest.current));
     window.addEventListener('beforeunload', flush);
     return () => window.removeEventListener('beforeunload', flush);
   }, []);
