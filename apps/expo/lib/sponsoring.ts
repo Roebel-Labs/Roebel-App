@@ -5,7 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as WebBrowser from 'expo-web-browser';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
-import { postSigned, SPONSORING_SCOPE, type ApiResult, type SigningAccount } from './signed-request';
+import { getApiBaseUrl, postSigned, SPONSORING_SCOPE, type ApiResult, type SigningAccount } from './signed-request';
 import { uploadVideoToStream } from './stream-upload';
 
 export const DANCECUP_SLUG = 'dancecup-2026';
@@ -155,6 +155,28 @@ export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<
   // Spread the picks over the menu instead of four starters in a row.
   const step = Math.max(1, Math.floor(rows.length / limit));
   return rows.filter((_, i) => i % step === 0).slice(0, limit);
+}
+
+let logoColors: Promise<Record<string, string | null>> | null = null;
+
+/**
+ * Background colour of an org logo for the Logo-Spot, precomputed on the website
+ * (apps/web/scripts/sponsoring-logo-colors.ts → /sponsoring/logo-colors.json). Unknown logo,
+ * transparent logo or no network → null (white).
+ */
+export async function fetchLogoColor(logoUrl: string | null): Promise<string | null> {
+  if (!logoUrl) return null;
+  if (!logoColors) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    logoColors = fetch(`${getApiBaseUrl()}/sponsoring/logo-colors.json`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => { logoColors = null; return {}; })
+      .finally(() => clearTimeout(timer));
+  }
+  const map = await logoColors;
+  const c = map[logoUrl];
+  return typeof c === 'string' && /^#[0-9A-F]{6}$/i.test(c) ? c : null;
 }
 
 export const IMAGE_MIMES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };

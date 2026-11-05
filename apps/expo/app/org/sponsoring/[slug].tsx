@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -10,11 +10,12 @@ import { useAccount } from '@/context/AccountContext';
 import { fontFamily } from '@/constants/theme';
 import BreakSpotPreview from '@/components/sponsoring/BreakSpotPreview';
 import {
-  fetchCampaign, fetchDishPhotos, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
+  fetchCampaign, fetchDishPhotos, fetchLogoColor, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
   openSponsoringCheckout, recommendedPackageId, slotsLeft, startCheckout,
   type AdMaterial, type CampaignView, type DishPhoto, type Supporter,
 } from '@/lib/sponsoring';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 
 function countdown(deadlineIso: string, now: number): string {
   const ms = Date.parse(deadlineIso) - now;
@@ -34,6 +35,7 @@ function logoMaterial(url: string | null): AdMaterial {
 export default function SponsoringDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { activeAccount } = useAccount();
@@ -49,6 +51,7 @@ export default function SponsoringDetailScreen() {
   const [view, setView] = useState<CampaignView | null>(null);
   const [supporters, setSupporters] = useState<Supporter[]>([]);
   const [dishes, setDishes] = useState<DishPhoto[]>([]);
+  const [logoColor, setLogoColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [packageId, setPackageId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -64,16 +67,18 @@ export default function SponsoringDetailScreen() {
     const v = await fetchCampaign(slug);
     setView(v);
     if (v) {
-      const [s, d] = await Promise.all([
+      const [s, d, c] = await Promise.all([
         fetchSupporters(v.campaign.id),
         orgId ? fetchDishPhotos(orgId).catch(() => []) : Promise.resolve([] as DishPhoto[]),
+        fetchLogoColor(orgLogo),
       ]);
       setSupporters(s);
       setDishes(d);
+      setLogoColor(c);
       setPackageId((cur) => cur ?? recommendedPackageId(v.packages, d.length > 0));
     }
     setLoading(false);
-  }, [slug, orgId]);
+  }, [slug, orgId, orgLogo]);
   useEffect(() => { load(); }, [load]);
 
   const pkg = view?.packages.find((p) => p.id === packageId) ?? null;
@@ -140,14 +145,6 @@ export default function SponsoringDetailScreen() {
   };
 
   // ── render ────────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
-      </SafeAreaView>
-    );
-  }
-
   const header = (
     <View style={styles.header}>
       <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8} accessibilityLabel="Zurück">
@@ -157,6 +154,24 @@ export default function SponsoringDetailScreen() {
       <View style={styles.backButton} />
     </View>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        {header}
+        <View style={styles.scroll} accessibilityLabel="Wird geladen">
+          <ShimmerSkeleton width="70%" height={28} borderRadius={6} />
+          <View style={styles.skeletonLines}>
+            <ShimmerSkeleton width="100%" height={14} borderRadius={4} />
+            <ShimmerSkeleton width="85%" height={14} borderRadius={4} />
+          </View>
+          <ShimmerSkeleton width="100%" height={Math.round(((screenWidth - 32) * 9) / 16)} borderRadius={12} />
+          <ShimmerSkeleton width="100%" height={168} borderRadius={14} />
+          <ShimmerSkeleton width="100%" height={200} borderRadius={14} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!view) {
     return (
@@ -204,7 +219,7 @@ export default function SponsoringDetailScreen() {
         )}
 
         <View style={styles.previewWrap}>
-          <BreakSpotPreview key={kind} kind={kind} orgName={orgName} logoUrl={orgLogo} dishes={dishes} />
+          <BreakSpotPreview key={kind} kind={kind} orgName={orgName} logoUrl={orgLogo} logoColor={logoColor} dishes={dishes} />
           <Text style={[styles.small, { color: colors.textTertiary }]}>{previewNote}</Text>
         </View>
 
@@ -313,6 +328,7 @@ const styles = StyleSheet.create({
   small: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17 },
   label: { fontFamily: fontFamily.medium, fontSize: 13, marginBottom: 8 },
   previewWrap: { gap: 8 },
+  skeletonLines: { gap: 8 },
   options: { gap: 12 },
   option: { borderWidth: 1.5, borderRadius: 14, padding: 16, gap: 8 },
   optionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },

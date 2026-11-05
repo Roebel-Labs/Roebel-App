@@ -59,3 +59,34 @@ export function bookingNotifyWallets(env: string | undefined): string[] {
 export function formatEuro(cents: number): string {
   return `${(cents / 100).toLocaleString("de-DE", { minimumFractionDigits: cents % 100 ? 2 : 0 })} €`;
 }
+
+/**
+ * Background colour of a logo, read from its border: the most frequent opaque edge colour
+ * (4-bit buckets, then averaged inside the winning bucket). `rgba` is raw RGBA, row-major.
+ * Mostly transparent edges → null (the caller shows the logo on white).
+ */
+export function logoEdgeColor(rgba: Uint8Array, width: number, height: number): string | null {
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  let edge = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (x !== 0 && y !== 0 && x !== width - 1 && y !== height - 1) continue;
+      edge++;
+      const i = (y * width + x) * 4;
+      if (rgba[i + 3] < 128) continue;
+      const key = ((rgba[i] >> 4) << 8) | ((rgba[i + 1] >> 4) << 4) | (rgba[i + 2] >> 4);
+      const b = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+      b.n++; b.r += rgba[i]; b.g += rgba[i + 1]; b.b += rgba[i + 2];
+      buckets.set(key, b);
+    }
+  }
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  let opaque = 0;
+  for (const b of buckets.values()) {
+    opaque += b.n;
+    if (!best || b.n > best.n) best = b;
+  }
+  if (!best || opaque < edge * 0.5) return null;
+  const hex = (v: number) => Math.round(v / best!.n).toString(16).padStart(2, "0");
+  return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`.toUpperCase();
+}

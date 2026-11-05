@@ -44,8 +44,9 @@ export default function SponsoringBanner({ slug }: Props) {
           styles.card,
           { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
           Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0.2 : 0.1, shadowRadius: 12 },
-            android: { elevation: 3 },
+            // Airbnb-style card: a wide, soft, low-opacity shadow instead of a tight dark one.
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: isDark ? 0.3 : 0.08, shadowRadius: 20 },
+            android: { elevation: 8, shadowColor: 'rgba(0,0,0,0.35)' },
           }),
         ]}
       >
@@ -63,10 +64,10 @@ export default function SponsoringBanner({ slug }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginTop: 16 },
-  card: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingVertical: 16, paddingLeft: 16, paddingRight: 12, gap: 8 },
+  card: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingVertical: 14, paddingLeft: 18, paddingRight: 10, gap: 6 },
   textBlock: { flex: 1, gap: 12, alignItems: 'flex-start' },
   title: { fontFamily: fontFamily.heading, fontSize: 17, lineHeight: 21 },
-  cta: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
-  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
-  illustration: { width: 112, height: 87 },
+  cta: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 12 },
+  illustration: { width: 150, height: 116 },
 });
