@@ -15,8 +15,6 @@ const EBML_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 const MAX_STDIN_BACKLOG = 32 * 1024 * 1024;
 // A session that stays live this long resets the backoff attempt counter.
 const STABLE_MS = 20000;
-// After a recording write error, ask the renderer for a fresh header at most this often.
-const RECORDING_RETRY_MS = 5000;
 
 function expandHome(p) {
   if (p === '~') return os.homedir();
@@ -62,9 +60,7 @@ function createOutput(hooks) {
   let stderrTail = '';
   let progressLines = 0;
   let held = null; // short chunk that may be the start of an EBML header
-  let lastHeaderRequest = 0;
   const openedFiles = new Set();
-  let headerRequestTimer = null;
 
   /** @type {import('../src/state/types').OutputStatus} */
   let status = { state: 'idle', since: Date.now(), recordingBytes: 0, restarts: 0 };
@@ -101,28 +97,16 @@ function createOutput(hooks) {
     log(`recording → ${file}`);
   }
 
-  // A failed stream is destroyed. Drop it and ask the renderer for a new
-  // MediaRecorder session, so the next file starts with a Matroska header
-  // and stays playable. recordingError is sticky until the next start().
+  // A failed stream is destroyed: drop it and keep recordingError set
+  // ("Aufnahme unterbrochen"). It must NEVER restart MediaRecorder or ffmpeg:
+  // the live stream outranks the recording. Recording resumes at the next
+  // natural session start (reconnect or next start), when a header arrives
+  // anyway; recordingError clears once a write into a new file succeeds.
   function onRecordingError(err) {
     log(`recording write error: ${err.message}`);
     status.recordingError = `Aufnahme: ${err.message}`;
     recordStream = null;
     hooks.sendStatus({ ...status });
-    requestHeader();
-  }
-
-  function requestHeader() {
-    if (!started || headerRequestTimer) return;
-    const wait = lastHeaderRequest + RECORDING_RETRY_MS - Date.now();
-    const fire = () => {
-      headerRequestTimer = null;
-      if (!started) return;
-      lastHeaderRequest = Date.now();
-      hooks.onNeedHeader();
-    };
-    if (wait <= 0) fire();
-    else headerRequestTimer = setTimeout(fire, wait);
   }
 
   function closeRecording() {
@@ -207,7 +191,6 @@ function createOutput(hooks) {
     started = true;
     held = null;
     attempt = 0;
-    lastHeaderRequest = 0;
     status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0 };
     hooks.sendStatus({ ...status });
     spawnFfmpeg();
@@ -238,20 +221,33 @@ function createOutput(hooks) {
     //    chunks are skipped until the requested new session arrives.
     if (isHeader) openRecording();
     if (recordStream) {
-      recordStream.write(buf);
+      const stream = recordStream;
+      if (status.recordingError) {
+        stream.write(buf, (err) => {
+          if (!err && stream === recordStream && status.recordingError) {
+            log('recording resumed');
+            status.recordingError = undefined;
+            hooks.sendStatus({ ...status });
+          }
+        });
+      } else {
+        stream.write(buf);
+      }
       status.recordingBytes += buf.length;
     }
 
     // 2) Then the encoder.
     if (isHeader && proc && !awaitingHeader) {
-      // A new recorder session while ffmpeg is mid-stream (e.g. after a
-      // recording error): ffmpeg cannot take a second header, so hand the
-      // new session to a fresh process. Not counted as a restart.
+      // A new recorder session while ffmpeg is mid-stream (renderer restarted
+      // its recorder on its own): ffmpeg cannot take a second header, so hand
+      // the new session to a fresh process. Not counted as a restart, but
+      // shown as 'connecting' so the UI does not hide the gap.
       const old = proc;
       proc = null;
       log('new recorder session, restarting encoder');
       old.stdin.end();
       old.kill('SIGTERM');
+      setState('connecting');
       spawnFfmpeg();
     }
     if (!proc || !proc.stdin.writable) return;
@@ -271,8 +267,6 @@ function createOutput(hooks) {
     if (held && recordStream) recordStream.write(held);
     held = null;
     started = false;
-    clearTimeout(headerRequestTimer);
-    headerRequestTimer = null;
     clearTimeout(restartTimer);
     restartTimer = null;
     clearInterval(statusTimer);

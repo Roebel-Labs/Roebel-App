@@ -3,7 +3,10 @@
 // Stand-in for ffmpeg in output.test.ts. Behaviour comes from env:
 //   FAKE_FFMPEG_DUMP     append every stdin byte to this file
 //   FAKE_FFMPEG_EXIT_MS  exit with code 1 after this many ms (default: run until stdin EOF)
+//   FAKE_FFMPEG_PIDS     append this process's pid (one per line) to this file
 const fs = require('node:fs');
+
+if (process.env.FAKE_FFMPEG_PIDS) fs.appendFileSync(process.env.FAKE_FFMPEG_PIDS, `${process.pid}\n`);
 
 const dump = process.env.FAKE_FFMPEG_DUMP;
 const exitMs = Number(process.env.FAKE_FFMPEG_EXIT_MS || 0);

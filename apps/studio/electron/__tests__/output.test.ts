@@ -54,6 +54,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   delete process.env.FAKE_FFMPEG_DUMP;
   delete process.env.FAKE_FFMPEG_EXIT_MS;
+  delete process.env.FAKE_FFMPEG_PIDS;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -122,7 +123,7 @@ describe('createOutput', () => {
     expect(last().restarts).toBe(0);
   });
 
-  it('recovers the recording after a write error via a fresh recorder session', async () => {
+  it('a recording write error never restarts the encoder; recording resumes at the next reconnect', async () => {
     const realCreate = fs.createWriteStream;
     const streams: fs.WriteStream[] = [];
     vi.spyOn(fs, 'createWriteStream').mockImplementation(((...args: Parameters<typeof realCreate>) => {
@@ -130,33 +131,56 @@ describe('createOutput', () => {
       streams.push(s);
       return s;
     }) as typeof realCreate);
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    const pids = () => fs.readFileSync(pidsFile, 'utf8').trim().split('\n').map(Number);
 
     await out.start(cfg());
     out.chunk(header());
+    out.chunk(cluster());
     await waitFor(() => last()?.state === 'live');
+    const dumpBefore = () => fs.readFileSync(dump).length;
+    await waitFor(() => dumpBefore() === 68 + 260);
 
     streams[0].destroy(new Error('ENOSPC: no space left on device'));
-    await waitFor(() => needHeader.mock.calls.length === 1);
+    await waitFor(() => last()?.recordingError !== undefined);
     expect(last().recordingError).toMatch(/ENOSPC/);
 
-    out.chunk(cluster()); // headerless tail of the old session: no new file
-    expect(mkvFiles()).toHaveLength(1);
+    // The live stream is untouched: same ffmpeg process keeps getting data.
+    out.chunk(cluster());
+    await waitFor(() => dumpBefore() === 68 + 2 * 260);
+    await sleep(150);
+    expect(needHeader).not.toHaveBeenCalled();
+    expect(pids()).toHaveLength(1);
+    expect(out.getStatus().restarts).toBe(0);
+    expect(out.getStatus().state).toBe('live');
+    expect(out.getStatus().recordingError).toMatch(/ENOSPC/); // still broken
+    expect(mkvFiles()).toHaveLength(1); // headerless chunk opened no new file
 
-    out.chunk(header()); // renderer restarted MediaRecorder
+    // Natural session start: ffmpeg exits → backoff → respawn + onNeedHeader.
+    process.kill(pids()[0], 'SIGKILL');
+    await waitFor(() => needHeader.mock.calls.length === 1);
+    await waitFor(() => pids().length === 2); // exactly one respawn
+
+    out.chunk(header()); // renderer's new MediaRecorder session
     out.chunk(cluster());
     await waitFor(() => mkvFiles().length === 2);
+    await waitFor(() => out.getStatus().recordingError === undefined);
     await waitFor(() => fs.statSync(out.getStatus().recordingFile).size === 68 + 260);
     const rec2 = fs.readFileSync(out.getStatus().recordingFile);
     expect([...rec2.subarray(0, 4)]).toEqual(MAGIC);
+    await waitFor(() => last()?.state === 'live');
+    expect(out.getStatus().restarts).toBe(1);
+  });
 
-    // ffmpeg was handed to a fresh process starting at the new header
-    await waitFor(() => {
-      const d = fs.readFileSync(dump);
-      return d.indexOf(Buffer.from(MAGIC), 1) !== -1;
-    });
-    await sleep(120); // progress lines arrive → live again
-    expect(last().state).toBe('live');
-    expect(last().recordingError).toMatch(/ENOSPC/); // sticky
-    expect(last().restarts).toBe(0);
+  it("shows 'connecting' while a mid-stream recorder restart hands over to a fresh ffmpeg", async () => {
+    await out.start(cfg());
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    const n = statuses.length;
+    out.chunk(header()); // renderer restarted its recorder on its own
+    expect(statuses.slice(n).map((s) => s.state)).toContain('connecting');
+    await waitFor(() => last()?.state === 'live');
+    expect(out.getStatus().restarts).toBe(0);
   });
 });
