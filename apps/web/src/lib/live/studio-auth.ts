@@ -1,4 +1,4 @@
-// Röbel Studio authenticates to the live-room operator API with a shared token
+// Ortis Studio authenticates to the live-room operator API with a shared token
 // (`Authorization: Studio <LIVE_STUDIO_TOKEN>`), entered once in the studio's Live-Raum panel.
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";

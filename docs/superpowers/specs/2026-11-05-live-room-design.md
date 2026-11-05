@@ -82,9 +82,9 @@ logo bug + "Live in der Röbel App" QR, support alerts, featured chat message, p
 UI German, code English · no wallet addresses on screen · "Unterstützen", never "Spende" · votes are a "Meinungsbild" ·
 Expo: StyleSheet + useTheme · Stripe: direct charges only, never Münzen through Stripe · no secrets in clients.
 
-## Part 2 (2026-11-05 evening): Röbel Studio first, guests, test show
+## Part 2 (2026-11-05 evening): Ortis Studio first, guests, test show
 
-Max: "everything runs fully functional by only using Röbel Studio". OBS + the web console stay as the fallback.
+Max: "everything runs fully functional by only using Röbel Studio" (renamed to **Ortis Studio** the same evening; branch/folder names feat/roebel-studio + apps/studio stay). OBS + the web console stay as the fallback.
 Migration `20261106_live_guests_test_show.sql`: `live_shows.is_test`, `live_shows.guests_enabled`, `live_guest_requests`, show `testlauf`.
 
 **Studio auth:** `/api/live/admin` also accepts `Authorization: Studio <LIVE_STUDIO_TOKEN>` (Vercel env, ≥ 24 chars). The

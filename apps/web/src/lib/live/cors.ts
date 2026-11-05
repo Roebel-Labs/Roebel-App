@@ -1,4 +1,4 @@
-// CORS for the routes Röbel Studio calls from its Electron renderer (origin localhost / file://).
+// CORS for the routes Ortis Studio calls from its Electron renderer (origin localhost / file://).
 // `*` is safe: the studio authenticates with the Authorization header, and browsers never send
 // cookies on a `*` response, so the admin-cookie path stays same-origin only.
 import { NextResponse } from "next/server";

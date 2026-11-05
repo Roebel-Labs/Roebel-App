@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 const OVERLAY_KEYS = ["lower_third", "next_up", "bug", "qr", "poll", "alerts", "reactions"] as const;
 
-// POST (admin dashboard cookie, or `Authorization: Studio <LIVE_STUDIO_TOKEN>` from Röbel Studio) { action, show_id, ... } — see docs/superpowers/specs/2026-11-05-live-room-design.md
+// POST (admin dashboard cookie, or `Authorization: Studio <LIVE_STUDIO_TOKEN>` from Ortis Studio) { action, show_id, ... } — see docs/superpowers/specs/2026-11-05-live-room-design.md
 export async function POST(request: NextRequest) {
   return withCors(await handle(request));
 }
@@ -256,7 +256,7 @@ async function handle(request: NextRequest) {
         } else if (req.status !== "accepted") {
           return jsonFail(409, "BAD_STATE", "Gast ist nicht zugeschaltet.");
         }
-        const token = await livekitToken(lk, { identity: `studio-${id.slice(0, 8)}`, name: "Röbel Studio", room, canPublish: true });
+        const token = await livekitToken(lk, { identity: `studio-${id.slice(0, 8)}`, name: "Ortis Studio", room, canPublish: true });
         return jsonOk({ request_id: id, display_name: req.display_name, room, livekit_url: lk.url, token });
       }
       case "guest_decline":
