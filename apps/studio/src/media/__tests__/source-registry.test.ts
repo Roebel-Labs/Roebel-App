@@ -176,3 +176,48 @@ describe('SourceRegistry', () => {
     reg.dispose();
   });
 });
+
+describe('SourceRegistry external sources', () => {
+  const guest: Source = { id: 'liveroom-guest-1', kind: 'external', label: 'Gast' };
+
+  it('shows the stream handed in via externalMedia, never stops its tracks, and goes lost without it', async () => {
+    const { externalMedia } = await import('../external');
+    const reg = new SourceRegistry({ fps: 30 });
+    const stream = new FakeStream();
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    reg.sync([guest]);
+    expect(videos).toHaveLength(1);
+    expect(videos[0].srcObject).toBe(stream);
+    expect(reg.statusOf(guest.id)).toBe('loading');
+    videos[0].dispatchEvent(new Event('playing'));
+    expect(reg.statusOf(guest.id)).toBe('ok');
+
+    externalMedia.delete(guest.id);
+    expect(reg.lookup(guest.id).status).toBe('lost'); // "Signal verloren"
+    expect(videos[0].srcObject).toBeNull();
+
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    expect(videos[0].srcObject).toBe(stream);
+    videos[0].dispatchEvent(new Event('playing'));
+    expect(reg.statusOf(guest.id)).toBe('ok');
+
+    reg.sync([]);
+    expect(stream.tracks[0].readyState).toBe('live'); // owned by LiveKit, not by the registry
+    externalMedia.delete(guest.id);
+    reg.dispose();
+  });
+
+  it('a guest track ending reads as lost', async () => {
+    const { externalMedia } = await import('../external');
+    const reg = new SourceRegistry({ fps: 30 });
+    const stream = new FakeStream();
+    externalMedia.set(guest.id, stream as unknown as MediaStream);
+    reg.sync([guest]);
+    videos[0].dispatchEvent(new Event('playing'));
+    stream.tracks[0].readyState = 'ended';
+    stream.tracks[0].dispatchEvent(new Event('ended'));
+    expect(reg.statusOf(guest.id)).toBe('lost');
+    externalMedia.delete(guest.id);
+    reg.dispose();
+  });
+});

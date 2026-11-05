@@ -1,6 +1,7 @@
 // Pure helpers for stream destinations: presets for "+ Ziel", validation and the upload estimate.
 
-import type { Destination, OutputTarget } from '../../state/types';
+import type { LiveRoomDestination } from '../../live-room/destinations';
+import type { Destination, OutputTarget, StreamTarget } from '../../state/types';
 
 export type PresetId = 'cloudflare-srt' | 'cloudflare-rtmps' | 'youtube' | 'facebook' | 'custom-rtmp';
 
@@ -77,4 +78,11 @@ export function uploadEstimate(n: number, videoKbps: number, audioKbps: number) 
   const perStream = videoKbps + audioKbps;
   const totalKbps = n * perStream;
   return { perStream, totalKbps, mbit: totalKbps / 1000, warn: n > 1 };
+}
+
+/** A Live-Raum send target → the addDestination action payload. URLs/keys pass through unchanged (already encoded). */
+export function fromLiveRoomDestination(d: LiveRoomDestination): { name: string; target: StreamTarget } {
+  const name = d.label.trim() || 'Röbel App';
+  if (d.kind === 'srt') return { name, target: { kind: 'srt', url: clean(d.url) } };
+  return { name, target: { kind: 'rtmp', url: clean(d.url), key: clean(d.key) } };
 }

@@ -2,7 +2,7 @@ import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
 import { OVERLAY_PORT } from '../overlay/constants';
 import { nextSpot } from '../sponsors/rotation';
-import { STARTER_TEMPLATES, isStarterTemplate, starterTemplates } from '../render/templates';
+import { STARTER_TEMPLATES, STARTER_VERSION, STARTERS_ADDED_IN, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
   Destination,
@@ -13,6 +13,7 @@ import type {
   ShowState,
   Source,
   SponsorItem,
+  StreamTarget,
   Table,
   Template,
   TransitionPreset,
@@ -60,7 +61,12 @@ export type Action =
   | { type: 'setRotationSeconds'; seconds: number }
   | { type: 'startBreak'; now: number; failedIds?: string[] }
   | { type: 'stopBreak'; now: number }
-  | { type: 'nextSpot'; failedIds?: string[] };
+  | { type: 'nextSpot'; failedIds?: string[] }
+  /** A runtime MediaStream source (Live-Raum guest); the stream lives in media/external.ts. Idempotent per id. */
+  | { type: 'addExternalSource'; id: string; label: string }
+  | { type: 'removeExternalSource'; id: string }
+  /** A destination handed over from the Live-Raum: added switched off, the operator turns it on in Einstellungen. */
+  | { type: 'addDestination'; id?: string; name: string; target: StreamTarget };
 
 const STORAGE_PRESETS: TransitionPreset[] = [
   { id: 'preset-cut', name: 'Cut', kind: 'cut', durationMs: 0, easing: 'linear' },
@@ -90,6 +96,7 @@ export function initialState(): ShowState {
   const templates = starterTemplates();
   return {
     version: 1,
+    starterVersion: STARTER_VERSION,
     sources: [],
     scenes: [],
     previewSceneId: null,
@@ -176,8 +183,84 @@ function endBreak(s: ShowState, now: number): ShowState {
   return { ...setBreakOverlays(s, false, now), sponsors: { ...s.sponsors, breakActive: false, currentId: null } };
 }
 
+const externalSceneId = (sourceId: string) => `scene-${sourceId}`;
+const externalChannelId = (sourceId: string) => `ach-${sourceId}`;
+
+/** Removes an external source with every scene showing it and its audio channel(s). */
+function dropExternal(s: ShowState, id: string): ShowState {
+  const gone = new Set(s.scenes.filter((sc) => sc.sourceIds.includes(id)).map((sc) => sc.id));
+  const out = dropScenes(s, gone);
+  return {
+    ...out,
+    sources: out.sources.filter((x) => x.id !== id),
+    audio: { ...out.audio, channels: out.audio.channels.filter((c) => !(c.input.kind === 'external' && c.input.sourceId === id)) },
+  };
+}
+
+/** True while a scene showing `sourceId` is on program (or still fading out of it). */
+function onAir(s: ShowState, sourceId: string): boolean {
+  return s.scenes.some(
+    (sc) => sc.sourceIds.includes(sourceId) && (sc.id === s.programSceneId || sc.id === s.transition.fromSceneId),
+  );
+}
+
+/** Detached external sources disappear as soon as nothing on air shows them any more. */
+function pruneDetached(s: ShowState): ShowState {
+  let out = s;
+  for (const src of s.sources) if (src.kind === 'external' && src.detached && !onAir(out, src.id)) out = dropExternal(out, src.id);
+  return out;
+}
+
+const sameTarget = (a: OutputTarget, b: OutputTarget) => JSON.stringify(a) === JSON.stringify(b);
+
 export function showReducer(s: ShowState, a: Action): ShowState {
+  const next = reduce(s, a);
+  return a.type === 'take' || a.type === 'cut' || a.type === 'transitionDone' ? pruneDetached(next) : next;
+}
+
+function reduce(s: ShowState, a: Action): ShowState {
   switch (a.type) {
+    case 'addExternalSource': {
+      const existing = s.sources.find((x) => x.id === a.id);
+      if (existing) {
+        if (existing.kind !== 'external') return s;
+        const { detached: _d, ...rest } = existing;
+        return { ...s, sources: s.sources.map((x) => (x.id === a.id ? { ...rest, label: a.label } : x)) };
+      }
+      const source: Source = { id: a.id, kind: 'external', label: a.label };
+      const sceneId = externalSceneId(a.id);
+      const scenes = s.scenes.some((sc) => sc.id === sceneId)
+        ? s.scenes
+        : [...s.scenes, { id: sceneId, label: a.label, layout: 'full' as const, sourceIds: [a.id] }];
+      const chId = externalChannelId(a.id);
+      const channels = s.audio.channels.some((c) => c.id === chId)
+        ? s.audio.channels
+        : [
+            ...s.audio.channels,
+            {
+              id: chId,
+              label: a.label,
+              input: { kind: 'external' as const, sourceId: a.id },
+              gainDb: 0,
+              muted: false,
+              delayMs: 0,
+              // A guest is heard only while their picture is on program: accepting the doorbell never opens a hot mic.
+              followsVideoSourceId: a.id,
+            },
+          ];
+      return { ...s, sources: [...s.sources, source], scenes, audio: { ...s.audio, channels } };
+    }
+    case 'removeExternalSource': {
+      const src = s.sources.find((x) => x.id === a.id);
+      if (!src || src.kind !== 'external') return s;
+      if (onAir(s, a.id)) return { ...s, sources: s.sources.map((x) => (x.id === a.id ? { ...x, detached: true } : x)) };
+      return dropExternal(s, a.id);
+    }
+    case 'addDestination': {
+      if (s.settings.destinations.some((d) => sameTarget(d.target, a.target))) return s;
+      const dest: Destination = { id: a.id ?? uid(), name: a.name, enabled: false, target: { ...a.target } };
+      return { ...s, settings: { ...s.settings, destinations: [...s.settings.destinations, dest] } };
+    }
     case 'addSource': {
       const source: Source = { ...a.source, id: a.source.id ?? uid() };
       const scene: Scene = { id: uid(), label: source.label, layout: 'full', sourceIds: [source.id] };
@@ -186,6 +269,8 @@ export function showReducer(s: ShowState, a: Action): ShowState {
     case 'updateSource':
       return { ...s, sources: s.sources.map((x) => (x.id === a.id ? { ...x, ...a.patch } : x)) };
     case 'removeSource': {
+      // An external source takes its audio channel with it (the operator removed the guest's tile).
+      if (s.sources.some((x) => x.id === a.id && x.kind === 'external')) return dropExternal(s, a.id);
       const gone = new Set(s.scenes.filter((sc) => sc.sourceIds.includes(a.id)).map((sc) => sc.id));
       return { ...dropScenes(s, gone), sources: s.sources.filter((x) => x.id !== a.id) };
     }
@@ -546,22 +631,40 @@ export function restore(json: string | null): ShowState {
   const tr = isObj(raw.transition) ? raw.transition : {};
   const presetsRaw = arr<unknown>(raw.presets, []).filter(hasId) as unknown as TransitionPreset[];
   const presets = presetsRaw.length > 0 ? presetsRaw : d.presets;
-  const sources = arr<unknown>(raw.sources, []).filter(hasId) as unknown as Source[];
+  const allSources = arr<unknown>(raw.sources, []).filter(hasId) as unknown as Source[];
+  // External streams (Live-Raum guests) do not survive a restart: drop them with their scenes.
+  const external = new Set(allSources.filter((x) => x.kind === 'external').map((x) => x.id));
+  const sources = allSources.filter((x) => !external.has(x.id));
   const scenes = arr<unknown>(raw.scenes, [])
     .filter(hasId)
     .map((sc) => ({
       ...(sc as unknown as Scene),
       sourceIds: arr<unknown>(sc.sourceIds, []).filter((x): x is string => typeof x === 'string'),
-    }));
+    }))
+    .filter((sc) => !sc.sourceIds.some((id) => external.has(id)));
   // An absent field (state saved before starters existed) gets the starters; an empty array is the operator's choice.
-  const overlays =
+  let overlays =
     raw.overlays === undefined ? d.overlays : (arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[]);
+  let templates = raw.templates === undefined ? d.templates : restoreTemplates(raw.templates);
+  // Starters introduced after this show was saved are added once (by id, never over a user template).
+  const savedVersion = num(raw.starterVersion, 1);
+  for (let v = savedVersion + 1; v <= STARTER_VERSION; v++) {
+    for (const id of STARTERS_ADDED_IN[v] ?? []) {
+      const starter = STARTER_TEMPLATES.find((t) => t.id === id);
+      if (!starter || templates.some((t) => t.id === id)) continue;
+      templates = [...templates, structuredClone(starter)];
+      if (!overlays.some((o) => o.templateId === id || o.id === `ov-${id}`)) {
+        overlays = [...overlays, { id: `ov-${id}`, templateId: id, visible: false, changedAt: 0, fromProgress: 0 }];
+      }
+    }
+  }
   const sceneOrNull = (id: string | null) => (id !== null && scenes.some((sc) => sc.id === id) ? id : null);
   const table = restoreTable(raw.table);
   if (table.currentRowId !== null && !table.rows.some((r) => r.id === table.currentRowId)) table.currentRowId = null;
   const presetId = str(tr.presetId, d.transition.presetId);
   return {
     version: 1,
+    starterVersion: Math.max(STARTER_VERSION, savedVersion),
     sources,
     scenes,
     previewSceneId: sceneOrNull(strOrNull(raw.previewSceneId, null)),
@@ -577,7 +680,7 @@ export function restore(json: string | null): ShowState {
     },
     presets,
     overlays,
-    templates: raw.templates === undefined ? d.templates : restoreTemplates(raw.templates),
+    templates,
     table,
     settings: restoreSettings(raw.settings),
     sponsors: restoreSponsors(raw.sponsors),

@@ -3,6 +3,8 @@
 // explicit requestFrame() after each draw means exactly one encoded frame per
 // tick, independent of rAF (which stops when the window is hidden).
 
+import { safeAvatarUrl } from '../live-room/alerts';
+import { liveRoomChatHighlight, liveRoomDonation } from '../live-room/seams';
 import { renderFrame } from '../render/draw';
 import type { RenderContext, ShowState } from '../state/types';
 import { hiddenHost } from './hidden-host';
@@ -19,8 +21,19 @@ export type ProgramOutput = {
   dispose(): void;
 };
 
-/** Current + next table row, wall clock; the sponsor is the spot of a running Werbeblock; donation is filled in by a later task. */
-export function defaultRenderContext(state: ShowState): RenderContext {
+/** Live-Raum values for the overlays; null when nothing is on air. */
+export function liveRoomContext(): Pick<RenderContext, 'donation' | 'chatHighlight'> {
+  return { donation: liveRoomDonation.get(), chatHighlight: liveRoomChatHighlight.get() };
+}
+
+/**
+ * Current + next table row, wall clock; the sponsor is the spot of a running Werbeblock; donation and
+ * chat highlight come from the Live-Raum (`live` overrides them, e.g. on the OBS page from the projection).
+ */
+export function defaultRenderContext(
+  state: ShowState,
+  live: Pick<RenderContext, 'donation' | 'chatHighlight'> = liveRoomContext(),
+): RenderContext {
   const rows = state.table.rows;
   const i = rows.findIndex((r) => r.id === state.table.currentRowId);
   const sp = state.sponsors.breakActive ? state.sponsors.items.find((x) => x.id === state.sponsors.currentId) : undefined;
@@ -29,7 +42,8 @@ export function defaultRenderContext(state: ShowState): RenderContext {
     next: i >= 0 && i + 1 < rows.length ? rows[i + 1].values : null,
     now: new Date(),
     sponsor: sp ? { name: sp.name, logoUrl: sp.logoUrl ?? '' } : null,
-    donation: null,
+    donation: live.donation,
+    chatHighlight: live.chatHighlight ? { ...live.chatHighlight, avatarUrl: safeAvatarUrl(live.chatHighlight.avatarUrl) } : null,
   };
 }
 

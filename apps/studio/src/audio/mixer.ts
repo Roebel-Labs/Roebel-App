@@ -7,6 +7,7 @@
 // The pure parts (dbToGain, effectiveGain, planDevices, peakDb) are unit-tested; the graph code is kept thin.
 
 import { audioConstraints } from '../media/devices';
+import { externalMedia } from '../media/external';
 import type { SourceRegistry } from '../media/sources';
 import type { AudioChannel, ShowState } from '../state/types';
 
@@ -50,7 +51,17 @@ export function peakDb(buf: Float32Array): number {
   return db < DB_FLOOR ? DB_FLOOR : db;
 }
 
+/** Distinct external (runtime MediaStream) sources the channels listen to. */
+export function planExternal(channels: AudioChannel[]): Set<string> {
+  const out = new Set<string>();
+  for (const c of channels) if (c.input.kind === 'external') out.add(c.input.sourceId);
+  return out;
+}
+
 export type ChannelStatus = 'ok' | 'lost';
+
+/** One external stream's audio as a WebAudio node, rebuilt when its audio track changes. */
+type ExternalInput = { trackId: string; node: MediaStreamAudioSourceNode };
 
 type DeviceInput = {
   stream: MediaStream | null;
@@ -92,6 +103,8 @@ function clipCurve(): Float32Array<ArrayBuffer> {
 export class Mixer {
   private channels = new Map<string, ChannelNodes>();
   private devices = new Map<string, DeviceInput>();
+  private externals = new Map<string, ExternalInput>();
+  private offExternal: () => void;
   private masterGain: GainNode;
   private limiter: DynamicsCompressorNode;
   private ceiling: GainNode;
@@ -137,6 +150,8 @@ export class Mixer {
       .connect(this.dest);
     this.clip.connect(this.monitorGain).connect(ctx.destination);
     navigator.mediaDevices?.addEventListener('devicechange', this.onDeviceChange);
+    // A guest's stream arrived, changed or went away: re-attach with the last synced state.
+    this.offExternal = externalMedia.subscribe(() => this.resync());
   }
 
   /** AudioContext may start 'suspended' until a user gesture. */
@@ -173,6 +188,8 @@ export class Mixer {
     const wanted = planDevices(audio.channels);
     for (const id of [...this.devices.keys()]) if (!wanted.has(id)) this.closeDevice(id);
     for (const id of wanted) if (!this.devices.has(id)) void this.openDevice(id);
+    const ext = planExternal(audio.channels);
+    for (const id of [...this.externals.keys()]) if (!ext.has(id)) this.closeExternal(id);
 
     for (const c of audio.channels) {
       const n = this.channels.get(c.id) ?? this.createChannel(c.id);
@@ -223,10 +240,12 @@ export class Mixer {
   dispose(): void {
     this.disposed = true;
     navigator.mediaDevices?.removeEventListener('devicechange', this.onDeviceChange);
+    this.offExternal();
     if (this.retry) clearInterval(this.retry);
     this.retry = null;
     for (const id of [...this.channels.keys()]) this.removeChannel(id);
     for (const id of [...this.devices.keys()]) this.closeDevice(id);
+    for (const id of [...this.externals.keys()]) this.closeExternal(id);
     for (const n of [this.masterGain, this.limiter, this.ceiling, this.clip, this.masterAnalyser, this.monitorGain]) {
       n.disconnect();
     }
@@ -281,12 +300,19 @@ export class Mixer {
     let next: AudioNode | null = null;
     if (c.input.kind === 'device') {
       next = this.devices.get(c.input.deviceId)?.node ?? null;
+    } else if (c.input.kind === 'external') {
+      next = this.externalNode(c.input.sourceId);
     } else {
       const el = this.latest.media?.lookup(c.input.sourceId).el;
       next = isMediaElement(el) ? this.elementNode(el) : null;
     }
     if (next !== n.src) {
-      n.src?.disconnect(n.delay);
+      // The old input may already be fully disconnected (lost device / closed guest): that throws InvalidAccessError.
+      try {
+        n.src?.disconnect(n.delay);
+      } catch {
+        /* already detached */
+      }
       next?.connect(n.delay);
       n.src = next;
     }
@@ -305,6 +331,34 @@ export class Mixer {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The audio of an external stream. Built from a one-track MediaStream so later changes to the guest's
+   * stream (LiveKit swapping tracks) never silently re-route; a new track id rebuilds the node.
+   * The tracks belong to the stream's owner and are never stopped here.
+   */
+  private externalNode(sourceId: string): MediaStreamAudioSourceNode | null {
+    const stream = externalMedia.get(sourceId);
+    const track = stream?.getAudioTracks().find((t) => t.readyState === 'live') ?? null;
+    const cur = this.externals.get(sourceId);
+    if (cur && track && cur.trackId === track.id) return cur.node;
+    if (cur) this.closeExternal(sourceId);
+    if (!track) return null;
+    try {
+      const node = this.ctx.createMediaStreamSource(new MediaStream([track]));
+      this.externals.set(sourceId, { trackId: track.id, node });
+      return node;
+    } catch {
+      return null;
+    }
+  }
+
+  private closeExternal(sourceId: string): void {
+    const cur = this.externals.get(sourceId);
+    if (!cur) return;
+    this.externals.delete(sourceId);
+    cur.node.disconnect();
   }
 
   private async openDevice(deviceId: string): Promise<void> {

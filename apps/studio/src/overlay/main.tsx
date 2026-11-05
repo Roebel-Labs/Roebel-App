@@ -2,6 +2,7 @@
 import { renderFrame } from '../render/draw';
 import { loadFonts } from '../render/fonts';
 import { defaultRenderContext } from '../media/program';
+import type { OverlayProjection } from './projection';
 import type { ShowState } from '../state/types';
 
 // Always the studio's server (also works when this page is served by the vite dev server).
@@ -9,7 +10,7 @@ const STATE_URL = 'ws://127.0.0.1:7311/state';
 const RECONNECT_MS = 1000;
 const FRAME_MS = 1000 / 30;
 
-let state: ShowState | null = null;
+let state: (ShowState & Partial<Pick<OverlayProjection, 'live'>>) | null = null;
 // Overlays-only never reads media, so the lookup stays empty.
 const noMedia = () => null;
 
@@ -18,7 +19,7 @@ function connect() {
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(String(e.data));
-      if (msg && msg.type === 'state' && msg.state) state = msg.state as ShowState; // projection: overlays, templates, table, sponsors only
+      if (msg && msg.type === 'state' && msg.state) state = msg.state as ShowState; // projection: overlays, templates, table, sponsors, live only
     } catch {
       /* ignore garbage */
     }
@@ -37,7 +38,9 @@ async function main() {
     if (t - last < FRAME_MS - 1) return;
     last = t;
     if (!state) return;
-    renderFrame(ctx, state, noMedia as never, defaultRenderContext(state), Date.now(), { overlaysOnly: true });
+    // Donation + chat highlight come from the studio's projection, not from this page's (empty) live-room stores.
+    const live = { donation: state.live?.donation ?? null, chatHighlight: state.live?.chatHighlight ?? null };
+    renderFrame(ctx, state, noMedia as never, defaultRenderContext(state, live), Date.now(), { overlaysOnly: true });
   };
   requestAnimationFrame(tick);
   connect();

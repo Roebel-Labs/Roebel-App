@@ -247,3 +247,16 @@ describe('maskSecrets', () => {
     expect(maskSecrets('x rtmp://h/live/ab\\|cd y', dests)).not.toContain('cd');
   });
 });
+
+describe('Live-Raum SRT URL (URL-encoded streamid + passphrase)', () => {
+  const url = 'srt://live.cloudflare.com:778?streamid=a%2Fb%20c&passphrase=p%26q%3Dr';
+  const base = { fps: 30, videoKbps: 6000, audioKbps: 160 };
+  it('reaches ffmpeg unchanged as a single destination', () => {
+    const args = buildFfmpegArgs({ ...base, destinations: [{ kind: 'srt', url }] });
+    expect(args[args.length - 1]).toBe(url);
+  });
+  it('is unchanged inside the tee slave list (nothing in it needs tee escaping)', () => {
+    const args = buildFfmpegArgs({ ...base, destinations: [{ kind: 'srt', url }, { kind: 'rtmp', url: 'rtmp://x/live', key: 'k' }] });
+    expect(args[args.length - 1].split('|')[0]).toMatch(new RegExp(`\\]${url.replace(/[?.]/g, '\\$&')}$`));
+  });
+});

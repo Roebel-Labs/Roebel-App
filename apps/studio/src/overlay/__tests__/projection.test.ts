@@ -10,7 +10,7 @@ describe('overlayProjection', () => {
     const json = JSON.stringify(overlayProjection(secret));
     expect(json).not.toContain('SECRET-KEY-123');
     expect(json).not.toContain('SRT-PASS-456');
-    expect(Object.keys(overlayProjection(secret)).sort()).toEqual(['overlays', 'sponsors', 'table', 'templates']);
+    expect(Object.keys(overlayProjection(secret)).sort()).toEqual(['live', 'overlays', 'sponsors', 'table', 'templates']);
   });
 
   it('keeps the same reference when an unrelated part changes, a new one when overlays change', () => {
@@ -19,5 +19,20 @@ describe('overlayProjection', () => {
     expect(overlayProjection(edited)).toBe(a);
     const toggled = showReducer(secret, { type: 'setOverlay', id: secret.overlays[0].id, visible: true, now: 1 });
     expect(overlayProjection(toggled)).not.toBe(a);
+  });
+
+  it('carries the live-room donation and chat highlight, never the studio token or settings', () => {
+    const live = { donation: { name: 'Anna', amount: '10 €', message: 'Toll' }, chatHighlight: { name: 'Lena', body: 'Hi', avatarUrl: '' } };
+    const p = overlayProjection(secret, live);
+    expect(p.live).toEqual(live);
+    expect(JSON.stringify(p)).not.toContain('SECRET-KEY-123');
+    expect(overlayProjection(restore(null)).live).toEqual({ donation: null, chatHighlight: null });
+  });
+
+  it('is memoized on the live values too', () => {
+    const live = { donation: { name: 'Anna', amount: '10 €', message: '' }, chatHighlight: null };
+    const a = overlayProjection(secret, live);
+    expect(overlayProjection(secret, { ...live })).toBe(a); // same parts, new wrapper
+    expect(overlayProjection(secret, { ...live, donation: { ...live.donation } })).not.toBe(a);
   });
 });

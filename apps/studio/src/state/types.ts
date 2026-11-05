@@ -47,13 +47,17 @@ export type Easing = 'linear' | 'easeInOut' | 'easeOut' | 'backOut';
 
 export type Source = {
   id: string;
-  kind: 'camera' | 'video' | 'image' | 'color';
+  /** 'external': a MediaStream handed in at runtime (Live-Raum phone guest). The stream itself is held in
+   * media/external.ts, never here; external sources do not survive a restart. */
+  kind: 'camera' | 'video' | 'image' | 'color' | 'external';
   label: string;
   deviceId?: string;
   url?: string;
   color?: string;
   loop?: boolean;
   audioChannelId?: string;
+  /** External source whose stream went away while its scene was on air: kept (as "Signal verloren") until the operator cuts away. */
+  detached?: boolean;
 };
 
 export type Scene = {
@@ -106,7 +110,7 @@ export type TemplateNode = {
 export type Template = {
   id: string;
   name: string;
-  kind: 'lowerThird' | 'logoBug' | 'clock' | 'nextUp' | 'breakSpot' | 'pause' | 'donation' | 'custom';
+  kind: 'lowerThird' | 'logoBug' | 'clock' | 'nextUp' | 'breakSpot' | 'pause' | 'donation' | 'chatHighlight' | 'custom';
   fullScreen: boolean;
   nodes: TemplateNode[];
   animIn: OverlayAnim;
@@ -119,6 +123,8 @@ export type RenderContext = {
   now: Date;
   sponsor: { name: string; logoUrl: string } | null;
   donation: { name: string; amount: string; message: string } | null;
+  /** The chat message the Live-Raum puts on air ({{chat.name}}, {{chat.body}}, {{chat.avatar}}). */
+  chatHighlight: { name: string; body: string; avatarUrl: string } | null;
 };
 
 export type OverlayInstance = {
@@ -152,7 +158,7 @@ export type SponsorItem = { id: string; name: string; logoUrl: string | null };
 export type AudioChannel = {
   id: string;
   label: string;
-  input: { kind: 'device'; deviceId: string } | { kind: 'source'; sourceId: string };
+  input: { kind: 'device'; deviceId: string } | { kind: 'source'; sourceId: string } | { kind: 'external'; sourceId: string };
   gainDb: number;
   muted: boolean;
   delayMs: number;
@@ -162,6 +168,8 @@ export type AudioChannel = {
 
 export type ShowState = {
   version: 1;
+  /** Which starter set this state has seen; restore() adds starters introduced later exactly once. */
+  starterVersion: number;
   sources: Source[];
   scenes: Scene[];
   previewSceneId: string | null;

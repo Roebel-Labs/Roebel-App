@@ -107,9 +107,9 @@ describe('initialState', () => {
     );
   });
 
-  it('ships the seven starter kinds as deep copies', () => {
+  it('ships the eight starter kinds as deep copies', () => {
     const s = initialState();
-    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'donation']);
+    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'donation', 'chatHighlight']);
     s.templates[0].nodes[0].x = 9999;
     expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
     expect(initialState().templates[0].nodes[0].x).not.toBe(9999);
@@ -269,6 +269,7 @@ describe('serialize / restore', () => {
         overlays: ['x', { id: 'o', templateId: 't', visible: true, changedAt: 1 }],
         templates: [null, { id: 't', name: 'n', kind: 'custom', fullScreen: false, nodes: 'bad', animIn: 7 }],
         presets: [null],
+        starterVersion: 2,
       }),
     );
     expect(r.sources.map((x) => x.id)).toEqual(['s']);
@@ -574,5 +575,157 @@ describe('break and overlay stay in sync', () => {
     s = showReducer(s, { type: 'updateSponsor', id: 'b', patch: { logoUrl: null }, now: 4 });
     expect(s.sponsors.breakActive).toBe(false);
     expect(ov(s).visible).toBe(false);
+  });
+});
+
+describe('external sources (Live-Raum guests)', () => {
+  const add = (s: ShowState, id = 'liveroom-guest-1', label = '📱 Anna') => showReducer(s, { type: 'addExternalSource', id, label });
+
+  it('adds the source, its full scene and a picture-following audio channel', () => {
+    const s = add(initialState());
+    expect(s.sources).toEqual([{ id: 'liveroom-guest-1', kind: 'external', label: '📱 Anna' }]);
+    expect(s.scenes).toEqual([{ id: 'scene-liveroom-guest-1', label: '📱 Anna', layout: 'full', sourceIds: ['liveroom-guest-1'] }]);
+    expect(s.audio.channels).toEqual([
+      {
+        id: 'ach-liveroom-guest-1',
+        label: '📱 Anna',
+        input: { kind: 'external', sourceId: 'liveroom-guest-1' },
+        gainDb: 0,
+        muted: false,
+        delayMs: 0,
+        followsVideoSourceId: 'liveroom-guest-1',
+      },
+    ]);
+  });
+
+  it('registering the same id again never duplicates anything', () => {
+    const s = add(add(initialState()), 'liveroom-guest-1', '📱 Anna B.');
+    expect(s.sources).toHaveLength(1);
+    expect(s.scenes).toHaveLength(1);
+    expect(s.audio.channels).toHaveLength(1);
+    expect(s.sources[0].label).toBe('📱 Anna B.');
+  });
+
+  it('removing an off-air guest drops source, scene and channel', () => {
+    const s = showReducer(add(initialState()), { type: 'removeExternalSource', id: 'liveroom-guest-1' });
+    expect(s.sources).toEqual([]);
+    expect(s.scenes).toEqual([]);
+    expect(s.audio.channels).toEqual([]);
+  });
+
+  it('removing a guest on air keeps the scene (slate) until the operator cuts away', () => {
+    let s = withScenes();
+    s = add(s);
+    s = { ...s, programSceneId: 'scene-liveroom-guest-1', previewSceneId: s.scenes[0].id };
+    s = showReducer(s, { type: 'removeExternalSource', id: 'liveroom-guest-1' });
+    expect(s.sources.find((x) => x.id === 'liveroom-guest-1')?.detached).toBe(true);
+    expect(s.scenes.some((x) => x.id === 'scene-liveroom-guest-1')).toBe(true);
+    // Unrelated actions keep it.
+    s = showReducer(s, { type: 'setMasterDb', db: -3 });
+    expect(s.sources.some((x) => x.id === 'liveroom-guest-1')).toBe(true);
+    // A cut away removes it.
+    s = showReducer(s, { type: 'cut' });
+    expect(s.sources.some((x) => x.id === 'liveroom-guest-1')).toBe(false);
+    expect(s.scenes.some((x) => x.id === 'scene-liveroom-guest-1')).toBe(false);
+    expect(s.audio.channels).toEqual([]);
+    expect(s.previewSceneId).toBeNull();
+  });
+
+  it('an animated take away removes it once the transition is done', () => {
+    let s = withScenes();
+    s = add(s);
+    s = { ...s, programSceneId: 'scene-liveroom-guest-1', previewSceneId: s.scenes[0].id };
+    s = showReducer(s, { type: 'removeExternalSource', id: 'liveroom-guest-1' });
+    s = showReducer(s, { type: 'take', now: 1000 });
+    expect(s.scenes.some((x) => x.id === 'scene-liveroom-guest-1')).toBe(true); // still fading out
+    s = showReducer(s, { type: 'transitionDone' });
+    expect(s.scenes.some((x) => x.id === 'scene-liveroom-guest-1')).toBe(false);
+  });
+
+  it('a guest that comes back while detached is live again', () => {
+    let s = add(initialState());
+    s = { ...s, programSceneId: 'scene-liveroom-guest-1' };
+    s = showReducer(s, { type: 'removeExternalSource', id: 'liveroom-guest-1' });
+    s = add(s);
+    expect(s.sources[0].detached).toBeUndefined();
+    s = showReducer(s, { type: 'cut' });
+    expect(s.sources).toHaveLength(1);
+  });
+
+  it('removing the guest tile by hand also drops its audio channel', () => {
+    const s = showReducer(add(initialState()), { type: 'removeSource', id: 'liveroom-guest-1' });
+    expect(s.sources).toEqual([]);
+    expect(s.audio.channels).toEqual([]);
+  });
+
+  it('restore drops external sources, their scenes and audio channels', () => {
+    let s = withScenes();
+    s = add(s);
+    s = { ...s, programSceneId: 'scene-liveroom-guest-1', previewSceneId: s.scenes[0].id };
+    const r = restore(serialize(s));
+    expect(r.sources.map((x) => x.kind)).toEqual(['camera', 'camera']);
+    expect(r.scenes).toHaveLength(2);
+    expect(r.programSceneId).toBeNull();
+    expect(r.previewSceneId).toBe(s.scenes[0].id);
+    expect(r.audio.channels).toEqual([]);
+  });
+});
+
+describe('starter migration (chat highlight)', () => {
+  const old = () => {
+    const s = initialState();
+    const { starterVersion: _v, ...rest } = s;
+    return {
+      ...rest,
+      templates: [...s.templates.filter((t) => t.id !== 'chat-highlight'), { ...s.templates[0], id: 'custom-1', name: 'Meine' }],
+      overlays: s.overlays.filter((o) => o.templateId !== 'chat-highlight'),
+    };
+  };
+
+  it('a show saved before the chat highlight gets the starter + its overlay once, user templates kept', () => {
+    const r = restore(JSON.stringify(old()));
+    expect(r.starterVersion).toBe(2);
+    expect(r.templates.find((t) => t.id === 'chat-highlight')?.kind).toBe('chatHighlight');
+    expect(r.templates.some((t) => t.id === 'custom-1')).toBe(true);
+    expect(r.overlays.filter((o) => o.id === 'ov-chat-highlight')).toHaveLength(1);
+    expect(r.overlays.find((o) => o.id === 'ov-chat-highlight')).toMatchObject({ templateId: 'chat-highlight', visible: false });
+  });
+
+  it('an operator who removed the chat overlay after the migration does not get it back', () => {
+    const migrated = restore(JSON.stringify(old()));
+    const removed = showReducer(migrated, { type: 'removeOverlay', id: 'ov-chat-highlight' });
+    const r = restore(serialize(removed));
+    expect(r.overlays.some((o) => o.templateId === 'chat-highlight')).toBe(false);
+    expect(r.templates.some((t) => t.id === 'chat-highlight')).toBe(true);
+  });
+
+  it('a fresh show is already on the current starter version', () => {
+    expect(initialState().starterVersion).toBe(2);
+    expect(initialState().overlays.some((o) => o.id === 'ov-chat-highlight')).toBe(true);
+  });
+});
+
+describe('addDestination', () => {
+  it('appends a switched-off destination', () => {
+    const s = showReducer(initialState(), {
+      type: 'addDestination',
+      id: 'd1',
+      name: 'Röbel App (Cloudflare SRT)',
+      target: { kind: 'srt', url: 'srt://live.cloudflare.com:778?streamid=a%2Fb&passphrase=p%26q' },
+    });
+    expect(s.settings.destinations).toEqual([
+      {
+        id: 'd1',
+        name: 'Röbel App (Cloudflare SRT)',
+        enabled: false,
+        target: { kind: 'srt', url: 'srt://live.cloudflare.com:778?streamid=a%2Fb&passphrase=p%26q' },
+      },
+    ]);
+  });
+
+  it('the same target twice is added only once', () => {
+    const a = { type: 'addDestination' as const, name: 'X', target: { kind: 'rtmp' as const, url: 'rtmps://h/live/', key: 'k' } };
+    const s = showReducer(showReducer(initialState(), { ...a, id: '1' }), { ...a, id: '2' });
+    expect(s.settings.destinations).toHaveLength(1);
   });
 });

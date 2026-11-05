@@ -8,6 +8,7 @@ const rc = (over: Partial<RenderContext> = {}): RenderContext => ({
   now: new Date(2026, 10, 7, 14, 5, 9),
   sponsor: { name: 'Bäckerei Schulz', logoUrl: 'https://x/logo.png' },
   donation: { name: 'Anna', amount: '10 €', message: 'Viel Erfolg!' },
+  chatHighlight: { name: 'Lena', body: 'Super Auftritt!', avatarUrl: 'https://x/a.png' },
   ...over,
 });
 
@@ -51,5 +52,12 @@ describe('resolveBindings', () => {
   it('leaves text without bindings untouched', () => {
     expect(resolveBindings(' · Literal · ', rc())).toBe(' · Literal · ');
     expect(resolveBindings("Gleich geht's weiter", rc())).toBe("Gleich geht's weiter");
+  });
+
+  it('resolves chat highlight bindings, and empty without a highlight', () => {
+    expect(resolveBindings('{{chat.name}}: {{chat.body}}', rc())).toBe('Lena: Super Auftritt!');
+    expect(resolveBindings('{{chat.avatar}}', rc())).toBe('https://x/a.png');
+    expect(resolveBindings('{{chat.name}} · {{chat.body}}', rc({ chatHighlight: null }))).toBe('');
+    expect(resolveBindings('{{chat.unknown}}', rc())).toBe('');
   });
 });

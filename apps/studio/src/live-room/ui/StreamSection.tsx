@@ -202,7 +202,7 @@ export function StreamSection() {
                   RTMPS als Ziel übernehmen
                 </button>
               )}
-              {taken && <span className="hint">{taken} ist als Sendeziel eingetragen.</span>}
+              {taken && <span className="hint">{taken}-Ziel übernommen – in Einstellungen einschalten.</span>}
             </div>
           ) : (
             <p className="hint lr-note">

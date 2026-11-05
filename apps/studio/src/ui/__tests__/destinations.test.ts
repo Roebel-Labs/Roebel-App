@@ -59,3 +59,20 @@ describe('destinationPills', () => {
     expect(restarting.map((p) => p.tone)).toEqual(['loading']);
   });
 });
+
+describe('fromLiveRoomDestination', () => {
+  it('maps SRT and RTMPS targets from the Live-Raum without touching the encoded URL', async () => {
+    const { fromLiveRoomDestination } = await import('../settings/destinations');
+    const { srtFullUrl } = await import('../../live-room/destinations');
+    const url = srtFullUrl('srt://live.cloudflare.com:778', 'a/b c', 'p&q=r');
+    expect(url).toBe('srt://live.cloudflare.com:778?streamid=a%2Fb%20c&passphrase=p%26q%3Dr');
+    expect(fromLiveRoomDestination({ kind: 'srt', label: 'Röbel App (Cloudflare SRT)', url })).toEqual({
+      name: 'Röbel App (Cloudflare SRT)',
+      target: { kind: 'srt', url },
+    });
+    expect(fromLiveRoomDestination({ kind: 'rtmp', label: ' ', url: 'rtmps://live.cloudflare.com:443/live/', key: 'k1' })).toEqual({
+      name: 'Röbel App',
+      target: { kind: 'rtmp', url: 'rtmps://live.cloudflare.com:443/live/', key: 'k1' },
+    });
+  });
+});

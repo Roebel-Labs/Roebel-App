@@ -25,6 +25,10 @@ function lookup(key: string, rc: RenderContext): string {
     case 'donation':
       value = field === 'name' || field === 'amount' || field === 'message' ? rc.donation?.[field] : undefined;
       break;
+    case 'chat':
+      value =
+        field === 'name' ? rc.chatHighlight?.name : field === 'body' ? rc.chatHighlight?.body : field === 'avatar' ? rc.chatHighlight?.avatarUrl : undefined;
+      break;
   }
   return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
 }

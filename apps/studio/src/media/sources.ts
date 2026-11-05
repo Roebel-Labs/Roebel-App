@@ -4,6 +4,7 @@
 
 import type { MediaLookup, Source } from '../state/types';
 import { videoConstraints } from './devices';
+import { externalMedia } from './external';
 import { hiddenHost } from './hidden-host';
 
 export type SourceHealth = 'ok' | 'loading' | 'lost';
@@ -47,6 +48,8 @@ type Entry = {
   opening: boolean;
   disposed: boolean;
   off: () => void;
+  /** External sources: detaches the listeners on the current stream's tracks. */
+  extOff: () => void;
 };
 
 type StatusListener = (sourceId: string, status: SourceHealth) => void;
@@ -59,6 +62,8 @@ function keyOf(s: Source): string | null {
       return s.url ? `video:${s.url}` : null;
     case 'image':
       return s.url ? `image:${s.url}` : null;
+    case 'external':
+      return `external:${s.id}`;
     default:
       return null; // 'color' is drawn by the renderer directly
   }
@@ -76,9 +81,14 @@ export class SourceRegistry {
   private entries = new Map<string, Entry>();
   private listeners = new Set<StatusListener>();
   private disposed = false;
+  private offExternal: () => void;
 
   constructor(private readonly opts: { fps: 30 | 50 } = { fps: 30 }) {
     navigator.mediaDevices?.addEventListener('devicechange', this.onDeviceChange);
+    this.offExternal = externalMedia.subscribe((id) => {
+      const e = this.entries.get(id);
+      if (e && !e.disposed && e.source.kind === 'external') this.attachExternal(e);
+    });
   }
 
   readonly lookup: MediaLookup = (sourceId) => {
@@ -129,6 +139,7 @@ export class SourceRegistry {
   dispose(): void {
     this.disposed = true;
     navigator.mediaDevices?.removeEventListener('devicechange', this.onDeviceChange);
+    this.offExternal();
     for (const id of [...this.entries.keys()]) this.release(id);
     this.listeners.clear();
   }
@@ -139,6 +150,7 @@ export class SourceRegistry {
     if (e.disposed) return;
     // A stale 'playing' from an ended stream (Chromium shows a 2×2 placeholder) must not mask a loss.
     if (ev === 'playing' && e.source.kind === 'camera' && !hasLiveVideo(e.stream)) return;
+    if (ev === 'playing' && e.source.kind === 'external' && !hasLiveVideo(externalMedia.get(e.source.id))) return;
     const prev = e.status;
     const next = sourceStatus(prev, ev);
     if (next !== 'loading') this.clearWatchdog(e);
@@ -207,6 +219,7 @@ export class SourceRegistry {
       opening: false,
       disposed: false,
       off: () => {},
+      extOff: () => {},
     };
     this.entries.set(s.id, e);
     if (el instanceof HTMLVideoElement) {
@@ -228,6 +241,7 @@ export class SourceRegistry {
         el.removeEventListener('error', onError);
       };
       if (s.kind === 'camera') void this.openCamera(e);
+      else if (s.kind === 'external') this.attachExternal(e);
       else this.openVideo(e);
     } else {
       el.crossOrigin = 'anonymous';
@@ -250,7 +264,8 @@ export class SourceRegistry {
     this.clearRetry(e);
     this.clearWatchdog(e);
     e.off();
-    stopStream(e.stream); // turns the camera light off, frees the capture buffers
+    e.extOff();
+    stopStream(e.stream); // turns the camera light off, frees the capture buffers (never set for external sources)
     e.stream = null;
     if (e.el instanceof HTMLVideoElement) {
       e.el.pause();
@@ -303,6 +318,42 @@ export class SourceRegistry {
     }
   }
 
+  /**
+   * Points an external source's element at its current stream (from media/external.ts). No stream or no
+   * live video track → 'lost' ("Signal verloren"). The tracks belong to the stream's owner: never stopped here.
+   */
+  private attachExternal(e: Entry) {
+    const video = e.el as HTMLVideoElement;
+    const stream = externalMedia.get(e.source.id);
+    e.extOff();
+    e.extOff = () => {};
+    if (!stream || !hasLiveVideo(stream)) {
+      video.srcObject = null;
+      this.emit(e, 'ended');
+      return;
+    }
+    const offs: Array<() => void> = [];
+    for (const t of stream.getVideoTracks()) {
+      const onEnded = () => this.emit(e, 'ended');
+      const onMute = () => this.emit(e, 'stalled');
+      const onUnmute = () => this.emit(e, 'playing');
+      t.addEventListener('ended', onEnded);
+      t.addEventListener('mute', onMute);
+      t.addEventListener('unmute', onUnmute);
+      offs.push(() => {
+        t.removeEventListener('ended', onEnded);
+        t.removeEventListener('mute', onMute);
+        t.removeEventListener('unmute', onUnmute);
+      });
+    }
+    e.extOff = () => offs.forEach((f) => f());
+    this.emit(e, 'started');
+    // Re-assign even for the same stream: its track set may have changed.
+    video.srcObject = null;
+    video.srcObject = stream;
+    void video.play().catch(() => {});
+  }
+
   private openVideo(e: Entry) {
     const video = e.el as HTMLVideoElement;
     video.loop = e.source.loop !== false;
@@ -323,6 +374,11 @@ export class SourceRegistry {
   /** Called every RETRY_MS while a source is lost. */
   private async recover(e: Entry) {
     if (e.disposed || e.status !== 'lost' || e.opening) return;
+    if (e.source.kind === 'external') {
+      // Comes back when its owner hands in a stream again (externalMedia listener); polling only re-checks.
+      if (hasLiveVideo(externalMedia.get(e.source.id))) this.attachExternal(e);
+      return;
+    }
     if (e.source.kind === 'camera') {
       // Only re-open when the device is enumerated again: avoids a getUserMedia storm.
       if (!(await this.cameraPresent(e.source.deviceId!))) return;

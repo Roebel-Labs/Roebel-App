@@ -137,7 +137,28 @@ export const STARTER_TEMPLATES: Template[] = [
     animIn: { kind: 'scale', durationMs: 450, easing: 'backOut' },
     animOut: fadeOut(300),
   },
+  {
+    // Live-Raum: one chat message on air. Sits above the lower third; the avatar simply stays empty without a URL.
+    id: 'chat-highlight',
+    name: 'Chat-Nachricht',
+    kind: 'chatHighlight',
+    fullScreen: false,
+    nodes: [
+      rect('bg', 120, 676, 880, 120, WHITE, { radius: 4 }),
+      rect('accent', 120, 676, 8, 120, NAVY),
+      { id: 'avatar', type: 'image', x: 152, y: 700, w: 72, h: 72, src: '{{chat.avatar}}', fit: 'cover', delayMs: 60 },
+      text('name', 248, 692, 720, 44, '{{chat.name}}', { ...title, size: 28, color: NAVY, delayMs: 80 }),
+      text('body', 248, 736, 720, 44, '{{chat.body}}', { weight: 400, size: 28, color: '#1F2937', delayMs: 120 }),
+    ],
+    animIn: { kind: 'slide', durationMs: 480, easing: 'easeOut', from: 'left' },
+    animOut: fadeOut(280),
+  },
 ];
+
+/** Bumped whenever a starter is added; restore() adds the new ones to older saved shows exactly once. */
+export const STARTER_VERSION = 2;
+/** Starter ids introduced per starter version (version 1 = the original set). */
+export const STARTERS_ADDED_IN: Record<number, string[]> = { 2: ['chat-highlight'] };
 
 /** Deep copy so state never aliases the module constant. */
 export function starterTemplates(): Template[] {

@@ -46,6 +46,7 @@ const rc: RenderContext = {
   now: new Date(2026, 10, 7, 14, 5),
   sponsor: null,
   donation: null,
+  chatHighlight: null,
 };
 
 const video = { videoWidth: 1920, videoHeight: 1080 } as unknown as CanvasImageSource;

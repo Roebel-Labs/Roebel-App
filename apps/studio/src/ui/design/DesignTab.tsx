@@ -38,6 +38,7 @@ function useContextFor(s: ShowState): RenderContext {
       now: new Date(),
       sponsor: { name: sp?.name ?? 'Bäckerei Schulz', logoUrl: sp?.logoUrl ?? '' },
       donation: { name: 'Familie Krüger', amount: '20 €', message: 'Viel Erfolg!' },
+      chatHighlight: { name: 'Lena', body: 'Was für ein Auftritt!', avatarUrl: '' },
     };
   }, [s.table, s.sponsors]);
 }
@@ -283,6 +284,9 @@ export function DesignTab() {
     '{{donation.name}}',
     '{{donation.amount}}',
     '{{donation.message}}',
+    '{{chat.name}}',
+    '{{chat.body}}',
+    '{{chat.avatar}}',
   ];
 
   const insertBinding = (b: string) => {

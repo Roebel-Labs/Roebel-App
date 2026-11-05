@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dbToGain, effectiveGain, peakDb, planDevices, DB_FLOOR, MAX_DELAY_MS } from '../mixer';
+import { dbToGain, effectiveGain, peakDb, planDevices, planExternal, DB_FLOOR, MAX_DELAY_MS } from '../mixer';
+import { externalMedia } from '../../media/external';
 import type { AudioChannel } from '../../state/types';
 
 const ch = (p: Partial<AudioChannel> = {}): AudioChannel => ({
@@ -42,6 +43,22 @@ describe('planDevices', () => {
       ch({ id: 'd', input: { kind: 'source', sourceId: 's' } }),
     ]);
     expect([...set].sort()).toEqual(['d1', 'd2']);
+  });
+});
+
+describe('planExternal', () => {
+  it('returns the external stream sources the channels need, once each', () => {
+    const set = planExternal([
+      ch({ id: 'a' }),
+      ch({ id: 'b', input: { kind: 'external', sourceId: 'g1' } }),
+      ch({ id: 'c', input: { kind: 'external', sourceId: 'g1' } }),
+      ch({ id: 'd', input: { kind: 'external', sourceId: 'g2' } }),
+      ch({ id: 'e', input: { kind: 'source', sourceId: 's' } }),
+    ]);
+    expect([...set].sort()).toEqual(['g1', 'g2']);
+  });
+  it('does not open external streams as devices', () => {
+    expect([...planDevices([ch({ input: { kind: 'external', sourceId: 'g1' } })])]).toEqual([]);
   });
 });
 
@@ -139,6 +156,49 @@ describe('Mixer graph', () => {
 
     m.sync({ masterDb: 0, channels: [] }, [], { lookup: () => ({ el: null, status: 'lost' }) } as never);
     expect(Object.keys(m.levels())).toEqual(['master']);
+    m.dispose();
+  });
+});
+
+describe('Mixer external inputs', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('feeds a guest MediaStream into its channel, follows track changes, never stops the tracks', () => {
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(), addEventListener() {}, removeEventListener() {} } });
+    vi.stubGlobal(
+      'MediaStream',
+      class {
+        constructor(readonly tracks: unknown[]) {}
+      },
+    );
+    const { ctx } = fakeCtx();
+    const created: unknown[] = [];
+    (ctx as any).createMediaStreamSource = (stream: unknown) => {
+      created.push(stream);
+      return { kind: 'extsrc', out: [], connect(to: unknown) { return to; }, disconnect() {} };
+    };
+    const m = new Mixer(ctx);
+    const t1 = { id: 't1', kind: 'audio', readyState: 'live', stop: vi.fn() };
+    const guest = { getAudioTracks: () => [t1], getVideoTracks: () => [] };
+    externalMedia.set('g1', guest as never);
+    const audio = { masterDb: 0, channels: [ch({ id: 'ach', input: { kind: 'external', sourceId: 'g1' }, followsVideoSourceId: 'g1' })] };
+    const media = { lookup: () => ({ el: null, status: 'lost' }) } as never;
+    m.sync(audio, ['g1'], media);
+    expect(m.statusOf('ach')).toBe('ok');
+    expect(created).toHaveLength(1);
+    m.sync(audio, ['g1'], media);
+    expect(created).toHaveLength(1); // same track: node reused
+
+    const t2 = { id: 't2', kind: 'audio', readyState: 'live', stop: vi.fn() };
+    externalMedia.set('g1', { getAudioTracks: () => [t2], getVideoTracks: () => [] } as never); // re-registered
+    expect(created).toHaveLength(2);
+    expect(m.statusOf('ach')).toBe('ok');
+
+    externalMedia.delete('g1');
+    expect(m.statusOf('ach')).toBe('lost');
+    m.sync({ masterDb: 0, channels: [] }, [], media);
+    expect(t1.stop).not.toHaveBeenCalled();
+    expect(t2.stop).not.toHaveBeenCalled();
     m.dispose();
   });
 });

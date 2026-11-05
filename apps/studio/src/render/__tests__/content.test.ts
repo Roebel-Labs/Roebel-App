@@ -9,6 +9,7 @@ const rc = (over: Partial<RenderContext> = {}): RenderContext => ({
   now: new Date(2026, 10, 7, 19, 5),
   sponsor: null,
   donation: null,
+  chatHighlight: null,
   ...over,
 });
 const byKind = (k: Template['kind']) => starterTemplates().find((t) => t.kind === k)!;

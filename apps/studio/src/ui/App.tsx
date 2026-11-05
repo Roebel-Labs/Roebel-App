@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LiveRoomPanel, LiveRoomRuntime } from '../live-room/LiveRoomPanel';
 import { useShow } from '../state/store';
 import { ConfirmDialog, Dialog } from './Dialog';
 import { errorText, maskedTarget, outputConfig } from './engine';
@@ -12,14 +13,16 @@ import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
 import { flushSponsorLog, useSponsorRuntime } from './show/sponsor-runtime';
 import { TableTab } from './table/TableTab';
+import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
 
-type Tab = 'show' | 'design' | 'table' | 'settings';
+type Tab = 'show' | 'design' | 'table' | 'liveroom' | 'settings';
 const TABS: Array<[Tab, string]> = [
   ['show', 'Show'],
   ['design', 'Design'],
   ['table', 'Tabelle'],
+  ['liveroom', 'Live-Raum'],
   ['settings', 'Einstellungen'],
 ];
 
@@ -325,6 +328,9 @@ function Shell() {
   const [tab, setTab] = useState<Tab>('show');
   useShowRuntime(tab);
   useSponsorRuntime();
+  const { dispatch } = useShow();
+  const { onAir } = useStudio();
+  useLiveRoomStudioSeams(dispatch, onAir);
   return (
     <div className="app">
       <header className="topbar">
@@ -347,10 +353,13 @@ function Shell() {
         {tab === 'show' && <ShowTab />}
         {tab === 'design' && <DesignTab />}
         {tab === 'table' && <TableTab />}
+        {tab === 'liveroom' && <LiveRoomPanel />}
         {tab === 'settings' && <SettingsTab />}
       </main>
       <HealthBar />
       <QuitConfirm />
+      {/* Alerts, guests, on-stage sync and the on-air follow keep running while another tab is open. */}
+      <LiveRoomRuntime />
     </div>
   );
 }
