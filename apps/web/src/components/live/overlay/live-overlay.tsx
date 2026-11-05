@@ -48,6 +48,9 @@ export function LiveOverlay({ slug, mode }: { slug: string; mode: Mode }) {
 /* Real data                                                          */
 /* ------------------------------------------------------------------ */
 
+/** Unterstützen never goes on air (see the stage). Kept as a switch so the alert design is not lost. */
+const SUPPORT_ON_AIR = false;
+
 function RealOverlay({ slug, checker }: { slug: string; checker: boolean }) {
   const { show, items } = useLiveShow({ slug }, { pollMs: 15_000 });
   const showId = show?.id ?? null;
@@ -223,10 +226,11 @@ function OverlayScene({
         </AnimatePresence>
       </div>
 
-      {/* top-center support alert */}
+      {/* top-center support alert: OFF the air by decision (Max, 2026-11-05) — Unterstützen must never be in the
+          stream picture or the recording (dancers watch it later); it lives only as an in-app layer for app viewers. */}
       <div className="absolute left-1/2 top-[56px] -translate-x-1/2">
         <AnimatePresence mode="wait">
-          {overlay.alerts && alert && <SupportAlert key={alert.id} alert={alert} />}
+          {SUPPORT_ON_AIR && overlay.alerts && alert && <SupportAlert key={alert.id} alert={alert} />}
         </AnimatePresence>
       </div>
 

@@ -17,7 +17,7 @@ const FLAGS: { key: FlagKey; label: string; hint: string }[] = [
   { key: "next_up", label: "Als Nächstes", hint: "Chip über der Bauchbinde" },
   { key: "bug", label: "Logo „Live in der Röbel App“", hint: "oben rechts" },
   { key: "qr", label: "QR-Code", hint: "unter dem Logo, führt zur Live-Seite" },
-  { key: "alerts", label: "Unterstützen-Einblendungen", hint: "6 s pro Unterstützung, oben Mitte" },
+  // No "alerts" switch: Unterstützen is never on air (only in the app), Max 2026-11-05.
   { key: "poll", label: "Publikumsliebling", hint: "Meinungsbild Top 5, links" },
   { key: "reactions", label: "Reaktionen", hint: "Emojis am rechten Rand" },
 ];

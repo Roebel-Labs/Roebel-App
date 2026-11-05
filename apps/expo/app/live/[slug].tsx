@@ -27,6 +27,7 @@ import ProgramSheet from '@/components/live/ProgramSheet';
 import SupportSheet, { type SupportDraft } from '@/components/live/SupportSheet';
 import VoteSheet from '@/components/live/VoteSheet';
 import TestPanel from '@/components/live/TestPanel';
+import SupportAlertLayer, { type SupportAlertHandle } from '@/components/live/SupportAlertLayer';
 import LoginDrawer from '@/components/LoginDrawer';
 // Guard only (no LiveKit import): the join route itself is reached via router.push, never imported.
 import { hasLiveKitNative } from '@/lib/live-guest-support';
@@ -115,6 +116,7 @@ export default function LiveRoomScreen() {
 
   const reactionsRef = useRef<FloatingReactionsHandle>(null);
   const inputRef = useRef<TextInput>(null);
+  const supportAlertRef = useRef<SupportAlertHandle>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   // Close the login drawer as soon as the account is there; the room continues where you were.
   useEffect(() => {
@@ -195,6 +197,8 @@ export default function LiveRoomScreen() {
       },
       onChatInsert: (m) => {
         if (m.hidden_at) return;
+        // Unterstützen shows as an in-app layer over the player (never in the stream picture).
+        if (m.kind === 'support') supportAlertRef.current?.push(m);
         freshIds.current.add(m.id);
         setChat((cur) => upsertById(cur, m).slice(-MAX_CHAT));
       },
@@ -484,6 +488,7 @@ export default function LiveRoomScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
       <LivePlayer ref={reactionsRef} show={show} width={width} topInset={insets.top} viewers={viewers} onClose={goBack} />
+      <SupportAlertLayer ref={supportAlertRef} top={insets.top} height={Math.round((width * 9) / 16)} />
 
       <View style={styles.flex}>
         {!keyboardUp ? (
