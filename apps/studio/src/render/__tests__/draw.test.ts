@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { fitText, renderFrame } from '../draw';
+import { describe, expect, it, vi } from 'vitest';
+import { clearTextCaches, fitText, renderFrame } from '../draw';
 import { initialState, showReducer } from '../../state/reducer';
 import type { MediaLookup, RenderContext, ShowState } from '../../state/types';
 
@@ -97,6 +97,31 @@ describe('renderFrame', () => {
     expect(f.calls.some((c) => c.fn === 'set:globalAlpha' && (c.args[0] as number) > 0 && (c.args[0] as number) < 1)).toBe(true);
   });
 
+  it('wipe and slide both bring the new scene in FROM the preset direction', () => {
+    const mid = (presetId: string, direction: 'left' | 'right' | 'up' | 'down') => {
+      let s = base();
+      s = {
+        ...s,
+        presets: s.presets.map((p) => (p.id === presetId ? { ...p, easing: 'linear' as const, direction } : p)),
+        programSceneId: s.scenes[0].id,
+        previewSceneId: s.scenes[2].id,
+        transition: { ...s.transition, presetId },
+      };
+      s = showReducer(s, { type: 'take', now: 1000 });
+      return run(s, 1300).calls; // p = 0.5
+    };
+    // last rect() = the wipe clip (the from-scene camera clip comes first, the colour to-scene has none)
+    const rects = (c: Call[]) => [c.filter((x) => x.fn === 'rect').map((x) => x.args).at(-1)];
+    expect(rects(mid('preset-wipe', 'left'))[0]).toEqual([0, 0, 960, 1080]);
+    expect(rects(mid('preset-wipe', 'right'))[0]).toEqual([960, 0, 960, 1080]);
+    expect(rects(mid('preset-wipe', 'up'))[0]).toEqual([0, 0, 1920, 540]);
+    expect(rects(mid('preset-wipe', 'down'))[0]).toEqual([0, 540, 1920, 540]);
+    const translates = (c: Call[]) => c.filter((x) => x.fn === 'translate').map((x) => x.args);
+    // [from-scene offset, to-scene offset]
+    expect(translates(mid('preset-slide', 'left'))).toEqual([[960, -0], [-960, 0]]);
+    expect(translates(mid('preset-slide', 'right'))).toEqual([[-960, -0], [960, 0]]);
+  });
+
   it('runs every transition kind without throwing', () => {
     for (const presetId of ['preset-wipe', 'preset-slide', 'preset-zoom', 'preset-cut']) {
       let s = base();
@@ -148,6 +173,38 @@ describe('renderFrame', () => {
   it('hidden overlays draw nothing', () => {
     const f = run(base());
     expect(texts(f.calls)).toEqual([]);
+  });
+});
+
+describe('error reporting', () => {
+  it('warns once per distinct error even when two broken overlays alternate', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bad = (id: string) => ({ id, name: id, kind: 'custom' as const, fullScreen: false, nodes: [null] as never, animIn: { kind: 'none' as const, durationMs: 0, easing: 'linear' as const }, animOut: { kind: 'none' as const, durationMs: 0, easing: 'linear' as const } });
+    const s0 = base();
+    const s: ShowState = {
+      ...s0,
+      templates: [bad('bad-a'), bad('bad-b')],
+      overlays: [
+        { id: 'a', templateId: 'bad-a', visible: true, changedAt: 0 },
+        { id: 'b', templateId: 'bad-b', visible: true, changedAt: 0 },
+      ],
+    };
+    for (let i = 0; i < 10; i++) run(s, 10_000 + i);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+});
+
+describe('clearTextCaches', () => {
+  it('forces text to be re-measured (fonts finished loading)', () => {
+    const f = fakeCtx();
+    fitText(f.ctx, 'Neu messen', 'Inter', 600, 33, 500);
+    const n = f.calls.filter((c) => c.fn === 'measureText').length;
+    fitText(f.ctx, 'Neu messen', 'Inter', 600, 33, 500);
+    expect(f.calls.filter((c) => c.fn === 'measureText').length).toBe(n); // cached
+    clearTextCaches();
+    fitText(f.ctx, 'Neu messen', 'Inter', 600, 33, 500);
+    expect(f.calls.filter((c) => c.fn === 'measureText').length).toBeGreaterThan(n);
   });
 });
 

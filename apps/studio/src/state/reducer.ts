@@ -1,3 +1,4 @@
+import { overlayProgress } from '../render/anim';
 import { starterTemplates } from '../render/templates';
 import type {
   OverlayInstance,
@@ -56,7 +57,8 @@ export function defaultSettings(): Settings {
 }
 
 function starterOverlays(templates: Template[]): OverlayInstance[] {
-  return templates.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0 }));
+  // fromProgress 0 = settled hidden (changedAt 0 must not read as "fading out right now").
+  return templates.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0, fromProgress: 0 }));
 }
 
 export function initialState(): ShowState {
@@ -98,6 +100,16 @@ function swap(s: ShowState, now: number | null): ShowState {
 
 function patchOverlay(s: ShowState, id: string, f: (o: OverlayInstance) => OverlayInstance): ShowState {
   return { ...s, overlays: s.overlays.map((o) => (o.id === id ? f(o) : o)) };
+}
+
+/** Sets visibility, recording the progress at `now` so the next animation continues from there. */
+function setVisible(s: ShowState, o: OverlayInstance, visible: boolean, now: number): OverlayInstance {
+  const t = s.templates.find((x) => x.id === o.templateId);
+  const anim = t ? (o.visible ? t.animIn : t.animOut) : undefined;
+  const next: OverlayInstance = { ...o, visible, changedAt: now };
+  if (anim) next.fromProgress = overlayProgress(o, anim, now);
+  else delete next.fromProgress;
+  return next;
 }
 
 function dropScenes(s: ShowState, gone: Set<string>): ShowState {
@@ -150,13 +162,13 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       };
     }
     case 'toggleOverlay':
-      return patchOverlay(s, a.id, (o) => ({ ...o, visible: !o.visible, changedAt: a.now }));
+      return patchOverlay(s, a.id, (o) => setVisible(s, o, !o.visible, a.now));
     case 'setOverlay':
-      return patchOverlay(s, a.id, (o) => ({ ...o, visible: a.visible, changedAt: a.now }));
+      return patchOverlay(s, a.id, (o) => setVisible(s, o, a.visible, a.now));
     case 'addOverlay': {
       const id = a.id ?? uid();
       if (!s.templates.some((t) => t.id === a.templateId) || s.overlays.some((o) => o.id === id)) return s;
-      return { ...s, overlays: [...s.overlays, { id, templateId: a.templateId, visible: false, changedAt: 0 }] };
+      return { ...s, overlays: [...s.overlays, { id, templateId: a.templateId, visible: false, changedAt: 0, fromProgress: 0 }] };
     }
     case 'removeOverlay':
       return { ...s, overlays: s.overlays.filter((o) => o.id !== a.id) };

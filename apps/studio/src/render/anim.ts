@@ -31,8 +31,11 @@ export function ease(e: Easing, t: number): number {
 export function overlayProgress(o: OverlayInstance, anim: OverlayAnim, nowMs: number, delayMs = 0): number {
   const target = o.visible ? 1 : 0;
   if (anim.kind === 'none' || !(anim.durationMs > 0)) return target;
-  const p = clamp01((nowMs - o.changedAt - delayMs) / anim.durationMs);
-  return o.visible ? p : 1 - p;
+  // Start where the previous animation was at the toggle (no pop on a quick double-toggle);
+  // the rate stays one full sweep per durationMs.
+  const start = typeof o.fromProgress === 'number' && Number.isFinite(o.fromProgress) ? clamp01(o.fromProgress) : 1 - target;
+  const d = clamp01((nowMs - o.changedAt - delayMs) / anim.durationMs);
+  return o.visible ? clamp01(start + d) : clamp01(start - d);
 }
 
 /** Linear scene-transition progress; `null` start (no transition running) means 1. */

@@ -111,6 +111,8 @@ export type OverlayInstance = {
   templateId: string;
   visible: boolean;
   changedAt: number;
+  /** Overlay progress (0…1) at `changedAt`; the new animation continues from here instead of popping. */
+  fromProgress?: number;
 };
 
 export type TableRow = { id: string; values: Record<string, string> };

@@ -36,13 +36,15 @@ const IMAGE_RETRY_MS = 30_000;
 
 const clamp01 = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t);
 
-let lastError = '';
+// Each distinct error is warned once (a broken template would otherwise log every frame for hours).
+const seenErrors = new Set<string>();
+const SEEN_ERRORS_MAX = 50;
 function report(where: string, e: unknown) {
   const msg = `${where}: ${e instanceof Error ? e.message : String(e)}`;
-  if (msg !== lastError) {
-    lastError = msg;
-    console.warn('[render]', msg);
-  }
+  if (seenErrors.has(msg)) return;
+  if (seenErrors.size >= SEEN_ERRORS_MAX) seenErrors.delete(seenErrors.values().next().value as string);
+  seenErrors.add(msg);
+  console.warn('[render]', msg);
 }
 
 /** Runs `fn` between save/restore; a throw is logged (deduplicated) and never escapes. */
@@ -123,17 +125,17 @@ function drawTransition(
       });
       return;
     case 'wipe': {
-      // The revealing edge moves in `direction`: 'left' reveals the new scene from the right edge.
+      // `direction` = where the new scene comes FROM (same as slide): 'left' reveals left→right.
       drawScene(ctx, state, from, media);
       const k = clamp01(e);
       const clip: Rect =
         dir === 'left'
-          ? { x: W * (1 - k), y: 0, w: W * k, h: H }
+          ? { x: 0, y: 0, w: W * k, h: H }
           : dir === 'right'
-            ? { x: 0, y: 0, w: W * k, h: H }
+            ? { x: W * (1 - k), y: 0, w: W * k, h: H }
             : dir === 'up'
-              ? { x: 0, y: H * (1 - k), w: W, h: H * k }
-              : { x: 0, y: 0, w: W, h: H * k };
+              ? { x: 0, y: 0, w: W, h: H * k }
+              : { x: 0, y: H * (1 - k), w: W, h: H * k };
       guarded(ctx, 'wipe', () => {
         ctx.beginPath();
         ctx.rect(clip.x, clip.y, clip.w, clip.h);
@@ -143,7 +145,7 @@ function drawTransition(
       return;
     }
     case 'slide': {
-      // The new scene pushes in from `direction`: 'left' enters from the left edge and pushes the old one right.
+      // `direction` = where the new scene comes FROM: 'left' enters from the left edge and pushes the old one right.
       const sx = dir === 'left' ? -1 : dir === 'right' ? 1 : 0;
       const sy = dir === 'up' ? -1 : dir === 'down' ? 1 : 0;
       guarded(ctx, 'slide-from', () => {
@@ -413,6 +415,12 @@ type FittedText = { text: string; font: string; size: number };
 const fitCache = new Map<string, FittedText>();
 const capCache = new Map<string, number>();
 const CACHE_MAX = 512;
+
+/** Drops cached text measurements (call after fonts finish loading — fallback metrics differ). */
+export function clearTextCaches() {
+  fitCache.clear();
+  capCache.clear();
+}
 
 function remember<K, V>(m: Map<K, V>, k: K, v: V): V {
   if (m.size >= CACHE_MAX) m.clear();

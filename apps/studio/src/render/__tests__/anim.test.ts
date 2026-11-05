@@ -39,6 +39,18 @@ describe('overlayProgress', () => {
     expect(overlayProgress(ov(false, 1000), fade, 1400)).toBe(0);
     expect(overlayProgress(ov(false, 0), fade, 1_000_000)).toBe(0);
   });
+  it('a hide mid-fade-in continues from the current progress (no pop)', () => {
+    // shown at t=0, hidden at t=200 with fade 400 → the reducer records fromProgress 0.5
+    const o: OverlayInstance = { ...ov(false, 200), fromProgress: 0.5 };
+    expect(overlayProgress(o, fade, 200)).toBeCloseTo(0.5, 10);
+    expect(overlayProgress(o, fade, 300)).toBeCloseTo(0.25, 10);
+    expect(overlayProgress(o, fade, 400)).toBe(0);
+    // re-show from 0.25 rises from there
+    const back: OverlayInstance = { ...ov(true, 300), fromProgress: 0.25 };
+    expect(overlayProgress(back, fade, 300)).toBeCloseTo(0.25, 10);
+    expect(overlayProgress(back, fade, 600)).toBe(1);
+  });
+
   it('none / zero duration snaps', () => {
     const none: OverlayAnim = { kind: 'none', durationMs: 400, easing: 'linear' };
     expect(overlayProgress(ov(true, 1000), none, 1000)).toBe(1);

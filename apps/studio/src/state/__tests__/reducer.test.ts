@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { initialState, restore, serialize, showReducer } from '../reducer';
 import type { ShowState } from '../types';
 import { STARTER_TEMPLATES } from '../../render/templates';
+import { overlayProgress } from '../../render/anim';
 
 function withScenes(): ShowState {
   let s = initialState();
@@ -88,6 +89,7 @@ describe('showReducer', () => {
     s = { ...s, overlays: [{ id: 'o1', templateId: 't', visible: false, changedAt: 0 }] };
     s = showReducer(s, { type: 'toggleOverlay', id: 'o1', now: 7 });
     expect(s.overlays[0]).toMatchObject({ visible: true, changedAt: 7 });
+    expect(s.overlays[0].fromProgress).toBeUndefined(); // unknown template → plain restart
     s = showReducer(s, { type: 'setOverlay', id: 'o1', visible: false, now: 9 });
     expect(s.overlays[0]).toMatchObject({ visible: false, changedAt: 9 });
   });
@@ -101,7 +103,7 @@ describe('initialState', () => {
     expect(s.transition.presetId).toBe('preset-fade');
     expect(s.templates).toEqual(STARTER_TEMPLATES);
     expect(s.overlays).toEqual(
-      STARTER_TEMPLATES.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0 })),
+      STARTER_TEMPLATES.map((t) => ({ id: `ov-${t.id}`, templateId: t.id, visible: false, changedAt: 0, fromProgress: 0 })),
     );
   });
 
@@ -114,12 +116,37 @@ describe('initialState', () => {
   });
 });
 
+describe('overlay re-toggle', () => {
+  it('show at 0, hide at 200 (fade 400) records fromProgress 0.5 and fades out from there', () => {
+    let s = initialState();
+    const id = 'ov-clock'; // clock: fade 400 in
+    s = showReducer(s, { type: 'setOverlay', id, visible: true, now: 0 });
+    s = showReducer(s, { type: 'setOverlay', id, visible: false, now: 200 });
+    const o = s.overlays.find((x) => x.id === id)!;
+    expect(o.fromProgress).toBeCloseTo(0.5, 10);
+    const t = s.templates.find((x) => x.id === o.templateId)!;
+    expect(overlayProgress(o, t.animOut, 200)).toBeCloseTo(0.5, 10);
+    const later = overlayProgress(o, t.animOut, 300);
+    expect(later).toBeLessThan(0.5);
+    expect(overlayProgress(o, t.animOut, 400)).toBe(0);
+  });
+
+  it('setOverlay to the current visibility does not restart the animation', () => {
+    let s = initialState();
+    s = showReducer(s, { type: 'setOverlay', id: 'ov-clock', visible: true, now: 0 });
+    s = showReducer(s, { type: 'setOverlay', id: 'ov-clock', visible: true, now: 5000 });
+    const o = s.overlays.find((x) => x.id === 'ov-clock')!;
+    expect(o.fromProgress).toBe(1);
+    expect(overlayProgress(o, s.templates.find((t) => t.id === 'clock')!.animIn, 5000)).toBe(1);
+  });
+});
+
 describe('addOverlay / removeOverlay', () => {
   it('adds a hidden instance of an existing template', () => {
     const s0 = initialState();
     const t = s0.templates[0].id;
     let s = showReducer(s0, { type: 'addOverlay', templateId: t, id: 'mine' });
-    expect(s.overlays.at(-1)).toEqual({ id: 'mine', templateId: t, visible: false, changedAt: 0 });
+    expect(s.overlays.at(-1)).toEqual({ id: 'mine', templateId: t, visible: false, changedAt: 0, fromProgress: 0 });
     s = showReducer(s, { type: 'addOverlay', templateId: t });
     expect(s.overlays).toHaveLength(s0.overlays.length + 2);
     expect(typeof s.overlays.at(-1)!.id).toBe('string');
