@@ -8,6 +8,7 @@ export const SUPABASE_ANON_KEY =
 export const API_BASE = 'https://www.roebel.app';
 
 /** Own persistence; never part of ShowState (which is autosaved and broadcast to the overlay page). */
+// Legacy name from before the rename to Ortis Studio; kept unchanged so saved shows keep loading.
 export const LIVE_ROOM_STORAGE_KEY = 'roebel-studio-liveroom-v1';
 
 /** Chat columns anon may read (`*` fails: wallet is not readable). */

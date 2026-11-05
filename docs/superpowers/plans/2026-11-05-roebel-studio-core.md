@@ -33,7 +33,7 @@ Their hooks are left as typed placeholders only where noted.
   % CPU on the M3. The local recording keeps the untouched mezzanine stream.
 - **Design tab = form editing** (pick template → edit text, colors, image per node, live preview) and no drag
   canvas. The spec marks "Design canvas beyond simple text/color edits" as cut-first.
-- **No packaging.** For 7 Nov the studio runs from the repo (`pnpm --filter @roebel/studio start`). An
+- **No packaging.** For 7 Nov the studio runs from the repo (`pnpm --filter @ortis/studio start`). An
   electron-builder `.app` comes later.
 - **Cut for 7 Nov:** sound-effects board, countdown component, typewriter text animation (all nice-to-have in §2).
 - **Donation alerts / chat highlights:** the overlay types exist and can be fired manually. The Supabase feed
@@ -131,7 +131,7 @@ The riskiest part comes first. At the end of this task a test-pattern canvas str
   - `{kind:'none'}` → throws `'no_target'`.
   - `parseProgress('frame= 300 fps= 30 q=-0.0 size= 2048kB time=00:00:10.00 bitrate=6012.3kbits/s dup=0 drop=2 speed=1.00x')` → `{ fps: 30, kbps: 6012.3, speed: 1, dropped: 2 }`; `parseProgress('Input #0, matroska')` → `null`.
 - [ ] **Step 4: Write failing test** `restart-policy.test.ts`: `nextRestartDelay(0) === 1000`, `(1) === 2000`, `(3) === 8000`, `(10) === 10000` (cap).
-- [ ] **Step 5: Run** `pnpm --filter @roebel/studio test`. Expected: FAIL (modules missing).
+- [ ] **Step 5: Run** `pnpm --filter @ortis/studio test`. Expected: FAIL (modules missing).
 - [ ] **Step 6: Implement** `ffmpeg-args.cjs` (CommonJS, also importable from vitest) and `output.cjs`. ffmpeg input is `-fflags +genpts -f matroska -i pipe:0`, add `-flush_packets 1`. Recording: main appends every chunk to `<recordDir>/roebel-studio-YYYY-MM-DD_HH-mm-ss.mkv` (a new file per recorder session) **before** writing to ffmpeg stdin, so an ffmpeg crash never loses recording. On ffmpeg exit while `started`: state `reconnecting`, call `onNeedHeader` → renderer restarts the MediaRecorder (fresh Matroska header) after `nextRestartDelay(restarts)`. Ignore `EPIPE` on stdin. Status pushed to the renderer at 1 Hz.
 - [ ] **Step 7: Implement** `startRecorder`: `MediaRecorder(stream, { mimeType: 'video/x-matroska;codecs=avc1,opus', videoBitsPerSecond: videoKbps*2*1000, audioBitsPerSecond: 192000 })`, `start(250)`; fall back to `video/webm;codecs=h264,opus` if unsupported; send each `dataavailable` blob as ArrayBuffer to `window.studio.output.chunk`.
 - [ ] **Step 8: Run tests.** Expected: PASS.

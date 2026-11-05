@@ -1,4 +1,4 @@
-// "Live-Raum" tab: connects Röbel Studio to the Röbel App live room (docs/superpowers/specs/2026-11-05-live-room-design.md).
+// "Live-Raum" tab: connects Ortis Studio to the Röbel App live room (docs/superpowers/specs/2026-11-05-live-room-design.md).
 
 import { useEffect, useRef, useState } from 'react';
 import { useShow } from '../state/store';

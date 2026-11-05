@@ -76,13 +76,17 @@ const STORAGE_PRESETS: TransitionPreset[] = [
   { id: 'preset-zoom', name: 'Zoom', kind: 'zoom', durationMs: 600, easing: 'easeOut' },
 ];
 
+/** Product rename (Röbel Studio -> Ortis Studio): a stored recordDir equal to the old default moves to the new one. */
+export const DEFAULT_RECORD_DIR = '~/Movies/Ortis Studio';
+const LEGACY_RECORD_DIR = '~/Movies/Röbel Studio';
+
 export function defaultSettings(): Settings {
   return {
     destinations: [],
     fps: 30,
     videoKbps: 6000,
     audioKbps: 160,
-    recordDir: '~/Movies/Röbel Studio',
+    recordDir: DEFAULT_RECORD_DIR,
     ffmpegPath: '/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg',
   };
 }
@@ -542,7 +546,7 @@ function restoreSettings(v: unknown): Settings {
     fps: v.fps === 50 ? 50 : v.fps === 30 ? 30 : d.fps,
     videoKbps: num(v.videoKbps, d.videoKbps),
     audioKbps: num(v.audioKbps, d.audioKbps),
-    recordDir: str(v.recordDir, d.recordDir),
+    recordDir: ((r) => (r === LEGACY_RECORD_DIR ? DEFAULT_RECORD_DIR : r))(str(v.recordDir, d.recordDir)),
     ffmpegPath: str(v.ffmpegPath, d.ffmpegPath),
   };
 }

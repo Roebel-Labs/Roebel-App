@@ -169,6 +169,13 @@ describe('addOverlay / removeOverlay', () => {
 });
 
 describe('serialize / restore', () => {
+  it('moves the old default recording folder to the new one, keeps custom paths', () => {
+    const base = initialState();
+    const withDir = (d: string) =>
+      restore(JSON.stringify({ ...JSON.parse(serialize(base)), settings: { ...base.settings, recordDir: d } })).settings.recordDir;
+    expect(withDir('~/Movies/Röbel Studio')).toBe('~/Movies/Ortis Studio');
+    expect(withDir('/Volumes/Show/Aufnahmen')).toBe('/Volumes/Show/Aufnahmen');
+  });
   it('garbage and null give initialState', () => {
     expect(restore('garbage')).toEqual(initialState());
     expect(restore(null)).toEqual(initialState());

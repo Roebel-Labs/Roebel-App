@@ -1,4 +1,4 @@
-# Röbel Studio – Betriebshandbuch
+# Ortis Studio – Betriebshandbuch
 
 Für den Operator (Max). Kurz, zum Abhaken. Stand: 2026-11-05.
 
@@ -112,7 +112,7 @@ Unterstützungen erscheinen **nie** im Bild (weder Stream noch Aufnahme), nur im
 
 ## 8. Aufnahmen und Werbe-Protokoll
 
-- Ordner: Einstellungen → Aufnahme (Standard `~/Movies/Röbel Studio`).
+- Ordner: Einstellungen → Aufnahme (Standard `~/Movies/Ortis Studio`).
 - **Eine .mkv pro Sitzung**; nach jedem Neuverbinden beginnt eine neue Datei.
 - In MP4 umwandeln (verlustfrei, Sekunden):
   ```bash

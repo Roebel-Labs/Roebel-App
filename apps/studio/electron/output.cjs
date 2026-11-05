@@ -40,7 +40,7 @@ function pad(n) {
 
 function timestampName(d = new Date()) {
   return (
-    `roebel-studio-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `ortis-studio-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
     `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
   );
 }

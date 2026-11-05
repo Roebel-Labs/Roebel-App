@@ -312,7 +312,7 @@ function QuitConfirm() {
   return (
     <ConfirmDialog
       title="Sendung läuft – wirklich beenden?"
-      body={<p>Röbel Studio schließt. Der Livestream endet für alle Zuschauer, die Aufnahme wird vorher sauber abgeschlossen.</p>}
+      body={<p>Ortis Studio schließt. Der Livestream endet für alle Zuschauer, die Aufnahme wird vorher sauber abgeschlossen.</p>}
       confirmLabel="Sendung beenden und schließen"
       danger
       onConfirm={() => {
@@ -334,7 +334,7 @@ function Shell() {
   return (
     <div className="app">
       <header className="topbar">
-        <span className="wordmark">Röbel Studio</span>
+        <span className="wordmark">Ortis Studio</span>
         <nav className="tabs" role="tablist">
           {TABS.map(([id, label]) => (
             <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>

@@ -1,11 +1,25 @@
 'use strict';
-// Electron main process for Röbel Studio.
+// Electron main process for Ortis Studio.
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
+const { resolveUserDataDir } = require('./userdata.cjs');
 const { checkFfmpeg, createOutput, testDestination } = require('./output.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
+
+// Product name + data folder. Electron derives userData from the app name; the studio used to be
+// '@roebel/studio'. Existing installs keep their saved show (localStorage) by staying on the old folder.
+app.setName('Ortis Studio');
+{
+  const dir = resolveUserDataDir({ appData: app.getPath('appData'), // 'in use' = holds a saved profile (a stray empty folder must not hide the legacy data)
+    exists: (p) => fs.existsSync(path.join(p, 'Local Storage')) });
+  if (dir !== path.join(app.getPath('appData'), 'Ortis Studio')) {
+    app.setPath('userData', dir);
+    console.log(`${new Date().toISOString()} [main] using legacy data folder ${dir}`);
+  }
+}
 
 // Program audio (silent track, later the mixer) must run without a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -183,7 +197,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1600,
     height: 1000,
-    title: 'Röbel Studio',
+    title: 'Ortis Studio',
     backgroundColor: '#17191C',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -216,8 +230,8 @@ function createWindow() {
       type: 'error',
       message: 'Die Oberfläche ist wiederholt abgestürzt.',
       detail: session_
-        ? 'Die Sendung läuft weiter, das Bild bleibt aber stehen. Röbel Studio beenden (⌘Q) schließt die Aufnahme ab.'
-        : 'Bitte Röbel Studio neu starten.',
+        ? 'Die Sendung läuft weiter, das Bild bleibt aber stehen. Ortis Studio beenden (⌘Q) schließt die Aufnahme ab.'
+        : 'Bitte Ortis Studio neu starten.',
     });
   });
   // A frozen page cannot answer the close confirmation: ask natively instead.

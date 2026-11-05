@@ -3,6 +3,7 @@ import { restore, serialize, showReducer, type Action } from './reducer';
 import { startOverlayPublisher } from '../overlay/publisher';
 import type { ShowState } from './types';
 
+// Legacy name from before the rename to Ortis Studio; kept unchanged so saved shows keep loading.
 export const STORAGE_KEY = 'roebel-studio-v1';
 
 function readStored(): string | null {
