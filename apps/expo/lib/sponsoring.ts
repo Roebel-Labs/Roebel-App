@@ -25,7 +25,7 @@ export interface SponsoringPackage {
 }
 export interface SponsoringBooking {
   id: string; package_id: string; status: BookingStatus; media_kind: MediaKind | null; media_url: string | null;
-  creative_id: string | null; amount_cents: number; review_note: string | null; created_at: string; paid_at: string | null;
+  creative_id: string | null; amount_cents: number; review_note: string | null; note?: string | null; created_at: string; paid_at: string | null;
 }
 export interface SponsoringCreative { id: string; image_url: string; variant: number; source: 'ai_logo' | 'ai_wordmark' | 'upload' }
 export interface Supporter { org_account_id: string; name: string; avatar_url: string | null; package_id: string; paid_at: string | null }
@@ -138,7 +138,7 @@ export function recommendedPackageId(packages: { id: string; name: string; price
   return [...packages].sort((a, b) => a.price_cents - b.price_cents)[0]?.id ?? null;
 }
 
-export interface DishPhoto { name: string; price: number | null; image_url: string }
+export interface DishPhoto { id: string; name: string; price: number | null; image_url: string }
 
 /** Up to `limit` menu photos of the org's restaurant(s): the material of its personal spot preview. */
 export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<DishPhoto[]> {
@@ -146,7 +146,7 @@ export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<
   const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
   if (!ids.length) return [];
   const { data } = await db.from('menu_items')
-    .select('name, price, image_url')
+    .select('id, name, price, image_url')
     .in('restaurant_id', ids)
     .not('image_url', 'is', null)
     .order('sort_order', { ascending: true })
@@ -155,6 +155,46 @@ export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<
   // Spread the picks over the menu instead of four starters in a row.
   const step = Math.max(1, Math.floor(rows.length / limit));
   return rows.filter((_, i) => i % step === 0).slice(0, limit);
+}
+
+/** Every menu photo of the org's restaurant(s), for picking the dishes of the produced spot. */
+export async function fetchMenuDishes(orgAccountId: string): Promise<DishPhoto[]> {
+  const { data: restaurants } = await db.from('restaurants').select('id').eq('account_id', orgAccountId);
+  const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
+  if (!ids.length) return [];
+  const { data } = await db.from('menu_items')
+    .select('id, name, price, image_url')
+    .in('restaurant_id', ids)
+    .not('image_url', 'is', null)
+    .order('sort_order', { ascending: true })
+    .limit(80);
+  return (data ?? []) as DishPhoto[];
+}
+
+export const MAX_SPOT_DISHES = 4;
+
+/** Dish ids stored on the booking note by sponsoring_set_dishes (apps/web/src/lib/sponsoring.ts dishNote). */
+export function parseDishNote(note: string | null | undefined): string[] {
+  if (!note) return [];
+  try {
+    const v = JSON.parse(note) as { dishes?: { id?: unknown }[] };
+    return Array.isArray(v.dishes) ? v.dishes.map((d) => d?.id).filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setSpotDishes(account: SigningAccount, orgAccountId: string, bookingId: string, dishIds: string[]) {
+  return postSigned<{ note: string }>('/api/sponsoring', account, 'sponsoring_set_dishes', {
+    org_account_id: orgAccountId, booking_id: bookingId, dish_ids: dishIds,
+  }, SPONSORING_SCOPE);
+}
+
+/** Direct line to the stream production (Max) for questions about a booked spot. */
+export const SPONSORING_WHATSAPP = '4917682275490';
+export function sponsoringWhatsAppUrl(orgName: string, packageName: string | null): string {
+  const text = `Hallo, hier ist ${orgName}. Wir haben ${packageName ? `„${packageName}“` : 'einen Werbeplatz'} für den DanceCup-Livestream gebucht und haben eine Frage:`;
+  return `https://wa.me/${SPONSORING_WHATSAPP}?text=${encodeURIComponent(text)}`;
 }
 
 let logoColors: Promise<Record<string, string | null>> | null = null;

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
@@ -95,20 +94,19 @@ export default function SponsoringDetailScreen() {
   const open = view ? isBookingOpen(view.campaign, now) : false;
   const others = supporters.filter((s) => s.org_account_id !== orgId);
 
-  /** After Stripe closes, the webhook marks the booking paid within seconds: poll the public list. */
+  /** After Stripe closes, the webhook marks the booking paid within seconds: poll the public list, then celebrate. */
   const waitForPaid = async (campaignId: string, packageIdPaid: string) => {
     setBusy('Zahlung wird bestätigt …');
-    for (let i = 0; i < 10; i++) {
+    let paid = false;
+    for (let i = 0; i < 10 && !paid; i++) {
       const s = await fetchSupporters(campaignId);
       setSupporters(s);
-      if (s.some((x) => x.org_account_id === orgId && x.package_id === packageIdPaid)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 1500));
+      paid = s.some((x) => x.org_account_id === orgId && x.package_id === packageIdPaid);
+      if (!paid) await new Promise((r) => setTimeout(r, 1500));
     }
     setBusy(null);
-    load();
+    if (paid && slug) router.replace(`/org/sponsoring/success/${slug}` as any);
+    else load();
   };
 
   const buy = async (targetPackageId: string, upgradeBookingId: string | null = null) => {
@@ -201,10 +199,11 @@ export default function SponsoringDetailScreen() {
           <View style={[styles.successBox, { backgroundColor: colors.primaryLight }]}>
             <Text style={[styles.successTitle, { color: colors.textPrimary }]}>Ihr seid dabei! 🎉</Text>
             <Text style={[styles.body, { color: colors.textPrimary }]}>
-              {myBestPaid && isCustomSpot(myBestPaid)
-                ? `Wir melden uns vor der Übertragung mit eurem Werbespot zur Freigabe. Die Rechnung kommt per E-Mail.`
-                : `${orgName} läuft mit dem Logo-Spot in den Pausen des DanceCup-Livestreams. Die Rechnung kommt per E-Mail.`}
+              {orgName} läuft mit „{myBestPaid?.name}“ in den Pausen des DanceCup-Livestreams.
             </Text>
+            <Pressable onPress={() => router.push(`/org/sponsoring/status/${slug}` as any)} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
+              <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Status und Infos</Text>
+            </Pressable>
             <Pressable onPress={share} style={[styles.secondaryBtn, { borderColor: colors.primary }]} accessibilityRole="button">
               <Text style={[styles.secondaryText, { color: colors.primary }]}>Teilen: „Wir sind dabei“</Text>
             </Pressable>

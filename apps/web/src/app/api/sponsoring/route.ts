@@ -5,11 +5,11 @@ import { SPONSORING_SCOPE, type SponsoringAction } from "@/lib/signed-request/me
 import { roleInAccount, canManage } from "@/lib/tickets/authz";
 import { connectedAccountRow } from "@/lib/tickets/connect-status";
 import { stripeConnect, isConnectLivemode, webBaseUrl } from "@/lib/stripe-connect";
-import { BOOK_ERRORS, bookErrorCode, isAllowedMediaUrl, sponsoringReturnUrl, KLEINUNTERNEHMER_FOOTER } from "@/lib/sponsoring";
+import { BOOK_ERRORS, bookErrorCode, isAllowedMediaUrl, sponsoringReturnUrl, KLEINUNTERNEHMER_FOOTER, dishNote, MAX_SPOT_DISHES } from "@/lib/sponsoring";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ACTIONS: readonly SponsoringAction[] = ["sponsoring_checkout", "sponsoring_mine", "sponsoring_set_creative"];
+const ACTIONS: readonly SponsoringAction[] = ["sponsoring_checkout", "sponsoring_mine", "sponsoring_set_creative", "sponsoring_set_dishes"];
 const HOLD_MINUTES = 35; // Stripe Checkout needs ≥ 30 min until expires_at.
 /** Above this amount the invoice needs the buyer's address (§ 33 UStDV small-amount limit is 250 €). */
 const ADDRESS_FROM_CENTS = 25000;
@@ -18,6 +18,7 @@ const ADDRESS_FROM_CENTS = 25000;
 //   sponsoring_checkout     { org_account_id, package_id, creative_id? | media_kind+media_url?, note?, upgrade_booking_id? } → { booking_id, url }
 //   sponsoring_mine         { org_account_id, campaign_slug }                                         → { bookings }
 //   sponsoring_set_creative { org_account_id, booking_id, creative_id? | media_kind+media_url? }       → { booking }
+//   sponsoring_set_dishes   { org_account_id, booking_id, dish_ids: uuid[] (1–4, own menu) }          → { note }
 export async function POST(request: NextRequest) {
   const v = await verifySignedRequest<SponsoringAction>(await request.json().catch(() => null), {
     scope: SPONSORING_SCOPE, actions: ACTIONS, headers: request.headers,
@@ -40,12 +41,39 @@ export async function POST(request: NextRequest) {
     if (!campaign) return jsonOk({ bookings: [] });
     const { data, error } = await admin
       .from("sponsoring_bookings")
-      .select("id, package_id, status, media_kind, media_url, creative_id, amount_cents, review_note, created_at, paid_at")
+      .select("id, package_id, status, media_kind, media_url, creative_id, amount_cents, review_note, note, created_at, paid_at")
       .eq("campaign_id", campaign.id).eq("org_account_id", orgId)
       .in("status", ["requested", "pending_payment", "paid", "approved", "rejected", "refunded"])
       .order("created_at", { ascending: false });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ bookings: data ?? [] });
+  }
+
+  if (v.action === "sponsoring_set_dishes") {
+    // Dishes for the produced spot ("Werbespot nach Maß"): picked from the org's own menu photos,
+    // changeable until the event starts (production uses whatever is stored then).
+    const bookingId = String(v.payload.booking_id ?? "");
+    if (!UUID_RE.test(bookingId)) return jsonFail(400, "BAD_REQUEST", "booking_id fehlt");
+    const ids = Array.isArray(v.payload.dish_ids) ? [...new Set(v.payload.dish_ids.map(String))] : [];
+    if (ids.length < 1 || ids.length > MAX_SPOT_DISHES || !ids.every((id) => UUID_RE.test(id))) {
+      return jsonFail(400, "BAD_REQUEST", `Bitte 1 bis ${MAX_SPOT_DISHES} Gerichte wählen.`);
+    }
+    const { data: b } = await admin.from("sponsoring_bookings")
+      .select("id, org_account_id, status, sponsoring_campaigns(event_starts_at, booking_deadline)").eq("id", bookingId).maybeSingle();
+    if (!b || b.org_account_id !== orgId) return jsonFail(404, "NOT_FOUND", "Buchung nicht gefunden");
+    if (!["paid", "approved"].includes(b.status)) return jsonFail(409, "BAD_STATE", "Diese Buchung ist nicht aktiv.");
+    const c = b.sponsoring_campaigns as { event_starts_at?: string | null; booking_deadline?: string } | null;
+    const lockAt = c?.event_starts_at ?? c?.booking_deadline;
+    if (lockAt && Date.now() > Date.parse(lockAt)) return jsonFail(409, "DEADLINE_PASSED", "Die Übertragung läuft schon – die Auswahl ist jetzt fest.");
+    const { data: restaurants } = await admin.from("restaurants").select("id").eq("account_id", orgId);
+    const { data: items } = await admin.from("menu_items").select("id, name")
+      .in("restaurant_id", (restaurants ?? []).map((r) => r.id)).in("id", ids);
+    if ((items ?? []).length !== ids.length) return jsonFail(400, "BAD_DISH", "Diese Gerichte gehören nicht zu eurer Speisekarte.");
+    const byId = new Map((items ?? []).map((i) => [i.id as string, i.name as string]));
+    const note = dishNote(ids.map((id) => ({ id, name: byId.get(id) ?? "" })));
+    const { error } = await admin.from("sponsoring_bookings").update({ note, updated_at: new Date().toISOString() }).eq("id", bookingId);
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    return jsonOk({ note });
   }
 
   // Ad material: one of the org's own creatives, or an upload from our storage.
