@@ -64,7 +64,7 @@ export default function BreakSpotPreview({ kind, orgName, logoUrl, dishes }: Pro
   );
 }
 
-/** Dark card with the logo fading and scaling in. `from` shifts the timeline (end card of the custom spot). */
+/** Plain white card, black type, the logo itself fading and scaling in (no tile). `from` shifts the timeline (end card of the custom spot). */
 function LogoCard({ t, orgName, logoUrl, caption, from }: {
   t: SharedValue<number>; orgName: string; logoUrl: string | null; caption: string | null; from: number;
 }) {
@@ -90,7 +90,7 @@ function LogoCard({ t, orgName, logoUrl, caption, from }: {
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, cardStyle]}>
-      <LinearGradient colors={['#0F2236', '#060B13']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, styles.cardBg]} />
       <View style={styles.cardCenter}>
         {caption ? <Animated.Text style={[styles.caption, captionStyle]}>{caption}</Animated.Text> : null}
         <Animated.View style={[styles.logoTile, logoStyle]}>
@@ -161,24 +161,27 @@ function Slide({ t, index, start, end, dish, placeholder }: {
 }
 
 const styles = StyleSheet.create({
-  frame: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, overflow: 'hidden', backgroundColor: '#060B13' },
+  frame: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, overflow: 'hidden', backgroundColor: '#FFFFFF' },
+  cardBg: { backgroundColor: '#FFFFFF' },
   cardCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24 },
-  caption: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 0.6, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' },
-  logoTile: {
-    width: '24%', aspectRatio: 1, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', padding: 8,
-  },
+  caption: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 0.6, color: 'rgba(0,0,0,0.55)', textTransform: 'uppercase' },
+  logoTile: { width: '30%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   logoImg: { width: '100%', height: '100%' },
   logoInitial: { fontFamily: fontFamily.heading, fontSize: 32, color: '#00498B' },
-  cardName: { fontFamily: fontFamily.heading, fontSize: 18, color: '#FFFFFF' },
+  cardName: { fontFamily: fontFamily.heading, fontSize: 18, color: '#000000' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '50%' },
   slideCaption: { position: 'absolute', left: 14, right: 14, bottom: 16, gap: 2 },
   slideTitle: { fontFamily: fontFamily.heading, fontSize: 18, color: '#FFFFFF' },
   slidePrice: { fontFamily: fontFamily.semiBold, fontSize: 13, color: 'rgba(255,255,255,0.85)' },
-  bug: { position: 'absolute', top: 10, right: 12, fontFamily: fontFamily.semiBold, fontSize: 10, color: 'rgba(255,255,255,0.85)' },
+  // Pills, so both stay readable on the white logo card and on dish photos.
+  bug: {
+    position: 'absolute', top: 8, right: 10, fontFamily: fontFamily.semiBold, fontSize: 9, color: '#FFFFFF',
+    backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
+  },
   adLabel: {
     position: 'absolute', top: 8, left: 10, fontFamily: fontFamily.medium, fontSize: 9, color: '#FFFFFF', textTransform: 'uppercase',
     letterSpacing: 0.5, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
   },
-  progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
-  progressFill: { height: 3, backgroundColor: '#FFFFFF' },
+  progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, backgroundColor: 'rgba(127,127,127,0.25)' },
+  progressFill: { height: 3, backgroundColor: '#00498B' },
 });
