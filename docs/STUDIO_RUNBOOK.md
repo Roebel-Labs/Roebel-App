@@ -1,166 +1,204 @@
-# Ortis Studio – Betriebshandbuch
+# Ortis Studio – Handbuch
 
-Für den Operator (Max). Kurz, zum Abhaken. Stand: 2026-11-05.
+Livestream-Studio für den Mac: Kameras und Medien mischen, Einblendungen und Werbung steuern, an mehrere Ziele
+senden und aufnehmen. Dieses Handbuch gilt für jede Veranstaltung und ist in der App unter **Hilfe** nachzulesen.
 
----
+## Schnellstart
 
-## 1. Installation (einmalig)
+1. ffmpeg mit SRT installieren und **Einstellungen → Technik → Prüfen** abwarten (Abschnitt Installation).
+2. macOS-Zugriff auf Kamera und Mikrofon erlauben.
+3. Im **Show**-Tab Kameras und Medien als Quellen anlegen, im **Design**-Tab die Einblendungen anpassen.
+4. In **Einstellungen → Sendeziele** ein Ziel anlegen und mit **Testen** prüfen.
+5. Proben (Abschnitt Probe), dann **Auf Sendung gehen**.
+
+## Installation
+
+Ortis Studio braucht auf dem Mac **ffmpeg mit SRT-Unterstützung** (das normale `ffmpeg` kann kein SRT):
 
 ```bash
-# Node über nvm, pnpm
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-source ~/.nvm/nvm.sh && nvm install --lts
-corepack enable && corepack prepare pnpm@9.15.0 --activate
-
-# ffmpeg MIT SRT (das normale "ffmpeg" kann kein SRT)
 brew install ffmpeg-full
-
-# Abhängigkeiten
-cd ~/Documents/privat/side_projects/DAO_test && pnpm install
 ```
 
-- **Vor einer Show NIEMALS `brew upgrade`.** ffmpeg-full hängt an einer festgepinnten freetype-Version; ein Upgrade
-  kann ffmpeg kaputt machen. Upgrades nur direkt nach einer Show, danach Probelauf.
-- ffmpeg-Pfad (Standard in den Einstellungen): `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`.
-  In **Einstellungen → Technik → Prüfen** muss stehen: `SRT ja · VideoToolbox ja`.
+- Standardpfad in den Einstellungen: `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`.
+- In **Einstellungen → Technik → Prüfen** muss stehen: `SRT ja · VideoToolbox ja`.
+- **Vor einer Sendung niemals `brew upgrade`.** ffmpeg-full hängt an festgepinnten Bibliotheken; ein Upgrade kann
+  ffmpeg kaputt machen. Upgrades nur direkt nach einer Veranstaltung, danach Probelauf.
 
-## 2. Starten
+## Starten
 
-Im Repo-Wurzelordner:
+Aus dem Projektordner:
 
 ```bash
-cd ~/Documents/privat/side_projects/DAO_test
 source ~/.nvm/nvm.sh
 pnpm studio
 ```
 
 `pnpm studio` baut die Oberfläche und startet Ortis Studio. Es setzt `env -u ELECTRON_RUN_AS_NODE` selbst (nötig,
-wenn das Terminal aus VS Code/Cursor kommt – sonst startet Electron als reines Node und es passiert nichts).
+wenn das Terminal aus VS Code oder Cursor kommt, sonst startet Electron als reines Node und es passiert nichts).
 
-Entwickler-Hinweis: Solange der Branch nicht gemergt ist, liegt der Code im Worktree
-`.worktrees/roebel-studio`; dort genauso `pnpm studio` ausführen.
+## macOS-Berechtigungen
 
-## 3. macOS-Berechtigungen
-
-- **Systemeinstellungen → Datenschutz & Sicherheit → Kamera** und **→ Mikrofon**: „Electron" erlauben.
-- Beim ersten Start fragt macOS selbst. Wurde einmal „Nicht erlauben" geklickt: dort von Hand einschalten,
+- **Systemeinstellungen → Datenschutz & Sicherheit → Kamera** und **→ Mikrofon**: „Electron" bzw. „Ortis Studio" erlauben.
+- Beim ersten Start fragt macOS selbst. Wurde einmal „Nicht erlauben" gewählt: dort von Hand einschalten und das
   Studio neu starten.
 
-## 4. Sendeziele
+## Kameras
+
+Alles, was macOS als Kamera (UVC) meldet, ist als Quelle nutzbar. Beispiele:
+
+- **Kamera mit HDMI-Ausgang** (z. B. Sony FX) → HDMI → Capture-Karte (UVC) → USB-C. Erscheint als normale Kamera.
+- **iPhone** über Continuity Camera. Per USB-Kabel ist es stabiler als drahtlos.
+- **DJI Osmo Pocket 4** (oder ähnliche Action-Cams): USB-C-**Daten**kabel an den Mac, am Gerät **„Webcam"** wählen.
+  Höchstens 1080p und **30 fps** einstellen. Keine USB-zu-HDMI-Adapter (nur ca. 15–20 fps).
+- Viele Macs haben nur 2 Anschlüsse: **USB-C-Hub mit eigenem Netzteil und Datenleitung** verwenden.
+- Soll dieselbe Kamera parallel in einer zweiten App laufen (z. B. OBS), vorher testen: USB-UVC-Geräte gehen meist in
+  zwei Apps, iPhone/Continuity Camera und manche Capture-Karten nur in einer.
+
+## Audio und Mischpult
+
+- Mischpult oder Audio-Interface als Mikrofonquelle wählen; die Pegel zeigt der Mixer im **Show**-Tab.
+- **Lippensynchronität:** Der Ton kommt meist früher als das Bild. In der Audiospur lässt sich eine Verzögerung
+  einstellen. Zum Abgleich vor der Kamera klatschen und im aufgenommenen Stream prüfen, ob Klatschen und Ton zusammenpassen.
+- Videodateien und Zuspielungen laufen mit ihrem eigenen Ton über dieselbe Mischung.
+
+## Tabelle und CSV
+
+Im **Tabelle**-Tab pflegst du Listen (z. B. Teilnehmer, Programmpunkte, Ergebnisse), aus denen Einblendungen ihre
+Texte holen.
+
+- Zeilen und Spalten direkt bearbeiten; die aktuelle Zeile steuert die verknüpften Einblendungen.
+- Import und Export als **CSV** (UTF-8, Trennzeichen Komma oder Semikolon).
+- Ändert sich eine Zelle, die gerade auf Sendung ist, aktualisiert sich die Einblendung.
+
+## Grafiken und Design
+
+Im **Design**-Tab entstehen die Vorlagen für Einblendungen: Bauchbinden, Uhr, Logo, Werbung, Ergebnistafeln.
+
+- Elemente verschieben, Schrift, Farben, Bilder und Animation (Einblenden/Ausblenden) einstellen.
+- Textfelder lassen sich an Tabellenspalten binden.
+- Im **Show**-Tab schaltest du Einblendungen mit einem Klick ein und aus. Vorschau (grün) und Sendung (rot) sind getrennt;
+  **TAKE** bringt die Vorschau auf Sendung.
+
+## Werbepausen und Werbe-Protokoll
+
+Werbespots (Sponsoren) laufen als Zuspielung oder Einblendung und werden zeitlich protokolliert.
+
+- Reihenfolge und Dauer legst du bei den Sponsoren fest; eine Kampagne rotiert automatisch.
+- Jede gelaufene Einblendung steht mit Name, Start und Ende in `werbung-airtime.jsonl` im Aufnahmeordner.
+  Das ist der Nachweis für Werbepartner.
+- Zusammenstellung zur Abrechnung: die Datei in eine Tabellenkalkulation importieren (eine JSON-Zeile pro Spot).
+
+## Sendeziele
 
 **Einstellungen → Sendeziele → „+ Ziel"**: Cloudflare SRT, Cloudflare RTMPS, YouTube, Facebook, Eigenes RTMP.
-Pro Ziel: Name, An/Aus, Adresse, Schlüssel (verdeckt; „Zeigen" nur kurz), **Testen** (20 s Testbild mit Ton nur an
-dieses Ziel – danach beim Ziel nachsehen, ob das Bild ankam).
+Pro Ziel: Name, An/Aus, Adresse, Schlüssel (verdeckt; „Zeigen" nur kurz), **Testen** (20 s Testbild mit Ton nur an dieses
+Ziel; danach beim Ziel nachsehen, ob das Bild ankam).
 
-Zwei Wege:
+### Ein oder mehrere Ziele
 
-| Weg | So geht's | Upload vom Saal |
+| Weg | So geht's | Upload |
 |---|---|---|
-| **Cloudflare** (Standard) | Studio → 1 Ziel (Cloudflare SRT). Cloudflare verteilt selbst an YouTube/Facebook („Live Outputs" im Cloudflare-Dashboard) und an die Röbel App. | 1 × Stream |
-| **Direkt** | Studio → mehrere Ziele (z. B. Cloudflare + YouTube + Facebook), Schlüssel direkt einfügen. | N × Stream |
+| **Verteiler** (z. B. Cloudflare) | Studio sendet 1 Ziel; der Dienst verteilt weiter an YouTube, Facebook usw. | 1 × Stream |
+| **Direkt** | Studio sendet an mehrere Ziele (z. B. YouTube und Facebook), Schlüssel direkt einfügen. | N × Stream |
 
-- Das Studio kodiert **einmal** und schickt dieselben Daten an alle Ziele (ffmpeg tee).
-- Fällt ein Ziel aus, laufen die anderen weiter. In der Statusleiste wird die Pille des Ziels rot, oben erscheint
-  „Ziel ausgefallen". **„Ziel neu verbinden"** startet den Encoder neu: **alle** Ziele haben dann ein paar Sekunden
-  Pause (im Test ~2 s), die Aufnahme geht in einer neuen Datei weiter. Nur in einer ruhigen Minute drücken.
-- **Tempo fällt gegen 0 → ein Ziel hängt → Ziel ausschalten → Ziel neu verbinden.** Während der Sendung lassen
-  sich in den Einstellungen nur die Ziele an- und ausschalten; erst „Ziel neu verbinden" übernimmt das. Mindestens
-  ein Ziel muss an bleiben (sonst „Sendung beenden").
-- Ein hängendes Ziel bremst die anderen nur kurz: Jedes Ziel hat seinen eigenen Puffer; ein RTMP-Ziel ohne
-  Antwort gilt nach ~2 s als ausgefallen (im Test: ~2 s Ruckler bei den anderen, danach normal weiter).
-- Bei nur einem Ziel verbindet das Studio von selbst neu (Pille gelb, solange es neu verbindet).
-- **Cloudflare SRT und Cloudflare RTMPS nie gleichzeitig auf denselben Cloudflare-Input** – das ist derselbe
-  Eingang zweimal; Cloudflare wirft dann eine der beiden Verbindungen raus (im Test: „Broken pipe").
-- „Testen" und „Auf Sendung gehen" schließen sich aus: Solange ein Test läuft, zeigt der Knopf „Test läuft noch …";
-  wer trotzdem live geht, bricht den Test ab.
-- Upload-Bedarf steht in den Einstellungen: „≈ N × (Video + Audio) kbit/s". Bei 6000 + 160 kbit/s:
-  1 Ziel ≈ 6,2 Mbit/s, 2 Ziele ≈ 12,3 Mbit/s, 3 Ziele ≈ 18,5 Mbit/s.
-- Bei mehreren Zielen zeigt die Statusleiste keine Bitrate („–"); maßgeblich sind **Tempo** (≈ 1,00×) und
-  **Encoder-fps**.
-- **Kein Ziel eingeschaltet** → der Knopf heißt **„Nur aufnehmen"**: nur lokale Aufnahme, nichts geht ins Netz.
+- Das Studio kodiert **einmal** und schickt dieselben Daten an alle Ziele.
+- **Pro Protokoll nur ein Eingang:** SRT und RTMPS desselben Dienstes nie gleichzeitig auf denselben Eingang
+  senden; der Dienst wirft sonst eine der beiden Verbindungen raus („Broken pipe").
+- Dieselben Schlüssel nie in zwei Programmen gleichzeitig verwenden (Studio und OBS bekommen je einen eigenen).
 
-## 5. Paralleltest mit OBS (DanceCup 07.11.)
+### Upload-Bedarf
 
-OBS sendet die Hauptsendung wie gewohnt, das Studio läuft parallel als Test.
+Die Einstellungen zeigen „≈ N × (Video + Audio) kbit/s". Bei 6000 + 160 kbit/s: 1 Ziel ≈ 6,2 Mbit/s,
+2 Ziele ≈ 12,3 Mbit/s, 3 Ziele ≈ 18,5 Mbit/s. Messe den Upload vor Ort und plane mindestens das 1,5-fache ein.
 
-- **Jede App bekommt ihr EIGENES Ziel/ihren eigenen Schlüssel.** Nie denselben Schlüssel zweimal – sonst werfen
-  sich beide gegenseitig raus und die Hauptsendung bricht ab. Beispiel: OBS → wie immer; Studio → eigener
-  Cloudflare-Input oder eine nicht-öffentliche YouTube-Sendung.
-- Upload ≈ **doppelt** (OBS + Studio). Vorher messen.
-- **Kameras in beiden Apps gleichzeitig** – bei der Probe testen:
-  - USB-UVC-Geräte (Capture-Karte, Osmo Pocket) lassen sich auf macOS meist von zwei Apps gleichzeitig nutzen.
-  - iPhone über Continuity Camera und manche Capture-Karten erlauben **nur eine App**. Dann bekommt OBS die Kamera.
-- **RAM** auf dem 8-GB-M3 im Blick behalten: Aktivitätsanzeige → Speicher. Gelber/roter „Speicherdruck" → Studio
-  beenden, die Hauptsendung (OBS) hat Vorrang.
+### Ein Ziel hängt oder fällt aus
 
-## 6. Kameras
+- Fällt ein Ziel aus, laufen die anderen weiter. In der Statusleiste wird die Pille rot, oben erscheint „Ziel ausgefallen".
+- **Tempo fällt gegen 0 → ein Ziel hängt → Ziel ausschalten → „Ziel neu verbinden".** Während der Sendung lassen sich
+  in den Einstellungen nur Ziele an- und ausschalten; erst „Ziel neu verbinden" übernimmt das.
+- **„Ziel neu verbinden"** startet den Encoder neu: **alle** Ziele haben ein paar Sekunden Pause, die Aufnahme geht in
+  einer neuen Datei weiter. Nur in einer ruhigen Minute drücken. Mindestens ein Ziel muss an bleiben.
+- Ein hängendes Ziel bremst die anderen nur kurz (eigener Puffer je Ziel; ein RTMP-Ziel ohne Antwort gilt nach ca. 2 s als ausgefallen).
+- Bei nur einem Ziel verbindet das Studio selbst neu (Pille gelb, solange es neu verbindet).
+- Bei mehreren Zielen zeigt die Statusleiste keine Bitrate („–"); maßgeblich sind **Tempo** (≈ 1,00×) und **Encoder-fps**.
+- „Testen" und „Auf Sendung gehen" schließen sich aus: Wer trotz laufendem Test live geht, bricht den Test ab.
 
-- **Sony FX** → HDMI → Capture-Karte (UVC) → USB-C. Erscheint als normale Kamera.
-- **iPhone** → Continuity Camera; **per USB-Kabel** ist stabiler als drahtlos.
-- **DJI Osmo Pocket 4** → USB-C-**Daten**kabel an den Mac → auf der Pocket **„Webcam"** tippen → erscheint als
-  UVC-Kamera. Max. 1080p, **30 fps** einstellen. **Keine USB-zu-HDMI-Adapter** (nur ~15–20 fps).
-- Das M3 hat nur 2 Anschlüsse → **USB-C-Hub mit eigenem Netzteil und Datenleitung**.
+## Nur aufnehmen
 
-## 7. Notfall: OBS mit den Einblendungen
+Ist **kein Ziel eingeschaltet**, heißt der Knopf **„Nur aufnehmen"**: Es entsteht nur die lokale Aufnahme, nichts geht
+ins Netz. Ideal für Proben und Mitschnitte.
 
-Läuft das Studio nicht, sendet OBS – die Einblendungen (Bauchbinden, Werbung, Uhr, Chat-Nachricht) kommen trotzdem.
-Unterstützungen erscheinen **nie** im Bild (weder Stream noch Aufnahme), nur im Live-Raum-Tab und in der App:
+## Notfall: OBS mit den Einblendungen
+
+Läuft das Studio nicht mehr rund, kann OBS senden; die Einblendungen (Bauchbinden, Werbung, Uhr, Chat-Nachricht)
+kommen trotzdem:
 
 - OBS → Quelle **Browser** → URL `http://127.0.0.1:7311/overlay.html`, Breite **1920**, Höhe **1080**.
 - **`127.0.0.1` verwenden, nicht `localhost`.**
 - Das Studio muss dafür laufen (es liefert die Seite und den Zustand); gesteuert wird weiter im Studio.
+- Unterstützungen aus der App erscheinen nie im Bild (weder Stream noch Aufnahme), nur im Live-Raum-Tab und in der App.
 
-## 8. Aufnahmen und Werbe-Protokoll
+## App-Anbindung (Live-Raum)
 
-- Ordner: Einstellungen → Aufnahme (Standard `~/Movies/Ortis Studio`).
-- **Eine .mkv pro Sitzung**; nach jedem Neuverbinden beginnt eine neue Datei.
-- In MP4 umwandeln (verlustfrei, Sekunden):
-  ```bash
-  ffmpeg -i aufnahme.mkv -c copy aufnahme.mp4
-  ```
-- `werbung-airtime.jsonl` im selben Ordner: jede gelaufene Werbeeinblendung mit Name, Start und Ende – Nachweis für
-  die Partner.
+Der **Live-Raum**-Tab verbindet das Studio mit der Röbel App: Zuschauer-Chat, Hinweise auf Unterstützungen,
+Handy-Gäste und die Live-Anzeige in der App.
 
-## 9. Probe (Checkliste)
+- Chat-Nachrichten lassen sich ausblenden oder hervorheben; Hervorgehobene erscheinen als Einblendung.
+- Unterstützungen sind **nie** auf Sendung, sondern nur ein Hinweis für das Team.
+- **Gäste:** Handy-Gäste erscheinen als Kachel und lassen sich wie jede Quelle schneiden.
+- Nach einem Neuladen der Oberfläche sind Gäste weg: im Live-Raum-Tab **„Neu verbinden"**.
 
-- [ ] Upload im Saal gemessen: **Upload gesamt ≥ 15–20 Mbit/s bzw. ≥ 1,5 × Bedarf** (ein Stream ≈ 6,2 Mbit/s;
-      Bedarf = alle Ziele des Studios + OBS zusammen).
-- [ ] Jede Kamera einzeln getestet (Capture-Karte, iPhone über das lange USB-Kabel, Osmo Pocket), auch parallel mit OBS.
-- [ ] **Klatschtest**: vor der Kamera klatschen, im Stream prüfen, ob Bild und Ton zusammenpassen; Mischpult-Verzögerung
-      in der Audiospur einstellen.
-- [ ] Jedes Ziel mit **Testen** geprüft und beim Ziel nachgesehen.
-- [ ] **60-Minuten-Dauertest** an alle Ziele: Tempo bleibt ≈ 1,00×, „Verworfen" bleibt 0, Speicher wächst nicht.
-- [ ] **Netzwerk-Ziehtest**: LAN/WLAN 20 s trennen → Studio verbindet neu, Aufnahme läuft durch.
-      Bei mehreren Zielen danach prüfen, ob alle Ziel-Pillen grün sind; sonst „Ziel neu verbinden".
-- [ ] **Minimieren-Test**: Fenster minimieren / anderes Programm vorne → Stream läuft flüssig weiter.
-- [ ] **Fenster-schließen-Test**: Fenster schließen während der Sendung → Rückfrage erscheint; „Abbrechen" lässt die
-      Sendung laufen.
-- [ ] OBS-Notfall: Browser-Quelle zeigt die Einblendungen.
-- [ ] Netzteil am Mac, Energiesparen aus, Mitteilungen auf „Nicht stören".
+## Aufnahmen
 
-## 10. Go / No-Go
+- Ordner: **Einstellungen → Aufnahme** (Standard `~/Movies/Ortis Studio`).
+- Dateinamen: `ortis-studio-JJJJ-MM-TT_HH-MM-SS`. Es entsteht **eine .mkv pro Sitzung**; nach jedem Neuverbinden beginnt eine neue Datei.
+- In MP4 umwandeln (verlustfrei, dauert Sekunden):
 
-Kriterium aus der Spezifikation (§2, wörtlich):
+```bash
+ffmpeg -i aufnahme.mkv -c copy aufnahme.mp4
+```
 
-> **Go/no-go at the 11-06 rehearsal** *(Claude's call)*: the studio runs the show only if it streams ≥ 60 minutes
-> continuously to all three destinations with no drop, freeze or audio desync, and lower thirds, ads and donation
-> alerts work on air. Otherwise the show runs on OBS with the browser-source overlays (§4.6).
+## Störungen
 
-Für den 07.11. gilt zusätzlich: OBS sendet die Hauptsendung, das Studio läuft nur parallel als Test. Im Zweifel
-**Studio beenden, OBS weiterlaufen lassen.**
+- **Studio-Fenster neu geladen oder abgestürzt, während gesendet wird:** Die Sendung läuft weiter (das Studio übernimmt
+  sie automatisch), aber das **Live-Bild ist leer, bis eine Szene neu genommen wird**. Sofort eine Szene anklicken und
+  **TAKE** drücken (oder Doppelklick auf die Kachel). Gäste: im Live-Raum-Tab „Neu verbinden".
+- **Gast-Kachel „Signal verloren" auf Sendung:** Der Gast hat aufgelegt oder die Verbindung verloren. Auf eine andere
+  Szene schneiden; die Kachel verschwindet dann von selbst.
+- **Kein Bild von einer Kamera:** Kabel/Hub prüfen, macOS-Berechtigung prüfen, Kamera ist evtl. in einer anderen App offen.
+- **Tempo unter 1,00×:** Upload zu knapp oder ein Ziel hängt; Bitrate senken oder Ziel ausschalten und neu verbinden.
+- **Speicherdruck gelb/rot** (Aktivitätsanzeige → Speicher): andere Programme schließen; im Zweifel auf den Notfallweg (OBS) wechseln.
+- **Medienserver-Fehler (Port 7311 belegt):** Eine andere Instanz des Studios läuft noch; beenden und neu starten.
 
-## 11. Sicherheit der Schlüssel
+## Sicherheit der Schlüssel
 
 - Schlüssel stehen nur lokal im Studio (nicht im Repo, nicht in Logs). Logs zeigen `***`.
 - Die OBS-Einblendungsseite enthält keine Einstellungen und keine Schlüssel.
-- Bildschirm teilen/fotografieren nur, wenn kein Schlüssel per „Zeigen" sichtbar ist.
-- Nach der Show bei YouTube/Facebook/Cloudflare den Schlüssel bei Bedarf neu erzeugen.
+- Bildschirm teilen oder fotografieren nur, wenn kein Schlüssel per „Zeigen" sichtbar ist.
+- Nach der Veranstaltung den Schlüssel beim Dienst bei Bedarf neu erzeugen.
 
-## 12. Störungen
+## Probe
 
-- **Studio-Fenster neu geladen / abgestürzt, während gesendet wird:** Die Sendung läuft weiter (das Studio übernimmt
-  sie automatisch), aber das **Live-Bild ist leer, bis eine Szene neu genommen wird**. Sofort eine Szene anklicken
-  und **TAKE** (oder Doppelklick auf die Kachel). Handy-Gäste aus dem Live-Raum sind nach dem Neuladen weg: im
-  Live-Raum-Tab **„Neu verbinden“**.
-- **Gast-Kachel „Signal verloren“ auf Sendung:** Der Gast hat aufgelegt oder die Verbindung verloren. Auf eine andere
-  Szene schneiden – die Kachel verschwindet dann von selbst.
+Vor jeder Veranstaltung:
+
+- [ ] Upload am Veranstaltungsort gemessen: **gesamt ≥ 1,5 × Bedarf** (alle Ziele und ggf. ein zweites Programm zusammen).
+- [ ] Jede Kamera einzeln getestet, auch parallel zu einem zweiten Programm, falls eingesetzt.
+- [ ] **Klatschtest**: Bild und Ton passen zusammen; Mischpult-Verzögerung eingestellt.
+- [ ] Jedes Ziel mit **Testen** geprüft und beim Ziel nachgesehen.
+- [ ] **60-Minuten-Dauertest** an alle Ziele: Tempo bleibt ≈ 1,00×, „Verworfen" bleibt 0, Speicher wächst nicht.
+- [ ] **Netzwerk-Ziehtest**: LAN/WLAN 20 s trennen; Studio verbindet neu, Aufnahme läuft durch. Bei mehreren Zielen
+      danach prüfen, ob alle Pillen grün sind; sonst „Ziel neu verbinden".
+- [ ] **Minimieren-Test**: Fenster minimieren oder anderes Programm nach vorn; der Stream läuft flüssig weiter.
+- [ ] **Fenster-schließen-Test**: Fenster schließen während der Sendung; die Rückfrage erscheint, „Abbrechen" lässt die Sendung laufen.
+- [ ] Notfallweg (OBS-Browserquelle) zeigt die Einblendungen.
+- [ ] Netzteil am Mac, Energiesparen aus, Mitteilungen auf „Nicht stören".
+
+## Go / No-Go
+
+Standardkriterium (kann pro Veranstaltung verschärft werden):
+
+> Das Studio fährt die Sendung nur, wenn es bei der Probe **mindestens 60 Minuten ununterbrochen** an **alle**
+> vorgesehenen Ziele sendet, ohne Aussetzer, Standbild oder Tonversatz, und Bauchbinden, Werbung und
+> Unterstützungs-Hinweise funktionieren. Andernfalls läuft die Sendung über OBS mit den Browserquellen-Einblendungen.
+
+Im Zweifel während der Sendung: **Studio beenden, den Notfallweg weiterlaufen lassen.**

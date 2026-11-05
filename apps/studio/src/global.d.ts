@@ -49,6 +49,10 @@ declare global {
       sys: {
         usage(): Promise<{ cpu: number; memMb: number; mainCpu: number }>;
       };
+      shell: {
+        /** Opens an http(s) URL in the system browser (main validates the scheme). */
+        openExternal(url: string): Promise<boolean>;
+      };
       app: {
         onWillQuit(cb: () => void): () => void;
         quitReady(): void;

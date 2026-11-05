@@ -8,6 +8,7 @@ import { destinationsProblem, enabledDestinations, uploadEstimate } from './sett
 import { ReconnectButton } from './settings/ReconnectButton';
 import { useTestRunning } from './settings/test-runs';
 import { SettingsTab } from './settings/SettingsTab';
+import { HelpTab } from '../help/HelpTab';
 import { HealthBar } from './show/HealthBar';
 import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
@@ -17,13 +18,14 @@ import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
 
-type Tab = 'show' | 'design' | 'table' | 'liveroom' | 'settings';
+type Tab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'help';
 const TABS: Array<[Tab, string]> = [
   ['show', 'Show'],
   ['design', 'Design'],
   ['table', 'Tabelle'],
   ['liveroom', 'Live-Raum'],
   ['settings', 'Einstellungen'],
+  ['help', 'Hilfe'],
 ];
 
 function StatusPill() {
@@ -355,6 +357,7 @@ function Shell() {
         {tab === 'table' && <TableTab />}
         {tab === 'liveroom' && <LiveRoomPanel />}
         {tab === 'settings' && <SettingsTab />}
+        {tab === 'help' && <HelpTab />}
       </main>
       <HealthBar />
       <QuitConfirm />

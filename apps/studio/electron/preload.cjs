@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('studio', {
   sys: {
     usage: () => ipcRenderer.invoke('sys:usage'),
   },
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  },
   app: {
     // Main asks the renderer to end the broadcast cleanly before quitting.
     onWillQuit: (cb) => subscribe('app:will-quit', () => cb()),

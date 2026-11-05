@@ -14,7 +14,7 @@ export default defineConfig({
     rollupOptions: { input: { main: resolve(__dirname, 'index.html'), overlay: resolve(__dirname, 'overlay.html') } },
   },
   test: {
-    include: ['electron/__tests__/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['electron/__tests__/**/*.test.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
     environment: 'node',
   },
 });

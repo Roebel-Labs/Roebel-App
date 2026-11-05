@@ -1,7 +1,7 @@
 'use strict';
 // Electron main process for Ortis Studio.
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, shell, systemPreferences } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { resolveUserDataDir } = require('./userdata.cjs');
@@ -141,6 +141,19 @@ ipcMain.handle('dialog:pickFile', async (_e, kind) => {
 ipcMain.handle('dialog:pickFolder', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
   return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
+});
+
+// Help links: only http(s) ever leaves the app (never file:, javascript:, custom schemes).
+ipcMain.handle('shell:openExternal', async (_e, url) => {
+  let u;
+  try {
+    u = new URL(String(url));
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  await shell.openExternal(u.href);
+  return true;
 });
 
 // Whole-app CPU (percent of one core, summed over all processes) + memory.
