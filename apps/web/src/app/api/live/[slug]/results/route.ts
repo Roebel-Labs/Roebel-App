@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withCors, corsPreflight } from "@/lib/live/cors";
 
 export const dynamic = "force-dynamic";
 
 // GET → { ok, data: { voting_open, total, items: [{ item_id, title, subtitle, votes }] } }
 // Publikumsliebling (a Meinungsbild): counts only, never who voted. Cached briefly at the edge.
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
+  return withCors(await handle(req, ctx));
+}
+
+export function OPTIONS() {
+  return corsPreflight();
+}
+
+async function handle(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const admin = createAdminClient();
   const { data: show } = await admin.from("live_shows").select("id, voting_open").eq("slug", slug).maybeSingle();

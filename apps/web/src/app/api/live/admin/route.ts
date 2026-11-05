@@ -5,6 +5,7 @@ import { jsonOk, jsonFail } from "@/lib/signed-request/verify";
 import { UUID_RE, cfConfig, cfApi, cfHlsUrl, cfLifecycle } from "@/lib/live/server";
 import { setOnStage, advance } from "@/lib/live/stage";
 import { isStudioRequest } from "@/lib/live/studio-auth";
+import { withCors, corsPreflight } from "@/lib/live/cors";
 import { livekitConfig, livekitToken, guestRoomName } from "@/lib/live/livekit";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,14 @@ const OVERLAY_KEYS = ["lower_third", "next_up", "bug", "qr", "poll", "alerts", "
 
 // POST (admin dashboard cookie, or `Authorization: Studio <LIVE_STUDIO_TOKEN>` from Röbel Studio) { action, show_id, ... } — see docs/superpowers/specs/2026-11-05-live-room-design.md
 export async function POST(request: NextRequest) {
+  return withCors(await handle(request));
+}
+
+export function OPTIONS() {
+  return corsPreflight();
+}
+
+async function handle(request: NextRequest) {
   if (!isStudioRequest(request.headers) && !(await isAuthenticated())) return jsonFail(401, "UNAUTHORIZED", "Bitte im Admin-Bereich anmelden.");
   const b = ((await request.json().catch(() => null)) ?? {}) as Record<string, unknown>;
   const action = String(b.action ?? "");
