@@ -13,7 +13,8 @@ const MAX_QUEUE = 20;
 
 export type SupportAlertHandle = { push: (m: ChatMessage) => void };
 
-type Props = { top: number; height: number };
+/** Without top / height the layer fills its parent (the stage's video box). */
+type Props = { top?: number; height?: number };
 
 /** Queue of support alerts, one at a time, centred over the video (touches pass through). */
 const SupportAlertLayer = forwardRef<SupportAlertHandle, Props>(function SupportAlertLayer({ top, height }, ref) {
@@ -36,7 +37,7 @@ const SupportAlertLayer = forwardRef<SupportAlertHandle, Props>(function Support
   }, [current]);
 
   return (
-    <View pointerEvents="none" style={[styles.layer, { top, height }]}>
+    <View pointerEvents="none" style={[styles.layer, top != null && height != null ? { top, height } : styles.fill]}>
       {current ? (
         <Animated.View key={current.id} entering={FadeInDown.duration(320)} exiting={FadeOutUp.duration(260)} style={styles.card}>
           <View style={styles.heart}>
@@ -58,6 +59,7 @@ export default SupportAlertLayer;
 
 const styles = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  fill: { top: 0, bottom: 0 },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12, maxWidth: 420, paddingVertical: 12, paddingLeft: 12, paddingRight: 18,
     borderRadius: 18, backgroundColor: '#F2C14E',

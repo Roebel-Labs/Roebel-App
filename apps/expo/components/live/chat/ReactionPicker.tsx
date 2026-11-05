@@ -5,18 +5,29 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LIVE_REACTIONS, type LiveReaction } from '@/lib/live';
+import { HeartFilledIcon } from '@/components/Icons';
 import { liveStyles, useLivePalette, type LivePalette } from '../tokens';
+
+/** Heart colour on the dark stage discs (the app's HeartFilledIcon). */
+const OVERLAY_HEART = '#FF3B5C';
 
 type Props = {
   onReact: (e: LiveReaction) => void;
   style?: StyleProp<ViewStyle>;
+  /** 'overlay' = dark translucent discs over the video with the app's own heart icon on the main button. */
+  variant?: 'theme' | 'overlay';
+  /** Called whenever the viewer touches the picker (the stage keeps its controls awake). */
+  onInteract?: () => void;
 };
 
-export default function ReactionPicker({ onReact, style }: Props) {
+export default function ReactionPicker({ onReact, style, variant = 'theme', onInteract }: Props) {
   const L = useLivePalette();
-  const styles = liveStyles(makeStyles, L);
+  const themed = liveStyles(makeStyles, L);
+  const overlay = variant === 'overlay';
+  const styles = overlay ? overlayStyles : themed;
   const [open, setOpen] = useState(false);
-  const toggle = useCallback(() => setOpen((o) => !o), []);
+  const toggle = useCallback(() => { onInteract?.(); setOpen((o) => !o); }, [onInteract]);
+  const chevronColor = overlay ? '#FFFFFF' : L.textSecondary;
 
   return (
     <View style={[styles.wrap, style]} pointerEvents="box-none">
@@ -35,7 +46,7 @@ export default function ReactionPicker({ onReact, style }: Props) {
             </Pressable>
           ))}
           <Pressable onPress={toggle} hitSlop={4} style={styles.pillBtn} accessibilityRole="button" accessibilityLabel="Reaktionen einklappen">
-            <Ionicons name="chevron-down" size={20} color={L.textSecondary} />
+            <Ionicons name="chevron-down" size={20} color={chevronColor} />
           </Pressable>
         </Animated.View>
       ) : null}
@@ -50,10 +61,10 @@ export default function ReactionPicker({ onReact, style }: Props) {
             accessibilityLabel="Herz senden"
             accessibilityHint="Lange drücken für weitere Reaktionen"
           >
-            <Text style={styles.mainEmoji}>❤️</Text>
+            {overlay ? <HeartFilledIcon size={24} color={OVERLAY_HEART} /> : <Text style={styles.mainEmoji}>❤️</Text>}
           </Pressable>
           <Pressable onPress={toggle} hitSlop={8} style={styles.chevron} accessibilityRole="button" accessibilityLabel="Weitere Reaktionen">
-            <Ionicons name="chevron-up" size={11} color={L.textSecondary} />
+            <Ionicons name="chevron-up" size={11} color={chevronColor} />
           </Pressable>
         </View>
       ) : null}
@@ -83,3 +94,18 @@ const makeStyles = (L: LivePalette) => {
     emoji: { fontSize: 23 },
   });
 };
+
+const overlayStyles = StyleSheet.create({
+  wrap: { alignItems: 'center' },
+  main: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.38)' },
+  mainPressed: { transform: [{ scale: 0.92 }] },
+  mainEmoji: { fontSize: 22 },
+  chevron: {
+    position: 'absolute', top: -4, left: -4, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  pill: { width: SIZE, borderRadius: SIZE / 2, paddingVertical: 4, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  pillBtn: { width: SIZE, height: 42, alignItems: 'center', justifyContent: 'center' },
+  pillPressed: { transform: [{ scale: 1.25 }] },
+  emoji: { fontSize: 23 },
+});

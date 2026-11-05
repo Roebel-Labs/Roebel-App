@@ -4,18 +4,24 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { formatSupportAmount, type Supporter } from '@/lib/live';
-import { F, liveStyles, useLivePalette, type LivePalette } from '../tokens';
+import { F, liveStyles, useLivePalette, VIDEO, type LivePalette } from '../tokens';
 
-type Props = { supporters: Supporter[]; onPress?: (s: Supporter) => void };
+type Props = {
+  supporters: Supporter[];
+  onPress?: (s: Supporter) => void;
+  /** 'overlay' = translucent chips over the video (live room stage). */
+  variant?: 'theme' | 'overlay';
+};
 
-export default function SupportersStrip({ supporters, onPress }: Props) {
+export default function SupportersStrip({ supporters, onPress, variant = 'theme' }: Props) {
   const L = useLivePalette();
-  const styles = liveStyles(makeStyles, L);
+  const themed = liveStyles(makeStyles, L);
+  const styles = variant === 'overlay' ? overlayStyles : themed;
   if (!supporters.length) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <Ionicons name="heart" size={13} color={L.goldText} style={styles.lead} accessibilityLabel="Unterstützer" />
+        <Ionicons name="heart" size={13} color={variant === 'overlay' ? VIDEO.gold : L.goldText} style={styles.lead} accessibilityLabel="Unterstützer" />
         {supporters.map((s, i) => (
           <Pressable
             key={s.key}
@@ -49,4 +55,19 @@ const makeStyles = (L: LivePalette) => StyleSheet.create({
   rankText: { color: '#1B1B1B', fontSize: 11, fontFamily: F.bold },
   name: { flexShrink: 1, color: L.text, fontSize: 12, fontFamily: F.semiBold, marginLeft: 4 },
   amount: { color: L.goldText, fontSize: 12, fontFamily: F.bold, fontVariant: ['tabular-nums'] },
+});
+
+const overlayStyles = StyleSheet.create({
+  wrap: {},
+  content: { alignItems: 'center', gap: 6, paddingVertical: 4 },
+  lead: { marginRight: 2 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 26, paddingLeft: 3, paddingRight: 9, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(242,193,78,0.55)', maxWidth: 200,
+  },
+  pressed: { opacity: 0.75 },
+  rank: { width: 20, height: 20, borderRadius: 10, backgroundColor: VIDEO.gold, alignItems: 'center', justifyContent: 'center' },
+  rankText: { color: '#1B1B1B', fontSize: 11, fontFamily: F.bold },
+  name: { flexShrink: 1, color: '#FFFFFF', fontSize: 12, fontFamily: F.semiBold, marginLeft: 4 },
+  amount: { color: VIDEO.gold, fontSize: 12, fontFamily: F.bold, fontVariant: ['tabular-nums'] },
 });

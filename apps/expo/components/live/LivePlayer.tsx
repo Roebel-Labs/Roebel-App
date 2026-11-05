@@ -1,74 +1,44 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useEvent, useEventListener } from 'expo';
-import { isPictureInPictureSupported, VideoView, type VideoPlayer } from 'expo-video';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { countdownParts, formatClock, type LiveShow } from '@/lib/live';
-import FloatingReactions, { type FloatingReactionsHandle } from './FloatingReactions';
+import { isPictureInPictureSupported, type VideoPlayer, type VideoView } from 'expo-video';
+import type { LiveShow } from '@/lib/live';
+import type { FloatingReactionsHandle } from './FloatingReactions';
 import PlayerSettingsSheet from './PlayerSettingsSheet';
-import { F, VIDEO } from './tokens';
-import { CastButton, CastSheet } from './player/CastButton';
-import {
-  ChromeButton, formatTime, haptic, LiveInfo, pad, safely, shareShow, Spinner, ViewerPill,
-} from './player/chrome';
-import ImmersiveFullscreen, { type FullscreenOverlayApi, type ReplayBar } from './player/ImmersiveFullscreen';
+import { CastSheet } from './player/CastButton';
+import { haptic, safely } from './player/chrome';
+import ImmersiveFullscreen, { type FullscreenOverlayApi, type ReplayBar, type SeekFx } from './player/ImmersiveFullscreen';
 import { useLivePlayerHost } from './player/LivePlayerProvider';
-import ScrubBar, { ProgressLine } from './player/ScrubBar';
 
 export type { FullscreenOverlayApi } from './player/ImmersiveFullscreen';
 
 type Props = {
   show: LiveShow;
-  width: number;
-  topInset: number;
   viewers: number;
   onClose: () => void;
   /**
-   * Rendered on top of the video in the immersive fullscreen (chat + action buttons, built by the room).
-   * `poke()` = the viewer interacted → resets the 4 s auto-hide; `exit()` leaves fullscreen.
+   * The room's chat + actions over the stage (portrait only; landscape shows the video alone).
+   * `poke()` = the viewer interacted → keeps the playback controls awake; `close()` leaves the room.
    */
-  fullscreenOverlay?: (api: FullscreenOverlayApi) => React.ReactNode;
+  overlay?: (api: FullscreenOverlayApi) => React.ReactNode;
+  /** Drawn over the video box in both orientations, touches pass through (the Unterstützen alert). */
+  videoLayer?: React.ReactNode;
+  /** Keep the playback controls up (a room sheet is open). */
+  hold?: boolean;
   /** Called by the close chevron before onClose. Leaving the room while the stream plays always minimizes it into the mini player. */
   onMinimize?: () => void;
-  /** Fullscreen double-tap on a live stream: the ❤️ is spawned locally either way; wire this to send the reaction. */
+  /** Double-tap on a live stream: the ❤️ is spawned locally either way; wire this to send the reaction. */
   onDoubleTapReact?: () => void;
 };
 
 /** How long the player may stay not-playing while live before we call it "gleich zurück". */
 const STALL_GRACE_MS = 8000;
 const RETRY_EVERY_MS = 5000;
-/** Controls fade out after this long while playing (YouTube: ~3 s). */
-const CONTROLS_HIDE_MS = 3000;
 /** Replay: double-tap seek step. */
 const SEEK_STEP_S = 10;
 /** Live: this much more latency than the best we have seen = "behind live". */
 const BEHIND_LIVE_S = 10;
-/** Gap between detaching one VideoView and attaching the next (only one view per player at a time). */
+/** Wait before attaching our VideoView, so the mini player's view (one view per player) is gone first. */
 const VIEW_SWAP_MS = 80;
-
-function Countdown({ startsAt }: { startsAt: string | null }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const parts = countdownParts(startsAt, now);
-  if (!parts) return <Text style={styles.stateSub}>Wir starten in Kürze.</Text>;
-  const clock = formatClock(startsAt);
-  if (parts.d >= 1) {
-    return <Text style={styles.stateSub}>{`Start in ${parts.d} ${parts.d === 1 ? 'Tag' : 'Tagen'}${clock ? ` · ${clock} Uhr` : ''}`}</Text>;
-  }
-  return (
-    <View style={styles.countdownWrap}>
-      <Text style={styles.countdown}>{parts.h > 0 ? `${parts.h}:${pad(parts.m)}:${pad(parts.s)}` : `${pad(parts.m)}:${pad(parts.s)}`}</Text>
-      {clock ? <Text style={styles.stateSub}>{`Start um ${clock} Uhr`}</Text> : null}
-    </View>
-  );
-}
 
 function readNumber(fn: () => number): number {
   try {
@@ -100,27 +70,22 @@ async function loadSource(player: VideoPlayer, uri: string, show: LiveShow) {
   } catch { /* the retry loop picks it up */ }
 }
 
-type SeekFx = { side: 'back' | 'forward'; seconds: number; key: number };
-type ViewTarget = 'none' | 'inline' | 'full';
-
 /**
- * 16:9 player on the app-wide shared expo-video player (LivePlayerProvider): pre-show, reconnect and end
- * states, YouTube-style controls (tap toggles, big play/pause, LIVE / live-edge jump, replay scrubber with
- * double-tap ±10 s), Twitch-style info (LIVE + running time + viewers; cast / share / settings; mute,
- * PiP, fullscreen), immersive fullscreen with the room's overlay. Leaving the room while the stream
- * plays hands the video to the floating mini player. The video area is black in every app theme.
+ * The live room's player on the app-wide shared expo-video player (LivePlayerProvider), rendered as the
+ * room's full-screen stage (ImmersiveFullscreen): pre-show countdown, reconnect ("gleich zurück") and end
+ * states, play/pause, LIVE / live-edge jump, replay scrubber with double-tap ±10 s, cast / settings / mute,
+ * automatic PiP, background audio. Leaving the room while the stream plays hands the video to the mini player.
  */
 const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlayer(
-  { show, width, topInset, viewers, onClose, fullscreenOverlay, onMinimize, onDoubleTapReact },
+  { show, viewers, onClose, overlay, videoLayer, hold = false, onMinimize, onDoubleTapReact },
   reactionsRef,
 ) {
-  const height = Math.round((width * 9) / 16);
   const isLive = show.status === 'live';
   const isReplay = show.status === 'ended' && !!show.replay_url;
   const source = isLive ? show.hls_url : isReplay ? show.replay_url : null;
 
   const host = useLivePlayerHost();
-  const [player] = useState(() => host.acquire());
+  const [player] = useState<VideoPlayer>(() => host.acquire());
   // Coming back from the mini player: the same stream is already loaded (and playing) → do not reload.
   const [resumed] = useState(() => !!source && host.loadedUri() === source);
   const skipFirstLoad = useRef(resumed);
@@ -146,23 +111,16 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
   const [minOffset, setMinOffset] = useState<number | null>(null);
   const [pausedOnLive, setPausedOnLive] = useState(false);
 
-  // ─── Shared player: register the room (hides the mini player), one VideoView at a time ───
-  const [viewTarget, setViewTarget] = useState<ViewTarget>('none');
-  const [fullscreen, setFullscreen] = useState(false);
-  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const swapTo = useCallback((target: ViewTarget) => {
-    setViewTarget('none');
-    if (swapTimer.current) clearTimeout(swapTimer.current);
-    swapTimer.current = setTimeout(() => setViewTarget(target), VIEW_SWAP_MS);
-  }, []);
+  // ─── Shared player: register the room (hides the mini player), then attach our one VideoView ───
+  const [attached, setAttached] = useState(false);
   useEffect(() => {
     const unregister = host.registerRoom();
-    swapTo('inline');
+    const t = setTimeout(() => setAttached(true), VIEW_SWAP_MS);
     return () => {
-      if (swapTimer.current) clearTimeout(swapTimer.current);
+      clearTimeout(t);
       unregister();
     };
-  }, [host, swapTo]);
+  }, [host]);
 
   useEffect(() => {
     host.setSession(source ? { slug: show.slug, title: show.title, posterUrl: show.poster_url, isLive } : null);
@@ -226,49 +184,20 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
     return () => clearInterval(t);
   }, [stalled, status, isPlaying, player]);
 
-  // ─── Controls visibility (inline) ───
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
   const [scrub, setScrub] = useState<number | null>(null);
-  const [shown, setShown] = useState(true);
-  const [pokeNonce, setPokeNonce] = useState(0);
   const showVideo = !!source;
-  // No video (pre-show, ended, reconnecting): the chrome is all there is, keep it up.
-  const holdOpen = !showVideo || stalled;
-  const visible = shown || holdOpen;
-  const autoHide = isPlaying && scrub == null && !settingsOpen && !castOpen && !fullscreen;
-  useEffect(() => {
-    if (!shown || !autoHide) return;
-    const t = setTimeout(() => setShown(false), CONTROLS_HIDE_MS);
-    return () => clearTimeout(t);
-  }, [shown, autoHide, pokeNonce]);
-  const poke = useCallback(() => { setShown(true); setPokeNonce((n) => n + 1); }, []);
 
-  const controlsOpacity = useSharedValue(1);
-  useEffect(() => {
-    controlsOpacity.value = withTiming(visible ? 1 : 0, { duration: visible ? 140 : 260 });
-  }, [visible, controlsOpacity]);
-  const controlsStyle = useAnimatedStyle(() => ({ opacity: controlsOpacity.value }));
-
-  // ─── Reactions: spawn in whichever view is showing ───
-  const inlineReactions = useRef<FloatingReactionsHandle>(null);
-  const fullReactions = useRef<FloatingReactionsHandle>(null);
+  // ─── Reactions ───
+  const stageReactions = useRef<FloatingReactionsHandle>(null);
   useImperativeHandle(reactionsRef, () => ({
-    spawn: (emoji: string, own?: boolean) => {
-      const target = fullscreen ? fullReactions.current : inlineReactions.current;
-      target?.spawn(emoji, own);
-    },
-  }), [fullscreen]);
+    spawn: (emoji: string, own?: boolean) => { stageReactions.current?.spawn(emoji, own); },
+  }), []);
 
   // ─── Actions ───
-  const toggleControls = useCallback(() => {
-    if (visible && !holdOpen) setShown(false);
-    else poke();
-  }, [visible, holdOpen, poke]);
-
   const togglePlay = useCallback(() => {
     haptic();
-    poke();
     if (ended) {
       setEnded(false);
       safely(() => player.replay());
@@ -282,17 +211,16 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
       setUserPaused(false);
       safely(() => player.play());
     }
-  }, [ended, isPlaying, isLive, player, poke]);
+  }, [ended, isPlaying, isLive, player]);
 
   const jumpToLive = useCallback(() => {
     haptic();
-    poke();
     setPausedOnLive(false);
     setUserPaused(false);
     // Reloading the HLS source always lands on the live edge (seeking past the seekable end is
     // platform-dependent in expo-video), and the stall/retry logic already covers a reload.
     setReloadNonce((n) => n + 1);
-  }, [poke]);
+  }, []);
 
   const [seekFx, setSeekFx] = useState<SeekFx | null>(null);
   useEffect(() => {
@@ -313,20 +241,8 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
 
   const toggleMute = useCallback(() => {
     haptic();
-    poke();
     safely(() => { player.muted = !player.muted; });
-  }, [player, poke]);
-
-  const enterFullscreen = useCallback(() => {
-    haptic();
-    setFullscreen(true);
-    swapTo('full');
-  }, [swapTo]);
-  const exitFullscreen = useCallback(() => {
-    setFullscreen(false);
-    swapTo('inline');
-    poke();
-  }, [swapTo, poke]);
+  }, [player]);
 
   const startPip = useCallback(() => {
     const view = viewRef.current;
@@ -347,36 +263,23 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
 
   const spawnHeart = useCallback(() => {
     haptic();
-    const r = fullReactions.current;
+    const r = stageReactions.current;
     if (r) r.spawn('❤️', true);
     if (onDoubleTapReact) onDoubleTapReact();
   }, [onDoubleTapReact]);
 
-  // ─── Gestures (plain JS callbacks via runOnJS(true): no worklets here) ───
-  const tapGesture = useMemo(() => {
-    const single = Gesture.Tap().runOnJS(true).maxDuration(300).onEnd((_e, ok) => { if (ok) toggleControls(); });
-    if (!isReplay) return single;
-    const double = Gesture.Tap().runOnJS(true).numberOfTaps(2).maxDelay(260).onEnd((e, ok) => {
-      if (!ok) return;
-      seek(e.x < width / 2 ? 'back' : 'forward');
-    });
-    return Gesture.Exclusive(double, single);
-  }, [isReplay, toggleControls, seek, width]);
-
   // Replay scrubber
   const duration = Math.max(loadedDuration, isReplay ? readNumber(() => player.duration) : 0);
-  const onScrub = useCallback((f: number) => { setScrub(f); setShown(true); }, []);
+  const onScrub = useCallback((f: number) => { setScrub(f); }, []);
   const onScrubRelease = useCallback((f: number) => {
     setScrub(null);
     if (duration > 0) {
       safely(() => { player.currentTime = f * duration; });
       setEnded(false);
     }
-    setPokeNonce((n) => n + 1);
   }, [player, duration]);
 
   const showPoster = !showVideo || (!hasPlayed && !stalled);
-  const poster = show.poster_url;
   const loadingFirst = showVideo && !hasPlayed && !stalled;
   const buffering = showVideo && hasPlayed && !stalled && !userPaused && status === 'loading';
   const canControlPlayback = showVideo && !stalled && hasPlayed;
@@ -389,262 +292,53 @@ const LivePlayer = forwardRef<FloatingReactionsHandle, Props>(function LivePlaye
     ? { progress, buffered, scrubbing: scrub != null, currentTime, duration, onScrub, onRelease: onScrubRelease }
     : null;
 
-  const sheets = (
-    <>
+  return (
+    <ImmersiveFullscreen
+      player={player}
+      videoRef={viewRef}
+      attachVideo={showVideo && attached}
+      hasVideo={showVideo}
+      show={show}
+      viewers={viewers}
+      isLive={isLive}
+      isReplay={isReplay}
+      isPlaying={isPlaying}
+      ended={ended}
+      muted={muted}
+      stalled={isLive && (stalled || !show.hls_url)}
+      spinner={loadingFirst || buffering}
+      showPoster={showPoster}
+      canControlPlayback={canControlPlayback}
+      behindLive={behindLive}
+      hold={hold || settingsOpen || castOpen}
+      replay={replayBar}
+      seekFx={seekFx}
+      reactionsRef={stageReactions}
+      canPip={canPip}
+      onStartPip={startPip}
+      onSpawnHeart={spawnHeart}
+      onClose={close}
+      onTogglePlay={togglePlay}
+      onToggleMute={toggleMute}
+      onJumpToLive={jumpToLive}
+      onSeek={seek}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onOpenCast={() => setCastOpen(true)}
+      overlay={overlay}
+      videoLayer={videoLayer}
+    >
       <PlayerSettingsSheet
         visible={settingsOpen}
-        onClose={() => { setSettingsOpen(false); poke(); }}
+        onClose={() => setSettingsOpen(false)}
         currentHeight={currentHeight}
         availableHeights={heights}
         showSpeed={isReplay}
         rate={playbackRate}
         onRate={setRate}
       />
-      <CastSheet visible={castOpen} onClose={() => { setCastOpen(false); poke(); }} show={show} />
-    </>
-  );
-
-  return (
-    <View style={[styles.wrap, { paddingTop: topInset }]}>
-      <View style={{ width, height, backgroundColor: '#000', overflow: 'hidden' }}>
-        {showVideo && viewTarget === 'inline' ? (
-          <VideoView
-            ref={viewRef}
-            player={player}
-            style={StyleSheet.absoluteFill}
-            contentFit="contain"
-            nativeControls={false}
-            allowsPictureInPicture
-            startsPictureInPictureAutomatically
-          />
-        ) : null}
-
-        {showPoster && poster ? (
-          <Animated.View exiting={FadeOut.duration(300)} style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
-          </Animated.View>
-        ) : null}
-
-        {fullscreen ? (
-          <View style={[styles.stateLayer, styles.stateDim]} pointerEvents="none">
-            <Ionicons name="expand" size={22} color={VIDEO.textSecondary} />
-            <Text style={styles.stateSub}>Läuft im Vollbild</Text>
-          </View>
-        ) : null}
-
-        {/* State layers */}
-        {show.status === 'scheduled' ? (
-          <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.stateLayer} pointerEvents="none">
-            <Text style={styles.stateKicker}>GLEICH GEHT'S LOS</Text>
-            <Countdown startsAt={show.starts_at} />
-          </Animated.View>
-        ) : null}
-        {isLive && (stalled || !show.hls_url) ? (
-          <Animated.View entering={FadeIn.duration(400)} exiting={FadeOut} style={[styles.stateLayer, styles.stateDim]} pointerEvents="none">
-            <Spinner size={36} />
-            <Text style={styles.stateTitle}>Die Übertragung ist gleich zurück</Text>
-            <Text style={styles.stateSub}>Kurze Pause auf der Fläche. Bleib dran.</Text>
-          </Animated.View>
-        ) : null}
-        {(loadingFirst || buffering) && !fullscreen ? (
-          <View style={styles.stateLayer} pointerEvents="none"><Spinner /></View>
-        ) : null}
-        {show.status === 'ended' && !isReplay ? (
-          <Animated.View entering={FadeIn} style={[styles.stateLayer, styles.stateDim]} pointerEvents="none">
-            <Text style={styles.stateKicker}>DAS WAR'S</Text>
-            <Text style={styles.stateTitle}>Danke fürs Zuschauen!</Text>
-            <Text style={styles.stateSub}>Die Aufzeichnung folgt in Kürze.</Text>
-          </Animated.View>
-        ) : null}
-
-        {/* Tap catcher: below the controls, so buttons never toggle the overlay. */}
-        <GestureDetector gesture={tapGesture}>
-          <View style={StyleSheet.absoluteFill} collapsable={false} accessibilityLabel="Steuerung ein- oder ausblenden" />
-        </GestureDetector>
-
-        {/* Double-tap seek ripple (replay) */}
-        {seekFx && !fullscreen ? (
-          <Animated.View
-            key={`${seekFx.side}-${seekFx.key}`}
-            entering={FadeIn.duration(120)}
-            exiting={FadeOut.duration(260)}
-            pointerEvents="none"
-            style={[styles.ripple, seekFx.side === 'back' ? styles.rippleLeft : styles.rippleRight, { height: height * 1.4, width: width * 0.62, top: -height * 0.2 }]}
-          >
-            <View style={[styles.rippleContent, seekFx.side === 'back' ? { left: width * 0.14 } : { right: width * 0.14 }]}>
-              <Ionicons name={seekFx.side === 'back' ? 'play-back' : 'play-forward'} size={22} color="#fff" />
-              <Text style={styles.rippleText}>{`${seekFx.seconds} Sekunden`}</Text>
-            </View>
-          </Animated.View>
-        ) : null}
-
-        <FloatingReactions ref={inlineReactions} height={height} />
-
-        {/* Controls overlay */}
-        <Animated.View style={[StyleSheet.absoluteFill, controlsStyle]} pointerEvents={visible ? 'box-none' : 'none'}>
-          <LinearGradient colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)']} style={styles.topShade} pointerEvents="none" />
-          <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']} style={styles.bottomShade} pointerEvents="none" />
-
-          <View style={styles.topBar} pointerEvents="box-none">
-            <ChromeButton icon="chevron-down" label="Schließen" onPress={close} size={24} />
-            <Text style={styles.title} numberOfLines={1}>{show.title}</Text>
-            {showVideo ? <CastButton onOpenSheet={() => { poke(); setCastOpen(true); }} /> : null}
-            <ChromeButton icon="share-outline" label="Teilen" onPress={() => { haptic(); poke(); void shareShow(show); }} size={20} />
-            {showVideo ? (
-              <ChromeButton icon="settings-outline" label="Einstellungen" onPress={() => { poke(); setSettingsOpen(true); }} size={20} />
-            ) : null}
-          </View>
-
-          {canControlPlayback && !buffering && !fullscreen ? (
-            <View style={styles.center} pointerEvents="box-none">
-              {isReplay ? (
-                <Pressable onPress={() => { poke(); seek('back'); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button" accessibilityLabel="10 Sekunden zurück">
-                  <Ionicons name="play-back" size={22} color="#fff" />
-                  <Text style={styles.skipText}>10</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={togglePlay}
-                style={({ pressed }) => [styles.playBtn, pressed && styles.chromePressed]}
-                accessibilityRole="button"
-                accessibilityLabel={ended ? 'Erneut abspielen' : isPlaying ? 'Pause' : 'Abspielen'}
-              >
-                <Ionicons name={ended ? 'refresh' : isPlaying ? 'pause' : 'play'} size={34} color="#fff" style={!isPlaying && !ended ? styles.playIconNudge : null} />
-              </Pressable>
-              {isReplay ? (
-                <Pressable onPress={() => { poke(); seek('forward'); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button" accessibilityLabel="10 Sekunden vor">
-                  <Ionicons name="play-forward" size={22} color="#fff" />
-                  <Text style={styles.skipText}>10</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={[styles.bottomBar, isReplay && styles.bottomBarReplay]} pointerEvents="box-none">
-            <View style={styles.bottomLeft} pointerEvents="box-none">
-              {isLive ? (
-                <LiveInfo show={show} viewers={viewers} behind={behindLive} onJumpToLive={jumpToLive} />
-              ) : isReplay ? (
-                <Text style={styles.timeText}>
-                  {`${formatTime(currentTime)} / `}
-                  <Text style={styles.timeTotal}>{formatTime(duration)}</Text>
-                </Text>
-              ) : (
-                <>
-                  <View style={styles.mutedPill}>
-                    <Text style={styles.mutedPillText}>{show.status === 'scheduled' ? 'BALD LIVE' : 'BEENDET'}</Text>
-                  </View>
-                  <ViewerPill viewers={viewers} />
-                </>
-              )}
-              {show.is_test === true ? (
-                <View style={styles.testPill} accessibilityLabel="Testlauf">
-                  <Text style={styles.testPillText}>TESTLAUF</Text>
-                </View>
-              ) : null}
-            </View>
-            {showVideo ? (
-              <View style={styles.bottomRight}>
-                <ChromeButton icon={muted ? 'volume-mute' : 'volume-high'} label={muted ? 'Ton an' : 'Ton aus'} onPress={toggleMute} size={20} />
-                {canPip ? <ChromeButton icon="albums-outline" label="Bild-in-Bild" onPress={startPip} size={19} /> : null}
-                <ChromeButton icon="expand" label="Vollbild" onPress={enterFullscreen} size={20} />
-              </View>
-            ) : null}
-          </View>
-
-          {isReplay ? (
-            <View style={styles.scrubWrap}>
-              <ScrubBar width={width} progress={progress} buffered={buffered} active={scrub != null} onScrub={onScrub} onRelease={onScrubRelease} />
-            </View>
-          ) : null}
-        </Animated.View>
-
-        {/* Replay: thin progress line while the controls are hidden (YouTube). */}
-        {isReplay && !visible ? <ProgressLine progress={progress} /> : null}
-      </View>
-
-      {fullscreen ? null : sheets}
-
-      <ImmersiveFullscreen
-        visible={fullscreen}
-        player={player}
-        attachVideo={showVideo && viewTarget === 'full'}
-        show={show}
-        viewers={viewers}
-        isLive={isLive}
-        isReplay={isReplay}
-        isPlaying={isPlaying}
-        ended={ended}
-        muted={muted}
-        stalled={isLive && (stalled || !show.hls_url)}
-        spinner={loadingFirst || buffering}
-        canControlPlayback={canControlPlayback}
-        behindLive={behindLive}
-        hold={settingsOpen || castOpen}
-        replay={replayBar}
-        reactionsRef={fullReactions}
-        onSpawnHeart={spawnHeart}
-        onExit={exitFullscreen}
-        onTogglePlay={togglePlay}
-        onToggleMute={toggleMute}
-        onJumpToLive={jumpToLive}
-        onSeek={seek}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenCast={() => setCastOpen(true)}
-        overlay={fullscreenOverlay}
-      >
-        {fullscreen ? sheets : null}
-      </ImmersiveFullscreen>
-    </View>
+      <CastSheet visible={castOpen} onClose={() => setCastOpen(false)} show={show} />
+    </ImmersiveFullscreen>
   );
 });
 
 export default LivePlayer;
-
-const styles = StyleSheet.create({
-  wrap: { backgroundColor: '#000' },
-  topShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 76 },
-  bottomShade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 84 },
-  topBar: {
-    position: 'absolute', top: 6, left: 4, right: 4, flexDirection: 'row', alignItems: 'center', gap: 2,
-  },
-  title: { flex: 1, color: '#fff', fontSize: 15, fontFamily: F.semiBold, marginRight: 4 },
-  chromePressed: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  center: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 44,
-  },
-  playBtn: {
-    width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
-  },
-  playIconNudge: { marginLeft: 4 },
-  skipBtn: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center',
-  },
-  skipText: { position: 'absolute', bottom: 3, color: '#fff', fontSize: 9, fontFamily: F.bold },
-  bottomBar: {
-    position: 'absolute', left: 12, right: 4, bottom: 2, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  bottomBarReplay: { bottom: 14 },
-  bottomLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  bottomRight: { flexDirection: 'row', alignItems: 'center' },
-  timeText: { color: '#fff', fontSize: 12, fontFamily: F.semiBold, fontVariant: ['tabular-nums'] },
-  timeTotal: { color: 'rgba(255,255,255,0.7)' },
-  mutedPill: { backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 8, height: 24, borderRadius: 6, justifyContent: 'center' },
-  mutedPillText: { color: '#fff', fontSize: 11, fontFamily: F.semiBold, letterSpacing: 0.8 },
-  testPill: { backgroundColor: VIDEO.gold, paddingHorizontal: 8, height: 22, borderRadius: 6, justifyContent: 'center' },
-  testPillText: { color: '#1B1B1B', fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
-  scrubWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  ripple: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center' },
-  rippleLeft: { left: 0, borderTopRightRadius: 9999, borderBottomRightRadius: 9999 },
-  rippleRight: { right: 0, borderTopLeftRadius: 9999, borderBottomLeftRadius: 9999 },
-  rippleContent: { position: 'absolute', alignItems: 'center', gap: 4 },
-  rippleText: { color: '#fff', fontSize: 12, fontFamily: F.semiBold },
-  stateLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 32 },
-  stateDim: { backgroundColor: 'rgba(12,13,15,0.72)' },
-  stateKicker: { color: VIDEO.accent, fontSize: 12, fontFamily: F.bold, letterSpacing: 1.6 },
-  stateTitle: { color: VIDEO.text, fontSize: 18, fontFamily: F.heading, textAlign: 'center', marginTop: 4 },
-  stateSub: { color: VIDEO.textSecondary, fontSize: 13, fontFamily: F.medium, textAlign: 'center' },
-  countdownWrap: { alignItems: 'center', gap: 2 },
-  countdown: { color: VIDEO.text, fontSize: 40, fontFamily: F.heading, fontVariant: ['tabular-nums'], letterSpacing: 1 },
-});

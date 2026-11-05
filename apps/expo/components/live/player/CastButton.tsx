@@ -22,7 +22,7 @@ async function openCastSettings() {
   try { await Linking.openSettings(); } catch { /* nothing left */ }
 }
 
-/** Opens the Android cast sheet; the caller renders <CastSheet> (inside its own Modal tree when fullscreen). */
+/** Opens the Android cast sheet; the caller renders <CastSheet> (a LiveSheet over the room stage). */
 export function CastButton({ onOpenSheet, disc }: { onOpenSheet: () => void; disc?: boolean }) {
   if (Platform.OS === 'ios') {
     return (

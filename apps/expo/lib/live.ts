@@ -44,9 +44,17 @@ export interface ChatMessage {
   kind: ChatKind; amount_cents: number | null; created_at: string; hidden_at: string | null; featured_at: string | null;
   /** Part 3: stable per person per show, never reversible to a wallet. Missing before the moderation migration. */
   author_key?: string | null;
+  /** Client-only: an optimistic own message still waiting for the server (temp id, slightly dimmed). */
+  pending?: boolean;
 }
 
-export interface LiveSession { token: string; expires_at: string; display_name: string | null; avatar_url: string | null }
+/**
+ * `author_key` (server ≥ cfd119eb): the viewer's own per-show author key, so own messages from earlier visits
+ * can be recognised after a rejoin. Sessions cached before that change lack it until they expire.
+ */
+export interface LiveSession {
+  token: string; expires_at: string; display_name: string | null; avatar_url: string | null; author_key?: string | null;
+}
 export interface VoteResult { item_id: string; title: string; subtitle: string | null; votes: number }
 export interface VoteResults { voting_open: boolean; total: number; items: VoteResult[] }
 export interface MyLiveState { vote_item_id: string | null; reminder_item_ids: string[] }
