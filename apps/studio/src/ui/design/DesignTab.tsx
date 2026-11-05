@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadFonts } from '../../render/fonts';
 import { renderFrame } from '../../render/draw';
 import { isStarterTemplate } from '../../render/templates';
+import { commitValue } from '../table/edit';
 import { useShow } from '../../state/store';
 import type { OverlayAnim, RenderContext, ShowState, Template, TemplateNode } from '../../state/types';
 import { applyNodeEdit, duplicateTemplate, insertAtCursor, isProtectedNode, removeNode } from './edit';
@@ -64,9 +65,13 @@ function Num({ label, value, onChange, step = 1 }: { label: string; value: numbe
   const [draft, setDraft] = useState(String(value ?? ''));
   const [resync, setResync] = useState(0);
   useEffect(() => setDraft(String(value ?? '')), [value, resync]);
+  const cancelled = useRef(false);
   const commit = () => {
+    const c = cancelled.current;
+    cancelled.current = false;
     const v = Number(draft);
-    if (draft.trim() !== '' && Number.isFinite(v)) onChange(v);
+    const out = commitValue(draft, String(value ?? ''), c);
+    if (out !== null && draft.trim() !== '' && Number.isFinite(v) && v !== value) onChange(v);
     setResync((n) => n + 1);
   };
   return (
@@ -81,6 +86,7 @@ function Num({ label, value, onChange, step = 1 }: { label: string; value: numbe
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
           else if (e.key === 'Escape') {
+            cancelled.current = true;
             setDraft(String(value ?? ''));
             e.currentTarget.blur();
           }
@@ -90,40 +96,42 @@ function Num({ label, value, onChange, step = 1 }: { label: string; value: numbe
   );
 }
 
-/** Text input/textarea with a local draft; the on-air graphic only changes on blur/Enter. */
+/** Single-line text input with a local draft; the on-air graphic only changes on blur/Enter (the renderer has no newlines). */
 function DraftText({
   value,
   onCommit,
-  multiline,
   ...rest
 }: {
   value: string;
   onCommit: (v: string) => void;
-  multiline?: boolean;
   'data-field': string;
   onFocus: (e: React.FocusEvent<Field>) => void;
   spellCheck?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
+  const cancelled = useRef(false);
   useEffect(() => setDraft(value), [value]);
-  const common = {
-    value: draft,
-    ...rest,
-    onChange: (e: React.ChangeEvent<Field>) => setDraft(e.target.value),
-    onBlur: () => {
-      if (draft !== value) onCommit(draft);
-    },
-    onKeyDown: (e: React.KeyboardEvent<Field>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.currentTarget.blur();
-      } else if (e.key === 'Escape') {
-        setDraft(value);
-        e.currentTarget.blur();
-      }
-    },
-  };
-  return multiline ? <textarea rows={2} {...common} /> : <input type="text" {...common} />;
+  return (
+    <input
+      type="text"
+      value={draft}
+      {...rest}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const out = commitValue(draft, value, cancelled.current);
+        cancelled.current = false;
+        if (out !== null) onCommit(out);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        else if (e.key === 'Escape') {
+          cancelled.current = true;
+          setDraft(value);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
 }
 
 function Colour({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string) => void }) {
@@ -386,7 +394,7 @@ export function DesignTab() {
               <>
                 <label className="ds-f">
                   <span>Text</span>
-                  <DraftText key={node.id} multiline value={node.text ?? ''} data-field="text" {...trackFocus(node)} onCommit={(v) => edit(node.id, { text: v })} />
+                  <DraftText key={node.id} value={node.text ?? ''} data-field="text" {...trackFocus(node)} onCommit={(v) => edit(node.id, { text: v })} />
                 </label>
                 <div className="ds-bindings">
                   <span className="ds-label">Platzhalter einfügen</span>
