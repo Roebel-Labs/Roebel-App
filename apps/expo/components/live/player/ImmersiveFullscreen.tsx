@@ -59,7 +59,7 @@ export type SeekFx = { side: 'back' | 'forward'; seconds: number; key: number };
 
 type Props = {
   player: VideoPlayer;
-  videoRef: React.Ref<VideoView>;
+  videoRef: React.RefObject<VideoView | null>;
   /** Mount the VideoView (false for a moment while the mini player hands over, and when there is no source). */
   attachVideo: boolean;
   /** There is a stream / replay source at all (pre-show and ended-without-replay have none). */
@@ -126,16 +126,17 @@ function lockPortrait() {
   void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => undefined);
 }
 function lockLandscape() {
-  if (Platform.OS === 'web') return;
+  // iOS: the app's Info.plist is portrait-only, and a landscape-only lock has no common orientation with it →
+  // UIKit throws (app crash). iOS rotates via the native fullscreen player instead (see `rotate`).
+  if (Platform.OS !== 'android') return;
   void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => undefined);
 }
 /** Follow the device. iOS: an explicit mask (the Info.plist default is portrait-only); Android: hand back to the system (respects auto-rotate). */
 function allowRotation() {
   if (Platform.OS === 'web') return;
-  const p = Platform.OS === 'ios'
-    ? ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL_BUT_UPSIDE_DOWN)
-    : ScreenOrientation.unlockAsync();
-  void p.catch(() => undefined);
+  // iOS stays portrait (Info.plist is portrait-only; landscape = native fullscreen player via the rotate button).
+  if (Platform.OS !== 'android') return;
+  void ScreenOrientation.unlockAsync().catch(() => undefined);
 }
 
 export default function ImmersiveFullscreen(props: Props) {
@@ -177,8 +178,14 @@ export default function ImmersiveFullscreen(props: Props) {
     setManual('landscape');
   }, []);
   const rotate = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      // The native player rotates freely in its own fullscreen, independent of the app's portrait-only setting.
+      haptic();
+      void videoRef.current?.enterFullscreen?.().catch(() => undefined);
+      return;
+    }
     if (landscape) toPortrait(); else toLandscape();
-  }, [landscape, toPortrait, toLandscape]);
+  }, [landscape, toPortrait, toLandscape, videoRef]);
 
   // Android back in landscape: back to portrait first, not out of the room.
   useEffect(() => {

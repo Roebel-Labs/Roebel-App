@@ -24,6 +24,7 @@ import {
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import Doorbell from '@/components/live/guest/Doorbell';
 import LoginDrawer from '@/components/LoginDrawer';
+import { useLivePlayerHost } from '@/components/live/player/LivePlayerProvider';
 import { F, liveStyles, useLivePalette, type LivePalette } from '@/components/live/tokens';
 // Type-only: erased at compile time, does not load the module.
 import type { GuestStageProps } from '@/components/live/guest/GuestStage';
@@ -115,6 +116,19 @@ export default function LiveGuestJoinScreen() {
 
   // Leaving the screen with an open request (swipe back, app nav) withdraws it.
   useEffect(() => () => { void cancelRequest(); }, [cancelRequest]);
+
+  // ─── While on air as a guest: silence the stream playing in the room behind this screen, or its sound
+  // goes into the guest's microphone and back to the studio (echo / feedback loop). Restored on hang-up. ───
+  const playerHost = useLivePlayerHost();
+  useEffect(() => {
+    if (phase !== 'live') return;
+    let p: ReturnType<typeof playerHost.acquire> | null = null;
+    try { p = playerHost.acquire(); p.muted = true; p.pause(); } catch { /* no shared player yet */ }
+    return () => {
+      if (!p) return;
+      try { p.muted = false; p.play(); } catch { /* released meanwhile */ }
+    };
+  }, [phase, playerHost]);
 
   // ─── Keep the screen awake while waiting / live ───
   const awake = phase === 'waiting' || phase === 'live';
