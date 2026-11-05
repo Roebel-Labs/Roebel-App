@@ -35,15 +35,12 @@ import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
-import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
 import SponsoringBanner from '@/components/profile/SponsoringBanner';
 import { DANCECUP_SLUG } from '@/lib/sponsoring';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
-import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
-import * as Updates from 'expo-updates';
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -66,15 +63,6 @@ export default function ProfileScreen() {
   const [showAccountSheet, setShowAccountSheet] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [storyCollections, setStoryCollections] = useState<StoryCollection[]>([]);
-  const [chatEnabled, setChatEnabled] = useState(true);
-  // The Mecky chat banner is not released yet: hidden on the production channel, kept on preview/dev for testing.
-  const chatBannerOnChannel = (() => {
-    try {
-      return Updates.channel !== 'production';
-    } catch {
-      return false;
-    }
-  })();
 
   const isConnected = !!account;
   const isOrg = activeAccount?.account_type === 'organisation';
@@ -89,7 +77,6 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     fetchProfileStoryCollections().then(setStoryCollections);
-    fetchChatSuiteEnabled().then(setChatEnabled);
   }, []);
 
   const handleDisconnect = async () => {
@@ -215,7 +202,6 @@ export default function ProfileScreen() {
                     </View>
                   )}
                   {showGrid && <ProfileActionGrid items={PERSONAL_PROFILE_ACTIONS} />}
-                  {chatEnabled && chatBannerOnChannel && <ChatAgentsBanner wallet={account?.address} />}
                   {(isCitizen || isAspiringCitizen || wantsToBeCitizen) && (
                     <StoryCollectionsBar collections={storyCollections} heading="Lerne mehr über die Röbel App" />
                   )}

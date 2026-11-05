@@ -13,6 +13,8 @@ import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
+import * as Updates from 'expo-updates';
 import BottomDrawer from '@/components/BottomDrawer';
 import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -97,6 +99,28 @@ export default function SettingsScreen() {
   const [showMembershipMenu, setShowMembershipMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
+
+  // The bots (Mecky chat suite) are not released yet: remote flag + non-production channel,
+  // the same gate the former profile card had. Moved here off the profile on 2026-11-05.
+  const [showBots, setShowBots] = useState(false);
+  useEffect(() => {
+    let onChannel = false;
+    try {
+      onChannel = Updates.channel !== 'production';
+    } catch {
+      onChannel = false;
+    }
+    if (!onChannel) return;
+    let cancelled = false;
+    fetchChatSuiteEnabled()
+      .then((ok) => {
+        if (!cancelled) setShowBots(ok);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Preview-only (flag + non-production channel): passkey sovereign accounts, tranche 1.
   const [showPasskey, setShowPasskey] = useState(false);
@@ -299,6 +323,20 @@ export default function SettingsScreen() {
                   {canRequestAttester
                     ? 'Bescheiniger beantragen oder Mitgliedschaft entziehen.'
                     : 'Entziehung im Browser beantragen — eigene Rolle oder anderes Mitglied.'}
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          </Section>
+        ) : null}
+
+        {showBots ? (
+          <Section title="BOTS" colors={colors}>
+            <Pressable style={styles.themeOptionRow} onPress={() => router.push('/chat' as any)}>
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>Deine Bots</Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Mecky und die anderen Agenten: Chats öffnen und neue Fragen stellen.
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
