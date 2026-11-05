@@ -1,6 +1,6 @@
 import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
-import { starterTemplates } from '../render/templates';
+import { STARTER_TEMPLATES, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
   OverlayInstance,
@@ -31,6 +31,9 @@ export type Action =
   | { type: 'addOverlay'; templateId: string; id?: string }
   | { type: 'removeOverlay'; id: string }
   | { type: 'updateTemplate'; template: Template }
+  | { type: 'addTemplate'; template: Template }
+  | { type: 'removeTemplate'; id: string }
+  | { type: 'resetTemplate'; id: string }
   | { type: 'setTable'; table: Table }
   | { type: 'updateCell'; rowId: string; column: string; value: string }
   | { type: 'addRow'; values?: Record<string, string> }
@@ -185,6 +188,24 @@ export function showReducer(s: ShowState, a: Action): ShowState {
       return { ...s, overlays: s.overlays.filter((o) => o.id !== a.id) };
     case 'updateTemplate':
       return { ...s, templates: s.templates.map((t) => (t.id === a.template.id ? a.template : t)) };
+    case 'addTemplate': {
+      if (s.templates.some((t) => t.id === a.template.id)) return s;
+      return {
+        ...s,
+        templates: [...s.templates, a.template],
+        overlays: [...s.overlays, { id: `ov-${a.template.id}`, templateId: a.template.id, visible: false, changedAt: 0, fromProgress: 0 }],
+      };
+    }
+    case 'removeTemplate': {
+      // Starters can be reset but never deleted; the show depends on them.
+      if (STARTER_TEMPLATES.some((t) => t.id === a.id) || !s.templates.some((t) => t.id === a.id)) return s;
+      return { ...s, templates: s.templates.filter((t) => t.id !== a.id), overlays: s.overlays.filter((o) => o.templateId !== a.id) };
+    }
+    case 'resetTemplate': {
+      const starter = STARTER_TEMPLATES.find((t) => t.id === a.id);
+      if (!starter || !s.templates.some((t) => t.id === a.id)) return s;
+      return { ...s, templates: s.templates.map((t) => (t.id === a.id ? structuredClone(starter) : t)) };
+    }
     case 'setTable':
       return { ...s, table: a.table };
     case 'updateCell':
