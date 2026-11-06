@@ -15,6 +15,8 @@ export type OutputConfig = {
   fps: 30 | 50;
   videoKbps: number;
   audioKbps: number;
+  /** false = no local .mkv (long shows, small disk); the stream is unaffected. */
+  record: boolean;
   recordDir: string;
   ffmpegPath: string;
 };
@@ -35,6 +37,8 @@ export type OutputStatus = {
   lastError?: string;
   /** Set while the local recording is broken ("Aufnahme unterbrochen"); cleared once a write into a new file succeeds. */
   recordingError?: string;
+  /** "Lokal aufnehmen" is off for this session. */
+  recordingOff?: boolean;
   /** No destination: the session only records locally (no ffmpeg). */
   recordOnly?: boolean;
   /** Last time ffmpeg reported "FIFO queue full": a destination cannot keep up and drops packets. */
@@ -154,6 +158,8 @@ export type Settings = {
   fps: 30 | 50;
   videoKbps: number;
   audioKbps: number;
+  /** Lokal aufnehmen (default on). */
+  record: boolean;
   recordDir: string;
   ffmpegPath: string;
 };

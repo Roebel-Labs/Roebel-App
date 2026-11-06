@@ -324,6 +324,16 @@ export function SettingsTab() {
 
         <section>
           <h3>Aufnahme</h3>
+          <label className="check">
+            <input type="checkbox" checked={s.record} onChange={(e) => set({ record: e.target.checked })} />
+            Lokal aufnehmen
+          </label>
+          {!s.record && (
+            <span className="hint">
+              Aus: nichts wird auf diesem Rechner gespeichert (gut für lange Sendungen). Der Stream läuft unverändert; die
+              Aufzeichnung in der App macht Cloudflare.
+            </span>
+          )}
           <label className="field">
             <span>Ordner</span>
             <div className="with-btn">
@@ -339,7 +349,11 @@ export function SettingsTab() {
               </button>
             </div>
           </label>
-          <span className="hint">Jede Sendung wird zusätzlich lokal als .mkv gespeichert, auch bei „Nur aufnehmen“.</span>
+          {s.record && (
+            <span className="hint">
+              Jede Sendung wird zusätzlich lokal als .mkv gespeichert, auch bei „Nur aufnehmen“. Bedarf: etwa 5–6 GB pro Stunde.
+            </span>
+          )}
         </section>
 
         <section>

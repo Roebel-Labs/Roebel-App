@@ -18,6 +18,7 @@ type Status = {
   recordingError?: string;
   recordOnly?: boolean;
   lastError?: string;
+  recordingOff?: boolean;
   destinations?: { id: string; state: 'ok' | 'failed'; lastError?: string }[];
 };
 
@@ -226,6 +227,19 @@ describe('createOutput', () => {
     await waitFor(() => (out.getStatus() as Status & { slowDestinationAt?: number }).slowDestinationAt !== undefined);
     expect((out.getStatus() as Status & { slowDestinationAt?: number }).slowDestinationAt).toBeGreaterThanOrEqual(t0);
     expect(logs.filter((l) => /FIFO queue full/.test(l))).toHaveLength(1);
+  });
+
+  it('"Lokal aufnehmen" off: streams to ffmpeg but writes no .mkv', async () => {
+    await out.start({ ...cfg(), record: false });
+    out.chunk(header());
+    out.chunk(cluster());
+    await waitFor(() => fs.existsSync(dump) && fs.statSync(dump).size > 0);
+    expect(mkvFiles()).toEqual([]);
+    expect(out.getStatus().recordingOff).toBe(true);
+  });
+
+  it('no destination and recording off refuses to start', async () => {
+    await expect(out.start({ ...cfg(), destinations: [], record: false })).rejects.toThrow('nothing_to_do');
   });
 
   it('record-only mode (no destinations) writes the recording without spawning ffmpeg', async () => {

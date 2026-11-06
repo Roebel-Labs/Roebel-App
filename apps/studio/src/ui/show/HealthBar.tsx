@@ -145,7 +145,7 @@ export function HealthBar() {
         <>
           <Item
             label="Aufnahme"
-            value={st?.recordingError ? 'unterbrochen' : mb(st?.recordingBytes ?? 0)}
+            value={st?.recordingOff ? 'aus' : st?.recordingError ? 'unterbrochen' : mb(st?.recordingBytes ?? 0)}
             bad={!!st?.recordingError}
             title={st?.recordingFile}
           />

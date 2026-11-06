@@ -108,6 +108,7 @@ function createOutput(hooks) {
 
   function openRecording() {
     closeRecording();
+    if (cfg.record === false) return; // "Lokal aufnehmen" off: nothing touches the disk
     try {
       // Re-create the directory in case it vanished after start (e.g. unplugged drive).
       fs.mkdirSync(cfg.recordDir, { recursive: true });
@@ -249,8 +250,9 @@ function createOutput(hooks) {
     const destinations = withIds(usableDestinations(newCfg));
     cfg = { ...newCfg, destinations, recordDir: expandHome(newCfg.recordDir) };
     delete cfg.target;
-    fs.mkdirSync(cfg.recordDir, { recursive: true });
     recordOnly = destinations.length === 0;
+    if (recordOnly && cfg.record === false) throw new Error('nothing_to_do');
+    if (cfg.record !== false) fs.mkdirSync(cfg.recordDir, { recursive: true });
     if (!recordOnly) buildFfmpegArgs(cfg); // validate before flipping state
     started = true;
     held = null;
@@ -261,7 +263,7 @@ function createOutput(hooks) {
       status = { state: 'live', since: Date.now(), recordingBytes: 0, restarts: 0, recordOnly: true, destinations: [] };
       hooks.sendStatus({ ...status });
     } else {
-      status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0 };
+      status = { state: 'connecting', since: Date.now(), recordingBytes: 0, restarts: 0, recordingOff: cfg.record === false };
       hooks.sendStatus({ ...status });
       spawnFfmpeg();
     }

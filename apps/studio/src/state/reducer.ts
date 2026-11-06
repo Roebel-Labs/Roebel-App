@@ -87,6 +87,7 @@ export function defaultSettings(): Settings {
     fps: 30,
     videoKbps: 6000,
     audioKbps: 160,
+    record: true,
     recordDir: DEFAULT_RECORD_DIR,
     ffmpegPath: '/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg',
   };
@@ -549,6 +550,7 @@ function restoreSettings(v: unknown): Settings {
     fps: v.fps === 50 ? 50 : v.fps === 30 ? 30 : d.fps,
     videoKbps: num(v.videoKbps, d.videoKbps),
     audioKbps: num(v.audioKbps, d.audioKbps),
+    record: v.record !== false,
     recordDir: ((r) => (r === LEGACY_RECORD_DIR ? DEFAULT_RECORD_DIR : r))(str(v.recordDir, d.recordDir)),
     ffmpegPath: str(v.ffmpegPath, d.ffmpegPath),
   };

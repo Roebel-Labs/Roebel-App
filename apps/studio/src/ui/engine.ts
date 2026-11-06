@@ -242,6 +242,7 @@ export function errorText(e: unknown): string {
   // ipcRenderer.invoke wraps main errors: "Error invoking remote method 'x': Error: msg"
   const msg = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
   if (msg === 'no_target') return 'Kein Sendeziel eingestellt';
+  if (msg === 'nothing_to_do') return 'Kein Sendeziel und Aufnahme aus: es gibt nichts zu tun';
   if (msg === 'recorder_mime_unsupported') return 'Dieses System kann den Programm-Stream nicht kodieren';
   return msg;
 }
@@ -258,6 +259,7 @@ export function outputConfig(s: Settings): OutputConfig {
     fps: s.fps,
     videoKbps: s.videoKbps,
     audioKbps: s.audioKbps,
+    record: s.record,
     recordDir: s.recordDir,
     ffmpegPath: s.ffmpegPath,
   };
