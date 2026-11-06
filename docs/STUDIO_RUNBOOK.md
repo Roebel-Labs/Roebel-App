@@ -54,6 +54,20 @@ Alles, was macOS als Kamera (UVC) meldet, ist als Quelle nutzbar. Beispiele:
 - Soll dieselbe Kamera parallel in einer zweiten App laufen (z. B. OBS), vorher testen: USB-UVC-Geräte gehen meist in
   zwei Apps, iPhone/Continuity Camera und manche Capture-Karten nur in einer.
 
+### iPhone als Kamera (Continuity Camera)
+
+1. Mac und iPhone mit derselben Apple-ID, auf beiden WLAN und Bluetooth an.
+2. iPhone gesperrt und quer in eine Halterung nahe am Mac stellen, oder per USB-Kabel anschließen (stabiler).
+3. Es erscheint als „<Name> Kamera" unter **+ Quelle → Kamera**.
+
+Fehlt das iPhone: Studio beenden und `pnpm studio` neu starten (das wendet den nötigen Info.plist-Eintrag
+`NSCameraUseContinuityCameraDeviceType` erneut an, siehe `apps/studio/scripts/patch-electron-plist.cjs`). Dann prüfen:
+Mac **Systemeinstellungen → Allgemein → AirPlay & Handoff → Continuity-Kamera** an, und am iPhone
+**Einstellungen → Allgemein → AirPlay & Handoff → Continuity-Kamera** an.
+
+Nach einem Update fragt macOS evtl. erneut nach Kamera/Mikrofon – erlauben. (Der Patch signiert die Electron-App neu,
+dadurch gilt sie für macOS als neue App.)
+
 ## Audio und Mischpult
 
 - Mischpult oder Audio-Interface als Mikrofonquelle wählen; die Pegel zeigt der Mixer im **Show**-Tab.
