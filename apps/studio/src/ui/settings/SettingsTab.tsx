@@ -155,6 +155,12 @@ function DestinationCard({
           <SecretInput disabled={locked} label="SRT-Adresse" placeholder="srt://live.cloudflare.com:778?passphrase=…&streamid=…" value={t.url} onChange={(url) => setTarget({ kind: 'srt', url })} />
         </label>
       )}
+      {t.kind === 'srt' && t.url.includes('live.cloudflare.com') && (
+        <span className="err-text">
+          Cloudflare über SRT stockt in der App (gemessen: Aussetzer bis 35 s). Besser RTMPS: Live-Raum → Zugangsdaten holen →
+          „RTMPS als Ziel übernehmen“.
+        </span>
+      )}
       {t.kind === 'rtmp' && (
         <div className="grid2">
           <label className="field">

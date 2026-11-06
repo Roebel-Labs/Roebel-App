@@ -180,9 +180,22 @@ export function StreamSection() {
           <CopyField label="Streamschlüssel" value={info.stream_key} secret />
           {seams.addDestination ? (
             <div className="lr-row">
-              {dests?.srt && (
+              {/* RTMPS first: measured 2026-11-06, Cloudflare's SRT ingest published HLS segments in
+                  bursts with 13-35 s gaps (endless "gleich zurück" in the app); RTMPS ran a steady 2 s. */}
+              {dests?.rtmps && (
                 <button
                   className="btn"
+                  onClick={() => {
+                    seams.addDestination!(dests.rtmps!);
+                    setTaken('RTMPS');
+                  }}
+                >
+                  RTMPS als Ziel übernehmen (empfohlen)
+                </button>
+              )}
+              {dests?.srt && (
+                <button
+                  className="btn ghost"
                   onClick={() => {
                     seams.addDestination!(dests.srt!);
                     setTaken('SRT');
@@ -191,24 +204,13 @@ export function StreamSection() {
                   SRT als Ziel übernehmen
                 </button>
               )}
-              {dests?.rtmps && (
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    seams.addDestination!(dests.rtmps!);
-                    setTaken('RTMPS');
-                  }}
-                >
-                  RTMPS als Ziel übernehmen
-                </button>
-              )}
               {taken && <span className="hint">{taken}-Ziel übernommen – in Einstellungen einschalten.</span>}
             </div>
           ) : (
             <p className="hint lr-note">
-              So kommt das Bild in die App: <strong>Einstellungen → Sendeziel</strong> öffnen, <strong>SRT</strong> wählen und die
-              kopierte SRT-Adresse einfügen. Alternativ <strong>RTMPS</strong> wählen und Adresse und Streamschlüssel einfügen. Gilt ab dem
-              nächsten Sendestart.
+              So kommt das Bild in die App: <strong>Einstellungen → Sendeziel</strong> öffnen, <strong>RTMPS</strong> wählen und
+              Adresse und Streamschlüssel einfügen (empfohlen: läuft in der App ohne Aussetzer). SRT geht auch, stockt bei Cloudflare aber.
+              Gilt ab dem nächsten Sendestart.
             </p>
           )}
           <div className="lr-row">
