@@ -223,10 +223,11 @@ export const DANCECUP_EVENT_ID = '65e89958-6e1d-4e63-b018-66dcfcd20461';
 export const DANCECUP_LIVE_SLUG = 'dancecup-2026';
 
 /**
- * Reach figures for the sales page, counted in the database on 2026-11-06 (personal accounts,
- * active push devices, org accounts). Rounded down on purpose; refresh them for the next campaign.
+ * Reach figures for the sales page. pushDevices + orgs were counted in the database on 2026-11-06;
+ * appPeople and streamViewers come from Max's 2026-11-06 page design (the database counted 180
+ * personal accounts that day). Refresh them for the next campaign.
  */
-export const SPONSORING_REACH = { appPeople: 180, pushDevices: 240, orgs: 40 } as const;
+export const SPONSORING_REACH = { appPeople: 500, pushDevices: 240, streamViewers: 100, orgs: 40 } as const;
 
 export interface CampaignEvent { title: string; image_url: string | null }
 

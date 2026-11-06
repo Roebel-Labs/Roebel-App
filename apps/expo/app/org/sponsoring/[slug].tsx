@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensi
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
@@ -18,12 +19,21 @@ import {
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 
-const REASONS: { icon: string; title: string; body: string }[] = [
-  { icon: '📺', title: 'Vollbild statt Banner', body: 'Eure Werbung läuft in den Pausen über den ganzen Bildschirm – nie über den Tänzen, sondern dann, wenn alle hinschauen.' },
-  { icon: '👨‍👩‍👧', title: 'Familien aus der ganzen Region', body: 'Großeltern, Eltern und Freunde der Tänzerinnen und Tänzer schauen zu Hause mit – genau die Menschen, die bei euch einkaufen.' },
-  { icon: '⏱', title: 'Ein ganzer Wettkampftag', body: 'Von 10 bis 17 Uhr live. Euer Spot läuft in jeder Pause, nicht nur einmal.' },
-  { icon: '🤝', title: 'Gutes tun und gesehen werden', body: 'Ihr unterstützt den 26. Müritz Dance Cup und den TSV 90 Röbel – und alle sehen, wer dahintersteht.' },
+const REASONS: { image: number; title: string; body: string }[] = [
+  { image: require('@/assets/images/sponsoring/reason-visible.png'), title: 'Überall sichtbar', body: 'Eure Werbung läuft in den Pausen über den ganzen Bildschirm, nie über den Tänzen, sondern dann, wenn alle hinschauen.' },
+  { image: require('@/assets/images/sponsoring/reason-families.png'), title: 'Familien aus der ganzen Region', body: 'Großeltern, Eltern und Freunde der Tänzerinnen und Tänzer schauen zu Hause mit, genau die Menschen, die bei euch einkaufen.' },
+  { image: require('@/assets/images/sponsoring/reason-good.png'), title: 'Gutes tun und gesehen werden', body: 'Ihr unterstützt den 26. Müritz Dance Cup und den TSV 90 Röbel und alle sehen, wer dahintersteht.' },
 ];
+
+const REACH: { value: string; label: string }[] = [
+  { value: `Über ${SPONSORING_REACH.appPeople}\nMenschen`, label: 'Menschen aus Röbel in der App' },
+  { value: `Über ${SPONSORING_REACH.pushDevices}`, label: 'Handys mit Push-Nachrichten' },
+  { value: `${SPONSORING_REACH.streamViewers}+\nZuschauer`, label: 'Kanäle: App, YouTube, Facebook' },
+];
+
+/** The two full-bleed sections keep their brand colours in both themes. */
+const REACH_BG = '#00498B';
+const CONTACT_BG = '#171A1F';
 
 function countdown(deadlineIso: string, now: number): string {
   const ms = Date.parse(deadlineIso) - now;
@@ -44,7 +54,7 @@ export default function SponsoringDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { activeAccount } = useAccount();
   const thirdwebAccount = useActiveAccount();
@@ -172,7 +182,7 @@ export default function SponsoringDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         {header}
-        <View style={styles.scroll} accessibilityLabel="Wird geladen">
+        <View style={styles.loadingBody} accessibilityLabel="Wird geladen">
           <ShimmerSkeleton width="70%" height={28} borderRadius={6} />
           <View style={styles.skeletonLines}>
             <ShimmerSkeleton width="100%" height={14} borderRadius={4} />
@@ -216,51 +226,61 @@ export default function SponsoringDetailScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {header}
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: canBuy ? 140 + insets.bottom : 40 + insets.bottom }]}>
-        <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.hero, { backgroundColor: colors.primary }]}
-          accessibilityRole="link" accessibilityLabel="Zum Müritz Dance Cup">
-          {event?.image_url ? <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
-          <View style={styles.heroShade} />
-          <View style={styles.heroChip}><Text style={styles.heroChipText}>LIVE · Sa., 7. November</Text></View>
-          <View style={styles.heroBottom}>
-            <Text style={styles.heroTitle}>26. Müritz Dance Cup</Text>
-            <Text style={styles.heroMeta}>10–17 Uhr · Sporthalle am Gotthunskamp, Röbel</Text>
-          </View>
-        </Pressable>
-        <View style={styles.heroLinks}>
-          <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} hitSlop={6} accessibilityRole="link">
-            <Text style={[styles.heroLink, { color: colors.primary }]}>Zum Event ›</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push(`/live/${DANCECUP_LIVE_SLUG}` as any)} hitSlop={6} accessibilityRole="link">
-            <Text style={[styles.heroLink, { color: colors.primary }]}>Zum Livestream ›</Text>
-          </Pressable>
-        </View>
-
+      <ScrollView contentContainerStyle={{ paddingTop: 16, paddingBottom: canBuy ? 140 + insets.bottom : 40 + insets.bottom }}>
         {bought ? (
-          <View style={[styles.successBox, { backgroundColor: colors.primaryLight }]}>
-            <Text style={[styles.successTitle, { color: colors.textPrimary }]}>Ihr seid dabei! 🎉</Text>
-            <Text style={[styles.body, { color: colors.textPrimary }]}>
-              {orgName} läuft mit „{myBestPaid?.name}“ in den Pausen des DanceCup-Livestreams.
-            </Text>
-            <Pressable onPress={() => router.push(`/org/sponsoring/status/${slug}` as any)} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
-              <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Status und Infos</Text>
-            </Pressable>
-            <Pressable onPress={share} style={[styles.secondaryBtn, { borderColor: colors.primary }]} accessibilityRole="button">
-              <Text style={[styles.secondaryText, { color: colors.primary }]}>Teilen: „Wir sind dabei“</Text>
-            </Pressable>
+          <View style={styles.pad}>
+            <View style={[styles.successBox, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.successTitle, { color: colors.textPrimary }]}>Ihr seid dabei! 🎉</Text>
+              <Text style={[styles.body, { color: colors.textPrimary }]}>
+                {orgName} läuft mit „{myBestPaid?.name}“ in den Pausen des DanceCup-Livestreams.
+              </Text>
+              <Pressable onPress={() => router.push(`/org/sponsoring/status/${slug}` as any)} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
+                <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Status und Infos</Text>
+              </Pressable>
+              <Pressable onPress={share} style={[styles.secondaryBtn, { borderColor: colors.primary }]} accessibilityRole="button">
+                <Text style={[styles.secondaryText, { color: colors.primary }]}>Teilen: „Wir sind dabei“</Text>
+              </Pressable>
+            </View>
           </View>
         ) : (
-          <>
+          <View style={styles.intro}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Eure Werbung vor ganz Röbel</Text>
             <Text style={[styles.body, { color: colors.textSecondary }]}>
               Der DanceCup läuft live in der Röbel App, auf YouTube und Facebook. Zwischen den Runden zeigen wir eure Werbung im Vollbild – professionell eingebaut, als Werbung gekennzeichnet.
             </Text>
+          </View>
+        )}
 
-            <View style={styles.section}>
+        <View style={styles.eventBlock}>
+          <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.hero, { backgroundColor: colors.primary }]}
+            accessibilityRole="link" accessibilityLabel="Zum Müritz Dance Cup">
+            {event?.image_url ? <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.77)', 'rgba(0,0,0,0.9)']} locations={[0.36, 0.78, 1]} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={['#F62C33', '#FF0548']} start={{ x: 0, y: 1 }} end={{ x: 1, y: 0 }} style={styles.heroChip}>
+              <Text style={styles.heroChipText}>LIVE · Sa., 7. November</Text>
+            </LinearGradient>
+            <View style={styles.heroBottom}>
+              <Text style={styles.heroTitle}>26. Müritz Dance Cup</Text>
+              <Text style={styles.heroMeta}>10–17 Uhr · Sporthalle am Gotthunskamp, Röbel</Text>
+            </View>
+          </Pressable>
+          <View style={styles.buttons}>
+            <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.button, { backgroundColor: colors.textPrimary }]} accessibilityRole="link">
+              <Text style={[styles.buttonText, { color: colors.background }]}>Zum Event</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push(`/live/${DANCECUP_LIVE_SLUG}` as any)} style={[styles.button, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#DEDEDE' }]} accessibilityRole="link">
+              <Text style={[styles.buttonText, { color: colors.textPrimary }]}>Zum Livestream</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {!bought ? (
+          <>
+            <View style={[styles.band, { backgroundColor: colors.surfaceSecondary }]}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Warum beim DanceCup werben?</Text>
               {REASONS.map((r) => (
-                <View key={r.title} style={styles.reason}>
-                  <Text style={styles.reasonIcon}>{r.icon}</Text>
+                <View key={r.title} style={[styles.reason, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <Image source={r.image} style={styles.reasonImage} contentFit="contain" accessible={false} />
                   <View style={styles.reasonText}>
                     <Text style={[styles.reasonTitle, { color: colors.textPrimary }]}>{r.title}</Text>
                     <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>{r.body}</Text>
@@ -269,48 +289,50 @@ export default function SponsoringDetailScreen() {
               ))}
             </View>
 
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Wen ihr erreicht</Text>
-              <View style={styles.stats}>
-                {[
-                  { value: `${SPONSORING_REACH.appPeople}+`, label: 'Menschen aus Röbel in der App' },
-                  { value: `${SPONSORING_REACH.pushDevices}+`, label: 'Handys mit Push-Nachrichten' },
-                  { value: '3', label: 'Kanäle: App, YouTube, Facebook' },
-                ].map((st) => (
-                  <View key={st.label} style={[styles.stat, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.statValue, { color: colors.primary }]}>{st.value}</Text>
+            <View style={[styles.band, styles.reachBand, { backgroundColor: REACH_BG }]}>
+              <View>
+                <Text style={styles.eyebrow}>VORTEILE</Text>
+                <Text style={styles.reachTitle}>Wen ihr erreicht</Text>
+              </View>
+              <View style={[styles.stats, { backgroundColor: colors.background }]}>
+                <Text style={[styles.statsTitle, { color: colors.textPrimary }]}>Profitieren Sie mit hoher regionaler Sichtbarkeit</Text>
+                {REACH.map((st) => (
+                  <View key={st.label} style={styles.stat}>
+                    <Text style={[styles.statValue, { color: colors.primary }]}>{st.value.toUpperCase()}</Text>
                     <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{st.label}</Text>
                   </View>
                 ))}
               </View>
-              <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+              <Text style={styles.reachNote}>
                 Dazu die Zuschauer in der Halle und alle, die von den Gruppen und Einzelstartern aus der Region den Link bekommen.
               </Text>
             </View>
           </>
-        )}
+        ) : null}
 
-        <View style={styles.previewWrap}>
+        <View style={[styles.previewBand, { backgroundColor: colors.surfaceSecondary }]}>
           <BreakSpotPreview key={kind} kind={kind} orgName={orgName} logoUrl={orgLogo} logoColor={logoColor} dishes={dishes} />
-          <Text style={[styles.small, { color: colors.textTertiary }]}>{previewNote}</Text>
+          <Text style={[styles.previewNote, { color: colors.textSecondary }]}>{previewNote}</Text>
         </View>
 
         {bought && open && upgradeTarget && myBestPaid ? (
-          <View style={[styles.upgrade, { borderColor: colors.primary }]}>
-            <Text style={[styles.pkgName, { color: colors.textPrimary }]}>Lieber einen richtigen Werbespot?</Text>
-            <Text style={[styles.body, { color: colors.textSecondary }]}>
-              Wir schneiden euch 15 Sekunden {catalog?.source === 'menu' ? 'mit euren Gerichten' : catalog?.source === 'listings' ? 'mit euren Angeboten' : 'mit euren Fotos und Produkten'} – wie im Fernsehen. Ihr zahlt nur die Differenz.
-            </Text>
-            <Pressable onPress={startUpgrade} disabled={!!busy} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
-              <Text style={[styles.ctaText, { color: colors.onPrimary }]}>
-                {busy ?? `Upgrade für ${formatEuro(upgradeTarget.price_cents - myBestPaid.price_cents)}`}
+          <View style={styles.pad}>
+            <View style={[styles.upgrade, { borderColor: colors.primary }]}>
+              <Text style={[styles.pkgName, { color: colors.textPrimary }]}>Lieber einen richtigen Werbespot?</Text>
+              <Text style={[styles.body, { color: colors.textSecondary }]}>
+                Wir schneiden euch 15 Sekunden {catalog?.source === 'menu' ? 'mit euren Gerichten' : catalog?.source === 'listings' ? 'mit euren Angeboten' : 'mit euren Fotos und Produkten'} – wie im Fernsehen. Ihr zahlt nur die Differenz.
               </Text>
-            </Pressable>
+              <Pressable onPress={startUpgrade} disabled={!!busy} style={[styles.cta, { backgroundColor: colors.primary }]} accessibilityRole="button">
+                <Text style={[styles.ctaText, { color: colors.onPrimary }]}>
+                  {busy ?? `Upgrade für ${formatEuro(upgradeTarget.price_cents - myBestPaid.price_cents)}`}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
 
         {!bought ? (
-          <View style={styles.options}>
+          <View style={[styles.band, { backgroundColor: colors.surfaceSecondary }]}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pakete</Text>
             {view.packages.map((p) => {
               const sel = p.id === packageId;
@@ -363,10 +385,11 @@ export default function SponsoringDetailScreen() {
           </View>
         ) : null}
 
+
         {isOrg && orgId ? <AdMaterialUpload myAccountId={orgId} orgName={orgName} /> : null}
 
         {others.length > 0 ? (
-          <View>
+          <View style={styles.pad}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>Schon dabei</Text>
             <View style={styles.supporters}>
               {others.slice(0, 12).map((s) => (
@@ -382,7 +405,7 @@ export default function SponsoringDetailScreen() {
 
         <SponsoringContact myAccountId={activeAccount?.id ?? null} orgName={orgName} packageName={(bought ? myBestPaid : pkg)?.name ?? null} booked={bought} />
 
-        <Text style={[styles.small, { color: colors.textTertiary }]}>
+        <Text style={[styles.small, styles.footNote, { color: colors.textSecondary }]}>
           {countdown(view.campaign.booking_deadline, now)} · Alle Spots werden im Stream als „Werbung“ gekennzeichnet.
           {!isOrg ? ' Wechsle zu deinem Vereins- oder Geschäftskonto, um zu buchen.' : ''}
         </Text>
@@ -408,35 +431,44 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fontFamily.semiBold, fontSize: 16 },
-  scroll: { padding: 16, gap: 16 },
-  title: { fontFamily: fontFamily.heading, fontSize: 24 },
+  loadingBody: { padding: 16, gap: 16 },
+  pad: { paddingHorizontal: 16, paddingBottom: 16 },
+  intro: { padding: 16, gap: 8 },
+  title: { fontFamily: fontFamily.heading, fontSize: 28 },
   body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 21 },
   small: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17 },
   label: { fontFamily: fontFamily.medium, fontSize: 13, marginBottom: 8 },
-  previewWrap: { gap: 8 },
-  hero: { height: 200, borderRadius: 16, overflow: 'hidden', justifyContent: 'space-between', padding: 14 },
-  heroShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
-  heroChip: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#E5484D' },
-  heroChipText: { fontFamily: fontFamily.bold, fontSize: 11, color: '#FFFFFF', letterSpacing: 0.4 },
+  eventBlock: { paddingHorizontal: 16, paddingBottom: 32, gap: 16 },
+  hero: { height: 200, borderRadius: 12, overflow: 'hidden', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
+  heroChip: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  heroChipText: { fontFamily: fontFamily.heading, fontSize: 11, color: '#FFFFFF', letterSpacing: 0.4 },
   heroBottom: { gap: 2 },
   heroTitle: { fontFamily: fontFamily.heading, fontSize: 26, color: '#FFFFFF' },
   heroMeta: { fontFamily: fontFamily.medium, fontSize: 13, color: 'rgba(255,255,255,0.9)' },
-  heroLinks: { flexDirection: 'row', gap: 20, marginTop: -6 },
-  heroLink: { fontFamily: fontFamily.semiBold, fontSize: 14 },
-  section: { gap: 12 },
-  sectionTitle: { fontFamily: fontFamily.heading, fontSize: 20 },
-  reason: { flexDirection: 'row', gap: 12 },
-  reasonIcon: { fontSize: 22, lineHeight: 26, width: 28, textAlign: 'center' },
-  reasonText: { flex: 1, gap: 2 },
-  reasonTitle: { fontFamily: fontFamily.semiBold, fontSize: 15 },
-  stats: { flexDirection: 'row', gap: 8 },
-  stat: { flex: 1, borderRadius: 12, padding: 12, gap: 4 },
-  statValue: { fontFamily: fontFamily.heading, fontSize: 22 },
-  statLabel: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 16 },
+  buttons: { gap: 8 },
+  button: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, alignItems: 'center' },
+  buttonText: { fontFamily: fontFamily.semiBold, fontSize: 15 },
+  band: { paddingHorizontal: 16, paddingVertical: 32, gap: 12 },
+  sectionTitle: { fontFamily: fontFamily.heading, fontSize: 24 },
+  reason: { flexDirection: 'row', gap: 24, padding: 24, borderRadius: 12, borderWidth: 1 },
+  reasonImage: { width: 88, height: 88 },
+  reasonText: { flex: 1, gap: 8 },
+  reasonTitle: { fontFamily: fontFamily.headingSemiBold, fontSize: 24, lineHeight: 28 },
+  reachBand: { gap: 16 },
+  eyebrow: { fontFamily: fontFamily.headingSemiBold, fontSize: 14, letterSpacing: 2.8, color: '#FFFFFF', textAlign: 'center' },
+  reachTitle: { fontFamily: fontFamily.heading, fontSize: 32, color: '#FFFFFF', textAlign: 'center' },
+  stats: { borderRadius: 12, alignItems: 'center', overflow: 'hidden' },
+  statsTitle: { fontFamily: fontFamily.heading, fontSize: 24, lineHeight: 28, textAlign: 'center', maxWidth: 220, paddingTop: 24, paddingBottom: 16 },
+  stat: { alignSelf: 'stretch', paddingHorizontal: 12, paddingVertical: 24, gap: 8, alignItems: 'center' },
+  statValue: { fontFamily: fontFamily.heading, fontSize: 28, lineHeight: 28, textAlign: 'center' },
+  statLabel: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 16, textAlign: 'center' },
+  reachNote: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: '#FFFFFF' },
+  previewBand: { paddingHorizontal: 16, paddingTop: 32, gap: 8 },
+  previewNote: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 17 },
+  footNote: { paddingHorizontal: 16, paddingTop: 16 },
   materialBtn: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, marginTop: 4 },
   materialText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   skeletonLines: { gap: 8 },
-  options: { gap: 12 },
   option: { borderWidth: 1.5, borderRadius: 14, padding: 16, gap: 8 },
   optionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   optionDesc: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20 },
@@ -457,10 +489,10 @@ const styles = StyleSheet.create({
   successBox: { borderRadius: 14, padding: 16, gap: 8 },
   successTitle: { fontFamily: fontFamily.heading, fontSize: 24 },
   upgrade: { borderWidth: 1.5, borderRadius: 14, padding: 16, gap: 8 },
-  secondaryBtn: { borderWidth: 1.5, borderRadius: 999, paddingVertical: 11, alignItems: 'center' },
+  secondaryBtn: { borderWidth: 1.5, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
   secondaryText: { fontFamily: fontFamily.semiBold, fontSize: 15 },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
-  cta: { borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
+  cta: { borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
   ctaText: { fontFamily: fontFamily.semiBold, fontSize: 17 },
   payHint: { fontFamily: fontFamily.regular, fontSize: 11, textAlign: 'center' },
 });

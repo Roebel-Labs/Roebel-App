@@ -72,10 +72,6 @@ export default function SponsoringBanner({ slug }: Props) {
           <View style={styles.textBlock}>
             <View style={styles.chip}><Text style={styles.chipText}>LIVE · Sa., 7. Nov.</Text></View>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Ihre Werbung beim Müritz DanceCup</Text>
-            <Text style={[styles.sub, { color: colors.textSecondary }]}>Im Livestream vor ganz Röbel</Text>
-            <View style={[styles.cta, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Mehr erfahren</Text>
-            </View>
           </View>
           <Image source={ILLUSTRATION} style={styles.illustration} contentFit="contain" accessible={false} />
         </View>
@@ -89,11 +85,8 @@ const styles = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginTop: 16 },
   card: { minHeight: CARD_HEIGHT, flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingVertical: 14, paddingLeft: 18, paddingRight: 10, gap: 6 },
   textBlock: { flex: 1, gap: 6, alignItems: 'flex-start' },
-  title: { fontFamily: fontFamily.heading, fontSize: 17, lineHeight: 21 },
-  sub: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 17 },
+  title: { fontFamily: fontFamily.heading, fontSize: 20, lineHeight: 24 },
   chip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E5484D' },
   chipText: { fontFamily: fontFamily.bold, fontSize: 10, color: '#FFFFFF', letterSpacing: 0.4 },
-  cta: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12, marginTop: 6 },
-  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 12 },
   illustration: { width: 150, height: 116 },
 });

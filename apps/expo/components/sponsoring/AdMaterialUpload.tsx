@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
+import ImageUpIcon from '@/assets/images/sponsoring/image-up.svg';
 import { MAX_IMAGE_BYTES, sendAdMaterialToChat, SPONSORING_CONTACT_NAME, uploadSponsoringMedia } from '@/lib/sponsoring';
 
 const MAX_PICTURES = 6;
@@ -74,7 +75,7 @@ export default function AdMaterialUpload({ myAccountId, orgName }: Props) {
   };
 
   return (
-    <View style={[styles.box, { borderColor: colors.border }]}>
+    <View style={styles.box}>
       <Text style={[styles.title, { color: colors.textPrimary }]}>Eigene Bilder für eure Werbung</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
         Logo, Produkte, Team oder Laden: Ladet bis zu {MAX_PICTURES} Bilder hoch. {SPONSORING_CONTACT_NAME} meldet sich danach bei euch, um eure Werbung gemeinsam anzupassen – ihr bekommt den fertigen Spot vor dem Stream zur Freigabe.
@@ -94,9 +95,10 @@ export default function AdMaterialUpload({ myAccountId, orgName }: Props) {
       ) : null}
 
       {picked.length < MAX_PICTURES ? (
-        <Pressable onPress={pick} disabled={sending} style={[styles.dropzone, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+        <Pressable onPress={pick} disabled={sending} style={[styles.dropzone, { borderColor: colors.textTertiary, backgroundColor: colors.surfaceSecondary }]}
           accessibilityRole="button" accessibilityLabel="Bilder auswählen">
-          <Text style={[styles.dropzoneText, { color: colors.primary }]}>{picked.length ? '+ Weitere Bilder' : '+ Bilder auswählen'}</Text>
+          <ImageUpIcon width={24} height={24} color={colors.textPrimary} />
+          <Text style={[styles.dropzoneText, { color: colors.textPrimary }]}>{picked.length ? '+ Weitere Bilder' : '+ Bilder auswählen'}</Text>
         </Pressable>
       ) : null}
 
@@ -106,7 +108,7 @@ export default function AdMaterialUpload({ myAccountId, orgName }: Props) {
             value={note}
             onChangeText={setNote}
             placeholder="Wünsche zur Werbung (optional), z. B. Text, Angebot, Farben"
-            placeholderTextColor={colors.textTertiary}
+            placeholderTextColor={colors.textSecondary}
             multiline
             maxLength={500}
             style={[styles.input, { color: colors.textPrimary, borderColor: colors.border }]}
@@ -115,7 +117,7 @@ export default function AdMaterialUpload({ myAccountId, orgName }: Props) {
             accessibilityRole="button">
             {sending ? <ActivityIndicator color={colors.onPrimary} /> : (
               <Text style={[styles.sendText, { color: colors.onPrimary }]}>
-                {picked.length === 1 ? 'Bild' : `${picked.length} Bilder`} an {SPONSORING_CONTACT_NAME} senden
+                {picked.length === 1 ? '1 Bild' : `${picked.length} Bilder`} einsenden
               </Text>
             )}
           </Pressable>
@@ -137,18 +139,18 @@ export default function AdMaterialUpload({ myAccountId, orgName }: Props) {
 }
 
 const styles = StyleSheet.create({
-  box: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 12 },
-  title: { fontFamily: fontFamily.heading, fontSize: 19 },
+  box: { padding: 16, gap: 12 },
+  title: { fontFamily: fontFamily.heading, fontSize: 24 },
   body: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   thumbWrap: { width: 76, height: 76 },
   thumb: { width: 76, height: 76, borderRadius: 10 },
   remove: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   removeText: { color: '#FFFFFF', fontFamily: fontFamily.bold, fontSize: 15, lineHeight: 17 },
-  dropzone: { borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
+  dropzone: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 4, paddingVertical: 18, alignItems: 'center', gap: 8 },
   dropzoneText: { fontFamily: fontFamily.semiBold, fontSize: 15 },
   input: { borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 64, fontFamily: fontFamily.regular, fontSize: 14, textAlignVertical: 'top' },
-  send: { borderRadius: 999, paddingVertical: 13, alignItems: 'center', minHeight: 46, justifyContent: 'center' },
+  send: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', minHeight: 46, justifyContent: 'center' },
   sendText: { fontFamily: fontFamily.semiBold, fontSize: 15 },
   sent: { borderRadius: 10, padding: 12, gap: 6 },
   link: { fontFamily: fontFamily.semiBold, fontSize: 14 },
