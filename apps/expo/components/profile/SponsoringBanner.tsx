@@ -35,7 +35,7 @@ export default function SponsoringBanner({ slug }: Props) {
     <PressableScale
       onPress={() => router.push(`/org/sponsoring/${slug}` as any)}
       accessibilityRole="button"
-      accessibilityLabel="Ihre Werbung beim Müritz DanceCup. Mehr erfahren"
+      accessibilityLabel="Ihre Werbung beim Müritz DanceCup am Samstag, 7. November, im Livestream. Mehr erfahren"
       scaleTo={0.98}
       style={styles.wrap}
     >
@@ -51,7 +51,9 @@ export default function SponsoringBanner({ slug }: Props) {
         ]}
       >
         <View style={styles.textBlock}>
+          <View style={styles.chip}><Text style={styles.chipText}>LIVE · Sa., 7. Nov.</Text></View>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Ihre Werbung beim Müritz DanceCup</Text>
+          <Text style={[styles.sub, { color: colors.textSecondary }]}>Im Livestream vor ganz Röbel</Text>
           <View style={[styles.cta, { backgroundColor: colors.primary }]}>
             <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Mehr erfahren</Text>
           </View>
@@ -65,9 +67,12 @@ export default function SponsoringBanner({ slug }: Props) {
 const styles = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginTop: 16 },
   card: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingVertical: 14, paddingLeft: 18, paddingRight: 10, gap: 6 },
-  textBlock: { flex: 1, gap: 12, alignItems: 'flex-start' },
+  textBlock: { flex: 1, gap: 6, alignItems: 'flex-start' },
   title: { fontFamily: fontFamily.heading, fontSize: 17, lineHeight: 21 },
-  cta: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  sub: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 17 },
+  chip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E5484D' },
+  chipText: { fontFamily: fontFamily.bold, fontSize: 10, color: '#FFFFFF', letterSpacing: 0.4 },
+  cta: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12, marginTop: 6 },
   ctaText: { fontFamily: fontFamily.semiBold, fontSize: 12 },
   illustration: { width: 150, height: 116 },
 });

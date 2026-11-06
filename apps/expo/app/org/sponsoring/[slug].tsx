@@ -8,13 +8,22 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { fontFamily } from '@/constants/theme';
 import BreakSpotPreview from '@/components/sponsoring/BreakSpotPreview';
+import SponsoringContact from '@/components/sponsoring/SponsoringContact';
+import AdMaterialUpload from '@/components/sponsoring/AdMaterialUpload';
 import {
-  fetchCampaign, fetchLogoColor, fetchSpotCatalog, pickSpotItems, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
+  DANCECUP_EVENT_ID, DANCECUP_LIVE_SLUG, fetchCampaign, fetchCampaignEvent, fetchLogoColor, SPONSORING_REACH, fetchSpotCatalog, pickSpotItems, fetchMyBookings, fetchSupporters, formatEuro, isBookingOpen, isCustomSpot,
   openSponsoringCheckout, recommendedPackageId, slotsLeft, startCheckout,
-  type AdMaterial, type CampaignView, type DishPhoto, type SpotCatalog, type Supporter,
+  type AdMaterial, type CampaignEvent, type CampaignView, type DishPhoto, type SpotCatalog, type Supporter,
 } from '@/lib/sponsoring';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+
+const REASONS: { icon: string; title: string; body: string }[] = [
+  { icon: '📺', title: 'Vollbild statt Banner', body: 'Eure Werbung läuft in den Pausen über den ganzen Bildschirm – nie über den Tänzen, sondern dann, wenn alle hinschauen.' },
+  { icon: '👨‍👩‍👧', title: 'Familien aus der ganzen Region', body: 'Großeltern, Eltern und Freunde der Tänzerinnen und Tänzer schauen zu Hause mit – genau die Menschen, die bei euch einkaufen.' },
+  { icon: '⏱', title: 'Ein ganzer Wettkampftag', body: 'Von 10 bis 17 Uhr live. Euer Spot läuft in jeder Pause, nicht nur einmal.' },
+  { icon: '🤝', title: 'Gutes tun und gesehen werden', body: 'Ihr unterstützt den 26. Müritz Dance Cup und den TSV 90 Röbel – und alle sehen, wer dahintersteht.' },
+];
 
 function countdown(deadlineIso: string, now: number): string {
   const ms = Date.parse(deadlineIso) - now;
@@ -52,6 +61,7 @@ export default function SponsoringDetailScreen() {
   const [dishes, setDishes] = useState<DishPhoto[]>([]);
   const [catalog, setCatalog] = useState<SpotCatalog | null>(null);
   const [logoColor, setLogoColor] = useState<string | null>(null);
+  const [event, setEvent] = useState<CampaignEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [packageId, setPackageId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,11 +77,13 @@ export default function SponsoringDetailScreen() {
     const v = await fetchCampaign(slug);
     setView(v);
     if (v) {
-      const [s, d, c] = await Promise.all([
+      const [s, d, c, e] = await Promise.all([
         fetchSupporters(v.campaign.id),
         orgId ? fetchSpotCatalog(orgId).catch(() => null) : Promise.resolve(null),
         fetchLogoColor(orgLogo),
+        fetchCampaignEvent(DANCECUP_EVENT_ID).catch(() => null),
       ]);
+      setEvent(e);
       setSupporters(s);
       setCatalog(d);
       setDishes(d ? pickSpotItems(d.items) : []);
@@ -205,6 +217,25 @@ export default function SponsoringDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {header}
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: canBuy ? 140 + insets.bottom : 40 + insets.bottom }]}>
+        <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.hero, { backgroundColor: colors.primary }]}
+          accessibilityRole="link" accessibilityLabel="Zum Müritz Dance Cup">
+          {event?.image_url ? <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          <View style={styles.heroShade} />
+          <View style={styles.heroChip}><Text style={styles.heroChipText}>LIVE · Sa., 7. November</Text></View>
+          <View style={styles.heroBottom}>
+            <Text style={styles.heroTitle}>26. Müritz Dance Cup</Text>
+            <Text style={styles.heroMeta}>10–17 Uhr · Sporthalle am Gotthunskamp, Röbel</Text>
+          </View>
+        </Pressable>
+        <View style={styles.heroLinks}>
+          <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} hitSlop={6} accessibilityRole="link">
+            <Text style={[styles.heroLink, { color: colors.primary }]}>Zum Event ›</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push(`/live/${DANCECUP_LIVE_SLUG}` as any)} hitSlop={6} accessibilityRole="link">
+            <Text style={[styles.heroLink, { color: colors.primary }]}>Zum Livestream ›</Text>
+          </Pressable>
+        </View>
+
         {bought ? (
           <View style={[styles.successBox, { backgroundColor: colors.primaryLight }]}>
             <Text style={[styles.successTitle, { color: colors.textPrimary }]}>Ihr seid dabei! 🎉</Text>
@@ -220,10 +251,42 @@ export default function SponsoringDetailScreen() {
           </View>
         ) : (
           <>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Euer Auftritt in der Pause</Text>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Eure Werbung vor ganz Röbel</Text>
             <Text style={[styles.body, { color: colors.textSecondary }]}>
-              Samstag, 7. November – live in der Röbel App, auf YouTube und Facebook. Zwischen den Runden läuft eure Werbung im Vollbild.
+              Der DanceCup läuft live in der Röbel App, auf YouTube und Facebook. Zwischen den Runden zeigen wir eure Werbung im Vollbild – professionell eingebaut, als Werbung gekennzeichnet.
             </Text>
+
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Warum beim DanceCup werben?</Text>
+              {REASONS.map((r) => (
+                <View key={r.title} style={styles.reason}>
+                  <Text style={styles.reasonIcon}>{r.icon}</Text>
+                  <View style={styles.reasonText}>
+                    <Text style={[styles.reasonTitle, { color: colors.textPrimary }]}>{r.title}</Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>{r.body}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Wen ihr erreicht</Text>
+              <View style={styles.stats}>
+                {[
+                  { value: `${SPONSORING_REACH.appPeople}+`, label: 'Menschen aus Röbel in der App' },
+                  { value: `${SPONSORING_REACH.pushDevices}+`, label: 'Handys mit Benachrichtigungen' },
+                  { value: '3', label: 'Kanäle: App, YouTube, Facebook' },
+                ].map((st) => (
+                  <View key={st.label} style={[styles.stat, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.statValue, { color: colors.primary }]}>{st.value}</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{st.label}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                Dazu die Zuschauer in der Halle und alle, die von den Gruppen und Einzelstartern aus der Region den Link bekommen.
+              </Text>
+            </View>
           </>
         )}
 
@@ -248,6 +311,7 @@ export default function SponsoringDetailScreen() {
 
         {!bought ? (
           <View style={styles.options}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pakete</Text>
             {view.packages.map((p) => {
               const sel = p.id === packageId;
               const pLeft = slotsLeft(p);
@@ -299,6 +363,8 @@ export default function SponsoringDetailScreen() {
           </View>
         ) : null}
 
+        {isOrg && orgId ? <AdMaterialUpload myAccountId={orgId} orgName={orgName} /> : null}
+
         {others.length > 0 ? (
           <View>
             <Text style={[styles.label, { color: colors.textSecondary }]}>Schon dabei</Text>
@@ -313,6 +379,8 @@ export default function SponsoringDetailScreen() {
             </View>
           </View>
         ) : null}
+
+        <SponsoringContact myAccountId={activeAccount?.id ?? null} orgName={orgName} packageName={(bought ? myBestPaid : pkg)?.name ?? null} booked={bought} />
 
         <Text style={[styles.small, { color: colors.textTertiary }]}>
           {countdown(view.campaign.booking_deadline, now)} · Alle Spots werden im Stream als „Werbung“ gekennzeichnet.
@@ -346,6 +414,25 @@ const styles = StyleSheet.create({
   small: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17 },
   label: { fontFamily: fontFamily.medium, fontSize: 13, marginBottom: 8 },
   previewWrap: { gap: 8 },
+  hero: { height: 200, borderRadius: 16, overflow: 'hidden', justifyContent: 'space-between', padding: 14 },
+  heroShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
+  heroChip: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#E5484D' },
+  heroChipText: { fontFamily: fontFamily.bold, fontSize: 11, color: '#FFFFFF', letterSpacing: 0.4 },
+  heroBottom: { gap: 2 },
+  heroTitle: { fontFamily: fontFamily.heading, fontSize: 26, color: '#FFFFFF' },
+  heroMeta: { fontFamily: fontFamily.medium, fontSize: 13, color: 'rgba(255,255,255,0.9)' },
+  heroLinks: { flexDirection: 'row', gap: 20, marginTop: -6 },
+  heroLink: { fontFamily: fontFamily.semiBold, fontSize: 14 },
+  section: { gap: 12 },
+  sectionTitle: { fontFamily: fontFamily.heading, fontSize: 20 },
+  reason: { flexDirection: 'row', gap: 12 },
+  reasonIcon: { fontSize: 22, lineHeight: 26, width: 28, textAlign: 'center' },
+  reasonText: { flex: 1, gap: 2 },
+  reasonTitle: { fontFamily: fontFamily.semiBold, fontSize: 15 },
+  stats: { flexDirection: 'row', gap: 8 },
+  stat: { flex: 1, borderRadius: 12, padding: 12, gap: 4 },
+  statValue: { fontFamily: fontFamily.heading, fontSize: 22 },
+  statLabel: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 16 },
   materialBtn: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, marginTop: 4 },
   materialText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   skeletonLines: { gap: 8 },

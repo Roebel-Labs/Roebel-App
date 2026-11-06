@@ -7,6 +7,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 import { getApiBaseUrl, postSigned, SPONSORING_SCOPE, type ApiResult, type SigningAccount } from './signed-request';
 import { uploadVideoToStream } from './stream-upload';
+import { findOrCreateConversation, sendMessage } from './supabase-messages';
 
 export const DANCECUP_SLUG = 'dancecup-2026';
 
@@ -199,9 +200,54 @@ export function setSpotDishes(account: SigningAccount, orgAccountId: string, boo
 
 /** Direct line to the stream production (Max) for questions about a booked spot. */
 export const SPONSORING_WHATSAPP = '4917682275490';
-export function sponsoringWhatsAppUrl(orgName: string, packageName: string | null): string {
-  const text = `Hallo, hier ist ${orgName}. Wir haben ${packageName ? `„${packageName}“` : 'einen Werbeplatz'} für den DanceCup-Livestream gebucht und haben eine Frage:`;
+export function sponsoringWhatsAppUrl(orgName: string, packageName: string | null, booked = true): string {
+  const text = booked
+    ? `Hallo, hier ist ${orgName}. Wir haben ${packageName ? `„${packageName}“` : 'einen Werbeplatz'} für den DanceCup-Livestream gebucht und haben eine Frage:`
+    : `Hallo Max, hier ist ${orgName}. Wir interessieren uns für Werbung beim DanceCup-Livestream und haben eine Frage:`;
   return `https://wa.me/${SPONSORING_WHATSAPP}?text=${encodeURIComponent(text)}`;
+}
+
+/** Max's personal account: in-app support contact for every sponsoring question, before and after a purchase. */
+export const SPONSORING_CONTACT_ACCOUNT_ID = '182a6f97-e02f-4379-bb0b-b467b74c6da9';
+export const SPONSORING_CONTACT_NAME = 'Max Brych';
+
+/** The DanceCup event and its live room, linked from the sponsoring page. */
+export const DANCECUP_EVENT_ID = '65e89958-6e1d-4e63-b018-66dcfcd20461';
+export const DANCECUP_LIVE_SLUG = 'dancecup-2026';
+
+/**
+ * Reach figures for the sales page, counted in the database on 2026-11-06 (personal accounts,
+ * active push devices, org accounts). Rounded down on purpose; refresh them for the next campaign.
+ */
+export const SPONSORING_REACH = { appPeople: 180, pushDevices: 240, orgs: 40 } as const;
+
+export interface CampaignEvent { title: string; image_url: string | null }
+
+export async function fetchCampaignEvent(eventId: string): Promise<CampaignEvent | null> {
+  const { data } = await db.from('events').select('title, image_url').eq('id', eventId).maybeSingle();
+  return (data as CampaignEvent | null) ?? null;
+}
+
+/** Opens (or creates) the chat between the viewer's active account and Max. */
+export async function openSponsoringChat(myAccountId: string): Promise<string | null> {
+  const convo = await findOrCreateConversation(myAccountId, SPONSORING_CONTACT_ACCOUNT_ID);
+  return convo?.id ?? null;
+}
+
+/**
+ * Sends the org's own pictures for a custom spot to Max as a chat message (one link per picture),
+ * so he sees them in his inbox right away and can reply to agree on the spot.
+ */
+export async function sendAdMaterialToChat(myAccountId: string, orgName: string, imageUrls: string[], note: string): Promise<string | null> {
+  const conversationId = await openSponsoringChat(myAccountId);
+  if (!conversationId) return null;
+  const lines = [
+    `Hallo Max, hier ist ${orgName}. Hier ${imageUrls.length === 1 ? 'ist ein Bild' : `sind ${imageUrls.length} Bilder`} für unsere DanceCup-Werbung:`,
+    ...imageUrls.map((u, i) => `${i + 1}. ${u}`),
+    ...(note.trim() ? ['', note.trim()] : []),
+  ];
+  const sent = await sendMessage(conversationId, myAccountId, lines.join('\n'));
+  return sent ? conversationId : null;
 }
 
 let logoColors: Promise<Record<string, string | null>> | null = null;
