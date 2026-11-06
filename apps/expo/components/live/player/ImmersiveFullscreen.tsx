@@ -226,11 +226,28 @@ export default function ImmersiveFullscreen(props: Props) {
   }, [controlsVisible, opacity]);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
+  // ─── Portrait "clean view": a tap on the video / empty space hides chat, actions and the top bar; the next
+  // tap brings everything back (Max, 2026-11-06). No auto-return: it stays clean until tapped again. ───
+  const [clean, setClean] = useState(false);
+  const cleanOpacity = useSharedValue(1);
+  useEffect(() => {
+    cleanOpacity.value = withTiming(clean ? 0 : 1, { duration: clean ? 220 : 180 });
+  }, [clean, cleanOpacity]);
+  const cleanStyle = useAnimatedStyle(() => ({ opacity: cleanOpacity.value }));
+  // Rotating back to portrait always shows the room again.
+  useEffect(() => { if (!landscape) setClean(false); }, [landscape]);
+
   // ─── Gestures (JS thread, no worklets) ───
   const tapGesture = useMemo(() => {
     const single = Gesture.Tap().runOnJS(true).maxDuration(300).onEnd((_e, ok) => {
       if (!ok) return;
-      Keyboard.dismiss();
+      // With the keyboard up, the first tap only closes the keyboard.
+      if (Keyboard.isVisible()) { Keyboard.dismiss(); return; }
+      if (!landscape) {
+        if (clean) poke(); else setShown(false);
+        setClean(!clean);
+        return;
+      }
       if (controlsVisible && !holdOpen) setShown(false);
       else poke();
     });
@@ -240,7 +257,7 @@ export default function ImmersiveFullscreen(props: Props) {
       else if (isLive) onSpawnHeart();
     });
     return Gesture.Exclusive(double, single);
-  }, [controlsVisible, holdOpen, poke, isReplay, isLive, onSeek, onSpawnHeart, W]);
+  }, [controlsVisible, holdOpen, poke, isReplay, isLive, onSeek, onSpawnHeart, W, landscape, clean]);
 
   const api = useMemo<FullscreenOverlayApi>(
     () => ({ poke, close: onClose, startPip: canPip ? onStartPip : null, videoTop, videoHeight: vh }),
@@ -396,11 +413,11 @@ export default function ImmersiveFullscreen(props: Props) {
         </Animated.View>
       ) : (
         <>
-          {/* Room overlay (chat + actions): always visible in portrait. */}
+          {/* Room overlay (chat + actions): visible in portrait unless the viewer tapped into the clean view. */}
           {overlay ? (
-            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <Animated.View style={[StyleSheet.absoluteFill, cleanStyle]} pointerEvents={clean ? 'none' : 'box-none'}>
               {overlay(api)}
-            </View>
+            </Animated.View>
           ) : null}
 
           {/* Playback controls over the video (fade). */}
@@ -409,7 +426,8 @@ export default function ImmersiveFullscreen(props: Props) {
             {scrubber}
           </Animated.View>
 
-          {/* Top bar (always visible in portrait). */}
+          {/* Top bar (portrait; hidden with the clean view). */}
+          <Animated.View style={[StyleSheet.absoluteFill, cleanStyle]} pointerEvents={clean ? 'none' : 'box-none'}>
           <LinearGradient colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)']} style={[styles.topShade, { height: insets.top + 96 }]} pointerEvents="none" />
           <View
             style={[styles.topBar, { paddingTop: Math.max(insets.top, 10), paddingLeft: Math.max(insets.left, 8), paddingRight: Math.max(insets.right, 8) }]}
@@ -451,6 +469,7 @@ export default function ImmersiveFullscreen(props: Props) {
               ) : null}
             </View>
           </View>
+          </Animated.View>
         </>
       )}
 
