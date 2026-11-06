@@ -79,14 +79,51 @@ export function pickRelease(releases: GhRelease[]): StudioRelease | null {
   return best;
 }
 
-export async function getStudioRelease(): Promise<StudioRelease> {
+async function listReleases(): Promise<GhRelease[] | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=50`, {
       headers: { accept: "application/vnd.github+json" },
       next: { revalidate: 300 },
     });
-    if (!res.ok) return FALLBACK_RELEASE;
-    const picked = pickRelease((await res.json()) as GhRelease[]);
+    return res.ok ? ((await res.json()) as GhRelease[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Interface update (OTA) as the app expects it; signed on the publishing machine, verified in the app. */
+export type StudioOta = { version: string; runtime: number; url: string; sha256: string; signature: string };
+const OTA_PREFIX = "ortis-studio-ota-v";
+
+/** Newest published OTA release that carries its signed ota.json. */
+export async function getStudioOta(): Promise<StudioOta | null> {
+  const releases = await listReleases();
+  if (!releases) return null;
+  let best: string | null = null;
+  for (const r of releases) {
+    if (r.draft || r.prerelease || !r.tag_name.startsWith(OTA_PREFIX)) continue;
+    const v = r.tag_name.slice(OTA_PREFIX.length);
+    if (!/^\d+(\.\d+)*$/.test(v) || !r.assets.some((a) => a.name === "ota.json")) continue;
+    if (!best || newer(v, best)) best = v;
+  }
+  if (!best) return null;
+  try {
+    const res = await fetch(`https://github.com/${REPO}/releases/download/${OTA_PREFIX}${best}/ota.json`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    const o = (await res.json()) as StudioOta;
+    return o && o.version === best ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getStudioRelease(): Promise<StudioRelease> {
+  try {
+    const releases = await listReleases();
+    if (!releases) return FALLBACK_RELEASE;
+    const picked = pickRelease(releases);
     return picked && !newer(FALLBACK_RELEASE.version, picked.version) ? picked : FALLBACK_RELEASE;
   } catch {
     return FALLBACK_RELEASE;
