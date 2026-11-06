@@ -22,6 +22,8 @@ type Props = {
   frameAssetUrl?: string | null;
   /** Skip frame rendering entirely (used for org / bot avatars). */
   disabled?: boolean;
+  /** Corner radius of the photo; defaults to a full circle (size / 2). */
+  radius?: number;
   style?: ViewStyle;
 };
 
@@ -35,6 +37,7 @@ export default function UserAvatarWithFrame({
   fallbackInitial,
   frameAssetUrl,
   disabled,
+  radius,
   style,
 }: Props) {
   const { colors } = useTheme();
@@ -64,7 +67,8 @@ export default function UserAvatarWithFrame({
         style={{
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: radius ?? size / 2,
+          borderCurve: 'continuous',
           overflow: 'hidden',
           backgroundColor: colors.cardPlaceholder,
           alignItems: 'center',

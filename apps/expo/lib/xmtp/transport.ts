@@ -43,10 +43,11 @@ export interface XmtpThreadPage {
 // ── Rail selection ─────────────────────────────────────────────────
 
 /**
- * Personal↔personal chats are XMTP-ONLY (2026-07-12 policy: no Supabase
- * transport for them anymore) — canMessage() alone decides reachability;
- * `users.xmtp_registered_at` remains a UI hint, not a gate. Org-involved
- * conversations stay on the Supabase rail until XMTP groups (phase 2).
+ * Personal↔personal chats MAY use XMTP (history renders, sends go over XMTP
+ * when the peer's `users.xmtp_registered_at` is set and canMessage() agrees —
+ * see useConversation). Everything else, and every pair where one side can't
+ * read XMTP (chain-locked, not activated), runs on the Supabase rail.
+ * Org-involved conversations stay on Supabase until XMTP groups (phase 2).
  */
 export function isXmtpRailEligible(
   peer: {

@@ -33,6 +33,25 @@ of both rails; sends pick exactly one.
 - DB: `users.xmtp_registered_at` (migration `20260710_xmtp_registration.sql`,
   **applied to live Supabase**) — the peer-readiness signal for rail selection.
 
+## Dual rail restored for personal chats (2026-11-06)
+
+The 2026-07-12 "personal chats are XMTP-only" policy is **reverted** (Max, 11-06).
+It broke DMs for every wallet without a working XMTP client (chain-locked, not
+activated): their inbox stayed frozen on a stale cache, threads showed nothing,
+and the composer was replaced by "Aktiviere private Nachrichten…". Marketplace
+inquiries (always written to Supabase) were invisible in personal threads.
+
+- Threads render the **union** of Supabase + XMTP for every pair.
+- Sends go over XMTP only when this device has a client **and** the peer's
+  `users.xmtp_registered_at` is set (+ canMessage). Chain-locked wallets still
+  look reachable on the network, so the flag is the gate. Everything else is
+  Supabase (realtime + `trg_notify_new_direct_message` push).
+- Inbox lists all registry rows (incl. org peers) with the newest preview of
+  either rail; unread = RPC + XMTP.
+- A successful `Client.build` re-asserts `xmtp_registered_at`.
+- Messages already sent over XMTP to a chain-locked inbox stay unreadable for
+  that person (no re-binding API).
+
 ## Chain-locked identities (2026-09-04)
 
 XMTP binds an SCW identity to the chain it was **first** registered from,

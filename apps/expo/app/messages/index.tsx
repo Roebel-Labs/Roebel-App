@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,59 +7,106 @@ import {
   Pressable,
   RefreshControl,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
+import { Feather } from '@expo/vector-icons';
 import { useMessaging } from '@/context/MessagingContext';
-import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
-import ConversationListItem from '@/components/messages/ConversationListItem';
+import ConversationListItem, {
+  AVATAR_SIZE,
+  AVATAR_RADIUS,
+} from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
-import XmtpActivationView from '@/components/messages/XmtpActivationView';
+import MessagingContactsRow from '@/components/messages/MessagingContactsRow';
+import { BlackPillButton } from '@/components/chat/BlackPillButton';
+import { GlassCircleButton } from '@/components/chat/GlassCircleButton';
+import { chatFont, haloShadow, useChatTokens } from '@/components/chat/tokens';
 import { useXmtp } from '@/context/XmtpContext';
+import { useAccount } from '@/context/AccountContext';
+import { useSnackbar } from '@/context/SnackbarContext';
 import { XMTP_PASSKEY_LINK_HINT } from '@/lib/xmtp/passkey-link';
 import { useNotificationsContext } from '@/context/NotificationsContext';
-import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
-
-import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import PencilIcon from '@/assets/icons/pencil.svg';
+import {
+  fetchPersonalAccountIdByWallet,
+  findOrCreateConversation,
+  type ConversationWithLastMessage,
+  type MessagingContact,
+} from '@/lib/supabase-messages';
 
 function MeckyRow() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const t = useChatTokens();
 
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.meckyRow,
-        { borderBottomColor: colors.border },
-        pressed && { backgroundColor: colors.pressedOverlay },
-      ]}
+      style={({ pressed }) => [styles.meckyRow, pressed && { backgroundColor: t.chipBackground }]}
       onPress={() => router.push('/messages/mecky' as any)}
+      accessibilityRole="button"
+      accessibilityLabel="Mecky, dein KI-Assistent"
     >
       <Image
         source={require('@/assets/illustration/mecky/welcome.png')}
-        style={styles.meckyAvatar}
+        style={[styles.meckyAvatar, { backgroundColor: t.chipBackground }]}
         contentFit="cover"
       />
       <View style={styles.meckyContent}>
-        <Text style={[styles.meckyName, { color: colors.textPrimary }]}>Mecky</Text>
-        <Text style={[styles.meckySubtitle, { color: colors.textSecondary }]}>
+        <Text style={[styles.meckyName, { color: t.textPrimary }]}>Mecky</Text>
+        <Text style={[styles.meckySubtitle, { color: t.textSecondary }]}>
           Dein KI-Assistent
         </Text>
       </View>
-      <View style={[styles.meckyBadge, { backgroundColor: colors.primary }]}>
-        <Text style={[styles.meckyBadgeText, { color: colors.onPrimary }]}>KI</Text>
+      <View style={[styles.meckyBadge, { backgroundColor: t.chipBackground }]}>
+        <Text style={[styles.meckyBadgeText, { color: t.chipText }]}>KI</Text>
       </View>
+    </Pressable>
+  );
+}
+
+/** Floating white card with the soft halo — replaces the old full-width strips. */
+function InboxBanner({
+  text,
+  action,
+  busy,
+  onPress,
+  label,
+}: {
+  text: string;
+  action?: string;
+  busy?: boolean;
+  onPress: () => void;
+  label: string;
+}) {
+  const t = useChatTokens();
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.banner,
+        { backgroundColor: t.surface, transform: [{ scale: pressed ? 0.98 : 1 }] },
+        haloShadow(t),
+      ]}
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={[styles.bannerText, { color: t.textPrimary }]}>{text}</Text>
+      {busy ? (
+        <ActivityIndicator size="small" color={t.textPrimary} />
+      ) : action ? (
+        <Text style={[styles.bannerAction, { color: t.link }]}>{action}</Text>
+      ) : null}
     </Pressable>
   );
 }
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const t = useChatTokens();
+  const insets = useSafeAreaInsets();
   const account = useActiveAccount();
   const requireAuth = useRequireAuth();
   const {
@@ -70,9 +117,36 @@ export default function MessagesScreen() {
 
   const isConnected = !!account;
 
-  // While this device hasn't registered its XMTP inbox yet, the screen shows
-  // the one-time "Private Nachrichten aktivieren" view instead of the inbox.
-  const { activationAvailable, passkeyLinkNeeded } = useXmtp();
+  // While this device hasn't registered its XMTP inbox yet, a banner offers
+  // the one-time "Private Nachrichten aktivieren" — the inbox itself (Supabase
+  // rail) works regardless.
+  const { activationAvailable, activating, activate, passkeyLinkNeeded } = useXmtp();
+  const { activeAccount } = useAccount();
+  const { showSnackbar } = useSnackbar();
+  const [openingWallet, setOpeningWallet] = useState<string | null>(null);
+
+  const handleActivate = async () => {
+    const ok = await activate();
+    showSnackbar({
+      message: ok ? 'Private Nachrichten aktiviert' : 'Aktivierung derzeit nicht möglich',
+    });
+  };
+
+  const handleOpenContact = async (contact: MessagingContact) => {
+    if (!activeAccount?.id || openingWallet) return;
+    setOpeningWallet(contact.wallet);
+    try {
+      const peerId = await fetchPersonalAccountIdByWallet(contact.wallet);
+      if (!peerId || peerId === activeAccount.id) return;
+      const convo = await findOrCreateConversation(activeAccount.id, peerId);
+      if (convo) router.push(`/messages/${convo.id}` as any);
+    } catch (err) {
+      console.error('Failed to open contact chat:', err);
+      showSnackbar({ message: 'Chat konnte nicht geöffnet werden' });
+    } finally {
+      setOpeningWallet(null);
+    }
+  };
 
   // DM pushes die silently when the OS permission is missing (e.g. a fresh
   // install leaves a stale token linked to the wallet). Opening the inbox is
@@ -99,98 +173,81 @@ export default function MessagesScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Nachrichten</Text>
+    <View style={[styles.container, { backgroundColor: t.background }]}>
+      {/* Floating controls (Mecky-chat style) */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <GlassCircleButton accessibilityLabel="Zurück" onPress={() => router.back()}>
+          <Feather name="chevron-left" size={26} color={t.icon} />
+        </GlassCircleButton>
         {isConnected ? (
-          <Pressable
+          <GlassCircleButton
+            accessibilityLabel="Neue Nachricht"
             onPress={() => router.push('/messages/new' as any)}
-            style={styles.actionButton}
           >
-            <PencilIcon width={20} height={20} color={colors.textPrimary} />
-          </Pressable>
-        ) : (
-          <View style={styles.actionButton} />
-        )}
+            <Feather name="edit-2" size={20} color={t.icon} />
+          </GlassCircleButton>
+        ) : null}
       </View>
 
-      {/* Content */}
       {!isConnected ? (
-        <View style={styles.notConnectedContent}>
+        <View style={styles.flex}>
+          <Text style={[styles.largeTitle, { color: t.textPrimary }]}>Nachrichten</Text>
           <MeckyRow />
           <View style={styles.notConnected}>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              Bitte anmelden
+            <Text style={[styles.emptyTitle, { color: t.textPrimary }]}>Bitte anmelden</Text>
+            <Text style={[styles.emptySubtext, { color: t.textSecondary }]}>
+              Melde dich an, um Nachrichten zu senden und zu empfangen.
             </Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-              Melden Sie sich an, um Nachrichten zu senden und zu empfangen
-            </Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.loginButton,
-                { backgroundColor: colors.primary },
-                pressed && { opacity: 0.85 },
-              ]}
+            <BlackPillButton
+              label="Anmelden"
               onPress={() => requireAuth(() => {})}
-            >
-              <Text style={[styles.loginButtonText, { color: colors.onPrimary }]}>Anmelden</Text>
-            </Pressable>
+              style={styles.loginButton}
+            />
           </View>
         </View>
-      ) : activationAvailable ? (
-        <View style={styles.notConnectedContent}>
-          <MeckyRow />
-          <XmtpActivationView />
-        </View>
       ) : (
-        <>
-          {passkeyLinkNeeded && (
-            // Passkey session on a migrated account: the E2E rail waits for the Safe link; the
-            // Supabase rail below keeps working.
-            <Pressable
-              style={({ pressed }) => [
-                styles.pushBanner,
-                { backgroundColor: colors.surfaceSecondary, borderBottomColor: colors.border },
-                pressed && { opacity: 0.85 },
-              ]}
-              onPress={() => router.push('/settings/passkey' as any)}
-              accessibilityRole="button"
-              accessibilityLabel="Nachrichten auf Passkey übertragen"
-            >
-              <Text style={[styles.pushBannerText, { color: colors.textPrimary, flex: 1 }]}>{XMTP_PASSKEY_LINK_HINT}</Text>
-            </Pressable>
-          )}
-          {permissionStatus !== 'granted' && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.pushBanner,
-                { backgroundColor: colors.surfaceSecondary, borderBottomColor: colors.border },
-                pressed && { opacity: 0.85 },
-              ]}
-              onPress={handleEnablePush}
-            >
-              <Text style={[styles.pushBannerText, { color: colors.textPrimary }]}>
-                Push-Benachrichtigungen sind aus
-              </Text>
-              <Text style={[styles.pushBannerAction, { color: colors.primary }]}>
-                Aktivieren
-              </Text>
-            </Pressable>
-          )}
-          <FlatList
+        <FlatList
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderConversation}
-          ListHeaderComponent={<MeckyRow />}
+          ListHeaderComponent={
+            <>
+              <Text style={[styles.largeTitle, { color: t.textPrimary }]}>Nachrichten</Text>
+              {activationAvailable && (
+                <InboxBanner
+                  text="Ende-zu-Ende-verschlüsselte Nachrichten"
+                  action="Aktivieren"
+                  busy={activating}
+                  onPress={handleActivate}
+                  label="Private Nachrichten aktivieren"
+                />
+              )}
+              {passkeyLinkNeeded && (
+                // Passkey session on a migrated account: the E2E rail waits for the Safe
+                // link; the Supabase rail keeps working.
+                <InboxBanner
+                  text={XMTP_PASSKEY_LINK_HINT}
+                  onPress={() => router.push('/settings/passkey' as any)}
+                  label="Nachrichten auf Passkey übertragen"
+                />
+              )}
+              {permissionStatus !== 'granted' && (
+                <InboxBanner
+                  text="Push-Benachrichtigungen sind aus"
+                  action="Aktivieren"
+                  onPress={handleEnablePush}
+                  label="Push-Benachrichtigungen aktivieren"
+                />
+              )}
+              <MessagingContactsRow onPress={handleOpenContact} openingWallet={openingWallet} />
+              <MeckyRow />
+            </>
+          }
           refreshControl={
             <RefreshControl
               refreshing={isLoading && conversations.length > 0}
               onRefresh={refreshConversations}
-              tintColor={colors.primary}
+              tintColor={t.textSecondary}
             />
           }
           ListEmptyComponent={
@@ -202,23 +259,20 @@ export default function MessagesScreen() {
               </View>
             ) : (
               <View style={styles.emptyState}>
-                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                  Keine Nachrichten
-                </Text>
-                <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                  Starten Sie eine neue Unterhaltung
+                <Text style={[styles.emptyTitle, { color: t.textPrimary }]}>Keine Nachrichten</Text>
+                <Text style={[styles.emptySubtext, { color: t.textSecondary }]}>
+                  Tippe oben rechts auf den Stift, um zu starten.
                 </Text>
               </View>
             )
           }
-          contentContainerStyle={
-            conversations.length === 0 && !isLoading ? styles.emptyContainer : undefined
-          }
-          ListFooterComponent={<View style={styles.bottomPadding} />}
-          />
-        </>
+          contentContainerStyle={{
+            paddingTop: insets.top + 8 + 44 + 4,
+            paddingBottom: insets.bottom + 32,
+          }}
+        />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -226,66 +280,83 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  flex: {
+    flex: 1,
+    paddingTop: 64,
+  },
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: 18,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'MonaSansSemiCondensed-Medium',
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
+  largeTitle: {
+    fontSize: 30,
+    fontFamily: chatFont.bold,
+    letterSpacing: -0.6,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 6,
   },
   meckyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 15,
   },
   meckyAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_RADIUS,
+    borderCurve: 'continuous',
   },
   meckyContent: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   meckyName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 17,
+    fontFamily: chatFont.medium,
+    letterSpacing: -0.2,
   },
   meckySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    fontFamily: chatFont.regular,
   },
   meckyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   meckyBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    fontFamily: chatFont.semiBold,
   },
-  notConnectedContent: {
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 18,
+    marginVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 22,
+    gap: 12,
+  },
+  bannerText: {
     flex: 1,
+    fontSize: 15,
+    fontFamily: chatFont.regular,
+  },
+  bannerAction: {
+    fontSize: 15,
+    fontFamily: chatFont.semiBold,
   },
   notConnected: {
     flex: 1,
@@ -294,56 +365,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   loginButton: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    marginTop: 20,
-  },
-  loginButtonText: {
-    fontSize: 14,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-  },
-  emptyContainer: {
-    flex: 1,
+    marginTop: 24,
+    alignSelf: 'stretch',
   },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingTop: 80,
+    paddingHorizontal: 40,
+    paddingTop: 60,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
+    fontSize: 17,
+    fontFamily: chatFont.medium,
+    marginBottom: 6,
   },
   emptySubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    fontFamily: chatFont.regular,
     textAlign: 'center',
-  },
-  bottomPadding: {
-    height: 100,
-  },
-  pushBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  pushBannerText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    flexShrink: 1,
-  },
-  pushBannerAction: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    marginLeft: 12,
   },
 });

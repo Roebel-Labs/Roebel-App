@@ -330,6 +330,9 @@ export async function bootXmtpClient(
             new sdk.PublicIdentity(account.address, 'ETHEREUM'),
             options
           );
+          // A working installation proves this wallet can read XMTP. Re-assert
+          // the peer-readiness flag (peers only send over XMTP when it's set).
+          markUserXmtpRegistered(wallet).catch(() => {});
         } catch (err) {
           console.warn('[xmtp] build failed (db/key lost?) — re-creating silently', err);
         }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { useTheme } from '@/context/ThemeContext';
+import { chatFont, chatSize, useChatTokens } from '@/components/chat/tokens';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
 import PaymentBubble from './PaymentBubble';
@@ -65,7 +65,7 @@ export default function MessageBubble({
   showRead,
   onPressPayment,
 }: Props) {
-  const { colors } = useTheme();
+  const t = useChatTokens();
 
   const hasSticker = !!message.sticker?.asset_url;
   const hasText = !!message.content && message.content.trim().length > 0;
@@ -103,7 +103,7 @@ export default function MessageBubble({
         {listingData ? (
           <>
             <ListingCard data={listingData} isOwn={isOwn} />
-            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: colors.textTertiary }]}>
+            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: t.textTertiary }]}>
               {timeLabel}
             </Text>
           </>
@@ -121,8 +121,8 @@ export default function MessageBubble({
                 style={[
                   styles.bubble,
                   isOwn
-                    ? [styles.bubbleOwn, { backgroundColor: colors.primary }]
-                    : [styles.bubbleOther, { backgroundColor: colors.surface }],
+                    ? [styles.bubbleOwn, { backgroundColor: t.bubbleUser }]
+                    : [styles.bubbleOther, { backgroundColor: t.bubbleBot }],
                 ]}
               >
                 <DecryptText
@@ -130,7 +130,7 @@ export default function MessageBubble({
                   text={message.content}
                   style={[
                     styles.text,
-                    { color: isOwn ? colors.onPrimary : colors.textPrimary },
+                    { color: isOwn ? t.bubbleUserText : t.bubbleBotText },
                   ]}
                 />
               </View>
@@ -156,14 +156,14 @@ export default function MessageBubble({
                     style={[
                       styles.reactionChip,
                       {
-                        backgroundColor: colors.surface,
-                        borderColor: r.reactedByMe ? colors.primary : colors.border,
+                        backgroundColor: t.chipBackground,
+                        borderColor: r.reactedByMe ? t.textPrimary : t.chipBackground,
                       },
                     ]}
                   >
                     <Text style={styles.reactionEmoji}>{r.emoji}</Text>
                     {r.count > 1 && (
-                      <Text style={[styles.reactionCount, { color: colors.textSecondary }]}>
+                      <Text style={[styles.reactionCount, { color: t.chipText }]}>
                         {r.count}
                       </Text>
                     )}
@@ -171,7 +171,7 @@ export default function MessageBubble({
                 ))}
               </View>
             )}
-            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: colors.textTertiary }]}>
+            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: t.textTertiary }]}>
               {timeLabel}
             </Text>
           </>
@@ -184,8 +184,8 @@ export default function MessageBubble({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    marginVertical: 2,
-    paddingHorizontal: 8,
+    marginVertical: 3,
+    paddingHorizontal: chatSize.screenPadH,
   },
   rowOwn: {
     justifyContent: 'flex-end',
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   wrapper: {
-    maxWidth: '75%',
+    maxWidth: chatSize.bubbleMaxWidth,
   },
   wrapperOwn: {
     alignItems: 'flex-end',
@@ -208,20 +208,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
+    paddingHorizontal: chatSize.bubblePadH,
+    paddingVertical: chatSize.bubblePadV,
+    borderRadius: chatSize.bubbleRadius,
+    borderCurve: 'continuous',
   },
-  bubbleOwn: {
-    borderBottomRightRadius: 4,
-  },
-  bubbleOther: {
-    borderBottomLeftRadius: 4,
-  },
+  bubbleOwn: {},
+  bubbleOther: {},
   text: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 21,
+    fontSize: 17,
+    fontFamily: chatFont.regular,
+    lineHeight: 22,
   },
   sticker: {
     width: 180,

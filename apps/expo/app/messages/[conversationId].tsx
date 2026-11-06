@@ -10,7 +10,9 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useConversation } from '@/hooks/useConversation';
 import { useMessaging } from '@/context/MessagingContext';
@@ -28,7 +30,8 @@ import { resetDecrypted } from '@/components/DecryptText';
 import { setActiveConversationId } from '@/lib/active-conversation';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 
-import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { GlassCircleButton } from '@/components/chat/GlassCircleButton';
+import { chatFont, chatSize, haloShadow, useChatTokens } from '@/components/chat/tokens';
 import LockIcon from '@/assets/icons/square-lock-02.svg';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -36,6 +39,7 @@ const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 export default function ChatScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const t = useChatTokens();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { markConversationRead } = useMessaging();
   const requireAuth = useRequireAuth();
@@ -108,7 +112,6 @@ export default function ChatScreen() {
     unblockPeer,
     consent,
     rail,
-    sendBlocked,
     paymentError,
     clearPaymentError,
     peerReadAt,
@@ -203,78 +206,17 @@ export default function ChatScreen() {
     />
   );
 
+  // Floating header (Mecky-chat style): content scrolls under a soft fade.
+  const headerHeight = insets.top + 6 + chatSize.control + 10;
+  const transparent = `${t.background}00`;
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Pressable
-          style={styles.headerCenter}
-          onPress={() => profileRef && openAuthorProfile(router, profileRef)}
-          disabled={!profileRef || !canOpenProfile(profileRef)}
-        >
-          {isLoadingPeer && !peerAccount ? (
-            <View style={styles.headerCenterSkeleton}>
-              <Skeleton width={32} height={32} borderRadius={16} />
-              <Skeleton width={120} height={14} borderRadius={4} />
-            </View>
-          ) : (
-            <>
-              <UserAvatarWithFrame
-                size={32}
-                uri={peerAccount?.avatarUrl ?? null}
-                fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
-                frameAssetUrl={peerAccount?.equippedFrameUrl ?? null}
-              />
-              <Text
-                style={[styles.headerTitle, { color: colors.textPrimary }]}
-                numberOfLines={1}
-              >
-                {peerDisplayName}
-              </Text>
-            </>
-          )}
-        </Pressable>
-        {xmtpActive ? (
-          <Pressable style={styles.headerRight} onPress={() => setShowMenu(true)} hitSlop={8}>
-            <Text style={[styles.menuDots, { color: colors.textSecondary }]}>⋯</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.headerRight} />
-        )}
-      </View>
-
-      {/* Encryption notice — XMTP-rail chats are end-to-end encrypted */}
-      {xmtpActive && (
-        <View style={styles.encryptionNotice}>
-          <LockIcon width={12} height={12} color={colors.textTertiary} />
-          <Text style={[styles.encryptionNoticeText, { color: colors.textTertiary }]}>
-            Nachrichten sind mit XMTP verschlüsselt
-          </Text>
-        </View>
-      )}
-
-      {/* Blocked banner */}
-      {isBlocked && (
-        <View style={[styles.blockedBanner, { backgroundColor: colors.errorBackground }]}>
-          <Text style={[styles.blockedText, { color: colors.error }]}>
-            Blockiert — du erhältst keine Nachrichten mehr
-          </Text>
-          <Pressable
-            onPress={() => {
-              unblockPeer().catch(() => {});
-            }}
-          >
-            <Text style={[styles.blockedAction, { color: colors.primary }]}>Aufheben</Text>
-          </Pressable>
-        </View>
-      )}
-
+    <View style={[styles.container, { backgroundColor: t.background }]}>
       <View style={styles.flex}>
         {isLoadingMessages && messages.length === 0 ? (
-          <ChatLoadingSkeletons />
+          <View style={[styles.flex, { paddingTop: headerHeight }]}>
+            <ChatLoadingSkeletons />
+          </View>
         ) : (
           <FlatList
             data={messages}
@@ -282,11 +224,21 @@ export default function ChatScreen() {
             renderItem={renderMessage}
             inverted
             style={styles.flex}
-            contentContainerStyle={styles.messageList}
+            contentContainerStyle={[styles.messageList, { paddingBottom: headerHeight + 8 }]}
+            ListFooterComponent={
+              xmtpActive ? (
+                <View style={styles.encryptionNotice}>
+                  <LockIcon width={12} height={12} color={t.textTertiary} />
+                  <Text style={[styles.encryptionNoticeText, { color: t.textTertiary }]}>
+                    Nachrichten sind mit XMTP verschlüsselt
+                  </Text>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={styles.emptyChat}>
-                <Text style={[styles.emptyChatText, { color: colors.textTertiary }]}>
-                  Schreiben Sie die erste Nachricht
+                <Text style={[styles.emptyChatText, { color: t.textSecondary }]}>
+                  Schreib die erste Nachricht
                 </Text>
               </View>
             }
@@ -295,18 +247,8 @@ export default function ChatScreen() {
           />
         )}
 
-        {sendBlocked ? (
-          <View style={[styles.inputSafe, { paddingBottom: inputBottomPad, backgroundColor: colors.background }]}>
-            <View style={[styles.sendBlockedNotice, { borderTopColor: colors.border }]}>
-              <Text style={[styles.sendBlockedText, { color: colors.textSecondary }]}>
-                {sendBlocked === 'self'
-                  ? 'Aktiviere private Nachrichten in deinem Posteingang, um hier zu schreiben.'
-                  : `${peerDisplayName || 'Dieser Kontakt'} hat private Nachrichten noch nicht aktiviert.`}
-              </Text>
-            </View>
-          </View>
-        ) : !isBlocked && (
-          <View style={[styles.inputSafe, { paddingBottom: inputBottomPad, backgroundColor: colors.background }]}>
+        {!isBlocked && (
+          <View style={[styles.inputSafe, { paddingBottom: inputBottomPad, backgroundColor: t.background }]}>
             <ChatInput
               onSend={(text, stickerRewardId) => {
                 if (!myAccountId) {
@@ -321,6 +263,78 @@ export default function ChatScreen() {
           </View>
         )}
       </View>
+
+      {/* Top fade + floating glass header */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[t.background, t.background, transparent]}
+        locations={[0, 0.55, 1]}
+        style={[styles.topFade, { height: headerHeight + 24 }]}
+      />
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+        <GlassCircleButton accessibilityLabel="Zurück" onPress={() => router.back()}>
+          <Feather name="chevron-left" size={26} color={t.icon} />
+        </GlassCircleButton>
+        <Pressable
+          style={({ pressed }) => [
+            styles.headerPill,
+            { backgroundColor: t.surface, transform: [{ scale: pressed ? 0.97 : 1 }] },
+            haloShadow(t),
+          ]}
+          onPress={() => profileRef && openAuthorProfile(router, profileRef)}
+          disabled={!profileRef || !canOpenProfile(profileRef)}
+          accessibilityRole="button"
+          accessibilityLabel={peerDisplayName || 'Profil'}
+        >
+          {isLoadingPeer && !peerAccount ? (
+            <View style={styles.headerCenterSkeleton}>
+              <Skeleton width={26} height={26} borderRadius={9} />
+              <Skeleton width={96} height={14} borderRadius={4} />
+            </View>
+          ) : (
+            <>
+              <UserAvatarWithFrame
+                size={26}
+                radius={9}
+                uri={peerAccount?.avatarUrl ?? null}
+                fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
+                frameAssetUrl={null}
+              />
+              <Text style={[styles.headerTitle, { color: t.textPrimary }]} numberOfLines={1}>
+                {peerDisplayName}
+              </Text>
+            </>
+          )}
+        </Pressable>
+        <View style={styles.flex} />
+        {xmtpActive ? (
+          <GlassCircleButton accessibilityLabel="Mehr" onPress={() => setShowMenu(true)}>
+            <Feather name="more-horizontal" size={24} color={t.icon} />
+          </GlassCircleButton>
+        ) : null}
+      </View>
+
+      {/* Blocked banner — floating card under the header */}
+      {isBlocked && (
+        <View
+          style={[
+            styles.blockedBanner,
+            { top: headerHeight, backgroundColor: t.surface },
+            haloShadow(t),
+          ]}
+        >
+          <Text style={[styles.blockedText, { color: colors.error }]}>
+            Blockiert — du erhältst keine Nachrichten mehr
+          </Text>
+          <Pressable
+            onPress={() => {
+              unblockPeer().catch(() => {});
+            }}
+          >
+            <Text style={[styles.blockedAction, { color: t.textPrimary }]}>Aufheben</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Röbel Münzen senden */}
       <MuenzenSendSheet
@@ -346,7 +360,7 @@ export default function ChatScreen() {
         onRequestClose={() => setReactionTarget(null)}
       >
         <Pressable style={styles.reactionBackdrop} onPress={() => setReactionTarget(null)}>
-          <View style={[styles.reactionBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.reactionBar, { backgroundColor: t.surface }, haloShadow(t, true)]}>
             {REACTION_EMOJIS.map((emoji) => (
               <Pressable
                 key={emoji}
@@ -368,7 +382,7 @@ export default function ChatScreen() {
         onRequestClose={() => setShowMenu(false)}
       >
         <Pressable style={styles.menuBackdrop} onPress={() => setShowMenu(false)}>
-          <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.menuCard, { backgroundColor: t.sheetBackground }]}>
             <Pressable
               style={styles.menuItem}
               onPress={() => {
@@ -376,17 +390,17 @@ export default function ChatScreen() {
                 (isBlocked ? unblockPeer() : blockPeer()).catch(() => {});
               }}
             >
-              <Text style={[styles.menuItemText, { color: isBlocked ? colors.textPrimary : colors.error }]}>
+              <Text style={[styles.menuItemText, { color: isBlocked ? t.textPrimary : colors.error }]}>
                 {isBlocked ? 'Blockierung aufheben' : 'Blockieren'}
               </Text>
             </Pressable>
             <Pressable style={styles.menuItem} onPress={() => setShowMenu(false)}>
-              <Text style={[styles.menuItemText, { color: colors.textSecondary }]}>Abbrechen</Text>
+              <Text style={[styles.menuItemText, { color: t.textSecondary }]}>Abbrechen</Text>
             </Pressable>
           </View>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -394,25 +408,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topFade: { position: 'absolute', top: 0, left: 0, right: 0 },
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+    paddingHorizontal: chatSize.controlInset,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerCenter: {
-    flex: 1,
+  headerPill: {
+    height: chatSize.control,
+    borderRadius: chatSize.control / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    paddingLeft: 9,
+    paddingRight: 15,
+    gap: 9,
+    marginLeft: 8,
+    maxWidth: 240,
+    flexShrink: 1,
   },
   headerCenterSkeleton: {
     flexDirection: 'row',
@@ -420,18 +436,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTitle: {
-    fontSize: 16,
-    fontFamily: 'MonaSansSemiCondensed-Medium',
-  },
-  headerRight: {
-    width: 40,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  menuDots: {
-    fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 26,
+    fontSize: 17,
+    fontFamily: chatFont.medium,
+    letterSpacing: -0.2,
+    flexShrink: 1,
   },
   encryptionNotice: {
     flexDirection: 'row',
@@ -439,36 +447,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   encryptionNoticeText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: chatFont.regular,
   },
   blockedBanner: {
+    position: 'absolute',
+    left: chatSize.controlInset,
+    right: chatSize.controlInset,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    borderRadius: 18,
   },
   blockedText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    fontFamily: chatFont.regular,
     flexShrink: 1,
   },
   blockedAction: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    fontFamily: chatFont.semiBold,
     marginLeft: 12,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   messageList: {
-    paddingVertical: 8,
+    paddingTop: 8,
     flexGrow: 1,
   },
   emptyChat: {
@@ -478,34 +486,22 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyChatText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    fontFamily: chatFont.regular,
   },
   flex: {
     flex: 1,
   },
   inputSafe: {},
-  sendBlockedNotice: {
-    borderTopWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  sendBlockedText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
   reactionBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   reactionBar: {
     flexDirection: 'row',
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 28,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 4,
@@ -519,23 +515,22 @@ const styles = StyleSheet.create({
   },
   menuBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
     justifyContent: 'flex-end',
   },
   menuCard: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-    paddingBottom: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingVertical: 12,
+    paddingBottom: 32,
   },
   menuItem: {
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
   menuItemText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontSize: 17,
+    fontFamily: chatFont.medium,
     textAlign: 'center',
   },
 });

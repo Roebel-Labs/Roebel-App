@@ -530,6 +530,43 @@ export async function fetchPersonalAccountIdByWallet(
   return personal?.account_id ?? null;
 }
 
+export interface MessagingContact {
+  wallet: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+/**
+ * People who activated private messages (users.xmtp_registered_at set),
+ * newest first — the inbox's top row. Excludes the viewer's own wallet.
+ */
+export async function fetchMessagingContacts(
+  myWallet: string | null,
+  limit = 30
+): Promise<MessagingContact[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('wallet_address, username, display_name, profile_picture_url, xmtp_registered_at')
+    .not('xmtp_registered_at', 'is', null)
+    .order('xmtp_registered_at', { ascending: false })
+    .limit(limit + 1);
+  if (error || !data) return [];
+  const me = myWallet?.toLowerCase() ?? null;
+  return (data as Array<{
+    wallet_address: string;
+    username: string | null;
+    display_name: string | null;
+    profile_picture_url: string | null;
+  }>)
+    .filter((u) => u.wallet_address.toLowerCase() !== me && (u.username || u.display_name))
+    .slice(0, limit)
+    .map((u) => ({
+      wallet: u.wallet_address.toLowerCase(),
+      name: safeDisplayName(u.display_name, u.username),
+      avatarUrl: u.profile_picture_url,
+    }));
+}
+
 // Owner/admin wallets of an account (lowercased, deduped) — used for XMTP
 // addressing and DM push targeting. Personal accounts have exactly one.
 export async function fetchAccountOwnerWallets(accountId: string): Promise<string[]> {
