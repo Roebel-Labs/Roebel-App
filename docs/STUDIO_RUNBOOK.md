@@ -13,14 +13,36 @@ senden und aufnehmen. Dieses Handbuch gilt für jede Veranstaltung und ist in de
 
 ## Installation
 
-Ortis Studio braucht auf dem Mac **ffmpeg mit SRT-Unterstützung** (das normale `ffmpeg` kann kein SRT):
+### Als App (macOS und Windows)
+
+Download auf **roebel.app/studio**.
+
+- **macOS** (13 oder neuer, Apple-Chip): DMG öffnen, Ortis Studio in „Programme“ ziehen. Beim ersten Öffnen
+  warnt macOS, weil die App noch nicht notarisiert ist: „Fertig“, dann **Systemeinstellungen → Datenschutz &
+  Sicherheit → „Trotzdem öffnen“**.
+- **Windows** (10/11, 64 Bit): Installationsdatei starten. Bei „Der Computer wurde durch Windows geschützt“:
+  **„Weitere Informationen“ → „Trotzdem ausführen“**. Danach liegt Ortis Studio auf dem Desktop und im Startmenü.
+- Die App bringt ihr eigenes ffmpeg mit (SRT, RTMPS). In **Einstellungen → Technik → Prüfen** steht dann
+  `(mitgeliefert)` und der gewählte **Encoder**: auf dem Mac VideoToolbox, unter Windows die Grafikkarte
+  (NVENC für NVIDIA, Quick Sync für Intel, AMF für AMD). Steht dort „x264 (Software)“, gibt es keinen
+  Grafikkarten-Encoder: das geht, braucht aber viel CPU. Dann die Videobitrate eher niedrig halten und vor der
+  Sendung 10 Minuten testen.
+- Ein ffmpeg, das unter **Pfad** eingetragen ist und existiert (z. B. Homebrew), hat immer Vorrang vor dem
+  mitgelieferten.
+- Aufnahmen landen unter macOS in `~/Movies/Ortis Studio`, unter Windows in `Videos\Ortis Studio`.
+- Das mitgelieferte ffmpeg steht unter der GPL; Quelltext: <https://ffmpeg.org/download.html>. Die Lizenzdatei
+  liegt neben dem Programm (`resources/ffmpeg/LICENSE.txt`).
+
+### Entwickler-Start (Mac, ohne Installation)
+
+Ortis Studio braucht dann **ffmpeg mit SRT-Unterstützung** (das normale `ffmpeg` kann kein SRT):
 
 ```bash
 brew install ffmpeg-full
 ```
 
 - Standardpfad in den Einstellungen: `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`.
-- In **Einstellungen → Technik → Prüfen** muss stehen: `SRT ja · VideoToolbox ja`.
+- In **Einstellungen → Technik → Prüfen** muss stehen: `SRT ja · Encoder VideoToolbox (Apple)`.
 - **Vor einer Sendung niemals `brew upgrade`.** ffmpeg-full hängt an festgepinnten Bibliotheken; ein Upgrade kann
   ffmpeg kaputt machen. Upgrades nur direkt nach einer Veranstaltung, danach Probelauf.
 
