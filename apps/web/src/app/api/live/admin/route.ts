@@ -41,8 +41,10 @@ async function handle(request: NextRequest) {
         const patch: Record<string, unknown> = { status, updated_at: now };
         // Running time on the player: set once when going live (kept across reconnects), cleared when back to scheduled.
         const ov = { ...((show.overlay as Record<string, unknown>) ?? {}) };
-        if (status === "live" && !ov.live_since) ov.live_since = now;
-        if (status === "scheduled") ov.live_since = null;
+        // A fresh run starts whenever the show switches to LIVE from another state; repeated "live" calls
+        // (Ortis Studio re-sending on reconnect) keep the running time.
+        if (status === "live" && (show.status !== "live" || !ov.live_since)) ov.live_since = now;
+        if (status !== "live") ov.live_since = null;
         patch.overlay = ov;
         // Ended: the Cloudflare recording becomes the replay (newest video of the input).
         const cfg = cfConfig();

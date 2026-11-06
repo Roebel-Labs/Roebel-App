@@ -42,11 +42,17 @@ function overlayExtras(show: LiveShow): OverlayExtras {
   return o && typeof o === 'object' ? (o as OverlayExtras) : {};
 }
 
-/** When the current live run started: overlay.live_since, else starts_at while live. */
+/**
+ * When the current live run started (overlay.live_since, set by the server each time the show goes LIVE).
+ * No fallback to starts_at: that is the planned start, not the broadcast start (showed "15:13:50").
+ * Implausible values (future, or older than 24 h) hide the timer instead of showing nonsense.
+ */
 export function liveSinceOf(show: LiveShow): string | null {
+  if (show.status !== 'live') return null;
   const since = overlayExtras(show).live_since;
-  if (typeof since === 'string' && since) return since;
-  return show.status === 'live' ? show.starts_at : null;
+  if (typeof since !== 'string' || !since) return null;
+  const age = Date.now() - Date.parse(since);
+  return Number.isFinite(age) && age >= -60_000 && age < 24 * 3600_000 ? since : null;
 }
 
 export function youtubeUrlOf(show: LiveShow): string | null {
