@@ -1308,3 +1308,9 @@ input[type='color'].input {
   border-color: var(--pgm);
   color: var(--pgm);
 }
+
+/* Update available (top bar) */
+.update-btn {
+  border-color: var(--accent, #7abbf2);
+  color: var(--accent, #7abbf2);
+}

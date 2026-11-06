@@ -57,6 +57,13 @@ describe('show package', () => {
     expect(allowed.map((p) => fs.readFileSync(p, 'utf8'))).toEqual(['VIDEO', 'PNG']);
   });
 
+  it('carries only the destinations (never machine paths) when asked to', () => {
+    const state = { settings: { destinations: [{ id: 'd', target: { key: 'K' } }], ffmpegPath: '/opt/x', recordDir: '~/Movies' } };
+    const out = exportShow({ stateJson: JSON.stringify(state), destDir: dir(), pathOf: () => null, withDestinations: true });
+    const doc = JSON.parse(fs.readFileSync(path.join(out.dir, 'show.json'), 'utf8'));
+    expect(doc.state.settings).toEqual({ destinations: [{ id: 'd', target: { key: 'K' } }] });
+  });
+
   it('reports media whose file is gone and refuses foreign JSON', () => {
     const out = exportShow({
       stateJson: JSON.stringify({ sources: [{ url: 'http://127.0.0.1:7311/media/cc' }] }),

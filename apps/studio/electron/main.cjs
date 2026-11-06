@@ -11,6 +11,7 @@ const { usableDestinations } = require('./ffmpeg-args.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
 const { exportShow, importShow } = require('./show-package.cjs');
+const { checkForUpdate, downloadInstaller } = require('./updater.cjs');
 
 // Product name + data folder. Electron derives userData from the app name; the studio used to be
 // '@roebel/studio'. Existing installs keep their saved show (localStorage) by staying on the old folder.
@@ -201,8 +202,40 @@ ipcMain.handle('overlay:status', () =>
   overlay ? overlay.status() : { ok: false, port: null, error: 'Medienserver nicht gestartet' },
 );
 
+// In-app update (see updater.cjs). Never while on air.
+ipcMain.handle('update:check', async (e) => {
+  guard('update:check', e);
+  const update = await checkForUpdate({ currentVersion: app.getVersion(), platform: process.platform });
+  return { current: app.getVersion(), update };
+});
+let updating = false;
+ipcMain.handle('update:install', async (e) => {
+  guard('update:install', e);
+  if (session_) throw new Error('Während der Sendung wird nicht aktualisiert');
+  if (updating) throw new Error('Update läuft bereits');
+  const update = await checkForUpdate({ currentVersion: app.getVersion(), platform: process.platform });
+  if (!update) return { started: false };
+  if (update.os !== 'win') {
+    await shell.openExternal(update.url); // macOS: the dmg opens; drag the app over the old one
+    return { started: false, opened: true };
+  }
+  updating = true;
+  try {
+    const file = await downloadInstaller(update, {
+      onProgress: (p) => win && !win.isDestroyed() && win.webContents.send('update:progress', p),
+    });
+    log(`update ${app.getVersion()} -> ${update.version}: running installer`);
+    // Silent install into the same place, then the installer starts the new version.
+    require('node:child_process').spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+    setTimeout(() => app.quit(), 500);
+    return { started: true };
+  } finally {
+    updating = false;
+  }
+});
+
 // Show package (Einstellungen → Show übertragen): see show-package.cjs.
-ipcMain.handle('show:export', async (e, stateJson) => {
+ipcMain.handle('show:export', async (e, stateJson, withDestinations) => {
   guard('show:export', e);
   if (!overlay) throw new Error('Medienserver nicht bereit');
   const r = await dialog.showOpenDialog(win, {
@@ -210,7 +243,12 @@ ipcMain.handle('show:export', async (e, stateJson) => {
     properties: ['openDirectory', 'createDirectory'],
   });
   if (r.canceled || r.filePaths.length === 0) return null;
-  return exportShow({ stateJson: String(stateJson), destDir: r.filePaths[0], pathOf: (u) => overlay.pathOf(u) });
+  return exportShow({
+    stateJson: String(stateJson),
+    destDir: r.filePaths[0],
+    pathOf: (u) => overlay.pathOf(u),
+    withDestinations: withDestinations === true,
+  });
 });
 ipcMain.handle('show:import', async (e) => {
   guard('show:import', e);

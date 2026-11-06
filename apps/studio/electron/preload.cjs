@@ -37,9 +37,16 @@ contextBridge.exposeInMainWorld('studio', {
     // { ok, port, error }: whether the local media/overlay server is listening.
     status: () => ipcRenderer.invoke('overlay:status'),
   },
+  update: {
+    // { current, update: { version, url, sha256, os } | null }
+    check: () => ipcRenderer.invoke('update:check'),
+    // Windows: downloads, installs silently, restarts. macOS: opens the download. -> { started, opened? }
+    install: () => ipcRenderer.invoke('update:install'),
+    onProgress: (cb) => subscribe('update:progress', cb),
+  },
   show: {
     // Writes an Ortis-Show folder (show.json + media/) -> { dir, files, missing } or null (cancelled).
-    exportPackage: (stateJson) => ipcRenderer.invoke('show:export', stateJson),
+    exportPackage: (stateJson, withDestinations) => ipcRenderer.invoke('show:export', stateJson, withDestinations === true),
     // Reads a package's show.json -> { stateJson, files, missing } or null (cancelled).
     importPackage: () => ipcRenderer.invoke('show:import'),
   },

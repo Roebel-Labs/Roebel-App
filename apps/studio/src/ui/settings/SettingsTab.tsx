@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { replaceStoredShow, useShow } from '../../state/store';
 import { serialize } from '../../state/reducer';
+import { annotateDevices, relinkDevices } from '../../state/relink';
 import type { Destination, OutputTarget, Settings } from '../../state/types';
 import { errorText } from '../engine';
 import { useOnAir } from '../studio';
@@ -402,15 +403,25 @@ function ShowTransfer() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirm, setConfirm] = useState<{ stateJson: string; files: number; missing: string[] } | null>(null);
+  const [withKeys, setWithKeys] = useState(true);
+  const devices = async () => {
+    try {
+      return await navigator.mediaDevices.enumerateDevices();
+    } catch {
+      return [];
+    }
+  };
 
   const doExport = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const r = await window.studio.show.exportPackage(serialize(state));
+      const annotated = annotateDevices(JSON.parse(serialize(state)) as Record<string, unknown>, await devices());
+      const r = await window.studio.show.exportPackage(JSON.stringify(annotated), withKeys);
       if (r) {
         const miss = r.missing.length ? ` ${r.missing.length} Datei(en) fehlten und sind nicht dabei.` : '';
-        setMsg({ ok: r.missing.length === 0, text: `Gespeichert: ${r.dir} (${r.files} Mediendateien).${miss} Den ganzen Ordner auf den anderen Rechner kopieren.` });
+        const keys = withKeys ? ' Enthält die Stream-Schlüssel: nicht weitergeben.' : '';
+        setMsg({ ok: r.missing.length === 0, text: `Gespeichert: ${r.dir} (${r.files} Mediendateien).${miss} Den ganzen Ordner auf den anderen Rechner kopieren.${keys}` });
       }
     } catch (e) {
       setMsg({ ok: false, text: `Export fehlgeschlagen: ${errorText(e)}` });
@@ -432,11 +443,14 @@ function ShowTransfer() {
     }
   };
 
-  const apply = () => {
+  const apply = async () => {
     if (!confirm) return;
-    // Destinations, keys and machine paths stay as they are on this computer.
-    const imported = JSON.parse(confirm.stateJson) as Record<string, unknown>;
-    replaceStoredShow(JSON.stringify({ ...imported, settings: state.settings }));
+    // Cameras/microphones: same device name on this computer. Machine paths stay as they are here;
+    // destinations come from the package when it carries them.
+    const { state: imported } = relinkDevices(JSON.parse(confirm.stateJson) as Record<string, unknown>, await devices());
+    const carried = (imported.settings as { destinations?: Settings['destinations'] } | undefined)?.destinations;
+    const settings = carried && carried.length ? { ...state.settings, destinations: carried } : state.settings;
+    replaceStoredShow(JSON.stringify({ ...imported, settings }));
   };
 
   return (
@@ -444,8 +458,12 @@ function ShowTransfer() {
       <h3>Show übertragen</h3>
       <p className="hint">
         Nimmt die ganze Show auf einen anderen Rechner mit: Quellen, Videos, Bilder, Logos, Einblendungen, Tabelle, Sponsoren und Mixer.
-        Sendeziele und Stream-Schlüssel bleiben auf diesem Rechner. Kameras und Mikrofone danach am neuen Rechner neu auswählen.
+        Kameras und Mikrofone werden am neuen Rechner über ihren Namen wiedergefunden (z. B. „OsmoPocket4P“), wenn sie beim Import angeschlossen sind.
       </p>
+      <label className="check">
+        <input type="checkbox" checked={withKeys} onChange={(e) => setWithKeys(e.target.checked)} />
+        Sendeziele und Stream-Schlüssel mitnehmen (Paket dann nicht weitergeben)
+      </label>
       <div className="with-btn">
         <button className="btn" onClick={doExport} disabled={busy}>
           Show exportieren…
@@ -461,7 +479,7 @@ function ShowTransfer() {
             {confirm.missing.length ? `, ${confirm.missing.length} fehlen: ${confirm.missing.slice(0, 3).join(', ')}` : ''}). Die aktuelle Show auf diesem Rechner wird ersetzt.
           </p>
           <div className="with-btn">
-            <button className="btn primary" onClick={apply}>
+            <button className="btn primary" onClick={() => void apply()}>
               Show ersetzen
             </button>
             <button className="btn" onClick={() => setConfirm(null)}>

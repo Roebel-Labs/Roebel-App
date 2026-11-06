@@ -3,7 +3,8 @@
 // computer. Export writes <folder>/show.json + <folder>/media/<files>; every local media URL
 // (http://127.0.0.1:<port>/media/<token>) becomes `ortis-media:<file>`. Import copies the files into
 // the app's own folder, registers them with the media server and rewrites the references back.
-// Settings (stream destinations and their keys, ffmpeg path, record folder) never leave the machine.
+// Machine paths (ffmpeg, record folder) never leave the machine; stream destinations with their keys
+// only when the operator ticks „Sendeziele und Schlüssel mitnehmen“.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -43,9 +44,11 @@ function stamp(d = new Date()) {
  * Builds the package in `destDir` (created). `pathOf(url)` maps a local media URL to its file (or null).
  * Returns { dir, files, missing } — `missing` lists media whose file no longer exists (left out).
  */
-function exportShow({ stateJson, destDir, pathOf, now = new Date() }) {
+function exportShow({ stateJson, destDir, pathOf, withDestinations = false, now = new Date() }) {
   const state = JSON.parse(stateJson);
-  delete state.settings; // destinations + keys, ffmpeg path, record folder: per machine
+  const destinations = state.settings && Array.isArray(state.settings.destinations) ? state.settings.destinations : [];
+  delete state.settings; // ffmpeg path, record folder: per machine
+  if (withDestinations && destinations.length) state.settings = { destinations };
   const dir = path.join(destDir, `Ortis-Show-${stamp(now)}`);
   const mediaDir = path.join(dir, 'media');
   fs.mkdirSync(mediaDir, { recursive: true });

@@ -16,6 +16,7 @@ import { DesignTab } from './design/DesignTab';
 import { ShowTab } from './show/ShowTab';
 import { flushSponsorLog, useSponsorRuntime } from './show/sponsor-runtime';
 import { TableTab } from './table/TableTab';
+import { UpdateButton } from './UpdateButton';
 import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import './theme.css';
@@ -375,6 +376,7 @@ function Shell() {
           ))}
         </nav>
         <div className="topbar-end">
+          <UpdateButton />
           <StatusPill />
           <OnAirButton onOpenSettings={() => setTab('settings')} />
         </div>
