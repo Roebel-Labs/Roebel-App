@@ -227,7 +227,8 @@ Vor jeder Veranstaltung:
 Standardkriterium (kann pro Veranstaltung verschärft werden):
 
 > Das Studio fährt die Sendung nur, wenn es bei der Probe **mindestens 60 Minuten ununterbrochen** an **alle**
-> vorgesehenen Ziele sendet, ohne Aussetzer, Standbild oder Tonversatz, und Bauchbinden, Werbung und
-> Unterstützungs-Hinweise funktionieren. Andernfalls läuft die Sendung über OBS mit den Browserquellen-Einblendungen.
+> vorgesehenen Ziele sendet, ohne Aussetzer, Standbild oder Tonversatz, Bauchbinden und Werbung funktionieren
+> und Unterstützungs-Hinweise nur im Live-Raum-Tab erscheinen (nie im Bild). Andernfalls läuft die Sendung über
+> OBS mit den Browserquellen-Einblendungen.
 
 Im Zweifel während der Sendung: **Studio beenden, den Notfallweg weiterlaufen lassen.**
