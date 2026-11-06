@@ -5,7 +5,7 @@ Veranstaltungsspezifisch. Das allgemeine Handbuch steht in der App unter **Hilfe
 ## Aufbau
 
 - Hauptsendung: **OBS** wie gewohnt. Ortis Studio läuft **parallel als Test** (Paralleltest).
-- Sendeweg: Studio → 1 Ziel (**Cloudflare SRT**). Cloudflare verteilt über „Live Outputs" an YouTube/Facebook und an die Röbel App.
+- Sendeweg: Studio → 1 Ziel (**Cloudflare RTMPS**, nicht SRT: SRT stockte im Test am 06.11. in der App alle paar Sekunden). Cloudflare verteilt über „Live Outputs" an YouTube/Facebook und an die Röbel App.
 - **Eigener Cloudflare-Input für das Studio.** Nie den Schlüssel der OBS-Sendung verwenden; sonst werfen sich beide
   gegenseitig raus und die Hauptsendung bricht ab. Alternative: nicht-öffentliche YouTube-Sendung.
 - Cloudflare SRT und Cloudflare RTMPS nie gleichzeitig auf denselben Input.
@@ -29,7 +29,9 @@ Veranstaltungsspezifisch. Das allgemeine Handbuch steht in der App unter **Hilfe
 - [ ] Upload im Saal gemessen: gesamt ≥ 15–20 Mbit/s bzw. ≥ 1,5 × Bedarf (Studio + OBS zusammen).
 - [ ] Jede Kamera einzeln und parallel mit OBS getestet (Capture-Karte, iPhone über das lange Kabel, Osmo Pocket).
 - [ ] Klatschtest; Mischpult-Verzögerung in der Audiospur eingestellt.
+- [ ] Cloudflare-Ziel ist **RTMPS** (Live-Raum → Zugangsdaten holen → „RTMPS als Ziel übernehmen“), SRT-Ziel aus.
 - [ ] Cloudflare-Ziel mit **Testen** geprüft und im Dashboard nachgesehen.
+- [ ] 5 Minuten in der App zugeschaut (mit Video und Ton im Studio): kein „gleich zurück“.
 - [ ] 60-Minuten-Dauertest: Tempo ≈ 1,00×, „Verworfen" = 0, Speicher wächst nicht.
 - [ ] Netzwerk-Ziehtest (20 s), Minimieren-Test, Fenster-schließen-Test.
 - [ ] OBS-Notfall: Browser-Quelle `http://127.0.0.1:7311/overlay.html` (1920 × 1080) zeigt die Einblendungen.

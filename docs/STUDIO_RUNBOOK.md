@@ -126,6 +126,12 @@ Ziel; danach beim Ziel nachsehen, ob das Bild ankam).
 | **Verteiler** (z. B. Cloudflare) | Studio sendet 1 Ziel; der Dienst verteilt weiter an YouTube, Facebook usw. | 1 × Stream |
 | **Direkt** | Studio sendet an mehrere Ziele (z. B. YouTube und Facebook), Schlüssel direkt einfügen. | N × Stream |
 
+- **Für Cloudflare (Röbel App) immer RTMPS nehmen, nicht SRT.** Messung 2026-11-06, dieselbe Aufnahme mit
+  denselben Einstellungen an denselben Cloudflare-Eingang: über **RTMPS** kam alle ~2 s ein HLS-Segment (längste
+  Lücke 4,3 s), über **SRT** nur 14 Segmente in 128 s mit Lücken von 13–35 s, auch mit 2 s SRT-Latenz; ein Testbild
+  über SRT lieferte in 75 s ein einziges Segment. In der App heißt das: „Die Übertragung ist gleich zurück“,
+  Ladekreis, Sprünge zurück. Live-Raum → **Zugangsdaten holen → „RTMPS als Ziel übernehmen (empfohlen)“**, das
+  SRT-Ziel ausschalten oder löschen.
 - Das Studio kodiert **einmal** und schickt dieselben Daten an alle Ziele.
 - **Pro Protokoll nur ein Eingang:** SRT und RTMPS desselben Dienstes nie gleichzeitig auf denselben Eingang
   senden; der Dienst wirft sonst eine der beiden Verbindungen raus („Broken pipe").
