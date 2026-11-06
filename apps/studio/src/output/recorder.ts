@@ -3,10 +3,14 @@
 
 const PRIMARY_MIME = 'video/x-matroska;codecs=avc1,opus';
 const FALLBACK_MIME = 'video/webm;codecs=h264,opus';
+// Last resort for a Chromium without an H.264 MediaRecorder encoder: ffmpeg re-encodes
+// anyway and reads WebM with its Matroska demuxer.
+const VP8_MIME = 'video/webm;codecs=vp8,opus';
 
 export function pickRecorderMime(): string {
-  if (MediaRecorder.isTypeSupported(PRIMARY_MIME)) return PRIMARY_MIME;
-  if (MediaRecorder.isTypeSupported(FALLBACK_MIME)) return FALLBACK_MIME;
+  for (const mime of [PRIMARY_MIME, FALLBACK_MIME, VP8_MIME]) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
   throw new Error('recorder_mime_unsupported');
 }
 

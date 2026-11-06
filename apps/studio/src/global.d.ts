@@ -44,7 +44,7 @@ declare global {
         pickFolder(): Promise<string | null>;
       };
       ffmpeg: {
-        check(ffmpegPath: string): Promise<{ ok: boolean; version: string | null; srt: boolean; videotoolbox: boolean; error?: string }>;
+        check(ffmpegPath: string): Promise<{ ok: boolean; version: string | null; srt: boolean; encoder: string | null; softwareEncoder: boolean; path?: string; source?: 'configured' | 'bundled'; error?: string }>;
       };
       sys: {
         usage(): Promise<{ cpu: number; memMb: number; mainCpu: number }>;

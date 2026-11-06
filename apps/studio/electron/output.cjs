@@ -1,7 +1,8 @@
 'use strict';
 // Output controller (Electron main): receives MediaRecorder Matroska chunks
 // from the renderer, appends them to a local recording file and pipes them
-// into ffmpeg, which encodes once with VideoToolbox and pushes to one or more
+// into ffmpeg, which encodes once (VideoToolbox on macOS, the best probed GPU
+// encoder or libx264 on Windows) and pushes to one or more
 // SRT/RTMP(S) destinations (tee muxer for two or more). With no destination it
 // only records (record-only mode, no ffmpeg at all).
 
@@ -12,6 +13,9 @@ const path = require('node:path');
 const {
   buildFfmpegArgs,
   buildTestArgs,
+  encoderCandidates,
+  encoderProbeArgs,
+  isSoftwareEncoder,
   parseProgress,
   parseSlaveFailure,
   isFifoFull,
@@ -34,9 +38,13 @@ const HANDOVER_KILL_MS = 2000;
 // "FIFO queue full" repeats per dropped packet: log it at most this often.
 const FIFO_LOG_INTERVAL_MS = 10000;
 
-function expandHome(p) {
+// Windows has no Movies folder: the default '~/Movies/…' recording folder lands in Videos there.
+function expandHome(p, platform = process.platform) {
   if (p === '~') return os.homedir();
-  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
+  if (p.startsWith('~/')) {
+    const rest = platform === 'win32' && p.startsWith('~/Movies/') ? `Videos/${p.slice('~/Movies/'.length)}` : p.slice(2);
+    return path.join(os.homedir(), ...rest.split('/'));
+  }
   return p;
 }
 
@@ -486,12 +494,46 @@ function testDestination(o) {
   });
 }
 
+// Encoder chosen per ffmpeg binary, probed once per app run.
+const encoderCache = new Map();
+
 /**
- * "Prüfen": does this ffmpeg run, speak SRT and have the VideoToolbox H.264 encoder?
+ * The first H.264 encoder of this platform's candidate list that really encodes with
+ * this ffmpeg binary (a short null-muxer test run per candidate).
  * @param {string} ffmpegPath
- * @returns {Promise<{ ok: boolean, version: string | null, srt: boolean, videotoolbox: boolean, error?: string }>}
+ * @param {{ platform?: string, run?: (path: string, args: string[]) => Promise<boolean> }} [opts]
+ * @returns {Promise<string | null>} encoder name, or null if none works
  */
-async function checkFfmpeg(ffmpegPath) {
+async function resolveEncoder(ffmpegPath, opts = {}) {
+  const platform = opts.platform || process.platform;
+  const key = `${platform}|${ffmpegPath}`;
+  if (encoderCache.has(key)) return encoderCache.get(key);
+  const run =
+    opts.run ||
+    ((bin, args) =>
+      new Promise((resolve) => {
+        execFile(bin, args, { timeout: 10000 }, (err) => resolve(!err));
+      }));
+  let chosen = null;
+  for (const encoder of encoderCandidates(platform)) {
+    if (await run(ffmpegPath, encoderProbeArgs(encoder))) {
+      chosen = encoder;
+      break;
+    }
+  }
+  // Only a success is cached: a missing binary may be installed while the app runs.
+  if (chosen) encoderCache.set(key, chosen);
+  return chosen;
+}
+
+/**
+ * "Prüfen": does this ffmpeg run, speak SRT and have a working H.264 encoder?
+ * @param {string} ffmpegPath
+ * @param {{ platform?: string, run?: (path: string, args: string[]) => Promise<boolean> }} [opts]
+ * @returns {Promise<{ ok: boolean, version: string | null, srt: boolean, encoder: string | null,
+ *                     softwareEncoder: boolean, error?: string }>}
+ */
+async function checkFfmpeg(ffmpegPath, opts = {}) {
   const run = (args) =>
     new Promise((resolve, reject) => {
       execFile(ffmpegPath, ['-hide_banner', ...args], { timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -501,14 +543,14 @@ async function checkFfmpeg(ffmpegPath) {
       });
     });
   try {
-    const [versionOut, protocols, encoders] = await Promise.all([run(['-version']), run(['-protocols']), run(['-encoders'])]);
+    const [versionOut, protocols] = await Promise.all([run(['-version']), run(['-protocols'])]);
     const version = (/^ffmpeg version (\S+)/m.exec(versionOut) || [])[1] || null;
     const srt = /^\s*srt\s*$/m.test(protocols);
-    const videotoolbox = /\bh264_videotoolbox\b/.test(encoders);
-    return { ok: srt && videotoolbox, version, srt, videotoolbox };
+    const encoder = await resolveEncoder(ffmpegPath, opts);
+    return { ok: srt && !!encoder, version, srt, encoder, softwareEncoder: !!encoder && isSoftwareEncoder(encoder) };
   } catch (e) {
-    return { ok: false, version: null, srt: false, videotoolbox: false, error: e.message };
+    return { ok: false, version: null, srt: false, encoder: null, softwareEncoder: false, error: e.message };
   }
 }
 
-module.exports = { createOutput, testDestination, checkFfmpeg, expandHome, timestampName };
+module.exports = { createOutput, testDestination, checkFfmpeg, resolveEncoder, expandHome, timestampName };

@@ -28,25 +28,75 @@ function teeEscape(url) {
   return String(url).replace(/[\\'|[\]]/g, '\\$&');
 }
 
+// H.264 encoders to try, best first. Hardware encoders listed by `-encoders` can still fail
+// at runtime (no such GPU, missing driver), so each candidate is probed with a real encode;
+// libx264 (software) is the last resort everywhere.
+const ENCODER_CANDIDATES = {
+  darwin: ['h264_videotoolbox', 'libx264'],
+  win32: ['h264_nvenc', 'h264_qsv', 'h264_amf', 'libx264'],
+};
+const DEFAULT_ENCODER = 'h264_videotoolbox';
+
+/** @param {string} platform a `process.platform` value */
+function encoderCandidates(platform) {
+  return ENCODER_CANDIDATES[platform] || ['libx264'];
+}
+
+/** True for the CPU encoder (higher CPU load, shown as a warning in Settings). */
+function isSoftwareEncoder(encoder) {
+  return encoder === 'libx264';
+}
+
+/**
+ * Video encoder flags: CBR at `videoKbps`, keyframe every 2 s, no B-frame reordering
+ * where the encoder allows it (low latency). The VideoToolbox list is the one the
+ * studio has always used and must not change.
+ */
+function videoEncodeArgs(encoder, { fps, videoKbps }) {
+  const gop = String(fps * 2); // keyframe every 2 s
+  const rate = ['-b:v', `${videoKbps}k`, '-maxrate', `${videoKbps}k`, '-bufsize', `${videoKbps * 2}k`];
+  switch (encoder) {
+    case 'h264_videotoolbox':
+      return ['-c:v', 'h264_videotoolbox', '-realtime', '1', '-profile:v', 'high', ...rate, '-g', gop, '-r', String(fps), '-pix_fmt', 'yuv420p'];
+    case 'h264_nvenc':
+      return ['-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'll', '-rc', 'cbr', '-profile:v', 'high', ...rate, '-g', gop, '-bf', '0', '-r', String(fps), '-pix_fmt', 'yuv420p'];
+    case 'h264_qsv':
+      // QSV takes nv12, not yuv420p.
+      return ['-c:v', 'h264_qsv', '-preset', 'veryfast', '-profile:v', 'high', ...rate, '-g', gop, '-bf', '0', '-look_ahead', '0', '-r', String(fps), '-pix_fmt', 'nv12'];
+    case 'h264_amf':
+      return ['-c:v', 'h264_amf', '-usage', 'lowlatency', '-quality', 'speed', '-rc', 'cbr', '-profile:v', 'high', ...rate, '-g', gop, '-bf', '0', '-r', String(fps), '-pix_fmt', 'yuv420p'];
+    case 'libx264':
+      return ['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-profile:v', 'high', ...rate, '-g', gop, '-keyint_min', gop, '-sc_threshold', '0', '-r', String(fps), '-pix_fmt', 'yuv420p'];
+    default:
+      throw new Error(`unknown_encoder:${encoder}`);
+  }
+}
+
 /** Encoder settings shared by the show output and the destination test. */
-function encodeArgs({ fps, videoKbps, audioKbps }) {
-  const gop = fps * 2; // keyframe every 2 s
+function encodeArgs({ fps, videoKbps, audioKbps, encoder = DEFAULT_ENCODER }) {
   return [
     // video
-    '-c:v', 'h264_videotoolbox',
-    '-realtime', '1',
-    '-profile:v', 'high',
-    '-b:v', `${videoKbps}k`,
-    '-maxrate', `${videoKbps}k`,
-    '-bufsize', `${videoKbps * 2}k`,
-    '-g', String(gop),
-    '-r', String(fps),
-    '-pix_fmt', 'yuv420p',
+    ...videoEncodeArgs(encoder, { fps, videoKbps }),
     // audio
     '-c:a', 'aac',
     '-b:a', `${audioKbps}k`,
     '-ar', '48000',
     '-ac', '2',
+  ];
+}
+
+/** Argv for the encoder probe: a few frames of a small test pattern into the null muxer. */
+function encoderProbeArgs(encoder) {
+  return [
+    '-hide_banner',
+    '-nostdin',
+    '-loglevel', 'error',
+    '-f', 'lavfi',
+    '-i', 'testsrc2=size=640x360:rate=30',
+    '-frames:v', '10',
+    ...videoEncodeArgs(encoder, { fps: 30, videoKbps: 1000 }),
+    '-f', 'null',
+    '-',
   ];
 }
 
@@ -90,10 +140,10 @@ function outputArgs(dests) {
 /**
  * Build the ffmpeg argv for one output session.
  * Input: the MediaRecorder Matroska chunk stream on stdin.
- * Output: H.264 (VideoToolbox) + AAC to SRT (mpegts) and/or RTMP(S) (flv).
+ * Output: H.264 (`o.encoder`, VideoToolbox by default) + AAC to SRT (mpegts) and/or RTMP(S) (flv).
  * @param {{ destinations?: Array<{ kind: 'srt', url: string } | { kind: 'rtmp', url: string, key: string } | { kind: 'none' }>,
  *           target?: { kind: 'srt', url: string } | { kind: 'rtmp', url: string, key: string } | { kind: 'none' },
- *           fps: 30 | 50, videoKbps: number, audioKbps: number }} o
+ *           fps: 30 | 50, videoKbps: number, audioKbps: number, encoder?: string }} o
  * @returns {string[]}
  */
 function buildFfmpegArgs(o) {
@@ -264,6 +314,12 @@ function maskSecrets(text, targets) {
 
 module.exports = {
   buildFfmpegArgs,
+  encodeArgs,
+  encoderCandidates,
+  encoderProbeArgs,
+  isSoftwareEncoder,
+  videoEncodeArgs,
+  DEFAULT_ENCODER,
   buildTestArgs,
   parseProgress,
   parseSlaveFailure,

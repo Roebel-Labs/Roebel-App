@@ -453,3 +453,50 @@ describe('testDestination', () => {
     expect(r.error).toMatch(/ENOENT|nicht gefunden/);
   });
 });
+
+describe('resolveEncoder', () => {
+  const { resolveEncoder } = require('../output.cjs');
+
+  it('picks the first Windows candidate whose probe encode succeeds', async () => {
+    const tried: string[] = [];
+    const run = async (_bin: string, args: string[]) => {
+      const enc = args[args.indexOf('-c:v') + 1];
+      tried.push(enc);
+      return enc === 'h264_qsv';
+    };
+    expect(await resolveEncoder('C:\\ff-qsv.exe', { platform: 'win32', run })).toBe('h264_qsv');
+    expect(tried).toEqual(['h264_nvenc', 'h264_qsv']);
+  });
+
+  it('falls back to libx264 when no GPU encoder works', async () => {
+    const run = async (_bin: string, args: string[]) => args.includes('libx264');
+    expect(await resolveEncoder('C:\\ff-cpu.exe', { platform: 'win32', run })).toBe('libx264');
+  });
+
+  it('caches a success per binary and does not cache a failure', async () => {
+    let calls = 0;
+    const fail = async () => {
+      calls += 1;
+      return false;
+    };
+    expect(await resolveEncoder('/ff-none', { platform: 'darwin', run: fail })).toBeNull();
+    expect(await resolveEncoder('/ff-none', { platform: 'darwin', run: fail })).toBeNull();
+    expect(calls).toBe(4);
+    const ok = async () => true;
+    expect(await resolveEncoder('/ff-vt', { platform: 'darwin', run: ok })).toBe('h264_videotoolbox');
+    expect(await resolveEncoder('/ff-vt', { platform: 'darwin', run: fail })).toBe('h264_videotoolbox');
+  });
+});
+
+describe('expandHome', () => {
+  const { expandHome } = require('../output.cjs');
+  it('expands ~/ into the home folder', () => {
+    expect(expandHome('~/Movies/Ortis Studio', 'darwin')).toBe(path.join(os.homedir(), 'Movies', 'Ortis Studio'));
+  });
+  it('puts the default Movies folder into Videos on Windows', () => {
+    expect(expandHome('~/Movies/Ortis Studio', 'win32')).toBe(path.join(os.homedir(), 'Videos', 'Ortis Studio'));
+  });
+  it('leaves absolute paths alone', () => {
+    expect(expandHome('D:\\Aufnahmen', 'win32')).toBe('D:\\Aufnahmen');
+  });
+});

@@ -188,7 +188,19 @@ function DestinationCard({
   );
 }
 
-type FfmpegCheck = { ok: boolean; version: string | null; srt: boolean; videotoolbox: boolean; error?: string } | 'running' | null;
+const ENCODER_LABELS: Record<string, string> = {
+  h264_videotoolbox: 'VideoToolbox (Apple)',
+  h264_nvenc: 'NVENC (NVIDIA)',
+  h264_qsv: 'Quick Sync (Intel)',
+  h264_amf: 'AMF (AMD)',
+  libx264: 'x264 (Software)',
+};
+const encoderLabel = (e: string) => ENCODER_LABELS[e] ?? e;
+const FFMPEG_INSTALL_HINT = navigator.userAgent.includes('Windows')
+  ? 'Ortis Studio neu installieren oder ffmpeg.exe mit SRT angeben'
+  : 'brew install ffmpeg-full';
+
+type FfmpegCheck = { ok: boolean; version: string | null; srt: boolean; encoder: string | null; softwareEncoder: boolean; path?: string; source?: 'configured' | 'bundled'; error?: string } | 'running' | null;
 
 export function SettingsTab() {
   const { state, dispatch } = useShow();
@@ -215,7 +227,7 @@ export function SettingsTab() {
     try {
       setCheck(await window.studio.ffmpeg.check(s.ffmpegPath));
     } catch (e) {
-      setCheck({ ok: false, version: null, srt: false, videotoolbox: false, error: errorText(e) });
+      setCheck({ ok: false, version: null, srt: false, encoder: null, softwareEncoder: false, error: errorText(e) });
     }
   };
 
@@ -343,13 +355,16 @@ export function SettingsTab() {
               </button>
             </div>
           </label>
+          {check && check !== 'running' && check.ok && check.softwareEncoder && (
+            <span className="err-text">Kein Grafikkarten-Encoder gefunden: Software-Encoder, höhere CPU-Last.</span>
+          )}
           {check && check !== 'running' && (
             <span className={check.ok ? 'ok-text' : 'err-text'}>
               {check.error
                 ? `ffmpeg nicht nutzbar: ${check.error}`
-                : `ffmpeg ${check.version ?? '?'} · SRT ${check.srt ? 'ja' : 'fehlt'} · VideoToolbox ${check.videotoolbox ? 'ja' : 'fehlt'}${
-                    check.ok ? '' : ' (brew install ffmpeg-full)'
-                  }`}
+                : `ffmpeg ${check.version ?? '?'}${check.source === 'bundled' ? ' (mitgeliefert)' : ''} · SRT ${check.srt ? 'ja' : 'fehlt'} · Encoder ${
+                    check.encoder ? encoderLabel(check.encoder) : 'fehlt'
+                  }${check.ok ? '' : ` (${FFMPEG_INSTALL_HINT})`}`}
             </span>
           )}
         </section>

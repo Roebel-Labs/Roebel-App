@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('studio', {
     pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   },
   ffmpeg: {
-    // { ok, version, srt, videotoolbox, error? }
+    // { ok, version, srt, encoder, softwareEncoder, path, source, error? }
     check: (ffmpegPath) => ipcRenderer.invoke('ffmpeg:check', ffmpegPath),
   },
   sys: {

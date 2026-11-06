@@ -5,7 +5,9 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, sh
 const path = require('node:path');
 const fs = require('node:fs');
 const { resolveUserDataDir } = require('./userdata.cjs');
-const { checkFfmpeg, createOutput, testDestination } = require('./output.cjs');
+const { checkFfmpeg, createOutput, resolveEncoder, testDestination } = require('./output.cjs');
+const { bundledFfmpegPath, resolveFfmpegPath } = require('./ffmpeg-path.cjs');
+const { usableDestinations } = require('./ffmpeg-args.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
 
@@ -72,7 +74,21 @@ function guard(channel, e) {
   throw new Error('forbidden');
 }
 
-ipcMain.handle('output:start', async (e, cfg) => {
+// The ffmpeg binary to run for a Settings value (bundled one if that path is missing).
+function ffmpegFor(configured) {
+  const bundled = bundledFfmpegPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
+  return resolveFfmpegPath(configured, { bundled });
+}
+
+// ffmpeg path + probed H.264 encoder for a show or a test; throws a German message if none works.
+async function encoderSetup(configured) {
+  const { path: ffmpegPath } = ffmpegFor(configured);
+  const encoder = await resolveEncoder(ffmpegPath);
+  if (!encoder) throw new Error('Kein funktionierender H.264-Encoder (Einstellungen → ffmpeg prüfen)');
+  return { ffmpegPath, encoder };
+}
+
+ipcMain.handle('output:start', async (e, rawCfg) => {
   guard('output:start', e);
   starting = true;
   try {
@@ -81,6 +97,16 @@ ipcMain.handle('output:start', async (e, cfg) => {
       log('output:start while a destination test runs: aborting the test');
       test_.abort.abort();
       await Promise.race([test_.done, new Promise((r) => setTimeout(r, 2000))]);
+    }
+    // Record-only (no destination) runs no ffmpeg, so a missing encoder only blocks a live start.
+    // It is still resolved then: a destination switched on later reconnects with it.
+    const live = usableDestinations(rawCfg).length > 0;
+    let cfg = rawCfg;
+    try {
+      cfg = { ...rawCfg, ...(await encoderSetup(rawCfg.ffmpegPath)) };
+      log(`encoder ${cfg.encoder} via ${cfg.ffmpegPath}`);
+    } catch (err) {
+      if (live) throw err;
     }
     await output.start(cfg);
     session_ = { startedAt: Date.now(), videoKbps: cfg.videoKbps };
@@ -114,13 +140,20 @@ ipcMain.handle('output:test', async (e, req) => {
   guard('output:test', e);
   if (session_ || starting) return { ok: false, error: 'Während der Sendung nicht möglich' };
   if (test_) return { ok: false, error: 'Es läuft bereits ein Test' };
+  let setup;
+  try {
+    setup = await encoderSetup(req.ffmpegPath);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
   const abort = new AbortController();
   const run = testDestination({
     destination: req.destination,
     fps: req.fps,
     videoKbps: req.videoKbps,
     audioKbps: req.audioKbps,
-    ffmpegPath: req.ffmpegPath,
+    ffmpegPath: setup.ffmpegPath,
+    encoder: setup.encoder,
     seconds: 20,
     signal: abort.signal,
     log: (msg) => console.log(`${new Date().toISOString()} [test] ${msg}`),
@@ -132,7 +165,10 @@ ipcMain.handle('output:test', async (e, req) => {
     test_ = null;
   }
 });
-ipcMain.handle('ffmpeg:check', (_e, ffmpegPath) => checkFfmpeg(String(ffmpegPath || '')));
+ipcMain.handle('ffmpeg:check', async (_e, configured) => {
+  const { path: ffmpegPath, source } = ffmpegFor(String(configured || ''));
+  return { ...(await checkFfmpeg(ffmpegPath)), path: ffmpegPath, source };
+});
 
 // Sponsor air-time log (append-only JSONL in the recording folder); never rejects.
 ipcMain.handle('fs:appendAirLog', (e, payload) => {

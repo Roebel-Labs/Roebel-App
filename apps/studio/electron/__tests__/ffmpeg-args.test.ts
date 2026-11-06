@@ -281,3 +281,66 @@ describe('createRepeatLimiter', () => {
     expect(lim(25_000)).toEqual({ suppressed: 1 });
   });
 });
+
+describe('encoder selection', () => {
+  const { encodeArgs, encoderCandidates, encoderProbeArgs, isSoftwareEncoder, videoEncodeArgs } = require('../ffmpeg-args.cjs');
+  const o = { fps: 30, videoKbps: 6000, audioKbps: 160 };
+
+  it('keeps the macOS VideoToolbox arg list exactly as before', () => {
+    expect(encodeArgs(o)).toEqual([
+      '-c:v', 'h264_videotoolbox', '-realtime', '1', '-profile:v', 'high',
+      '-b:v', '6000k', '-maxrate', '6000k', '-bufsize', '12000k', '-g', '60', '-r', '30', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2',
+    ]);
+    expect(encodeArgs({ ...o, encoder: 'h264_videotoolbox' })).toEqual(encodeArgs(o));
+  });
+
+  it('tries the GPU encoders first on Windows, libx264 last', () => {
+    expect(encoderCandidates('win32')).toEqual(['h264_nvenc', 'h264_qsv', 'h264_amf', 'libx264']);
+    expect(encoderCandidates('darwin')).toEqual(['h264_videotoolbox', 'libx264']);
+    expect(encoderCandidates('linux')).toEqual(['libx264']);
+  });
+
+  it.each(['h264_nvenc', 'h264_qsv', 'h264_amf', 'libx264'])('%s: CBR, keyframe every 2 s, frame rate', (enc) => {
+    const a: string[] = videoEncodeArgs(enc, { fps: 50, videoKbps: 4000 });
+    expect(valueAfter(a, '-c:v')).toBe(enc);
+    expect(valueAfter(a, '-b:v')).toBe('4000k');
+    expect(valueAfter(a, '-maxrate')).toBe('4000k');
+    expect(valueAfter(a, '-g')).toBe('100');
+    expect(valueAfter(a, '-r')).toBe('50');
+  });
+
+  it('feeds QSV nv12 and the others yuv420p', () => {
+    expect(valueAfter(videoEncodeArgs('h264_qsv', o), '-pix_fmt')).toBe('nv12');
+    expect(valueAfter(videoEncodeArgs('h264_nvenc', o), '-pix_fmt')).toBe('yuv420p');
+  });
+
+  it('pins the libx264 GOP (no scene-cut keyframes) and tunes for latency', () => {
+    const a: string[] = videoEncodeArgs('libx264', o);
+    expect(valueAfter(a, '-tune')).toBe('zerolatency');
+    expect(valueAfter(a, '-keyint_min')).toBe('60');
+    expect(valueAfter(a, '-sc_threshold')).toBe('0');
+  });
+
+  it('rejects an unknown encoder', () => {
+    expect(() => videoEncodeArgs('h265_magic', o)).toThrow('unknown_encoder');
+  });
+
+  it('carries the chosen encoder into the show and test argv', () => {
+    const show: string[] = buildFfmpegArgs({ target: { kind: 'srt', url: SRT_URL }, ...o, encoder: 'h264_nvenc' });
+    expect(valueAfter(show, '-c:v')).toBe('h264_nvenc');
+    const test: string[] = buildTestArgs({ destination: { kind: 'srt', url: SRT_URL }, ...o, seconds: 5, encoder: 'libx264' });
+    expect(valueAfter(test, '-c:v')).toBe('libx264');
+  });
+
+  it('probes into the null muxer with a few frames', () => {
+    const a: string[] = encoderProbeArgs('libx264');
+    expect(valueAfter(a, '-frames:v')).toBe('10');
+    expect(a.slice(-3)).toEqual(['-f', 'null', '-']);
+  });
+
+  it('flags only libx264 as the software encoder', () => {
+    expect(isSoftwareEncoder('libx264')).toBe(true);
+    expect(isSoftwareEncoder('h264_nvenc')).toBe(false);
+  });
+});
