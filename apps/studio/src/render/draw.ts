@@ -292,10 +292,10 @@ function boundsOf(nodes: TemplateNode[]): Bounds {
   return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : { x: 0, y: 0, w: 0, h: 0 };
 }
 
-/** Per-node delay: the node's own `delayMs` on the way in, plus `staggerMs × index` either way. */
+/** Per-node delay: the node's own `delayMs` / `outDelayMs`, plus `staggerMs × index` either way. */
 function nodeDelay(n: TemplateNode, i: number, anim: OverlayAnim, visible: boolean): number {
   const stagger = (anim.staggerMs ?? 0) * i;
-  return visible ? (n.delayMs ?? 0) + stagger : stagger;
+  return (visible ? (n.delayMs ?? 0) : (n.outDelayMs ?? 0)) + stagger;
 }
 
 function drawOverlays(ctx: CanvasRenderingContext2D, state: ShowState, rc: RenderContext, nowMs: number) {
@@ -336,8 +336,9 @@ function drawOverlay(ctx: CanvasRenderingContext2D, o: OverlayInstance, t: Templ
   if (raw.length === 0) return;
   if (!templateHasContent(t, rc)) return; // never air empty bars
   if (!(o.visible ? t.animIn : t.animOut)) return;
-  // A node's own entrance (animIn) wins on the way in; the exit is always the template's.
-  const animOf = (n: TemplateNode): OverlayAnim => (o.visible ? (n.animIn ?? t.animIn) : t.animOut);
+  // A node's own entrance/exit wins over the template's.
+  const own = (n: TemplateNode) => (o.visible ? n.animIn : n.animOut);
+  const animOf = (n: TemplateNode): OverlayAnim => own(n) ?? (o.visible ? t.animIn : t.animOut);
   const progress = raw.map((n, i) => {
     const anim = animOf(n);
     return overlayProgress(o, anim, nowMs, nodeDelay(n, i, anim, o.visible));
@@ -350,8 +351,8 @@ function drawOverlay(ctx: CanvasRenderingContext2D, o: OverlayInstance, t: Templ
     if (p <= 0) return;
     const anim = animOf(n);
     guarded(ctx, `node ${t.id}/${n.id}`, () => {
-      // A per-node entrance scales/wipes around the node itself, the template's around the whole overlay.
-      applyAnim(ctx, anim, p, o.visible && n.animIn ? { x: n.x, y: n.y, w: n.w, h: n.h } : bounds);
+      // A node's own animation scales/wipes around the node itself, the template's around the whole overlay.
+      applyAnim(ctx, anim, p, own(n) ? { x: n.x, y: n.y, w: n.w, h: n.h } : bounds);
       ctx.globalAlpha *= clamp01(n.opacity ?? 1);
       drawNode(ctx, n, rc);
     });

@@ -2,7 +2,7 @@ import { overlayProgress } from '../render/anim';
 import { renameInTemplates } from './columns';
 import { OVERLAY_PORT } from '../overlay/constants';
 import { nextSpot } from '../sponsors/rotation';
-import { FORBIDDEN_TEMPLATE_KINDS, STARTER_TEMPLATES, STARTER_VERSION, STARTERS_ADDED_IN, isStarterTemplate, starterTemplates } from '../render/templates';
+import { FORBIDDEN_TEMPLATE_KINDS, STARTER_TEMPLATES, STARTER_VERSION, STARTERS_ADDED_IN, STARTERS_REPLACED_IN, isStarterTemplate, starterTemplates } from '../render/templates';
 import type {
   AudioChannel,
   Destination,
@@ -669,6 +669,10 @@ export function restore(json: string | null): ShowState {
   // Starters introduced after this show was saved are added once (by id, never over a user template).
   const savedVersion = num(raw.starterVersion, 1);
   for (let v = savedVersion + 1; v <= STARTER_VERSION; v++) {
+    for (const id of STARTERS_REPLACED_IN[v] ?? []) {
+      const starter = STARTER_TEMPLATES.find((t) => t.id === id);
+      if (starter) templates = templates.map((t) => (t.id === id ? structuredClone(starter) : t));
+    }
     for (const id of STARTERS_ADDED_IN[v] ?? []) {
       const starter = STARTER_TEMPLATES.find((t) => t.id === id);
       if (!starter || templates.some((t) => t.id === id)) continue;

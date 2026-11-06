@@ -135,8 +135,11 @@ export type TemplateNode = {
   /** Flow: this node's x = the (hugged) right edge of node `after` + `afterGap`. */
   after?: string;
   afterGap?: number;
-  /** The node's own entrance (default: the template's animIn); the exit stays the template's animOut. */
+  /** The node's own entrance (default: the template's animIn). */
   animIn?: OverlayAnim;
+  /** The node's own exit (default: the template's animOut), starting `outDelayMs` after the hide. */
+  animOut?: OverlayAnim;
+  outDelayMs?: number;
 };
 
 export type Template = {
