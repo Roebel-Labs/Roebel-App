@@ -14,6 +14,19 @@ import type { AudioChannel, ShowState } from '../state/types';
 /** Meter / fader floor. Anything at or below counts as silence. */
 export const DB_FLOOR = -60;
 export const MAX_DELAY_MS = 500;
+/** Master at the floor this long while on air = the stream is silent ("Ton: stumm"). */
+export const SILENT_ALERT_MS = 5000;
+
+/** True when at least one channel can be heard (unmuted, fader above the floor). An empty mixer streams silence. */
+export function hasAudibleChannel(channels: AudioChannel[]): boolean {
+  return channels.some((c) => !c.muted && c.gainDb > DB_FLOOR);
+}
+
+/** Silence clock for the master peak: when it went silent (kept while silent), null once there is signal. */
+export function nextSilentSince(since: number | null, masterDb: number, now: number): number | null {
+  if (masterDb > DB_FLOOR) return null;
+  return since ?? now;
+}
 /** Ramp for fader / mute changes: long enough to avoid clicks, short enough to feel instant. */
 export const RAMP_MS = 30;
 /** The recorded master never exceeds this. */

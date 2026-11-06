@@ -7,7 +7,7 @@ import { useShow } from '../../state/store';
 import type { Destination, OutputTarget, Settings } from '../../state/types';
 import { errorText } from '../engine';
 import { useOnAir } from '../studio';
-import { clean, destinationProblem, enabledDestinations, newDestination, PRESETS, uploadEstimate, type PresetId } from './destinations';
+import { clean, destinationProblem, destinationsWarning, duplicateIngestProblem, enabledDestinations, newDestination, PRESETS, uploadEstimate, type PresetId } from './destinations';
 import { ReconnectButton } from './ReconnectButton';
 import { trackTest } from './test-runs';
 
@@ -246,6 +246,8 @@ export function SettingsTab() {
           {menu && !locked && <AddDestinationMenu onPick={addDest} onClose={() => setMenu(false)} />}
           {streaming && <ReconnectButton />}
         </div>
+        {duplicateIngestProblem(s.destinations) && <div className="dialog-error">{duplicateIngestProblem(s.destinations)}</div>}
+        {destinationsWarning(s.destinations) && <div className="dialog-warn">{destinationsWarning(s.destinations)}</div>}
         {streaming && (
           <span className="hint">
             Tempo fällt gegen 0 oder ein Ziel ist ausgefallen: das Ziel ausschalten, dann „Ziel neu verbinden“. Alle Ziele sind

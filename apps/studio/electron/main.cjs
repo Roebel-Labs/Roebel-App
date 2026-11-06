@@ -53,7 +53,27 @@ let session_ = null; // { startedAt, videoKbps } while started
 let test_ = null;
 let starting = false;
 
-ipcMain.handle('output:start', async (_e, cfg) => {
+/**
+ * Privileged IPC only from our own window's top frame: never from a child window,
+ * an iframe or a page that is not ours (those could spawn ffmpeg or serve any file).
+ */
+function isMainFrame(e) {
+  if (!win || win.isDestroyed() || e.sender !== win.webContents) return false;
+  const f = e.senderFrame;
+  if (!f) return false;
+  const main = win.webContents.mainFrame;
+  const same = f === main || (f.processId === main.processId && f.routingId === main.routingId);
+  return same && isOwnOrigin(f.url);
+}
+
+function guard(channel, e) {
+  if (isMainFrame(e)) return;
+  log(`rejected ${channel} from a foreign frame (${(e.senderFrame && e.senderFrame.url) || 'unknown'})`);
+  throw new Error('forbidden');
+}
+
+ipcMain.handle('output:start', async (e, cfg) => {
+  guard('output:start', e);
   starting = true;
   try {
     // Going live kills a running test first: the same key must never be pushed twice.
@@ -90,7 +110,8 @@ ipcMain.handle('output:reconnect', (_e, cfg) => output.reconnect(cfg && Array.is
 
 // "Testen": 20 s test pattern to one destination; one at a time, never during a show
 // (the same key would collide with the live stream). The result never contains the key.
-ipcMain.handle('output:test', async (_e, req) => {
+ipcMain.handle('output:test', async (e, req) => {
+  guard('output:test', e);
   if (session_ || starting) return { ok: false, error: 'Während der Sendung nicht möglich' };
   if (test_) return { ok: false, error: 'Es läuft bereits ein Test' };
   const abort = new AbortController();
@@ -114,10 +135,14 @@ ipcMain.handle('output:test', async (_e, req) => {
 ipcMain.handle('ffmpeg:check', (_e, ffmpegPath) => checkFfmpeg(String(ffmpegPath || '')));
 
 // Sponsor air-time log (append-only JSONL in the recording folder); never rejects.
-ipcMain.handle('fs:appendAirLog', (_e, payload) => appendAirLog(payload));
+ipcMain.handle('fs:appendAirLog', (e, payload) => {
+  guard('fs:appendAirLog', e);
+  return appendAirLog(payload);
+});
 
 let overlay = null;
-ipcMain.handle('media:allow', (_e, absPath) => {
+ipcMain.handle('media:allow', (e, absPath) => {
+  guard('media:allow', e);
   if (!overlay) throw new Error('Medienserver nicht bereit');
   return overlay.allow(absPath);
 });
@@ -131,20 +156,23 @@ const FILE_FILTERS = {
   image: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }],
 };
 
-ipcMain.handle('dialog:pickFile', async (_e, kind) => {
+ipcMain.handle('dialog:pickFile', async (e, kind) => {
+  guard('dialog:pickFile', e);
   const filters = FILE_FILTERS[kind];
   if (!filters) throw new Error(`unknown file kind ${kind}`);
   const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
   return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
 });
 
-ipcMain.handle('dialog:pickFolder', async () => {
+ipcMain.handle('dialog:pickFolder', async (e) => {
+  guard('dialog:pickFolder', e);
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
   return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
 });
 
 // Help links: only http(s) ever leaves the app (never file:, javascript:, custom schemes).
-ipcMain.handle('shell:openExternal', async (_e, url) => {
+ipcMain.handle('shell:openExternal', async (e, url) => {
+  guard('shell:openExternal', e);
   let u;
   try {
     u = new URL(String(url));
@@ -223,6 +251,21 @@ function createWindow() {
   const devUrl = process.env.STUDIO_DEV_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // The page must never be replaced: a dropped file or a stray link would unload the renderer
+  // (MediaRecorder dies → dead stream). In-page #hash links and win.reload() do not fire will-navigate;
+  // a renderer-side reload of our own page does (Vite dev full reload) and stays allowed: main keeps
+  // the session and the reloaded page adopts it, as after a crash.
+  const noHash = (u) => String(u).split('#')[0];
+  win.webContents.on('will-navigate', (e, url) => {
+    if (noHash(url) === noHash(win.webContents.getURL())) return;
+    e.preventDefault();
+    log(`blocked navigation to ${String(url).split('?')[0].slice(0, 120)}`);
+  });
+  // No child windows (they would inherit the preload): web links open in the browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
   // Closing the window while on air needs a confirmation and the graceful stop (final chunk flushed).
   win.on('close', (e) => {
     if (quitting || confirmedQuit || !session_) return;

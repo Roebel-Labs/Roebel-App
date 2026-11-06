@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { buildFfmpegArgs, buildTestArgs, parseProgress, parseSlaveFailure, teeEscape } = require('../ffmpeg-args.cjs');
+const { buildFfmpegArgs, buildTestArgs, createRepeatLimiter, isFifoFull, parseProgress, parseSlaveFailure, teeEscape } = require('../ffmpeg-args.cjs');
 
 const SRT_URL = 'srt://live.cloudflare.com:778?passphrase=x&streamid=y';
 
@@ -258,5 +258,26 @@ describe('Live-Raum SRT URL (URL-encoded streamid + passphrase)', () => {
   it('is unchanged inside the tee slave list (nothing in it needs tee escaping)', () => {
     const args = buildFfmpegArgs({ ...base, destinations: [{ kind: 'srt', url }, { kind: 'rtmp', url: 'rtmp://x/live', key: 'k' }] });
     expect(args[args.length - 1].split('|')[0]).toMatch(new RegExp(`\\]${url.replace(/[?.]/g, '\\$&')}$`));
+  });
+});
+
+describe('isFifoFull', () => {
+  it('detects the fifo muxer overflow line only', () => {
+    expect(isFifoFull('[fifo @ 0x7f8] FIFO queue full')).toBe(true);
+    expect(isFifoFull('[tee @ 0x1] Slave muxer #1 failed: I/O error')).toBe(false);
+    expect(isFifoFull('frame=  30 fps= 30')).toBe(false);
+  });
+});
+
+describe('createRepeatLimiter', () => {
+  it('lets the first line through, then at most one per interval with the number suppressed meanwhile', () => {
+    const lim = createRepeatLimiter(10_000);
+    expect(lim(0)).toEqual({ suppressed: 0 });
+    expect(lim(100)).toBeNull();
+    expect(lim(5_000)).toBeNull();
+    expect(lim(9_999)).toBeNull();
+    expect(lim(10_000)).toEqual({ suppressed: 3 });
+    expect(lim(10_001)).toBeNull();
+    expect(lim(25_000)).toEqual({ suppressed: 1 });
   });
 });

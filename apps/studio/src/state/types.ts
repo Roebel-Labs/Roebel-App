@@ -37,6 +37,8 @@ export type OutputStatus = {
   recordingError?: string;
   /** No destination: the session only records locally (no ffmpeg). */
   recordOnly?: boolean;
+  /** Last time ffmpeg reported "FIFO queue full": a destination cannot keep up and drops packets. */
+  slowDestinationAt?: number;
   /** Per destination, in config order. A failed tee slave stays failed until "Ziel neu verbinden". */
   destinations?: DestinationStatus[];
 };

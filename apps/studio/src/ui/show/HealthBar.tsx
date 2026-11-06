@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { nextSilentSince, SILENT_ALERT_MS } from '../../audio/mixer';
 import { useShow } from '../../state/store';
 import type { OutputStatus, Settings } from '../../state/types';
 import { hms, useOnAir, useStudio, useTick } from '../studio';
@@ -51,6 +52,25 @@ export function healthFlags(o: { speed?: number; renderFps: number; targetFps: n
   };
 }
 
+/** True while on air and the master peak has stayed at the floor for more than SILENT_ALERT_MS (polled at 2 Hz). */
+function useSilentMaster(onAir: boolean): boolean {
+  const { mixer } = useStudio();
+  const [silent, setSilent] = useState(false);
+  const since = useRef<number | null>(null);
+  useEffect(() => {
+    since.current = null;
+    setSilent(false);
+    if (!onAir) return;
+    const t = setInterval(() => {
+      const now = Date.now();
+      since.current = nextSilentSince(since.current, mixer.levels().master, now);
+      setSilent(since.current !== null && now - since.current > SILENT_ALERT_MS);
+    }, 500);
+    return () => clearInterval(t);
+  }, [mixer, onAir]);
+  return silent;
+}
+
 export function HealthBar() {
   const { engine } = useStudio();
   const { state } = useShow();
@@ -90,6 +110,7 @@ export function HealthBar() {
   const recordOnly = onAir && !!st?.recordOnly;
   const outState = !onAir ? 'Aus' : recordOnly ? 'Nur Aufnahme' : st ? STATE_TEXT[st.state] : 'Startet…';
   const pills = onAir && !recordOnly ? destinationPills(state.settings, st) : [];
+  const silent = useSilentMaster(onAir);
 
   return (
     <footer className="health" aria-label="Zustand">
@@ -130,6 +151,9 @@ export function HealthBar() {
           />
           {air.recorderError && <Item label="Kodierer" value={`neu gestartet (${air.recorderRestarts}×)`} bad title={air.recorderError} />}
         </>
+      )}
+      {silent && (
+        <Item label="Ton" value="stumm" bad title="Seit über 5 s kein Signal am Summenausgang. Mischpult prüfen: Show → Audio." />
       )}
       {server && !server.ok && (
         <Item label="Medienserver" value={server.error ?? 'nicht erreichbar'} bad title="Videos, Bilder und die OBS-Einblendungsseite brauchen ihn" />

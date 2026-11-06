@@ -93,7 +93,8 @@ export function parseCsv(text: string): ParsedCsv {
   const keep: number[] = [];
   const columns: string[] = [];
   headers.forEach((h, i) => {
-    if (h === '') {
+    // Check the RAW header: uniqueHeaders turns a second empty one into " 2".
+    if ((records[0][i] ?? '').trim() === '') {
       if (!body.some((r) => (r[i] ?? '').trim() !== '')) return;
       let name = `Spalte ${i + 1}`;
       while (headers.includes(name) || columns.includes(name)) name = `${name}*`;

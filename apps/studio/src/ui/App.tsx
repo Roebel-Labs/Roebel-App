@@ -4,7 +4,8 @@ import { useShow } from '../state/store';
 import { ConfirmDialog, Dialog } from './Dialog';
 import { errorText, maskedTarget, outputConfig } from './engine';
 import { hotkeyAction, targetKind } from './hotkeys';
-import { destinationsProblem, enabledDestinations, uploadEstimate } from './settings/destinations';
+import { hasAudibleChannel } from '../audio/mixer';
+import { destinationsProblem, destinationsWarning, enabledDestinations, uploadEstimate } from './settings/destinations';
 import { ReconnectButton } from './settings/ReconnectButton';
 import { useTestRunning } from './settings/test-runs';
 import { SettingsTab } from './settings/SettingsTab';
@@ -69,6 +70,8 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
   const [error, setError] = useState<string | null>(null);
   const s = state.settings;
   const problem = destinationsProblem(s.destinations);
+  const warning = destinationsWarning(s.destinations);
+  const silent = !hasAudibleChannel(state.audio.channels);
   const enabled = enabledDestinations(s.destinations);
   const recordOnly = enabled.length === 0;
   const up = uploadEstimate(enabled.length, s.videoKbps, s.audioKbps);
@@ -146,6 +149,12 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
         <dt>Aufnahme</dt>
         <dd>{s.recordDir}</dd>
       </dl>
+      {silent && (
+        <div className="dialog-warn">
+          Kein Ton: Im Mischpult ist kein Kanal aktiv – der Stream wäre stumm. Show → Audio → „+ Kanal“.
+        </div>
+      )}
+      {!problem && warning && <div className="dialog-warn">{warning}</div>}
       {problem && <div className="dialog-error">{problem}</div>}
       {error && <div className="dialog-error">Start fehlgeschlagen: {error}</div>}
     </Dialog>
@@ -258,6 +267,23 @@ function DestinationBanner() {
   );
 }
 
+/** How long the slow-destination banner stays after the last "FIFO queue full". */
+const SLOW_BANNER_MS = 10_000;
+
+/** A destination drops packets (its fifo overflows): the stream degrades there without failing. */
+function SlowDestinationBanner() {
+  const air = useOnAir();
+  const now = useTick(1000);
+  const at = air.phase === 'on' ? air.status?.slowDestinationAt : undefined;
+  if (at === undefined || now - at > SLOW_BANNER_MS) return null;
+  return (
+    <div className="banner" role="alert">
+      <strong>Ziel zu langsam</strong>
+      <span>Ein Ziel kommt nicht hinterher – Pakete werden verworfen. Ziel prüfen oder ausschalten.</span>
+    </div>
+  );
+}
+
 /** Ends running transitions, binds hotkeys (Show tab only), and stops the broadcast cleanly on quit. */
 function useShowRuntime(tab: Tab) {
   const { state, dispatch } = useShow();
@@ -351,6 +377,7 @@ function Shell() {
       </header>
       <RecordingBanner />
       <DestinationBanner />
+      <SlowDestinationBanner />
       <main className="content">
         {tab === 'show' && <ShowTab />}
         {tab === 'design' && <DesignTab />}

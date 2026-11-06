@@ -202,3 +202,39 @@ describe('Mixer external inputs', () => {
     m.dispose();
   });
 });
+
+import { hasAudibleChannel, nextSilentSince, SILENT_ALERT_MS } from '../mixer';
+
+describe('hasAudibleChannel', () => {
+  const ch = (gainDb: number, muted = false): AudioChannel => ({
+    id: 'c',
+    label: 'c',
+    input: { kind: 'device', deviceId: 'd' },
+    gainDb,
+    muted,
+    delayMs: 0,
+  });
+  it('is false for an empty mixer, muted channels or faders at the floor', () => {
+    expect(hasAudibleChannel([])).toBe(false);
+    expect(hasAudibleChannel([ch(0, true)])).toBe(false);
+    expect(hasAudibleChannel([ch(DB_FLOOR)])).toBe(false);
+    expect(hasAudibleChannel([ch(DB_FLOOR - 10), ch(-6, true)])).toBe(false);
+  });
+  it('is true once one channel is unmuted above the floor', () => {
+    expect(hasAudibleChannel([ch(0, true), ch(-12)])).toBe(true);
+  });
+});
+
+describe('nextSilentSince', () => {
+  it('starts the silence clock at the first silent poll and keeps it while silent', () => {
+    expect(nextSilentSince(null, DB_FLOOR, 1000)).toBe(1000);
+    expect(nextSilentSince(1000, DB_FLOOR, 7000)).toBe(1000);
+  });
+  it('resets as soon as the master peak rises above the floor', () => {
+    expect(nextSilentSince(1000, -30, 2000)).toBeNull();
+    expect(nextSilentSince(null, -59, 2000)).toBeNull();
+  });
+  it('alerts after more than 5 s', () => {
+    expect(SILENT_ALERT_MS).toBe(5000);
+  });
+});

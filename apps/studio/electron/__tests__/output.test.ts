@@ -60,6 +60,7 @@ afterEach(async () => {
   delete process.env.FAKE_FFMPEG_PIDS;
   delete process.env.FAKE_FFMPEG_STDERR;
   delete process.env.FAKE_FFMPEG_ARGS;
+  delete process.env.FAKE_FFMPEG_IGNORE_TERM;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -187,6 +188,44 @@ describe('createOutput', () => {
     expect(statuses.slice(n).map((s) => s.state)).toContain('connecting');
     await waitFor(() => last()?.state === 'live');
     expect(out.getStatus().restarts).toBe(0);
+  });
+
+  it('a mid-stream recorder restart SIGKILLs an old encoder that ignores SIGTERM (no orphan holding the key)', async () => {
+    const pidsFile = path.join(dir, 'pids.txt');
+    process.env.FAKE_FFMPEG_PIDS = pidsFile;
+    process.env.FAKE_FFMPEG_IGNORE_TERM = '1';
+    const pids = () => fs.readFileSync(pidsFile, 'utf8').trim().split('\n').map(Number);
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    await out.start(cfg());
+    out.chunk(header());
+    await waitFor(() => last()?.state === 'live');
+    delete process.env.FAKE_FFMPEG_IGNORE_TERM; // the fresh encoder behaves
+    out.chunk(header());
+    await waitFor(() => pids().length === 2);
+    const [old] = pids();
+    await sleep(500);
+    expect(alive(old)).toBe(true); // SIGTERM alone does not end it
+    await waitFor(() => !alive(old), 3000);
+    expect(alive(pids()[1])).toBe(true);
+  }, 8000);
+
+  it('flags a slow destination on "FIFO queue full" and rate-limits that line in the log', async () => {
+    process.env.FAKE_FFMPEG_STDERR = '[fifo @ 0x7f8] FIFO queue full';
+    const logs: string[] = [];
+    out = createOutput({ sendStatus: (s: Status) => statuses.push(s), onNeedHeader: needHeader, log: (m: string) => logs.push(m) });
+    const t0 = Date.now();
+    await out.start(cfg());
+    out.chunk(header());
+    await waitFor(() => (out.getStatus() as Status & { slowDestinationAt?: number }).slowDestinationAt !== undefined);
+    expect((out.getStatus() as Status & { slowDestinationAt?: number }).slowDestinationAt).toBeGreaterThanOrEqual(t0);
+    expect(logs.filter((l) => /FIFO queue full/.test(l))).toHaveLength(1);
   });
 
   it('record-only mode (no destinations) writes the recording without spawning ffmpeg', async () => {

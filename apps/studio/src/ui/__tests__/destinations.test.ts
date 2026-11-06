@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { destinationProblem, destinationsProblem, newDestination, PRESETS, uploadEstimate } from '../settings/destinations';
+import { destinationProblem, destinationsProblem, destinationsWarning, newDestination, PRESETS, uploadEstimate } from '../settings/destinations';
+import type { Destination } from '../../state/types';
 
 describe('destination presets', () => {
   it('carry the exact ingest URLs', () => {
@@ -23,6 +24,44 @@ describe('destination presets', () => {
   it('disabled destinations are not checked; none enabled = record-only, no problem', () => {
     expect(destinationsProblem([{ ...newDestination('facebook', 'f'), enabled: false }])).toBeNull();
     expect(destinationsProblem([])).toBeNull();
+  });
+});
+
+describe('duplicate ingest', () => {
+  const rtmp = (id: string, url: string, key: string, enabled = true): Destination => ({ id, name: id, enabled, target: { kind: 'rtmp', url, key } });
+  const srt = (id: string, url: string, enabled = true): Destination => ({ id, name: id, enabled, target: { kind: 'srt', url } });
+
+  it('blocks two enabled RTMP destinations with the same server + key (slash differences ignored)', () => {
+    const p = destinationsProblem([
+      rtmp('A', 'rtmps://live.cloudflare.com:443/live/', 'K1'),
+      rtmp('B', 'rtmps://live.cloudflare.com:443/live', 'K1'),
+    ]);
+    expect(p).toMatch(/A.*B|gleiche/);
+    expect(destinationsProblem([rtmp('A', 'rtmp://x/live', 'K1'), rtmp('B', 'rtmp://x/live', 'K2')])).toBeNull();
+  });
+
+  it('blocks two enabled SRT destinations with the same streamid, even with other params in another order', () => {
+    expect(
+      destinationsProblem([
+        srt('A', 'srt://live.cloudflare.com:778?passphrase=P1&streamid=S1'),
+        srt('B', 'srt://live.cloudflare.com:778?streamid=S1&passphrase=P2'),
+      ]),
+    ).not.toBeNull();
+    expect(
+      destinationsProblem([srt('A', 'srt://live.cloudflare.com:778?streamid=S1'), srt('B', 'srt://live.cloudflare.com:778?streamid=S2')]),
+    ).toBeNull();
+  });
+
+  it('ignores a disabled duplicate', () => {
+    expect(destinationsProblem([rtmp('A', 'rtmp://x/live', 'K'), rtmp('B', 'rtmp://x/live', 'K', false)])).toBeNull();
+  });
+
+  it('warns (does not block) when more than one enabled destination goes to Cloudflare', () => {
+    const two = [srt('A', 'srt://live.cloudflare.com:778?streamid=S1'), rtmp('B', 'rtmps://live.cloudflare.com:443/live/', 'K')];
+    expect(destinationsProblem(two)).toBeNull();
+    expect(destinationsWarning(two)).toMatch(/Zwei Cloudflare-Ziele/);
+    expect(destinationsWarning([two[0], { ...two[1], enabled: false }])).toBeNull();
+    expect(destinationsWarning([two[0], rtmp('Y', 'rtmp://a.rtmp.youtube.com/live2', 'K')])).toBeNull();
   });
 });
 

@@ -157,6 +157,36 @@ function parseSlaveFailure(line) {
   return m ? { index: Number(m[1]), reason: m[2].trim() } : null;
 }
 
+/**
+ * The fifo muxer of a tee slave drops packets ("FIFO queue full"): that destination
+ * cannot keep up (upload, ingest). The stream degrades for it while the others run on.
+ * @param {string} line
+ */
+function isFifoFull(line) {
+  return /FIFO queue full/i.test(String(line));
+}
+
+/**
+ * Rate limiter for a repeating log line: the first call passes, then at most one per
+ * `intervalMs`, carrying how many were swallowed since the last one that passed.
+ * @param {number} intervalMs
+ * @returns {(now: number) => { suppressed: number } | null}
+ */
+function createRepeatLimiter(intervalMs) {
+  let lastAt = -Infinity;
+  let suppressed = 0;
+  return (now) => {
+    if (now - lastAt >= intervalMs) {
+      const r = { suppressed };
+      lastAt = now;
+      suppressed = 0;
+      return r;
+    }
+    suppressed += 1;
+    return null;
+  };
+}
+
 /** Join an RTMP(S) server URL and a stream key with exactly one slash. */
 function joinRtmpUrl(url, key) {
   if (!key) return url;
@@ -237,6 +267,8 @@ module.exports = {
   buildTestArgs,
   parseProgress,
   parseSlaveFailure,
+  isFifoFull,
+  createRepeatLimiter,
   nextRestartDelay,
   joinRtmpUrl,
   maskSecrets,

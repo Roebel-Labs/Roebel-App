@@ -6,6 +6,7 @@
 //   FAKE_FFMPEG_PIDS     append this process's pid (one per line) to this file
 //   FAKE_FFMPEG_STDERR   write this line to stderr once, ~120 ms after start
 //   FAKE_FFMPEG_ARGS     append this process's argv (JSON, one per line) to this file
+//   FAKE_FFMPEG_IGNORE_TERM  ignore SIGTERM and stdin EOF (a hung RTMP slave); only SIGKILL ends it
 const fs = require('node:fs');
 
 if (process.env.FAKE_FFMPEG_PIDS) fs.appendFileSync(process.env.FAKE_FFMPEG_PIDS, `${process.pid}\n`);
@@ -18,6 +19,9 @@ if (process.env.FAKE_FFMPEG_STDERR) {
   setTimeout(() => process.stderr.write(`${line}\n`), 120);
 }
 
+const ignoreTerm = !!process.env.FAKE_FFMPEG_IGNORE_TERM;
+if (ignoreTerm) process.on('SIGTERM', () => {});
+
 const dump = process.env.FAKE_FFMPEG_DUMP;
 const exitMs = Number(process.env.FAKE_FFMPEG_EXIT_MS || 0);
 
@@ -26,7 +30,7 @@ process.stdin.on('data', (d) => {
 });
 // With an exit timer the fake runs until it (EOF on an ignored stdin must not end it early).
 process.stdin.on('end', () => {
-  if (!exitMs) process.exit(0);
+  if (!exitMs && !ignoreTerm) process.exit(0);
 });
 process.stdin.on('error', () => {});
 

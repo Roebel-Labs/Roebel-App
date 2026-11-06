@@ -49,6 +49,13 @@ describe('parseCsv', () => {
     expect(r.columns).toEqual(['A', 'B', 'Spalte 3']);
     expect(r.rows[0]['Spalte 3']).toBe('x');
   });
+  it('drops several empty trailing columns (Excel padding) instead of naming them " 2"', () => {
+    expect(parseCsv('A;B;;\n1;2;;').columns).toEqual(['A', 'B']);
+    expect(parseCsv('A;B;;;\n1;2;;;').columns).toEqual(['A', 'B']);
+    const r = parseCsv('A;B;;\n1;2;;y');
+    expect(r.columns).toEqual(['A', 'B', 'Spalte 4']);
+    expect(r.rows[0]['Spalte 4']).toBe('y');
+  });
   it('counts rows with values beyond the header', () => {
     const r = parseCsv('A;B\n1;2;3\n4;5\n6;7;8;9');
     expect(r.overflowRows).toBe(2);

@@ -14,6 +14,8 @@ const {
   buildTestArgs,
   parseProgress,
   parseSlaveFailure,
+  isFifoFull,
+  createRepeatLimiter,
   nextRestartDelay,
   maskSecrets,
   usableDestinations,
@@ -27,6 +29,10 @@ const MAX_STDIN_BACKLOG = 32 * 1024 * 1024;
 const STABLE_MS = 20000;
 // "Ziel neu verbinden" waits at most this long for the old encoder to close its connections.
 const RECONNECT_EXIT_CAP_MS = 2000;
+// An encoder replaced mid-stream gets this long after SIGTERM before SIGKILL (a hung slave ignores SIGTERM).
+const HANDOVER_KILL_MS = 2000;
+// "FIFO queue full" repeats per dropped packet: log it at most this often.
+const FIFO_LOG_INTERVAL_MS = 10000;
 
 function expandHome(p) {
   if (p === '~') return os.homedir();
@@ -80,6 +86,7 @@ function createOutput(hooks) {
   let recordOnly = false;
   let reconnecting = null; // pending reconnect() promise
   let generation = 0; // bumped by start()/stop(): a reconnect from an older session must not spawn
+  const fifoLimiter = createRepeatLimiter(FIFO_LOG_INTERVAL_MS);
   const openedFiles = new Set();
 
   /** @type {import('../src/state/types').OutputStatus} */
@@ -177,6 +184,14 @@ function createOutput(hooks) {
           } else if (attempt > 0 && Date.now() - liveSince > STABLE_MS) {
             attempt = 0;
           }
+        } else if (isFifoFull(line)) {
+          // A destination cannot keep up: packets are dropped for it. Not a failure, no stderrTail.
+          if (p === proc) {
+            status.slowDestinationAt = Date.now();
+            hooks.sendStatus({ ...status });
+          }
+          const pass = fifoLimiter(Date.now());
+          if (pass) log(`ffmpeg: ${line}${pass.suppressed ? ` (+${pass.suppressed}× in den letzten ${FIFO_LOG_INTERVAL_MS / 1000} s)` : ''}`);
         } else {
           stderrTail = mask(line).slice(0, 300);
           log(`ffmpeg: ${line}`);
@@ -295,6 +310,9 @@ function createOutput(hooks) {
       log('new recorder session, restarting encoder');
       old.stdin.end();
       old.kill('SIGTERM');
+      // A hung RTMP slave ignores SIGTERM: the orphan would keep the stream key and get the new publisher kicked.
+      const k = setTimeout(() => old.kill('SIGKILL'), HANDOVER_KILL_MS);
+      old.once('exit', () => clearTimeout(k));
       setState('connecting');
       spawnFfmpeg();
     }
@@ -389,7 +407,7 @@ function createOutput(hooks) {
       });
     }
     await closeRecording();
-    status = { ...status, state: 'idle', since: Date.now(), fps: undefined, kbps: undefined, speed: undefined };
+    status = { ...status, state: 'idle', since: Date.now(), fps: undefined, kbps: undefined, speed: undefined, slowDestinationAt: undefined };
     hooks.sendStatus({ ...status });
   }
 

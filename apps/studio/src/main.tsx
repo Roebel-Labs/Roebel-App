@@ -4,6 +4,15 @@ import { loadFonts } from './render/fonts';
 import { StoreProvider } from './state/store';
 import { App } from './ui/App';
 
+// A file dropped anywhere on the window must never navigate the page (the renderer would
+// unload and the MediaRecorder with it: dead stream). Drop zones that accept files call
+// preventDefault themselves; everything else shows "not allowed" and swallows the drop.
+document.addEventListener('dragover', (e) => {
+  if (!e.defaultPrevented && e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+  e.preventDefault();
+});
+document.addEventListener('drop', (e) => e.preventDefault());
+
 // Fonts first: canvas text never triggers font loading, so the first program
 // frame would otherwise air in the fallback face.
 void loadFonts().then(() => {

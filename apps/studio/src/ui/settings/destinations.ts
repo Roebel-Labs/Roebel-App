@@ -64,12 +64,66 @@ export function destinationProblem(d: Destination): string | null {
 
 export const enabledDestinations = (list: Destination[]) => list.filter((d) => d.enabled);
 
-/** The first problem of an enabled destination (record-only mode has none). */
+/**
+ * The ingest a destination publishes to: RTMP server + key (slashes normalised), or the
+ * SRT host + streamid (other query params ignored). Two destinations with the same ingest
+ * would push the same stream twice and the platform throws one of them out.
+ */
+export function ingestKey(t: OutputTarget): string | null {
+  if (t.kind === 'rtmp') {
+    const server = clean(t.url).replace(/\/+$/, '').toLowerCase();
+    const key = clean(t.key).replace(/^\/+/, '');
+    return server && key ? `rtmp|${server}/${key}` : null;
+  }
+  if (t.kind === 'srt') {
+    const url = clean(t.url);
+    const q = url.indexOf('?');
+    const host = (q === -1 ? url : url.slice(0, q)).replace(/\/+$/, '').toLowerCase();
+    const streamid = q === -1 ? null : new URLSearchParams(url.slice(q + 1)).get('streamid');
+    return streamid ? `srt|${host}|${streamid}` : `srt|${host}`;
+  }
+  return null;
+}
+
+/** Host of a destination URL, lower-case ('' when unparsable). */
+function hostOf(t: OutputTarget): string {
+  if (t.kind === 'none') return '';
+  const m = /^[a-z]+:\/\/([^/:?#]+)/i.exec(clean(t.url));
+  return m ? m[1].toLowerCase() : '';
+}
+
+/** The first problem of an enabled destination (record-only mode has none). Duplicate ingests block going live. */
 export function destinationsProblem(list: Destination[]): string | null {
   for (const d of enabledDestinations(list)) {
     const p = destinationProblem(d);
     if (p) return p;
   }
+  return duplicateIngestProblem(list);
+}
+
+/** Two enabled destinations publishing to the same ingest (same RTMP server + key, or same SRT streamid). */
+export function duplicateIngestProblem(list: Destination[]): string | null {
+  const enabled = enabledDestinations(list);
+  const seen = new Map<string, Destination>();
+  for (const d of enabled) {
+    const k = ingestKey(d.target);
+    if (!k) continue;
+    const first = seen.get(k);
+    if (first) {
+      const a = first.name.trim() || 'Ziel';
+      const b = d.name.trim() || 'Ziel';
+      return `${a} und ${b} senden an die gleiche Adresse mit dem gleichen Schlüssel. Ein Ziel ausschalten oder löschen.`;
+    }
+    seen.set(k, d);
+  }
+  return null;
+}
+
+/** Non-blocking hint for the go-live dialog and the settings (null when there is nothing to say). */
+export function destinationsWarning(list: Destination[]): string | null {
+  const cf = enabledDestinations(list).filter((d) => /(^|\.)cloudflare\.com$/.test(hostOf(d.target)));
+  if (cf.length > 1)
+    return 'Zwei Cloudflare-Ziele: nur wenn es zwei verschiedene Live-Inputs sind – sonst wirft Cloudflare einen Stream raus.';
   return null;
 }
 
