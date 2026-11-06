@@ -91,8 +91,16 @@ button {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: 700 15px/1 var(--font-head);
   letter-spacing: -0.01em;
+}
+
+.wordmark-logo {
+  display: block;
+  flex: none;
 }
 
 .tabs {

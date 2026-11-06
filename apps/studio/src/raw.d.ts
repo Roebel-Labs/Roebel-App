@@ -3,3 +3,9 @@ declare module '*?raw' {
   const text: string;
   export default text;
 }
+
+// Vite asset imports (resolve to a URL).
+declare module '*.svg' {
+  const url: string;
+  export default url;
+}

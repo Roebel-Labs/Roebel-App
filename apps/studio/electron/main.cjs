@@ -276,6 +276,8 @@ function createWindow() {
     height: 1000,
     title: 'Ortis Studio',
     backgroundColor: '#17191C',
+    // Window/taskbar icon on Windows and Linux (macOS takes the bundle icon).
+    ...(process.platform === 'darwin' ? {} : { icon: path.join(__dirname, '..', 'build', 'icon.png') }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

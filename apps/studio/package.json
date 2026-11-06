@@ -10,7 +10,11 @@
     "start": "node scripts/patch-electron-plist.cjs && vite build && electron .",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "postinstall": "node scripts/patch-electron-plist.cjs"
+    "postinstall": "node scripts/patch-electron-plist.cjs",
+    "build:renderer": "vite build",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.cjs",
+    "dist:mac": "vite build && pnpm dlx electron-builder@26.18.0 --mac --arm64",
+    "dist:win": "vite build && pnpm dlx electron-builder@26.18.0 --win --x64"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -33,5 +37,77 @@
     "vite": "^7.1.0",
     "vitest": "^3.2.0",
     "wait-on": "^9.5.0"
+  },
+  "description": "Ortis Studio – Livestream-Studio für Vereine und Veranstaltungen",
+  "author": "Röbel Labs",
+  "homepage": "https://www.roebel.app/studio",
+  "build": {
+    "appId": "app.roebel.ortisstudio",
+    "productName": "Ortis Studio",
+    "copyright": "Röbel Labs",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "electron/**/*.cjs",
+      "!electron/__tests__/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg/${os}",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.video",
+      "icon": "build/icon.png",
+      "minimumSystemVersion": "13.0",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUseContinuityCameraDeviceType": true,
+        "NSCameraUsageDescription": "Ortis Studio nutzt die Kamera für den Livestream.",
+        "NSMicrophoneUsageDescription": "Ortis Studio nutzt das Mikrofon für den Livestream."
+      }
+    },
+    "dmg": {
+      "artifactName": "Ortis-Studio-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ortis Studio",
+      "artifactName": "Ortis-Studio-${version}-win-x64.${ext}"
+    }
   }
 }

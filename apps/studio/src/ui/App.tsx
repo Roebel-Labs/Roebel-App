@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import logoUrl from '../assets/logo.svg';
 import { LiveRoomPanel, LiveRoomRuntime } from '../live-room/LiveRoomPanel';
 import { useShow } from '../state/store';
 import { ConfirmDialog, Dialog } from './Dialog';
@@ -362,7 +363,10 @@ function Shell() {
   return (
     <div className="app">
       <header className="topbar">
-        <span className="wordmark">Ortis Studio</span>
+        <span className="wordmark">
+          <img className="wordmark-logo" src={logoUrl} alt="" width={20} height={20} />
+          Ortis Studio
+        </span>
         <nav className="tabs" role="tablist">
           {TABS.map(([id, label]) => (
             <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
