@@ -1,7 +1,7 @@
 // Download page for Ortis Studio, the desktop livestream studio (apps/studio).
 import type { Metadata } from "next";
 import Image from "next/image";
-import { STUDIO_DOWNLOADS, STUDIO_VERSION } from "@/lib/studio/release";
+import { getStudioRelease } from "@/lib/studio/release";
 import { DownloadButtons } from "./DownloadButtons";
 
 export const metadata: Metadata = {
@@ -37,7 +37,10 @@ const FEATURES: { title: string; text: string }[] = [
   },
 ];
 
-export default function StudioPage() {
+export const revalidate = 300;
+
+export default async function StudioPage() {
+  const release = await getStudioRelease();
   return (
     <main className="min-h-screen bg-background px-4 py-16 text-foreground">
       <div className="mx-auto max-w-4xl">
@@ -53,7 +56,7 @@ export default function StudioPage() {
           zuerst beim DanceCup in Röbel.
         </p>
 
-        <DownloadButtons />
+        <DownloadButtons downloads={release.downloads} />
 
         <div className="mt-14 grid gap-4 md:grid-cols-3">
           {FEATURES.map((f) => (
@@ -97,11 +100,11 @@ export default function StudioPage() {
         </section>
 
         <p className="mt-10 text-xs text-muted-foreground">
-          Version {STUDIO_VERSION} · Quelloffen ·{" "}
+          Version {release.version} · Quelloffen ·{" "}
           <a href="https://github.com/Roebel-Labs/Roebel-App/tree/main/apps/studio" className="underline">
             Quellcode
           </a>
-          {STUDIO_DOWNLOADS.filter((d) => d.sha256).map((d) => (
+          {release.downloads.filter((d) => d.sha256).map((d) => (
             <span key={d.os} className="block break-all">
               SHA-256 {d.os === "mac" ? "macOS" : "Windows"}: {d.sha256}
             </span>
