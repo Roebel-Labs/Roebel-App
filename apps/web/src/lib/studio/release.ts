@@ -20,13 +20,13 @@ export const STUDIO_DOWNLOADS: StudioDownload[] = [
     label: "Für macOS laden",
     requirements: "macOS 13 oder neuer, Mac mit Apple-Chip (M1 und neuer)",
     url: `${RELEASE_BASE}/Ortis-Studio-${STUDIO_VERSION}-mac-arm64.dmg`,
-    sha256: null,
+    sha256: "6709a431cae2b70506408bfdd7c18ae5a423efbe2fbe12b52f5c0eabd106793e",
   },
   {
     os: "win",
     label: "Für Windows laden",
     requirements: "Windows 10 oder 11, 64 Bit",
     url: `${RELEASE_BASE}/Ortis-Studio-${STUDIO_VERSION}-win-x64.exe`,
-    sha256: null,
+    sha256: "25797bd42a032a41f89f3380b5af6bff2f93ae2a10e68503fcf2d8d8844c3529",
   },
 ];
