@@ -25,6 +25,7 @@ export type Action =
   | { type: 'removeSource'; id: string }
   | { type: 'addScene'; scene: Omit<Scene, 'id'> & { id?: string } }
   | { type: 'removeScene'; id: string }
+  | { type: 'updateScene'; id: string; patch: Pick<Scene, 'fill' | 'backgroundSourceId'> }
   | { type: 'setPreview'; sceneId: string | null }
   | { type: 'take'; now: number }
   | { type: 'cut' }
@@ -284,6 +285,8 @@ function reduce(s: ShowState, a: Action): ShowState {
       return { ...s, scenes: [...s.scenes, { ...a.scene, id: a.scene.id ?? uid() }] };
     case 'removeScene':
       return dropScenes(s, new Set([a.id]));
+    case 'updateScene':
+      return { ...s, scenes: s.scenes.map((sc) => (sc.id === a.id ? { ...sc, ...a.patch } : sc)) };
     case 'setPreview':
       if (a.sceneId !== null && !s.scenes.some((sc) => sc.id === a.sceneId)) return s;
       return { ...s, previewSceneId: a.sceneId };
@@ -648,7 +651,9 @@ export function restore(json: string | null): ShowState {
       ...(sc as unknown as Scene),
       sourceIds: arr<unknown>(sc.sourceIds, []).filter((x): x is string => typeof x === 'string'),
     }))
-    .filter((sc) => !sc.sourceIds.some((id) => external.has(id)));
+    .filter((sc) => !sc.sourceIds.some((id) => external.has(id)))
+    // A guest used as background is gone after a restart: fall back to black.
+    .map((sc) => (sc.backgroundSourceId && external.has(sc.backgroundSourceId) ? { ...sc, backgroundSourceId: undefined } : sc));
   // An absent field (state saved before starters existed) gets the starters; an empty array is the operator's choice.
   let overlays =
     raw.overlays === undefined ? d.overlays : (arr<unknown>(raw.overlays, []).filter(hasId) as unknown as OverlayInstance[]);

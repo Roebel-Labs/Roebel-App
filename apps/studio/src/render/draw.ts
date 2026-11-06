@@ -177,11 +177,14 @@ function drawTransition(
 
 function drawScene(ctx: CanvasRenderingContext2D, state: ShowState, scene: Scene | undefined, media: MediaLookup) {
   if (!scene) return;
-  const rects = sceneRects(scene.layout, FRAME_W, FRAME_H);
+  const rects = sceneRects(scene.layout, FRAME_W, FRAME_H, { fill: scene.fill });
   if (scene.layout !== 'full') {
     // Base fill so letterbox bars / pip backgrounds are black even inside a fading transition.
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, FRAME_W, FRAME_H);
+    // Optional background behind the layout; a removed background source simply stays black.
+    const bg = scene.backgroundSourceId ? state.sources.find((s) => s.id === scene.backgroundSourceId) : undefined;
+    if (bg) guarded(ctx, 'source', () => drawSource(ctx, bg, { x: 0, y: 0, w: FRAME_W, h: FRAME_H }, media));
   }
   rects.forEach((r, i) => {
     const id = scene.sourceIds[i];

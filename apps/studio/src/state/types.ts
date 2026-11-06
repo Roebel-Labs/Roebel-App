@@ -67,6 +67,10 @@ export type Scene = {
   label: string;
   layout: 'full' | 'pip' | 'split';
   sourceIds: string[];
+  /** Split only: both halves fill the frame height (cropped) instead of two 16:9 halves with bars. */
+  fill?: boolean;
+  /** Split / picture-in-picture: source drawn full-frame behind the layout instead of black. */
+  backgroundSourceId?: string;
 };
 
 export type TransitionKind = 'cut' | 'fade' | 'wipe' | 'slide' | 'zoom';

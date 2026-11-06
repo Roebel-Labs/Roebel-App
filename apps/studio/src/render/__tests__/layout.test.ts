@@ -18,6 +18,12 @@ describe('sceneRects', () => {
     expect(r[0]).toEqual({ x: 0, y: 270, w: 960, h: 540 });
     expect(r[1]).toEqual({ x: 960, y: 270, w: 960, h: 540 });
   });
+  it('split with fill = two full-height halves (no bars)', () => {
+    expect(sceneRects('split', 1920, 1080, { fill: true })).toEqual([
+      { x: 0, y: 0, w: 960, h: 1080 },
+      { x: 960, y: 0, w: 960, h: 1080 },
+    ]);
+  });
 });
 
 describe('fitRect', () => {

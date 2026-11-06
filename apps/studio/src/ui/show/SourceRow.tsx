@@ -65,6 +65,8 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [a, setA] = useState(state.sources[0]?.id ?? '');
   const [b, setB] = useState(state.sources[1]?.id ?? state.sources[0]?.id ?? '');
+  const [fill, setFill] = useState(true);
+  const [bg, setBg] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,7 +122,16 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
   const addCombo = (layout: 'split' | 'pip') => {
     if (!a || !b) return;
     const joiner = layout === 'split' ? ' | ' : ' + ';
-    dispatch({ type: 'addScene', scene: { label: `${labelOf(a)}${joiner}${labelOf(b)}`, layout, sourceIds: [a, b] } });
+    dispatch({
+      type: 'addScene',
+      scene: {
+        label: `${labelOf(a)}${joiner}${labelOf(b)}`,
+        layout,
+        sourceIds: [a, b],
+        ...(layout === 'split' ? { fill } : {}),
+        ...(bg ? { backgroundSourceId: bg } : {}),
+      },
+    });
     onClose();
   };
 
@@ -238,6 +249,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
                 ))}
               </select>
             </label>
+            <ComboOptions layout={view} fill={fill} onFill={setFill} bg={bg} onBg={setBg} />
             <button className="btn" disabled={!a || !b || a === b} onClick={() => addCombo(view)}>
               {view === 'split' ? 'Split anlegen' : 'Bild-im-Bild anlegen'}
             </button>
@@ -248,12 +260,78 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Split / picture-in-picture options: fill the frame (split only) and the background behind the layout. */
+function ComboOptions(p: { layout: Scene['layout']; fill: boolean; onFill: (v: boolean) => void; bg: string; onBg: (v: string) => void }) {
+  const { state } = useShow();
+  // Background = any non-guest source; a still image or a colour is the usual choice.
+  const options = state.sources.filter((x) => x.kind !== 'external');
+  return (
+    <>
+      {p.layout === 'split' && (
+        <label className="check">
+          <input type="checkbox" checked={p.fill} onChange={(e) => p.onFill(e.target.checked)} />
+          Bild ausfüllen (ohne Ränder, Ränder werden abgeschnitten)
+        </label>
+      )}
+      {(p.layout === 'pip' || !p.fill) && (
+        <label className="field">
+          <span>Hintergrund</span>
+          <select className="input" value={p.bg} onChange={(e) => p.onBg(e.target.value)}>
+            <option value="">Schwarz</option>
+            {options.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {(p.layout === 'pip' || !p.fill) && options.length === 0 && (
+        <div className="hint">Eigenes Hintergrundbild: erst über „+ Quelle → Bild aus Datei…“ hinzufügen.</div>
+      )}
+    </>
+  );
+}
+
+/** ⚙ on a split / picture-in-picture tile: change fill and background of an existing combo. */
+function ComboEdit({ scene, onClose }: { scene: Scene; onClose: () => void }) {
+  const { dispatch } = useShow();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.parentElement?.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+  return (
+    <div className="menu" ref={ref} role="menu">
+      <div className="menu-sub">
+        <ComboOptions
+          layout={scene.layout}
+          fill={!!scene.fill}
+          onFill={(v) => dispatch({ type: 'updateScene', id: scene.id, patch: { fill: v } })}
+          bg={scene.backgroundSourceId ?? ''}
+          onBg={(v) => dispatch({ type: 'updateScene', id: scene.id, patch: { backgroundSourceId: v || undefined } })}
+        />
+        <div className="hint">Änderungen gelten sofort, auch im Live-Bild.</div>
+      </div>
+    </div>
+  );
+}
+
 export function SourceRow() {
   const { state, dispatch } = useShow();
   const health = useSourceHealth();
   const thumbRef = useThumbnails(state);
   const [menu, setMenu] = useState(false);
   const [removing, setRemoving] = useState<Scene | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const kindOf = (id: string) => state.sources.find((s) => s.id === id)?.kind;
 
   const remove = (scene: Scene) => {
@@ -278,8 +356,7 @@ export function SourceRow() {
         <span className="row-title">Quellen</span>
         <span className="row-hint">Klick = in die Vorschau, Doppelklick = sofort live, Tasten 1–9</span>
       </div>
-      <div className="strip-row">
-      <div className="strip">
+      <div className="strip wrap">
         {state.scenes.map((scene, i) => {
           const h = sceneHealth(scene, kindOf, health);
           const isPgm = scene.id === state.programSceneId;
@@ -302,6 +379,18 @@ export function SourceRow() {
                   {i < 9 && <span className="key">{i + 1}</span>}
                 </div>
               </button>
+              {scene.layout !== 'full' && (
+                <button
+                  className="tile-edit"
+                  aria-label={`${scene.label} anpassen`}
+                  title="Ausfüllen und Hintergrund"
+                  aria-expanded={editing === scene.id}
+                  onClick={() => setEditing((cur) => (cur === scene.id ? null : scene.id))}
+                >
+                  ⚙
+                </button>
+              )}
+              {editing === scene.id && <ComboEdit scene={scene} onClose={() => setEditing(null)} />}
               {isPgm && <span className="tile-tag pgm">Live</span>}
               {isPvw && !isPgm && <span className="tile-tag pvw">Vorschau</span>}
               {(() => {
@@ -321,7 +410,6 @@ export function SourceRow() {
             </div>
           );
         })}
-      </div>
         <div className="add-wrap">
           <button className="add-tile" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
             + Quelle

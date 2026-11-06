@@ -8,9 +8,9 @@ const PIP_MARGIN = 40;
 /**
  * Source rectangles for a scene layout, in draw order.
  * full = whole frame; pip = full + bottom-right 30 % inset (40 px margin);
- * split = two 16:9 halves, letterboxed vertically.
+ * split = two 16:9 halves, letterboxed vertically; with `fill` two full-height halves (sources cropped).
  */
-export function sceneRects(layout: Scene['layout'], W: number, H: number): Rect[] {
+export function sceneRects(layout: Scene['layout'], W: number, H: number, opts: { fill?: boolean } = {}): Rect[] {
   const full: Rect = { x: 0, y: 0, w: W, h: H };
   switch (layout) {
     case 'pip': {
@@ -20,6 +20,12 @@ export function sceneRects(layout: Scene['layout'], W: number, H: number): Rect[
     }
     case 'split': {
       const w = W / 2;
+      if (opts.fill) {
+        return [
+          { x: 0, y: 0, w, h: H },
+          { x: w, y: 0, w, h: H },
+        ];
+      }
       const h = Math.round((w * H) / W);
       const y = Math.round((H - h) / 2);
       return [

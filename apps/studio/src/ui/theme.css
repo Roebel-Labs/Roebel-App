@@ -686,6 +686,36 @@ button {
   opacity: 0;
 }
 
+.tile-edit {
+  position: absolute;
+  top: 4px;
+  right: 30px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.tile:hover .tile-edit,
+.tile-edit:focus-visible,
+.tile-edit[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 .tile-remove:disabled {
   cursor: not-allowed;
   color: rgba(255, 255, 255, 0.45);
@@ -735,7 +765,8 @@ button {
   flex-direction: column;
   justify-content: space-between;
   width: 184px;
-  height: 64px;
+  min-height: 64px;
+  gap: 6px;
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--line-strong);
@@ -751,6 +782,19 @@ button {
 .ovl.on {
   border-color: var(--pgm);
   background: rgba(229, 72, 77, 0.12);
+}
+
+/* Overlay preview: the graphic over a neutral checkerboard, at 16:9. */
+.ovl-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 3px;
+  background-color: #2a2c30;
+  background-image: linear-gradient(45deg, #34363b 25%, transparent 25%, transparent 75%, #34363b 75%),
+    linear-gradient(45deg, #34363b 25%, transparent 25%, transparent 75%, #34363b 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
 }
 
 .ovl-name {

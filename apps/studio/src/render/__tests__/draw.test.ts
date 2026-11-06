@@ -86,6 +86,32 @@ describe('renderFrame', () => {
     expect(texts(f.calls)).toEqual(expect.arrayContaining(['Signal verloren', 'Kamera 3']));
   });
 
+  it('draws a split background source full-frame behind the halves', () => {
+    let s = base();
+    s = showReducer(s, { type: 'addScene', scene: { id: 'sp', label: 'Split', layout: 'split', sourceIds: ['cam1', 'cam2'], backgroundSourceId: 'col' } });
+    const f = run({ ...s, programSceneId: 'sp' });
+    const fills = f.calls.filter((c) => c.fn === 'fillRect').map((c) => c.args);
+    expect(fills).toContainEqual([0, 0, 1920, 1080]);
+    const colorIdx = f.calls.findIndex((c) => c.fn === 'set:fillStyle' && c.args[0] === '#00498B');
+    const firstImg = f.calls.findIndex((c) => c.fn === 'drawImage');
+    expect(colorIdx).toBeGreaterThan(-1);
+    expect(colorIdx).toBeLessThan(firstImg); // background first, halves on top
+  });
+
+  it('a split whose background source was removed stays black (no lost-signal slate)', () => {
+    let s = base();
+    s = showReducer(s, { type: 'addScene', scene: { id: 'sp', label: 'Split', layout: 'split', sourceIds: ['cam1', 'cam2'], backgroundSourceId: 'gone' } });
+    const f = run({ ...s, programSceneId: 'sp' });
+    expect(texts(f.calls)).not.toContain('Signal verloren');
+  });
+
+  it('updateScene sets fill and background on a split', () => {
+    let s = base();
+    s = showReducer(s, { type: 'addScene', scene: { id: 'sp', label: 'Split', layout: 'split', sourceIds: ['cam1', 'cam2'] } });
+    s = showReducer(s, { type: 'updateScene', id: 'sp', patch: { fill: true, backgroundSourceId: 'col' } });
+    expect(s.scenes.find((x) => x.id === 'sp')).toMatchObject({ fill: true, backgroundSourceId: 'col' });
+  });
+
   it('draws both scenes during a running fade', () => {
     let s = base();
     s = { ...s, programSceneId: s.scenes[0].id, previewSceneId: s.scenes[2].id };
