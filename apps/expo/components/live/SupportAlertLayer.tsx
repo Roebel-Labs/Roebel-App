@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import * as Haptics from 'expo-haptics';
 import { formatSupportAmount, type ChatMessage } from '@/lib/live';
 import { F } from './tokens';
@@ -41,7 +41,7 @@ const SupportAlertLayer = forwardRef<SupportAlertHandle, Props>(function Support
       {current ? (
         <Animated.View key={current.id} entering={FadeInDown.duration(320)} exiting={FadeOutUp.duration(260)} style={styles.card}>
           <View style={styles.heart}>
-            <Ionicons name="heart" size={18} color="#1B1B1B" />
+            <LiveIcon name="heart" size={18} color="#1B1B1B" />
           </View>
           <View style={styles.body}>
             <Text style={styles.title} numberOfLines={1}>

@@ -20,7 +20,7 @@ import { useIsFocused } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { countdownParts, formatClock, type LiveShow } from '@/lib/live';
 import FloatingReactions, { type FloatingReactionsHandle } from '../FloatingReactions';
 import { F, VIDEO } from '../tokens';
@@ -286,7 +286,7 @@ export default function ImmersiveFullscreen(props: Props) {
     <View style={[styles.center, { top: videoTop, height: vh }]} pointerEvents="box-none">
       {isReplay ? (
         <Pressable onPress={() => { poke(); onSeek('back'); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button" accessibilityLabel="10 Sekunden zurück">
-          <Ionicons name="play-back" size={22} color="#fff" />
+          <LiveIcon name="play-back" size={22} color="#fff" />
         </Pressable>
       ) : null}
       <Pressable
@@ -295,11 +295,11 @@ export default function ImmersiveFullscreen(props: Props) {
         accessibilityRole="button"
         accessibilityLabel={ended ? 'Erneut abspielen' : isPlaying ? 'Pause' : 'Abspielen'}
       >
-        <Ionicons name={ended ? 'refresh' : isPlaying ? 'pause' : 'play'} size={34} color="#fff" style={!isPlaying && !ended ? styles.playNudge : null} />
+        <LiveIcon name={ended ? 'refresh' : isPlaying ? 'pause' : 'play'} size={34} color="#fff" style={!isPlaying && !ended ? styles.playNudge : null} />
       </Pressable>
       {isReplay ? (
         <Pressable onPress={() => { poke(); onSeek('forward'); }} hitSlop={10} style={styles.skipBtn} accessibilityRole="button" accessibilityLabel="10 Sekunden vor">
-          <Ionicons name="play-forward" size={22} color="#fff" />
+          <LiveIcon name="play-forward" size={22} color="#fff" />
         </Pressable>
       ) : null}
     </View>
@@ -379,7 +379,7 @@ export default function ImmersiveFullscreen(props: Props) {
             pointerEvents="none"
             style={[styles.ripple, seekFx.side === 'back' ? styles.rippleLeft : styles.rippleRight, { width: vw * 0.42 }]}
           >
-            <Ionicons name={seekFx.side === 'back' ? 'play-back' : 'play-forward'} size={22} color="#fff" />
+            <LiveIcon name={seekFx.side === 'back' ? 'play-back' : 'play-forward'} size={22} color="#fff" />
             <Text style={styles.rippleText}>{`${seekFx.seconds} Sekunden`}</Text>
           </Animated.View>
         ) : null}

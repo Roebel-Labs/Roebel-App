@@ -2,7 +2,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatSupportAmount, type Supporter } from '@/lib/live';
 import { F, liveStyles, useLivePalette, type LivePalette } from '../tokens';
 
@@ -21,7 +21,7 @@ export default function SupportersStrip({ supporters, onPress, variant = 'theme'
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {variant === 'overlay' ? null : <Ionicons name="heart" size={13} color={L.goldText} style={styles.lead} accessibilityLabel="Spender" />}
+        {variant === 'overlay' ? null : <LiveIcon name="heart" size={13} color={L.goldText} style={styles.lead} accessibilityLabel="Spender" />}
         {supporters.map((s, i) => (
           <Pressable
             key={s.key}

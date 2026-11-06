@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { liveStyles, useLivePalette, type LivePalette } from '../tokens';
 
 const SIZE = 132;
@@ -54,7 +54,7 @@ export default function Doorbell() {
       <Ring progress={ringB} />
       <View style={styles.core}>
         <Animated.View style={bellStyle}>
-          <Ionicons name="notifications" size={40} color={L.goldText} />
+          <LiveIcon name="notifications" size={40} color={L.goldText} />
         </Animated.View>
       </View>
     </View>

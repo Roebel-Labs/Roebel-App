@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
 type Props = {
@@ -26,15 +26,15 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
         accessibilityRole="button"
         accessibilityLabel={open ? 'Testlauf-Werkzeuge einklappen' : 'Testlauf-Werkzeuge ausklappen'}
       >
-        <Ionicons name="construct-outline" size={14} color={L.goldText} />
+        <LiveIcon name="construct-outline" size={14} color={L.goldText} />
         <Text style={styles.headerText}>Testlauf-Werkzeuge</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={L.textSecondary} />
+        <LiveIcon name={open ? 'chevron-up' : 'chevron-down'} size={15} color={L.textSecondary} />
       </Pressable>
       {open ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.body}>
           {!loggedIn ? (
             <Pressable onPress={onLogin} style={({ pressed }) => [styles.btn, styles.btnWide, pressed && styles.pressed]}>
-              <Ionicons name="log-in-outline" size={15} color={L.text} />
+              <LiveIcon name="log-in-outline" size={15} color={L.text} />
               <Text style={styles.btnText}>Zum Testen bitte anmelden</Text>
             </Pressable>
           ) : (
@@ -48,7 +48,7 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
                 >
                   {busy === 'support'
                     ? <ActivityIndicator size="small" color={L.text} />
-                    : <Ionicons name="heart-outline" size={15} color={L.goldText} />}
+                    : <LiveIcon name="heart-outline" size={15} color={L.goldText} />}
                   <Text style={styles.btnText} numberOfLines={1}>Unterstützung simulieren</Text>
                 </Pressable>
                 <Pressable
@@ -59,7 +59,7 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
                 >
                   {busy === 'next'
                     ? <ActivityIndicator size="small" color={L.text} />
-                    : <Ionicons name="play-skip-forward-outline" size={15} color={L.accent} />}
+                    : <LiveIcon name="play-skip-forward-outline" size={15} color={L.accent} />}
                   <Text style={styles.btnText} numberOfLines={1}>Nächste Gruppe</Text>
                 </Pressable>
               </View>

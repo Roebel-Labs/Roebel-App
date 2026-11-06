@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import type { RundownItem, VoteResults } from '@/lib/live';
 import LiveSheet from './LiveSheet';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
@@ -50,7 +50,7 @@ export default function VoteSheet({ visible, onClose, items, results, myVote, bu
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
         {!loggedIn ? (
           <Pressable onPress={onLogin} style={({ pressed }) => [styles.login, pressed && { opacity: 0.85 }]} accessibilityRole="button">
-            <Ionicons name="log-in-outline" size={17} color="#fff" />
+            <LiveIcon name="log-in-outline" size={17} color="#fff" />
             <Text style={styles.loginText}>Anmelden zum Abstimmen</Text>
           </Pressable>
         ) : null}
@@ -77,7 +77,7 @@ export default function VoteSheet({ visible, onClose, items, results, myVote, bu
                 {busyItemId === item.id ? (
                   <ActivityIndicator size="small" color={L.text} />
                 ) : mine ? (
-                  <View style={styles.mineTag}><Ionicons name="checkmark" size={13} color="#fff" /><Text style={styles.mineText}>Deine Stimme</Text></View>
+                  <View style={styles.mineTag}><LiveIcon name="checkmark" size={13} color="#fff" /><Text style={styles.mineText}>Deine Stimme</Text></View>
                 ) : (
                   <Text style={styles.pct}>{total > 0 ? `${Math.round(share * 100)} %` : ''}</Text>
                 )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Keyboard, LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import BottomDrawer from '@/components/BottomDrawer';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
@@ -66,7 +66,7 @@ export default function LiveSheet({ visible, onClose, title, subtitle, children,
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         <Pressable onPress={onClose} hitSlop={10} style={styles.close} accessibilityRole="button" accessibilityLabel="Schließen">
-          <Ionicons name="close" size={20} color={L.text} />
+          <LiveIcon name="close" size={20} color={L.text} />
         </Pressable>
       </View>
       {children}

@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { AudioSession, registerGlobals, VideoTrack } from '@livekit/react-native';
 import {
   LocalVideoTrack, Room, RoomEvent, Track,
@@ -173,7 +174,7 @@ export default function GuestStage({ url, token, topInset, bottomInset, onHangUp
         <VideoTrack trackRef={localRef as any} style={FILL} objectFit="cover" mirror={front} zOrder={0} />
       ) : (
         <View style={styles.camOff}>
-          <Ionicons name={camOn ? 'videocam-outline' : 'videocam-off-outline'} size={40} color={LIVE.textTertiary} />
+          <LiveIcon name={camOn ? 'videocam-outline' : 'videocam-off-outline'} size={40} color={LIVE.textTertiary} />
           <Text style={styles.camOffText}>{camOn ? 'Kamera startet …' : 'Kamera aus'}</Text>
         </View>
       )}
@@ -204,7 +205,7 @@ export default function GuestStage({ url, token, topInset, bottomInset, onHangUp
         <ControlButton icon={camOn ? 'videocam' : 'videocam-off'} label={camOn ? 'Kamera aus' : 'Kamera an'} active={!camOn} onPress={() => { void toggleCam(); }} />
         <ControlButton icon="camera-reverse-outline" label="Kamera wechseln" disabled={!camOn} onPress={() => { void flip(); }} />
         <Pressable onPress={hangUp} style={({ pressed }) => [styles.hangUp, pressed && { opacity: 0.85 }]} accessibilityRole="button" accessibilityLabel="Auflegen">
-          <Ionicons name="call" size={22} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+          <LiveIcon name="call" size={22} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
           <Text style={styles.hangUpText}>Auflegen</Text>
         </Pressable>
       </View>
@@ -224,7 +225,7 @@ function ControlButton({ icon, label, onPress, active, disabled }: {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={22} color={active ? '#1B1B1B' : '#fff'} />
+      <LiveIcon name={icon} size={22} color={active ? '#1B1B1B' : '#fff'} />
     </Pressable>
   );
 }

@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
@@ -128,7 +129,7 @@ export function ChromeButton({ icon, label, onPress, size = 22, disc }: ChromeBu
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={size} color="#fff" />
+      <LiveIcon name={icon} size={size} color="#fff" />
     </Pressable>
   );
 }
@@ -137,7 +138,7 @@ export function ViewerPill({ viewers }: { viewers: number }) {
   if (viewers <= 0) return null;
   return (
     <View style={styles.viewerPill} pointerEvents="none" accessibilityLabel={`${viewers} Zuschauer`}>
-      <Ionicons name="eye-outline" size={13} color="#fff" />
+      <LiveIcon name="eye-outline" size={13} color="#fff" />
       <Text style={styles.viewerText}>{formatViewers(viewers)}</Text>
     </View>
   );

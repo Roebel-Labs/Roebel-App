@@ -2,7 +2,7 @@
 // and, for the replay only, playback speed.
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import LiveSheet from './LiveSheet';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
@@ -35,7 +35,7 @@ export default function PlayerSettingsSheet({ visible, onClose, currentHeight, a
     <LiveSheet visible={visible} onClose={onClose} title="Einstellungen" maxHeight="70%">
       <View style={styles.content}>
         <View style={styles.row}>
-          <Ionicons name="options-outline" size={20} color={L.text} />
+          <LiveIcon name="options-outline" size={20} color={L.text} />
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>Qualität</Text>
             <Text style={styles.rowSub}>{`${offered}Passt sich automatisch an deine Verbindung an.`}</Text>
@@ -46,7 +46,7 @@ export default function PlayerSettingsSheet({ visible, onClose, currentHeight, a
         {showSpeed ? (
           <>
             <View style={[styles.row, styles.rowTop]}>
-              <Ionicons name="speedometer-outline" size={20} color={L.text} />
+              <LiveIcon name="speedometer-outline" size={20} color={L.text} />
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>Wiedergabegeschwindigkeit</Text>
               </View>

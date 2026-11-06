@@ -3,7 +3,7 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { LIVE_REACTIONS, type LiveReaction } from '@/lib/live';
 import { HeartFilledIcon } from '@/components/Icons';
 import { liveStyles, useLivePalette, type LivePalette } from '../tokens';
@@ -46,7 +46,7 @@ export default function ReactionPicker({ onReact, style, variant = 'theme', onIn
             </Pressable>
           ))}
           <Pressable onPress={toggle} hitSlop={4} style={styles.pillBtn} accessibilityRole="button" accessibilityLabel="Reaktionen einklappen">
-            <Ionicons name="chevron-down" size={20} color={chevronColor} />
+            <LiveIcon name="chevron-down" size={20} color={chevronColor} />
           </Pressable>
         </Animated.View>
       ) : null}
@@ -64,7 +64,7 @@ export default function ReactionPicker({ onReact, style, variant = 'theme', onIn
             {overlay ? <HeartFilledIcon size={24} color={OVERLAY_HEART} /> : <Text style={styles.mainEmoji}>❤️</Text>}
           </Pressable>
           <Pressable onPress={toggle} hitSlop={8} style={styles.chevron} accessibilityRole="button" accessibilityLabel="Weitere Reaktionen">
-            <Ionicons name="chevron-up" size={11} color={chevronColor} />
+            <LiveIcon name="chevron-up" size={11} color={chevronColor} />
           </Pressable>
         </View>
       ) : null}

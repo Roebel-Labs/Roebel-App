@@ -17,6 +17,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { useGoBack } from '@/hooks/useGoBack';
 import {
   GUEST_NOTE_MAX, fetchShow, liveActAs, liveErrorText, type GuestRequest, type GuestStatus, type LiveShow,
@@ -281,7 +282,7 @@ export default function LiveGuestJoinScreen() {
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
       <Pressable onPress={goBack} hitSlop={10} style={styles.roundBtn} accessibilityRole="button" accessibilityLabel="Zurück">
-        <Ionicons name="chevron-down" size={20} color={L.text} />
+        <LiveIcon name="chevron-down" size={20} color={L.text} />
       </Pressable>
       <Text style={styles.headerTitle} numberOfLines={1}>Live dazuschalten</Text>
       <View style={styles.roundBtnSpacer} />
@@ -293,7 +294,7 @@ export default function LiveGuestJoinScreen() {
       <StatusBar barStyle={barStyle} backgroundColor={L.bg} />
       {header}
       <Animated.View entering={FadeIn.duration(220)} style={styles.center}>
-        <Ionicons name={icon} size={40} color={L.textSecondary} />
+        <LiveIcon name={icon} size={40} color={L.textSecondary} />
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.sub}>{sub}</Text>
         <Pressable onPress={cta?.onPress ?? goBack} style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}>
@@ -380,7 +381,7 @@ export default function LiveGuestJoinScreen() {
               <CameraView style={StyleSheet.absoluteFill} facing="front" />
             ) : (
               <Pressable onPress={() => { void ensurePermissions(); }} style={styles.previewEmpty} accessibilityRole="button">
-                <Ionicons name="videocam-outline" size={34} color={L.textTertiary} />
+                <LiveIcon name="videocam-outline" size={34} color={L.textTertiary} />
                 <Text style={styles.previewHint}>Kamera-Vorschau anzeigen</Text>
               </Pressable>
             )}
@@ -405,7 +406,7 @@ export default function LiveGuestJoinScreen() {
 
           {permDenied ? (
             <Pressable onPress={() => { void Linking.openSettings(); }} style={styles.errorBox}>
-              <Ionicons name="lock-closed-outline" size={15} color={L.errorText} />
+              <LiveIcon name="lock-closed-outline" size={15} color={L.errorText} />
               <Text style={styles.errorText}>
                 Kamera und Mikrofon sind nicht freigegeben. Tippe hier, um die Einstellungen zu öffnen.
               </Text>
@@ -413,7 +414,7 @@ export default function LiveGuestJoinScreen() {
           ) : null}
           {error ? (
             <View style={styles.errorBox}>
-              <Ionicons name="information-circle-outline" size={15} color={L.errorText} />
+              <LiveIcon name="information-circle-outline" size={15} color={L.errorText} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
@@ -426,7 +427,7 @@ export default function LiveGuestJoinScreen() {
           >
             {phase === 'requesting'
               ? <ActivityIndicator color="#fff" />
-              : (<><Ionicons name="hand-right-outline" size={18} color="#fff" /><Text style={styles.primaryText}>Anfragen</Text></>)}
+              : (<><LiveIcon name="hand-right-outline" size={18} color="#fff" /><Text style={styles.primaryText}>Anfragen</Text></>)}
           </Pressable>
           <Text style={styles.fine}>Du kannst jederzeit auflegen. Das Studio entscheidet, wer live geht.</Text>
         </ScrollView>

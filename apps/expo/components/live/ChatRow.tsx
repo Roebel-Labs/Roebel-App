@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatSupportAmount, type ChatMessage } from '@/lib/live';
 import { F, liveStyles, useLivePalette, VIDEO, type LivePalette } from './tokens';
 
@@ -60,7 +60,7 @@ function ChatRowImpl({ m, own, animate, blocked = false, onLongPress, variant = 
   if (m.kind === 'system') {
     return (
       <Animated.View entering={animate ? FadeInDown.duration(220) : undefined} style={styles.systemRow}>
-        <Ionicons name="megaphone-outline" size={13} color={variant === 'overlay' ? 'rgba(255,255,255,0.7)' : L.textTertiary} />
+        <LiveIcon name="megaphone-outline" size={13} color={variant === 'overlay' ? 'rgba(255,255,255,0.7)' : L.textTertiary} />
         <Text style={styles.systemText}>{m.body}</Text>
       </Animated.View>
     );
@@ -102,7 +102,7 @@ function ChatRowImpl({ m, own, animate, blocked = false, onLongPress, variant = 
             {bodyNode}
           </Text>
         )}
-        {m.featured_at && variant !== 'overlay' ? <Ionicons name="pin" size={13} color={L.goldText} style={styles.pin} /> : null}
+        {m.featured_at && variant !== 'overlay' ? <LiveIcon name="pin" size={13} color={L.goldText} style={styles.pin} /> : null}
       </Pressable>
     </Animated.View>
   );
@@ -119,11 +119,11 @@ export function PinnedMessage({ m, variant = 'theme' }: { m: ChatMessage; varian
   const name = m.display_name?.trim() || 'Jemand';
   return (
     <Animated.View entering={FadeInDown.duration(240)} style={styles.pinned}>
-      <Ionicons name="pin" size={14} color={variant === 'overlay' ? VIDEO.gold : L.goldText} />
+      <LiveIcon name="pin" size={14} color={variant === 'overlay' ? VIDEO.gold : L.goldText} />
       <Text style={styles.pinnedText} numberOfLines={2}>
         <Text style={styles.pinnedName}>{name}</Text>
         {'  '}
-        {m.kind === 'support' ? `spendet ${formatSupportAmount(m.amount_cents)}${m.body ? ` · ${m.body}` : ''}` : m.body}
+        {m.kind === 'support' ? `unterstützt mit ${formatSupportAmount(m.amount_cents)}${m.body ? ` · ${m.body}` : ''}` : m.body}
       </Text>
     </Animated.View>
   );

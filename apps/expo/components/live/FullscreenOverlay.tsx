@@ -1,7 +1,7 @@
 // The live room's overlay on the stage (TikTok / Instagram Live / YouTube Shorts), rendered by LivePlayer
 // through its `overlay` render prop in portrait: a compact "Jetzt auf der Bühne" chip (→ Programm), the
 // supporters strip and the scrollable chat (fades out towards the top, Neu divider, long-press report /
-// block), the composer at the bottom, and a bare white icon column on the right (Herz, Spende,
+// block), the composer at the bottom, and a bare white icon column on the right (Herz, Unterstützen,
 // Publikumsliebling, Dazuschalten, Teilen, Mehr with Programm / Bild-in-Bild / Testlauf-Werkzeuge / Verlassen).
 // Black and white by design (Max, 2026-11-06): no pinned message, no gold rows. While typing the column
 // steps aside and the composer + chat ride above the keyboard; idle, the stage fades the whole overlay out.
@@ -15,6 +15,7 @@ import Animated, {
   FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, type SharedValue,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import HeartOutlineSvg from '@/assets/icons/heart-02.svg';
 import CoinsSvg from '@/assets/icons/coins-01.svg';
 import StarSvg from '@/assets/icons/star.svg';
@@ -79,12 +80,16 @@ type Props = {
 };
 
 /** Right action column: narrow, small gap to the chat. */
-const COLUMN_W = 56;
+const COLUMN_W = 64;
 const COLUMN_GAP = 6;
 const COMPOSER_H = 42;
 const ICON = 30;
 /** Height of the chat's fade-out band at its top edge. */
 const CHAT_FADE = 72;
+/** Small white "Unterstützen" pill in the chat: shortly after joining, then now and then again. */
+const NUDGE_FIRST_MS = 6000;
+const NUDGE_EVERY_MS = 4 * 60 * 1000;
+const NUDGE_SHOW_MS = 14000;
 
 type SvgIcon = React.ComponentType<{ width?: number; height?: number; color?: string }>;
 
@@ -93,7 +98,7 @@ function ActionButton({ Icon, label, onPress, size = ICON }: { Icon: SvgIcon; la
   return (
     <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.action, pressed && styles.actionPressed]} accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.actionIcon}><Icon width={size} height={size} color="#FFFFFF" /></View>
-      <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>
+      <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
     </Pressable>
   );
 }
@@ -135,7 +140,7 @@ function MenuItem({ icon, label, onPress, busy, disabled }: {
       style={({ pressed }) => [styles.menuItem, pressed && styles.menuPressed, disabled && styles.menuDisabled]}
       accessibilityRole="button"
     >
-      {busy ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name={icon} size={17} color="#fff" />}
+      {busy ? <ActivityIndicator size="small" color="#fff" /> : <LiveIcon name={icon} size={17} color="#fff" />}
       <Text style={styles.menuText} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
@@ -167,7 +172,7 @@ function NowChip({ current, next, onPress }: { current: RundownItem | null; next
           )}
         </Text>
       </Animated.View>
-      <Ionicons name="list" size={14} color="#fff" />
+      <LiveIcon name="list" size={14} color="#fff" />
     </Pressable>
   );
 }
@@ -213,6 +218,21 @@ export default function FullscreenOverlay(props: Props) {
     holdRoom(typing || menuOpen);
     return () => holdRoom(false);
   }, [typing, menuOpen, holdRoom]);
+
+  // "Unterstützen" nudge: a small white pill at the bottom of the chat, first a few seconds after joining,
+  // then every few minutes for a short while (Max, 2026-11-06).
+  const [nudge, setNudge] = useState(false);
+  useEffect(() => {
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    const show = () => {
+      setNudge(true);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => setNudge(false), NUDGE_SHOW_MS);
+    };
+    const first = setTimeout(show, NUDGE_FIRST_MS);
+    const every = setInterval(show, NUDGE_EVERY_MS);
+    return () => { clearTimeout(first); clearInterval(every); clearTimeout(hideTimer); };
+  }, []);
 
   // Top fade of the chat: per-cell opacity from the scroll position (no mask view in this build).
   const scrollY = useSharedValue(0);
@@ -324,6 +344,24 @@ export default function FullscreenOverlay(props: Props) {
             </Text>
           }
         />
+        {nudge && !typing && !toast && !error && !snack ? (
+          <Animated.View
+            entering={FadeInDown.duration(260)}
+            exiting={FadeOut.duration(220)}
+            style={styles.nudgeWrap}
+          >
+            <Pressable
+              onPress={() => { setNudge(false); closeMenuThen(onSupport); }}
+              hitSlop={6}
+              style={({ pressed }) => [styles.nudge, pressed && styles.actionPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Übertragung unterstützen"
+            >
+              <CoinsSvg width={13} height={13} color="#111111" />
+              <Text style={styles.nudgeText}>Unterstützen</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
       </View>
 
       {/* Toast / undo snackbar / inline error, just above the composer. */}
@@ -341,7 +379,7 @@ export default function FullscreenOverlay(props: Props) {
       {error ? (
         <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(140)} style={[styles.errorWrap, { left, right: chatRight, bottom: areaBottom }]}>
           <Pressable onPress={onDismissError} style={styles.error} accessibilityRole="button" accessibilityLabel="Hinweis schließen">
-            <Ionicons name="information-circle-outline" size={15} color="#fff" />
+            <LiveIcon name="information-circle-outline" size={15} color="#fff" />
             <Text style={styles.errorText}>{error}</Text>
           </Pressable>
         </Animated.View>
@@ -351,12 +389,12 @@ export default function FullscreenOverlay(props: Props) {
       <View style={[styles.composer, { left, right: chatRight, bottom }]}>
         {!loggedIn ? (
           <Pressable onPress={() => closeMenuThen(onLogin)} style={styles.pill} accessibilityRole="button">
-            <Ionicons name="log-in-outline" size={16} color="rgba(255,255,255,0.8)" />
+            <LiveIcon name="log-in-outline" size={16} color="rgba(255,255,255,0.8)" />
             <Text style={styles.pillPlaceholder} numberOfLines={1}>Anmelden zum Mitschreiben</Text>
           </Pressable>
         ) : !chatOpen ? (
           <View style={styles.pill}>
-            <Ionicons name="pause-circle-outline" size={16} color="rgba(255,255,255,0.7)" />
+            <LiveIcon name="pause-circle-outline" size={16} color="rgba(255,255,255,0.7)" />
             <Text style={styles.pillPlaceholder} numberOfLines={1}>Chat pausiert</Text>
           </View>
         ) : (
@@ -377,7 +415,7 @@ export default function FullscreenOverlay(props: Props) {
             />
             {text.trim() ? (
               <Pressable onPress={send} hitSlop={6} style={styles.send} accessibilityRole="button" accessibilityLabel="Senden">
-                <Ionicons name="arrow-up" size={17} color="#111" />
+                <LiveIcon name="arrow-up" size={17} color="#111" />
               </Pressable>
             ) : null}
           </View>
@@ -389,7 +427,7 @@ export default function FullscreenOverlay(props: Props) {
         <View style={[styles.column, { right, bottom }]} pointerEvents="box-none">
           {/* Heart: white outline; every tap floats a red filled heart up the video (no picker, no emoji). */}
           <ActionButton Icon={HeartOutlineSvg} label="Herz" onPress={() => react('❤️')} size={ICON + 2} />
-          <ActionButton Icon={CoinsSvg} label="Spende" onPress={() => closeMenuThen(onSupport)} size={ICON - 4} />
+          <ActionButton Icon={CoinsSvg} label="Unterstützen" onPress={() => closeMenuThen(onSupport)} size={ICON - 4} />
           {votingOpen ? <ActionButton Icon={StarSvg} label="Liebling" onPress={() => closeMenuThen(onVote)} size={ICON - 2} /> : null}
           {canJoinAsGuest ? <ActionButton Icon={VideoSvg} label="Dazu" onPress={() => closeMenuThen(onJoinAsGuest)} /> : null}
           <ActionButton Icon={ShareSvg} label="Teilen" onPress={() => { poke(); onShare(); }} />
@@ -410,14 +448,14 @@ export default function FullscreenOverlay(props: Props) {
             {isTest ? (
               <>
                 <View style={styles.menuSection}>
-                  <Ionicons name="construct-outline" size={12} color="rgba(255,255,255,0.6)" />
+                  <LiveIcon name="construct-outline" size={12} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.menuSectionText}>TESTLAUF</Text>
                 </View>
                 {loggedIn ? (
                   <>
                     <MenuItem
                       icon="cash-outline"
-                      label="Spende simulieren"
+                      label="Unterstützung simulieren"
                       busy={testBusy === 'support'}
                       disabled={testBusy !== null}
                       onPress={() => { poke(); onSimulateSupport(); }}
@@ -481,6 +519,11 @@ const styles = StyleSheet.create({
   toast: { position: 'absolute', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(24,25,27,0.94)' },
   toastText: { color: '#fff', fontSize: 13, fontFamily: F.semiBold, textAlign: 'center' },
   errorWrap: { position: 'absolute' },
+  nudgeWrap: { alignSelf: 'flex-start' },
+  nudge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, height: 26, paddingHorizontal: 11, borderRadius: 13, backgroundColor: '#FFFFFF',
+  },
+  nudgeText: { color: '#111111', fontSize: 12, fontFamily: F.semiBold },
   error: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
     backgroundColor: 'rgba(229,72,77,0.94)',

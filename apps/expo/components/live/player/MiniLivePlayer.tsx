@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEvent } from 'expo';
 import { VideoView, type VideoPlayer } from 'expo-video';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
@@ -121,7 +121,7 @@ export default function MiniLivePlayer({ player, session, onClose }: Props) {
             {!isPlaying && !loading ? (
               <View style={styles.center} pointerEvents="box-none">
                 <Pressable onPress={togglePlay} hitSlop={8} style={styles.play} accessibilityRole="button" accessibilityLabel="Abspielen">
-                  <Ionicons name="play" size={20} color="#fff" style={{ marginLeft: 2 }} />
+                  <LiveIcon name="play" size={20} color="#fff" style={{ marginLeft: 2 }} />
                 </Pressable>
               </View>
             ) : null}
@@ -136,10 +136,10 @@ export default function MiniLivePlayer({ player, session, onClose }: Props) {
         ) : null}
         <View style={styles.actions} pointerEvents="box-none">
           <Pressable onPress={open} hitSlop={6} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Vollbild öffnen">
-            <Ionicons name="expand" size={15} color="#fff" />
+            <LiveIcon name="expand" size={15} color="#fff" />
           </Pressable>
           <Pressable onPress={close} hitSlop={6} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Wiedergabe beenden">
-            <Ionicons name="close" size={17} color="#fff" />
+            <LiveIcon name="close" size={17} color="#fff" />
           </Pressable>
         </View>
       </Animated.View>

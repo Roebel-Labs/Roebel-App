@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatSupportAmount, SUPPORT_MAX_CENTS, SUPPORT_MESSAGE_MAX, SUPPORT_MIN_CENTS } from '@/lib/live';
 import LiveSheet from './LiveSheet';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
@@ -127,7 +127,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
 
         {testMode ? (
           <View style={styles.testNote}>
-            <Ionicons name="construct-outline" size={14} color={L.goldText} />
+            <LiveIcon name="construct-outline" size={14} color={L.goldText} />
             <Text style={styles.testNoteText}>Testlauf: Das ist eine echte Zahlung über Stripe, damit der ganze Ablauf getestet werden kann. Ab 1 € möglich.</Text>
           </View>
         ) : null}
@@ -147,13 +147,13 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
             <ActivityIndicator color="#1B1B1B" />
           ) : (
             <>
-              <Ionicons name="heart" size={17} color="#1B1B1B" />
+              <LiveIcon name="heart" size={17} color="#1B1B1B" />
               <Text style={styles.ctaText}>{amountValid && amount != null ? `Mit ${formatSupportAmount(amount)} unterstützen` : 'Betrag wählen'}</Text>
             </>
           )}
         </Pressable>
         <View style={styles.secureRow}>
-          <Ionicons name="lock-closed" size={12} color={L.textTertiary} />
+          <LiveIcon name="lock-closed" size={12} color={L.textTertiary} />
           <Text style={styles.secure}>Sichere Kartenzahlung über Stripe. Kein Konto nötig.</Text>
         </View>
       </ScrollView>

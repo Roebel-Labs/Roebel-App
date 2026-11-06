@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
@@ -639,7 +639,7 @@ export default function LiveRoomScreen() {
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         {loading ? <ActivityIndicator color="#fff" /> : (
           <View style={styles.notFound}>
-            <Ionicons name="videocam-off-outline" size={36} color={VIDEO.textTertiary} />
+            <LiveIcon name="videocam-off-outline" size={36} color={VIDEO.textTertiary} />
             <Text style={styles.notFoundTitle}>Livestream nicht gefunden</Text>
             <Text style={styles.notFoundSub}>Vielleicht ist die Übertragung schon vorbei oder der Link ist nicht mehr gültig.</Text>
             <Pressable onPress={goBack} style={({ pressed }) => [styles.notFoundBtn, pressed && styles.pressed]}>

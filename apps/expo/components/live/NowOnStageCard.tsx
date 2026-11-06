@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatClock, type RundownItem } from '@/lib/live';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
 
@@ -40,7 +40,7 @@ export default function NowOnStageCard({ current, next, showTitle, onOpenProgram
         accessibilityRole="button"
         accessibilityLabel="Programm öffnen"
       >
-        <Ionicons name="list" size={14} color={L.text} />
+        <LiveIcon name="list" size={14} color={L.text} />
         <Text style={styles.chipText}>Programm</Text>
       </Pressable>
     </Animated.View>

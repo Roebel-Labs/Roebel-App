@@ -3,7 +3,7 @@
 // button mirrors to the TV) or the system screen-cast settings (Smart View / Bildschirm übertragen).
 import React, { useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { VideoAirPlayButton } from 'expo-video';
 import type { LiveShow } from '@/lib/live';
 import LiveSheet from '../LiveSheet';
@@ -62,7 +62,7 @@ export function CastSheet({ visible, onClose, show }: { visible: boolean; onClos
               style={({ pressed }) => [s.primary, (pressed || busy) && { opacity: 0.85 }]}
               accessibilityRole="button"
             >
-              <Ionicons name="logo-youtube" size={20} color={L.onNavy} />
+              <LiveIcon name="logo-youtube" size={20} color={L.onNavy} />
               <Text style={s.primaryText}>In YouTube öffnen</Text>
             </Pressable>
             <Text style={s.or}>oder</Text>
@@ -76,7 +76,7 @@ export function CastSheet({ visible, onClose, show }: { visible: boolean; onClos
           style={({ pressed }) => [youtube ? s.secondary : s.primary, pressed && { opacity: 0.85 }]}
           accessibilityRole="button"
         >
-          <Ionicons name="tv-outline" size={20} color={youtube ? L.text : L.onNavy} />
+          <LiveIcon name="tv-outline" size={20} color={youtube ? L.text : L.onNavy} />
           <Text style={youtube ? s.secondaryText : s.primaryText}>Bildschirm übertragen</Text>
         </Pressable>
       </View>

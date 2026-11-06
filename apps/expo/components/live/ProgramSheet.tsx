@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatClock, type RundownItem } from '@/lib/live';
 import LiveSheet from './LiveSheet';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
@@ -58,7 +58,7 @@ export default function ProgramSheet({ visible, onClose, rundown, reminders, bus
                     <ActivityIndicator size="small" color={L.text} />
                   ) : (
                     <>
-                      <Ionicons name={on ? 'notifications' : 'notifications-outline'} size={15} color={on ? L.onNavy : L.text} />
+                      <LiveIcon name={on ? 'notifications' : 'notifications-outline'} size={15} color={on ? L.onNavy : L.text} />
                       <Text style={[styles.bellText, on && styles.bellTextOn]}>{on ? 'Erinnert' : 'Erinnern'}</Text>
                     </>
                   )}

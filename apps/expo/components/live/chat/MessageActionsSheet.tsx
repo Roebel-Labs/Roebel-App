@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LiveIcon from '@/components/live/LiveIcon';
 import { formatSupportAmount, type ChatMessage, type ReportReason } from '@/lib/live';
 import LiveSheet from '../LiveSheet';
 import { Avatar } from '../ChatRow';
@@ -54,9 +55,9 @@ export default function MessageActionsSheet({ message, onClose, blocked, reportB
           <Text style={styles.section}>Nachricht</Text>
           {!choosing ? (
             <Pressable onPress={() => setChoosing(true)} style={({ pressed }) => [styles.item, pressed && styles.pressed]} accessibilityRole="button">
-              <Ionicons name="flag-outline" size={19} color={L.text} />
+              <LiveIcon name="flag-outline" size={19} color={L.text} />
               <Text style={styles.itemText}>Melden</Text>
-              <Ionicons name="chevron-forward" size={16} color={L.textTertiary} />
+              <LiveIcon name="chevron-forward" size={16} color={L.textTertiary} />
             </Pressable>
           ) : (
             <View style={styles.reasons}>
@@ -69,7 +70,7 @@ export default function MessageActionsSheet({ message, onClose, blocked, reportB
                   style={({ pressed }) => [styles.item, pressed && styles.pressed, reportBusy && styles.disabled]}
                   accessibilityRole="button"
                 >
-                  <Ionicons name={r.icon} size={19} color={L.text} />
+                  <LiveIcon name={r.icon} size={19} color={L.text} />
                   <Text style={styles.itemText}>{r.label}</Text>
                   {reportBusy ? <ActivityIndicator size="small" color={L.textSecondary} /> : null}
                 </Pressable>
@@ -79,7 +80,7 @@ export default function MessageActionsSheet({ message, onClose, blocked, reportB
 
           <Text style={styles.section}>Person</Text>
           <Pressable onPress={() => onToggleBlock(m)} style={({ pressed }) => [styles.item, pressed && styles.pressed]} accessibilityRole="button">
-            <Ionicons name={blocked ? 'person-add-outline' : 'remove-circle-outline'} size={19} color={blocked ? L.text : L.errorText} />
+            <LiveIcon name={blocked ? 'person-add-outline' : 'remove-circle-outline'} size={19} color={blocked ? L.text : L.errorText} />
             <Text style={[styles.itemText, !blocked && styles.danger]}>{blocked ? 'Blockierung aufheben' : 'Blockieren'}</Text>
           </Pressable>
           <Text style={styles.note}>Blockieren gilt nur auf diesem Gerät: Du siehst die Nachrichten dieser Person nicht mehr.</Text>
