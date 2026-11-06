@@ -17,7 +17,7 @@ const SOURCES = {
   // Gyan Doshi's Windows "full" release build: libsrt, NVENC, QSV, AMF, libx264.
   win: {
     url: 'https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-full_build.zip',
-    sha256: null,
+    sha256: 'd760e1b3574402ed18b4865851f87d87e73965a982e6453212df8621fed1c508',
     binary: 'ffmpeg.exe',
     // paths inside the zip
     entries: { binary: 'ffmpeg-7.1.1-full_build/bin/ffmpeg.exe', license: 'ffmpeg-7.1.1-full_build/LICENSE' },
@@ -26,7 +26,7 @@ const SOURCES = {
   mac: {
     // Redirects to the newest release build; the sha256 pin stops an unnoticed version change.
     url: 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip',
-    sha256: null,
+    sha256: 'c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924',
     binary: 'ffmpeg',
     entries: { binary: 'ffmpeg', license: null },
   },
