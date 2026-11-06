@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { formatSupportAmount, type Supporter } from '@/lib/live';
-import { F, liveStyles, useLivePalette, VIDEO, type LivePalette } from '../tokens';
+import { F, liveStyles, useLivePalette, type LivePalette } from '../tokens';
 
 type Props = {
   supporters: Supporter[];
@@ -21,7 +21,7 @@ export default function SupportersStrip({ supporters, onPress, variant = 'theme'
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <Ionicons name="heart" size={13} color={variant === 'overlay' ? VIDEO.gold : L.goldText} style={styles.lead} accessibilityLabel="Unterstützer" />
+        {variant === 'overlay' ? null : <Ionicons name="heart" size={13} color={L.goldText} style={styles.lead} accessibilityLabel="Spender" />}
         {supporters.map((s, i) => (
           <Pressable
             key={s.key}
@@ -62,12 +62,12 @@ const overlayStyles = StyleSheet.create({
   content: { alignItems: 'center', gap: 6, paddingVertical: 4 },
   lead: { marginRight: 2 },
   chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, height: 26, paddingLeft: 3, paddingRight: 9, borderRadius: 13,
-    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(242,193,78,0.55)', maxWidth: 200,
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 26, paddingLeft: 3, paddingRight: 10, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.42)', maxWidth: 200,
   },
   pressed: { opacity: 0.75 },
-  rank: { width: 20, height: 20, borderRadius: 10, backgroundColor: VIDEO.gold, alignItems: 'center', justifyContent: 'center' },
-  rankText: { color: '#1B1B1B', fontSize: 11, fontFamily: F.bold },
-  name: { flexShrink: 1, color: '#FFFFFF', fontSize: 12, fontFamily: F.semiBold, marginLeft: 4 },
-  amount: { color: VIDEO.gold, fontSize: 12, fontFamily: F.bold, fontVariant: ['tabular-nums'] },
+  rank: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  rankText: { color: '#111111', fontSize: 11, fontFamily: F.bold },
+  name: { flexShrink: 1, color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: F.medium, marginLeft: 4 },
+  amount: { color: '#FFFFFF', fontSize: 12, fontFamily: F.bold, fontVariant: ['tabular-nums'] },
 });

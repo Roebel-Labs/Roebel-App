@@ -45,7 +45,7 @@ const SupportAlertLayer = forwardRef<SupportAlertHandle, Props>(function Support
           </View>
           <View style={styles.body}>
             <Text style={styles.title} numberOfLines={1}>
-              {current.display_name || 'Jemand'} unterstützt mit {formatSupportAmount(current.amount_cents)}
+              {current.display_name || 'Jemand'} spendet {formatSupportAmount(current.amount_cents)}
             </Text>
             {current.body ? <Text style={styles.message} numberOfLines={2}>{current.body}</Text> : null}
           </View>

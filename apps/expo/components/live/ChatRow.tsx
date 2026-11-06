@@ -102,7 +102,7 @@ function ChatRowImpl({ m, own, animate, blocked = false, onLongPress, variant = 
             {bodyNode}
           </Text>
         )}
-        {m.featured_at ? <Ionicons name="pin" size={13} color={variant === 'overlay' ? VIDEO.gold : L.goldText} style={styles.pin} /> : null}
+        {m.featured_at && variant !== 'overlay' ? <Ionicons name="pin" size={13} color={L.goldText} style={styles.pin} /> : null}
       </Pressable>
     </Animated.View>
   );
@@ -123,7 +123,7 @@ export function PinnedMessage({ m, variant = 'theme' }: { m: ChatMessage; varian
       <Text style={styles.pinnedText} numberOfLines={2}>
         <Text style={styles.pinnedName}>{name}</Text>
         {'  '}
-        {m.kind === 'support' ? `unterstützt mit ${formatSupportAmount(m.amount_cents)}${m.body ? ` · ${m.body}` : ''}` : m.body}
+        {m.kind === 'support' ? `spendet ${formatSupportAmount(m.amount_cents)}${m.body ? ` · ${m.body}` : ''}` : m.body}
       </Text>
     </Animated.View>
   );
@@ -143,19 +143,16 @@ const staticStyles = StyleSheet.create({
 
 const SHADOW = { textShadowColor: 'rgba(0,0,0,0.65)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 } as const;
 
-/** Over the video: white text with a soft shadow, gold-tinted support rows. */
+/** Over the video: plain white text with a soft shadow, airy rows; support rows only carry the amount tag. */
 const overlayStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingLeft: 6, paddingRight: 6, paddingVertical: 3,
-    borderLeftWidth: 2, borderLeftColor: 'transparent', borderRadius: 8,
-  },
-  rowSupport: { borderLeftColor: VIDEO.gold, backgroundColor: 'rgba(242,193,78,0.16)' },
-  rowFeatured: { backgroundColor: 'rgba(242,193,78,0.24)' },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, paddingHorizontal: 4, paddingVertical: 6, borderRadius: 8 },
+  rowSupport: {},
+  rowFeatured: {},
   rowPressed: { backgroundColor: 'rgba(255,255,255,0.10)' },
-  text: { flex: 1, fontSize: 14, lineHeight: 19, paddingTop: 1 },
-  supportCol: { flex: 1, gap: 1 },
+  text: { flex: 1, fontSize: 14, lineHeight: 20, paddingTop: 1 },
+  supportCol: { flex: 1, gap: 2 },
   supportHead: { flexDirection: 'row', alignItems: 'center', minHeight: 20 },
-  name: { color: 'rgba(255,255,255,0.78)', fontFamily: F.semiBold, fontSize: 13, ...SHADOW },
+  name: { color: 'rgba(255,255,255,0.72)', fontFamily: F.semiBold, fontSize: 13, ...SHADOW },
   nameShrink: { flexShrink: 1 },
   nameOwn: { color: '#FFFFFF' },
   body: { color: '#FFFFFF', fontFamily: F.regular, fontSize: 14, ...SHADOW },

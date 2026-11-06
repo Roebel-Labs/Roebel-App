@@ -1,6 +1,10 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { HeartFilledIcon } from '@/components/Icons';
+
+/** Hearts float as the app's own filled heart icon (no emoji heart). */
+const HEART_RED = '#FF3040';
 
 export type FloatingReactionsHandle = { spawn: (emoji: string, own?: boolean) => void };
 
@@ -38,7 +42,7 @@ function FloatingEmoji({ f, height }: { f: Floater; height: number }) {
   }));
   return (
     <Animated.View style={[styles.floater, style]}>
-      <Text style={{ fontSize: f.size }}>{f.emoji}</Text>
+      {f.emoji === '❤️' ? <HeartFilledIcon size={f.size + 4} color={HEART_RED} /> : <Text style={{ fontSize: f.size }}>{f.emoji}</Text>}
     </Animated.View>
   );
 }

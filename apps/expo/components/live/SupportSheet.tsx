@@ -47,7 +47,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
     <LiveSheet
       visible={visible}
       onClose={onClose}
-      title="Übertragung unterstützen"
+      title="Spenden"
       subtitle="Dein Beitrag hilft, den Livestream möglich zu machen. Auf Wunsch erscheint dein Gruß im Chat und auf dem Bildschirm."
       maxHeight="90%"
     >
@@ -148,7 +148,7 @@ export default function SupportSheet({ visible, onClose, defaultName, busy, erro
           ) : (
             <>
               <Ionicons name="heart" size={17} color="#1B1B1B" />
-              <Text style={styles.ctaText}>{amountValid && amount != null ? `Mit ${formatSupportAmount(amount)} unterstützen` : 'Betrag wählen'}</Text>
+              <Text style={styles.ctaText}>{amountValid && amount != null ? `${formatSupportAmount(amount)} spenden` : 'Betrag wählen'}</Text>
             </>
           )}
         </Pressable>

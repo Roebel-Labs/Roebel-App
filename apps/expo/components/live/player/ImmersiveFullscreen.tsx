@@ -39,9 +39,14 @@ export type FullscreenOverlayApi = {
   /** Top of the video box (px from the screen top) and its height, for laying out around it. */
   videoTop: number;
   videoHeight: number;
+  /** While true the room overlay never fades out on its own (typing, menu open). */
+  holdRoom: (held: boolean) => void;
 };
 
 const HIDE_MS = 3500;
+/** Portrait: chat + actions fade out slowly after this long without interaction (a tap brings them back). */
+const ROOM_IDLE_MS = 8000;
+const ROOM_IDLE_FADE_MS = 1400;
 /** After "back to portrait" from a manual landscape lock, auto-rotation comes back after this long. */
 const MANUAL_PORTRAIT_HOLD_MS = 3000;
 
@@ -229,10 +234,20 @@ export default function ImmersiveFullscreen(props: Props) {
   // ─── Portrait "clean view": a tap on the video / empty space hides chat, actions and the top bar; the next
   // tap brings everything back (Max, 2026-11-06). No auto-return: it stays clean until tapped again. ───
   const [clean, setClean] = useState(false);
+  // 'idle' = faded out on its own after ROOM_IDLE_MS (slow fade); 'tap' = the viewer tapped it away (quick).
+  const cleanBy = useRef<'tap' | 'idle'>('tap');
   const cleanOpacity = useSharedValue(1);
   useEffect(() => {
-    cleanOpacity.value = withTiming(clean ? 0 : 1, { duration: clean ? 220 : 180 });
+    const duration = clean ? (cleanBy.current === 'idle' ? ROOM_IDLE_FADE_MS : 220) : 180;
+    cleanOpacity.value = withTiming(clean ? 0 : 1, { duration });
   }, [clean, cleanOpacity]);
+  const [roomHeld, setRoomHeld] = useState(false);
+  const holdRoom = useCallback((held: boolean) => setRoomHeld(held), []);
+  useEffect(() => {
+    if (landscape || clean || roomHeld || hold) return;
+    const t = setTimeout(() => { cleanBy.current = 'idle'; setClean(true); }, ROOM_IDLE_MS);
+    return () => clearTimeout(t);
+  }, [landscape, clean, roomHeld, hold, pokeNonce]);
   const cleanStyle = useAnimatedStyle(() => ({ opacity: cleanOpacity.value }));
   // Rotating back to portrait always shows the room again.
   useEffect(() => { if (!landscape) setClean(false); }, [landscape]);
@@ -245,6 +260,7 @@ export default function ImmersiveFullscreen(props: Props) {
       if (Keyboard.isVisible()) { Keyboard.dismiss(); return; }
       if (!landscape) {
         if (clean) poke(); else setShown(false);
+        cleanBy.current = 'tap';
         setClean(!clean);
         return;
       }
@@ -260,8 +276,8 @@ export default function ImmersiveFullscreen(props: Props) {
   }, [controlsVisible, holdOpen, poke, isReplay, isLive, onSeek, onSpawnHeart, W, landscape, clean]);
 
   const api = useMemo<FullscreenOverlayApi>(
-    () => ({ poke, close: onClose, startPip: canPip ? onStartPip : null, videoTop, videoHeight: vh }),
-    [poke, onClose, canPip, onStartPip, videoTop, vh],
+    () => ({ poke, close: onClose, startPip: canPip ? onStartPip : null, videoTop, videoHeight: vh, holdRoom }),
+    [poke, onClose, canPip, onStartPip, videoTop, vh, holdRoom],
   );
   const poster = show.poster_url;
   const playControls = canControlPlayback && !spinner;

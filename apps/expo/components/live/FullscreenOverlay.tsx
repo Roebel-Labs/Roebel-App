@@ -1,27 +1,35 @@
-// The live room's overlay on the stage (TikTok / Instagram Live / eBay Live), rendered by LivePlayer through
-// its `overlay` render prop in portrait: a compact "Jetzt auf der Bühne" chip (→ Programm), the pinned
-// message, the supporters strip and the scrollable chat (Neu divider, long-press report / block), the
-// composer at the bottom, and a narrow action column on the right (❤️ reactions, Unterstützen,
-// Publikumsliebling, Dazuschalten, Teilen, ⋯ with Programm / Bild-in-Bild / Testlauf-Werkzeuge / Verlassen).
-// Always visible; while typing the column steps aside and the composer + chat ride above the keyboard.
+// The live room's overlay on the stage (TikTok / Instagram Live / YouTube Shorts), rendered by LivePlayer
+// through its `overlay` render prop in portrait: a compact "Jetzt auf der Bühne" chip (→ Programm), the
+// supporters strip and the scrollable chat (fades out towards the top, Neu divider, long-press report /
+// block), the composer at the bottom, and a bare white icon column on the right (Herz, Spende,
+// Publikumsliebling, Dazuschalten, Teilen, Mehr with Programm / Bild-in-Bild / Testlauf-Werkzeuge / Verlassen).
+// Black and white by design (Max, 2026-11-06): no pinned message, no gold rows. While typing the column
+// steps aside and the composer + chat ride above the keyboard; idle, the stage fades the whole overlay out.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Dimensions, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeInDown, FadeOut, FadeOutDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn, FadeInDown, FadeOut, FadeOutDown, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, type SharedValue,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import HeartOutlineSvg from '@/assets/icons/heart-02.svg';
+import CoinsSvg from '@/assets/icons/coins-01.svg';
+import StarSvg from '@/assets/icons/star.svg';
+import VideoSvg from '@/assets/icons/video-01.svg';
+import ShareSvg from '@/assets/icons/share-02.svg';
+import MoreSvg from '@/assets/icons/more-02.svg';
 import {
   CHAT_MAX_LENGTH, formatClock, type ChatMessage, type LiveReaction, type RundownItem, type Supporter,
 } from '@/lib/live';
-import ChatRow, { PinnedMessage } from './ChatRow';
-import ReactionPicker from './chat/ReactionPicker';
+import ChatRow from './ChatRow';
 import SupportersStrip from './chat/SupportersStrip';
 import NewDivider from './chat/NewDivider';
 import UndoSnackbar from './chat/UndoSnackbar';
 import type { FullscreenOverlayApi } from './player/ImmersiveFullscreen';
-import { F, VIDEO } from './tokens';
+import { F } from './tokens';
 
 export type { FullscreenOverlayApi } from './player/ImmersiveFullscreen';
 
@@ -34,7 +42,8 @@ type Props = {
   /** Ids of messages that arrived while watching (they animate in). */
   freshIds: Set<string>;
   newDividerId: string | null;
-  pinned: ChatMessage | null;
+  /** Still passed by the room; the overlay no longer shows a pinned message. */
+  pinned?: ChatMessage | null;
   supporters: Supporter[];
   current: RundownItem | null;
   next: RundownItem | null;
@@ -70,26 +79,50 @@ type Props = {
 };
 
 /** Right action column: narrow, small gap to the chat. */
-const COLUMN_W = 52;
-const COLUMN_GAP = 8;
+const COLUMN_W = 56;
+const COLUMN_GAP = 6;
 const COMPOSER_H = 42;
+const ICON = 30;
+/** Height of the chat's fade-out band at its top edge. */
+const CHAT_FADE = 72;
 
-type ActionProps = {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-  gold?: boolean;
-};
+type SvgIcon = React.ComponentType<{ width?: number; height?: number; color?: string }>;
 
-function ActionButton({ icon, label, onPress, gold }: ActionProps) {
+/** YouTube-Shorts-style action: a bare white custom icon with its label right underneath. */
+function ActionButton({ Icon, label, onPress, size = ICON }: { Icon: SvgIcon; label: string; onPress: () => void; size?: number }) {
   return (
-    <Pressable onPress={onPress} hitSlop={4} style={({ pressed }) => [styles.action, pressed && styles.actionPressed]} accessibilityRole="button" accessibilityLabel={label}>
-      <View style={[styles.actionCircle, gold && styles.actionGold]}>
-        <Ionicons name={icon} size={21} color={gold ? '#1B1B1B' : '#FFFFFF'} />
-      </View>
+    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.action, pressed && styles.actionPressed]} accessibilityRole="button" accessibilityLabel={label}>
+      <View style={styles.actionIcon}><Icon width={size} height={size} color="#FFFFFF" /></View>
       <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
+}
+
+/** Chat cell that fades out as it nears the list's top edge (inverted list: content y 0 = bottom). */
+function makeFadeCell(scrollY: SharedValue<number>, viewH: SharedValue<number>) {
+  return function FadeCell({ children, style, onLayout, item: _item, index: _index, cellKey: _cellKey, ...rest }:
+    React.ComponentProps<typeof View> & { item?: unknown; index?: number; cellKey?: string }) {
+    const y = useSharedValue(-1);
+    const h = useSharedValue(0);
+    const fade = useAnimatedStyle(() => {
+      if (y.value < 0 || viewH.value <= 0) return { opacity: 1 };
+      const toTop = scrollY.value + viewH.value - (y.value + h.value * 0.5);
+      return { opacity: Math.min(1, Math.max(0, toTop / CHAT_FADE)) };
+    });
+    return (
+      <Animated.View
+        {...rest}
+        style={[style, fade]}
+        onLayout={(e) => {
+          onLayout?.(e);
+          y.value = e.nativeEvent.layout.y;
+          h.value = e.nativeEvent.layout.height;
+        }}
+      >
+        {children}
+      </Animated.View>
+    );
+  };
 }
 
 function MenuItem({ icon, label, onPress, busy, disabled }: {
@@ -141,12 +174,12 @@ function NowChip({ current, next, onPress }: { current: RundownItem | null; next
 
 export default function FullscreenOverlay(props: Props) {
   const {
-    api, messages, isOwn, isBlocked, freshIds, newDividerId, pinned, supporters, current, next, hasProgram, listExtra,
+    api, messages, isOwn, isBlocked, freshIds, newDividerId, supporters, current, next, hasProgram, listExtra,
     loggedIn, chatOpen, votingOpen, slowModeSeconds, canJoinAsGuest, isTest, testBusy, onSend, error, onDismissError,
     toast, snack, onUndoSnack, onDismissSnack, onReact, onSupport, onVote, onShare, onOpenProgram, onJoinAsGuest,
     onSimulateSupport, onNextGroup, onLongPressMessage, onLogin,
   } = props;
-  const { poke, close, startPip, videoTop, videoHeight } = api;
+  const { poke, close, startPip, videoTop, videoHeight, holdRoom } = api;
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
   const inputRef = useRef<TextInput>(null);
@@ -174,6 +207,18 @@ export default function FullscreenOverlay(props: Props) {
   }, []);
   const keyboardUp = keyboardHeight > 0;
   const typing = keyboardUp || focused;
+
+  // The stage fades the overlay out when idle; never while typing or with the Mehr menu open.
+  useEffect(() => {
+    holdRoom(typing || menuOpen);
+    return () => holdRoom(false);
+  }, [typing, menuOpen, holdRoom]);
+
+  // Top fade of the chat: per-cell opacity from the scroll position (no mask view in this build).
+  const scrollY = useSharedValue(0);
+  const viewH = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
+  const FadeCell = useMemo(() => makeFadeCell(scrollY, viewH), [scrollY, viewH]);
 
   // Inline errors go away on their own.
   useEffect(() => {
@@ -235,11 +280,14 @@ export default function FullscreenOverlay(props: Props) {
       {/* Chat area: now-on-stage chip, pinned, supporters, then the list (newest at the bottom). */}
       <View style={[styles.chatArea, { left, right: chatRight, bottom: areaBottom, height: areaHeight }]} pointerEvents="box-none">
         {!keyboardUp && hasProgram ? <NowChip current={current} next={next} onPress={() => { poke(); onOpenProgram(); }} /> : null}
-        {pinned && !keyboardUp ? <PinnedMessage m={pinned} variant="overlay" /> : null}
         {!keyboardUp ? <SupportersStrip supporters={supporters} onPress={scrollToSupporter} variant="overlay" /> : null}
-        <FlatList
+        <Animated.FlatList
           ref={listRef}
           style={styles.list}
+          onLayout={(e) => { viewH.value = e.nativeEvent.layout.height; }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          CellRendererComponent={FadeCell}
           data={listData}
           inverted
           keyExtractor={(m) => m.id}
@@ -329,7 +377,7 @@ export default function FullscreenOverlay(props: Props) {
             />
             {text.trim() ? (
               <Pressable onPress={send} hitSlop={6} style={styles.send} accessibilityRole="button" accessibilityLabel="Senden">
-                <Ionicons name="arrow-up" size={17} color="#fff" />
+                <Ionicons name="arrow-up" size={17} color="#111" />
               </Pressable>
             ) : null}
           </View>
@@ -339,15 +387,13 @@ export default function FullscreenOverlay(props: Props) {
       {/* Right action column (steps aside while typing). */}
       {!typing ? (
         <View style={[styles.column, { right, bottom }]} pointerEvents="box-none">
-          <View style={styles.action}>
-            <ReactionPicker onReact={react} variant="overlay" onInteract={poke} />
-            <Text style={styles.actionLabel} numberOfLines={1}>Herz</Text>
-          </View>
-          <ActionButton icon="heart" label="Unterstützen" gold onPress={() => closeMenuThen(onSupport)} />
-          {votingOpen ? <ActionButton icon="trophy-outline" label="Liebling" onPress={() => closeMenuThen(onVote)} /> : null}
-          {canJoinAsGuest ? <ActionButton icon="videocam-outline" label="Dazu" onPress={() => closeMenuThen(onJoinAsGuest)} /> : null}
-          <ActionButton icon="share-outline" label="Teilen" onPress={() => { poke(); onShare(); }} />
-          <ActionButton icon="ellipsis-horizontal" label="Mehr" onPress={() => { poke(); setMenuOpen((o) => !o); }} />
+          {/* Heart: white outline; every tap floats a red filled heart up the video (no picker, no emoji). */}
+          <ActionButton Icon={HeartOutlineSvg} label="Herz" onPress={() => react('❤️')} size={ICON + 2} />
+          <ActionButton Icon={CoinsSvg} label="Spende" onPress={() => closeMenuThen(onSupport)} size={ICON - 4} />
+          {votingOpen ? <ActionButton Icon={StarSvg} label="Liebling" onPress={() => closeMenuThen(onVote)} size={ICON - 2} /> : null}
+          {canJoinAsGuest ? <ActionButton Icon={VideoSvg} label="Dazu" onPress={() => closeMenuThen(onJoinAsGuest)} /> : null}
+          <ActionButton Icon={ShareSvg} label="Teilen" onPress={() => { poke(); onShare(); }} />
+          <ActionButton Icon={MoreSvg} label="Mehr" onPress={() => { poke(); setMenuOpen((o) => !o); }} />
         </View>
       ) : null}
 
@@ -364,14 +410,14 @@ export default function FullscreenOverlay(props: Props) {
             {isTest ? (
               <>
                 <View style={styles.menuSection}>
-                  <Ionicons name="construct-outline" size={12} color={VIDEO.gold} />
+                  <Ionicons name="construct-outline" size={12} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.menuSectionText}>TESTLAUF</Text>
                 </View>
                 {loggedIn ? (
                   <>
                     <MenuItem
-                      icon="heart-outline"
-                      label="Unterstützung simulieren"
+                      icon="cash-outline"
+                      label="Spende simulieren"
                       busy={testBusy === 'support'}
                       disabled={testBusy !== null}
                       onPress={() => { poke(); onSimulateSupport(); }}
@@ -403,7 +449,7 @@ const SHADOW = { textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 
 
 const styles = StyleSheet.create({
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  chatArea: { position: 'absolute', gap: 6 },
+  chatArea: { position: 'absolute', gap: 8 },
   list: { flex: 1 },
   listContent: { paddingVertical: 4 },
   welcome: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: F.medium, paddingHorizontal: 6, paddingVertical: 8, ...SHADOW },
@@ -412,30 +458,27 @@ const styles = StyleSheet.create({
     borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.22)',
   },
   nowChipPressed: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  nowDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: VIDEO.red },
+  nowDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF3040' },
   nowDotIdle: { backgroundColor: 'rgba(255,255,255,0.5)' },
   nowTextWrap: { flexShrink: 1 },
   nowText: { color: '#fff', fontSize: 13 },
   nowTitle: { color: '#fff', fontFamily: F.bold, fontSize: 13 },
   nowNext: { color: 'rgba(255,255,255,0.72)', fontFamily: F.medium, fontSize: 12 },
-  column: { position: 'absolute', width: COLUMN_W, alignItems: 'center', gap: 10 },
-  action: { alignItems: 'center', gap: 3, width: COLUMN_W },
-  actionPressed: { transform: [{ scale: 0.92 }] },
-  actionCircle: {
-    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.38)',
-  },
-  actionGold: { backgroundColor: VIDEO.gold },
-  actionLabel: { color: '#FFFFFF', fontSize: 10, fontFamily: F.semiBold, ...SHADOW },
+  column: { position: 'absolute', width: COLUMN_W, alignItems: 'center', gap: 16, paddingBottom: 2 },
+  action: { alignItems: 'center', gap: 1, width: COLUMN_W },
+  actionPressed: { transform: [{ scale: 0.88 }] },
+  actionIcon: { width: ICON + 4, height: ICON + 4, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { color: '#FFFFFF', fontSize: 12, fontFamily: F.semiBold, ...SHADOW },
   menu: { position: 'absolute', borderRadius: 12, paddingVertical: 4, backgroundColor: 'rgba(24,25,27,0.96)', width: 236 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, height: 44 },
   menuPressed: { backgroundColor: 'rgba(255,255,255,0.08)' },
   menuDisabled: { opacity: 0.5 },
   menuText: { flex: 1, color: '#FFFFFF', fontSize: 14, fontFamily: F.medium },
   menuSection: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2 },
-  menuSectionText: { color: VIDEO.gold, fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
+  menuSectionText: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontFamily: F.bold, letterSpacing: 1 },
   menuHint: { color: 'rgba(255,255,255,0.55)', fontSize: 11, lineHeight: 15, fontFamily: F.medium, paddingHorizontal: 14, paddingBottom: 6 },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.14)', marginVertical: 4 },
-  toast: { position: 'absolute', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(30,107,184,0.96)' },
+  toast: { position: 'absolute', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(24,25,27,0.94)' },
   toastText: { color: '#fff', fontSize: 13, fontFamily: F.semiBold, textAlign: 'center' },
   errorWrap: { position: 'absolute' },
   error: {
@@ -450,5 +493,5 @@ const styles = StyleSheet.create({
   },
   pillPlaceholder: { flex: 1, color: 'rgba(255,255,255,0.78)', fontSize: 14, fontFamily: F.medium },
   input: { flex: 1, color: '#FFFFFF', fontSize: 15, fontFamily: F.regular, paddingVertical: 8 },
-  send: { width: 34, height: 34, borderRadius: 17, backgroundColor: VIDEO.navyBright, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
 });

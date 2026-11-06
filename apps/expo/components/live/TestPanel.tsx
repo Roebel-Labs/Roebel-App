@@ -49,7 +49,7 @@ export default function TestPanel({ loggedIn, busy, onSimulateSupport, onNextGro
                   {busy === 'support'
                     ? <ActivityIndicator size="small" color={L.text} />
                     : <Ionicons name="heart-outline" size={15} color={L.goldText} />}
-                  <Text style={styles.btnText} numberOfLines={1}>Unterstützung simulieren</Text>
+                  <Text style={styles.btnText} numberOfLines={1}>Spende simulieren</Text>
                 </Pressable>
                 <Pressable
                   onPress={onNextGroup}
