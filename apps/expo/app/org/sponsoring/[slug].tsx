@@ -274,7 +274,7 @@ export default function SponsoringDetailScreen() {
               <View style={styles.stats}>
                 {[
                   { value: `${SPONSORING_REACH.appPeople}+`, label: 'Menschen aus Röbel in der App' },
-                  { value: `${SPONSORING_REACH.pushDevices}+`, label: 'Handys mit Benachrichtigungen' },
+                  { value: `${SPONSORING_REACH.pushDevices}+`, label: 'Handys mit Push-Nachrichten' },
                   { value: '3', label: 'Kanäle: App, YouTube, Facebook' },
                 ].map((st) => (
                   <View key={st.label} style={[styles.stat, { backgroundColor: colors.surface }]}>
