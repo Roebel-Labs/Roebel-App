@@ -60,6 +60,13 @@ export async function fetchCampaign(slug: string): Promise<CampaignView | null> 
   };
 }
 
+/** Just the booking deadline (profile card): one small read instead of the campaign + packages + availability. */
+export async function fetchBookingDeadline(slug: string): Promise<string | null> {
+  const { data, error } = await db.from('sponsoring_campaigns').select('booking_deadline').eq('slug', slug).maybeSingle();
+  if (error || !data) return null;
+  return (data as { booking_deadline: string }).booking_deadline;
+}
+
 export function isBookingOpen(campaign: Pick<SponsoringCampaign, 'booking_deadline'>, now: number = Date.now()): boolean {
   return now <= Date.parse(campaign.booking_deadline);
 }
