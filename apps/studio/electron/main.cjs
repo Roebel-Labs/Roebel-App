@@ -23,6 +23,19 @@ app.setName('Ortis Studio');
   }
 }
 
+// One studio per data folder: a second copy would fight over the saved show, port 7311 and the
+// stream keys. A second launch only brings the running window to the front.
+if (!app.requestSingleInstanceLock()) {
+  console.log(`${new Date().toISOString()} [main] Ortis Studio is already running; focusing it`);
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+}
+
 // Program audio (silent track, later the mixer) must run without a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
