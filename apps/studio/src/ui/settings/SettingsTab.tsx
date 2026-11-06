@@ -3,7 +3,8 @@
 // and only ever shown in password fields (with an explicit "Zeigen").
 
 import { useEffect, useRef, useState } from 'react';
-import { useShow } from '../../state/store';
+import { replaceStoredShow, useShow } from '../../state/store';
+import { serialize } from '../../state/reducer';
 import type { Destination, OutputTarget, Settings } from '../../state/types';
 import { errorText } from '../engine';
 import { useOnAir } from '../studio';
@@ -388,7 +389,88 @@ export function SettingsTab() {
             </span>
           )}
         </section>
+
+        <ShowTransfer />
       </fieldset>
     </div>
+  );
+}
+
+/** Show-Paket: the whole show (sources, media, templates, table, sponsors, mixer) to another computer. */
+function ShowTransfer() {
+  const { state } = useShow();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ stateJson: string; files: number; missing: string[] } | null>(null);
+
+  const doExport = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await window.studio.show.exportPackage(serialize(state));
+      if (r) {
+        const miss = r.missing.length ? ` ${r.missing.length} Datei(en) fehlten und sind nicht dabei.` : '';
+        setMsg({ ok: r.missing.length === 0, text: `Gespeichert: ${r.dir} (${r.files} Mediendateien).${miss} Den ganzen Ordner auf den anderen Rechner kopieren.` });
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: `Export fehlgeschlagen: ${errorText(e)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doImport = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await window.studio.show.importPackage();
+      if (r) setConfirm(r);
+    } catch (e) {
+      setMsg({ ok: false, text: `Import fehlgeschlagen: ${errorText(e)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = () => {
+    if (!confirm) return;
+    // Destinations, keys and machine paths stay as they are on this computer.
+    const imported = JSON.parse(confirm.stateJson) as Record<string, unknown>;
+    replaceStoredShow(JSON.stringify({ ...imported, settings: state.settings }));
+  };
+
+  return (
+    <section>
+      <h3>Show übertragen</h3>
+      <p className="hint">
+        Nimmt die ganze Show auf einen anderen Rechner mit: Quellen, Videos, Bilder, Logos, Einblendungen, Tabelle, Sponsoren und Mixer.
+        Sendeziele und Stream-Schlüssel bleiben auf diesem Rechner. Kameras und Mikrofone danach am neuen Rechner neu auswählen.
+      </p>
+      <div className="with-btn">
+        <button className="btn" onClick={doExport} disabled={busy}>
+          Show exportieren…
+        </button>
+        <button className="btn" onClick={doImport} disabled={busy}>
+          Show importieren…
+        </button>
+      </div>
+      {confirm && (
+        <div className="locked">
+          <p>
+            Show-Paket gelesen ({confirm.files} Mediendateien
+            {confirm.missing.length ? `, ${confirm.missing.length} fehlen: ${confirm.missing.slice(0, 3).join(', ')}` : ''}). Die aktuelle Show auf diesem Rechner wird ersetzt.
+          </p>
+          <div className="with-btn">
+            <button className="btn primary" onClick={apply}>
+              Show ersetzen
+            </button>
+            <button className="btn" onClick={() => setConfirm(null)}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <span className={msg.ok ? 'ok-text' : 'err-text'}>{msg.text}</span>}
+    </section>
   );
 }

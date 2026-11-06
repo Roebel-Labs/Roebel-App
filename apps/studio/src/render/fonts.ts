@@ -3,6 +3,10 @@ import '@fontsource/inter/400.css';
 import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import '@fontsource/inter/800.css';
+import '@fontsource/inter/900.css';
+import '@fontsource/inter/600-italic.css';
+import '@fontsource/inter/700-italic.css';
+import '@fontsource/inter/900-italic.css';
 import '@fontsource/plus-jakarta-sans/400.css';
 import '@fontsource/plus-jakarta-sans/600.css';
 import '@fontsource/plus-jakarta-sans/700.css';
@@ -12,6 +16,8 @@ import { clearTextCaches } from './draw';
 
 const FAMILIES = ['Inter', 'Plus Jakarta Sans'] as const;
 const WEIGHTS = [400, 600, 700, 800] as const;
+/** Inter faces the event lower thirds use (Black, and the italics). */
+const INTER_EXTRA = ['900', 'italic 600', 'italic 700', 'italic 900'] as const;
 // Covers the latin + latin-ext subsets German names need.
 const SAMPLE = 'AaÄäÖöÜüß€ŁłŠšĆć·–…';
 
@@ -23,9 +29,11 @@ let ready: Promise<void> | null = null;
  */
 export function loadFonts(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return Promise.resolve();
-  ready ??= Promise.all(
-    FAMILIES.flatMap((f) => WEIGHTS.map((w) => document.fonts.load(`${w} 32px "${f}"`, SAMPLE).catch(() => []))),
-  )
+  const faces = [
+    ...FAMILIES.flatMap((f) => WEIGHTS.map((w) => `${w} 32px "${f}"`)),
+    ...INTER_EXTRA.map((s) => `${s} 32px "Inter"`),
+  ];
+  ready ??= Promise.all(faces.map((face) => document.fonts.load(face, SAMPLE).catch(() => [])))
     .then(() => document.fonts.ready)
     // Measurements taken with the fallback font are wrong now.
     .then(() => clearTextCaches());

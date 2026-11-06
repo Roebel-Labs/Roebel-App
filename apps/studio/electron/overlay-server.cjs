@@ -307,7 +307,13 @@ function createOverlayServer({
     });
   }
 
-  return { start, stop, allow, status };
+  /** The file behind a media URL this server handed out, or null. */
+  function pathOf(url) {
+    const m = /\/media\/([0-9a-f]+)$/.exec(String(url));
+    return (m && tokens.get(m[1])) || null;
+  }
+
+  return { start, stop, allow, status, pathOf };
 }
 
 module.exports = { createOverlayServer, OVERLAY_PORT, parseRange, contentType };

@@ -94,6 +94,8 @@ export type OverlayAnim = {
   easing: Easing;
   from?: 'left' | 'right' | 'top' | 'bottom';
   staggerMs?: number;
+  /** 'scale' only: start size (default 0.9). */
+  scaleFrom?: number;
 };
 
 export type TemplateNode = {
@@ -108,13 +110,33 @@ export type TemplateNode = {
   opacity?: number;
   text?: string;
   font?: 'Inter' | 'Plus Jakarta Sans';
-  weight?: 400 | 600 | 700 | 800;
+  weight?: 400 | 600 | 700 | 800 | 900;
+  italic?: boolean;
+  uppercase?: boolean;
+  /** Letter spacing in px (negative = tighter). */
+  tracking?: number;
   size?: number;
   color?: string;
   align?: 'left' | 'center' | 'right';
   src?: string;
   fit?: 'contain' | 'cover';
   delayMs?: number;
+  /** Outline (rect: around the shape; text: unused). */
+  stroke?: string;
+  strokeWidth?: number;
+  shadow?: { x: number; y: number; blur: number; color: string };
+  /** Per-corner radii [top-left, top-right, bottom-right, bottom-left]; wins over `radius`. */
+  radii?: [number, number, number, number];
+  /** Rect: the bottom-right corner sits this many px left of the top-right one (slanted right edge). */
+  slant?: number;
+  /** Hug: this node's right edge = the measured right edge of node `hug` + `hugPad`. */
+  hug?: string;
+  hugPad?: number;
+  /** Flow: this node's x = the (hugged) right edge of node `after` + `afterGap`. */
+  after?: string;
+  afterGap?: number;
+  /** The node's own entrance (default: the template's animIn); the exit stays the template's animOut. */
+  animIn?: OverlayAnim;
 };
 
 export type Template = {

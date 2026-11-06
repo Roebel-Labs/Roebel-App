@@ -10,6 +10,7 @@ const { bundledFfmpegPath, resolveFfmpegPath } = require('./ffmpeg-path.cjs');
 const { usableDestinations } = require('./ffmpeg-args.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
+const { exportShow, importShow } = require('./show-package.cjs');
 
 // Product name + data folder. Electron derives userData from the app name; the studio used to be
 // '@roebel/studio'. Existing installs keep their saved show (localStorage) by staying on the old folder.
@@ -199,6 +200,33 @@ ipcMain.handle('media:allow', (e, absPath) => {
 ipcMain.handle('overlay:status', () =>
   overlay ? overlay.status() : { ok: false, port: null, error: 'Medienserver nicht gestartet' },
 );
+
+// Show package (Einstellungen → Show übertragen): see show-package.cjs.
+ipcMain.handle('show:export', async (e, stateJson) => {
+  guard('show:export', e);
+  if (!overlay) throw new Error('Medienserver nicht bereit');
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Ordner für das Show-Paket wählen',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return exportShow({ stateJson: String(stateJson), destDir: r.filePaths[0], pathOf: (u) => overlay.pathOf(u) });
+});
+ipcMain.handle('show:import', async (e) => {
+  guard('show:import', e);
+  if (!overlay) throw new Error('Medienserver nicht bereit');
+  const r = await dialog.showOpenDialog(win, {
+    title: 'show.json des Show-Pakets wählen',
+    properties: ['openFile'],
+    filters: [{ name: 'Ortis Show', extensions: ['json'] }],
+  });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return importShow({
+    file: r.filePaths[0],
+    mediaRoot: path.join(app.getPath('userData'), 'imported-media'),
+    allow: (p) => overlay.allow(p),
+  });
+});
 
 const FILE_FILTERS = {
   video: [{ name: 'Video', extensions: ['mp4', 'mov', 'm4v', 'webm', 'mkv'] }],

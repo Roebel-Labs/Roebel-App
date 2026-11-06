@@ -14,12 +14,26 @@ function readStored(): string | null {
   }
 }
 
+// Set while a replaced show is being loaded: no autosave/unload flush may overwrite it.
+let frozen = false;
+
 function writeStored(json: string): void {
+  if (frozen) return;
   try {
     localStorage.setItem(STORAGE_KEY, json);
   } catch {
     // quota / security errors must never crash the show
   }
+}
+
+/**
+ * Replaces the whole saved show (Show-Paket import) and reloads the page, which restores it.
+ * The running page never writes its old state back afterwards.
+ */
+export function replaceStoredShow(json: string): void {
+  writeStored(json);
+  frozen = true;
+  window.location.reload();
 }
 
 type Ctx = { state: ShowState; dispatch: (a: Action) => void };

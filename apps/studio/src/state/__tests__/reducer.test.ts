@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialState, restore, serialize, showReducer } from '../reducer';
 import type { ShowState } from '../types';
-import { STARTER_TEMPLATES } from '../../render/templates';
+import { STARTER_TEMPLATES, STARTER_VERSION } from '../../render/templates';
 import { overlayProgress } from '../../render/anim';
 
 function withScenes(): ShowState {
@@ -107,9 +107,9 @@ describe('initialState', () => {
     );
   });
 
-  it('ships the seven starter kinds as deep copies (no Unterstützung on air)', () => {
+  it('ships the eight starter kinds as deep copies (no Unterstützung on air)', () => {
     const s = initialState();
-    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight']);
+    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight', 'lowerThird']);
     expect(s.overlays.some((o) => o.id === 'ov-donation')).toBe(false);
     s.templates[0].nodes[0].x = 9999;
     expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
@@ -277,7 +277,7 @@ describe('serialize / restore', () => {
         overlays: ['x', { id: 'o', templateId: 't', visible: true, changedAt: 1 }],
         templates: [null, { id: 't', name: 'n', kind: 'custom', fullScreen: false, nodes: 'bad', animIn: 7 }],
         presets: [null],
-        starterVersion: 2,
+        starterVersion: STARTER_VERSION,
       }),
     );
     expect(r.sources.map((x) => x.id)).toEqual(['s']);
@@ -692,7 +692,7 @@ describe('starter migration (chat highlight)', () => {
 
   it('a show saved before the chat highlight gets the starter + its overlay once, user templates kept', () => {
     const r = restore(JSON.stringify(old()));
-    expect(r.starterVersion).toBe(3);
+    expect(r.starterVersion).toBe(STARTER_VERSION);
     expect(r.templates.find((t) => t.id === 'chat-highlight')?.kind).toBe('chatHighlight');
     expect(r.templates.some((t) => t.id === 'custom-1')).toBe(true);
     expect(r.overlays.filter((o) => o.id === 'ov-chat-highlight')).toHaveLength(1);
@@ -708,7 +708,7 @@ describe('starter migration (chat highlight)', () => {
   });
 
   it('a fresh show is already on the current starter version', () => {
-    expect(initialState().starterVersion).toBe(3);
+    expect(initialState().starterVersion).toBe(STARTER_VERSION);
     expect(initialState().overlays.some((o) => o.id === 'ov-chat-highlight')).toBe(true);
   });
 });
@@ -765,7 +765,7 @@ describe('Unterstützungen are never on air (donation template removed)', () => 
     const r = restore(JSON.stringify(saved));
     expect(r.templates.some((t) => (t.kind as string) === 'donation')).toBe(false);
     expect(r.overlays.map((o) => o.id)).toEqual(s.overlays.map((o) => o.id));
-    expect(r.starterVersion).toBe(3);
+    expect(r.starterVersion).toBe(STARTER_VERSION);
   });
 
   it('applies at any saved starter version (it is a rule, not a one-off)', () => {

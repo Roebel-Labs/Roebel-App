@@ -332,23 +332,71 @@ export function templateHasContent(t: Template, rc: RenderContext): boolean {
 }
 
 function drawOverlay(ctx: CanvasRenderingContext2D, o: OverlayInstance, t: Template, rc: RenderContext, nowMs: number) {
-  const nodes = Array.isArray(t.nodes) ? t.nodes : [];
-  if (nodes.length === 0) return;
+  const raw = Array.isArray(t.nodes) ? t.nodes : [];
+  if (raw.length === 0) return;
   if (!templateHasContent(t, rc)) return; // never air empty bars
-  const anim = o.visible ? t.animIn : t.animOut;
-  if (!anim) return;
-  const progress = nodes.map((n, i) => overlayProgress(o, anim, nowMs, nodeDelay(n, i, anim, o.visible)));
+  if (!(o.visible ? t.animIn : t.animOut)) return;
+  // A node's own entrance (animIn) wins on the way in; the exit is always the template's.
+  const animOf = (n: TemplateNode): OverlayAnim => (o.visible ? (n.animIn ?? t.animIn) : t.animOut);
+  const progress = raw.map((n, i) => {
+    const anim = animOf(n);
+    return overlayProgress(o, anim, nowMs, nodeDelay(n, i, anim, o.visible));
+  });
   if (progress.every((p) => p <= 0)) return;
+  const nodes = layoutNodes(ctx, raw, rc);
   const bounds = boundsOf(nodes);
   nodes.forEach((n, i) => {
     const p = progress[i];
     if (p <= 0) return;
+    const anim = animOf(n);
     guarded(ctx, `node ${t.id}/${n.id}`, () => {
-      applyAnim(ctx, anim, p, bounds);
+      // A per-node entrance scales/wipes around the node itself, the template's around the whole overlay.
+      applyAnim(ctx, anim, p, o.visible && n.animIn ? { x: n.x, y: n.y, w: n.w, h: n.h } : bounds);
       ctx.globalAlpha *= clamp01(n.opacity ?? 1);
       drawNode(ctx, n, rc);
     });
   });
+}
+
+// ---- hug / flow layout ----
+
+/** Width the text of a text node takes on air (after shrink-to-fit), in px. */
+function textWidth(ctx: CanvasRenderingContext2D, n: TemplateNode, rc: RenderContext): number {
+  const value = textValue(n, rc);
+  if (!value) return 0;
+  const fitted = fitText(ctx, value, n.font ?? 'Inter', n.weight ?? 600, n.size && n.size > 0 ? n.size : 28, n.w, textStyle(n));
+  return fitted.width;
+}
+
+/**
+ * Resolves `after` (x follows another node's right edge) and `hug` (right edge follows another
+ * node's content) so boxes grow with the bound text. Nodes without either keep their own geometry.
+ */
+export function layoutNodes(ctx: CanvasRenderingContext2D, nodes: TemplateNode[], rc: RenderContext): TemplateNode[] {
+  if (!nodes.some((n) => n.hug || n.after)) return nodes;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const done = new Map<string, TemplateNode>();
+  const busy = new Set<string>();
+  const resolve = (n: TemplateNode): TemplateNode => {
+    const hit = done.get(n.id);
+    if (hit) return hit;
+    if (busy.has(n.id)) return n; // cycle: keep the authored geometry
+    busy.add(n.id);
+    let x = n.x;
+    let w = n.w;
+    const prev = n.after ? byId.get(n.after) : undefined;
+    if (prev) x = rightEdge(resolve(prev)) + (n.afterGap ?? 0);
+    const target = n.hug ? byId.get(n.hug) : undefined;
+    if (target) w = Math.max(0, rightEdge(resolve(target)) + (n.hugPad ?? 0) - x);
+    const out = x === n.x && w === n.w ? n : { ...n, x, w };
+    busy.delete(n.id);
+    done.set(n.id, out);
+    return out;
+  };
+  // Right edge of the node's content: a left-aligned text ends where its glyphs end.
+  const rightEdge = (n: TemplateNode) =>
+    n.type === 'text' && (n.align ?? 'left') === 'left' ? n.x + textWidth(ctx, n, rc) : n.x + n.w;
+  return nodes.map(resolve);
 }
 
 function applyAnim(ctx: CanvasRenderingContext2D, anim: OverlayAnim, p: number, b: Bounds) {
@@ -368,7 +416,8 @@ function applyAnim(ctx: CanvasRenderingContext2D, anim: OverlayAnim, p: number, 
       return;
     }
     case 'scale': {
-      const s = SCALE_FROM + (1 - SCALE_FROM) * e;
+      const from = anim.scaleFrom ?? SCALE_FROM;
+      const s = from + (1 - from) * e;
       const cx = b.x + b.w / 2;
       const cy = b.y + b.h / 2;
       ctx.translate(cx, cy);
@@ -408,34 +457,77 @@ function drawNode(ctx: CanvasRenderingContext2D, n: TemplateNode, rc: RenderCont
 }
 
 function roundedPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  shapePath(ctx, x, y, w, h, [r, r, r, r], 0);
+}
+
+/** Rounded rectangle with per-corner radii [tl, tr, br, bl] and an optional slanted right edge. */
+function shapePath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radii: number[], slant: number) {
+  const cap = (r: number) => Math.max(0, Math.min(r || 0, w / 2, h));
+  const [tl, tr, br, bl] = radii.map(cap);
+  const s = Math.max(0, Math.min(slant || 0, w));
   ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.moveTo(x + tl, y);
+  ctx.arcTo(x + w, y, x + w - s, y + h, tr);
+  ctx.arcTo(x + w - s, y + h, x, y + h, br);
+  ctx.arcTo(x, y + h, x, y, bl);
+  ctx.arcTo(x, y, x + w, y, tl);
   ctx.closePath();
 }
 
+function applyShadow(ctx: CanvasRenderingContext2D, n: TemplateNode) {
+  const sh = n.shadow;
+  if (!sh) return;
+  ctx.shadowColor = sh.color;
+  ctx.shadowOffsetX = sh.x;
+  ctx.shadowOffsetY = sh.y;
+  ctx.shadowBlur = sh.blur;
+}
+
+function clearShadow(ctx: CanvasRenderingContext2D) {
+  ctx.shadowColor = 'transparent';
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.shadowBlur = 0;
+}
+
 function drawRectNode(ctx: CanvasRenderingContext2D, n: TemplateNode) {
-  if (!n.fill || !(n.w > 0) || !(n.h > 0)) return;
-  ctx.fillStyle = n.fill;
-  if (n.radius && n.radius > 0) {
-    roundedPath(ctx, n.x, n.y, n.w, n.h, n.radius);
-    ctx.fill();
-  } else {
+  if ((!n.fill && !n.stroke) || !(n.w > 0) || !(n.h > 0)) return;
+  const simple = !n.radii && !n.slant && !n.stroke && !n.shadow;
+  if (simple && n.fill && !(n.radius && n.radius > 0)) {
+    ctx.fillStyle = n.fill;
     ctx.fillRect(n.x, n.y, n.w, n.h);
+    return;
+  }
+  const r = n.radius ?? 0;
+  shapePath(ctx, n.x, n.y, n.w, n.h, n.radii ?? [r, r, r, r], n.slant ?? 0);
+  if (n.fill) {
+    applyShadow(ctx, n);
+    ctx.fillStyle = n.fill;
+    ctx.fill();
+    clearShadow(ctx);
+  }
+  if (n.stroke && (n.strokeWidth ?? 1) > 0) {
+    ctx.strokeStyle = n.stroke;
+    ctx.lineWidth = n.strokeWidth ?? 1;
+    ctx.stroke();
   }
 }
 
 // ---- text ----
 
-export function fontString(family: string, weight: number, size: number): string {
-  return `${weight} ${size}px "${family}", ${FONT_FALLBACK}`;
+export function fontString(family: string, weight: number, size: number, italic = false): string {
+  return `${italic ? 'italic ' : ''}${weight} ${size}px "${family}", ${FONT_FALLBACK}`;
 }
 
-type FittedText = { text: string; font: string; size: number };
+export type TextStyle = { italic?: boolean; tracking?: number };
+type FittedText = { text: string; font: string; size: number; width: number; tracking: number };
+
+const textStyle = (n: TemplateNode): TextStyle => ({ italic: n.italic === true, tracking: n.tracking ?? 0 });
+
+function textValue(n: TemplateNode, rc: RenderContext): string {
+  const v = resolveBindings(n.text ?? '', rc).replace(/\s+/g, ' ').trim();
+  return n.uppercase ? v.toLocaleUpperCase('de-DE') : v;
+}
 const fitCache = new Map<string, FittedText>();
 const capCache = new Map<string, number>();
 const CACHE_MAX = 512;
@@ -463,19 +555,29 @@ export function fitText(
   weight: number,
   size: number,
   maxW: number,
+  style: TextStyle = {},
 ): FittedText {
-  const key = `${family}|${weight}|${size}|${maxW}|${text}`;
+  const italic = style.italic === true;
+  const tracking = style.tracking ?? 0;
+  const key = `${family}|${weight}|${size}|${maxW}|${italic ? 1 : 0}|${tracking}|${text}`;
   const hit = fitCache.get(key);
   if (hit) return hit;
+  // Tracking scales with the font size, like letter-spacing in em.
+  const trackAt = (s: number) => (tracking * s) / size;
   const measure = (s: number, t: string) => {
-    ctx.font = fontString(family, weight, s);
-    return ctx.measureText(t).width;
+    ctx.font = fontString(family, weight, s, italic);
+    setTracking(ctx, trackAt(s));
+    const w = ctx.measureText(t).width;
+    setTracking(ctx, 0);
+    return w;
   };
+  const make = (t: string, s: number, w: number): FittedText => ({ text: t, font: fontString(family, weight, s, italic), size: s, width: w, tracking: trackAt(s) });
   const full = measure(size, text);
-  if (full <= maxW || !(maxW > 0)) return remember(fitCache, key, { text, font: fontString(family, weight, size), size });
+  if (full <= maxW || !(maxW > 0)) return remember(fitCache, key, make(text, size, full));
   const minSize = Math.max(1, Math.floor(size * MIN_TEXT_SCALE));
   const shrunk = Math.max(minSize, Math.floor((size * maxW) / full));
-  if (measure(shrunk, text) <= maxW) return remember(fitCache, key, { text, font: fontString(family, weight, shrunk), size: shrunk });
+  const shrunkW = measure(shrunk, text);
+  if (shrunkW <= maxW) return remember(fitCache, key, make(text, shrunk, shrunkW));
   // Still too wide at the minimum size: binary-search the longest prefix that fits with an ellipsis.
   const chars = Array.from(text);
   let lo = 0;
@@ -486,7 +588,13 @@ export function fitText(
     else hi = mid - 1;
   }
   const out = lo > 0 ? chars.slice(0, lo).join('').trimEnd() + '…' : '…';
-  return remember(fitCache, key, { text: out, font: fontString(family, weight, minSize), size: minSize });
+  return remember(fitCache, key, make(out, minSize, measure(minSize, out)));
+}
+
+/** Canvas letterSpacing (Chromium); a no-op where unsupported. */
+function setTracking(ctx: CanvasRenderingContext2D, px: number) {
+  const c = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+  if ('letterSpacing' in c) c.letterSpacing = `${px}px`;
 }
 
 /** Cap height of a font, for optically centring text in its box. */
@@ -500,20 +608,24 @@ function capHeight(ctx: CanvasRenderingContext2D, font: string, size: number): n
 }
 
 function drawTextNode(ctx: CanvasRenderingContext2D, n: TemplateNode, rc: RenderContext) {
-  const value = resolveBindings(n.text ?? '', rc).replace(/\s+/g, ' ').trim();
+  const value = textValue(n, rc);
   if (!value) return;
   const family = n.font ?? 'Inter';
   const weight = n.weight ?? 600;
   const size = n.size && n.size > 0 ? n.size : 28;
-  const fitted = fitText(ctx, value, family, weight, size, n.w);
+  const fitted = fitText(ctx, value, family, weight, size, n.w, textStyle(n));
   const align = n.align ?? 'left';
   const x = align === 'center' ? n.x + n.w / 2 : align === 'right' ? n.x + n.w : n.x;
   const cap = capHeight(ctx, fitted.font, fitted.size);
   ctx.font = fitted.font;
+  setTracking(ctx, fitted.tracking);
   ctx.fillStyle = n.color ?? '#FFFFFF';
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
+  applyShadow(ctx, n);
   ctx.fillText(fitted.text, x, n.y + n.h / 2 + cap / 2);
+  clearShadow(ctx);
+  setTracking(ctx, 0);
 }
 
 // ---- images ----

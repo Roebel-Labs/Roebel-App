@@ -39,6 +39,10 @@ declare global {
         /** Listen state of the local media/overlay server (127.0.0.1). */
         status(): Promise<{ ok: boolean; port: number | null; error: string | null }>;
       };
+      show: {
+        exportPackage(stateJson: string): Promise<{ dir: string; files: number; missing: string[] } | null>;
+        importPackage(): Promise<{ stateJson: string; files: number; missing: string[] } | null>;
+      };
       dialog: {
         pickFile(kind: 'video' | 'image'): Promise<string | null>;
         pickFolder(): Promise<string | null>;

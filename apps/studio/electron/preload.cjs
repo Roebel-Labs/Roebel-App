@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('studio', {
     // { ok, port, error }: whether the local media/overlay server is listening.
     status: () => ipcRenderer.invoke('overlay:status'),
   },
+  show: {
+    // Writes an Ortis-Show folder (show.json + media/) -> { dir, files, missing } or null (cancelled).
+    exportPackage: (stateJson) => ipcRenderer.invoke('show:export', stateJson),
+    // Reads a package's show.json -> { stateJson, files, missing } or null (cancelled).
+    importPackage: () => ipcRenderer.invoke('show:import'),
+  },
   dialog: {
     // Resolves to an absolute path, or null when cancelled.
     pickFile: (kind) => ipcRenderer.invoke('dialog:pickFile', kind),
