@@ -291,4 +291,4 @@ ist damit **nicht** gemessen; CPU, Render-fps und Speicher sind davon kaum betro
 **Urteil: bedingtes GO für den Paralleltest neben OBS.** Voraussetzungen: (1) **mindestens 10 GB freier Plattenplatz** vor der Sendung, die Aufnahme
 braucht rund 1 GB pro Stunde und der Mac hatte beim Test nur rund 460 MB frei; (2) andere Programme schließen, damit der Mac nicht im Swap arbeitet;
 (3) die Sendung mit 6000 kbit/s ist noch nicht 60 Minuten lang geprobt. Aufnahmen des Tests: `~/Movies/Ortis Studio/ortis-studio-2026-11-06_08-43-*.mkv`
-und `_08-54-*.mkv` (Dateien 1 und 2 von 3 großen wurden zur Platzgewinnung nach der Prüfung gelöscht).
+und `_08-54-*.mkv` (die beiden ersten großen Dateien, 21 und 10,5 Minuten, wurden zur Platzgewinnung nach der Prüfung gelöscht).
