@@ -232,3 +232,63 @@ Standardkriterium (kann pro Veranstaltung verschärft werden):
 > OBS mit den Browserquellen-Einblendungen.
 
 Im Zweifel während der Sendung: **Studio beenden, den Notfallweg weiterlaufen lassen.**
+
+## Testprotokoll
+
+**Dauertest 2026-11-06**, MacBook Air M3, 8 GB RAM (der Show-Mac), Branch `feat/roebel-studio` (HEAD 451c0f6d), ein Cloudflare-SRT-Ziel
+(nicht mit einer Show verknüpft) plus lokale Aufnahme. Aufbau: FaceTime-Kamera + Video-Datei im PiP, Bild-Quelle, Bauchbinde mit
+Tabellenzeile, Uhr, Senderlogo, Werbeblock mit 2 Partnern (Wechsel alle 8 s, Minute 2 bis 6,5), ein Audiokanal vom Mikrofon.
+Gemessen alle 10 Minuten aus der Statusleiste und dem System (`ps`, `top`, `sysctl vm.swapusage`, `memory_pressure`). 60 Minuten auf Sendung.
+
+| Minute | Render-fps | Tempo | kbit/s | Aussetzer | RAM gesamt | Swap | CPU (Studio / Mac gesamt) |
+|---|---|---|---|---|---|---|---|
+| 1 | 28,2 | 1,05× | 944 | 13 | 416 MB | 12,2 GB | 29 % / 33 % |
+| 10 | 30,0 | 1,01× | 671 | 43 | 381 MB | 11,9 GB | 59 % / 69 % |
+| 14,5 (minimiert) | 29,9 | 1,00× | 758 | 51 | 357 MB | 11,8 GB | 57 % / 59 % |
+| 20 | 30,0 | 1,00× | 811 | 74 | 318 MB | 12,1 GB | 48 % / 48 % |
+| 30 | 30,0 | 1,00× | 951 | 121 | 367 MB | 12,2 GB | 42 % / 39 % |
+| 40 | 30,0 | 1,00× | 838 | 171 | 356 MB | 12,3 GB | 31 % / 33 % |
+| 50 | 30,0 | 1,00× | 806 | 200 | 440 MB | 8,9 GB | 48 % / 20 % |
+| 60 | 30,1 | 1,00× | 799 | 200 | 438 MB | 8,0 GB | 48 % / 14 % |
+
+„RAM gesamt“ = Summe der RSS aller Studio-Prozesse (Haupt, Renderer, GPU, Hilfsprozesse) plus ffmpeg. „Verworfen“ blieb die ganze Zeit **0**,
+„Neustarts“ nur durch die beiden Netzwerk-Tests (je 5). Speicherdruck 24 bis 27 % frei, ab Minute 50 bis 51 % (ein anderes Programm hat Speicher freigegeben).
+
+**Wichtig für die Einordnung:** Die Video-Bitrate stand bei diesem Test auf **1000 kbit/s** (nicht 6000), weil auf dem Mac nur rund 460 MB Platz frei waren.
+Die Aufnahme ist davon unabhängig und wuchs trotzdem mit rund 16 MB pro Minute (etwa 1 GB pro Stunde). Das Senden mit 6000 kbit/s über 60 Minuten
+ist damit **nicht** gemessen; CPU, Render-fps und Speicher sind davon kaum betroffen, die Upload-Last schon.
+
+### Ausgelöste Ereignisse
+
+| Ereignis | Ergebnis |
+|---|---|
+| Fenster minimieren (Minute 12 bis 17) | Render-fps 29,9 bis 30,0, Tempo 1,00×, kein Verworfen. Die Minimierung selbst wurde per Hauptprozess ausgelöst; dass das Fenster dabei wirklich minimiert war, wurde nachträglich separat bestätigt. |
+| Netzwerk ziehen, 30 s (WLAN aus/an, zweimal: Minute 21 und 32) | „Verbinde neu…“ nach etwa 6 s, 5 Neustarts des Encoders je Ausfall, 8 bis 9 s nach WLAN an wieder „Live“. Aufnahme läuft lückenlos über Folgedateien weiter (Dateigrenzen ±1 s). Ziel-Pille blieb „ok“. |
+| Kamera ab- und anstecken | **Nicht getestet** (eingebaute FaceTime-Kamera). |
+| Beenden mit ⌘Q während der Sendung (ausgelöst über `app.quit()`) | Rückfrage „Sendung läuft – wirklich beenden?“ erschien, die Sendung lief weiter. „Abbrechen“ ließ sie laufen, „Sendung beenden und schließen“ beendete in unter 3 s, kein ffmpeg blieb übrig. Nach dem Neustart war der Zustand unverändert (byte-identisch). |
+| Werbeblock, Wechsel alle 8 s | Partner wechselten wie eingestellt (Stichproben im 20-s-Takt). |
+| Warnung „Kein Ton“ | Erscheint im Start-Dialog ohne Audiokanal, nach Anlegen des Kanals nicht mehr; Pegel am Mikrofon bewegte sich. |
+| OBS-Einblendungsseite (`overlay.html`) | Headless-Chrome-Bildschirmfoto zeigt Bauchbinde, Uhr und Senderlogo. |
+| Externe Quelle (Gast) anmelden/abmelden | Anmelden: Quellenkachel und Audiokanal erscheinen; Abmelden: beide weg. Der Pegel der Test-Tonspur blieb −∞ (Quelle nicht im Programm). Geprüft im Dev-Modus, weil die Funktion im Release-Bündel nicht erreichbar ist. |
+
+### Ton gegen Bild in der Aufnahme
+
+- Datei 1 (21 min, geschlossen): Ton-Ende 27 ms vor Bild-Ende, Start 40 ms versetzt.
+- Letzte Datei (28 min, nach dem Beenden geprüft): Bild-Ende 1682,164 s, Ton-Ende 1682,119 s, Start-Versatz 30 ms. Drift insgesamt unter 100 ms.
+- Der Wert bei Minute 59 an der noch laufenden Datei (Ton 266 ms hinter dem Bild) ist ein Puffer-Artefakt des offenen Containers und wurde nach dem Schließen nicht bestätigt.
+
+### Urteil gegen die Go-/No-Go-Kriterien
+
+| Kriterium | Ergebnis |
+|---|---|
+| Render-fps ≥ 29,5 | Erfüllt ab Minute 2 (Minute 1: 28,2 Anlaufphase, danach 29,9 bis 30,1). |
+| Tempo 0,98 bis 1,02 | Erfüllt (nur Minute 1: 1,05 Aufholen nach dem Start). |
+| Speicherwachstum < 100 MB | Erfüllt (416 → 438 MB, +22 MB; RSS schwankte wegen Swap zwischen 318 und 440 MB). |
+| Keine Neuverbindungen außer den ausgelösten | Erfüllt (10 Neustarts = 2 × 5, beide durch das Ziehen des Netzwerks). |
+| Kein Tonversatz | Erfüllt (< 100 ms). |
+| Ohne Aussetzer | **Teilweise:** „Verworfen“ 0, aber 200 Render-Aussetzer (ca. 4 bis 5 pro Minute, solange der Mac 12 GB Swap nutzte; nach Minute 50 keine mehr). |
+
+**Urteil: bedingtes GO für den Paralleltest neben OBS.** Voraussetzungen: (1) **mindestens 10 GB freier Plattenplatz** vor der Sendung, die Aufnahme
+braucht rund 1 GB pro Stunde und der Mac hatte beim Test nur rund 460 MB frei; (2) andere Programme schließen, damit der Mac nicht im Swap arbeitet;
+(3) die Sendung mit 6000 kbit/s ist noch nicht 60 Minuten lang geprobt. Aufnahmen des Tests: `~/Movies/Ortis Studio/ortis-studio-2026-11-06_08-43-*.mkv`
+und `_08-54-*.mkv` (Dateien 1 und 2 von 3 großen wurden zur Platzgewinnung nach der Prüfung gelöscht).
