@@ -392,9 +392,22 @@ export function SettingsTab() {
         </section>
 
         <ShowTransfer />
+        <VersionLine />
       </fieldset>
     </div>
   );
+}
+
+/** Running version (an over-the-air interface update shows its own number). */
+function VersionLine() {
+  const [v, setV] = useState<string | null>(null);
+  useEffect(() => {
+    window.studio.ota
+      ?.status()
+      .then((r) => setV(r.version))
+      .catch(() => {});
+  }, []);
+  return v ? <p className="hint">Ortis Studio {v}</p> : null;
 }
 
 /** Show-Paket: the whole show (sources, media, templates, table, sponsors, mixer) to another computer. */

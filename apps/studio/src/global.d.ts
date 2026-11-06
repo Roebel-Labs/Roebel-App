@@ -39,6 +39,12 @@ declare global {
         /** Listen state of the local media/overlay server (127.0.0.1). */
         status(): Promise<{ ok: boolean; port: number | null; error: string | null }>;
       };
+      ota: {
+        status(): Promise<{ version: string; pending: string | null }>;
+        apply(): Promise<boolean>;
+        ready(): void;
+        onPending(cb: (version: string) => void): () => void;
+      };
       update: {
         check(): Promise<{ current: string; update: { version: string; url: string; sha256: string | null; os: 'win' | 'mac' } | null }>;
         install(): Promise<{ started: boolean; opened?: boolean }>;

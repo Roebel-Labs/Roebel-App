@@ -151,7 +151,7 @@ function createOverlayServer({
 
   /** Serves the built renderer (overlay.html + /assets/*) for the OBS browser source. */
   function handleStatic(req, res, pathname) {
-    if (!fs.existsSync(distDir)) {
+    if (!fs.existsSync(typeof distDir === 'function' ? distDir() : distDir)) {
       return send(res, 503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Renderer nicht gebaut: pnpm build ausführen');
     }
     let rel;
@@ -161,7 +161,7 @@ function createOverlayServer({
       return send(res, 400, {}, 'bad request');
     }
     if (rel !== '/overlay.html' && !rel.startsWith('/assets/')) return send(res, 404, {}, 'not found');
-    const root = path.resolve(distDir);
+    const root = path.resolve(typeof distDir === 'function' ? distDir() : distDir);
     const file = path.resolve(root, `.${rel}`);
     if (!file.startsWith(root + path.sep)) return send(res, 404, {}, 'not found');
     fs.stat(file, (err, st) => {

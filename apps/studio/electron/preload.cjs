@@ -37,6 +37,15 @@ contextBridge.exposeInMainWorld('studio', {
     // { ok, port, error }: whether the local media/overlay server is listening.
     status: () => ipcRenderer.invoke('overlay:status'),
   },
+  ota: {
+    // { version, pending }: running interface version and a downloaded one waiting for a restart.
+    status: () => ipcRenderer.invoke('ota:status'),
+    // Switches to the downloaded interface (window reloads, the show stays). -> boolean
+    apply: () => ipcRenderer.invoke('ota:apply'),
+    // The interface rendered: an OTA bundle is kept (otherwise rolled back after 30 s).
+    ready: () => ipcRenderer.send('ota:ready'),
+    onPending: (cb) => subscribe('ota:pending', cb),
+  },
   update: {
     // { current, update: { version, url, sha256, os } | null }
     check: () => ipcRenderer.invoke('update:check'),

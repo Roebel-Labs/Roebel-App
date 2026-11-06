@@ -23,4 +23,6 @@ void loadFonts().then(() => {
       </StoreProvider>
     </StrictMode>,
   );
+  // Tells main this interface started (an over-the-air bundle that never gets here is rolled back).
+  setTimeout(() => window.studio?.ota?.ready(), 1500);
 });

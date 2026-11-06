@@ -165,7 +165,7 @@ export const STARTER_TEMPLATES: Template[] = [
       { id: 'age', type: 'text', x: 600, y: 944, w: 520, h: 56, text: '{{row.Altersklasse}}', font: 'Inter', weight: 700, italic: true, uppercase: true, size: 28, color: WHITE, after: 'cat-pill', afterGap: 56.5, delayMs: 580, animIn: mdcFade(300), animOut: mdcFade(180) },
       // Name field: white, black outline, round right end.
       { id: 'name-bg', type: 'rect', x: 204, y: 840, w: 600, h: 96, fill: WHITE, stroke: '#000000', strokeWidth: 1, radii: [0, 48, 48, 0], hug: 'name', hugPad: 40, delayMs: 140, animIn: mdcWipe(440), outDelayMs: 220, animOut: mdcWipe(380) },
-      { id: 'name', type: 'text', x: 312, y: 840, w: 1400, h: 96, text: '{{row.Name}}', font: 'Inter', weight: 700, italic: true, uppercase: true, tracking: -1.2, size: 56, color: MDC_BLUE, delayMs: 340, animIn: mdcFade(320), animOut: mdcFade(180) },
+      { id: 'name', type: 'text', x: 312, y: 840, w: 1400, h: 96, text: '{{row.Name}}', font: 'Inter', weight: 900, italic: true, uppercase: true, tracking: -1.2, size: 56, color: MDC_BLUE, delayMs: 340, animIn: mdcFade(320), animOut: mdcFade(180) },
       // Start number disc, on top of both fields.
       { id: 'disc', type: 'rect', x: 104, y: 820, w: 200, h: 200, fill: MDC_YELLOW, radius: 100, stroke: '#000000', strokeWidth: 1.35, shadow: { x: 4, y: 0, blur: 0, color: 'rgba(0,0,0,0.25)' }, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, outDelayMs: 560, animOut: MDC_DISC_OUT },
       { id: 'nr', type: 'text', x: 104, y: 820, w: 200, h: 200, text: '{{row.Nr}}', font: 'Inter', weight: 900, italic: true, size: 112, color: '#1656AD', align: 'center', animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, outDelayMs: 560, animOut: MDC_DISC_OUT },
@@ -176,9 +176,9 @@ export const STARTER_TEMPLATES: Template[] = [
 ];
 
 /** Bumped whenever a starter is added; restore() adds the new ones to older saved shows exactly once. */
-export const STARTER_VERSION = 5;
+export const STARTER_VERSION = 6;
 /** Starters whose built-in design changed in a version: restore() replaces saved copies once (overlays kept). */
-export const STARTERS_REPLACED_IN: Record<number, string[]> = { 5: ['mdc-lower-third'] };
+export const STARTERS_REPLACED_IN: Record<number, string[]> = { 5: ['mdc-lower-third'], 6: ['mdc-lower-third'] };
 /** Starter ids introduced per starter version (version 1 = the original set; 3 only removed the donation starter). */
 export const STARTERS_ADDED_IN: Record<number, string[]> = { 2: ['chat-highlight'], 4: ['mdc-lower-third'] };
 

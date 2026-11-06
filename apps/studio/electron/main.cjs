@@ -11,7 +11,8 @@ const { usableDestinations } = require('./ffmpeg-args.cjs');
 const { createOverlayServer } = require('./overlay-server.cjs');
 const { appendAirLog } = require('./airlog.cjs');
 const { exportShow, importShow } = require('./show-package.cjs');
-const { checkForUpdate, downloadInstaller } = require('./updater.cjs');
+const { LATEST_URL, checkForUpdate, downloadInstaller } = require('./updater.cjs');
+const { createOta } = require('./ota.cjs');
 
 // Product name + data folder. Electron derives userData from the app name; the studio used to be
 // '@roebel/studio'. Existing installs keep their saved show (localStorage) by staying on the old folder.
@@ -205,15 +206,16 @@ ipcMain.handle('overlay:status', () =>
 // In-app update (see updater.cjs). Never while on air.
 ipcMain.handle('update:check', async (e) => {
   guard('update:check', e);
-  const update = await checkForUpdate({ currentVersion: app.getVersion(), platform: process.platform });
-  return { current: app.getVersion(), update };
+  const current = ota ? ota.version() : app.getVersion();
+  const update = await checkForUpdate({ currentVersion: current, platform: process.platform });
+  return { current, update };
 });
 let updating = false;
 ipcMain.handle('update:install', async (e) => {
   guard('update:install', e);
   if (session_) throw new Error('Während der Sendung wird nicht aktualisiert');
   if (updating) throw new Error('Update läuft bereits');
-  const update = await checkForUpdate({ currentVersion: app.getVersion(), platform: process.platform });
+  const update = await checkForUpdate({ currentVersion: ota ? ota.version() : app.getVersion(), platform: process.platform });
   if (!update) return { started: false };
   if (update.os !== 'win') {
     await shell.openExternal(update.url); // macOS: the dmg opens; drag the app over the old one
@@ -232,6 +234,39 @@ ipcMain.handle('update:install', async (e) => {
   } finally {
     updating = false;
   }
+});
+
+// OTA interface updates (see ota.cjs): checked in the background, applied on "Neu starten".
+let ota = null;
+const OTA_CHECK_MS = 30 * 60_000;
+async function otaCheck() {
+  if (!ota) return;
+  try {
+    const v = await ota.check(LATEST_URL);
+    if (v && win && !win.isDestroyed()) win.webContents.send('ota:pending', v);
+  } catch (e) {
+    log(`ota check failed: ${e.message}`);
+  }
+}
+function loadInterface() {
+  if (!win || win.isDestroyed()) return;
+  const devUrl = process.env.STUDIO_DEV_URL;
+  if (devUrl) return void win.loadURL(devUrl);
+  ota.beginBoot(() => loadInterface());
+  void win.loadFile(ota.indexFile());
+}
+ipcMain.handle('ota:status', (e) => {
+  guard('ota:status', e);
+  return { version: ota ? ota.version() : app.getVersion(), pending: ota ? ota.pending() : null };
+});
+ipcMain.on('ota:ready', () => ota && ota.ready());
+ipcMain.handle('ota:apply', (e) => {
+  guard('ota:apply', e);
+  if (session_) throw new Error('Während der Sendung wird nicht aktualisiert');
+  if (!ota || !ota.apply()) return false;
+  log(`ota: switching to interface ${ota.version()}`);
+  loadInterface();
+  return true;
 });
 
 // Show package (Einstellungen → Show übertragen): see show-package.cjs.
@@ -367,7 +402,7 @@ function createWindow() {
   });
   const devUrl = process.env.STUDIO_DEV_URL;
   if (devUrl) win.loadURL(devUrl);
-  else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  else loadInterface();
   // The page must never be replaced: a dropped file or a stray link would unload the renderer
   // (MediaRecorder dies → dead stream). In-page #hash links and win.reload() do not fire will-navigate;
   // a renderer-side reload of our own page does (Vite dev full reload) and stays allowed: main keeps
@@ -516,12 +551,25 @@ ipcMain.on('app:quit-confirmed', () => {
 app.whenReady().then(() => {
   setupPermissions();
   setupMenu();
+  ota = createOta({
+    userDataDir: app.getPath('userData'),
+    appVersion: app.getVersion(),
+    bundledDist: path.join(__dirname, '..', 'dist'),
+    fsImpl: require('original-fs'),
+    readable: (p) => fs.existsSync(p),
+    log,
+  });
   overlay = createOverlayServer({
     userDataDir: app.getPath('userData'),
+    distDir: () => ota.distDir(),
     log: (msg) => console.log(`${new Date().toISOString()} [overlay] ${msg}`),
   });
   overlay.start().catch((e) => console.log(`${new Date().toISOString()} [overlay] start failed: ${e.message}`));
   createWindow();
+  if (!process.env.STUDIO_DEV_URL) {
+    setTimeout(() => void otaCheck(), 15_000);
+    setInterval(() => void otaCheck(), OTA_CHECK_MS);
+  }
   // Never block window creation on the macOS permission dialog.
   void askMacMediaAccess();
 });
