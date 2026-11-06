@@ -506,6 +506,22 @@ export function startSupport(input: SupportInput): Promise<ApiResult<{ url: stri
   return requestJson('/api/live/support', { method: 'POST', body });
 }
 
+/**
+ * After Checkout: ask the server to settle the support by checking Stripe directly (does not wait for the
+ * webhook). Retries a few times because Stripe can need a moment after the redirect. The chat row then
+ * arrives via Realtime like every other message.
+ */
+export async function confirmSupport(supportId: string): Promise<'paid' | 'pending' | 'other'> {
+  const waits = [0, 1500, 3000, 6000, 10000];
+  for (const w of waits) {
+    if (w) await new Promise((r) => setTimeout(r, w));
+    const r = await requestJson<{ status: string }>('/api/live/support/confirm', { method: 'POST', body: { support_id: supportId } }, 12000);
+    if (r.ok && r.data?.status === 'paid') return 'paid';
+    if (r.ok && r.data?.status && r.data.status !== 'pending') return 'other';
+  }
+  return 'pending';
+}
+
 /** Stripe Checkout in the in-app browser; it closes itself on the roebel://live/<slug> return. */
 export async function openSupportCheckout(url: string, slug: string): Promise<WebBrowser.WebBrowserAuthSessionResult | null> {
   try {

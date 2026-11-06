@@ -19,7 +19,7 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import {
-  authorKeyOf, fetchChat, fetchResults, fetchShow, joinLiveRoom, liveAct, liveActAs,
+  authorKeyOf, confirmSupport, fetchChat, fetchResults, fetchShow, joinLiveRoom, liveAct, liveActAs,
   liveErrorText, liveShareUrl, loadBlocked, loadLastSeen, openSupportCheckout, peekLiveSession, precheckChat, randomTestSupport,
   saveBlocked, saveLastSeen, startSupport, subscribeShowChanges, topSupporters,
   type ChatMessage, type LiveReaction, type LiveRoomChannel, type LiveSession, type LiveShow, type MyLiveState, type ReportReason,
@@ -625,8 +625,11 @@ export default function LiveRoomScreen() {
       return;
     }
     setSupportOpen(false);
-    const result = await openSupportCheckout(r.data.url, s.slug);
-    if (result?.type === 'success') setToast('Danke für deine Unterstützung! Dein Gruß erscheint gleich im Chat.');
+    const supportId = r.data.support_id;
+    await openSupportCheckout(r.data.url, s.slug);
+    // No snackbar: the support simply appears in the chat (and as the gold alert) once settled.
+    // Confirm regardless of how the browser closed (a cancelled return is just 'pending' and ends quietly).
+    if (supportId) void confirmSupport(supportId);
   }, []);
 
   // ─── Render ───

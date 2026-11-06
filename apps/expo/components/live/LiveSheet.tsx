@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Keyboard, LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomDrawer from '@/components/BottomDrawer';
 import { F, liveStyles, useLivePalette, type LivePalette } from './tokens';
@@ -18,15 +18,44 @@ type Props = {
  * Bottom sheet for the live room. Same drawer as the login sheet (BottomDrawer: spring slide-up,
  * drag the handle down to dismiss, docks above the keyboard), in the live room palette (follows the app theme).
  */
+/**
+ * Keyboard overlap from the keyboard's real top edge (same approach as the room's composer and the DM
+ * screen). BottomDrawer's KeyboardAvoidingView mode misjudges it on Android edge-to-edge, which made the
+ * Unterstützen sheet jump up and down when the message field lost focus.
+ */
+function useKeyboardOverlap(active: boolean): number {
+  const [overlap, setOverlap] = useState(0);
+  useEffect(() => {
+    if (!active) { setOverlap(0); return; }
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const animate = (duration?: number) => {
+      LayoutAnimation.configureNext(LayoutAnimation.create(duration && duration > 0 ? duration : 220, 'easeInEaseOut', 'opacity'));
+    };
+    const show = Keyboard.addListener(showEvt, (e) => {
+      const y = e.endCoordinates?.screenY;
+      const next = typeof y === 'number' ? Math.max(0, Dimensions.get('screen').height - y) : e.endCoordinates?.height ?? 0;
+      animate(e.duration);
+      setOverlap(next);
+    });
+    const hide = Keyboard.addListener(hideEvt, (e) => {
+      animate(e?.duration);
+      setOverlap(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, [active]);
+  return overlap;
+}
+
 export default function LiveSheet({ visible, onClose, title, subtitle, children, maxHeight = '82%' }: Props) {
   const L = useLivePalette();
+  const keyboard = useKeyboardOverlap(visible);
   const styles = liveStyles(makeStyles, L);
   return (
     <BottomDrawer
       visible={visible}
       onClose={onClose}
       maxSnapPoint={parseFloat(maxHeight) / 100}
-      keyboardAware
       contentPaddingHorizontal={0}
       backgroundColor={L.isDark ? L.surface : L.bg}
       handleColor={L.isDark ? L.borderStrong : undefined}
@@ -41,6 +70,8 @@ export default function LiveSheet({ visible, onClose, title, subtitle, children,
         </Pressable>
       </View>
       {children}
+      {/* Lifts the content above the keyboard; the sheet grows upward instead of being resized by the OS. */}
+      {keyboard > 0 ? <View style={{ height: keyboard }} /> : null}
     </BottomDrawer>
   );
 }
