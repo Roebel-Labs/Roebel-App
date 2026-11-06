@@ -1,4 +1,7 @@
 import { SuccessRedirect } from "@/app/roebel-card/success/success-redirect";
+import { confirmLiveSupport } from "@/lib/live/confirm";
+
+export const dynamic = "force-dynamic";
 
 const FALLBACK = "roebel://profile";
 
@@ -20,9 +23,11 @@ export default async function LiveSupportReturnPage({
 }: {
   searchParams: Promise<{ support_id?: string; return_to?: string; cancelled?: string }>;
 }) {
-  const { return_to, cancelled } = await searchParams;
+  const { support_id, return_to, cancelled } = await searchParams;
   const returnTo = safeReturnTo(return_to);
   const isCancelled = cancelled === "true" || cancelled === "1";
+  // Settle right here (asks Stripe directly), so the support shows in the chat without waiting for the webhook.
+  if (!isCancelled && support_id) await confirmLiveSupport(support_id).catch(() => "error");
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-8 text-center shadow-sm">
@@ -35,7 +40,7 @@ export default async function LiveSupportReturnPage({
         <p className="text-sm text-muted-foreground mb-6">
           {isCancelled
             ? "Es wurde nichts abgebucht. Zurück zum Livestream …"
-            : "Dein Beitrag erscheint gleich im Livestream. Zurück zum Livestream …"}
+            : "Zurück zum Livestream …"}
         </p>
         <SuccessRedirect returnTo={returnTo} />
       </div>
