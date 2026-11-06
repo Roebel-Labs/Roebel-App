@@ -10,6 +10,11 @@ Veranstaltungsspezifisch. Das allgemeine Handbuch steht in der App unter **Hilfe
   gegenseitig raus und die Hauptsendung bricht ab. Alternative: nicht-öffentliche YouTube-Sendung.
 - Cloudflare SRT und Cloudflare RTMPS nie gleichzeitig auf denselben Input.
 - Upload ≈ **doppelt** (OBS + Studio). Vorher im Saal messen.
+- **Live-Raum nur mit der Show verbinden, für die der Studio-Stream gedacht ist** – beim Paralleltest die Show
+  `testlauf`, oder im Live-Raum-Tab unter „Status in der App“ **„Folgt dem Studio“ ausschalten**. Sonst stellt das
+  Studio beim Sendestart die echte DanceCup-Show in der App auf LIVE (und fragt beim Beenden, ob sie enden soll).
+- **Mischpult startet leer:** vor dem Sendestart unter Show → Audio → „+ Kanal“ das Mischpult/Mikrofon anlegen, sonst
+  ist der Stream stumm.
 
 ## Rechner
 
@@ -32,8 +37,8 @@ Veranstaltungsspezifisch. Das allgemeine Handbuch steht in der App unter **Hilfe
 
 ## Go / No-Go (Spezifikation §2)
 
-Studio-Show nur, wenn es ≥ 60 Minuten ohne Aussetzer, Standbild oder Tonversatz an alle drei Ziele sendet und
-Bauchbinden, Werbung und Spenden-Hinweise auf Sendung funktionieren. Sonst läuft die Show auf OBS mit den
-Browser-Quellen-Einblendungen.
+Studio-Show nur, wenn es ≥ 60 Minuten ohne Aussetzer, Standbild oder Tonversatz an das vorgesehene Ziel sendet,
+Bauchbinden und Werbung funktionieren und Unterstützungs-Hinweise nur im Live-Raum-Tab erscheinen (nie im Bild).
+Sonst läuft die Show auf OBS mit den Browser-Quellen-Einblendungen.
 
 Am 07.11. gilt zusätzlich: OBS sendet, das Studio ist nur Test. Im Zweifel **Studio beenden, OBS weiterlaufen lassen.**

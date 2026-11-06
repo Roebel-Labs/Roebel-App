@@ -26,12 +26,21 @@ brew install ffmpeg-full
 
 ## Starten
 
-Aus dem Projektordner:
+**Stand: Entwicklungs-Branch.** Das Studio liegt zurzeit auf dem Branch `feat/roebel-studio` im Ordner
+`~/Documents/privat/side_projects/DAO_test/.worktrees/roebel-studio`. **Nicht** die alte Kopie
+`.worktrees/ortis-studio-test` verwenden.
+
+Beim ersten Mal und nach jedem Update dort einmal `pnpm install`, dann starten:
 
 ```bash
+cd ~/Documents/privat/side_projects/DAO_test/.worktrees/roebel-studio
 source ~/.nvm/nvm.sh
+pnpm install   # nur beim ersten Mal und nach Updates
 pnpm studio
 ```
+
+Der erste Start nach einem Update fragt evtl. erneut nach Kamera und Mikrofon – erlauben (die Electron-App wird
+dabei neu signiert und gilt für macOS als neue App).
 
 `pnpm studio` baut die Oberfläche und startet Ortis Studio. Es setzt `env -u ELECTRON_RUN_AS_NODE` selbst (nötig,
 wenn das Terminal aus VS Code oder Cursor kommt, sonst startet Electron als reines Node und es passiert nichts).
@@ -70,6 +79,8 @@ dadurch gilt sie für macOS als neue App.)
 
 ## Audio und Mischpult
 
+- **Das Mischpult startet leer.** Vor dem Sendestart mindestens einen Kanal anlegen (**Show → Audio → „+ Kanal“**),
+  sonst ist der Stream stumm. Das Studio warnt im Sendedialog und unten in der Leiste („Ton: stumm“).
 - Mischpult oder Audio-Interface als Mikrofonquelle wählen; die Pegel zeigt der Mixer im **Show**-Tab.
 - **Lippensynchronität:** Der Ton kommt meist früher als das Bild. In der Audiospur lässt sich eine Verzögerung
   einstellen. Zum Abgleich vor der Kamera klatschen und im aufgenommenen Stream prüfen, ob Klatschen und Ton zusammenpassen.
@@ -161,6 +172,10 @@ Handy-Gäste und die Live-Anzeige in der App.
 - Unterstützungen sind **nie** auf Sendung, sondern nur ein Hinweis für das Team.
 - **Gäste:** Handy-Gäste erscheinen als Kachel und lassen sich wie jede Quelle schneiden.
 - Nach einem Neuladen der Oberfläche sind Gäste weg: im Live-Raum-Tab **„Neu verbinden"**.
+- **„Folgt dem Studio“** (Abschnitt „Status in der App“, standardmäßig an): Geht das Studio auf Sendung, steht die
+  verbundene Show in der App auf LIVE; beim Beenden fragt das Studio, ob sie auch in der App enden soll. Den Live-Raum
+  deshalb nur mit der Show verbinden, für die dieser Stream gedacht ist – bei einem Paralleltest mit einer Test-Show
+  oder „Folgt dem Studio“ ausschalten.
 
 ## Aufnahmen
 
