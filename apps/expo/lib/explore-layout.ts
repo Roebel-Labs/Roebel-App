@@ -36,7 +36,9 @@ export type ExploreBlockId =
   | 'mini_apps'
   | 'marketplace'
   | 'news'
+  | 'special_menu'
   | 'restaurants'
+  | 'vacation_rentals'
   | 'businesses';
 
 export interface ExploreBlockDef {
@@ -57,7 +59,9 @@ export const EXPLORE_BLOCKS: readonly ExploreBlockDef[] = [
   { id: 'mini_apps', label: 'Mini-Apps', description: 'Kleine Apps für Röbel' },
   { id: 'marketplace', label: 'Marktplatz', description: 'Anzeigen und Angebote' },
   { id: 'news', label: 'Neuigkeiten', description: 'Nachrichten aus Röbel' },
+  { id: 'special_menu', label: 'Mittagstisch', description: 'Tagesgerichte der Woche' },
   { id: 'restaurants', label: 'Gastronomie', description: 'Restaurants, Cafés und Imbisse' },
+  { id: 'vacation_rentals', label: 'Ferienwohnungen', description: 'Unterkünfte in Röbel' },
   { id: 'businesses', label: 'Unternehmen in der Nähe', description: 'Geschäfte und Vereine' },
 ] as const;
 
@@ -117,7 +121,7 @@ export const CODE_PRESETS: readonly ExplorePreset[] = [
     description: 'Nur das Wichtigste: Highlights, diese Woche, Neuigkeiten, Gastronomie',
     layout: {
       order: ['hero', 'this_week', 'news', 'restaurants'],
-      hidden: ['all_events', 'nearby_events', 'movies', 'audio', 'mini_apps', 'marketplace', 'businesses'],
+      hidden: ['all_events', 'nearby_events', 'movies', 'audio', 'mini_apps', 'marketplace', 'businesses', 'special_menu', 'vacation_rentals'],
     },
   },
   {

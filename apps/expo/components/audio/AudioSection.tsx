@@ -107,7 +107,6 @@ function AudioSection() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Hören</Text>
-        <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>Geschichten, Hörbücher & Podcasts</Text>
       </View>
       <FlatList
         horizontal
@@ -137,11 +136,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 22,
     fontFamily: 'MonaSansSemiCondensed-Medium',
-  },
-  sectionHint: {
-    fontSize: 13,
-    fontFamily: fontFamily.regular,
-    marginTop: 2,
   },
   listContent: {
     paddingHorizontal: 16,

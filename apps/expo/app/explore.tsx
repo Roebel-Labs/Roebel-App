@@ -49,6 +49,8 @@ import NearbyOrgAccountsSection, {
 import MapFAB from '@/components/MapFAB';
 import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
 import AudioSection, { AUDIO_SHOWS_QUERY_KEY } from '@/components/audio/AudioSection';
+import SpecialMenuExploreSection from '@/components/explore/SpecialMenuExploreSection';
+import VacationRentalSection from '@/components/explore/VacationRentalSection';
 import MiniPlayer from '@/components/audio/MiniPlayer';
 import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
 import { fetchAudioShows } from '@/lib/audio-content';
@@ -392,6 +394,11 @@ export default function ExploreScreen() {
         ) : (
           <NewsSection key={id} articles={newsArticles} />
         );
+      case 'special_menu':
+        // Mittagstisch dishes; hidden when no menu is active
+        return <SpecialMenuExploreSection key={id} />;
+      case 'vacation_rentals':
+        return <VacationRentalSection key={id} />;
       case 'restaurants':
         return restaurantsQuery.isPending ? (
           <SectionRailSkeleton key={id} titleWidth="40%" />

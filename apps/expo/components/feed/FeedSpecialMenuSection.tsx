@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, FlatList, StyleSheet } from 'react-native';
+import { View, Text, Pressable, FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -18,6 +18,9 @@ type Props = {
    * FeedHome locks the feed pager meanwhile, so a dish swipe never flips the tab.
    */
   onRailTouchActive?: (active: boolean) => void;
+  /** Side gutter of title and first card: 24 in the feed, 16 on Erkunden. */
+  gutter?: number;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 type Dish = {
@@ -38,7 +41,7 @@ const dishKey = (dish: Dish) => dish.item.id;
  * serving day first. Dishes of past days are hidden; dishes without a day
  * go last. Tapping a dish opens its detail page (photo, day, comments).
  */
-export default function FeedSpecialMenuSection({ menus, onRailTouchActive }: Props) {
+export default function FeedSpecialMenuSection({ menus, onRailTouchActive, gutter = 24, containerStyle }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -127,15 +130,15 @@ export default function FeedSpecialMenuSection({ menus, onRailTouchActive }: Pro
   if (dishes.length === 0) return null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.textPrimary }]}>Mittagstisch</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }, containerStyle]}>
+      <Text style={[styles.title, { color: colors.textPrimary, paddingHorizontal: gutter }]}>Mittagstisch</Text>
       <FlatList
         horizontal
         data={dishes}
         renderItem={renderItem}
         keyExtractor={dishKey}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingHorizontal: gutter }}
         onTouchStart={() => onRailTouchActive?.(true)}
         onTouchEnd={() => onRailTouchActive?.(false)}
         onTouchCancel={() => onRailTouchActive?.(false)}
@@ -156,10 +159,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontFamily: 'MonaSansSemiCondensed-Medium',
-    paddingHorizontal: 24,
-  },
-  listContent: {
-    paddingHorizontal: 24,
   },
   fallback: {
     width: 96,
