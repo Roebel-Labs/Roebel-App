@@ -24,6 +24,7 @@ import {
 } from '@/lib/live';
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import Doorbell from '@/components/live/guest/Doorbell';
+import GuestCompanion from '@/components/live/guest/GuestCompanion';
 import LoginDrawer from '@/components/LoginDrawer';
 import { useLivePlayerHost } from '@/components/live/player/LivePlayerProvider';
 import { F, liveStyles, useLivePalette, type LivePalette } from '@/components/live/tokens';
@@ -272,6 +273,9 @@ export default function LiveGuestJoinScreen() {
             onHangUp={hangUp}
             onDisconnected={onStageDisconnected}
             onError={onStageError}
+            overlay={show ? (
+              <GuestCompanion showId={show.id} hlsUrl={show.hls_url} topInset={insets.top} bottomInset={insets.bottom} />
+            ) : null}
           />
         </View>
       );

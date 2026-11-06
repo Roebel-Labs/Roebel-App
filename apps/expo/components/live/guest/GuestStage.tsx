@@ -38,6 +38,8 @@ export type GuestStageProps = {
   /** The room closed on its own (studio ended / network lost for good). */
   onDisconnected: () => void;
   onError: (message: string) => void;
+  /** Drawn over the camera picture, under the pill + controls (live view + chat from the join screen). */
+  overlay?: React.ReactNode;
 };
 
 function LiveDot() {
@@ -52,7 +54,7 @@ function LiveDot() {
   return <Animated.View style={[styles.liveDot, style]} />;
 }
 
-export default function GuestStage({ url, token, topInset, bottomInset, onHangUp, onDisconnected, onError }: GuestStageProps) {
+export default function GuestStage({ url, token, topInset, bottomInset, onHangUp, onDisconnected, onError, overlay }: GuestStageProps) {
   const roomRef = useRef<Room | null>(null);
   const leavingRef = useRef(false);
   const cbRef = useRef({ onDisconnected, onError });
@@ -178,6 +180,8 @@ export default function GuestStage({ url, token, topInset, bottomInset, onHangUp
           <Text style={styles.camOffText}>{camOn ? 'Kamera startet …' : 'Kamera aus'}</Text>
         </View>
       )}
+
+      {overlay}
 
       <View style={[styles.top, { top: topInset + 10 }]} pointerEvents="none">
         {connected ? (
