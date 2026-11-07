@@ -1,4 +1,5 @@
 import type { OverlayAnim, Template, TemplateNode } from '../state/types';
+import { ROEBEL_APP_LOGO } from './roebel-app-logo';
 
 // Starter templates (1920×1080 space). Kept inside the 5 % action-safe area.
 const NAVY = '#00498B';
@@ -59,10 +60,10 @@ const screenBg = (): TemplateNode[] => [
   rect('main', 0, 0, 1470, 1080, MDC_MAIN, { slant: MDC_SLANT }),
 ];
 const screenHead = (label: string): TemplateNode[] => [
-  rect('head-pill', 210, 124, 500, 64, WHITE, { stroke: '#000000', strokeWidth: 1, radii: [0, 32, 32, 0], hug: 'head', hugPad: 40, delayMs: 220, animIn: mdcWipe(420), animOut: mdcFade(200) }),
-  text('head', 298, 124, 1300, 64, label, { weight: 900, italic: true, uppercase: true, tracking: -0.6, size: 34, color: MDC_BLUE, delayMs: 360, animIn: mdcFade(300), animOut: mdcFade(180) }),
-  rect('head-disc', 150, 96, 120, 120, MDC_YELLOW, { radius: 60, stroke: '#000000', strokeWidth: 1.35, shadow: { x: 4, y: 0, blur: 0, color: 'rgba(0,0,0,0.25)' }, delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
-  text('head-nr', 150, 96, 120, 120, '26', { weight: 900, italic: true, size: 48, tracking: -2, color: '#1656AD', align: 'center', delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
+  rect('head-pill', 210, 164, 500, 64, WHITE, { stroke: '#000000', strokeWidth: 1, radii: [0, 32, 32, 0], hug: 'head', hugPad: 40, delayMs: 220, animIn: mdcWipe(420), animOut: mdcFade(200) }),
+  text('head', 298, 164, 1300, 64, label, { weight: 900, italic: true, uppercase: true, tracking: -0.6, size: 34, color: MDC_BLUE, delayMs: 360, animIn: mdcFade(300), animOut: mdcFade(180) }),
+  rect('head-disc', 150, 136, 120, 120, MDC_YELLOW, { radius: 60, stroke: '#000000', strokeWidth: 1.35, shadow: { x: 4, y: 0, blur: 0, color: 'rgba(0,0,0,0.25)' }, delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
+  text('head-nr', 150, 136, 120, 120, '26', { weight: 900, italic: true, size: 48, tracking: -2, color: '#1656AD', align: 'center', delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
 ];
 const screenFoot = (): TemplateNode =>
   text('foot', 150, 960, 1200, 50, 'Live in der Röbel App · Röbel/Müritz', { weight: 600, italic: true, uppercase: true, tracking: 1, size: 28, color: 'rgba(255,255,255,0.75)', delayMs: 500, animIn: mdcFade(400), animOut: mdcFade(200) });
@@ -102,7 +103,7 @@ const SCHEDULE: [string, string, string][] = [
 
 function mdcSchedule(): Template {
   const rows = SCHEDULE.flatMap(([time, what, who], i): TemplateNode[] => {
-    const y = 250 + i * 98;
+    const y = 296 + i * 92;
     const d = 300 + i * 70;
     const n = i + 1;
     return [
@@ -124,6 +125,41 @@ function mdcSchedule(): Template {
   };
 }
 
+/** "Live in der Röbel App": who hosts the stream. */
+function mdcHost(): Template {
+  return {
+    id: 'mdc-roebel-app',
+    name: 'MDC Live in der Röbel App',
+    kind: 'custom',
+    fullScreen: true,
+    nodes: [
+      ...screenBg(),
+      ...screenHead('Müritz Dance Cup 2026'),
+      text('title', 150, 330, 1620, 100, 'Livestream präsentiert von', { weight: 900, italic: true, uppercase: true, tracking: -2, size: 76, color: WHITE, shadow: { x: 4, y: 4, blur: 0, color: 'rgba(0,0,0,0.18)' }, delayMs: 300, animIn: { kind: 'slide', durationMs: 520, easing: 'easeOut', from: 'left' }, animOut: mdcFade(220) }),
+      rect('card', 150, 462, 1120, 300, WHITE, { stroke: '#000000', strokeWidth: 1, radii: [0, 150, 150, 0], delayMs: 420, animIn: mdcWipe(480), outDelayMs: 120, animOut: mdcFade(260) }),
+      { id: 'logo', type: 'image', x: 210, y: 497, w: 960, h: 230, src: ROEBEL_APP_LOGO, fit: 'contain', delayMs: 640, animIn: mdcFade(360), animOut: mdcFade(200) },
+      rect('sub-bg', 140, 812, 400, 76, MDC_YELLOW, { slant: 18, hug: 'sub', hugPad: 46, delayMs: 760, animIn: mdcWipe(420), animOut: mdcFade(200) }),
+      text('sub', 186, 812, 1560, 76, 'Kostenlos im App Store und bei Google Play', { weight: 700, italic: true, size: 42, color: MDC_BLUE, delayMs: 880, animIn: mdcFade(300), animOut: mdcFade(180) }),
+    ],
+    animIn: mdcFade(400),
+    animOut: mdcFade(450),
+  };
+}
+
+/** Small Röbel App logo top left (white pill), for the whole stream. */
+const ROEBEL_APP_BUG: Template = {
+  id: 'roebel-app-logo',
+  name: 'Röbel App Logo',
+  kind: 'logoBug',
+  fullScreen: false,
+  nodes: [
+    rect('bg', 56, 40, 286, 76, WHITE, { radius: 38, stroke: '#000000', strokeWidth: 1, opacity: 0.96 }),
+    { id: 'logo', type: 'image', x: 80, y: 52, w: 238, h: 52, src: ROEBEL_APP_LOGO, fit: 'contain' },
+  ],
+  animIn: fadeIn(400),
+  animOut: fadeOut(300),
+};
+
 const MDC_SCREENS: Template[] = [
   mdcScreen('mdc-gleich-los', 'MDC Gleich geht’s los', ['Gleich', 'geht’s los'], 'Start um 10:00 Uhr'),
   mdcScreen('mdc-gleich-weiter', 'MDC Gleich geht’s weiter', ['Gleich geht’s', 'weiter'], 'Bleibt dran!'),
@@ -132,6 +168,8 @@ const MDC_SCREENS: Template[] = [
   mdcScreen('mdc-siegerehrung', 'MDC Siegerehrung', ['Siegerehrung'], 'Gleich werden die Pokale vergeben'),
   mdcScreen('mdc-finale', 'MDC Finale', ['Finale'], 'Müritz Dance Cup 2026'),
   mdcScreen('mdc-danke', 'MDC Danke', ['Danke fürs', 'Zuschauen'], 'Bis zum nächsten Mal!'),
+  mdcHost(),
+  ROEBEL_APP_BUG,
 ];
 
 export const STARTER_TEMPLATES: Template[] = [

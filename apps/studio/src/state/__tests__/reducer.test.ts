@@ -123,9 +123,10 @@ describe('initialState', () => {
     const s = initialState();
     expect(s.templates.map((t) => t.kind)).toEqual([
       'lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight', 'lowerThird',
-      ...Array(7).fill('custom'),
+      ...Array(8).fill('custom'),
+      'logoBug',
     ]);
-    expect(s.templates.filter((t) => t.id.startsWith('mdc-') && t.fullScreen)).toHaveLength(7);
+    expect(s.templates.filter((t) => t.id.startsWith('mdc-') && t.fullScreen)).toHaveLength(8);
     expect(s.overlays.some((o) => o.id === 'ov-donation')).toBe(false);
     s.templates[0].nodes[0].x = 9999;
     expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
@@ -786,12 +787,14 @@ describe('Unterstützungen are never on air (donation template removed)', () => 
 
   it('a show saved at starter version 6 gets the MDC screens with hidden overlays, user templates kept', () => {
     const s = initialState();
-    const old = { ...s, starterVersion: 6, templates: s.templates.filter((t) => !t.id.startsWith('mdc-') || t.id === 'mdc-lower-third'), overlays: s.overlays.filter((o) => !o.templateId.startsWith('mdc-') || o.templateId === 'mdc-lower-third') };
+    const added = (id: string) => (id.startsWith('mdc-') && id !== 'mdc-lower-third') || id === 'roebel-app-logo';
+    const old = { ...s, starterVersion: 6, templates: s.templates.filter((t) => !added(t.id)), overlays: s.overlays.filter((o) => !added(o.templateId)) };
     const r = restore(JSON.stringify(old));
-    for (const id of ['mdc-gleich-los', 'mdc-gleich-weiter', 'mdc-ablaufplan', 'mdc-pause', 'mdc-siegerehrung', 'mdc-finale', 'mdc-danke']) {
+    for (const id of ['mdc-gleich-los', 'mdc-gleich-weiter', 'mdc-ablaufplan', 'mdc-pause', 'mdc-siegerehrung', 'mdc-finale', 'mdc-danke', 'mdc-roebel-app']) {
       expect(r.templates.find((t) => t.id === id)?.fullScreen).toBe(true);
       expect(r.overlays.find((o) => o.templateId === id)?.visible).toBe(false);
     }
+    expect(r.overlays.find((o) => o.templateId === 'roebel-app-logo')?.visible).toBe(false);
   });
 
   it('applies at any saved starter version (it is a rule, not a one-off)', () => {
