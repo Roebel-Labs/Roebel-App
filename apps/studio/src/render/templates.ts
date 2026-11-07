@@ -47,6 +47,93 @@ const MDC_DISC_OUT: OverlayAnim = { kind: 'scale', durationMs: 380, easing: 'bac
 
 const title = { font: 'Plus Jakarta Sans', weight: 800 } as const;
 
+// ---- Müritz Dance Cup full screens (Gleich geht's los/weiter, Ablaufplan, Pause, Siegerehrung, Finale, Danke).
+// Background: dark blue, a blue band, a yellow diagonal stripe and the lighter main field, all with the same slant.
+const MDC_DARK = '#11489A';
+const MDC_MAIN = '#2468C9';
+const MDC_SLANT = 560;
+const screenBg = (): TemplateNode[] => [
+  rect('bg', 0, 0, 1920, 1080, MDC_DARK),
+  rect('band', 0, 0, 1660, 1080, MDC_BLUE, { slant: MDC_SLANT }),
+  rect('stripe', 0, 0, 1530, 1080, MDC_YELLOW, { slant: MDC_SLANT, delayMs: 120, animIn: mdcWipe(600), outDelayMs: 200, animOut: mdcFade(300) }),
+  rect('main', 0, 0, 1470, 1080, MDC_MAIN, { slant: MDC_SLANT }),
+];
+const screenHead = (label: string): TemplateNode[] => [
+  rect('head-pill', 210, 124, 500, 64, WHITE, { stroke: '#000000', strokeWidth: 1, radii: [0, 32, 32, 0], hug: 'head', hugPad: 40, delayMs: 220, animIn: mdcWipe(420), animOut: mdcFade(200) }),
+  text('head', 298, 124, 1300, 64, label, { weight: 900, italic: true, uppercase: true, tracking: -0.6, size: 34, color: MDC_BLUE, delayMs: 360, animIn: mdcFade(300), animOut: mdcFade(180) }),
+  rect('head-disc', 150, 96, 120, 120, MDC_YELLOW, { radius: 60, stroke: '#000000', strokeWidth: 1.35, shadow: { x: 4, y: 0, blur: 0, color: 'rgba(0,0,0,0.25)' }, delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
+  text('head-nr', 150, 96, 120, 120, '26', { weight: 900, italic: true, size: 48, tracking: -2, color: '#1656AD', align: 'center', delayMs: 100, animIn: { kind: 'scale', durationMs: 460, easing: 'backOut', scaleFrom: 0.2 }, animOut: mdcFade(200) }),
+];
+const screenFoot = (): TemplateNode =>
+  text('foot', 150, 960, 1200, 50, 'Live in der Röbel App · Röbel/Müritz', { weight: 600, italic: true, uppercase: true, tracking: 1, size: 28, color: 'rgba(255,255,255,0.75)', delayMs: 500, animIn: mdcFade(400), animOut: mdcFade(200) });
+const bigLine = (id: string, y: number, value: string, delayMs: number): TemplateNode =>
+  text(id, 150, y, 1620, 170, value, { weight: 900, italic: true, uppercase: true, tracking: -5, size: 168, color: WHITE, shadow: { x: 6, y: 6, blur: 0, color: 'rgba(0,0,0,0.18)' }, delayMs, animIn: { kind: 'slide', durationMs: 520, easing: 'easeOut', from: 'left' }, animOut: mdcFade(220) });
+
+function mdcScreen(id: string, name: string, lines: string[], sub: string): Template {
+  const top = lines.length > 1 ? 340 : 360;
+  const subY = top + lines.length * 165 + 40;
+  return {
+    id,
+    name,
+    kind: 'custom',
+    fullScreen: true,
+    nodes: [
+      ...screenBg(),
+      ...screenHead('Müritz Dance Cup 2026'),
+      ...lines.map((l, i) => bigLine(`title-${i + 1}`, top + i * 165, l, 300 + i * 90)),
+      rect('sub-bg', 140, subY, 400, 76, MDC_YELLOW, { slant: 18, hug: 'sub', hugPad: 46, delayMs: 520, animIn: mdcWipe(420), animOut: mdcFade(200) }),
+      text('sub', 186, subY, 1560, 76, sub, { weight: 700, italic: true, size: 42, color: MDC_BLUE, delayMs: 640, animIn: mdcFade(300), animOut: mdcFade(180) }),
+      screenFoot(),
+    ],
+    animIn: mdcFade(400),
+    animOut: mdcFade(450),
+  };
+}
+
+const SCHEDULE: [string, string, string][] = [
+  ['10:00', 'Eröffnung', 'Dance, FunDance MiniMinis – Kids'],
+  ['10:15', 'Dance · FunDance', 'MiniMinis – Kids'],
+  ['13:30', 'Siegerehrung', 'Dance, FunDance MiniMinis – Kids'],
+  ['15:15', 'Eröffnung', 'P-Synchron, FunDance Juniors – Seniors'],
+  ['15:30', 'P-Synchron · FunDance', 'Juniors – Seniors'],
+  ['18:15', 'Siegerehrung', 'P-Synchron, FunDance Juniors – Seniors'],
+  ['18:45', 'Finale', ''],
+];
+
+function mdcSchedule(): Template {
+  const rows = SCHEDULE.flatMap(([time, what, who], i): TemplateNode[] => {
+    const y = 250 + i * 98;
+    const d = 300 + i * 70;
+    const n = i + 1;
+    return [
+      rect(`r${n}-bar`, 386, y, 1384, 84, WHITE, { stroke: '#000000', strokeWidth: 1, radii: [0, 42, 42, 0], delayMs: d, animIn: mdcWipe(420), animOut: mdcFade(200) }),
+      rect(`r${n}-time-bg`, 150, y, 228, 84, MDC_YELLOW, { stroke: '#000000', strokeWidth: 1, slant: 20, delayMs: d, animIn: mdcWipe(300), animOut: mdcFade(200) }),
+      text(`r${n}-time`, 150, y, 220, 84, time, { weight: 900, italic: true, size: 44, color: MDC_BLUE, align: 'center', delayMs: d + 120, animIn: mdcFade(260), animOut: mdcFade(160) }),
+      text(`r${n}-what`, 426, y, 900, 84, what, { weight: 900, italic: true, uppercase: true, tracking: -0.6, size: 38, color: MDC_BLUE, delayMs: d + 160, animIn: mdcFade(260), animOut: mdcFade(160) }),
+      text(`r${n}-who`, 426, y, 1300, 84, who, { weight: 700, italic: true, size: 30, color: MDC_LIGHT, after: `r${n}-what`, afterGap: 18, delayMs: d + 200, animIn: mdcFade(260), animOut: mdcFade(160) }),
+    ];
+  });
+  return {
+    id: 'mdc-ablaufplan',
+    name: 'MDC Ablaufplan',
+    kind: 'custom',
+    fullScreen: true,
+    nodes: [...screenBg(), ...screenHead('Ablaufplan · Samstag 07.11.2026'), ...rows, screenFoot()],
+    animIn: mdcFade(400),
+    animOut: mdcFade(450),
+  };
+}
+
+const MDC_SCREENS: Template[] = [
+  mdcScreen('mdc-gleich-los', 'MDC Gleich geht’s los', ['Gleich', 'geht’s los'], 'Start um 10:00 Uhr'),
+  mdcScreen('mdc-gleich-weiter', 'MDC Gleich geht’s weiter', ['Gleich geht’s', 'weiter'], 'Bleibt dran!'),
+  mdcSchedule(),
+  mdcScreen('mdc-pause', 'MDC Pause', ['Pause'], 'Weiter um 15:15 Uhr · P-Synchron, FunDance Juniors – Seniors'),
+  mdcScreen('mdc-siegerehrung', 'MDC Siegerehrung', ['Siegerehrung'], 'Gleich werden die Pokale vergeben'),
+  mdcScreen('mdc-finale', 'MDC Finale', ['Finale'], 'Müritz Dance Cup 2026'),
+  mdcScreen('mdc-danke', 'MDC Danke', ['Danke fürs', 'Zuschauen'], 'Bis zum nächsten Mal!'),
+];
+
 export const STARTER_TEMPLATES: Template[] = [
   {
     id: 'lower-third',
@@ -173,14 +260,19 @@ export const STARTER_TEMPLATES: Template[] = [
     animIn: { kind: 'fade', durationMs: 300, easing: 'easeOut' },
     animOut: fadeOut(280),
   },
+  ...MDC_SCREENS,
 ];
 
 /** Bumped whenever a starter is added; restore() adds the new ones to older saved shows exactly once. */
-export const STARTER_VERSION = 6;
+export const STARTER_VERSION = 7;
 /** Starters whose built-in design changed in a version: restore() replaces saved copies once (overlays kept). */
 export const STARTERS_REPLACED_IN: Record<number, string[]> = { 5: ['mdc-lower-third'], 6: ['mdc-lower-third'] };
 /** Starter ids introduced per starter version (version 1 = the original set; 3 only removed the donation starter). */
-export const STARTERS_ADDED_IN: Record<number, string[]> = { 2: ['chat-highlight'], 4: ['mdc-lower-third'] };
+export const STARTERS_ADDED_IN: Record<number, string[]> = {
+  2: ['chat-highlight'],
+  4: ['mdc-lower-third'],
+  7: MDC_SCREENS.map((t) => t.id),
+};
 
 /**
  * Template kinds that may never exist: Unterstützungen are never burned into the stream or the recording

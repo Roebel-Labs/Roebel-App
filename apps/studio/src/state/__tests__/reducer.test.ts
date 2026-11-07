@@ -119,9 +119,13 @@ describe('initialState', () => {
     );
   });
 
-  it('ships the eight starter kinds as deep copies (no Unterstützung on air)', () => {
+  it('ships the starter kinds as deep copies (no Unterstützung on air)', () => {
     const s = initialState();
-    expect(s.templates.map((t) => t.kind)).toEqual(['lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight', 'lowerThird']);
+    expect(s.templates.map((t) => t.kind)).toEqual([
+      'lowerThird', 'logoBug', 'clock', 'nextUp', 'breakSpot', 'pause', 'chatHighlight', 'lowerThird',
+      ...Array(7).fill('custom'),
+    ]);
+    expect(s.templates.filter((t) => t.id.startsWith('mdc-') && t.fullScreen)).toHaveLength(7);
     expect(s.overlays.some((o) => o.id === 'ov-donation')).toBe(false);
     s.templates[0].nodes[0].x = 9999;
     expect(STARTER_TEMPLATES[0].nodes[0].x).not.toBe(9999);
@@ -778,6 +782,16 @@ describe('Unterstützungen are never on air (donation template removed)', () => 
     expect(r.templates.some((t) => (t.kind as string) === 'donation')).toBe(false);
     expect(r.overlays.map((o) => o.id)).toEqual(s.overlays.map((o) => o.id));
     expect(r.starterVersion).toBe(STARTER_VERSION);
+  });
+
+  it('a show saved at starter version 6 gets the MDC screens with hidden overlays, user templates kept', () => {
+    const s = initialState();
+    const old = { ...s, starterVersion: 6, templates: s.templates.filter((t) => !t.id.startsWith('mdc-') || t.id === 'mdc-lower-third'), overlays: s.overlays.filter((o) => !o.templateId.startsWith('mdc-') || o.templateId === 'mdc-lower-third') };
+    const r = restore(JSON.stringify(old));
+    for (const id of ['mdc-gleich-los', 'mdc-gleich-weiter', 'mdc-ablaufplan', 'mdc-pause', 'mdc-siegerehrung', 'mdc-finale', 'mdc-danke']) {
+      expect(r.templates.find((t) => t.id === id)?.fullScreen).toBe(true);
+      expect(r.overlays.find((o) => o.templateId === id)?.visible).toBe(false);
+    }
   });
 
   it('applies at any saved starter version (it is a rule, not a one-off)', () => {
