@@ -9,6 +9,7 @@ import { fontFamily } from '@/constants/theme';
 import EventInterestPeek from './EventInterestPeek';
 import EventCancelledScrim from './EventCancelledScrim';
 import { transformedImageUrl } from '@/lib/image-url';
+import LiveEventMedia, { isStreaming, useEventLiveShow } from '@/components/live/LiveEventMedia';
 
 import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/constants/poster';
 
@@ -31,6 +32,7 @@ type Props = {
 function HorizontalEventCard({ event, fullWidth = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
+  const liveShow = useEventLiveShow(event.id);
   const when = formatEventCardWhen(event.date, event.time);
   const place = formatLocation(event.location);
   const price = event.ticket_price == null ? null : currency(event.ticket_price);
@@ -75,6 +77,7 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
             }
           />
         ) : null}
+        {isStreaming(liveShow) ? <LiveEventMedia show={liveShow} style={{ borderRadius: POSTER_RADIUS }} /> : null}
         {event.is_cancelled && <EventCancelledScrim radius={POSTER_RADIUS} compact />}
       </View>
 

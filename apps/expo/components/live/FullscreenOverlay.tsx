@@ -81,7 +81,7 @@ type Props = {
 };
 
 /** Right action column: narrow, small gap to the chat. */
-const COLUMN_W = 56;
+const COLUMN_W = 68;
 const COLUMN_GAP = 6;
 const COMPOSER_H = 42;
 const ICON = 26;
@@ -101,7 +101,7 @@ function ActionButton({ Icon, label, onPress, size = ICON }: { Icon: SvgIcon; la
   return (
     <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.action, pressed && styles.actionPressed]} accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.actionIcon}><Icon width={size} height={size} color="#FFFFFF" /></View>
-      <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>
+      <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
     </Pressable>
   );
 }
@@ -330,7 +330,7 @@ export default function FullscreenOverlay(props: Props) {
                     accessibilityRole="button"
                     accessibilityLabel="Übertragung unterstützen"
                   >
-                    <CoinsSvg width={13} height={13} color="#111111" />
+                    <CoinsSvg width={17} height={17} color="#111111" />
                     <Text style={styles.nudgeText}>Unterstützen</Text>
                   </Pressable>
                 </Animated.View>
@@ -443,6 +443,7 @@ export default function FullscreenOverlay(props: Props) {
           {/* Heart: white outline; every tap floats a red filled heart up the video (no picker, no emoji). */}
           <ActionButton Icon={HeartOutlineSvg} label="Herz" onPress={() => react('❤️')} size={ICON + 2} />
           {votingOpen ? <ActionButton Icon={StarSvg} label="Liebling" onPress={() => closeMenuThen(onVote)} size={ICON - 2} /> : null}
+          <ActionButton Icon={CoinsSvg} label="Unterstützen" onPress={() => closeMenuThen(onSupport)} />
           {canJoinAsGuest ? <ActionButton Icon={VideoSvg} label="Dazu" onPress={() => closeMenuThen(onJoinAsGuest)} /> : null}
           <ActionButton Icon={ShareSvg} label="Teilen" onPress={() => { poke(); onShare(); }} />
           <ActionButton Icon={MoreSvg} label="Mehr" onPress={() => { poke(); setMenuOpen((o) => !o); }} />
@@ -535,9 +536,9 @@ const styles = StyleSheet.create({
   errorWrap: { position: 'absolute' },
   nudgeRow: { flexDirection: 'row', paddingHorizontal: 4, paddingVertical: 6 },
   nudge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, height: 26, paddingHorizontal: 11, borderRadius: 13, backgroundColor: '#FFFFFF',
+    flexDirection: 'row', alignItems: 'center', gap: 7, height: 36, paddingHorizontal: 16, borderRadius: 18, backgroundColor: '#FFFFFF',
   },
-  nudgeText: { color: '#111111', fontSize: 12, fontFamily: F.semiBold },
+  nudgeText: { color: '#111111', fontSize: 14, fontFamily: F.semiBold },
   error: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
     backgroundColor: 'rgba(229,72,77,0.94)',
