@@ -37,6 +37,8 @@ export function hotkeyAction(e: HotkeyEvent, state: ShowState, now: number = Dat
       return { type: 'cut' };
     case 'KeyN':
       return { type: 'nextRow' };
+    case 'KeyV':
+      return { type: 'prevRow' };
     case 'KeyL': {
       const id = firstOverlayOfKind(state, 'lowerThird');
       return id ? { type: 'toggleOverlay', id, now } : null;

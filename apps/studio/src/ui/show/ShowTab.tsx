@@ -2,6 +2,7 @@ import { useStudio } from '../studio';
 import { AudioStrip } from './AudioStrip';
 import { Monitors } from './Monitors';
 import { OverlayRow } from './OverlayRow';
+import { RundownRow } from './RundownRow';
 import { SourceRow } from './SourceRow';
 import { SponsorPanel } from './SponsorPanel';
 
@@ -15,6 +16,7 @@ export function ShowTab() {
         <div className="show-rows">
           <SourceRow />
           <OverlayRow />
+          <RundownRow />
         </div>
         <div className="show-side">
           <AudioStrip mixer={mixer} />

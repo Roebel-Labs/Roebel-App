@@ -263,6 +263,9 @@ export function TableTab() {
         <span className="tbl-hint">
           {rows.length === 0 ? 'Keine Zeilen' : idx >= 0 ? `Auf Sendung: Zeile ${idx + 1} von ${rows.length}` : 'Keine Zeile auf Sendung'}
         </span>
+        <button disabled={idx <= 0} onClick={() => stable({ type: 'prevRow' })}>
+          ◂ Zurück
+        </button>
         <button className="primary" disabled={rows.length === 0 || idx >= rows.length - 1} onClick={() => stable({ type: 'nextRow' })}>
           Weiter ▸
         </button>

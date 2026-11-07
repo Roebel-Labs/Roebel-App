@@ -50,6 +50,7 @@ export type Action =
   | { type: 'moveRow'; rowId: string; delta: number }
   | { type: 'selectRow'; rowId: string | null }
   | { type: 'nextRow' }
+  | { type: 'prevRow' }
   | { type: 'updateSettings'; patch: Partial<Settings> }
   | { type: 'addAudioChannel'; channel: Omit<AudioChannel, 'id'> & { id?: string } }
   | { type: 'updateAudioChannel'; id: string; patch: Partial<Omit<AudioChannel, 'id'>> }
@@ -421,6 +422,12 @@ function reduce(s: ShowState, a: Action): ShowState {
       const i = rows.findIndex((r) => r.id === currentRowId);
       const next = rows[i + 1];
       return next ? { ...s, table: { ...s.table, currentRowId: next.id } } : s;
+    }
+    case 'prevRow': {
+      const { rows, currentRowId } = s.table;
+      const i = rows.findIndex((r) => r.id === currentRowId);
+      const prev = i > 0 ? rows[i - 1] : undefined;
+      return prev ? { ...s, table: { ...s.table, currentRowId: prev.id } } : s;
     }
     case 'updateSettings':
       return { ...s, settings: { ...s.settings, ...a.patch } };

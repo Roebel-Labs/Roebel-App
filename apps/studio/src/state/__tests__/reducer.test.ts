@@ -68,6 +68,18 @@ describe('showReducer', () => {
     expect(s.table.currentRowId).toBe(r2);
   });
 
+  it('prevRow goes back and stays on the first row', () => {
+    let s = initialState();
+    s = showReducer(s, { type: 'addRow' });
+    s = showReducer(s, { type: 'addRow' });
+    const [r1, r2] = s.table.rows.map((r) => r.id);
+    s = showReducer(s, { type: 'selectRow', rowId: r2 });
+    s = showReducer(s, { type: 'prevRow' });
+    expect(s.table.currentRowId).toBe(r1);
+    s = showReducer(s, { type: 'prevRow' });
+    expect(s.table.currentRowId).toBe(r1);
+  });
+
   it('removeSource of the program source clears program and its scenes', () => {
     let s = withScenes();
     const [a, b] = s.scenes.map((x) => x.id);

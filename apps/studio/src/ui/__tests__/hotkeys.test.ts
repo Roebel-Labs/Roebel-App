@@ -60,6 +60,10 @@ describe('hotkeyAction', () => {
     expect(hotkeyAction(key('n', 'KeyN'), s)).toEqual({ type: 'nextRow' });
   });
 
+  it('v goes back one table row', () => {
+    expect(hotkeyAction(key('v', 'KeyV'), s)).toEqual({ type: 'prevRow' });
+  });
+
   it('works with caps lock / German layout via code', () => {
     expect(hotkeyAction(key('C', 'KeyC'), s)).toEqual({ type: 'cut' });
   });
