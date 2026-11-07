@@ -303,14 +303,19 @@ button {
 
 .show {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   padding: 14px 20px 16px;
   min-width: 1100px;
+  height: 100%;
+  min-height: 640px;
 }
 
-/* Monitors shrink with the window height so the rows and the audio meters never scroll away. */
+/* Monitors take the full width (minus the TAKE column); they only shrink when the window is so low that
+   less than ~300 px would stay for the rows below. Sources, overlays, start list and audio scroll in their
+   own area underneath, so the monitors never scroll away. */
 .monitors {
-  --mon-w: min(calc((100vw - 260px) / 2), calc((100vh - 560px) * 16 / 9));
+  --mon-w: min(calc((100vw - 260px) / 2), calc((100vh - 420px) * 16 / 9));
   display: grid;
   grid-template-columns: minmax(320px, var(--mon-w)) 188px minmax(320px, var(--mon-w));
   justify-content: center;
@@ -323,6 +328,9 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
   align-items: start;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .show-rows {
