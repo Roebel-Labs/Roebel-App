@@ -1406,3 +1406,21 @@ input[type='color'].input {
 .rd-app.warn {
   color: var(--amber);
 }
+
+/* ---------------------------------------------------------------- show: drag & drop */
+
+.drag-target {
+  outline: 2px dashed var(--border-brand);
+  outline-offset: 2px;
+  border-radius: var(--r);
+}
+
+.strip.drop-over {
+  outline: 2px dashed var(--pvw);
+  outline-offset: 4px;
+  border-radius: var(--r);
+}
+
+.row-hint.warn {
+  color: var(--amber);
+}

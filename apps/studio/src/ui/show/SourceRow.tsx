@@ -10,6 +10,8 @@ import { sceneHealth, useSourceHealth, useStudio } from '../studio';
 import { asProgram } from './Monitors';
 import { liveRoom } from '../../live-room/controller';
 import { removalPlan } from './removal';
+import type { Action } from '../../state/reducer';
+import { useTileDrag } from './tile-drag';
 
 const THUMB_W = 192;
 const THUMB_H = 108;
@@ -48,6 +50,27 @@ function useThumbnails(state: ShowState) {
 function basename(p: string): string {
   const name = p.split(/[\\/]/).pop() ?? p;
   return name.replace(/\.[^.]+$/, '');
+}
+
+const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
+
+/** Adds every video/image path as its own source (one tile each). Returns how many were skipped. */
+export async function addMediaFiles(paths: string[], dispatch: (a: Action) => void): Promise<number> {
+  let skipped = 0;
+  for (const path of paths) {
+    const kind = VIDEO_EXT.test(path) ? 'video' : IMAGE_EXT.test(path) ? 'image' : null;
+    if (!kind) {
+      skipped++;
+      continue;
+    }
+    const url = await window.studio.media.allow(path);
+    dispatch({
+      type: 'addSource',
+      source: kind === 'video' ? { kind: 'video', label: basename(path), url, loop: true } : { kind: 'image', label: basename(path), url },
+    });
+  }
+  return skipped;
 }
 
 /** macOS appends the USB vendor:product id to camera labels ("FaceTime HD-Kamera (5B00:3AA6)"). */
@@ -118,6 +141,19 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const pickMany = async () => {
+    setError(null);
+    try {
+      const paths = (await window.studio.dialog.pickFiles?.()) ?? [];
+      if (paths.length === 0) return;
+      const skipped = await addMediaFiles(paths, dispatch);
+      if (skipped) setError(`${skipped} Datei(en) übersprungen (kein Video oder Bild).`);
+      else onClose();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
   const labelOf = (id: string) => state.sources.find((s) => s.id === id)?.label ?? '';
   const addCombo = (layout: 'split' | 'pip') => {
     if (!a || !b) return;
@@ -148,6 +184,11 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
           <button className="menu-item" onClick={openCameras}>
             Kamera
           </button>
+          {window.studio.dialog.pickFiles && (
+            <button className="menu-item" onClick={() => void pickMany()}>
+              Videos und Bilder (mehrere)…
+            </button>
+          )}
           <button className="menu-item" onClick={() => void pickFile('video')}>
             Video aus Datei…
           </button>
@@ -333,6 +374,16 @@ export function SourceRow() {
   const [removing, setRemoving] = useState<Scene | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const kindOf = (id: string) => state.sources.find((s) => s.id === id)?.kind;
+  const [dropNote, setDropNote] = useState<string | null>(null);
+  const drag = useTileDrag('scene', (id, to) => dispatch({ type: 'moveScene', id, to }), async (files) => {
+    const pathFor = window.studio.dialog.pathForFile;
+    if (!pathFor) {
+      setDropNote('Dateien hineinziehen geht erst mit der neuen App-Version 0.1.6 (Installer) – bis dahin „+ Quelle“.');
+      return;
+    }
+    const skipped = await addMediaFiles(files.map((f) => pathFor(f)).filter(Boolean), dispatch);
+    setDropNote(skipped ? `${skipped} Datei(en) übersprungen (kein Video oder Bild).` : null);
+  });
 
   const remove = (scene: Scene) => {
     const plan = removalPlan(state, scene.id);
@@ -354,15 +405,16 @@ export function SourceRow() {
     <section>
       <div className="row-head">
         <span className="row-title">Quellen</span>
-        <span className="row-hint">Klick = in die Vorschau, Doppelklick = sofort live, Tasten 1–9</span>
+        <span className="row-hint">Klick = in die Vorschau, Doppelklick = sofort live, Tasten 1–9 · Ziehen = umsortieren</span>
+        {dropNote && <span className="row-hint warn">{dropNote}</span>}
       </div>
-      <div className="strip wrap">
+      <div className={`strip wrap${drag.fileOver ? ' drop-over' : ''}`} {...drag.stripProps}>
         {state.scenes.map((scene, i) => {
           const h = sceneHealth(scene, kindOf, health);
           const isPgm = scene.id === state.programSceneId;
           const isPvw = scene.id === state.previewSceneId;
           return (
-            <div key={scene.id} className={`tile${isPgm ? ' is-pgm' : isPvw ? ' is-pvw' : ''}`}>
+            <div key={scene.id} className={`tile${isPgm ? ' is-pgm' : isPvw ? ' is-pvw' : ''}${drag.overIndex === i ? ' drag-target' : ''}`} {...drag.tileProps(scene.id, i)}>
               <button
                 style={{ all: 'unset', display: 'block', width: '100%', cursor: 'pointer' }}
                 onClick={() => dispatch({ type: 'setPreview', sceneId: scene.id })}

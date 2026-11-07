@@ -48,6 +48,8 @@ export type Action =
   | { type: 'renameColumn'; from: string; to: string }
   | { type: 'removeColumn'; name: string }
   | { type: 'moveRow'; rowId: string; delta: number }
+  | { type: 'moveScene'; id: string; to: number }
+  | { type: 'moveOverlay'; id: string; to: number }
   | { type: 'selectRow'; rowId: string | null }
   | { type: 'nextRow' }
   | { type: 'prevRow' }
@@ -414,6 +416,14 @@ function reduce(s: ShowState, a: Action): ShowState {
       [next[i], next[j]] = [next[j], next[i]];
       return { ...s, table: { ...s.table, rows: next } };
     }
+    case 'moveScene': {
+      const scenes = moveTo(s.scenes, a.id, a.to);
+      return scenes === s.scenes ? s : { ...s, scenes };
+    }
+    case 'moveOverlay': {
+      const overlays = moveTo(s.overlays, a.id, a.to);
+      return overlays === s.overlays ? s : { ...s, overlays };
+    }
     case 'selectRow':
       if (a.rowId !== null && !s.table.rows.some((r) => r.id === a.rowId)) return s;
       return { ...s, table: { ...s.table, currentRowId: a.rowId } };
@@ -717,4 +727,15 @@ export function restore(json: string | null): ShowState {
     sponsors: restoreSponsors(raw.sponsors),
     audio: restoreAudio(raw.audio),
   };
+}
+
+/** Moves the item with `id` to index `to` (clamped); same array when nothing changes. */
+function moveTo<T extends { id: string }>(list: T[], id: string, to: number): T[] {
+  const from = list.findIndex((x) => x.id === id);
+  const target = Math.max(0, Math.min(list.length - 1, Math.trunc(to)));
+  if (from < 0 || from === target) return list;
+  const next = list.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(target, 0, item);
+  return next;
 }

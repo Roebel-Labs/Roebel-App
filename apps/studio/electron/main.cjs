@@ -314,6 +314,14 @@ ipcMain.handle('dialog:pickFile', async (e, kind) => {
   return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
 });
 
+// Several videos and images at once (Strg/Cmd or Shift in the dialog).
+ipcMain.handle('dialog:pickFiles', async (e) => {
+  guard('dialog:pickFiles', e);
+  const extensions = [...FILE_FILTERS.video[0].extensions, ...FILE_FILTERS.image[0].extensions];
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Videos und Bilder', extensions }] });
+  return r.canceled ? [] : r.filePaths;
+});
+
 ipcMain.handle('dialog:pickFolder', async (e) => {
   guard('dialog:pickFolder', e);
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });

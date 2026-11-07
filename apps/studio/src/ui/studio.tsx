@@ -19,6 +19,19 @@ function programAudioInputs(s: ShowState): { ids: string[]; transitionMs: number
     transitionMs: s.transition.startedAt !== null && preset ? preset.durationMs : 0,
   };
 }
+/** Every source the program draws (incl. split/PiP background and, during a transition, the outgoing scene). */
+export function programSourceIds(s: ShowState): string[] {
+  const ids = new Set<string>();
+  const add = (sceneId: string | null) => {
+    const sc = s.scenes.find((x) => x.id === sceneId);
+    if (!sc) return;
+    sc.sourceIds.forEach((id) => ids.add(id));
+    if (sc.backgroundSourceId) ids.add(sc.backgroundSourceId);
+  };
+  add(s.programSceneId);
+  if (s.transition.startedAt !== null) add(s.transition.fromSceneId);
+  return [...ids].sort();
+}
 const StudioContext = createContext<Ctx | null>(null);
 
 // One OnAir per renderer (it subscribes to main's output events).
@@ -62,7 +75,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     engine?.registry.sync(state.sources);
+    engine?.registry.setActive(programSourceIds(latest.current));
   }, [engine, state.sources]);
+
+  // Video files run only while on program.
+  const activeKey = programSourceIds(state).join('|');
+  useEffect(() => {
+    engine?.registry.setActive(activeKey ? activeKey.split('|') : []);
+  }, [engine, activeKey]);
 
   // Mixer follows the show (channels, faders, program picture) and re-attaches re-created elements.
   const { ids: programIds, transitionMs } = programAudioInputs(state);

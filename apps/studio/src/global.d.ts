@@ -56,6 +56,10 @@ declare global {
       };
       dialog: {
         pickFile(kind: 'video' | 'image'): Promise<string | null>;
+        /** Shell (installer) ≥ 0.1.6 only. */
+        pickFiles?(): Promise<string[]>;
+        /** Shell (installer) ≥ 0.1.6 only. */
+        pathForFile?(file: File): string;
         pickFolder(): Promise<string | null>;
       };
       ffmpeg: {

@@ -1,7 +1,7 @@
 'use strict';
 // Preload bridge: exposes window.studio to the renderer (contextIsolation on).
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 function subscribe(channel, cb) {
   const listener = (_event, payload) => cb(payload);
@@ -62,6 +62,16 @@ contextBridge.exposeInMainWorld('studio', {
   dialog: {
     // Resolves to an absolute path, or null when cancelled.
     pickFile: (kind) => ipcRenderer.invoke('dialog:pickFile', kind),
+    // Several videos/images -> absolute paths ([] when cancelled).
+    pickFiles: () => ipcRenderer.invoke('dialog:pickFiles'),
+    // Absolute path of a file dropped onto the window ('' when it has none).
+    pathForFile: (file) => {
+      try {
+        return webUtils.getPathForFile(file) || '';
+      } catch {
+        return '';
+      }
+    },
     pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   },
   ffmpeg: {

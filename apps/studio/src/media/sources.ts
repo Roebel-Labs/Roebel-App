@@ -84,6 +84,8 @@ export class SourceRegistry {
   private listeners = new Set<StatusListener>();
   private disposed = false;
   private offExternal: () => void;
+  /** Sources the program shows right now: only these video files play (see setActive). */
+  private active = new Set<string>();
 
   constructor(private readonly opts: { fps: 30 | 50 } = { fps: 30 }) {
     navigator.mediaDevices?.addEventListener('devicechange', this.onDeviceChange);
@@ -117,6 +119,27 @@ export class SourceRegistry {
       }
       this.create(s);
     }
+  }
+
+  /**
+   * Video files play only while the program shows them, from the start each time they go on air; everywhere
+   * else (preview, source tile) they rest on their first frame, so nothing runs in the background.
+   */
+  setActive(ids: Iterable<string>): void {
+    const next = new Set(ids);
+    for (const e of this.entries.values()) {
+      if (e.source.kind !== 'video' || !(e.el instanceof HTMLVideoElement)) continue;
+      const was = this.active.has(e.source.id);
+      const now = next.has(e.source.id);
+      if (now && !was) {
+        e.el.currentTime = 0;
+        void e.el.play().catch(() => {});
+      } else if (!now && was) {
+        e.el.pause();
+        e.el.currentTime = 0;
+      }
+    }
+    this.active = next;
   }
 
   onStatus(cb: StatusListener): () => void {
@@ -228,20 +251,26 @@ export class SourceRegistry {
     if (el instanceof HTMLVideoElement) {
       el.muted = true; // audio goes through the mixer, never the element
       el.playsInline = true;
-      el.autoplay = true;
+      el.autoplay = s.kind !== 'video'; // video files wait for the program (setActive)
       el.setAttribute('playsinline', '');
       el.crossOrigin = 'anonymous'; // /media/ sends ACAO:* → canvas stays untainted
       hiddenHost().appendChild(el);
       const onPlaying = () => this.emit(e, 'playing');
       const onStall = () => this.emit(e, 'stalled');
       const onError = () => this.emit(e, 'ended');
+      // A paused video file is fine as soon as its first frame is decoded.
+      const onLoaded = () => {
+        if (s.kind === 'video') this.emit(e, 'playing');
+      };
       el.addEventListener('playing', onPlaying);
       el.addEventListener('waiting', onStall);
       el.addEventListener('error', onError);
+      el.addEventListener('loadeddata', onLoaded);
       e.off = () => {
         el.removeEventListener('playing', onPlaying);
         el.removeEventListener('waiting', onStall);
         el.removeEventListener('error', onError);
+        el.removeEventListener('loadeddata', onLoaded);
       };
       if (s.kind === 'camera') void this.openCamera(e);
       else if (s.kind === 'external') this.attachExternal(e);
@@ -369,7 +398,7 @@ export class SourceRegistry {
     video.loop = e.source.loop !== false;
     video.src = e.source.url!;
     video.load();
-    void video.play().catch(() => {});
+    if (this.active.has(e.source.id)) void video.play().catch(() => {});
   }
 
   private async cameraPresent(deviceId: string): Promise<boolean> {

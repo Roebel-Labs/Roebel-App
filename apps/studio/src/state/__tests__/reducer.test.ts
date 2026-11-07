@@ -68,6 +68,16 @@ describe('showReducer', () => {
     expect(s.table.currentRowId).toBe(r2);
   });
 
+  it('moveOverlay / moveScene move one tile to an index (clamped), unknown ids change nothing', () => {
+    const s = initialState();
+    const ids = s.overlays.map((o) => o.id);
+    const moved = showReducer(s, { type: 'moveOverlay', id: ids[0], to: 2 });
+    expect(moved.overlays.map((o) => o.id)).toEqual([ids[1], ids[2], ids[0], ...ids.slice(3)]);
+    expect(showReducer(s, { type: 'moveOverlay', id: ids[1], to: 999 }).overlays.at(-1)!.id).toBe(ids[1]);
+    expect(showReducer(s, { type: 'moveOverlay', id: 'nope', to: 0 })).toBe(s);
+    expect(showReducer(s, { type: 'moveScene', id: 'nope', to: 0 })).toBe(s);
+  });
+
   it('prevRow goes back and stays on the first row', () => {
     let s = initialState();
     s = showReducer(s, { type: 'addRow' });

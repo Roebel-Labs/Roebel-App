@@ -4,6 +4,7 @@ import { renderFrame, templateHasContent } from '../../render/draw';
 import { useShow } from '../../state/store';
 import type { OverlayInstance, RenderContext, ShowState, Template } from '../../state/types';
 import { useStudio } from '../studio';
+import { useTileDrag } from './tile-drag';
 
 const PREVIEW_W = 160;
 const PREVIEW_H = 90;
@@ -126,15 +127,16 @@ export function OverlayRow() {
   const seen = new Map<string, number>();
   const rc = defaultRenderContext(state);
   const previewRef = useOverlayPreviews(state);
+  const drag = useTileDrag('overlay', (id, to) => dispatch({ type: 'moveOverlay', id, to }));
 
   return (
     <section>
       <div className="row-head">
         <span className="row-title">Einblendungen</span>
-        <span className="row-hint">Klick blendet direkt im Live-Bild ein oder aus</span>
+        <span className="row-hint">Klick blendet direkt im Live-Bild ein oder aus · Ziehen = umsortieren</span>
       </div>
       <div className="strip wrap">
-        {state.overlays.map((o) => {
+        {state.overlays.map((o, i) => {
           const t = state.templates.find((x) => x.id === o.templateId);
           const n = (seen.get(o.templateId) ?? 0) + 1;
           seen.set(o.templateId, n);
@@ -142,7 +144,7 @@ export function OverlayRow() {
           const key = hotkeyFor(state, o.id);
           const empty = !!t && !templateHasContent(t, rc);
           return (
-            <div key={o.id} className="ovl-wrap">
+            <div key={o.id} className={`ovl-wrap${drag.overIndex === i ? ' drag-target' : ''}`} {...drag.tileProps(o.id, i)}>
               <button
                 className={`ovl${o.visible ? ' on' : ''}`}
                 title={empty ? `${emptyHint(t!)}. Die Vorschau zeigt Beispieltext.` : undefined}

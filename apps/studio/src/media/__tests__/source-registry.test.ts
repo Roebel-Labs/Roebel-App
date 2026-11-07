@@ -104,6 +104,29 @@ async function playingCamera() {
 }
 
 describe('SourceRegistry', () => {
+  it('a video file rests on its first frame until the program shows it, then plays from the start', async () => {
+    const clip: Source = { id: 'clip', kind: 'video', label: 'Intro', url: 'http://127.0.0.1:1/media/ab', loop: true };
+    const reg = new SourceRegistry({ fps: 30 });
+    reg.sync([clip]);
+    const v = videos[0] as FakeVideo & { currentTime?: number };
+    const play = vi.spyOn(v, 'play');
+    const pause = vi.spyOn(v, 'pause');
+    expect(v.autoplay).toBe(false);
+    expect(play).not.toHaveBeenCalled();
+    v.dispatchEvent(new Event('loadeddata'));
+    expect(reg.statusOf('clip')).toBe('ok');
+    v.currentTime = 12;
+    reg.setActive(['clip']);
+    expect(v.currentTime).toBe(0);
+    expect(play).toHaveBeenCalledTimes(1);
+    reg.setActive(['clip']);
+    expect(play).toHaveBeenCalledTimes(1);
+    v.currentTime = 30;
+    reg.setActive([]);
+    expect(pause).toHaveBeenCalled();
+    expect(v.currentTime).toBe(0);
+  });
+
   it('muted camera (HDMI loss without ended) → loading → lost after the stall timeout → re-opened', async () => {
     const { reg } = await playingCamera();
     streams[0].tracks[0].dispatchEvent(new Event('mute'));
