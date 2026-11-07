@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -34,8 +35,10 @@ export default function AppUpdateModalScreen() {
     body,
     ctaLabel,
     dismissLabel,
+    imageUrl,
     dismiss,
   } = useAppReleaseGate();
+  const [imageAspect, setImageAspect] = React.useState(3 / 4);
 
   const handleOpenStore = () => {
     Linking.openURL(storeUrl).catch(() => {
@@ -61,14 +64,30 @@ export default function AppUpdateModalScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.iconWrap,
-            { backgroundColor: colors.primary + '1A' },
-          ]}
-        >
-          <Ionicons name="arrow-up-circle" size={72} color={colors.primary} />
-        </View>
+        {imageUrl ? (
+          // Hero image from the release config (DanceCup 2026: the event flyer).
+          <Image
+            source={{ uri: imageUrl }}
+            style={[styles.heroImage, { aspectRatio: imageAspect, backgroundColor: colors.surface }]}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+            onLoad={(e) => {
+              const { width, height } = e.source;
+              if (width && height) setImageAspect(Math.max(width / height, 0.75));
+            }}
+            accessibilityIgnoresInvertColors
+          />
+        ) : (
+          <View
+            style={[
+              styles.iconWrap,
+              { backgroundColor: colors.primary + '1A' },
+            ]}
+          >
+            <Ionicons name="arrow-up-circle" size={72} color={colors.primary} />
+          </View>
+        )}
 
         <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Röbel App</Text>
         <Text style={[styles.headline, { color: colors.textPrimary }]}>{title}</Text>
@@ -131,6 +150,12 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  heroImage: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 12,
+    marginBottom: 20,
   },
   scrollContent: {
     paddingHorizontal: 24,
