@@ -81,6 +81,10 @@ export const PASSKEY_PAYMASTER: string = process.env.EXPO_PUBLIC_PASSKEY_PAYMAST
 export const PASSKEY_CITIZEN_NFT_V3: string = process.env.EXPO_PUBLIC_PASSKEY_CITIZEN_NFT_V3 ?? '';
 export const PASSKEY_ATTESTER_NFT_V3: string = process.env.EXPO_PUBLIC_PASSKEY_ATTESTER_NFT_V3 ?? '';
 
-export const PASSKEY_API_URL: string = process.env.EXPO_PUBLIC_PASSKEY_API_URL ?? '';
+/**
+ * Defaulted in source because OTA exports run from worktrees whose .env can lack the variable,
+ * which breaks every passkey write. Only passkey sessions use this URL; set the variable to override.
+ */
+export const PASSKEY_API_URL: string = process.env.EXPO_PUBLIC_PASSKEY_API_URL || 'https://www.roebel.app';
 export const PASSKEY_BUNDLER_URL: string =
   process.env.EXPO_PUBLIC_PASSKEY_BUNDLER_URL || (PASSKEY_API_URL ? `${PASSKEY_API_URL}/api/bundler` : '');
