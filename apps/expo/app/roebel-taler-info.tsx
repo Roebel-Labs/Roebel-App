@@ -1,5 +1,6 @@
-// Info-/Erklärscreen: Was ist Röbel Münzen, wie funktioniert es, und die Vision.
-// Bürgerfreundliches Deutsch, keine Krypto-Fachbegriffe (Currency = immer "Röbel Münzen").
+// Info screen: what Röbel Münzen are, how they work, and the vision.
+// Citizen-friendly German, no crypto jargon. Wording rule: always "Röbel Münzen", described as the
+// town's thank-you for belonging and taking part; never "Währung", "Geld" or "Bürgergeld".
 import React from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,8 +28,9 @@ export default function RoebelTalerInfoScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.lead}>
-          Röbel Münzen sind die digitale Gemeinschaftswährung von Röbel/Müritz — von Bürgern für
-          Bürger. Sie soll Wertschöpfung in der Stadt halten und das lokale Miteinander stärken.
+          Röbel Münzen sind Röbels Dankeschön fürs Dabeisein und Mitmachen, von Bürgern für
+          Bürger. Sie sollen das Miteinander stärken: mehr Leben in Geschäften und Vereinen, mehr
+          Menschen bei Veranstaltungen, mehr Stimmen, wenn es um unsere Stadt geht.
         </Text>
 
         <View style={{ marginBottom: 16 }}>
@@ -37,7 +39,7 @@ export default function RoebelTalerInfoScreen() {
 
         <Section colors={colors} title="Wer kann mitmachen?" emoji="🪪">
           Nur verifizierte Bürger. Deine Bürger-Verifizierung ist dein Schlüssel — nur wer als
-          echter Röbeler bestätigt ist, kann Röbel Münzen erzeugen. Das macht das Geld
+          echter Röbeler bestätigt ist, kann Röbel Münzen erzeugen. Das macht sie
           fälschungssicher: keine Bots, keine Fake-Konten.
         </Section>
 
@@ -47,13 +49,13 @@ export default function RoebelTalerInfoScreen() {
           Mensch erzeugt seinen eigenen, gleichen Anteil.
         </Section>
 
-        <Section colors={colors} title="Eine geteilte Währung (die Gruppe)" emoji="👥">
-          Damit alle dasselbe Geld nutzen, bündeln die Bürger ihre persönlichen Münzen in einer
-          gemeinsamen Gruppe — daraus entsteht der einheitliche Röbel Münzen, den alle akzeptieren.
-          Deine eingebrachten Münzen dienen als Deckung der gemeinsamen Währung; zurücktauschen
-          lassen sie sich nicht. Mitglied der Gruppe sind ausschließlich verifizierte
-          Bürger — deshalb bleibt Röbel Münzen echtes Bürgergeld und kann nicht von Außenstehenden
-          erzeugt werden.
+        <Section colors={colors} title="Gemeinsame Münzen für alle (die Gruppe)" emoji="👥">
+          Damit alle dieselben Münzen nutzen, bringen die Bürger ihre persönlichen Münzen in eine
+          gemeinsame Gruppe ein. Daraus entstehen die einheitlichen Röbel Münzen, die alle annehmen
+          können. Deine eingebrachten Münzen stehen hinter den gemeinsamen Röbel Münzen;
+          zurücktauschen lassen sie sich nicht. Mitglied der Gruppe sind ausschließlich verifizierte
+          Bürger. Deshalb gehören Röbel Münzen wirklich den Röbelern und können nicht von
+          Außenstehenden erzeugt werden.
         </Section>
 
         <Section colors={colors} title="Wie kommen neue Bürger dazu?" emoji="🤲">
@@ -65,34 +67,34 @@ export default function RoebelTalerInfoScreen() {
         </Section>
 
         <Section colors={colors} title="Warum schrumpft mein Guthaben?" emoji="🌊">
-          Röbel Münzen verlieren ganz langsam an Wert, wenn sie nur liegen bleiben (etwa 7 % im
-          Jahr). Das ist Absicht: Geld soll genutzt werden, nicht gehortet. So bleibt es in
-          Bewegung — und in der Stadt. Wer aktiv ist, verliert dadurch praktisch nichts.
+          Röbel Münzen werden ganz langsam weniger, wenn sie nur liegen bleiben (etwa 7 % im
+          Jahr). Das ist Absicht: Sie sollen genutzt werden, nicht gehortet. So bleiben sie in
+          Bewegung und in der Stadt. Wer aktiv ist, merkt davon praktisch nichts.
         </Section>
 
-        <Section colors={colors} title="Senden & bezahlen" emoji="🤝">
-          Du kannst Röbel Münzen an andere Bürger senden. Schritt für Schritt sollen lokale
-          Geschäfte und Vereine sie annehmen — damit dein Geld vor Ort kreist statt abzufließen.
+        <Section colors={colors} title="Weitergeben & einlösen" emoji="🤝">
+          Du kannst Röbel Münzen schon heute an andere Bürger weitergeben: als Dankeschön, fürs
+          Helfen, für gute Arbeit. Schritt für Schritt sollen lokale Geschäfte und Vereine sie
+          annehmen. So bleibt in Röbel, was in Röbel entsteht.
         </Section>
 
         <Section colors={colors} title="Öffentlich & nachprüfbar" emoji="🔍">
           Röbel Münzen läuft auf einer offenen, öffentlichen Infrastruktur (Gnosis). Jede Münze und
-          jede Überweisung ist für alle überprüfbar — niemand kann heimlich Geld „drucken“. Das
+          jede Weitergabe ist für alle überprüfbar. Niemand kann heimlich Münzen erzeugen. Das
           schafft Vertrauen ohne zentrale Kontrolle.
         </Section>
 
         <Section colors={colors} title="Die Vision: ein Netzwerk von Städten" emoji="🌍">
-          Röbel ist der Anfang. Weitere Städte erhalten ihre eigene Währung mit ihrer eigenen
-          Bürger-Verifizierung. Diese Währungen vertrauen einander — so entsteht ein Netzwerk
-          lokaler Wirtschaften. Jede Stadt behält ihr eigenes Geld und ihre eigenen Regeln;
-          akzeptiert wird trotzdem über Stadtgrenzen hinweg. Geld wird lokal erzeugt, aber breit
-          nutzbar.
+          Röbel ist der Anfang. Weitere Städte können ihre eigenen Münzen mit ihrer eigenen
+          Bürger-Verifizierung bekommen. Vertrauen diese Städte einander, entsteht ein Netzwerk
+          lokaler Gemeinschaften. Jede Stadt behält ihre eigenen Münzen und ihre eigenen Regeln;
+          angenommen werden sie trotzdem über Stadtgrenzen hinweg.
         </Section>
 
         <View style={styles.note}>
           <Text style={styles.noteText}>
-            Hinweis: Röbel Münzen sind eine experimentelle Gemeinschaftswährung — kein E-Geld und
-            nicht 1:1 in Euro auszahlbar. Es ist getrennt von den Belohnungs-Münzen in der App.
+            Hinweis: Röbel Münzen sind ein Gemeinschaftsexperiment. Sie sind kein E-Geld und
+            nicht in Euro auszahlbar. Sie sind getrennt von den Punkten unter „Belohnungen“.
           </Text>
         </View>
 

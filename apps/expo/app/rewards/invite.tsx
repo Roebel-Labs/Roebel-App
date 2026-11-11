@@ -171,7 +171,7 @@ export default function InviteNeighboursScreen() {
           <Text style={styles.heroTitle}>Röbel Münzen wachsen von Mensch zu Mensch</Text>
           <Text style={styles.heroBody}>
             Niemand verteilt sie von oben. Wer schon dabei ist, holt die Nächsten dazu und steht mit
-            seinem Wort für sie ein. So entsteht ein Geld, das auf Vertrauen unter Nachbarn beruht.
+            seinem Wort für sie ein. So entsteht etwas Gemeinsames, das auf Vertrauen unter Nachbarn beruht.
           </Text>
           {overview ? (
             <View style={styles.townProgress} accessible accessibilityLabel={`${overview.joined} von ${overview.citizens} Bürgerinnen und Bürgern sind dabei`}>
