@@ -42,6 +42,8 @@ import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import { softShadow } from '@/lib/shadow';
 import { watchTreasuryEuro } from '@/lib/roebel-taler';
+import { findMyInvitation } from '@/lib/muenzen-invite';
+import UsersIcon from '@/assets/icons/user.svg';
 import {
   MIN_MINTABLE,
   MINT_COOLDOWN_MS,
@@ -150,6 +152,26 @@ export default function RewardsIndexScreen() {
   const [showReceive, setShowReceive] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [showNotInvited, setShowNotInvited] = useState(false);
+  // Name of an inviter who is still saving up for this user's invitation (sheet variant).
+  const [savingInviter, setSavingInviter] = useState<string | null | undefined>(undefined);
+  // Not joined yet: is there an invitation waiting? Drives the hero line so an invited
+  // citizen sees at a glance that one tap is all that is missing.
+  const [invitation, setInvitation] = useState<{ address: string; name: string | null } | null>(null);
+  const talerAddress = talerAccount?.address;
+  useEffect(() => {
+    if (!talerAddress || talerLoading || talerOnboarded) return;
+    let cancelled = false;
+    findMyInvitation(talerAddress)
+      .then((inv) => {
+        if (!cancelled && inv.inviter) setInvitation({ address: talerAddress, name: inv.inviterName });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [talerAddress, talerLoading, talerOnboarded]);
+  // undefined = no usable invitation; null = invited, inviter's name unknown.
+  const invitedBy = invitation && invitation.address === talerAddress ? invitation.name : undefined;
 
   // One-time Röbel Münzen intro: show the first time this device lands on the
   // page, after a short beat so the screen paints first.
@@ -274,7 +296,8 @@ export default function RewardsIndexScreen() {
       await onboard();
       showSnackbar({ message: 'Willkommen bei Röbel Münzen!' });
     } catch (e: any) {
-      if (e?.code === 'NOT_INVITED') {
+      if (e?.code === 'NOT_INVITED' || e?.code === 'INVITER_SAVING') {
+        setSavingInviter(e.code === 'INVITER_SAVING' ? (e.inviterName ?? null) : undefined);
         setShowNotInvited(true);
         return;
       }
@@ -425,7 +448,9 @@ export default function RewardsIndexScreen() {
               !isConnected
                 ? 'Melde dich an, um Röbel Münzen zu sammeln'
                 : !talerOnboarded
-                  ? 'Mach mit, um täglich Röbel Münzen abzuholen'
+                  ? invitedBy !== undefined
+                    ? `${invitedBy ?? 'Ein:e Nachbar:in'} hat dich eingeladen. Tippe auf „Belohnungen erhalten“`
+                    : 'Mach mit, um täglich Röbel Münzen abzuholen'
                   : `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'}`
             }
           />
@@ -561,6 +586,31 @@ export default function RewardsIndexScreen() {
             recentCheckins={[]}
             hasCheckedInToday={talerClaimedToday}
           />
+        )}
+
+        {/* Bring the next citizens in — only someone who already collects can invite. */}
+        {isConnected && talerOnboarded && (
+          <Pressable
+            onPress={() => router.push('/rewards/invite' as any)}
+            style={({ pressed }) => [
+              styles.inviteCard,
+              { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+              softShadow(2, isDark),
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Nachbarn zu den Röbel Münzen einladen"
+          >
+            <View style={[styles.inviteIcon, { backgroundColor: colors.primaryLight }]}>
+              <UsersIcon width={22} height={22} color={colors.primary} />
+            </View>
+            <View style={styles.inviteText}>
+              <Text style={[styles.inviteTitle, { color: colors.textPrimary }]}>Nachbarn einladen</Text>
+              <Text style={[styles.inviteSub, { color: colors.textSecondary }]}>
+                Hol die Nächsten zu den Röbel Münzen. Sie starten mit 48 Münzen.
+              </Text>
+            </View>
+            <ChevronLeftIcon width={18} height={18} color={colors.textTertiary} style={styles.inviteChevron} />
+          </Pressable>
         )}
 
         {/* Stadtkasse + Schatzkammer — two soft-shadow square cards */}
@@ -753,7 +803,7 @@ export default function RewardsIndexScreen() {
       <NotInvitedSheet
         visible={showNotInvited}
         onClose={() => setShowNotInvited(false)}
-        address={talerAccount?.address}
+        savingInviterName={savingInviter}
       />
     </View>
   );
@@ -908,6 +958,24 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: 120,
   },
+  inviteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    padding: 16,
+  },
+  inviteIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteText: { flex: 1, gap: 2 },
+  inviteTitle: { fontFamily: 'Inter-SemiBold', fontSize: 16 },
+  inviteSub: { fontFamily: 'Inter-Regular', fontSize: 13, lineHeight: 18 },
+  inviteChevron: { transform: [{ rotate: '180deg' }] },
   cardsRow: {
     flexDirection: 'row',
     gap: 16,

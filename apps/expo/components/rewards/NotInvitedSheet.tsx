@@ -10,23 +10,28 @@ const HERO_COIN = require('../../assets/illustration/muenzen/top_hero_coin.png')
 interface NotInvitedSheetProps {
   visible: boolean;
   onClose: () => void;
-  /** The user's own address — shared so a citizen can invite them. */
-  address?: string;
+  /**
+   * Set when someone HAS invited the user but is still saving the Münzen the invitation costs
+   * them: their name (null = unknown). Undefined = nobody has invited the user yet.
+   */
+  savingInviterName?: string | null;
 }
 
 /**
- * Shown when a not-yet-invited user taps "Belohnungen erhalten". To receive
- * Röbel Münzen rewards a citizen must invite (trust) them first; this explains
- * that and lets them share their address.
+ * Shown when a user taps "Belohnungen erhalten" and cannot join yet: either nobody has invited
+ * them, or their inviter is still saving up. Explains the neighbour-to-neighbour invitation and
+ * lets them ask for one (no wallet address is ever shown or shared).
  */
-export default function NotInvitedSheet({ visible, onClose, address }: NotInvitedSheetProps) {
+export default function NotInvitedSheet({ visible, onClose, savingInviterName }: NotInvitedSheetProps) {
   const { colors } = useTheme();
+  const inviterSaving = savingInviterName !== undefined;
 
   const onShare = async () => {
-    if (!address) return;
     try {
       await Share.share({
-        message: `Bitte lade mich zu Röbel ein, damit ich Belohnungen erhalten kann — meine Adresse: ${address}`,
+        message:
+          'Ich möchte bei den Röbel Münzen mitmachen. Lädst du mich ein? ' +
+          'In der Röbel App: „Belohnungen“ → „Nachbarn einladen“ → meinen Namen antippen.',
       });
     } catch {
       /* user dismissed the share sheet */
@@ -38,26 +43,27 @@ export default function NotInvitedSheet({ visible, onClose, address }: NotInvite
       <View style={styles.container}>
         <Image source={HERO_COIN} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.headline, { color: colors.textPrimary }]}>
-          Lass dich einladen
+          {inviterSaving ? 'Deine Einladung ist unterwegs' : 'Lass dich einladen'}
         </Text>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          Um Röbel Münzen zu sammeln, muss dich zuerst ein:e Bürger:in aus Röbel einladen.
-          Teile deine Adresse — sobald du eingeladen bist, tippe hier erneut.
+          {inviterSaving
+            ? `${savingInviterName ?? 'Ein:e Nachbar:in'} hat dich eingeladen und spart gerade noch die Münzen an, die eine Einladung kostet. Das dauert meist nur ein paar Tage. Schau dann wieder vorbei und tippe erneut.`
+            : 'Röbel Münzen wachsen von Mensch zu Mensch: Wer schon sammelt, lädt die Nächsten ein. Bitte eine:n Nachbar:in, der oder die schon dabei ist, dich einzuladen. Danach tippst du hier erneut und startest mit 48 Röbel Münzen.'}
         </Text>
 
-        {address ? (
-          <Pressable
-            onPress={onShare}
-            style={({ pressed }) => [
-              styles.cta,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Meine Adresse teilen"
-          >
-            <Text style={styles.ctaText}>Adresse teilen</Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          onPress={onShare}
+          style={({ pressed }) => [
+            styles.cta,
+            { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Um eine Einladung bitten"
+        >
+          <Text style={styles.ctaText}>
+            {inviterSaving ? 'Jemand anderen fragen' : 'Um Einladung bitten'}
+          </Text>
+        </Pressable>
 
         <Pressable
           onPress={() => { void openBrowserAsync(gnosisReferralUrl); }}

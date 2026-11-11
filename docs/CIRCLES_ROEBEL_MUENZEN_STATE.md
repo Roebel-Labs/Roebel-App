@@ -91,3 +91,24 @@ to "Punkte".
 - `scripts/circles/trust-wallet.ts` — trust a wallet from a KEY-based funded inviter (not the passkey one).
 - `scripts/circles/register-roebel-group.ts` — registers a citizen-gated group (reference).
 - PR automation (not in repo, were in /tmp): `open-pr.mjs`, `update-pr-entry.mjs` — used the macOS git-keychain token via the GitHub API.
+
+## Update 2026-11-11 — "Nachbarn einladen" (citizen-to-citizen invitations in the Expo app)
+
+State on Gnosis that day: 59 CitizenNFTv2 holders, 4 registered humans, 8 trusted by `0x1f14` but
+unregistered, 47 with no human inviter. `0x1f14` holds 77 raw personal CRC (< 96), farm quota 30 is
+still unusable for thirdweb accounts (InvitationModule needs Safe invitees). So onboarding now runs
+from citizen to citizen inside the app:
+
+- **Screen** `apps/expo/app/rewards/invite.tsx` (entry card on Belohnungen for joined citizens):
+  explanation, savings progress, list of citizens who have not joined, invite / withdraw.
+- **Saving**: the daily claim converts personal Münzen into group Münzen, and the group's
+  BaseTreasury never gives them back. A per-wallet switch ("Für eine Einladung ansparen") plus every
+  open invitation makes the claim hold back 97 personal Münzen each (`lib/muenzen-invite.ts`,
+  applied in `RoebelTalerProvider.dailyMint` and `lib/muenzen-claim.ts`). Invite = `Hub.trust`,
+  only offered when 96 are already there, so a join can never revert for lack of funds.
+  Withdraw = `Hub.trust(addr, 0)`.
+- **Join side**: `findMyInvitation` picks an inviter who is a human AND holds >= 96 own personal
+  CRC. Invited-but-unfunded (the 8 trusted by `0x1f14`) now get a "Deine Einladung ist unterwegs"
+  sheet instead of an on-chain revert; any funded citizen can invite them as well.
+- Capacity compounds: each newcomer gets 48 + ~24/day, i.e. can pay an invitation after ~2 days.
+- Not built: a push/in-app notification to the invitee (the inviter gets a "Bescheid sagen" share).

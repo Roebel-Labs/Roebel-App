@@ -50,10 +50,18 @@ export default function RoebelTalerInfoScreen() {
         <Section colors={colors} title="Eine geteilte Währung (die Gruppe)" emoji="👥">
           Damit alle dasselbe Geld nutzen, bündeln die Bürger ihre persönlichen Münzen in einer
           gemeinsamen Gruppe — daraus entsteht der einheitliche Röbel Münzen, den alle akzeptieren.
-          Deine eingebrachten Münzen dienen als Deckung und bleiben dir erhalten: du kannst sie
-          jederzeit wieder zurücktauschen. Mitglied der Gruppe sind ausschließlich verifizierte
+          Deine eingebrachten Münzen dienen als Deckung der gemeinsamen Währung; zurücktauschen
+          lassen sie sich nicht. Mitglied der Gruppe sind ausschließlich verifizierte
           Bürger — deshalb bleibt Röbel Münzen echtes Bürgergeld und kann nicht von Außenstehenden
           erzeugt werden.
+        </Section>
+
+        <Section colors={colors} title="Wie kommen neue Bürger dazu?" emoji="🤲">
+          Von Mensch zu Mensch. Wer schon Röbel Münzen sammelt, lädt unter „Belohnungen“ →
+          „Nachbarn einladen“ die Nächsten ein und steht mit seinem Wort dafür ein, dass es ein
+          echter Mensch aus Röbel ist. Eine Einladung kostet 96 eigene Münzen (etwa vier Tage
+          Abholen), die dafür vorher angespart werden. Wer eingeladen wird, startet mit 48 Münzen.
+          So wächst der Kreis durch Vertrauen statt durch Formulare, und Fake-Konten lohnen sich nicht.
         </Section>
 
         <Section colors={colors} title="Warum schrumpft mein Guthaben?" emoji="🌊">
