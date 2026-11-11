@@ -1,20 +1,21 @@
-import { Check, Dumbbell, Heart, PartyPopper, Store, Users } from 'lucide-react';
+import { Check, Heart, PartyPopper, Store, Users } from 'lucide-react';
 import { interpolate, useCurrentFrame } from 'remotion';
 import { Avatar, C, Card, Coin, FONT, FlyingCoin, Pill, Reveal, Shadow, Tile, at, ramp, smooth, usePop, useRamp } from './parts';
+import { useCues } from './cues';
 import type { SceneId } from './script';
-
-const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 
 /** Scene 1: the places of the town, then everyone who shows up. */
 function Town() {
   const visitors = [140, 260, 380, 500, 620, 740, 860];
+  const [, places, everyone] = useCues();
+  const beat = (share: number) => Math.round(places.from + (places.to - places.from) * share);
   return (
     <>
-      <Tile x={190} y={390} icon={Store} label="Laden" start={10} activeAt={96} />
-      <Tile x={500} y={390} icon={Dumbbell} label="Verein" start={20} activeAt={134} />
-      <Tile x={810} y={390} icon={PartyPopper} label="Fest" start={30} activeAt={172} />
+      <Tile x={190} y={390} icon={Store} label="Laden" start={10} activeAt={beat(0.08)} />
+      <Tile x={500} y={390} icon={Users} label="Verein" start={20} activeAt={beat(0.4)} />
+      <Tile x={810} y={390} icon={PartyPopper} label="Fest" start={30} activeAt={beat(0.7)} />
       {visitors.map((x, i) => (
-        <Avatar key={x} x={x} y={800} size={110} start={224 + i * 5} shift={90} />
+        <Avatar key={x} x={x} y={800} size={110} start={everyone.from - 6 + i * 5} shift={90} />
       ))}
     </>
   );
@@ -23,27 +24,30 @@ function Town() {
 /** Scene 2: the answer to the question is one Münze. */
 function Question() {
   const frame = useCurrentFrame();
-  const drop = usePop(62, 11);
+  const answer = useCues()[1].from - 8;
+  const drop = usePop(answer, 11);
   const y = interpolate(drop, [0, 1], [-260, 430]);
-  const squash = 1 + Math.sin(Math.min(1, Math.max(0, (frame - 74) / 10)) * Math.PI) * 0.06;
-  const float = Math.sin((frame - 90) / 14) * 8 * Math.min(1, Math.max(0, (frame - 90) / 20));
+  const squash = 1 + Math.sin(Math.min(1, Math.max(0, (frame - answer - 12) / 10)) * Math.PI) * 0.06;
+  const float = Math.sin((frame - answer - 28) / 14) * 8 * Math.min(1, Math.max(0, (frame - answer - 28) / 20));
   return (
     <>
       <Shadow x={500} y={690} width={360 * (0.5 + 0.5 * drop)} strength={drop} />
-      <Coin x={500} y={y + float} size={400} scale={squash} rotate={(1 - drop) * -28} opacity={Math.min(1, drop * 5)} glint={ramp(frame, 96, 30, smooth)} />
+      <Coin x={500} y={y + float} size={400} scale={squash} rotate={(1 - drop) * -28} opacity={Math.min(1, drop * 5)} glint={ramp(frame, answer + 34, 30, smooth)} />
       <div style={at(500, 850)}>
-        <Reveal text="Röbel Münzen" start={98} size={120} style={{ whiteSpace: 'nowrap' }} />
+        <Reveal text="Röbel Münzen" start={answer + 30} size={120} style={{ whiteSpace: 'nowrap' }} />
       </div>
     </>
   );
 }
 
 const WEEK = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-const DAY_TICKS = [70, 125, 180, 235];
 
 /** Scene 3: every verified citizen receives the same, every day. */
 function Belonging() {
   const frame = useCurrentFrame();
+  const [first, second, third] = useCues();
+  // One drop per spoken beat: "jeden Tag", "weil du dazugehörst", "alle gleich viel", and one more.
+  const DAY_TICKS = [first.to - 48, second.from + 6, third.from + 2, third.from + 40];
   const today = DAY_TICKS.filter((tick) => frame >= tick).length - 1;
   const people = Array.from({ length: 16 }, (_, i) => ({ x: 185 + (i % 4) * 210, y: 330 + Math.floor(i / 4) * 185, i }));
   return (
@@ -92,9 +96,12 @@ function Belonging() {
 /** Scene 4: helping with a project is rewarded; a good contribution can be thanked. */
 function TakingPart() {
   const frame = useCurrentFrame();
-  const progress = ramp(frame, 40, 60, smooth);
-  const done = usePop(100, 11);
-  const post = 212;
+  const [, helping, thanking] = useCues();
+  const work = helping.from - 6;
+  const progress = ramp(frame, work, 58, smooth);
+  const done = usePop(work + 58, 11);
+  const paid = Math.max(work + 68, helping.to - 62);
+  const post = thanking.from - 10;
   const heart = usePop(post + 78, 10);
   return (
     <>
@@ -113,7 +120,7 @@ function TakingPart() {
 
       <Avatar x={230} y={640} size={190} start={22} verifiedAt={34} />
       {[0, 1, 2].map((i) => (
-        <FlyingCoin key={i} from={[800, 250]} to={[392 + i * 58, 668]} start={112 + i * 9} duration={30} lift={150} size={86} keep={frame < post + 50 || i < 2} />
+        <FlyingCoin key={i} from={[800, 250]} to={[392 + i * 58, 668]} start={paid + i * 9} duration={30} lift={150} size={86} keep={frame < post + 50 || i < 2} />
       ))}
 
       <Card x={745} y={790} width={410} height={250} start={post}>
@@ -143,8 +150,9 @@ const onRing = (deg: number, r = RING.r): [number, number] => [RING.cx + Math.co
 function StaysLocal() {
   const frame = useCurrentFrame();
   const draw = ramp(frame, 6, 44, smooth);
-  const turn = interpolate(frame, [56, 420], [0, 560], clamp);
-  const centre = usePop(300, 12);
+  const [, , later, closing] = useCues();
+  const turn = Math.max(0, frame - 56) * 1.5;
+  const centre = usePop(closing.from + 8, 12);
   const circumference = 2 * Math.PI * RING.r;
   const [topX, topY] = onRing(-90);
   const [rightX, rightY] = onRing(0);
@@ -165,14 +173,14 @@ function StaysLocal() {
       })}
       <Avatar x={topX} y={topY} size={150} start={26} verifiedAt={40} />
       <Avatar x={rightX} y={rightY} size={150} start={40} verifiedAt={54} />
-      <Avatar x={bottomX} y={bottomY} size={150} start={196} dashed icon={Store} />
-      <Avatar x={leftX} y={leftY} size={150} start={214} dashed icon={Users} />
+      <Avatar x={bottomX} y={bottomY} size={150} start={later.from + 22} dashed icon={Store} />
+      <Avatar x={leftX} y={leftY} size={150} start={later.from + 40} dashed icon={Users} />
       <Pill x={topX} y={topY - 118} text="Du" start={34} />
       <Pill x={rightX} y={rightY + 118} text="Nachbarin" start={48} />
-      <Pill x={bottomX} y={bottomY + 118} text="Geschäfte · bald" start={204} muted />
-      <Pill x={leftX} y={leftY + 118} text="Vereine · bald" start={222} muted />
+      <Pill x={bottomX} y={bottomY + 118} text="Geschäfte · bald" start={later.from + 30} muted />
+      <Pill x={leftX} y={leftY + 118} text="Vereine · bald" start={later.from + 48} muted />
       <Shadow x={500} y={640} width={200 * centre} strength={centre} />
-      <Coin x={500} y={500} size={210} scale={centre} glint={ramp(frame, 318, 30, smooth)} />
+      <Coin x={500} y={500} size={210} scale={centre} glint={ramp(frame, closing.from + 28, 30, smooth)} />
     </>
   );
 }
@@ -184,7 +192,8 @@ const OUTER = INNER.flatMap((deg, parent) => [deg - 30, deg + 30].map((angle) =>
 /** Scene 6: the circle grows from neighbour to neighbour. */
 function Neighbours() {
   const frame = useCurrentFrame();
-  const pull = interpolate(ramp(frame, 0, 200, smooth), [0, 1], [1.16, 1]);
+  const next = useCues()[1].from;
+  const pull = interpolate(ramp(frame, 0, next + 90, smooth), [0, 1], [1.16, 1]);
   const link = (from: [number, number], to: [number, number], start: number, key: string) => {
     const t = ramp(frame, start, 22, smooth);
     const mid: [number, number] = [(from[0] + to[0]) / 2 + (to[1] - from[1]) * 0.12, (from[1] + to[1]) / 2 - (to[0] - from[0]) * 0.12];
@@ -194,7 +203,7 @@ function Neighbours() {
     <div style={{ position: 'absolute', inset: 0, transform: `scale(${pull})`, transformOrigin: '500px 500px' }}>
       <svg viewBox="0 0 1000 1000" style={{ position: 'absolute', inset: 0, width: 1000, height: 1000 }}>
         {INNER.map((deg, i) => link([500, 500], polar(deg, 215), 28 + i * 12, `i${i}`))}
-        {OUTER.map((o, i) => link(polar(INNER[o.parent], 215), polar(o.angle, 410), 104 + i * 9, `o${i}`))}
+        {OUTER.map((o, i) => link(polar(INNER[o.parent], 215), polar(o.angle, 410), next + i * 9, `o${i}`))}
       </svg>
       <Avatar x={500} y={500} size={150} start={4} verifiedAt={14} />
       <Coin x={556} y={552} size={58} scale={usePop(18)} />
@@ -204,7 +213,7 @@ function Neighbours() {
       })}
       {OUTER.map((o, i) => {
         const [x, y] = polar(o.angle, 410);
-        return <Member key={o.angle} x={x} y={y} size={104} start={120 + i * 9} />;
+        return <Member key={o.angle} x={x} y={y} size={104} start={next + 16 + i * 9} />;
       })}
     </div>
   );
@@ -225,25 +234,27 @@ const OUTRO_LINES = ['Mehr Leute auf den Festen.', 'Mehr Leben in den Läden.', 
 /** Scene 7: what it is for, then the name. */
 function Outro() {
   const frame = useCurrentFrame();
-  const leave = useRamp(226, 18, smooth);
-  const drop = usePop(248, 11);
-  const float = Math.sin((frame - 270) / 14) * 7 * Math.min(1, Math.max(0, (frame - 270) / 20));
+  const cues = useCues();
+  const name = cues[3].from;
+  const leave = useRamp(name - 30, 18, smooth);
+  const drop = usePop(name - 10, 11);
+  const float = Math.sin((frame - name - 12) / 14) * 7 * Math.min(1, Math.max(0, (frame - name - 12) / 20));
   return (
     <>
       <div style={{ position: 'absolute', inset: 0, opacity: 1 - leave, transform: `translateY(${-leave * 60}px)` }}>
         {OUTRO_LINES.map((line, i) => (
           <div key={line} style={{ ...at(500, 330 + i * 150), width: 1000 }}>
-            <Reveal text={line} start={14 + i * 62} size={84} color={C.white} />
+            <Reveal text={line} start={cues[i].from - 4} size={84} color={C.white} />
           </div>
         ))}
       </div>
       <Shadow x={500} y={560} width={300 * drop} strength={drop} dark />
-      <Coin x={500} y={interpolate(drop, [0, 1], [-240, 350]) + float} size={330} rotate={(1 - drop) * -28} opacity={Math.min(1, drop * 5)} glint={ramp(frame, 276, 30, smooth)} />
+      <Coin x={500} y={interpolate(drop, [0, 1], [-240, 350]) + float} size={330} rotate={(1 - drop) * -28} opacity={Math.min(1, drop * 5)} glint={ramp(frame, name + 18, 30, smooth)} />
       <div style={{ ...at(500, 700), width: 1000 }}>
-        <Reveal text="Röbel Münzen" start={266} size={132} color={C.white} />
+        <Reveal text="Röbel Münzen" start={name + 4} size={132} color={C.white} />
       </div>
       <div style={{ ...at(500, 810), width: 1000 }}>
-        <Reveal text="Unser Dankeschön fürs Mitmachen." start={288} size={48} color={C.sky} family={FONT.body} weight={500} stagger={2} />
+        <Reveal text="Unser Dankeschön fürs Mitmachen." start={name + 34} size={48} color={C.sky} family={FONT.body} weight={500} stagger={2} />
       </div>
     </>
   );

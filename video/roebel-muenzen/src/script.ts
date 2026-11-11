@@ -1,8 +1,16 @@
 /**
- * Narration of the Röbel Münzen explainer. One entry per scene; `seconds` is the scene length and
+ * Narration of the Röbel Münzen explainer. One entry per scene; `seconds` is the minimum scene length (the recorded voice sets the real one) and
  * the sentences double as burned-in captions. Wording rule: always "Röbel Münzen", never "Währung".
  */
+import voice from './voice.json';
+
 export const FPS = 30;
+
+export interface Cue {
+  text: string;
+  from: number;
+  to: number;
+}
 
 export type SceneId = 'town' | 'question' | 'belonging' | 'takingPart' | 'staysLocal' | 'neighbours' | 'outro';
 
@@ -17,7 +25,7 @@ export const SCENES: SceneScript[] = [
   {
     id: 'town',
     title: 'Röbel lebt von seinen Menschen',
-    seconds: 11,
+    seconds: 9,
     lines: [
       'Röbel lebt von den Menschen, die etwas tun.',
       'Die den Laden aufschließen, das Training leiten, das Fest aufbauen.',
@@ -27,13 +35,13 @@ export const SCENES: SceneScript[] = [
   {
     id: 'question',
     title: 'Wie sagt eine Stadt Danke?',
-    seconds: 6,
+    seconds: 5.5,
     lines: ['Wie sagt eine Stadt dafür Danke?', 'In Röbel mit den Röbel Münzen.'],
   },
   {
     id: 'belonging',
     title: 'Dabeisein zählt',
-    seconds: 11,
+    seconds: 10,
     lines: [
       'Wer als Bürgerin oder Bürger bestätigt ist, bekommt jeden Tag Röbel Münzen.',
       'Einfach, weil du dazugehörst.',
@@ -64,13 +72,13 @@ export const SCENES: SceneScript[] = [
   {
     id: 'neighbours',
     title: 'Von Mensch zu Mensch',
-    seconds: 8,
+    seconds: 7,
     lines: ['Der Kreis wächst über Nachbarn:', 'Wer schon dabei ist, lädt die Nächsten ein.'],
   },
   {
     id: 'outro',
     title: '',
-    seconds: 12,
+    seconds: 10,
     lines: [
       'Mehr Leute auf den Festen.',
       'Mehr Leben in den Läden.',
@@ -80,20 +88,24 @@ export const SCENES: SceneScript[] = [
   },
 ];
 
-export const sceneFrames = (scene: SceneScript) => Math.round(scene.seconds * FPS);
-export const TOTAL_FRAMES = SCENES.reduce((sum, scene) => sum + sceneFrames(scene), 0);
+/** Frames of silence before the voice starts in each scene. */
+export const VOICE_OFFSET = 10;
 
-/** Frame window of each caption line inside its scene, proportional to the line's length. */
-export function captionWindows(scene: SceneScript): { text: string; from: number; to: number }[] {
-  const total = sceneFrames(scene);
-  const lead = 8;
-  const usable = total - lead - 10;
-  const chars = scene.lines.reduce((sum, line) => sum + line.length + 12, 0);
-  let cursor = lead;
-  return scene.lines.map((text) => {
-    const span = (usable * (text.length + 12)) / chars;
-    const window = { text, from: Math.round(cursor), to: Math.round(cursor + span) };
-    cursor += span;
-    return window;
-  });
+const VOICE: Record<string, { seconds: number; lines: { start: number; end: number }[] }> = voice;
+
+/** Frame window of each spoken line inside its scene, taken from the recorded narration. */
+export function cuesOf(scene: SceneScript): Cue[] {
+  const lines = VOICE[scene.id].lines;
+  return lines.map((line, i) => ({
+    text: scene.lines[i],
+    from: VOICE_OFFSET + Math.round(line.start * FPS),
+    to: VOICE_OFFSET + Math.round((lines[i + 1]?.start ?? line.end + 0.5) * FPS),
+  }));
 }
+
+/** A scene lasts as long as its narration plus a short tail, and never less than `seconds`. */
+export const sceneFrames = (scene: SceneScript) => {
+  const spoken = VOICE_OFFSET + Math.round(VOICE[scene.id].seconds * FPS) + (scene.id === 'outro' ? 96 : 26);
+  return Math.max(Math.round(scene.seconds * FPS), spoken);
+};
+export const TOTAL_FRAMES = SCENES.reduce((sum, scene) => sum + sceneFrames(scene), 0);

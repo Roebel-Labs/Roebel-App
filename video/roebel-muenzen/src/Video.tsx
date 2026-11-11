@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AbsoluteFill, Sequence, continueRender, delayRender, interpolate, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, continueRender, delayRender, interpolate, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import { C, FONT, Reveal, ramp, smooth } from './parts';
 import { SCENE_VIEWS } from './scenes';
-import { SCENES, captionWindows, sceneFrames, type SceneScript } from './script';
+import { CueContext } from './cues';
+import { SCENES, VOICE_OFFSET, cuesOf, sceneFrames, type SceneScript } from './script';
 
 const STAGE = 1000;
 const FONT_FILES: { family: string; file: string; weight: string }[] = [
@@ -35,7 +36,8 @@ function SceneFrame({ scene }: { scene: SceneScript }) {
   const portrait = height > width;
   const View = SCENE_VIEWS[scene.id];
   // The outro shows its lines on stage, so it carries no caption.
-  const caption = dark ? undefined : captionWindows(scene).find((c) => frame >= c.from && frame < c.to);
+  const cues = cuesOf(scene);
+  const caption = dark ? undefined : cues.find((c) => frame >= c.from && frame < c.to);
   const stage = portrait ? width * 0.92 : height * 0.66;
   // Content leaves upwards; the paper stays, so scenes read as one continuous film.
   const leave = dark ? 0 : ramp(frame, total - 12, 12, smooth);
@@ -46,13 +48,18 @@ function SceneFrame({ scene }: { scene: SceneScript }) {
 
   return (
     <AbsoluteFill style={dark ? { backgroundColor: C.navy, clipPath: `circle(${reveal}% at 50% 50%)` } : undefined}>
+      <Sequence from={VOICE_OFFSET} layout="none">
+        <Audio src={staticFile(`voice/${scene.id}.mp3`)} />
+      </Sequence>
       <AbsoluteFill style={{ alignItems: 'center', opacity: 1 - leave, transform: `translateY(${-leave * 50}px)` }}>
         <div style={{ height: portrait ? height * 0.21 : height * 0.17, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: `0 ${width * 0.07}px` }}>
-          {scene.title ? <Reveal text={scene.title} start={4} size={portrait ? 96 : 70} /> : null}
+          {scene.title ? <Reveal text={scene.title.toUpperCase()} start={4} size={portrait ? 92 : 66} style={{ letterSpacing: '0.01em' }} /> : null}
         </div>
         <div style={{ width: stage, height: stage, marginTop: portrait ? height * 0.025 : 0 }}>
           <div style={{ width: STAGE, height: STAGE, position: 'relative', transform: `scale(${(stage / STAGE) * push})`, transformOrigin: '0 0' }}>
-            <View />
+            <CueContext.Provider value={cues}>
+              <View />
+            </CueContext.Provider>
           </div>
         </div>
         <div
