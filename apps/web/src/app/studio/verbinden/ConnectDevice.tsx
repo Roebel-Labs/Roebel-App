@@ -92,7 +92,11 @@ export function ConnectDevice() {
   };
 
   const returnTo = `/studio/verbinden?code=${encodeURIComponent(raw)}`;
-  const appLink = `roebel://chat/pair?code=${encodeURIComponent(raw)}`;
+  // Android: an intent link opens the installed app reliably from Chrome (falls back to this page).
+  const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+  const appLink = isAndroid
+    ? `intent://chat/pair?code=${encodeURIComponent(raw)}#Intent;scheme=roebel;package=com.maxbrych.roebelonchain;end`
+    : `roebel://chat/pair?code=${encodeURIComponent(raw)}`;
 
   return (
     <section>

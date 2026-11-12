@@ -12,6 +12,7 @@
           { "/": "/api/*", "exclude": true, "comment": "Exclude API routes" },
 
           { "/": "/e/*", "comment": "Smart Event QR (Röbel Münzen attendance)" },
+          { "/": "/studio/verbinden", "comment": "Ortis Studio pairing (QR) → in-app confirmation" },
           { "/": "/event/*", "comment": "Events (expo native path)" },
           { "/": "/events/*", "comment": "Events (web plural path)" },
           { "/": "/app/events/*", "comment": "Events (authenticated)" },

@@ -285,6 +285,19 @@ const config: ExpoConfig = {
         data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/e/' },
         category: ['BROWSABLE', 'DEFAULT']
       },
+      // Ortis Studio pairing QR (roebel.app/studio/verbinden?code=…) → in-app confirmation screen
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/studio/verbinden' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/studio/verbinden' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
       // Event deep links
       {
         autoVerify: true,
