@@ -63,8 +63,11 @@ function handleAppUrl(raw) {
   }
   if (win.isMinimized()) win.restore();
   win.show();
+  // macOS keeps a background app behind the browser unless it activates itself.
+  if (process.platform === 'darwin') app.focus({ steal: true });
   win.focus();
   win.webContents.send('desktop:command', cmd);
+  console.log(`${new Date().toISOString()} [main] app link: connected google=${google}`);
 }
 try {
   if (process.defaultApp && process.argv.length >= 2) {
