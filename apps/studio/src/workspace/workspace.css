@@ -897,3 +897,106 @@ html.mac-inset .rail button {
 html.mac-inset .rail {
   -webkit-app-region: drag;
 }
+
+/* Mini-Apps section */
+
+.apps .section-head {
+  gap: 12px;
+}
+
+.apps-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--w-line);
+  border-radius: 16px;
+  background: var(--w-card);
+}
+
+.app-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.app-icon.placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--w-accent);
+  color: #fff;
+  font: 700 20px/1 var(--font-head);
+}
+
+.app-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-status {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--w-raised);
+  color: var(--w-text-2);
+  font-size: 12px;
+}
+
+.app-status.live {
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+}
+
+.app-status.rejected,
+.app-status.suspended {
+  background: rgba(208, 69, 63, 0.1);
+  color: var(--w-danger);
+}
+
+.app-desc {
+  margin: 0;
+  color: var(--w-text-2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.apps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 460px;
+}

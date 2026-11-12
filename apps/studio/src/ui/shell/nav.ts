@@ -7,7 +7,7 @@ export type LiveTab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'h
 export const SECTIONS: ReadonlyArray<{ id: Section; label: string; soon?: boolean }> = [
   { id: 'home', label: 'Start' },
   { id: 'live', label: 'Livestream' },
-  { id: 'apps', label: 'Mini-Apps', soon: true },
+  { id: 'apps', label: 'Mini-Apps' },
 ];
 
 /** Own key, never part of ShowState (which is autosaved and broadcast to the overlay page). */

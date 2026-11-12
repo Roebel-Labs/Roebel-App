@@ -343,3 +343,33 @@ html.mac-inset .toolbar {
   color: var(--w-muted);
   font-size: 12px;
 }
+
+/* browser build: livestream notice (the card stays in workspace colours) */
+
+.web-live {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.web-live-card {
+  max-width: 520px;
+  padding: 32px;
+  border: 1px solid var(--w-line);
+  border-radius: 20px;
+}
+
+.web-live-card h1 {
+  margin: 0 0 10px;
+  font: 700 22px/1.25 var(--font-head);
+}
+
+.web-live-card p {
+  margin: 0 0 18px;
+  color: var(--w-text-2);
+  line-height: 1.55;
+}
+
+.web-live-card .w-btn {
+  text-decoration: none;
+}

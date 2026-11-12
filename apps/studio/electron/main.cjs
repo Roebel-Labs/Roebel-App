@@ -580,6 +580,11 @@ ipcMain.handle('secrets:clear', (e, key) => {
   guard('secrets:clear', e);
   return secrets ? secrets.clear(String(key)) : false;
 });
+ipcMain.handle('media:askAccess', async (e) => {
+  guard('media:askAccess', e);
+  await askMacMediaAccess();
+  return true;
+});
 ipcMain.handle('desktop:capture', (e) => {
   guard('desktop:capture', e);
   return desktop ? desktop.capture() : null;
@@ -616,8 +621,8 @@ app.whenReady().then(() => {
     setTimeout(() => void otaCheck(), 15_000);
     setInterval(() => void otaCheck(), OTA_CHECK_MS);
   }
-  // Never block window creation on the macOS permission dialog.
-  void askMacMediaAccess();
+  // No permission prompt at launch: the renderer asks (media:askAccess) when the operator first opens
+  // the livestream. The workspace never needs the camera.
 });
 
 // Quit: while on air the operator confirms first (Cmd+Q, window close). Then the renderer

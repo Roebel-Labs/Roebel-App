@@ -113,3 +113,21 @@ export const uploadImage = (token: string, blob: Blob, name: string) =>
 
 export const transcribe = (token: string, blob: Blob) =>
   upload<{ text: string }>('/api/chat/transcribe', token, 'audio', blob, 'aufnahme.webm');
+
+// ---- mini apps -------------------------------------------------------------------
+
+export interface MyMiniApp {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  iconUrl: string | null;
+  homeUrl: string;
+  status: 'draft' | 'pending' | 'approved' | 'live' | 'rejected' | 'suspended';
+  category: string;
+  primaryColor: string | null;
+  pendingUpdate: boolean;
+  updatedAt: string;
+}
+
+export const fetchMyMiniApps = (token: string) => call<{ apps: MyMiniApp[] }>('/api/chat/mini-apps', { token });

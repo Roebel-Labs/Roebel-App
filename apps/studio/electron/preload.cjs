@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('studio', {
   media: {
     // Returns http://127.0.0.1:7311/media/<token> for a local file.
     allow: (absPath) => ipcRenderer.invoke('media:allow', absPath),
+    // macOS camera/microphone permission, asked when the livestream is first opened (installer ≥ 0.2.0).
+    askAccess: () => ipcRenderer.invoke('media:askAccess'),
   },
   fs: {
     // { recordDir, sponsorId, name, startedAt, endedAt } -> { ok, error? }; appends to <recordDir>/werbung-airtime.jsonl.

@@ -22,6 +22,8 @@ declare global {
         getStatus(): Promise<{ started: boolean; startedAt: number | null; videoKbps: number | null; status: OutputStatus }>;
       };
       media: {
+        /** Installer ≥ 0.2.0: asks macOS for camera/microphone access. */
+        askAccess?: () => Promise<boolean>;
         /** Grants the renderer access to a local file; resolves to http://127.0.0.1:7311/media/<token>. */
         allow(absPath: string): Promise<string>;
       };

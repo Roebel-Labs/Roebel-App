@@ -24,6 +24,8 @@ import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } 
 import { Rail } from './shell/Rail';
 import { Toolbar } from './shell/Toolbar';
 import { onDesktopCommand } from '../workspace/desktop';
+import { setCaptureSection } from '../media/gate';
+import { isWebBuild } from '../web-shim';
 import './theme.css';
 import './shell/shell.css';
 
@@ -370,6 +372,8 @@ function Shell() {
     setSectionState(next);
     saveSection(next);
   };
+  // Cameras and microphones may open only in the livestream section (or while on air).
+  useEffect(() => setCaptureSection(section), [section]);
   useShowRuntime(visibleLiveTab(section, tab));
   useSponsorRuntime();
   const { dispatch } = useShow();
@@ -391,12 +395,26 @@ function Shell() {
       <Toolbar section={section} onSection={setSection} />
       <div className="shell-body">
         <Rail section={section} onSelect={setSection} />
-        <div className={`shell-card ${section === 'live' ? 'live-mode' : 'ws-mode'}`}>
+        <div className={`shell-card ${section === 'live' && !isWebBuild() ? 'live-mode' : 'ws-mode'}`}>
           {/* Broadcast alarms stay visible in every section. */}
           <RecordingBanner />
           <DestinationBanner />
           <SlowDestinationBanner />
-          {section === 'live' && (
+          {section === 'live' && isWebBuild() && (
+            <div className="section web-live">
+              <div className="web-live-card">
+                <h1>Livestream gibt es in der Desktop-App</h1>
+                <p>
+                  Kameras umschalten, Einblendungen und gleichzeitig in die Röbel App und auf YouTube senden: dafür braucht
+                  Ortis Studio deinen Rechner. Arbeitsbereich und Mini-Apps funktionieren auch hier im Browser.
+                </p>
+                <a className="w-btn green" href="https://www.roebel.app/studio" target="_blank" rel="noreferrer">
+                  Ortis Studio herunterladen
+                </a>
+              </div>
+            </div>
+          )}
+          {section === 'live' && !isWebBuild() && (
             <div className="section">
               <header className="topbar">
                 <span className="wordmark">Livestream</span>
@@ -430,7 +448,7 @@ function Shell() {
           )}
           {section === 'apps' && <AppsSection />}
           {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
-          {(section === 'live' || air.phase !== 'off') && <HealthBar />}
+          {((section === 'live' && !isWebBuild()) || air.phase !== 'off') && <HealthBar />}
         </div>
       </div>
       <QuitConfirm />

@@ -1,3 +1,6 @@
+import { installWebShim } from './web-shim';
+// Must run before anything touches window.studio (engine, OnAir).
+installWebShim();
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadFonts } from './render/fonts';

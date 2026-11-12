@@ -7,6 +7,8 @@ import { setProgramAudioProvider } from '../output/program-audio';
 import { useShow } from '../state/store';
 import type { Scene, ShowState } from '../state/types';
 import { Engine, OnAir, type OnAirSnapshot } from './engine';
+import { isWebBuild } from '../web-shim';
+import { captureAllowed, captureSection, gateAudio, gateSources, subscribeCaptureSection } from '../media/gate';
 
 type Ctx = { engine: Engine; onAir: OnAir; mixer: Mixer };
 
@@ -73,10 +75,25 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     return () => e.dispose();
   }, [fps]);
 
+  // Capture gate: cameras/microphones only in the Livestream section or while on air.
+  const section = useSyncExternalStore(subscribeCaptureSection, captureSection);
+  const phase = useSyncExternalStore(
+    (cb) => onAir.subscribe(cb),
+    () => onAir.get().phase,
+  );
+  // The browser build never captures (no broadcast there).
+  const capture = captureAllowed(section, phase) && !isWebBuild();
+  const captureRef = useRef(capture);
+  captureRef.current = capture;
   useEffect(() => {
-    engine?.registry.sync(state.sources);
+    // First entry into the livestream asks macOS for access (never at app launch).
+    if (capture) void window.studio?.media?.askAccess?.();
+  }, [capture]);
+
+  useEffect(() => {
+    engine?.registry.sync(gateSources(state.sources, capture));
     engine?.registry.setActive(programSourceIds(latest.current));
-  }, [engine, state.sources]);
+  }, [engine, state.sources, capture]);
 
   // Video files run only while on program.
   const activeKey = programSourceIds(state).join('|');
@@ -90,14 +107,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!mixer || !engine) return;
     const p = programAudioInputs(latest.current);
-    mixer.sync(state.audio, p.ids, engine.registry, p.transitionMs);
-  }, [mixer, engine, state.audio, programKey, transitionMs]);
+    mixer.sync(gateAudio(state.audio, capture), p.ids, engine.registry, p.transitionMs);
+  }, [mixer, engine, state.audio, programKey, transitionMs, capture]);
   useEffect(() => {
     if (!mixer || !engine) return;
     return engine.onHealth(() => {
       const s = latest.current;
       const p = programAudioInputs(s);
-      mixer.sync(s.audio, p.ids, engine.registry, 0);
+      mixer.sync(gateAudio(s.audio, captureRef.current), p.ids, engine.registry, 0);
     });
   }, [mixer, engine]);
 
