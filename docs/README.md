@@ -12,6 +12,7 @@ the right one.
 | Know what is running on the sovereign node | [State of the Netizen Node](STATE_OF_THE_NETIZEN_NODE.md) |
 | Work on Nostr, relays, or federation | [State of Nostr](STATE_OF_NOSTR.md) |
 | Work on agents, models, or AI governance | [State of Sovereign AI](STATE_OF_SOVEREIGN_AI.md) |
+| Work on Ortis Studio (desktop workspace, livestream, pairing, own keys, Google) | [State of Ortis Studio](STATE_OF_ORTIS_STUDIO.md) |
 | Run my own node | [Netizen Node manifest](superpowers/specs/2026-07-26-netizen-node-manifest.md) → [installer](superpowers/specs/2026-07-26-netizen-node-installer.md) |
 | Contribute code | [Contributor onboarding](CONTRIBUTOR_ONBOARDING.md), [Forking guide](FORKING_GUIDE.md) |
 | Know what we deliberately have NOT built, and why | [Roadmap and deferred work](ROADMAP_AND_DEFERRED.md) |
@@ -33,6 +34,7 @@ learned, including what turned out false), or a **runbook** (how to operate a th
 STATE_OF_THE_NETIZEN_STACK.md      what the whole system is, and what is live
   ├── STATE_OF_THE_NETIZEN_NODE.md what runs on the box, and how to reproduce it
   ├── STATE_OF_NOSTR.md            identity bridge, relay, allow-list, federation
+  ├── STATE_OF_ORTIS_STUDIO.md     desktop workspace, pairing, own keys, Google, releases
   └── STATE_OF_SOVEREIGN_AI.md     agents, models, privacy boundaries, AI governance
 
 ROADMAP_AND_DEFERRED.md            what is deliberately NOT built, and its trigger

@@ -157,6 +157,12 @@ Key implications when working on coordinator code:
   submission verify, GovernorDisabledDeposit on survey proposals, etc).
   Read it before touching the coordinator scripts.
 
+## Ortis Studio (desktop workspace) — read first
+
+Before touching `apps/studio`, device pairing (`/api/chat/pair/*`), own API keys, the Google
+connector or Studio releases, READ [`docs/STATE_OF_ORTIS_STUDIO.md`](docs/STATE_OF_ORTIS_STUDIO.md).
+The app lives on branch `feat/ortis-studio-desktop` (never merge unasked); its backend is on main.
+
 ## Environment Variables
 
 Each app has its own `.env.example` showing required variables. Copy to `.env.local` (web) or `.env` (expo) and fill in real values.
