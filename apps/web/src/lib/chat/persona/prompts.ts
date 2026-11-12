@@ -26,13 +26,13 @@ export const digestSchema = z.object({
   facts: z.array(z.object({
     claim: z.string().describe("Ein eigenständiger Satz in der dritten Person über den Menschen („Der Mensch …“) oder über eine Person, mit der er zu tun hat."),
     type: z.enum(["identitaet", "projekt", "ziel", "zusage", "offenes_thema", "vorliebe", "beziehung", "ereignis", "werkzeug", "sonstiges"]),
-    people: z.array(z.string()).describe("E-Mail-Adressen der beteiligten Personen (ohne den Menschen selbst)"),
-    date: z.string().nullable().describe("Datum der Mail, YYYY-MM-DD"),
+    people: z.array(z.string()).nullish().describe("E-Mail-Adressen der beteiligten Personen (ohne den Menschen selbst)"),
+    date: z.string().nullish().describe("Datum der Mail, YYYY-MM-DD"),
     refs: z.array(z.string()).describe("Die ref-Kennungen der Mails, die das belegen, z. B. s12"),
     basis: z.enum(["stated", "inferred"]).describe("stated = steht so in der Mail; inferred = deine Schlussfolgerung"),
-    sensitive: z.boolean().describe("true, wenn die Aussage besonders schützenswert ist"),
+    sensitive: z.boolean().nullish().describe("true, wenn die Aussage besonders schützenswert ist"),
   })).describe("Höchstens 40 Fakten"),
-  style: z.array(z.string()).describe("Höchstens 8. Konkrete Beobachtungen zum Schreibstil des Menschen NUR aus seinen gesendeten Mails: Anrede, Gruß, Länge, Ton, Sprache, typische Wendungen (wörtlich zitiert)."),
+  style: z.array(z.string()).nullish().describe("Höchstens 8. Konkrete Beobachtungen zum Schreibstil des Menschen NUR aus seinen gesendeten Mails: Anrede, Gruß, Länge, Ton, Sprache, typische Wendungen (wörtlich zitiert)."),
 });
 
 export const DIGEST_SYSTEM = [
@@ -71,23 +71,23 @@ const pageOut = z.object({
 
 export const coreSchema = z.object({
   overview: pageOut.extend({
-    facts: z.array(z.object({ label: z.string(), value: z.string() })).describe("Höchstens 6 Zeilen. Infobox: Name, E-Mail, Ort, Fokus (nur was belegt ist)"),
+    facts: z.array(z.object({ label: z.string(), value: z.string() })).nullish().describe("Höchstens 6 Zeilen. Infobox: Name, E-Mail, Ort, Fokus (nur was belegt ist)"),
   }),
   goals: pageOut.describe("Abschnitte ## Heute, ## Diese Woche, ## Diesen Monat. Pro Ziel ein fetter Satz, dann 1–2 Sätze Begründung mit Belegen."),
   projects: pageOut.describe("Pro Projekt ein Abschnitt ## Name mit Stand (aktiv, pausiert, wartet auf …), Beteiligten, nächstem Schritt."),
   core: z.string().describe("Kurzprofil für den Assistenten, höchstens 220 Wörter, Fließtext ohne Belege: wer der Mensch ist, woran er gerade arbeitet, was diese Woche zählt, wichtigste Personen mit Rolle, feste Vorlieben."),
-  updateNote: z.string().describe("Ein bis zwei Sätze für das Änderungsprotokoll: was neu aufgenommen oder geändert wurde, mit [Text](wiki:slug)-Verweisen."),
+  updateNote: z.string().nullish().describe("Ein bis zwei Sätze für das Änderungsprotokoll: was neu aufgenommen oder geändert wurde, mit [Text](wiki:slug)-Verweisen."),
   suggestions: z.array(z.object({
-    group: z.string().describe("Name des Projekts, zu dem der Vorschlag gehört, oder „Allgemein“"),
+    group: z.string().nullish().describe("Name des Projekts, zu dem der Vorschlag gehört, oder „Allgemein“"),
     kind: z.enum(["task", "routine"]),
     title: z.string().describe("Handlungsaufforderung, höchstens 90 Zeichen, z. B. „Verbessertes Konzept und Finanzplan für HANGAR Kohorte 4 aufsetzen“"),
-    reason: z.string().describe("Der konkrete Anlass in einem kurzen Satz, z. B. „Lars hat Anne ein verbessertes Konzept mit Finanzplan zugesagt“"),
+    reason: z.string().nullish().describe("Der konkrete Anlass in einem kurzen Satz, z. B. „Lars hat Anne ein verbessertes Konzept mit Finanzplan zugesagt“"),
     prompt: z.string().describe("Der vollständige Auftrag an den Assistenten in Du-Form, 2–5 Sätze, mit allen Namen und Details, sodass er ohne Rückfrage loslegen kann."),
     schedule: z.object({
-      kind: z.enum(["daily", "weekly"]), weekday: z.number().nullable().describe("0 = Sonntag … 6 = Samstag; nur bei weekly"),
-      hour: z.number().describe("0 bis 23"), minute: z.number().describe("0 bis 59"),
-    }).nullable().describe("Nur bei kind = routine"),
-    people: z.array(z.string()).describe("E-Mail-Adressen beteiligter Personen aus der Kontaktliste"),
+      kind: z.enum(["daily", "weekly"]), weekday: z.number().nullish().describe("0 = Sonntag … 6 = Samstag; nur bei weekly"),
+      hour: z.number().describe("0 bis 23"), minute: z.number().nullish().describe("0 bis 59"),
+    }).nullish().describe("Nur bei kind = routine, sonst null"),
+    people: z.array(z.string()).nullish().describe("E-Mail-Adressen beteiligter Personen aus der Kontaktliste"),
   })).describe("5 bis 9 Vorschläge"),
 });
 
@@ -190,7 +190,7 @@ export function dossier(input: SynthInput, opts: { forProfile: boolean }): strin
 export const personSchema = z.object({
   name: z.string().describe("Vor- und Nachname, so wie er in den Mails steht"),
   description: z.string().describe("Eine Zeile, höchstens 110 Zeichen: Rolle und Bezug zum Menschen, z. B. „Projektmanagerin beim DeepTech HANGAR Strausberg (STIC)“"),
-  facts: z.array(z.object({ label: z.string(), value: z.string() })).describe("Höchstens 5 Zeilen. Infobox: Organisation, Rolle, Ort, Sprache (nur Belegtes)"),
+  facts: z.array(z.object({ label: z.string(), value: z.string() })).nullish().describe("Höchstens 5 Zeilen. Infobox: Organisation, Rolle, Ort, Sprache (nur Belegtes)"),
   body: z.string().describe("Markdown mit den Abschnitten ## Kontakt, ## Wer das ist, ## Eure Verbindung, ## Offene Themen, ## Kommunikationsstil, ## Unsicherheiten. Belege inline als [ref]."),
 });
 

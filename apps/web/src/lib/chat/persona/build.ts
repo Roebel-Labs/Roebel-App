@@ -7,7 +7,7 @@
 //
 // The extractor and writer models have NO tools; their only output is a
 // schema-constrained object. Untrusted mail text can therefore not act.
-import { generateObject } from "ai";
+import { NoObjectGeneratedError, generateObject } from "ai";
 import type { z } from "zod";
 import { resolveModelFor, platformCostMicros } from "../models";
 import * as chatStore from "../store";
@@ -85,12 +85,12 @@ async function callModel<S extends z.ZodTypeAny>(wallet: string, route: ModelRou
 }): Promise<z.infer<S>> {
   const resolved = await resolveModelFor(wallet, route);
   try {
-    const res = await generateObject({
+    const res = await withSchemaRetry(() => generateObject({
       model: resolved.model, schema: opts.schema, system: opts.system, prompt: opts.prompt,
       maxOutputTokens: opts.maxOutputTokens, maxRetries: 2,
       // Tool mode accepts any JSON schema; the native structured-output mode rejects several keywords.
       providerOptions: { anthropic: { structuredOutputMode: "jsonTool" } },
-    });
+    }));
     const inputTokens = res.usage?.inputTokens ?? 0;
     const outputTokens = res.usage?.outputTokens ?? 0;
     // route "persona:*" is excluded from the daily chat quota (store.usedTokensToday); the cost is still recorded.
@@ -105,6 +105,17 @@ async function callModel<S extends z.ZodTypeAny>(wallet: string, route: ModelRou
       status: "error", error: err instanceof Error ? err.message : String(err), billedTo: resolved.billedTo,
     });
     throw err;
+  }
+}
+
+/** A model sometimes returns an object that misses the schema; one more try is cheaper than failing the stage. */
+async function withSchemaRetry<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!NoObjectGeneratedError.isInstance(err)) throw err;
+    console.error("[chat/persona] schema mismatch, retrying once:", String(err.cause ?? err.message).slice(0, 600));
+    return run();
   }
 }
 
@@ -167,9 +178,9 @@ async function stageDigest(wallet: string, cp: Checkpoint, deadline: number, sav
         if (f.sensitive) continue;
         const ok = f.refs.filter((x) => refs.has(x));
         if (!ok.length) continue;
-        cp.facts!.push({ claim: f.claim.slice(0, 400), type: f.type, people: f.people.map((p) => p.toLowerCase()).slice(0, 6), date: f.date, refs: ok.slice(0, 4), basis: f.basis } satisfies DigestFact);
+        cp.facts!.push({ claim: f.claim.slice(0, 400), type: f.type, people: (f.people ?? []).map((p) => p.toLowerCase()).slice(0, 6), date: f.date ?? null, refs: ok.slice(0, 4), basis: f.basis } satisfies DigestFact);
       }
-      for (const s of r.value.style.slice(0, 8)) cp.style!.push(s.slice(0, 300));
+      for (const s of (r.value.style ?? []).slice(0, 8)) cp.style!.push(s.slice(0, 300));
     }
     if (results.every((r) => r.status === "rejected")) throw new Error("Die Auswertung der E-Mails ist fehlgeschlagen.");
     cp.nextChunk = start + batch.length;
@@ -203,7 +214,7 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
 
   const known = knownRefs(corpus);
   const pages: { slug: (typeof GENERATED)[number]; kind: "overview" | "goals" | "projects" | "profile" | "profile_section"; title: string; parent: string | null; out: { summary: string; body: string }; facts?: { label: string; value: string }[] }[] = [
-    { slug: "overview", kind: "overview", title: "Übersicht", parent: null, out: core.overview, facts: core.overview.facts },
+    { slug: "overview", kind: "overview", title: "Übersicht", parent: null, out: core.overview, facts: core.overview.facts ?? [] },
     { slug: "goals", kind: "goals", title: "Ziele", parent: null, out: core.goals },
     { slug: "projects", kind: "projects", title: "Projekte", parent: null, out: core.projects },
     { slug: "profile", kind: "profile", title: "Profil", parent: null, out: profile.profile },
@@ -234,13 +245,13 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     .filter((s) => !tombstones.has(`suggestion:${s.title.trim().toLowerCase()}`))
     .map((s, i) => {
       const schedule = s.kind === "routine" && s.schedule
-        ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute, tz: "Europe/Berlin" })
+        ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute ?? 0, tz: "Europe/Berlin" })
         : null;
       return {
-        group_title: s.group.trim().slice(0, 80) || "Allgemein",
+        group_title: (s.group ?? "").trim().slice(0, 80) || "Allgemein",
         kind: (s.kind === "routine" && schedule ? "routine" : "task") as "task" | "routine",
-        title: s.title.trim().slice(0, 140), reason: s.reason.trim().slice(0, 200), prompt: s.prompt.trim().slice(0, 1000),
-        schedule, people: s.people.map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4),
+        title: s.title.trim().slice(0, 140), reason: (s.reason ?? "").trim().slice(0, 200), prompt: s.prompt.trim().slice(0, 1000),
+        schedule, people: (s.people ?? []).map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4),
         sort: i,
       };
     });
@@ -249,7 +260,7 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
   cp.changed = changed;
   cp.peopleQueue = contacts.map((c) => c.email);
   cp.peopleDone = 0;
-  cp.updateNote = core.updateNote;
+  cp.updateNote = core.updateNote ?? undefined;
   return cp.peopleQueue.length ? "people" : "suggest";
 }
 
@@ -276,7 +287,7 @@ async function stagePeople(wallet: string, cp: Checkpoint, deadline: number, sav
       const rank = corpus.contacts.indexOf(c);
       await store.upsertPage(wallet, {
         slug, kind: "person", title: name, summary: out.description.slice(0, 200), parent: "people", body,
-        facts: [{ label: "E-Mail", value: c.email }, ...out.facts.filter((f) => f.label.toLowerCase() !== "e-mail")].slice(0, 6), sources,
+        facts: [{ label: "E-Mail", value: c.email }, ...(out.facts ?? []).filter((f) => f.label.toLowerCase() !== "e-mail")].slice(0, 6), sources,
         meta: { email: c.email, name, description: out.description.slice(0, 200), priority: 100 - rank },
       });
     }));
