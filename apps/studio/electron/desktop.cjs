@@ -27,6 +27,8 @@ function createSecrets({ userDataDir, log }) {
     fs.writeFileSync(file, JSON.stringify(obj), { mode: 0o600 });
   };
   const available = () => {
+    // macOS: never touch the keychain (unsigned builds prompt for the login password on every version).
+    if (process.platform === 'darwin') return false;
     try {
       return safeStorage.isEncryptionAvailable();
     } catch {
