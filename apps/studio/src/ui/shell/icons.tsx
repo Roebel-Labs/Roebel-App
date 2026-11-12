@@ -40,4 +40,44 @@ export function AppsIcon() {
   );
 }
 
-export const SECTION_ICONS = { home: HomeIcon, live: LiveIcon, apps: AppsIcon } as const;
+export function ForYouIcon() {
+  return (
+    <svg {...base}>
+      <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.8 10.6c.6.5.8 1.1.8 1.9h6c0-.8.2-1.4.8-1.9A6 6 0 0 0 12 3z" />
+    </svg>
+  );
+}
+
+export function SkillsIcon() {
+  return (
+    <svg {...base}>
+      <path d="M13 3 5 13.5h6L10 21l8-10.5h-6z" />
+    </svg>
+  );
+}
+
+export function WikiIcon() {
+  return (
+    <svg {...base}>
+      <path d="M12 6.5C10.5 5 8.5 4.5 4 4.5v13c4.5 0 6.5.5 8 2 1.5-1.5 3.5-2 8-2v-13c-4.5 0-6.5.5-8 2zM12 6.5v13" />
+    </svg>
+  );
+}
+
+export function LibraryIcon() {
+  return (
+    <svg {...base}>
+      <path d="M5 4v16M9.5 4v16M5 20h4.5M5 4h4.5M13.5 7.5l4.5 12.2 2-.7-4.5-12.2z" />
+    </svg>
+  );
+}
+
+export const SECTION_ICONS = {
+  home: HomeIcon,
+  foryou: ForYouIcon,
+  skills: SkillsIcon,
+  wiki: WikiIcon,
+  library: LibraryIcon,
+  live: LiveIcon,
+  apps: AppsIcon,
+} as const;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SECTION, loadSection, parseSection, saveSection, SECTION_STORAGE_KEY, visibleLiveTab } from '../nav';
+import { DEFAULT_SECTION, loadSection, parseSection, saveSection, SECTION_STORAGE_KEY, SECTIONS, visibleLiveTab } from '../nav';
+import { SECTION_ICONS } from '../icons';
 
 function memory() {
   const m = new Map<string, string>();
@@ -12,6 +13,12 @@ describe('shell navigation', () => {
     expect(parseSection(null)).toBe('home');
     expect(parseSection('workspace')).toBe('home');
     expect(parseSection('live')).toBe('live');
+  });
+
+  it('lists the personal-context sections between Start and the livestream', () => {
+    expect(SECTIONS.map((s) => s.id)).toEqual(['home', 'foryou', 'skills', 'wiki', 'library', 'live', 'apps']);
+    for (const id of ['foryou', 'skills', 'wiki', 'library'] as const) expect(parseSection(id)).toBe(id);
+    for (const s of SECTIONS) expect(typeof SECTION_ICONS[s.id]).toBe('function');
   });
 
   it('remembers the last section', () => {
@@ -39,5 +46,6 @@ describe('shell navigation', () => {
     expect(visibleLiveTab('live', 'design')).toBe('design');
     expect(visibleLiveTab('home', 'show')).toBeNull();
     expect(visibleLiveTab('apps', 'show')).toBeNull();
+    expect(visibleLiveTab('wiki', 'show')).toBeNull();
   });
 });

@@ -10,6 +10,8 @@ export type DesktopCommand =
   | { kind: 'dictate' }
   | { kind: 'signout' }
   | { kind: 'navigate'; section: 'home' | 'live' }
+  /** Open a thread in Start; `message` is sent as the first user message once the thread is on screen. */
+  | { kind: 'openThread'; threadId: string; message?: string }
   | { kind: 'capture'; name: string; type: string; bytes: Uint8Array };
 
 type Bridge = { onCommand(cb: (c: DesktopCommand) => void): () => void };

@@ -1,0 +1,194 @@
+import { useState } from 'react';
+import { addPersonaImport, buildPersona, ChatApiError, deletePersonaImport, fetchPersonaImports, type ImportKind } from '../workspace/api';
+import { IconCheck, IconCopy, IconTrash } from '../ui/shell/line-icons';
+import { LoadError, Modal, useLoad } from './common';
+import { fmtDate, friendlyError } from './format';
+
+const TABS: Array<{ id: ImportKind; label: string; app: string }> = [
+  { id: 'claude', label: 'Claude', app: 'Claude' },
+  { id: 'chatgpt', label: 'ChatGPT', app: 'ChatGPT' },
+  { id: 'text', label: 'Freitext', app: '' },
+];
+const KIND_LABEL: Record<ImportKind, string> = { claude: 'Claude', chatgpt: 'ChatGPT', text: 'Freitext' };
+const MAX_CHARS = 60_000;
+
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Import what Claude or ChatGPT already know about the user (or any free text) as a wiki source. */
+export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted }: { token: string; mode?: 'full' | 'refresh'; onClose: () => void; onBuildStarted: () => void }) {
+  const [tab, setTab] = useState<ImportKind>('claude');
+  const [text, setText] = useState('');
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [changed, setChanged] = useState(false);
+  const imports = useLoad(() => fetchPersonaImports(token));
+  const app = TABS.find((t) => t.id === tab)?.app ?? '';
+  const prompt = imports.data?.exportPrompt ?? '';
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await addPersonaImport(token, { kind: tab, title: title.trim() || undefined, text: text.trim() });
+      setText('');
+      setTitle('');
+      setChanged(true);
+      await imports.reload(true);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deletePersonaImport(token, id);
+      setChanged(true);
+      await imports.reload(true);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refresh = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await buildPersona(token, mode);
+      onBuildStarted();
+      onClose();
+    } catch (e) {
+      if (e instanceof ChatApiError && e.status === 409) {
+        onBuildStarted();
+        onClose();
+      } else setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tooLong = text.length > MAX_CHARS;
+
+  return (
+    <Modal
+      title="Importieren"
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          {changed && <span className="w-muted pz-foot-note">{mode === 'full' ? 'Gespeichert. Jetzt kannst du dein Wiki aufbauen.' : 'Gespeichert. Damit das Wiki die Änderung übernimmt, aktualisiere es.'}</span>}
+          <button className="w-btn" onClick={onClose}>
+            Schließen
+          </button>
+          {changed ? (
+            <button className="w-btn green" disabled={busy} onClick={() => void refresh()}>
+              {mode === 'full' ? 'Wiki jetzt aufbauen' : 'Wiki aktualisieren'}
+            </button>
+          ) : (
+            <button className="w-btn green" disabled={busy || !text.trim() || tooLong} onClick={() => void save()}>
+              {busy ? 'Speichere …' : 'Speichern'}
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="pz-tabs" role="tablist">
+        {TABS.map((t) => (
+          <button key={t.id} role="tab" className="pz-chip" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab !== 'text' ? (
+        <>
+          <ol className="pz-steps">
+            <li>Kopiere diesen Text in {app}.</li>
+            <li>Füge die Antwort hier ein.</li>
+          </ol>
+          <div className="pz-prompt">
+            {imports.loading && !imports.data ? (
+              <span className="w-muted">Lade …</span>
+            ) : prompt ? (
+              <pre>{prompt}</pre>
+            ) : (
+              <span className="w-muted">Der Text zum Kopieren ist gerade nicht verfügbar. Du kannst trotzdem eine Antwort einfügen.</span>
+            )}
+            {prompt && (
+              <button
+                className="w-btn pz-prompt-copy"
+                onClick={() =>
+                  void copyText(prompt).then((ok) => {
+                    setCopied(ok);
+                    if (ok) setTimeout(() => setCopied(false), 2000);
+                  })
+                }
+              >
+                {copied ? <IconCheck size={15} /> : <IconCopy size={15} />} {copied ? 'Kopiert' : 'Kopieren'}
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="w-muted pz-p">Schreib oder füge ein, was Ortis über dich wissen soll: Lebenslauf, Vereinsbeschreibung, Notizen, Arbeitsweise.</p>
+          <label className="pz-field">
+            <span>Titel (optional)</span>
+            <input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="z. B. Über meinen Verein" />
+          </label>
+        </>
+      )}
+
+      <label className="pz-field">
+        <span>{tab === 'text' ? 'Text' : `Antwort von ${app}`}</span>
+        <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={tab === 'text' ? 'Text hier einfügen' : 'Antwort hier einfügen'} />
+      </label>
+      <div className={`pz-count${tooLong ? ' over' : ''}`}>
+        {text.length.toLocaleString('de-DE')} / {MAX_CHARS.toLocaleString('de-DE')} Zeichen
+      </div>
+      {changed && text.trim() && !tooLong && (
+        <button className="w-btn" disabled={busy} onClick={() => void save()}>
+          Weiteren Import speichern
+        </button>
+      )}
+      {error && <div className="ws-error">{error}</div>}
+
+      <h3 className="pz-h3">Bisherige Importe</h3>
+      {imports.error && !imports.data ? (
+        <LoadError message={imports.error} onRetry={() => void imports.reload()} />
+      ) : imports.data && imports.data.imports.length === 0 ? (
+        <div className="w-muted">Noch nichts importiert.</div>
+      ) : (
+        <ul className="pz-rows">
+          {imports.data?.imports.map((im) => (
+            <li key={im.id} className="pz-row">
+              <div className="pz-row-text">
+                <strong className="w-ellipsis">{im.title || KIND_LABEL[im.kind]}</strong>
+                <span className="w-muted">
+                  {KIND_LABEL[im.kind]} · {im.chars.toLocaleString('de-DE')} Zeichen · {fmtDate(im.createdAt)}
+                </span>
+              </div>
+              <button className="w-icon" aria-label="Import löschen" title="Import löschen" disabled={busy} onClick={() => void remove(im.id)}>
+                <IconTrash size={16} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}

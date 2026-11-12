@@ -1,11 +1,15 @@
 // Top-level navigation of Ortis Studio: the left rail picks a section, the livestream is one of them.
 // Pure helpers only (tested); the components live next to this file.
 
-export type Section = 'home' | 'live' | 'apps';
+export type Section = 'home' | 'foryou' | 'skills' | 'wiki' | 'library' | 'live' | 'apps';
 export type LiveTab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'help';
 
 export const SECTIONS: ReadonlyArray<{ id: Section; label: string; soon?: boolean }> = [
   { id: 'home', label: 'Start' },
+  { id: 'foryou', label: 'Für dich' },
+  { id: 'skills', label: 'Funktionen' },
+  { id: 'wiki', label: 'Wiki' },
+  { id: 'library', label: 'Bibliothek' },
   { id: 'live', label: 'Livestream' },
   { id: 'apps', label: 'Mini-Apps' },
 ];

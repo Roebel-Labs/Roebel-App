@@ -79,6 +79,11 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  // "openThread" command (Für dich → Starten): the first message waits until the thread's history is loaded.
+  const firstMessage = useRef<{ threadId: string; text: string } | null>(null);
+  const sendFirst = useRef<(threadId: string, text: string) => void>(() => {});
+  const currentThread = useRef<string | null>(null);
+  currentThread.current = threadId;
 
   const guard = useCallback(
     (e: unknown): string => {
@@ -109,7 +114,15 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     setView(emptyThread);
     setDoc(null);
     fetchMessages(token, threadId)
-      .then((r) => alive && setView({ ...emptyThread, messages: r.messages }))
+      .then((r) => {
+        if (!alive) return;
+        setView({ ...emptyThread, messages: r.messages });
+        const first = firstMessage.current;
+        if (first && first.threadId === threadId) {
+          firstMessage.current = null;
+          sendFirst.current(threadId, first.text);
+        }
+      })
       .catch((e) => alive && setView({ ...emptyThread, error: guard(e) }));
     void markRead(token, threadId).catch(() => {});
     return () => {
@@ -162,6 +175,11 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
       setAttachments([]);
     }
     void run(() => sendMessage(token, tid, { text, imageUrls: imageUrls.length ? imageUrls : undefined, optionAnswer }, onEvent(tid)));
+  };
+
+  sendFirst.current = (tid, text) => {
+    setView((v) => ({ ...v, error: null, messages: [...v.messages, optimisticUser(tid, text)] }));
+    void run(() => sendMessage(token, tid, { text }, onEvent(tid)));
   };
 
   const newThread = async (bot: ChatBot) => {
@@ -239,6 +257,13 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
       else if (c.kind === 'dictate') void toggleDictation();
       else if (c.kind === 'capture') void attach(new Blob([c.bytes], { type: c.type }), c.name);
       else if (c.kind === 'toggleList') setListOpen((o) => !o);
+      else if (c.kind === 'openThread') {
+        const text = c.message?.trim();
+        if (text && currentThread.current === c.threadId) sendFirst.current(c.threadId, text);
+        else if (text) firstMessage.current = { threadId: c.threadId, text };
+        setThreadId(c.threadId);
+        void reload(); // the thread was created elsewhere: fetch it into the list
+      }
       else if (c.kind === 'search') {
         setListOpen(true);
         setSearch((s) => s ?? '');
@@ -249,7 +274,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     const p = takePending();
     if (p) handle(p);
     return onDesktopCommand(handle);
-  }, [attach, toggleDictation]);
+  }, [attach, toggleDictation, reload]);
 
   const handlers = (messageId: string): PartHandlers => ({
     busy,

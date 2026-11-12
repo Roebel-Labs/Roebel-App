@@ -20,6 +20,10 @@ import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import { AppsSection } from './shell/AppsSection';
 import { WorkspaceSection } from '../workspace/WorkspaceSection';
+import { ForYouSection } from '../persona/ForYouSection';
+import { SkillsSection } from '../persona/SkillsSection';
+import { WikiSection } from '../persona/WikiSection';
+import { LibrarySection } from '../persona/LibrarySection';
 import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
 import { Rail } from './shell/Rail';
 import { Toolbar } from './shell/Toolbar';
@@ -446,6 +450,10 @@ function Shell() {
               <WorkspaceSection />
             </div>
           )}
+          {section === 'foryou' && <ForYouSection onNavigate={setSection} />}
+          {section === 'skills' && <SkillsSection />}
+          {section === 'wiki' && <WikiSection />}
+          {section === 'library' && <LibrarySection />}
           {section === 'apps' && <AppsSection />}
           {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
           {((section === 'live' && !isWebBuild()) || air.phase !== 'off') && <HealthBar />}
