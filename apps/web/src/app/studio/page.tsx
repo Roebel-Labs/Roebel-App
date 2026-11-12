@@ -45,7 +45,7 @@ export default async function StudioPage() {
     <main className="min-h-screen bg-background px-4 py-16 text-foreground">
       <div className="mx-auto max-w-4xl">
         <div className="flex items-center gap-3">
-          <Image src="/favicon.svg" alt="" width={40} height={40} unoptimized />
+          <Image src="/studio/ortis-icon.svg" alt="" width={40} height={40} unoptimized />
           <p className="text-sm font-semibold uppercase tracking-wide text-[#00498B] dark:text-[#7ABBF2]">Ortis Studio</p>
         </div>
         <h1 className="mt-4 font-heading text-4xl font-bold leading-tight md:text-5xl">
