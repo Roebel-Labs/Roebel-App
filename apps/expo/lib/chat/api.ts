@@ -526,3 +526,25 @@ export async function cancelTask(account: SigningAccount, taskId: string): Promi
   });
   return res?.task ?? null;
 }
+
+// ---- device pairing (Ortis Studio, spec 2026-11-12 §3.1) ---------------------------
+
+export interface PairingLookup {
+  code: string;
+  deviceName: string;
+  state: 'pending' | 'approved' | 'claimed' | 'expired';
+}
+
+/** Public lookup: which device asks to connect (shown before the user confirms). */
+export async function lookupPairing(code: string): Promise<PairingLookup> {
+  const res = await fetch(`${getApiBaseUrl()}/api/chat/pair/lookup?code=${enc(code)}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw await errorFromResponse(res);
+  return (await res.json()) as PairingLookup;
+}
+
+/** The signed-in user confirms the device with their chat session. */
+export async function approvePairing(account: SigningAccount, code: string): Promise<{ ok: boolean; deviceName: string }> {
+  return request(account, 'POST', '/api/chat/pair/approve', { json: { code } });
+}

@@ -11,6 +11,7 @@ export default function ChatLayout() {
       <ChatSheetsProvider>
         <Stack screenOptions={{ headerShown: false, animation: 'default' }}>
           <Stack.Screen name="ultra" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="pair" options={{ presentation: 'modal' }} />
         </Stack>
       </ChatSheetsProvider>
     </ChatProvider>

@@ -147,6 +147,18 @@ const nextConfig = {
         ],
       },
       {
+        // Ortis Studio (Electron renderer, origin file:// or localhost) is a client of the chat
+        // API. Auth is the Bearer header only; with `*` browsers never send cookies, so the
+        // cookie-authenticated pairing approval stays same-origin.
+        source: '/api/chat/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'authorization, content-type, x-roebel-device' },
+          { key: 'Access-Control-Max-Age', value: '600' },
+        ],
+      },
+      {
         // Mini apps served from /mini/[slug] run with an opaque origin (CSP
         // sandbox) — @font-face fetches are CORS-gated there, so the shared
         // fonts must be readable cross-origin.

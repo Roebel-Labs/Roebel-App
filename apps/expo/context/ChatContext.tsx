@@ -287,6 +287,11 @@ function useChatContext(): ChatContextValue {
 }
 
 /** Presets, own bots, threads, tier and quota. Refetches whenever the calling screen gains focus. */
+/** The signed-in account for chat calls outside the hooks below (e.g. device pairing). */
+export function useChatAccount(): SigningAccount | null {
+  return useChatContext().account;
+}
+
 export function useChatBootstrap() {
   const { account, hasSession, store, refreshBootstrap, startSession } = useChatContext();
 
