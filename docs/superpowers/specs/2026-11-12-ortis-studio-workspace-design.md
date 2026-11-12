@@ -1,6 +1,6 @@
 # Ortis Studio as the Ortis desktop: workspace, livestream, mini apps (design)
 
-Date: 2026-11-12 · Status: slice 1 BUILT on `feat/ortis-studio-desktop`; slices 2+ DRAFT, awaiting Max ·
+Date: 2026-11-12 · Status: slices 1, 2 and 3.4 BUILT (installer 0.2.0); slice 3 (mini apps) next ·
 Builds on: `2026-09-25-mecky-chat-suite-design.md`, `2026-09-26-ortis-agent-harness-design.md`,
 `2026-10-22-roebel-studio-livestream-design.md` (on `feat/roebel-studio`)
 
@@ -100,11 +100,24 @@ the Röbel/Ortis app goes through the existing manifest indexing and a review ga
 
 Never: selling data, training on user data, standing inbox mirroring (read on demand, like Town).
 
-## 6. Decisions for Max
+## 6. Decisions (Max, 2026-11-12)
 
-1. Sign-in: **A pairing with the Röbel app** or B Ortis ID OIDC?
-2. Default section once the workspace works: Start or Livestream?
-3. Installer release for glass + menu-bar + secure token storage: bundle into one release after slice 2,
-   or ship glass + tray first?
-4. Google OAuth client: create it now for calendar + send-only, and start CASA for inbox reading?
-5. Hetzner CX33 for the chat runtime: yes, and when?
+1. Sign-in: **both** — Röbel app pairing and Ortis ID in the browser. Built as ONE pairing backend
+   (`/api/chat/pair/{start,lookup,approve,poll}`, table `chat_device_pairings`, page `/studio/verbinden`,
+   app screen `roebel://chat/pair`). The browser path reuses the existing Ortis ID workspace login
+   (`roebel_ws` session, `sub` = smart-account address), so no new OIDC client was needed.
+2. Default section: **Start = the multi-agent workspace** (the main product).
+3. Installer 0.2.0: glass + inset traffic lights, menu-bar icon (new message, dictate, screenshot,
+   sections, sign out, quit), Cmd/Ctrl+Shift+Space, keychain token. **New Ortis logo everywhere** in the
+   studio (rail mark, rounded app icon on the macOS grid, Windows icon, tray template) and on the
+   download page.
+4. Google OAuth client: yes — Max creates it in Google Cloud Console (needs his Google account); the
+   connector switches on when `GOOGLE_OAUTH_CLIENT_ID/SECRET` are set on Vercel.
+5. Hetzner: depends on cost — CX33 about €8.49/month + IPv4 after the June 2026 price change.
+
+## 7. Known gaps after 0.2.0
+
+- The Röbel app confirmation screen ships with the next `eas update` (Max runs it); until then the
+  browser/Ortis ID path is the working one.
+- The Vercel **preview** env points at a dead Supabase project, so pairing cannot be tested on previews.
+- No bot creation/editing, routines UI, connectors UI or memory UI in the studio yet (use the app).
