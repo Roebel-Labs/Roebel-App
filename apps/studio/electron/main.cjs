@@ -33,12 +33,54 @@ if (!app.requestSingleInstanceLock()) {
   console.log(`${new Date().toISOString()} [main] Ortis Studio is already running; focusing it`);
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_e, argv) => {
     if (!win || win.isDestroyed()) return;
     if (win.isMinimized()) win.restore();
     win.focus();
+    const link = (argv || []).find((a) => String(a).startsWith('ortis-studio://'));
+    if (link) handleAppUrl(link);
   });
 }
+
+// ortis-studio:// links (the browser hands control back after Google sign-in, RFC 8252 pattern).
+const PROTOCOL = 'ortis-studio';
+let pendingUrl = null;
+function handleAppUrl(raw) {
+  let u;
+  try {
+    u = new URL(String(raw));
+  } catch {
+    return;
+  }
+  if (u.protocol !== `${PROTOCOL}:`) return;
+  // Only known, payload-free commands: never navigate or run anything from a link.
+  if (u.hostname !== 'connected') return;
+  const google = ['ok', 'cancelled', 'error'].includes(u.searchParams.get('google')) ? u.searchParams.get('google') : 'error';
+  const cmd = { kind: 'connected', provider: 'google', result: google };
+  if (!win || win.isDestroyed() || win.webContents.isLoading()) {
+    pendingUrl = cmd;
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send('desktop:command', cmd);
+}
+try {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL);
+  }
+} catch (e) {
+  console.log(`${new Date().toISOString()} [main] protocol registration failed: ${e.message}`);
+}
+app.on('open-url', (e, url) => {
+  e.preventDefault();
+  handleAppUrl(url);
+});
+// Windows: the link arrives as an argument of a second launch (cold start: of this one).
+for (const a of process.argv) if (String(a).startsWith(`${PROTOCOL}://`)) pendingUrl = null, setImmediate(() => handleAppUrl(a));
 
 // Program audio (silent track, later the mixer) must run without a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -413,6 +455,12 @@ function createWindow() {
   const devUrl = process.env.STUDIO_DEV_URL;
   if (devUrl) win.loadURL(devUrl);
   else loadInterface();
+  win.webContents.on('did-finish-load', () => {
+    if (!pendingUrl) return;
+    const cmd = pendingUrl;
+    pendingUrl = null;
+    setTimeout(() => win && !win.isDestroyed() && win.webContents.send('desktop:command', cmd), 1500);
+  });
   // The page must never be replaced: a dropped file or a stray link would unload the renderer
   // (MediaRecorder dies → dead stream). In-page #hash links and win.reload() do not fire will-navigate;
   // a renderer-side reload of our own page does (Vite dev full reload) and stays allowed: main keeps

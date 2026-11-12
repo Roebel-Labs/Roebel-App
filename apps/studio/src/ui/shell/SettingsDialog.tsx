@@ -129,12 +129,47 @@ function Connections({ token }: { token: string }) {
   }, [token]);
   useEffect(() => void load(), [load]);
 
+  // After "Verbinden" Google runs in the browser. Refresh when Studio regains focus, when the browser hands
+  // back via ortis-studio://connected, and every 3 s while waiting (max 5 min).
+  const [waiting, setWaiting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const onFocus = () => void load();
+    window.addEventListener('focus', onFocus);
+    const off = onDesktopCommand((c) => {
+      if (c.kind !== 'connected') return;
+      setWaiting(false);
+      setNotice(c.result === 'ok' ? 'Google ist verbunden.' : c.result === 'cancelled' ? 'Google-Anmeldung abgebrochen.' : 'Google-Verbindung fehlgeschlagen.');
+      void load();
+    });
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      off();
+    };
+  }, [load]);
   const google = rows?.find((r) => r.kind === 'google');
+  useEffect(() => {
+    if (!waiting) return;
+    if (google) {
+      setWaiting(false);
+      setNotice('Google ist verbunden.');
+      return;
+    }
+    const started = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - started > 5 * 60_000) setWaiting(false);
+      else void load();
+    }, 3000);
+    return () => clearInterval(t);
+  }, [waiting, google, load]);
+
   const connectGoogle = async () => {
     setBusy(true);
+    setNotice(null);
     try {
       const { url } = await googleStart(token);
       void window.studio.shell.openExternal(url);
+      setWaiting(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -171,11 +206,12 @@ function Connections({ token }: { token: string }) {
       <h2>Verbindungen</h2>
       <p className="w-muted">Was deine Assistenten lesen und nutzen dürfen. Lesen passiert bei Bedarf, nichts wird dauerhaft gespiegelt.</p>
       {error && <div className="ws-error">{error}</div>}
+      {notice && <div className="conn-notice">{notice}</div>}
       <div className="conn-list">
         <div className="conn-row">
           <div>
             <strong>Google</strong>
-            <span className="w-muted">Kalender, Gmail, Drive</span>
+            <span className="w-muted">{google ? google.name.replace(/^Google \((.*)\)$/, '$1') : 'Kalender, Gmail, Drive'}</span>
           </div>
           {google ? (
             <div className="conn-actions">
@@ -185,9 +221,18 @@ function Connections({ token }: { token: string }) {
               </button>
             </div>
           ) : googleAvailable ? (
-            <button className="w-btn green" disabled={busy} onClick={() => void connectGoogle()}>
-              Verbinden
-            </button>
+            waiting ? (
+              <div className="conn-actions">
+                <span className="w-muted">Warte auf Google im Browser …</span>
+                <button className="w-btn" onClick={() => setWaiting(false)}>
+                  Abbrechen
+                </button>
+              </div>
+            ) : (
+              <button className="w-btn green" disabled={busy} onClick={() => void connectGoogle()}>
+                Verbinden
+              </button>
+            )
           ) : (
             <span className="w-tag">Noch nicht eingerichtet</span>
           )}

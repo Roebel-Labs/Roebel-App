@@ -385,7 +385,7 @@ function Shell() {
     () =>
       onDesktopCommand((cmd) => {
         if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : 'home');
-        else if (cmd.kind !== 'settings') setSection('home');
+        else if (cmd.kind !== 'settings' && cmd.kind !== 'connected' && cmd.kind !== 'signedin') setSection('home');
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

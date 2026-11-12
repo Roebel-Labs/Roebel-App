@@ -635,3 +635,11 @@ html.mac-inset .toolbar {
   border: 1px solid var(--w-line);
   border-radius: 12px;
 }
+
+.conn-notice {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+}

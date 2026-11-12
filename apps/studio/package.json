@@ -1,7 +1,7 @@
 {
   "name": "@ortis/studio",
   "productName": "Ortis Studio",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -114,6 +114,14 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Ortis Studio",
       "artifactName": "Ortis-Studio-${version}-win-x64.${ext}"
-    }
+    },
+    "protocols": [
+      {
+        "name": "Ortis Studio",
+        "schemes": [
+          "ortis-studio"
+        ]
+      }
+    ]
   }
 }

@@ -5,6 +5,7 @@ export type DesktopCommand =
   | { kind: 'search' }
   | { kind: 'settings'; section?: 'appearance' | 'connections' | 'keys' | 'account' }
   | { kind: 'signedin' }
+  | { kind: 'connected'; provider: 'google'; result: 'ok' | 'cancelled' | 'error' }
   | { kind: 'toggleList' }
   | { kind: 'dictate' }
   | { kind: 'signout' }
