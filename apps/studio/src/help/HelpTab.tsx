@@ -18,7 +18,7 @@ function mark(text: string, q: string, key: string): ReactNode {
   return parts;
 }
 
-interface Ctx {
+export interface Ctx {
   q: string;
   onLink: (e: { preventDefault(): void }, href: string) => void;
 }

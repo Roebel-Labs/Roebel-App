@@ -1,7 +1,7 @@
 {
   "name": "@ortis/studio",
   "productName": "Ortis Studio",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -39,7 +39,7 @@
     "vitest": "^3.2.0",
     "wait-on": "^9.5.0"
   },
-  "description": "Ortis Studio – Livestream-Studio für Vereine und Veranstaltungen",
+  "description": "Ortis Studio – Arbeitsbereich mit KI-Assistenten und Livestream-Studio für Vereine und Betriebe",
   "author": "Röbel Labs",
   "homepage": "https://www.roebel.app/studio",
   "build": {
@@ -55,7 +55,11 @@
       "electron/**/*.cjs",
       "!electron/__tests__/**",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "build/icon-win.png",
+      "build/trayTemplate.png",
+      "build/trayTemplate@2x.png",
+      "build/tray-win.png"
     ],
     "extraResources": [
       {
@@ -100,7 +104,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon-win.png"
     },
     "nsis": {
       "oneClick": false,

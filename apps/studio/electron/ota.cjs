@@ -14,7 +14,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 
 // Bump whenever main.cjs/preload.cjs change in a way an older/newer interface cannot work with.
-const OTA_RUNTIME = 1;
+const OTA_RUNTIME = 2; // 2: secrets, ui, desktop (installer 0.2.0)
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAlIykqhmezmrnhA8+mPg7oMu9BLAmx+8cg9keFggbIcw=
 -----END PUBLIC KEY-----`;

@@ -84,6 +84,23 @@ contextBridge.exposeInMainWorld('studio', {
   shell: {
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   },
+  // OS keychain (safeStorage) for the workspace session token.
+  secrets: {
+    get: (key) => ipcRenderer.invoke('secrets:get', key),
+    set: (key, value) => ipcRenderer.invoke('secrets:set', key, value),
+    clear: (key) => ipcRenderer.invoke('secrets:clear', key),
+  },
+  // Window chrome: html.glass + html.mac-inset (vibrancy and inset traffic lights on macOS).
+  ui: {
+    platform: process.platform,
+    glass: process.platform === 'darwin',
+  },
+  // Tray / shortcut commands: { kind: 'compose' | 'dictate' | 'signout' | 'navigate', section? }
+  // or { kind: 'capture', name, type, bytes }.
+  desktop: {
+    onCommand: (cb) => subscribe('desktop:command', cb),
+    capture: () => ipcRenderer.invoke('desktop:capture'),
+  },
   app: {
     // Main asks the renderer to end the broadcast cleanly before quitting.
     onWillQuit: (cb) => subscribe('app:will-quit', () => cb()),

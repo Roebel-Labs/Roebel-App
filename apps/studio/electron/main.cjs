@@ -13,6 +13,7 @@ const { appendAirLog } = require('./airlog.cjs');
 const { exportShow, importShow } = require('./show-package.cjs');
 const { LATEST_URL, checkForUpdate, downloadInstaller } = require('./updater.cjs');
 const { createOta } = require('./ota.cjs');
+const { createDesktop, createSecrets } = require('./desktop.cjs');
 
 // Product name + data folder. Electron derives userData from the app name; the studio used to be
 // '@roebel/studio'. Existing installs keep their saved show (localStorage) by staying on the old folder.
@@ -397,9 +398,10 @@ function createWindow() {
     width: 1600,
     height: 1000,
     title: 'Ortis Studio',
-    backgroundColor: '#17191C',
-    // Window/taskbar icon on Windows and Linux (macOS takes the bundle icon).
-    ...(process.platform === 'darwin' ? {} : { icon: path.join(__dirname, '..', 'build', 'icon.png') }),
+    // macOS: vibrant window (glass sidebar) with the traffic lights inset over the rail.
+    ...(process.platform === 'darwin'
+      ? { vibrancy: 'sidebar', visualEffectState: 'active', backgroundColor: '#00000000', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } }
+      : { backgroundColor: '#17191C', icon: path.join(__dirname, '..', 'build', 'icon-win.png') }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -556,9 +558,45 @@ ipcMain.on('app:quit-confirmed', () => {
   app.quit();
 });
 
+// Desktop integration: tray, quick-ask shortcut, capture, keychain (see desktop.cjs).
+let desktop = null;
+let secrets = null;
+function showWindow() {
+  if (!win || win.isDestroyed()) return null;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return win;
+}
+ipcMain.handle('secrets:get', (e, key) => {
+  guard('secrets:get', e);
+  return secrets ? secrets.get(String(key)) : null;
+});
+ipcMain.handle('secrets:set', (e, key, value) => {
+  guard('secrets:set', e);
+  return secrets ? secrets.set(String(key), value) : false;
+});
+ipcMain.handle('secrets:clear', (e, key) => {
+  guard('secrets:clear', e);
+  return secrets ? secrets.clear(String(key)) : false;
+});
+ipcMain.handle('desktop:capture', (e) => {
+  guard('desktop:capture', e);
+  return desktop ? desktop.capture() : null;
+});
+
 app.whenReady().then(() => {
   setupPermissions();
   setupMenu();
+  secrets = createSecrets({ userDataDir: app.getPath('userData'), log });
+  desktop = createDesktop({
+    getWindow: () => win,
+    showWindow,
+    buildDir: path.join(__dirname, '..', 'build'),
+    quit: () => app.quit(), // goes through before-quit: on air the operator confirms first
+    log,
+  });
+  desktop.start();
   ota = createOta({
     userDataDir: app.getPath('userData'),
     appVersion: app.getVersion(),
@@ -623,6 +661,10 @@ app.on('before-quit', (e) => {
       setOnAir(false);
       app.quit();
     });
+});
+
+app.on('will-quit', () => {
+  if (desktop) desktop.stop();
 });
 
 app.on('window-all-closed', () => app.quit());

@@ -72,6 +72,17 @@ declare global {
         /** Opens an http(s) URL in the system browser (main validates the scheme). */
         openExternal(url: string): Promise<boolean>;
       };
+      /** Installer ≥ 0.2.0 only. */
+      secrets?: {
+        get(key: string): Promise<string | null>;
+        set(key: string, value: string): Promise<boolean>;
+        clear(key: string): Promise<boolean>;
+      };
+      ui?: { platform: string; glass: boolean };
+      desktop?: {
+        onCommand(cb: (cmd: unknown) => void): () => void;
+        capture(): Promise<null>;
+      };
       app: {
         onWillQuit(cb: () => void): () => void;
         quitReady(): void;

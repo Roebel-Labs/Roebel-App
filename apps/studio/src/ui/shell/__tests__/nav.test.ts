@@ -7,11 +7,11 @@ function memory() {
 }
 
 describe('shell navigation', () => {
-  it('defaults to the livestream for unknown or missing values', () => {
-    expect(DEFAULT_SECTION).toBe('live');
-    expect(parseSection(null)).toBe('live');
-    expect(parseSection('workspace')).toBe('live');
-    expect(parseSection('home')).toBe('home');
+  it('defaults to the workspace for unknown or missing values', () => {
+    expect(DEFAULT_SECTION).toBe('home');
+    expect(parseSection(null)).toBe('home');
+    expect(parseSection('workspace')).toBe('home');
+    expect(parseSection('live')).toBe('live');
   });
 
   it('remembers the last section', () => {
@@ -30,7 +30,7 @@ describe('shell navigation', () => {
         throw new Error('blocked');
       },
     };
-    expect(loadSection(broken)).toBe('live');
+    expect(loadSection(broken)).toBe('home');
     expect(() => saveSection('home', broken)).not.toThrow();
   });
 

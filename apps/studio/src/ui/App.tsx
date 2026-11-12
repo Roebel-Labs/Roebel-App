@@ -19,9 +19,10 @@ import { UpdateButton } from './UpdateButton';
 import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
 import { AppsSection } from './shell/AppsSection';
-import { HomeSection } from './shell/HomeSection';
+import { WorkspaceSection } from '../workspace/WorkspaceSection';
 import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
 import { Rail } from './shell/Rail';
+import { onDesktopCommand } from '../workspace/desktop';
 import './theme.css';
 import './shell/shell.css';
 
@@ -372,7 +373,18 @@ function Shell() {
   useSponsorRuntime();
   const { dispatch } = useShow();
   const { onAir } = useStudio();
+  const air = useOnAir();
   useLiveRoomStudioSeams(dispatch, onAir);
+  // Tray / shortcut: everything except "Livestream" lands in the workspace (which handles the rest).
+  useEffect(
+    () =>
+      onDesktopCommand((cmd) => {
+        if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : 'home');
+        else setSection('home');
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   return (
     <div className="app shell">
       <Rail section={section} onSelect={setSection} />
@@ -408,9 +420,14 @@ function Shell() {
             </main>
           </div>
         )}
-        {section === 'home' && <HomeSection onOpen={setSection} />}
+        {section === 'home' && (
+          <div className="section">
+            <WorkspaceSection />
+          </div>
+        )}
         {section === 'apps' && <AppsSection />}
-        <HealthBar />
+        {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
+        {(section === 'live' || air.phase !== 'off') && <HealthBar />}
       </div>
       <QuitConfirm />
       {/* Alerts, guests, on-stage sync and the on-air follow keep running in every section and tab. */}

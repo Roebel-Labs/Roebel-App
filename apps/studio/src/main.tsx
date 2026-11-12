@@ -13,6 +13,13 @@ document.addEventListener('dragover', (e) => {
 });
 document.addEventListener('drop', (e) => e.preventDefault());
 
+// Window chrome from the shell (installer ≥ 0.2.0): macOS glass + inset traffic lights.
+{
+  const ui = (window.studio as { ui?: { platform?: string; glass?: boolean } } | undefined)?.ui;
+  if (ui?.glass) document.documentElement.classList.add('glass');
+  if (ui?.platform === 'darwin') document.documentElement.classList.add('mac-inset');
+}
+
 // Fonts first: canvas text never triggers font loading, so the first program
 // frame would otherwise air in the fallback face.
 void loadFonts().then(() => {

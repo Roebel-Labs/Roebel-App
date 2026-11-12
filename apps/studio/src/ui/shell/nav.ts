@@ -13,8 +13,8 @@ export const SECTIONS: ReadonlyArray<{ id: Section; label: string; soon?: boolea
 /** Own key, never part of ShowState (which is autosaved and broadcast to the overlay page). */
 export const SECTION_STORAGE_KEY = 'ortis-studio-section-v1';
 
-/** Operators open the studio to run a show, so the livestream stays the default until the workspace is live. */
-export const DEFAULT_SECTION: Section = 'live';
+/** The multi-agent workspace is the main product (Max, 2026-11-12); the livestream is one section. */
+export const DEFAULT_SECTION: Section = 'home';
 
 export function parseSection(raw: unknown): Section {
   return SECTIONS.some((s) => s.id === raw) ? (raw as Section) : DEFAULT_SECTION;
