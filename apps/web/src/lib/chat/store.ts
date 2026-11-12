@@ -531,7 +531,7 @@ export async function recordRun(input: {
 
 export async function usedTokensToday(wallet: string, now: Date = new Date()): Promise<number> {
   const res = await db().from("chat_runs").select("input_tokens, output_tokens")
-    .eq("owner_wallet", wallet).gte("created_at", quotaWindowStart(now)).limit(5000);
+    .eq("owner_wallet", wallet).not("route", "like", "persona:%").gte("created_at", quotaWindowStart(now)).limit(5000);
   return sumTokens(must(res, "usage") as { input_tokens: number; output_tokens: number }[]);
 }
 

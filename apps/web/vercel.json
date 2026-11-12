@@ -49,6 +49,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/chat/cron/persona",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/vorhaben",
       "schedule": "*/5 * * * *"
     }

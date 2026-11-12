@@ -101,6 +101,21 @@ Anthropic key, `chat_runs.billed_to = 'own_key'`, cost 0, and `checkQuota` never
   Search Console, demo video, then "Publish app" and submit for verification. Inbox reading
   (gmail.readonly) later needs the CASA Tier 2 assessment.
 
+## 6a. Personal context: Wiki, Für dich, Funktionen, Bibliothek (2026-11-12)
+
+Design and research: `docs/superpowers/specs/2026-11-12-ortis-personal-context-design.md`.
+
+- **Backend (main):** `apps/web/src/lib/chat/persona/*` builds a cited Markdown wiki per account from
+  Gmail (sent mail first), Calendar, the Röbel App profile, imported Claude/ChatGPT memory and chat
+  memory. Job state machine in `persona_jobs`, continued by the cron `/api/chat/cron/persona`.
+  Endpoints under `/api/chat/persona/*`, `/api/chat/skills`, `/api/chat/routines/catalog`,
+  `/api/chat/routines/quick`, `/api/chat/library`. Migration `20261112b_persona_wiki.sql` applied.
+- **Runtime:** bots with the `memory` key get a short profile block in the system prompt plus the
+  tools `wiki_read`, `wiki_search`, `wiki_note`, `skill_read`.
+- **Studio (`feat/ortis-studio-desktop`, `src/persona/*`):** rail sections Für dich, Funktionen,
+  Wiki, Bibliothek. Interface-only change (no `electron/` edits), so it can ship as an interface OTA.
+- **Not verified yet:** a build on a real mailbox, and the new screens on a device.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
@@ -124,7 +139,7 @@ Anthropic key, `chat_runs.billed_to = 'own_key'`, cost 0, and `checkQuota` never
    needs the legal entity.
 4. `OPENAI_API_KEY` is missing in Vercel **production** → dictation fails in production.
 5. Model routes: `bot-fast` is still Haiku 4.5; Haiku 5.5 is a tenth of the price (Max decides).
-6. Personalisation pass on first connect, merged contacts with trust levels, Microsoft 365.
+6. First real wiki build on Max's account (§6a), then tune prompts on the result; merged contacts with trust levels, Microsoft 365.
 7. Own-keys screen in the Röbel app; Android intent filters ship with the next native build.
 8. Vercel **preview** env points at a dead Supabase project — previews cannot test anything that
    touches the database.

@@ -222,7 +222,7 @@ async function accessTokenFor(row: ConnectorRow): Promise<string> {
   }
 }
 
-async function googleApi<T>(row: ConnectorRow, url: string, init: RequestInit = {}): Promise<T> {
+export async function googleApi<T>(row: ConnectorRow, url: string, init: RequestInit = {}): Promise<T> {
   const token = await accessTokenFor(row);
   const res = await fetch(url, {
     ...init,
