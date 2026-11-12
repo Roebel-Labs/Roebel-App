@@ -24,6 +24,9 @@ const ROUTE_MAPPINGS: [RegExp, string][] = [
 
   // Segment rename
   [/^\/profile\//, '/user/'],
+
+  // Ortis Studio pairing page (QR / universal link) → the in-app confirmation screen
+  [/^\/studio\/verbinden$/, '/chat/pair'],
 ];
 
 /**

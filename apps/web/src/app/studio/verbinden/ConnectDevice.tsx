@@ -17,6 +17,15 @@ export function ConnectDevice() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  /** null = not checked yet. Decides which single button is primary. */
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/chat/pair/me")
+      .then((r) => r.json())
+      .then((j) => setSignedIn(!!j?.signedIn))
+      .catch(() => setSignedIn(false));
+  }, []);
 
   useEffect(() => {
     if (!raw) return;
@@ -110,23 +119,28 @@ export function ConnectDevice() {
           )}
           {info.state === "pending" && phase !== "done" && (
             <div className="mt-6 flex flex-col gap-3">
-              <a href={appLink} className="rounded bg-[#00498B] px-4 py-3 text-center font-semibold text-white">
-                In der Röbel App bestätigen
-              </a>
-              {needsLogin ? (
-                <a href={LOGIN + encodeURIComponent(returnTo)} className="rounded border border-gray-300 px-4 py-3 text-center font-semibold">
+              {signedIn && !needsLogin ? (
+                <>
+                  <p className="rounded bg-green-50 p-3 text-sm text-green-800">Du bist mit deiner Ortis ID angemeldet.</p>
+                  <button
+                    onClick={confirm}
+                    disabled={phase === "busy"}
+                    className="rounded bg-[#00498B] px-4 py-3 font-semibold text-white disabled:opacity-50"
+                  >
+                    {phase === "busy" ? "Verbinde …" : "Ortis Studio jetzt verbinden"}
+                  </button>
+                </>
+              ) : (
+                <a href={LOGIN + encodeURIComponent(returnTo)} className="rounded bg-[#00498B] px-4 py-3 text-center font-semibold text-white">
                   Mit Ortis ID anmelden
                 </a>
-              ) : (
-                <button
-                  onClick={confirm}
-                  disabled={phase === "busy"}
-                  className="rounded border border-gray-300 px-4 py-3 font-semibold disabled:opacity-50"
-                >
-                  {phase === "busy" ? "Verbinde …" : "Hier mit Ortis ID bestätigen"}
-                </button>
               )}
-              {needsLogin && <p className="text-sm text-gray-600">Nach der Anmeldung kommst du hierher zurück und bestätigst noch einmal.</p>}
+              <a href={appLink} className="rounded border border-gray-300 px-4 py-3 text-center font-semibold">
+                Stattdessen in der Röbel App bestätigen
+              </a>
+              {!signedIn && (
+                <p className="text-sm text-gray-600">Nach der Anmeldung kommst du hierher zurück und tippst auf „Ortis Studio jetzt verbinden“.</p>
+              )}
             </div>
           )}
           {phase === "done" && (

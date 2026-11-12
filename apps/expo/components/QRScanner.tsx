@@ -16,7 +16,7 @@ import ErrorDrawer from './ErrorDrawer';
 const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'studio_pair' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
@@ -100,6 +100,12 @@ function parseQRCode(data: string): QRScanResult {
   const orderMatch = data.match(/roebel\.app\/order\/([^/]+)\/([^/?#]+)/);
   if (orderMatch) {
     return { type: 'order', data, slug: orderMatch[1], tableNumber: decodeURIComponent(orderMatch[2]) };
+  }
+
+  // Ortis Studio pairing: https://www.roebel.app/studio/verbinden?code=ABCDEFGH (or roebel://chat/pair?code=…)
+  const pairMatch = data.match(/(?:roebel\.app\/studio\/verbinden|roebel:\/\/chat\/pair)\?(?:[^#]*&)?code=([A-Za-z0-9-]{8,9})/);
+  if (pairMatch) {
+    return { type: 'studio_pair', data, id: pairMatch[1] };
   }
 
   return { type: 'unknown', data };
@@ -190,6 +196,9 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       return;
     } else if (result.type === 'event' && result.id) {
       router.push(`/e/${result.id}` as any);
+      return;
+    } else if (result.type === 'studio_pair' && result.id) {
+      router.push({ pathname: '/chat/pair', params: { code: result.id } } as any);
       return;
     } else if (result.type === 'checkpoint') {
       // Handled by parent via onScan
