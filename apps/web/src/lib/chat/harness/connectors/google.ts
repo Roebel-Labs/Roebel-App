@@ -14,14 +14,37 @@ import { secretOf, updateConnector } from "./store";
 import type { ConnectorRow } from "./store";
 
 export const GOOGLE_DISABLED_MESSAGE = "Google-Verbindung ist noch nicht eingerichtet";
+const S = "https://www.googleapis.com/auth/";
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.compose",
-  "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/drive.readonly",
+  `${S}gmail.readonly`,
+  `${S}gmail.compose`,
+  `${S}calendar`,
+  `${S}drive.readonly`,
 ] as const;
+
+/**
+ * Scope profiles. Google classifies gmail.readonly, gmail.compose and drive.readonly as RESTRICTED
+ * (app review + paid annual CASA assessment before the public can connect). 'verified' asks only for
+ * sensitive / non-sensitive scopes, so the app can go to production after a normal review:
+ * calendar (sensitive), gmail.send (sensitive), drive.file (non-sensitive, files the app opens/creates).
+ * Env GOOGLE_OAUTH_SCOPE_PROFILE = 'verified' | 'full' (default 'full' = testing with every tool).
+ */
+export const GOOGLE_SCOPE_PROFILES = {
+  full: GOOGLE_SCOPES as readonly string[],
+  verified: ["openid", "email", `${S}calendar`, `${S}gmail.send`, `${S}drive.file`] as readonly string[],
+} as const;
+
+export function googleScopes(env: Record<string, string | undefined> = process.env): readonly string[] {
+  return env.GOOGLE_OAUTH_SCOPE_PROFILE?.trim() === "verified" ? GOOGLE_SCOPE_PROFILES.verified : GOOGLE_SCOPE_PROFILES.full;
+}
+
+/** True when the granted scope string (space separated, from the token response) includes `scope`. */
+export function hasScope(granted: string | undefined, scope: string): boolean {
+  if (!granted) return true; // links stored before scopes were recorded: keep the old behaviour
+  return granted.split(/\s+/).includes(scope.startsWith("https://") ? scope : `${S}${scope}`);
+}
 export const DEFAULT_RETURN_URL = "roebel://chat/settings/connections";
 const STATE_TTL_MS = 10 * 60_000;
 const STATE_AAD = "google-oauth-state";
@@ -100,7 +123,7 @@ export function buildAuthUrl(cfg: GoogleConfig, opts: { redirectUri: string; sta
     client_id: cfg.clientId,
     redirect_uri: opts.redirectUri,
     response_type: "code",
-    scope: GOOGLE_SCOPES.join(" "),
+    scope: googleScopes().join(" "),
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",
@@ -351,6 +374,24 @@ export function googleTools(row: ConnectorRow): HarnessTool[] {
       return { ok: true, entwurfId: res.id, hinweis: "Entwurf liegt in Gmail unter „Entwürfe“ und wurde nicht gesendet." };
     },
   };
+  // Production profile (gmail.send, sensitive): send directly, always behind the approval card.
+  const gmailSend: HarnessTool<z.infer<typeof gmailDraftInput>> = {
+    name: "google_gmail_send",
+    pack: "connectors",
+    risk: "external",
+    description: "Sendet im Namen des Menschen eine E-Mail über sein Gmail. Nur nach ausdrücklicher Freigabe; vorher Empfänger, Betreff und Text zeigen.",
+    inputSchema: gmailDraftInput,
+    summarize: ({ to, subject }) => `E-Mail an ${to.slice(0, 60)} senden: „${subject.slice(0, 60)}“`,
+    preview: ({ to, subject, body }) => ({
+      kind: "email", fields: [{ label: "An", value: to }, { label: "Betreff", value: subject }], body,
+    }),
+    execute: async ({ to, subject, body }) => {
+      const raw = buildRawEmail({ to: parseRecipients(to), subject, body });
+      const res = await googleApi<{ id: string }>(row, `${G}/messages/send`, { method: "POST", body: JSON.stringify({ raw }) });
+      return { ok: true, nachrichtId: res.id, hinweis: "Die E-Mail wurde gesendet." };
+    },
+  };
+
 
   const calendarList: HarnessTool<z.infer<typeof calListInput>> = {
     name: "google_calendar_list",
@@ -441,7 +482,20 @@ export function googleTools(row: ConnectorRow): HarnessTool[] {
     },
   };
 
-  return [gmailSearch, gmailDraft, calendarList, calendarCreate, driveSearch] as HarnessTool[];
+  // Offer only what this link was actually granted (scope profile + the user's own choices on the consent screen).
+  let granted: string | undefined;
+  try {
+    granted = secretOf<GoogleSecret>(row)?.scope;
+  } catch {
+    granted = undefined;
+  }
+  const tools: HarnessTool[] = [];
+  if (hasScope(granted, "gmail.readonly")) tools.push(gmailSearch as HarnessTool);
+  if (hasScope(granted, "gmail.compose")) tools.push(gmailDraft as HarnessTool);
+  else if (hasScope(granted, "gmail.send")) tools.push(gmailSend as HarnessTool);
+  if (hasScope(granted, "calendar")) tools.push(calendarList as HarnessTool, calendarCreate as HarnessTool);
+  if (hasScope(granted, "drive.readonly")) tools.push(driveSearch as HarnessTool);
+  return tools;
 }
 
 export const GOOGLE_TOOL_NAMES = [

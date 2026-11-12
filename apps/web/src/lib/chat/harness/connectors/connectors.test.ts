@@ -205,3 +205,20 @@ test("Gmail draft encoding, recipients and Berlin times", () => {
   assert.equal(parseBerlinTime("2026-12-01T18:00").toISOString(), "2026-12-01T17:00:00.000Z");
   assert.equal(parseBerlinTime("2026-12-01T18:00:00Z").toISOString(), "2026-12-01T18:00:00.000Z");
 });
+
+import { GOOGLE_SCOPE_PROFILES, googleScopes, hasScope } from "./google";
+
+test("google scope profiles: verified avoids restricted scopes", () => {
+  const restricted = ["gmail.readonly", "gmail.compose", "drive.readonly"].map((x) => `https://www.googleapis.com/auth/${x}`);
+  for (const r of restricted) assert.ok(!GOOGLE_SCOPE_PROFILES.verified.includes(r));
+  assert.deepEqual(googleScopes({ GOOGLE_OAUTH_SCOPE_PROFILE: "verified" }), GOOGLE_SCOPE_PROFILES.verified);
+  assert.deepEqual(googleScopes({}), GOOGLE_SCOPE_PROFILES.full);
+});
+
+test("hasScope reads the granted scope string; unknown grants keep old behaviour", () => {
+  const granted = "openid https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send";
+  assert.ok(hasScope(granted, "calendar"));
+  assert.ok(hasScope(granted, "gmail.send"));
+  assert.ok(!hasScope(granted, "gmail.readonly"));
+  assert.ok(hasScope(undefined, "gmail.readonly"));
+});
