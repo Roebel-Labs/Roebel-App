@@ -57,7 +57,10 @@ export function safeReturnUrl(raw: string | null | undefined): string {
   if (!raw) return DEFAULT_RETURN_URL;
   const v = raw.trim();
   if (v.length > 300) return DEFAULT_RETURN_URL;
-  return /^(roebel|exp\+roebel|exp):\/\/[^\s]*$/.test(v) ? v : DEFAULT_RETURN_URL;
+  if (/^(roebel|exp\+roebel|exp):\/\/[^\s]*$/.test(v)) return v;
+  // Ortis Studio (desktop/browser) connects through the system browser and lands on a plain page.
+  if (/^https:\/\/(www\.)?roebel\.app\/studio\/verbunden$/.test(v)) return v;
+  return DEFAULT_RETURN_URL;
 }
 
 export function withQuery(url: string, params: Record<string, string>): string {

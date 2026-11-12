@@ -5,10 +5,11 @@ import { randomUUID } from "node:crypto";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, hasToolCall, stepCountIs, streamText } from "ai";
 import type { ModelMessage, StopCondition, ToolSet, UserContent } from "ai";
-import { estimateCostMicros, resolveModel } from "./models";
+import { resolveModelFor, platformCostMicros } from "./models";
 import { calendarPromptBlock, formatEventWhen } from "./calendar";
 import { buildSystemPrompt, fallbackGreeting, greetingInstruction } from "./prompts";
 import { quotaState } from "./quota";
+import { getProviderKey } from "./provider-keys";
 import { nextRunAt, validateSchedule } from "./schedule";
 import { sendChatPush } from "./push";
 import { SplitStreamer, splitBubbles } from "./split";
@@ -173,7 +174,7 @@ function mergeSources(into: Map<string, string>, url: unknown, title: unknown) {
 async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   const { wallet, threadId, bot, emit } = ctx;
   const route = ctx.hasImages && bot.model_route === "bot-fast" ? "vision" : bot.model_route;
-  const resolved = resolveModel(route);
+  const resolved = await resolveModelFor(wallet, route);
   const enabled = new Set(bot.tools ?? []);
   const canSearch = enabled.has("web_search") && resolved.provider === "anthropic";
 
@@ -347,7 +348,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   await store.recordRun({
     wallet, threadId, botId: bot.id, route: resolved.route,
     inputTokens, outputTokens,
-    costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+    costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
     status: streamError ? "error" : "ok",
     error: streamError ? errorText(streamError) : null,
   });
@@ -362,8 +363,14 @@ function errorText(err: unknown): string {
 // ---- user turn -------------------------------------------------------------------
 
 export async function checkQuota(wallet: string) {
-  const [tier, used] = await Promise.all([store.getTier(wallet), store.usedTokensToday(wallet)]);
-  return { tier, ...quotaState(used, tier) };
+  const [tier, used, ownKey] = await Promise.all([
+    store.getTier(wallet),
+    store.usedTokensToday(wallet),
+    getProviderKey(wallet, "anthropic").then((k) => !!k).catch(() => false),
+  ]);
+  const state = quotaState(used, tier);
+  // The user's own key pays for model calls: the platform quota does not apply.
+  return { tier, ...state, exceeded: ownKey ? false : state.exceeded, ownKey };
 }
 
 export const QUOTA_MESSAGE = "Dein Tageskontingent ist aufgebraucht. Mit Ultra geht's sofort weiter – oder morgen wieder kostenlos.";
@@ -514,7 +521,7 @@ export async function createThreadWithGreeting(wallet: string, botIds: string[])
 }
 
 async function generateGreeting(wallet: string, threadId: string, bot: BotRow, all: BotRow[], isGroup: boolean): Promise<string[]> {
-  const resolved = resolveModel("bot-fast");
+  const resolved = await resolveModelFor(wallet, "bot-fast");
   try {
     const res = await generateText({
       model: resolved.model,
@@ -530,7 +537,7 @@ async function generateGreeting(wallet: string, threadId: string, bot: BotRow, a
     const outputTokens = res.totalUsage.outputTokens ?? 0;
     await store.recordRun({
       wallet, threadId, botId: bot.id, route: resolved.route, inputTokens, outputTokens,
-      costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+      costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
       status: "ok",
     });
     return splitBubbles(res.text, 2);

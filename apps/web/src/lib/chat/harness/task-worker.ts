@@ -7,7 +7,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, hasToolCall, stepCountIs } from "ai";
 import type { StopCondition, ToolSet } from "ai";
-import { estimateCostMicros, resolveModel } from "../models";
+import { resolveModelFor, platformCostMicros } from "../models";
 import { buildSystemPrompt } from "../prompts";
 import { sendChatPush } from "../push";
 import { checkQuota, rowsToModelMessages } from "../runtime";
@@ -193,7 +193,7 @@ async function runClaimed(row: TaskRow, budgetMs: number): Promise<TickOutcome> 
     return finish(row, bot, "failed", normalizeCheckpoint(row.checkpoint), { error: "Der Chat oder Bot dieser Aufgabe existiert nicht mehr." });
   }
 
-  const resolved = resolveModel(bot.model_route);
+  const resolved = await resolveModelFor(row.wallet, bot.model_route);
   const enabled = new Set(bot.tools ?? []);
   const canSearch = enabled.has("web_search") && resolved.provider === "anthropic";
   const [rows, files] = await Promise.all([
@@ -270,7 +270,7 @@ async function runClaimed(row: TaskRow, budgetMs: number): Promise<TickOutcome> 
   await store.recordRun({
     wallet: row.wallet, threadId: thread.id, botId: bot.id, route: resolved.route,
     inputTokens, outputTokens,
-    costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+    costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
     status: modelError ? "error" : "ok",
     error: modelError ? `task ${row.id}: ${errorText(modelError)}` : null,
   });
@@ -388,7 +388,7 @@ export async function askBot(ctx: HarnessContext, input: { botSlugOrName: string
   const quota = await checkQuota(ctx.wallet);
   if (quota.exceeded) return { error: "Das Tageskontingent ist aufgebraucht." };
 
-  const resolved = resolveModel(target.model_route);
+  const resolved = await resolveModelFor(ctx.wallet, target.model_route);
   const enabled = new Set(target.tools ?? []);
   const canSearch = enabled.has("web_search") && resolved.provider === "anthropic";
   const nested = await buildHarnessContext({
@@ -429,7 +429,7 @@ export async function askBot(ctx: HarnessContext, input: { botSlugOrName: string
     outputTokens = out.totalUsage.outputTokens ?? 0;
     await store.recordRun({
       wallet: ctx.wallet, threadId: ctx.threadId, botId: target.id, route: resolved.route, inputTokens, outputTokens,
-      costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+      costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
       status: "ok",
     });
     const answer = out.text.trim();

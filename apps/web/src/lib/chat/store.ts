@@ -519,10 +519,10 @@ export async function threadsWithActiveRoutines(wallet: string): Promise<Set<str
 export async function recordRun(input: {
   wallet: string; threadId: string | null; botId: string | null; route: string;
   inputTokens: number; outputTokens: number; costMicros: number;
-  status: "ok" | "error" | "quota"; error?: string | null;
+  status: "ok" | "error" | "quota"; error?: string | null; billedTo?: "platform" | "own_key";
 }): Promise<void> {
   const res = await db().from("chat_runs").insert({
-    owner_wallet: input.wallet, thread_id: input.threadId, bot_id: input.botId, route: input.route,
+    owner_wallet: input.wallet, thread_id: input.threadId, bot_id: input.botId, route: input.route, billed_to: input.billedTo ?? "platform",
     input_tokens: input.inputTokens, output_tokens: input.outputTokens, cost_micros: input.costMicros,
     status: input.status, error: input.error?.slice(0, 1000) ?? null,
   });
