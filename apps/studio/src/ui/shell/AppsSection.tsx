@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChatApiError, fetchMyMiniApps, type MyMiniApp } from '../../workspace/api';
 import { apiBase, loadSession } from '../../workspace/session';
 import { IconPlus } from './line-icons';
+import { AppAnalytics } from './AppAnalytics';
 
 const STATUS: Record<MyMiniApp['status'], string> = {
   draft: 'Entwurf',
@@ -21,12 +22,15 @@ export function AppsSection() {
   const [apps, setApps] = useState<MyMiniApp[] | null>(null);
   const [state, setState] = useState<'loading' | 'signed-out' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [selected, setSelected] = useState<MyMiniApp | null>(null);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
       const session = await loadSession();
       if (!session) return alive && setState('signed-out');
+      setToken(session.token);
       try {
         const r = await fetchMyMiniApps(session.token);
         if (!alive) return;
@@ -44,6 +48,14 @@ export function AppsSection() {
   }, []);
 
   const dashboard = `${apiBase()}/dashboard/mini-apps`;
+
+  if (selected && token) {
+    return (
+      <div className="section apps">
+        <AppAnalytics token={token} app={selected} onBack={() => setSelected(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="section apps">
@@ -89,6 +101,9 @@ export function AppsSection() {
                 </div>
                 {a.description && <p className="app-desc">{a.description}</p>}
                 <div className="app-actions">
+                  <button className="w-btn green" onClick={() => setSelected(a)}>
+                    Nutzung
+                  </button>
                   <button className="w-btn" onClick={() => open(a.homeUrl)}>
                     Öffnen
                   </button>

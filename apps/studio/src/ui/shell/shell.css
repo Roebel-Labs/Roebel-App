@@ -373,3 +373,265 @@ html.mac-inset .toolbar {
 .web-live-card .w-btn {
   text-decoration: none;
 }
+
+/* rail account */
+
+.rail-spacer {
+  flex: 1;
+}
+
+.rail-account {
+  position: relative;
+}
+
+.rail-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #d94c8c;
+  color: #fff;
+  font: 700 13px/1 var(--font-head);
+}
+
+.account-pop {
+  position: absolute;
+  z-index: 60;
+  left: 56px;
+  bottom: 0;
+  width: 280px;
+  padding: 14px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 14px;
+  background: var(--w-card);
+  color: var(--w-text);
+  -webkit-app-region: no-drag;
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.account-sub {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.w-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--w-raised);
+  color: var(--w-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.w-tag.ok {
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+}
+
+.account-quota {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.account-quota-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.account-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--w-raised);
+}
+
+.account-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--w-accent);
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--w-text);
+  text-align: left;
+}
+
+.account-item:hover {
+  background: var(--w-hover);
+}
+
+.account-item.danger {
+  color: var(--w-danger);
+}
+
+/* settings dialog */
+
+.dlg-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-app-region: no-drag;
+}
+
+.dlg {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  width: min(760px, calc(100vw - 48px));
+  height: min(560px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 16px;
+  background: var(--w-card);
+  color: var(--w-text);
+}
+
+.dlg-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 10px;
+  border-right: 1px solid var(--w-line);
+  background: var(--w-raised);
+}
+
+.dlg-nav > strong {
+  padding: 4px 8px 12px;
+  font: 700 15px/1 var(--font-head);
+}
+
+.dlg-nav-item {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--w-text-2);
+  text-align: left;
+}
+
+.dlg-nav-item:hover,
+.dlg-nav-item[aria-selected='true'] {
+  background: var(--w-card);
+  color: var(--w-text);
+}
+
+.dlg-body {
+  position: relative;
+  overflow: auto;
+  padding: 22px 26px;
+}
+
+.dlg-body h2 {
+  margin: 0 0 6px;
+  font: 700 18px/1.2 var(--font-head);
+}
+
+.dlg-body h3 {
+  margin: 22px 0 4px;
+  font: 700 14px/1.2 var(--font-head);
+}
+
+.dlg-body > p {
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.dlg-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.conn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conn-row,
+.key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+
+.conn-row > div,
+.key-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.key-row {
+  align-items: stretch;
+  margin-bottom: 10px;
+}
+
+.key-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conn-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.conn-form input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  background: var(--w-card);
+  color: var(--w-text);
+  font: inherit;
+  user-select: text;
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}

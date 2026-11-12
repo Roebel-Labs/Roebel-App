@@ -2,6 +2,7 @@ import logoUrl from '../../assets/logo.svg';
 import { useOnAir } from '../studio';
 import { SECTION_ICONS } from './icons';
 import { SECTIONS, type Section } from './nav';
+import { AccountMenu } from './AccountMenu';
 
 /** Left navigation rail. The livestream icon carries a red dot while the program is on air or recording. */
 export function Rail({ section, onSelect }: { section: Section; onSelect: (s: Section) => void }) {
@@ -30,6 +31,8 @@ export function Rail({ section, onSelect }: { section: Section; onSelect: (s: Se
           );
         })}
       </div>
+      <span className="rail-spacer" />
+      <AccountMenu />
     </nav>
   );
 }

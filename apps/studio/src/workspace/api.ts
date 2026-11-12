@@ -131,3 +131,71 @@ export interface MyMiniApp {
 }
 
 export const fetchMyMiniApps = (token: string) => call<{ apps: MyMiniApp[] }>('/api/chat/mini-apps', { token });
+
+// ---- account, own keys, connectors, analytics ---------------------------------------
+
+export interface Me {
+  displayName: string | null;
+  username: string | null;
+  isCitizen: boolean;
+  tier: 'free' | 'plus' | 'ultra' | string;
+  quota: { used: number; limit: number; ownKey: boolean };
+  providerKeys: ProviderKey[];
+}
+
+export const fetchMe = (token: string) => call<Me>('/api/chat/me', { token });
+
+export type KeyProvider = 'anthropic' | 'openai';
+export interface ProviderKey {
+  provider: KeyProvider;
+  last4: string;
+  status: 'active' | 'error';
+  lastError: string | null;
+  createdAt: string;
+}
+
+export const listProviderKeys = (token: string) => call<{ keys: ProviderKey[] }>('/api/chat/provider-keys', { token });
+export const saveProviderKey = (token: string, provider: KeyProvider, key: string) =>
+  call<{ key: ProviderKey }>('/api/chat/provider-keys', { token, method: 'PUT', json: { provider, key } });
+export const deleteProviderKey = (token: string, provider: KeyProvider) =>
+  call<{ ok: boolean }>(`/api/chat/provider-keys?provider=${provider}`, { token, method: 'DELETE' });
+
+export interface Connector {
+  id: string;
+  kind: 'mcp' | 'google';
+  name: string;
+  url: string | null;
+  status: 'active' | 'error' | 'disabled';
+  toolCount: number;
+  lastError: string | null;
+}
+
+export const listConnectors = (token: string) => call<{ connectors: Connector[]; googleAvailable: boolean }>('/api/chat/connectors', { token });
+export const addMcpConnector = (token: string, name: string, url: string) =>
+  call<{ connector: Connector }>('/api/chat/connectors', { token, json: { kind: 'mcp', name, url } });
+export const deleteConnector = (token: string, id: string) =>
+  call<{ ok: boolean }>(`/api/chat/connectors?id=${encodeURIComponent(id)}`, { token, method: 'DELETE' });
+/** Google consent URL; the browser lands on /studio/verbunden afterwards. */
+export const googleStart = (token: string) =>
+  call<{ url: string }>(`/api/chat/connectors/google/start?return=${encodeURIComponent(`${apiBase()}/studio/verbunden`)}`, { token });
+
+export type AnalyticsRange = '24h' | '7d' | '30d' | '90d' | 'all';
+export interface AnalyticsSummary {
+  appId: string;
+  range: AnalyticsRange;
+  opens: number;
+  uniqueWallets: number;
+  events: number;
+  sessions: number;
+  returningWallets: number;
+  retentionRate: number;
+  rewardsGranted: number;
+  rewardsAmount: number;
+  budget: number | null;
+  spent: number | null;
+  series: { date: string; opens: number; uniqueWallets: number; rewards: number }[];
+  topEvents: { event: string; count: number }[];
+}
+
+export const fetchMiniAppAnalytics = (token: string, appId: string, range: AnalyticsRange) =>
+  call<AnalyticsSummary>(`/api/chat/mini-apps/${encodeURIComponent(appId)}/analytics?range=${range}`, { token });

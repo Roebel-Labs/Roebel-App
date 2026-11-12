@@ -3,7 +3,8 @@
 export type DesktopCommand =
   | { kind: 'compose' }
   | { kind: 'search' }
-  | { kind: 'settings' }
+  | { kind: 'settings'; section?: 'appearance' | 'connections' | 'keys' | 'account' }
+  | { kind: 'signedin' }
   | { kind: 'toggleList' }
   | { kind: 'dictate' }
   | { kind: 'signout' }

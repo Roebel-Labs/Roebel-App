@@ -2,7 +2,7 @@ import { emitCommand } from '../../workspace/desktop';
 import { hms, useOnAir, useTick } from '../studio';
 import { IconCapture, IconMic, IconSearch, IconSidebar } from './line-icons';
 import type { Section } from './nav';
-import { SettingsMenu } from './SettingsMenu';
+import { SettingsDialog } from './SettingsDialog';
 
 /** Window toolbar on the glass (Town layout): list toggle left, quick actions centred, on-air state right. */
 export function Toolbar({ section, onSection }: { section: Section; onSection: (s: Section) => void }) {
@@ -39,7 +39,7 @@ export function Toolbar({ section, onSection }: { section: Section; onSection: (
             <span className="pill-dot" /> {air.status?.recordOnly ? 'Aufnahme' : 'Live'} {hms(now - (air.startedAt ?? now))}
           </button>
         )}
-        <SettingsMenu />
+        <SettingsDialog />
       </div>
     </header>
   );

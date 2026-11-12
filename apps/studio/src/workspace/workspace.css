@@ -450,6 +450,11 @@
   color: var(--w-accent);
 }
 
+.ws-md code,
+.ws-md pre {
+  font-family: var(--font-mono);
+}
+
 .ws-md code {
   padding: 1px 5px;
   border-radius: 5px;
@@ -868,7 +873,7 @@
 }
 
 .ws-code .num {
-  font: 700 24px/1 var(--font-head);
+  font: 600 24px/1 var(--font-mono);
   letter-spacing: 0.08em;
 }
 
@@ -999,4 +1004,124 @@ html.mac-inset .rail {
   align-items: flex-start;
   gap: 10px;
   max-width: 460px;
+}
+
+/* mini-app analytics */
+
+.apps-detail {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 24px 24px;
+}
+
+.apps-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  font-size: 16px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--w-line);
+  border-radius: 14px;
+}
+
+.kpi-label {
+  color: var(--w-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kpi-value {
+  font: 700 26px/1.1 var(--font-head);
+}
+
+.kpi-sub {
+  font-size: 12px;
+}
+
+.chart-card {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--w-line);
+  border-radius: 14px;
+}
+
+.chart-title {
+  margin-bottom: 10px;
+  font: 700 14px/1.2 var(--font-head);
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart-grid {
+  stroke: var(--w-line);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--w-muted);
+  font: 500 10px var(--font-body);
+}
+
+.chart-bar {
+  fill: var(--w-accent);
+  opacity: 0.85;
+}
+
+.chart-bar.hot {
+  opacity: 1;
+}
+
+.chart-tip {
+  position: absolute;
+  top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  background: var(--w-card);
+  font-size: 12px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.events-table td {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--w-line);
+}
+
+.events-table td.num {
+  text-align: right;
+  color: var(--w-text-2);
 }

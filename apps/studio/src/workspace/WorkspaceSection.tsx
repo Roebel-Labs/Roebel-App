@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { clearSession, loadSession, saveSession, type StoredSession } from './session';
 import { SignIn } from './SignIn';
 import { Workspace } from './Workspace';
-import { onDesktopCommand } from './desktop';
+import { emitCommand, onDesktopCommand } from './desktop';
 import { UpdateButton } from '../ui/UpdateButton';
 import './workspace.css';
 
@@ -15,7 +15,7 @@ export function WorkspaceSection() {
   }, []);
 
   const signedIn = useCallback((s: StoredSession) => {
-    void saveSession(s);
+    void saveSession(s).then(() => emitCommand({ kind: 'signedin' }));
     setSession(s);
   }, []);
 

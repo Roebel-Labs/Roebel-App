@@ -1,3 +1,28 @@
+/* Mona Sans (SIL OFL 1.1): one variable file covers weight 200–900 and width 75–125 %.
+   'Mona Sans SemiCondensed' is the same file clamped to 87.5 % width (headlines, as in the Röbel App). */
+@font-face {
+  font-family: 'Mona Sans';
+  src: url('../assets/MonaSansVF.woff2') format('woff2');
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Mona Sans SemiCondensed';
+  src: url('../assets/MonaSansVF.woff2') format('woff2');
+  font-weight: 200 900;
+  font-stretch: 87.5%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Mona Sans Mono';
+  src: url('../assets/MonaSansMonoVF.woff2') format('woff2');
+  font-weight: 200 900;
+  font-display: swap;
+}
+
 /* Ortis Studio — calm control-room theme.
    One accent (navy) for the one primary action: TAKE. Green = preview, red = live, amber = attention. */
 
@@ -19,8 +44,10 @@
   --pgm: #e5484d;
   --amber: #e8a33d;
   --r: 4px;
-  --font-body: 'Inter', system-ui, sans-serif;
-  --font-head: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  /* Interface fonts. The on-air graphics (canvas) keep Inter / Plus Jakarta Sans in render/fonts.ts. */
+  --font-body: 'Mona Sans', 'Inter', system-ui, sans-serif;
+  --font-head: 'Mona Sans SemiCondensed', 'Mona Sans', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Mona Sans Mono', ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
 
