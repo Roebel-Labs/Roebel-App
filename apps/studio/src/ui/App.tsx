@@ -22,6 +22,7 @@ import { AppsSection } from './shell/AppsSection';
 import { WorkspaceSection } from '../workspace/WorkspaceSection';
 import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
 import { Rail } from './shell/Rail';
+import { Toolbar } from './shell/Toolbar';
 import { onDesktopCommand } from '../workspace/desktop';
 import './theme.css';
 import './shell/shell.css';
@@ -380,54 +381,57 @@ function Shell() {
     () =>
       onDesktopCommand((cmd) => {
         if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : 'home');
-        else setSection('home');
+        else if (cmd.kind !== 'settings') setSection('home');
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   return (
     <div className="app shell">
-      <Rail section={section} onSelect={setSection} />
-      <div className="shell-main">
-        {/* Broadcast alarms stay visible in every section. */}
-        <RecordingBanner />
-        <DestinationBanner />
-        <SlowDestinationBanner />
-        {section === 'live' && (
-          <div className="section">
-            <header className="topbar">
-              <span className="wordmark">Livestream</span>
-              <nav className="tabs" role="tablist">
-                {TABS.map(([id, label]) => (
-                  <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-                    {label}
-                  </button>
-                ))}
-              </nav>
-              <div className="topbar-end">
-                <UpdateButton />
-                <StatusPill />
-                <OnAirButton onOpenSettings={() => setTab('settings')} />
-              </div>
-            </header>
-            <main className="content">
-              {tab === 'show' && <ShowTab />}
-              {tab === 'design' && <DesignTab />}
-              {tab === 'table' && <TableTab />}
-              {tab === 'liveroom' && <LiveRoomPanel />}
-              {tab === 'settings' && <SettingsTab />}
-              {tab === 'help' && <HelpTab />}
-            </main>
-          </div>
-        )}
-        {section === 'home' && (
-          <div className="section">
-            <WorkspaceSection />
-          </div>
-        )}
-        {section === 'apps' && <AppsSection />}
-        {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
-        {(section === 'live' || air.phase !== 'off') && <HealthBar />}
+      <Toolbar section={section} onSection={setSection} />
+      <div className="shell-body">
+        <Rail section={section} onSelect={setSection} />
+        <div className={`shell-card ${section === 'live' ? 'live-mode' : 'ws-mode'}`}>
+          {/* Broadcast alarms stay visible in every section. */}
+          <RecordingBanner />
+          <DestinationBanner />
+          <SlowDestinationBanner />
+          {section === 'live' && (
+            <div className="section">
+              <header className="topbar">
+                <span className="wordmark">Livestream</span>
+                <nav className="tabs" role="tablist">
+                  {TABS.map(([id, label]) => (
+                    <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+                      {label}
+                    </button>
+                  ))}
+                </nav>
+                <div className="topbar-end">
+                  <UpdateButton />
+                  <StatusPill />
+                  <OnAirButton onOpenSettings={() => setTab('settings')} />
+                </div>
+              </header>
+              <main className="content">
+                {tab === 'show' && <ShowTab />}
+                {tab === 'design' && <DesignTab />}
+                {tab === 'table' && <TableTab />}
+                {tab === 'liveroom' && <LiveRoomPanel />}
+                {tab === 'settings' && <SettingsTab />}
+                {tab === 'help' && <HelpTab />}
+              </main>
+            </div>
+          )}
+          {section === 'home' && (
+            <div className="section">
+              <WorkspaceSection />
+            </div>
+          )}
+          {section === 'apps' && <AppsSection />}
+          {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
+          {(section === 'live' || air.phase !== 'off') && <HealthBar />}
+        </div>
       </div>
       <QuitConfirm />
       {/* Alerts, guests, on-stage sync and the on-air follow keep running in every section and tab. */}

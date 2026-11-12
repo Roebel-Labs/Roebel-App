@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { loadFonts } from './render/fonts';
 import { StoreProvider } from './state/store';
 import { App } from './ui/App';
+import { applyAccent, loadAccent } from './ui/shell/accent';
 
 // A file dropped anywhere on the window must never navigate the page (the renderer would
 // unload and the MediaRecorder with it: dead stream). Drop zones that accept files call
@@ -19,6 +20,9 @@ document.addEventListener('drop', (e) => e.preventDefault());
   if (ui?.glass) document.documentElement.classList.add('glass');
   if (ui?.platform === 'darwin') document.documentElement.classList.add('mac-inset');
 }
+
+// The user's primary colour before the first paint.
+applyAccent(loadAccent());
 
 // Fonts first: canvas text never triggers font loading, so the first program
 // frame would otherwise air in the fallback face.

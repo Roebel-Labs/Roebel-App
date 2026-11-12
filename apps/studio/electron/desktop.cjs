@@ -94,20 +94,43 @@ function createDesktop({ getWindow, showWindow, buildDir, quit, log }) {
     send({ kind: 'capture', name: 'Bildschirmfoto.png', type: 'image/png', bytes: new Uint8Array(bytes) });
   };
 
+  // Town-style menu: short names, a line icon each (macOS template images), submenus for New / Capture.
+  const icon = (name) => {
+    if (process.platform !== 'darwin') return undefined; // Windows tray menus look better without
+    const img = nativeImage.createFromPath(path.join(buildDir, 'menu', `${name}Template.png`));
+    img.setTemplateImage(true);
+    return img;
+  };
+  const acc = (accelerator) => ({ accelerator, registerAccelerator: false });
+
   function menu() {
     const mac = process.platform === 'darwin';
     return Menu.buildFromTemplate([
-      { label: 'Ortis Studio öffnen', click: () => showWindow() },
+      { label: 'Ortis öffnen', icon: icon('home'), ...acc('CommandOrControl+O'), click: () => showWindow() },
+      { label: 'Suchen', icon: icon('search'), ...acc('CommandOrControl+K'), click: () => send({ kind: 'search' }) },
+      {
+        label: 'Neu',
+        icon: icon('plus'),
+        submenu: [
+          { label: 'Nachricht', icon: icon('message'), ...acc(QUICK_ASK), click: () => send({ kind: 'compose' }) },
+          { label: 'Sprachnachricht', icon: icon('mic'), click: () => send({ kind: 'dictate' }) },
+        ],
+      },
+      ...(mac
+        ? [
+            {
+              label: 'Aufnahme',
+              icon: icon('capture'),
+              submenu: [{ label: 'Bildschirmfoto', icon: icon('capture'), click: () => void capture() }],
+            },
+          ]
+        : []),
+      { label: 'Livestream', icon: icon('live'), click: () => send({ kind: 'navigate', section: 'live' }) },
       { type: 'separator' },
-      { label: 'Neue Nachricht', accelerator: QUICK_ASK, click: () => send({ kind: 'compose' }) },
-      { label: 'Sprachnachricht aufnehmen', click: () => send({ kind: 'dictate' }) },
-      ...(mac ? [{ label: 'Bildschirmfoto an Assistenten', click: () => void capture() }] : []),
+      { label: 'Einstellungen …', icon: icon('settings'), ...acc('CommandOrControl+,'), click: () => send({ kind: 'settings' }) },
+      { label: 'Abmelden', icon: icon('logout'), click: () => send({ kind: 'signout' }) },
       { type: 'separator' },
-      { label: 'Arbeitsbereich', click: () => send({ kind: 'navigate', section: 'home' }) },
-      { label: 'Livestream', click: () => send({ kind: 'navigate', section: 'live' }) },
-      { type: 'separator' },
-      { label: 'Abmelden', click: () => send({ kind: 'signout' }) },
-      { label: 'Ortis Studio beenden', click: () => quit() },
+      { label: 'Beenden', icon: icon('power'), ...acc('CommandOrControl+Q'), click: () => quit() },
     ]);
   }
 

@@ -2,6 +2,9 @@
 
 export type DesktopCommand =
   | { kind: 'compose' }
+  | { kind: 'search' }
+  | { kind: 'settings' }
+  | { kind: 'toggleList' }
   | { kind: 'dictate' }
   | { kind: 'signout' }
   | { kind: 'navigate'; section: 'home' | 'live' }
@@ -43,4 +46,10 @@ export function takePending(): DesktopCommand | null {
 
 export function markHandled(): void {
   pending = null;
+}
+
+/** In-app commands (toolbar) use the same bus as the tray, so the workspace handles both alike. */
+export function emitCommand(c: DesktopCommand): void {
+  pending = c;
+  for (const l of listeners) l(c);
 }

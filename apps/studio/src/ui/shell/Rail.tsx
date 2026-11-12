@@ -9,7 +9,7 @@ export function Rail({ section, onSelect }: { section: Section; onSelect: (s: Se
   const live = air.phase !== 'off';
   return (
     <nav className="rail" aria-label="Bereiche">
-      <img className="rail-logo" src={logoUrl} alt="Ortis Studio" width={26} height={26} />
+      <img className="rail-logo" src={logoUrl} alt="Ortis Studio" width={24} height={24} />
       <div className="rail-items" role="tablist" aria-orientation="vertical">
         {SECTIONS.map((s) => {
           const Icon = SECTION_ICONS[s.id];

@@ -72,7 +72,7 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
         <button className="ws-file" onClick={() => h.onOpenFile(p.fileId, p.name)}>
           <span className="ws-file-ext">{p.ext.toUpperCase()}</span>
           <span className="ws-file-name">{p.name}</span>
-          <span className="ws-muted">{kb(p.size)}</span>
+          <span className="w-muted">{kb(p.size)}</span>
         </button>
       );
     }
@@ -103,7 +103,7 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
             <strong>{p.title}</strong>
             {p.status !== 'pending' && <span className="ws-tag">{APPROVAL_STATUS[p.status] ?? p.status}</span>}
           </div>
-          <div className="ws-muted">{p.summary}</div>
+          <div className="w-muted">{p.summary}</div>
           {p.preview.fields.length > 0 && (
             <dl className="ws-fields">
               {p.preview.fields.map((f, i) => (
@@ -115,16 +115,16 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
             </dl>
           )}
           {p.preview.body && <div className="ws-approval-body">{p.preview.body}</div>}
-          {p.resultNote && <div className="ws-muted">{p.resultNote}</div>}
+          {p.resultNote && <div className="w-muted">{p.resultNote}</div>}
           {p.status === 'pending' &&
             (p.risk === 'money' ? (
               <div className="ws-note">Zahlungen bestätigst du in der Röbel App.</div>
             ) : (
               <div className="ws-approval-actions">
-                <button className="btn primary" disabled={h.busy} onClick={() => h.onApprove(p.actionId)}>
+                <button className="w-btn green" disabled={h.busy} onClick={() => h.onApprove(p.actionId)}>
                   Freigeben
                 </button>
-                <button className="btn ghost" disabled={h.busy} onClick={() => h.onReject(p.actionId)}>
+                <button className="w-btn" disabled={h.busy} onClick={() => h.onReject(p.actionId)}>
                   Ablehnen
                 </button>
               </div>
@@ -153,7 +153,7 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
       return (
         <div className="ws-event">
           <strong>{p.title}</strong>
-          <span className="ws-muted">
+          <span className="w-muted">
             {d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })},{' '}
             {d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
             {p.location ? ` · ${p.location}` : ''}

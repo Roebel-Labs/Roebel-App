@@ -63,19 +63,19 @@ export function SignIn({ onSignedIn }: { onSignedIn: (s: StoredSession) => void 
     <div className="ws-signin">
       <div className="ws-signin-card">
         <h1>Willkommen im Arbeitsbereich</h1>
-        <p className="ws-muted">
+        <p className="w-muted">
           Deine Assistenten für Termine, Mails, Aufgaben und Veranstaltungen. Verbinde Ortis Studio einmal mit deinem
           Röbel- bzw. Ortis-Konto.
         </p>
         {error && (
           <div className="ws-error">
             {error}{' '}
-            <button className="btn ghost" onClick={() => void start()}>
+            <button className="w-btn" onClick={() => void start()}>
               Erneut versuchen
             </button>
           </div>
         )}
-        {!pair && !error && <div className="ws-muted ws-signin-wait">Code wird erzeugt …</div>}
+        {!pair && !error && <div className="w-muted ws-signin-wait">Code wird erzeugt …</div>}
         {pair && (
           <div className="ws-signin-grid">
             <div className="ws-qr">
@@ -84,17 +84,17 @@ export function SignIn({ onSignedIn }: { onSignedIn: (s: StoredSession) => void 
             <div className="ws-signin-steps">
               <div>
                 <strong>Mit dem Handy</strong>
-                <p className="ws-muted">QR-Code mit der Kamera scannen und in der Röbel App bestätigen.</p>
+                <p className="w-muted">QR-Code mit der Kamera scannen und in der Röbel App bestätigen.</p>
               </div>
               <div>
                 <strong>Im Browser</strong>
-                <p className="ws-muted">Mit Ortis ID anmelden und bestätigen.</p>
-                <button className="btn primary" onClick={() => void window.studio.shell.openExternal(pair.approveUrl)}>
+                <p className="w-muted">Mit Ortis ID anmelden und bestätigen.</p>
+                <button className="w-btn green" onClick={() => void window.studio.shell.openExternal(pair.approveUrl)}>
                   Im Browser verbinden
                 </button>
               </div>
               <div className="ws-code">
-                <span className="ws-muted">Code</span>
+                <span className="w-muted">Code</span>
                 <span className="num">{pair.codeDisplay}</span>
               </div>
             </div>

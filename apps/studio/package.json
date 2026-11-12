@@ -59,7 +59,8 @@
       "build/icon-win.png",
       "build/trayTemplate.png",
       "build/trayTemplate@2x.png",
-      "build/tray-win.png"
+      "build/tray-win.png",
+      "build/menu/**"
     ],
     "extraResources": [
       {

@@ -2,12 +2,16 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { parseMarkdown } from '../help/markdown';
+import {
+  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconLogout, IconMic, IconPanelRight, IconPlus, IconSearch,
+  IconSend, IconStop, IconWave,
+} from '../ui/shell/line-icons';
 import { approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, markRead, rejectAction, sendMessage, transcribe, uploadImage } from './api';
-import { markHandled, onDesktopCommand, takePending, type DesktopCommand } from './desktop';
 import { BotAvatar } from './BotAvatar';
+import { markHandled, onDesktopCommand, takePending, type DesktopCommand } from './desktop';
 import { Part, type PartHandlers } from './Parts';
 import { applyEvent, emptyThread, optimisticUser, type ThreadView } from './thread-state';
-import type { ChatBootstrap, ChatBot, ChatStreamEvent, ChatThread } from './types';
+import type { ChatBootstrap, ChatBot, ChatMessage, ChatPart, ChatStreamEvent, ChatThread } from './types';
 
 type Doc = { name: string; content: string | null; error?: string };
 
@@ -21,13 +25,41 @@ const docCtx: Ctx = {
 
 function relTime(iso: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  return d.toDateString() === today.toDateString()
+  return d.toDateString() === new Date().toDateString()
     ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
 }
 
-/** Town-shaped workspace: threads · conversation · document panel. Talks to the same chat API as the app. */
+function textOf(m: ChatMessage | undefined): string {
+  if (!m) return '';
+  for (const p of m.parts) if (p.type === 'text') return String((p as { text: string }).text).replace(/[#*_`>]/g, '').trim();
+  return '';
+}
+
+/** Open option chips of the newest bot message (Town's suggestion row above the composer). */
+function suggestions(messages: ChatMessage[]): { messageId: string; key: string; label: string }[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === 'user') return [];
+    const opt = m.parts.find((p) => p.type === 'options') as Extract<ChatPart, { type: 'options' }> | undefined;
+    if (opt) return opt.dismissed || opt.selected ? [] : opt.options.map((o) => ({ messageId: m.id, key: o.key, label: o.label }));
+  }
+  return [];
+}
+
+/** Files and images in a thread, newest first (the "Bibliothek" panel). */
+function library(messages: ChatMessage[]): Array<{ kind: 'file'; id: string; name: string } | { kind: 'image'; url: string; name: string }> {
+  const out: Array<{ kind: 'file'; id: string; name: string } | { kind: 'image'; url: string; name: string }> = [];
+  for (const m of [...messages].reverse())
+    for (const p of m.parts) {
+      if (p.type === 'file') out.push({ kind: 'file', id: (p as { fileId: string }).fileId, name: (p as { name: string }).name });
+      else if ((p.type === 'image' || p.type === 'generated_image') && (p as { url?: string }).url)
+        out.push({ kind: 'image', url: (p as { url: string }).url, name: (p as { prompt?: string }).prompt?.slice(0, 60) || 'Bild' });
+    }
+  return out;
+}
+
+/** Town-shaped workspace: list · conversation · Bibliothek. Same chat API as the Röbel app. */
 export function Workspace({ token, onSignOut, footer }: { token: string; onSignOut: () => void; footer?: React.ReactNode }) {
   const [boot, setBoot] = useState<ChatBootstrap | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
@@ -36,13 +68,17 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [listOpen, setListOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [search, setSearch] = useState<string | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string }>>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
 
   const guard = useCallback(
     (e: unknown): string => {
@@ -71,6 +107,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     if (!threadId) return;
     let alive = true;
     setView(emptyThread);
+    setDoc(null);
     fetchMessages(token, threadId)
       .then((r) => alive && setView({ ...emptyThread, messages: r.messages }))
       .catch((e) => alive && setView({ ...emptyThread, error: guard(e) }));
@@ -90,13 +127,15 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     for (const b of [...(boot?.presets ?? []), ...(boot?.bots ?? []), ...(thread?.bots ?? [])]) m.set(b.id, b);
     return m;
   }, [boot, thread]);
+  const leadBot = thread?.bots[0] ?? boot?.presets[0];
+  const lastBotMsg = [...view.messages].reverse().find((m) => m.role === 'bot');
+  const chips = suggestions(view.messages);
+  const lib = library(view.messages);
 
   const onEvent = useCallback(
     (tid: string) => (e: ChatStreamEvent) => {
       setView((v) => applyEvent(v, tid, e));
-      if (e.type === 'done') {
-        setBoot((b) => (b ? { ...b, threads: [e.thread, ...b.threads.filter((t) => t.id !== e.thread.id)] } : b));
-      }
+      if (e.type === 'done') setBoot((b) => (b ? { ...b, threads: [e.thread, ...b.threads.filter((t) => t.id !== e.thread.id)] } : b));
     },
     [],
   );
@@ -118,9 +157,34 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     if (!threadId || !text || busy || uploading) return;
     const tid = threadId;
     setView((v) => ({ ...v, error: null, messages: [...v.messages, optimisticUser(tid, text)] }));
-    setDraft('');
-    if (!optionAnswer) setAttachments([]);
+    if (!optionAnswer) {
+      setDraft('');
+      setAttachments([]);
+    }
     void run(() => sendMessage(token, tid, { text, imageUrls: imageUrls.length ? imageUrls : undefined, optionAnswer }, onEvent(tid)));
+  };
+
+  const newThread = async (bot: ChatBot) => {
+    setPicker(false);
+    try {
+      const r = await createThread(token, [bot.id]);
+      setBoot((b) => (b ? { ...b, threads: [r.thread, ...b.threads] } : b));
+      setThreadId(r.thread.id);
+      setView({ ...emptyThread, messages: r.messages });
+    } catch (e) {
+      setBootError(guard(e));
+    }
+  };
+
+  const openFile = async (fileId: string, name: string) => {
+    setPanelOpen(true);
+    setDoc({ name, content: null });
+    try {
+      const r = await fetchFile(token, fileId);
+      setDoc({ name: r.file.name, content: r.file.content });
+    } catch (e) {
+      setDoc({ name, content: null, error: guard(e) });
+    }
   };
 
   const attach = useCallback(
@@ -168,41 +232,24 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     }
   }, [token, guard]);
 
-  // Tray / shortcut commands (compose, dictate, capture). A command sent before mount is taken once.
+  // Tray, shortcut and toolbar commands. A command sent before mount is taken once.
   useEffect(() => {
     const handle = (c: DesktopCommand) => {
       if (c.kind === 'compose') input.current?.focus();
       else if (c.kind === 'dictate') void toggleDictation();
       else if (c.kind === 'capture') void attach(new Blob([c.bytes], { type: c.type }), c.name);
-      else return;
+      else if (c.kind === 'toggleList') setListOpen((o) => !o);
+      else if (c.kind === 'search') {
+        setListOpen(true);
+        setSearch((s) => s ?? '');
+        setTimeout(() => searchInput.current?.focus(), 0);
+      } else return;
       markHandled();
     };
     const p = takePending();
     if (p) handle(p);
     return onDesktopCommand(handle);
   }, [attach, toggleDictation]);
-
-  const newThread = async (bot: ChatBot) => {
-    setPicker(false);
-    try {
-      const r = await createThread(token, [bot.id]);
-      setBoot((b) => (b ? { ...b, threads: [r.thread, ...b.threads] } : b));
-      setThreadId(r.thread.id);
-      setView({ ...emptyThread, messages: r.messages });
-    } catch (e) {
-      setBootError(guard(e));
-    }
-  };
-
-  const openFile = async (fileId: string, name: string) => {
-    setDoc({ name, content: null });
-    try {
-      const r = await fetchFile(token, fileId);
-      setDoc({ name: r.file.name, content: r.file.content });
-    } catch (e) {
-      setDoc({ name, content: null, error: guard(e) });
-    }
-  };
 
   const handlers = (messageId: string): PartHandlers => ({
     busy,
@@ -213,66 +260,103 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   });
 
   const pickable = [...(boot?.presets ?? []), ...(boot?.bots ?? [])];
+  const q = (search ?? '').trim().toLowerCase();
+  const threads = (boot?.threads ?? []).filter(
+    (t: ChatThread) => !q || `${t.title} ${t.lastMessagePreview} ${t.bots.map((b) => b.name).join(' ')}`.toLowerCase().includes(q),
+  );
+  const streaming = view.streaming.length > 0;
 
   return (
-    <div className={`ws${doc ? ' with-doc' : ''}`}>
-      <aside className="ws-list">
-        <div className="ws-list-head">
-          <div className="ws-new">
-            <button className="btn" onClick={() => setPicker((p) => !p)} disabled={!boot}>
-              + Neu
-            </button>
-            {picker && (
-              <div className="ws-picker" role="menu">
-                {pickable.map((b) => (
-                  <button key={b.id} className="ws-picker-item" role="menuitem" onClick={() => void newThread(b)}>
-                    <BotAvatar avatar={b.avatar} size={24} />
-                    <span>
-                      <strong>{b.name}</strong>
-                      <span className="ws-muted">{b.description}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+    <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen ? ' with-panel' : ''}`}>
+      {listOpen && (
+        <aside className="ws-list">
+          <div className={`ws-agent${streaming ? ' running' : ''}`}>
+            <BotAvatar avatar={leadBot?.avatar} size={40} />
+            <div className="ws-agent-text">
+              <span className="ws-agent-name">{(leadBot?.name ?? 'Mecky').toUpperCase()}</span>
+              <span className="ws-agent-status">{streaming ? 'Arbeitet …' : textOf(lastBotMsg) || 'Bereit'}</span>
+            </div>
+            {streaming && <span className="ws-spinner" aria-label="arbeitet" />}
           </div>
-          <button className="btn ghost" onClick={onSignOut} title="Ortis Studio vom Konto trennen">
-            Abmelden
-          </button>
-        </div>
-        {bootError && <div className="ws-error">{bootError}</div>}
-        <div className="ws-threads">
-          {boot?.threads.map((t: ChatThread) => (
-            <button key={t.id} className="ws-thread" aria-selected={t.id === threadId} onClick={() => setThreadId(t.id)}>
-              <BotAvatar avatar={t.bots[0]?.avatar} size={30} />
-              <span className="ws-thread-text">
-                <span className="ws-thread-top">
-                  <strong>{t.title || t.bots[0]?.name || 'Unterhaltung'}</strong>
-                  <span className="ws-muted">{relTime(t.lastMessageAt)}</span>
-                </span>
-                <span className="ws-muted ws-ellipsis">{t.lastMessagePreview}</span>
-              </span>
-              {t.unread && <span className="ws-unread" aria-label="ungelesen" />}
+
+          <div className="ws-list-tools">
+            <div className="ws-new">
+              <button className="w-pill" onClick={() => setPicker((p) => !p)} disabled={!boot}>
+                <IconPlus size={16} /> Neu <IconChevronDown size={14} />
+              </button>
+              {picker && (
+                <div className="ws-picker" role="menu">
+                  {pickable.map((b) => (
+                    <button key={b.id} className="ws-picker-item" role="menuitem" onClick={() => void newThread(b)}>
+                      <BotAvatar avatar={b.avatar} size={26} />
+                      <span>
+                        <strong>{b.name}</strong>
+                        <span className="w-muted">{b.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button className={`w-round${recording ? ' rec' : ''}`} title="Aufnehmen" aria-label="Aufnehmen" onClick={() => void toggleDictation()}>
+              <IconWave size={16} />
             </button>
-          ))}
-          {boot && boot.threads.length === 0 && <div className="ws-muted ws-empty">Noch keine Unterhaltung. Starte mit „+ Neu“.</div>}
-        </div>
-        <div className="ws-quota ws-muted">
-          <span>{boot ? `Heute ${Math.round((boot.quota.used / Math.max(1, boot.quota.limit)) * 100)} % genutzt` : ''}</span>
-          {footer}
-        </div>
-      </aside>
+            <span className="ws-tools-spacer" />
+            <button
+              className="w-icon"
+              title="Suchen"
+              aria-label="Suchen"
+              onClick={() => {
+                setSearch((s) => (s === null ? '' : null));
+                setTimeout(() => searchInput.current?.focus(), 0);
+              }}
+            >
+              <IconSearch size={17} />
+            </button>
+          </div>
+          {search !== null && (
+            <input
+              ref={searchInput}
+              className="ws-search"
+              placeholder="Unterhaltungen durchsuchen"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setSearch(null)}
+            />
+          )}
+
+          {bootError && <div className="ws-error">{bootError}</div>}
+          <div className="ws-threads">
+            <div className="ws-group">Zuletzt verwendet</div>
+            {threads.map((t) => (
+              <button key={t.id} className="ws-thread" aria-selected={t.id === threadId} onClick={() => setThreadId(t.id)} title={t.lastMessagePreview}>
+                <span className="w-ellipsis">{t.title || t.bots[0]?.name || 'Unterhaltung'}</span>
+                {t.unread && <span className="ws-unread" aria-label="ungelesen" />}
+              </button>
+            ))}
+            {boot && threads.length === 0 && <div className="ws-empty">{q ? 'Nichts gefunden.' : 'Noch keine Unterhaltung. Starte mit „Neu“.'}</div>}
+          </div>
+
+          <div className="ws-list-foot">
+            <span className="w-muted">{boot ? `Heute ${Math.round((boot.quota.used / Math.max(1, boot.quota.limit)) * 100)} % genutzt` : ''}</span>
+            {footer}
+            <button className="w-icon" onClick={onSignOut} title="Abmelden" aria-label="Abmelden">
+              <IconLogout size={16} />
+            </button>
+          </div>
+        </aside>
+      )}
 
       <section className="ws-chat">
         {thread ? (
           <>
             <header className="ws-chat-head">
-              <strong>{thread.title || thread.bots[0]?.name}</strong>
-              <span className="ws-chat-bots">
-                {thread.bots.map((b) => (
-                  <BotAvatar key={b.id} avatar={b.avatar} size={20} />
-                ))}
-              </span>
+              <BotAvatar avatar={leadBot?.avatar} size={30} />
+              <strong className="w-ellipsis">{thread.title || leadBot?.name}</strong>
+              <span className="ws-tools-spacer" />
+              <button className={`w-icon${panelOpen ? ' on' : ''}`} title="Bibliothek" aria-label="Bibliothek" onClick={() => setPanelOpen((o) => !o)}>
+                <IconPanelRight size={18} />
+              </button>
             </header>
             <div className="ws-messages" ref={scroller}>
               <div className="ws-messages-inner">
@@ -288,11 +372,11 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     );
                   return (
                     <div key={m.id} className="ws-msg bot">
-                      <BotAvatar avatar={bot?.avatar} size={30} />
+                      <BotAvatar avatar={bot?.avatar} size={28} />
                       <div className="ws-msg-body">
                         <div className="ws-msg-meta">
                           <strong>{bot?.name ?? 'Assistent'}</strong>
-                          <span className="ws-muted">{relTime(m.createdAt)}</span>
+                          <span className="w-muted">{relTime(m.createdAt)}</span>
                         </div>
                         {m.parts.map((p, i) => (
                           <Part key={i} part={p} h={handlers(m.id)} />
@@ -305,6 +389,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 {view.error && <div className="ws-error">{view.error}</div>}
               </div>
             </div>
+
             <form
               className="ws-composer"
               onSubmit={(e) => {
@@ -312,23 +397,32 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 send(draft);
               }}
             >
+              {chips.length > 0 && (
+                <div className="ws-chips">
+                  {chips.map((c) => (
+                    <button key={c.key} type="button" className="ws-chip" disabled={busy} onClick={() => send(c.label, { messageId: c.messageId, key: c.key })}>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {(attachments.length > 0 || uploading) && (
                 <div className="ws-attachments">
                   {attachments.map((a, i) => (
                     <span key={a.url} className="ws-attachment">
                       <img src={a.url} alt={a.name} />
                       <button type="button" aria-label="Entfernen" onClick={() => setAttachments((x) => x.filter((_, j) => j !== i))}>
-                        ✕
+                        <IconClose size={10} />
                       </button>
                     </span>
                   ))}
-                  {uploading && <span className="ws-muted">Lädt hoch …</span>}
+                  {uploading && <span className="w-muted">Lädt hoch …</span>}
                 </div>
               )}
               <textarea
                 ref={input}
                 value={draft}
-                placeholder={`Nachricht an ${thread.bots[0]?.name ?? 'deinen Assistenten'}`}
+                placeholder={`Schreib ${leadBot?.name ?? 'deinem Assistenten'} oder sprich mit ihm`}
                 rows={2}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -338,29 +432,27 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                   }
                 }}
               />
-              <div className="ws-composer-actions">
+              <div className="ws-composer-row">
+                <button type="button" className="w-icon" title="Erwähnen" aria-label="Erwähnen" onClick={() => setDraft((d) => `${d}@`)}>
+                  <IconAt size={18} />
+                </button>
+                {window.studio?.desktop && (
+                  <button type="button" className="w-icon" title="Bildschirmfoto anhängen" aria-label="Bildschirmfoto anhängen" onClick={() => void window.studio.desktop?.capture()}>
+                    <IconCapture size={18} />
+                  </button>
+                )}
+                <span className="ws-tools-spacer" />
                 <button
                   type="button"
-                  className={`ws-icon-btn${recording ? ' rec' : ''}`}
+                  className={`w-circle ink${recording ? ' rec' : ''}`}
                   onClick={() => void toggleDictation()}
                   title={recording ? 'Aufnahme beenden' : 'Diktieren'}
                   aria-label={recording ? 'Aufnahme beenden' : 'Diktieren'}
                 >
-                  {recording ? '■' : '🎙'}
+                  {recording ? <IconStop size={16} /> : <IconMic size={17} />}
                 </button>
-                {window.studio?.desktop && (
-                  <button
-                    type="button"
-                    className="ws-icon-btn"
-                    onClick={() => void window.studio.desktop?.capture()}
-                    title="Bildschirmfoto anhängen"
-                    aria-label="Bildschirmfoto anhängen"
-                  >
-                    ⬚
-                  </button>
-                )}
-                <button className="btn primary" disabled={busy || uploading || (!draft.trim() && attachments.length === 0)}>
-                  {busy ? '…' : 'Senden'}
+                <button className="w-circle green" disabled={busy || uploading || (!draft.trim() && attachments.length === 0)} title="Senden" aria-label="Senden">
+                  {busy ? <span className="ws-spinner light" /> : <IconSend size={17} />}
                 </button>
               </div>
             </form>
@@ -370,21 +462,49 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
         )}
       </section>
 
-      {doc && (
-        <aside className="ws-doc">
-          <header className="ws-doc-head">
-            <strong className="ws-ellipsis">{doc.name}</strong>
-            <button className="btn ghost" onClick={() => setDoc(null)} aria-label="Schließen">
-              ✕
-            </button>
-          </header>
-          <div className="ws-doc-body">
-            {doc.error ? (
-              <div className="ws-error">{doc.error}</div>
-            ) : doc.content === null ? (
-              <div className="ws-muted">Lade …</div>
+      {panelOpen && (
+        <aside className="ws-panel">
+          <div className="ws-panel-card">
+            {doc ? (
+              <>
+                <header className="ws-panel-head">
+                  <button className="w-icon" onClick={() => setDoc(null)} aria-label="Zurück zur Bibliothek">
+                    ←
+                  </button>
+                  <strong className="w-ellipsis">{doc.name}</strong>
+                </header>
+                <div className="ws-doc-body">
+                  {doc.error ? (
+                    <div className="ws-error">{doc.error}</div>
+                  ) : doc.content === null ? (
+                    <div className="w-muted">Lade …</div>
+                  ) : (
+                    <div className="ws-md">{renderBlocks(parseMarkdown(doc.content), docCtx)}</div>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="ws-md">{renderBlocks(parseMarkdown(doc.content), docCtx)}</div>
+              <>
+                <header className="ws-panel-head">
+                  <strong>Bibliothek</strong>
+                </header>
+                <div className="ws-lib">
+                  {lib.length === 0 && <div className="w-muted ws-empty">Dateien und Bilder aus dieser Unterhaltung erscheinen hier.</div>}
+                  {lib.map((it, i) =>
+                    it.kind === 'file' ? (
+                      <button key={i} className="ws-lib-item" onClick={() => void openFile(it.id, it.name)}>
+                        <IconFile size={16} />
+                        <span className="w-ellipsis">{it.name}</span>
+                      </button>
+                    ) : (
+                      <button key={i} className="ws-lib-item" onClick={() => void window.studio.shell.openExternal(it.url)}>
+                        <img src={it.url} alt="" />
+                        <span className="w-ellipsis">{it.name}</span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </>
             )}
           </div>
         </aside>
