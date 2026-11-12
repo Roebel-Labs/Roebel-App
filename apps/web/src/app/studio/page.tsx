@@ -49,14 +49,21 @@ export default async function StudioPage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-[#00498B] dark:text-[#7ABBF2]">Ortis Studio</p>
         </div>
         <h1 className="mt-4 font-heading text-4xl font-bold leading-tight md:text-5xl">
-          Das Livestream-Studio für deine Veranstaltung.
+          Deine KI-Assistenten und dein Livestream-Studio.
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-          Kameras, Einblendungen, Werbung und Sendeziele in einer App. Gebaut für Turniere, Feste und Vereine,
-          zuerst beim DanceCup in Röbel.
+          Termine, Mails, Aufgaben und Veranstaltungen mit deinen Assistenten erledigen, eigene Mini-Apps verwalten
+          und Feste live in die Röbel App senden. Gebaut für Vereine und Betriebe, zuerst beim DanceCup in Röbel.
         </p>
 
         <DownloadButtons downloads={release.downloads} />
+        <p className="mt-3 text-sm text-muted-foreground">
+          Lieber ohne Installation?{" "}
+          <a href="https://ortis-studio-web.vercel.app" className="font-semibold text-[#00498B] underline dark:text-[#7ABBF2]">
+            Ortis Studio im Browser öffnen
+          </a>{" "}
+          (Arbeitsbereich und Mini-Apps; der Livestream braucht die Desktop-App).
+        </p>
 
         <div className="mt-14 grid gap-4 md:grid-cols-3">
           {FEATURES.map((f) => (
