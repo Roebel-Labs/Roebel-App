@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import logoUrl from '../assets/logo.svg';
 import { LiveRoomPanel, LiveRoomRuntime } from '../live-room/LiveRoomPanel';
 import { useShow } from '../state/store';
 import { ConfirmDialog, Dialog } from './Dialog';
@@ -19,9 +18,14 @@ import { TableTab } from './table/TableTab';
 import { UpdateButton } from './UpdateButton';
 import { useLiveRoomStudioSeams } from './live-room-seams';
 import { hms, StudioProvider, useOnAir, useStudio, useTick } from './studio';
+import { AppsSection } from './shell/AppsSection';
+import { HomeSection } from './shell/HomeSection';
+import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
+import { Rail } from './shell/Rail';
 import './theme.css';
+import './shell/shell.css';
 
-type Tab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'help';
+type Tab = LiveTab;
 const TABS: Array<[Tab, string]> = [
   ['show', 'Show'],
   ['design', 'Design'],
@@ -286,8 +290,11 @@ function SlowDestinationBanner() {
   );
 }
 
-/** Ends running transitions, binds hotkeys (Show tab only), and stops the broadcast cleanly on quit. */
-function useShowRuntime(tab: Tab) {
+/**
+ * Ends running transitions, binds hotkeys (only while the Show tab is on screen), and stops the broadcast
+ * cleanly on quit. Lives in the shell, so leaving the livestream section never touches a running show.
+ */
+function useShowRuntime(tab: Tab | null) {
   const { state, dispatch } = useShow();
   const { onAir } = useStudio();
   const latest = useRef(state);
@@ -355,46 +362,58 @@ function QuitConfirm() {
 }
 
 function Shell() {
+  const [section, setSectionState] = useState<Section>(() => loadSection());
   const [tab, setTab] = useState<Tab>('show');
-  useShowRuntime(tab);
+  const setSection = (next: Section) => {
+    setSectionState(next);
+    saveSection(next);
+  };
+  useShowRuntime(visibleLiveTab(section, tab));
   useSponsorRuntime();
   const { dispatch } = useShow();
   const { onAir } = useStudio();
   useLiveRoomStudioSeams(dispatch, onAir);
   return (
-    <div className="app">
-      <header className="topbar">
-        <span className="wordmark">
-          <img className="wordmark-logo" src={logoUrl} alt="" width={20} height={20} />
-          Ortis Studio
-        </span>
-        <nav className="tabs" role="tablist">
-          {TABS.map(([id, label]) => (
-            <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="topbar-end">
-          <UpdateButton />
-          <StatusPill />
-          <OnAirButton onOpenSettings={() => setTab('settings')} />
-        </div>
-      </header>
-      <RecordingBanner />
-      <DestinationBanner />
-      <SlowDestinationBanner />
-      <main className="content">
-        {tab === 'show' && <ShowTab />}
-        {tab === 'design' && <DesignTab />}
-        {tab === 'table' && <TableTab />}
-        {tab === 'liveroom' && <LiveRoomPanel />}
-        {tab === 'settings' && <SettingsTab />}
-        {tab === 'help' && <HelpTab />}
-      </main>
-      <HealthBar />
+    <div className="app shell">
+      <Rail section={section} onSelect={setSection} />
+      <div className="shell-main">
+        {/* Broadcast alarms stay visible in every section. */}
+        <RecordingBanner />
+        <DestinationBanner />
+        <SlowDestinationBanner />
+        {section === 'live' && (
+          <div className="section">
+            <header className="topbar">
+              <span className="wordmark">Livestream</span>
+              <nav className="tabs" role="tablist">
+                {TABS.map(([id, label]) => (
+                  <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="topbar-end">
+                <UpdateButton />
+                <StatusPill />
+                <OnAirButton onOpenSettings={() => setTab('settings')} />
+              </div>
+            </header>
+            <main className="content">
+              {tab === 'show' && <ShowTab />}
+              {tab === 'design' && <DesignTab />}
+              {tab === 'table' && <TableTab />}
+              {tab === 'liveroom' && <LiveRoomPanel />}
+              {tab === 'settings' && <SettingsTab />}
+              {tab === 'help' && <HelpTab />}
+            </main>
+          </div>
+        )}
+        {section === 'home' && <HomeSection onOpen={setSection} />}
+        {section === 'apps' && <AppsSection />}
+        <HealthBar />
+      </div>
       <QuitConfirm />
-      {/* Alerts, guests, on-stage sync and the on-air follow keep running while another tab is open. */}
+      {/* Alerts, guests, on-stage sync and the on-air follow keep running in every section and tab. */}
       <LiveRoomRuntime />
     </div>
   );
