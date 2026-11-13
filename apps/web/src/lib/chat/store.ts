@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "../supabase/admin";
 import { BOT_EYES, BOT_SHAPES } from "./types";
+import { PERSONALITY_KEYS, characterById } from "./agent/characters";
 import type {
   BotAvatarSpec, ChatBot, ChatMessage, ChatPart, ChatRoutine, ChatThread, ChatTier, RoutineSchedule,
 } from "./types";
@@ -85,7 +86,10 @@ export function normalizeAvatar(input: unknown): BotAvatarSpec {
   const shape = BOT_SHAPES.includes(a.shape as never) ? (a.shape as BotAvatarSpec["shape"]) : "circle";
   const eyes = BOT_EYES.includes(a.eyes as never) ? (a.eyes as BotAvatarSpec["eyes"]) : "dots";
   const color = typeof a.color === "string" && /^#[0-9a-fA-F]{6}$/.test(a.color) ? a.color : "#00498B";
-  return { shape, color, eyes };
+  const out: BotAvatarSpec = { shape, color, eyes };
+  if (characterById(a.character)) out.character = a.character as string;
+  if (PERSONALITY_KEYS.includes(a.personality as never)) out.personality = a.personality as string;
+  return out;
 }
 
 export function rowToBot(row: BotRow, opts: { includeInstructions?: boolean } = {}): ChatBot {
@@ -227,9 +231,10 @@ export async function getBotRow(id: string): Promise<BotRow | null> {
 }
 
 export async function createBot(wallet: string, input: {
-  name: string; description: string; instructions: string; avatar: BotAvatarSpec; modelRoute?: string;
+  name: string; description: string; instructions: string; avatar: BotAvatarSpec; modelRoute?: string; tools?: string[];
 }): Promise<ChatBot> {
   const res = await db().from("chat_bots").insert({
+    ...(input.tools ? { tools: input.tools } : {}),
     owner_wallet: wallet,
     name: input.name,
     description: input.description,
@@ -239,6 +244,22 @@ export async function createBot(wallet: string, input: {
     is_preset: false,
   }).select("*").single();
   return rowToBot(must(res, "create bot") as BotRow, { includeInstructions: true });
+}
+
+/**
+ * Deletes an own bot. Its threads and routines move to `heir` first: the foreign keys would otherwise drop the
+ * bot from its threads and cascade-delete its routines.
+ */
+export async function deleteBot(wallet: string, id: string, heir: string): Promise<boolean> {
+  const row = await getBotRow(id);
+  if (!row || row.is_preset || row.owner_wallet !== wallet) return false;
+  const links = must(await db().from("chat_thread_bots").select("thread_id").eq("bot_id", id), "bot threads") as { thread_id: string }[];
+  if (links.length) {
+    must(await db().from("chat_thread_bots").upsert(links.map((l) => ({ thread_id: l.thread_id, bot_id: heir })), { onConflict: "thread_id,bot_id", ignoreDuplicates: true }), "heir threads");
+  }
+  must(await db().from("chat_routines").update({ bot_id: heir }).eq("bot_id", id).eq("owner_wallet", wallet), "heir routines");
+  must(await db().from("chat_bots").delete().eq("id", id).eq("owner_wallet", wallet).eq("is_preset", false), "delete bot");
+  return true;
 }
 
 export async function updateBot(wallet: string, id: string, patch: Partial<{

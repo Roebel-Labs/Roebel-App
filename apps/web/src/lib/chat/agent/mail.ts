@@ -6,6 +6,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ChatMessage } from "../types";
 import { agentBot, findProfile, getAgentProfile, patchProfileRaw } from "./profile";
 import type { AgentProfileRow } from "./profile";
+import { characterArt, characterById } from "./characters";
+import { normalizeAvatar } from "../store";
+import type { BotRow } from "../store";
 
 const API = "https://api.resend.com";
 
@@ -59,7 +62,14 @@ async function resendFetch(path: string, init?: RequestInit): Promise<Response> 
   });
 }
 
-export interface MailFooter { name: string; address: string }
+/** `image`: site-relative picture path (defaults to Mecky). */
+/** The signature picture of a bot: its character's, or Mecky's. */
+export function mailImageOf(bot: Pick<BotRow, "avatar">): string | null {
+  const c = characterById(normalizeAvatar(bot.avatar).character);
+  return c ? characterArt(c.id).mail : null;
+}
+
+export interface MailFooter { name: string; address: string; image?: string | null }
 
 const siteOrigin = (): string => (process.env.NEXT_PUBLIC_SITE_URL || "https://www.roebel.app").replace(/\/$/, "");
 
@@ -69,7 +79,7 @@ export function footerHtml(f: MailFooter): string {
   const link = (href: string, text: string) => `<a href="${esc(href)}" style="color:#2f6f5e;text-decoration:none">${esc(text)}</a>`;
   const feedback = `mailto:${f.address}?subject=${encodeURIComponent(`Feedback zu ${f.name}`)}`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:28px;border-top:1px solid #e7e6e1;padding-top:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"><tr>`
-    + `<td style="vertical-align:top;padding-right:12px"><img src="${site}/mascot/mecky-mail.png" width="44" height="44" alt="${esc(f.name)}" style="display:block;border-radius:9px"></td>`
+    + `<td style="vertical-align:top;padding-right:12px"><img src="${site}${esc(f.image || "/mascot/mecky-mail.png")}" width="44" height="44" alt="${esc(f.name)}" style="display:block;border-radius:9px"></td>`
     + `<td style="vertical-align:top;font-size:13px;line-height:1.5;color:#737267"><div style="font-size:15px;font-weight:600;color:#1a1a16">${esc(f.name)}</div>`
     + `Antworte hier, um zu schreiben · ${link(`${site}/ortis/open`, "In Ortis öffnen")} · ${link(feedback, "Feedback senden")}</td></tr></table>`;
 }
@@ -108,7 +118,7 @@ export async function sendAgentMail(wallet: string, input: { subject: string; ma
   if (!from || !profile.owner_email || !profile.owner_email_verified_at) return false;
   const bot = await agentBot(profile);
   const name = profile.name || bot.name;
-  return sendMail({ fromName: name, fromAddress: from, to: profile.owner_email, footer: { name, address: from }, ...input });
+  return sendMail({ fromName: name, fromAddress: from, to: profile.owner_email, footer: { name, address: from, image: mailImageOf(bot) }, ...input });
 }
 
 const textOf = (messages: ChatMessage[]): string =>

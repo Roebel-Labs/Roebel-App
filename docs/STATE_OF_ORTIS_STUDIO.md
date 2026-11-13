@@ -146,6 +146,13 @@ Code in `apps/web/src/lib/chat/agent/` (`profile.ts`, `mail.ts`, `channels.ts`),
 - **Off by default**: mail needs `ORTIS_MAIL_DOMAIN` (+ `RESEND_API_KEY`, `RESEND_INBOUND_WEBHOOK_SECRET`); phone needs `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_SMS_FROM` / `TWILIO_WHATSAPP_FROM`. Without them the endpoints report the channel as not set up.
 - Not built: voice notes and images over SMS/WhatsApp, proactive SMS, group chats.
 
+### 6a.3 Agent characters and multiple agents (2026-11-13)
+
+- **12 illustrated characters** (`lib/chat/agent/characters.ts`: name, species, role, tagline, default personality, colour). Masters (4K transparent PNGs, ~160 MB) stay on Max's laptop in `~/Documents/privat/agent mascots`; `apps/studio/scripts/build-agent-art.cjs` (studio branch) builds the studio tiles and `public/agents/<id>/{full.webp, mail.png, card.png}` (~5 MB total). Berta (character sheet #8) has no artwork yet.
+- **An agent = an own `chat_bots` row** whose `avatar` jsonb carries `character` + `personality` (no migration). It gets the default assistant's tools; `agentOverlay` adds the character prompt for every character bot. `GET /api/chat/agent` now also returns `agents[]`; `POST /api/chat/agent/agents`, `PATCH|DELETE /api/chat/agent/agents/:id`. Deleting moves the agent's threads and routines to Mecky first (the FKs would otherwise drop/cascade them).
+- **Main assistant** = `chat_agent_profiles.bot_id` (mailbox, phone, briefings). `PATCH /api/chat/agent {botId}` → `setMainAgent`: clears the profile name, moves the mail alias to the new name. Renaming a main character agent writes to its bot row. Mail signature shows the main agent's `mail.png`.
+- **Share page** `/ortis/agent/<id>?name=…` (public, OG card).
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`

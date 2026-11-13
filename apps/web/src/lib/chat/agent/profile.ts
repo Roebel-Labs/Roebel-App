@@ -3,6 +3,8 @@
 import { db } from "../store";
 import type { BotRow } from "../store";
 import { workBot } from "../persona/catalog";
+import { normalizeAvatar } from "../store";
+import { characterById, characterPrompt } from "./characters";
 
 export interface Personality { key: string; title: string; description: string; prompt: string }
 
@@ -25,7 +27,7 @@ export interface AgentProfileRow {
 const RESERVED = new Set(["admin", "support", "hello", "hallo", "info", "mail", "postmaster", "abuse", "noreply", "no-reply", "security", "billing", "team", "ortis", "bounce", "bounces"]);
 export const ALIAS_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 
-function slug(name: string): string {
+export function slug(name: string): string {
   return name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "assistent";
 }
 
@@ -101,6 +103,19 @@ export async function patchProfileRaw(wallet: string, patch: Record<string, unkn
   if (res.error) throw new Error(`[chat/agent] patch profile: ${res.error.message}`);
 }
 
+/**
+ * Makes `bot` the main assistant (mailbox, phone, briefings). The profile's own name belonged to the previous
+ * one, so it is cleared; the mail alias follows the new name when it is a valid address.
+ */
+export async function setMainAgent(wallet: string, bot: BotRow | null): Promise<void> {
+  await getAgentProfile(wallet);
+  const target = bot ?? (await workBot());
+  const alias = slug(target.name);
+  const patch: Record<string, unknown> = { bot_id: bot ? bot.id : null, name: null };
+  if (ALIAS_RE.test(alias) && !RESERVED.has(alias)) patch.mail_alias = alias;
+  await patchProfileRaw(wallet, patch);
+}
+
 /** The bot the profile is laid over. */
 export async function agentBot(profile: AgentProfileRow | null): Promise<BotRow> {
   if (profile?.bot_id) {
@@ -129,15 +144,17 @@ export async function agentOverlay(wallet: string, bot: BotRow, channel?: Channe
   try {
     const profile = await findProfile(wallet);
     const base = profile ? await agentBot(profile) : null;
-    if (profile && base && base.id === bot.id) {
-      if (profile.name) {
-        name = profile.name;
-        blocks.push(`Der Mensch hat dir den Namen „${profile.name}“ gegeben. So heißt du für ihn.`);
-      }
-      const p = PERSONALITIES.find((x) => x.key === profile.personality);
-      if (p?.prompt) blocks.push(`Gewünschte Art: ${p.prompt}`);
-      if (profile.custom_instructions.trim()) blocks.push(`Persönliche Anweisungen des Menschen an dich (verbindlich, solange sie den Hausregeln nicht widersprechen):\n${profile.custom_instructions.trim()}`);
-    }
+    const isMain = Boolean(profile && base && base.id === bot.id);
+    if (isMain && profile?.name) name = profile.name;
+    const avatar = normalizeAvatar(bot.avatar);
+    const character = characterById(avatar.character);
+    if (character) blocks.push(characterPrompt(character, name));
+    else if (isMain && profile?.name) blocks.push(`Der Mensch hat dir den Namen „${profile.name}“ gegeben. So heißt du für ihn.`);
+    // The main assistant follows the profile; other character agents carry their own preset.
+    const personality = isMain ? profile?.personality : avatar.personality;
+    const p = PERSONALITIES.find((x) => x.key === personality);
+    if (p?.prompt) blocks.push(`Gewünschte Art: ${p.prompt}`);
+    if (isMain && profile?.custom_instructions.trim()) blocks.push(`Persönliche Anweisungen des Menschen an dich (verbindlich, solange sie den Hausregeln nicht widersprechen):\n${profile.custom_instructions.trim()}`);
   } catch (err) {
     console.error("[chat/agent] overlay failed (non-fatal)", err);
   }
