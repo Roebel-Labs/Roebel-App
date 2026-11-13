@@ -267,7 +267,13 @@ export interface Persona {
 const enc = encodeURIComponent;
 
 export const fetchPersona = (token: string) => call<Persona>('/api/chat/persona', { token });
-export const fetchPersonaPage = (token: string, slug: string) => call<{ page: Page }>(`/api/chat/persona/pages/${enc(slug)}`, { token });
+/** v2: pages that link here (`backlinks`) and pages this one links to (`related`); absent on an older backend. */
+export interface PageLink {
+  slug: string;
+  title: string;
+}
+export const fetchPersonaPage = (token: string, slug: string) =>
+  call<{ page: Page; backlinks?: PageLink[]; related?: PageLink[] }>(`/api/chat/persona/pages/${enc(slug)}`, { token });
 export const savePersonaPage = (token: string, slug: string, body: { body: string; title?: string; summary?: string }) =>
   call<{ page: Page }>(`/api/chat/persona/pages/${enc(slug)}`, { token, method: 'PUT', json: body });
 export const deletePersonaPage = (token: string, slug: string) =>
@@ -301,17 +307,51 @@ export interface Suggestion {
   prompt: string;
   schedule: RoutineSchedule | null;
   people: { name: string; slug: string }[];
+  /** v2: done in minutes ("Schnell erledigt"). */
+  quick?: boolean;
+  /** v2: not in the previous set ("Neu"). */
+  fresh?: boolean;
 }
 export interface SuggestionGroup {
   title: string;
   items: Suggestion[];
 }
+export type SuggestionSectionKey = 'projects' | 'collab' | 'improve' | 'peers';
+export interface SuggestionSection {
+  key: SuggestionSectionKey | string;
+  title: string;
+  groups: SuggestionGroup[];
+}
+/** `sections` is v2 and absent on an older backend; `groups` stays as the fallback. */
 export const fetchSuggestions = (token: string) =>
-  call<{ groups: SuggestionGroup[]; status: PersonaStatus }>('/api/chat/persona/suggestions', { token });
+  call<{ sections?: SuggestionSection[]; groups?: SuggestionGroup[]; status: PersonaStatus }>('/api/chat/persona/suggestions', { token });
 export const dismissSuggestion = (token: string, id: string) =>
   call<{ ok: boolean }>(`/api/chat/persona/suggestions/${enc(id)}`, { token, json: { action: 'dismiss' } });
 export const startSuggestion = (token: string, id: string) =>
   call<{ threadId: string; prompt: string; routine: ChatRoutine | null }>(`/api/chat/persona/suggestions/${enc(id)}`, { token, json: { action: 'start' } });
+
+// Link with Claude (two-way sync over MCP). The endpoint may not exist yet (404).
+export interface LinkToken {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+export interface LinkCreated {
+  token: LinkToken;
+  /** Shown once. */
+  secret: string;
+  mcpUrl: string;
+  connectorUrl: string;
+  claudeCodeCommand: string;
+  syncPrompt: string;
+}
+export const fetchPersonaLinks = (token: string) =>
+  call<{ tokens: LinkToken[]; mcpUrl: string; syncPrompt: string }>('/api/chat/persona/link', { token });
+export const createPersonaLink = (token: string, label?: string) =>
+  call<LinkCreated>('/api/chat/persona/link', { token, json: label ? { label } : {} });
+export const deletePersonaLink = (token: string, id: string) =>
+  call<{ ok: boolean }>(`/api/chat/persona/link?id=${enc(id)}`, { token, method: 'DELETE' });
 
 export interface Skill {
   id: string;

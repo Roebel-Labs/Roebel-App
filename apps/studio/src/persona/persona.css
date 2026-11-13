@@ -102,7 +102,12 @@
 }
 
 .pz-content.wide {
-  max-width: 1040px;
+  max-width: 1080px;
+}
+
+/* Reading column for lists (Für dich): about 700px of text, like the reference layout. */
+.pz-content.narrow {
+  max-width: 764px;
 }
 
 .pz-actions + .pz-scroll .pz-content {
@@ -120,7 +125,13 @@
   letter-spacing: -0.01em;
 }
 
+.pz-title-lg {
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
 .pz-lead {
+  max-width: 72ch;
   margin: 0 0 18px;
   color: var(--w-muted);
   font-size: 15px;
@@ -504,12 +515,48 @@
 
 /* Für dich */
 
-.pz-group {
+.pz-sec {
+  margin-top: 44px;
+}
+
+.pz-title + .pz-sec {
   margin-top: 30px;
 }
 
-.pz-group > h2 {
-  margin-bottom: 8px;
+.pz-content h2.pz-sec-title {
+  margin-bottom: 4px;
+  font-size: 18px;
+}
+
+.pz-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 6px;
+}
+
+.pz-group-head h2 {
+  font-size: 18px;
+}
+
+.pz-group.sub {
+  margin-top: 14px;
+}
+
+.pz-group.sub .pz-group-head {
+  margin-bottom: 0;
+}
+
+.pz-group-head h3 {
+  margin: 0;
+  color: var(--w-muted);
+  font: 600 13px/1.3 var(--font-body);
+}
+
+.pz-sugs {
+  margin: 0 -10px;
 }
 
 .pz-sug {
@@ -517,7 +564,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 10px;
+  padding: 9px 10px;
   border-radius: 10px;
 }
 
@@ -528,7 +575,7 @@
 
 .pz-sug-icon {
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: 3px;
   color: var(--w-muted);
 }
 
@@ -542,12 +589,39 @@
 
 .pz-sug-title {
   font-size: 15px;
+  line-height: 1.45;
+}
+
+.pz-sug-reason {
+  color: var(--w-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pz-new {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 1px;
 }
 
 .pz-sug-people {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  padding-top: 1px;
+  margin-left: auto;
+  padding: 1px 0 0 4px;
+}
+
+.pz-fresh-toggle.on {
+  background: var(--w-selected);
+  color: var(--w-text);
 }
 
 .pz-person-chip {
@@ -680,9 +754,48 @@
   gap: 6px;
 }
 
+.pz-textlink {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--w-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pz-textlink:hover {
+  text-decoration: underline;
+}
+
+.pz-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 12px auto 0;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--w-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pz-more-toggle:hover {
+  color: var(--w-text);
+}
+
+.pz-more-toggle.open svg {
+  transform: rotate(180deg);
+}
+
 .pz-updates-card {
   margin-top: 20px;
-  padding: 16px 18px;
+  padding: 16px 18px 14px;
   border: 1px solid var(--w-line);
   border-radius: 12px;
   background: var(--w-raised);
@@ -692,6 +805,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  line-height: 1.6;
 }
 
 .pz-updates li {
@@ -732,8 +846,8 @@
 
 .pz-page-body.with-box {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 40px;
   align-items: start;
 }
 
@@ -748,13 +862,18 @@
   }
 }
 
+/* Prose: a comfortable measure (about 80 characters) and open leading; tables may use the full column. */
 .pz-md {
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.pz-page-text .pz-md > :not(.pz-md-table):not(pre) {
+  max-width: 80ch;
 }
 
 .pz-md h2 {
-  margin: 26px 0 8px;
+  margin: 30px 0 10px;
   font-size: 20px;
 }
 
@@ -775,11 +894,11 @@
 .pz-md p,
 .pz-md ul,
 .pz-md ol {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .pz-md li {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .pz-md blockquote {
@@ -800,25 +919,32 @@
   margin-bottom: 12px;
 }
 
+.pz-cites {
+  white-space: nowrap;
+}
+
 .pz-cite {
   position: relative;
   margin-left: 1px;
-  padding: 0 3px;
+  padding: 0 2px;
   border-radius: 4px;
-  color: var(--w-accent-text);
-  font-size: 11px;
+  color: var(--w-muted);
+  font-size: 10.5px;
   font-weight: 600;
+  line-height: 0;
   cursor: help;
 }
 
 .pz-cite:hover,
-.pz-cite:focus {
+.pz-cite:focus,
+.pz-cite:focus-within {
   outline: none;
   background: var(--w-accent-soft);
+  color: var(--w-accent-text);
 }
 
-.pz-cite:hover::after,
-.pz-cite:focus::after {
+.pz-cite:not(.pz-cite-more):hover::after,
+.pz-cite:not(.pz-cite-more):focus::after {
   content: attr(data-tip);
   position: absolute;
   z-index: 30;
@@ -834,6 +960,58 @@
   font: 500 12px/1.35 var(--font-body);
   white-space: normal;
   pointer-events: none;
+}
+
+.pz-cite-more {
+  cursor: pointer;
+}
+
+/* The list of folded sources opens below the mark; the top padding bridges the gap so the pointer can
+   move into it and scroll. */
+.pz-cite-pop {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 320px;
+  padding-top: 8px;
+  cursor: default;
+}
+
+.pz-cite-more:hover .pz-cite-pop,
+.pz-cite-more:focus .pz-cite-pop,
+.pz-cite-more:focus-within .pz-cite-pop {
+  display: block;
+}
+
+.pz-cite-pop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 232px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--w-ink);
+  color: var(--w-ink-text);
+  font: 500 12px/1.4 var(--font-body);
+  white-space: normal;
+  text-align: left;
+}
+
+.pz-cite-pop-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.pz-cite-pop-row b {
+  font-weight: 700;
+  text-align: right;
 }
 
 .pz-infobox {
@@ -862,24 +1040,82 @@
 
 .pz-infobox dl {
   margin: 0;
-  padding: 10px 14px 12px;
 }
 
-.pz-infobox dl > div {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 8px;
-  padding: 5px 0;
-  font-size: 13px;
+.pz-infobox-avatar + dl {
+  margin-top: 10px;
+  border-top: 1px solid var(--w-line);
+}
+
+/* Label above value: long values (an e-mail address) get the full card width and wrap at any character
+   only when they must. */
+.pz-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.pz-fact + .pz-fact {
+  border-top: 1px solid var(--w-line);
 }
 
 .pz-infobox dt {
-  color: var(--w-muted);
+  font-weight: 600;
 }
 
 .pz-infobox dd {
   margin: 0;
+  min-width: 0;
+  color: var(--w-text-2);
   overflow-wrap: anywhere;
+}
+
+/* Verweise auf diese Seite / Verwandte Seiten */
+
+.pz-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 48px;
+  margin-top: 40px;
+}
+
+.pz-links-col h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--w-line);
+  font-size: 15px;
+}
+
+.pz-links-col h2 svg {
+  color: var(--w-muted);
+}
+
+.pz-links-col ul {
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+}
+
+.pz-links-col li button {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--w-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.pz-links-col li button:hover {
+  color: var(--w-accent-text);
 }
 
 .pz-page-foot {
@@ -898,13 +1134,110 @@
 }
 
 .pz-sources ol {
-  margin: 0;
-  padding-left: 22px;
+  margin: 0 0 8px;
+  padding-left: 26px;
   color: var(--w-text-2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .pz-editor {
   min-height: 46vh;
+}
+
+/* Meine Funktionen: search + suggestion row */
+
+.pz-toolbar-search {
+  margin: 6px 0 4px;
+}
+
+.pz-search-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.pz-search-wrap svg {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  transform: translateY(-50%);
+  color: var(--w-muted);
+  pointer-events: none;
+}
+
+.pz-search-wrap .pz-search {
+  height: 42px;
+  padding-left: 40px;
+  font-size: 15px;
+}
+
+/* One row that scrolls sideways once the cards no longer fit. */
+.pz-hrow {
+  display: flex;
+  gap: 12px;
+  margin: 0 -32px;
+  padding: 2px 32px 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 32px;
+}
+
+.pz-idea {
+  flex: 0 0 272px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 268px;
+  padding: 16px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+  scroll-snap-align: start;
+}
+
+.pz-idea .pz-tile {
+  margin-bottom: 14px;
+}
+
+.pz-idea-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pz-idea-caption {
+  margin-top: 2px;
+  font-size: 12.5px;
+}
+
+.pz-idea-text {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 8px;
+  color: var(--w-muted);
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pz-idea-chip {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+.pz-idea-btn {
+  width: 100%;
+  height: 36px;
+  margin-top: auto;
+  border-radius: 10px;
+}
+
+.pz-idea > :nth-last-child(2) {
+  margin-bottom: 16px;
 }
 
 /* people table */
@@ -1238,6 +1571,54 @@
   padding: 0 10px;
 }
 
+/* Mit Claude verbinden */
+
+.pz-link-created {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pz-link-once {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+}
+
+.pz-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--w-line);
+  border-radius: 10px;
+  background: var(--w-raised);
+}
+
+.pz-copy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pz-copy-btn {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.pz-copy pre {
+  max-height: 120px;
+  margin: 4px 0 0;
+  overflow: auto;
+  font: 12.5px/1.5 var(--font-mono);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* Integrationen: the connectors list from the settings dialog, at section width */
 
 .pz-integrations h2 {
@@ -1264,5 +1645,11 @@
 
   .pz-content {
     padding: 20px 18px 48px;
+  }
+
+  .pz-hrow {
+    margin: 0 -18px;
+    padding: 2px 18px 10px;
+    scroll-padding: 0 18px;
   }
 }

@@ -4,25 +4,60 @@ import { useMemo, type ReactNode } from 'react';
 import { parseMarkdown, type Block, type Inline } from '../help/markdown';
 import type { PageSource } from '../workspace/api';
 import { openExternal } from './common';
-import { fmtDate, prepareWikiMarkdown, splitCitations, wikiSlugOf } from './format';
+import { citationRuns, fmtDate, foldCitations, prepareWikiMarkdown, wikiSlugOf } from './format';
 
 interface Ctx {
   sources?: PageSource[];
   onWiki?: (slug: string) => void;
 }
 
+function sourceTip(ctx: Ctx, n: number): string {
+  const src = ctx.sources?.find((s) => s.n === n) ?? ctx.sources?.[n - 1];
+  return src ? [src.label, fmtDate(src.date)].filter(Boolean).join(' · ') : 'Quelle unbekannt';
+}
+
+function Cite({ n, ctx }: { n: number; ctx: Ctx }) {
+  const tip = sourceTip(ctx, n);
+  return (
+    <sup className="pz-cite" data-tip={tip} aria-label={`Quelle ${n}: ${tip}`} tabIndex={0}>
+      {n}
+    </sup>
+  );
+}
+
+/** "+N" mark for a long run of citations; hover, focus or click lists the folded sources. */
+function CiteMore({ ns, ctx }: { ns: number[]; ctx: Ctx }) {
+  return (
+    <sup className="pz-cite pz-cite-more" tabIndex={0} role="button" aria-label={`${ns.length} weitere Quellen`}>
+      +{ns.length}
+      <span className="pz-cite-pop" role="tooltip">
+        <span className="pz-cite-pop-list">
+          {ns.map((n) => (
+            <span key={n} className="pz-cite-pop-row">
+              <b>{n}</b>
+              <span>{sourceTip(ctx, n)}</span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </sup>
+  );
+}
+
 function text(v: string, ctx: Ctx, key: string): ReactNode {
   if (!ctx.sources) return v;
-  const parts = splitCitations(v);
+  const parts = citationRuns(v);
   if (parts.length === 1 && typeof parts[0] === 'string') return v;
   return parts.map((p, i) => {
     if (typeof p === 'string') return <span key={`${key}.${i}`}>{p}</span>;
-    const src = ctx.sources?.find((s) => s.n === p.n) ?? ctx.sources?.[p.n - 1];
-    const tip = src ? [src.label, fmtDate(src.date)].filter(Boolean).join(' · ') : 'Quelle unbekannt';
+    const { shown, folded } = foldCitations(p.ns);
     return (
-      <sup key={`${key}.${i}`} className="pz-cite" data-tip={tip} aria-label={`Quelle ${p.n}: ${tip}`} tabIndex={0}>
-        {p.n}
-      </sup>
+      <span key={`${key}.${i}`} className="pz-cites">
+        {shown.map((n) => (
+          <Cite key={n} n={n} ctx={ctx} />
+        ))}
+        {folded.length > 0 && <CiteMore ns={folded} ctx={ctx} />}
+      </span>
     );
   });
 }

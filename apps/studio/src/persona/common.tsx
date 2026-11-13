@@ -113,7 +113,7 @@ export interface NavEntry {
 
 /** Section layout: title + sub-navigation on the left, scrolling content on the right. */
 export function Frame({
-  title, nav, active, onSelect, actions, children, wide,
+  title, nav, active, onSelect, actions, children, wide, narrow,
 }: {
   title: string;
   nav: NavEntry[];
@@ -122,6 +122,8 @@ export function Frame({
   actions?: ReactNode;
   children: ReactNode;
   wide?: boolean;
+  /** Reading column for lists (Für dich). */
+  narrow?: boolean;
 }) {
   return (
     <div className="section pz">
@@ -142,7 +144,7 @@ export function Frame({
       <div className="pz-main">
         {actions && <div className="pz-actions">{actions}</div>}
         <div className="pz-scroll">
-          <div className={`pz-content${wide ? ' wide' : ''}`}>{children}</div>
+          <div className={`pz-content${wide ? ' wide' : narrow ? ' narrow' : ''}`}>{children}</div>
         </div>
       </div>
     </div>

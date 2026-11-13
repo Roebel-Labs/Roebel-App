@@ -31,6 +31,7 @@ export const IconSettings = (p: P) => <I {...p}><circle cx="12" cy="12" r="3" />
 export const IconCheck = (p: P) => <I {...p}><path d="M20 6 9 17l-5-5" /></I>;
 export const IconPencil = (p: P) => <I {...p}><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></I>;
 export const IconLoop = (p: P) => <I {...p}><path d="M17 3l3 3-3 3M20 6H8a4 4 0 0 0-4 4v1M7 21l-3-3 3-3M4 18h12a4 4 0 0 0 4-4v-1" /></I>;
+export const IconLink = (p: P) => <I {...p}><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></I>;
 export const IconMore = (p: P) => <I {...p}><path d="M6 12h.01M12 12h.01M18 12h.01" strokeWidth={3} /></I>;
 export const IconCopy = (p: P) => <I {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></I>;
 export const IconUpload = (p: P) => <I {...p}><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></I>;

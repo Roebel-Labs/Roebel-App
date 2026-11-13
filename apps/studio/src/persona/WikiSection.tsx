@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildPersona, ChatApiError, createPerson, deletePersona, deletePersonaPage, fetchPersona, fetchPersonaPage, savePersonaPage,
-  type Page, type Persona, type PersonaUpdate,
+  type Page, type PageLink, type Persona, type PersonaUpdate,
 } from '../workspace/api';
 import { emitCommand } from '../workspace/desktop';
-import { IconChat, IconClock, IconPencil, IconPlus, IconRefresh, IconUpload } from '../ui/shell/line-icons';
+import { IconChat, IconChevronDown, IconClock, IconLink, IconLoop, IconPencil, IconPlus, IconRefresh, IconUpload } from '../ui/shell/line-icons';
 import { BuildProgress, Confirm, Frame, Initial, LoadError, Modal, MoreMenu, PersonaOnboarding, SearchField, SignedOutHint, useLoad, usePoll, useSessionToken, type NavEntry } from './common';
 import { fmtDate, fmtDay, friendlyError } from './format';
 import { ImportDialog } from './ImportDialog';
@@ -14,6 +14,9 @@ import './persona.css';
 
 const UPDATES = '~updates';
 const PEOPLE = '~people';
+const UPDATES_SHORT = 3;
+const UPDATES_MORE = 10;
+const SOURCES_SHORT = 8;
 const TOP_ORDER = ['overview', 'goals', 'projects', 'profile', 'notes'];
 const FALLBACK_TITLES: Record<string, string> = { overview: 'Übersicht', goals: 'Ziele', projects: 'Projekte', profile: 'Profil', notes: 'Notizen' };
 
@@ -137,6 +140,7 @@ export function WikiSection() {
               token={token}
               slug={slug}
               updates={slug === 'overview' ? persona.updates : null}
+              onAllUpdates={() => setSlug(UPDATES)}
               onWiki={setSlug}
               onChanged={() => void load.reload(true)}
               onDeleted={() => {
@@ -192,11 +196,12 @@ function UpdatesPage({ updates, onWiki }: { updates: PersonaUpdate[]; onWiki: (s
 // ---- page ---------------------------------------------------------------------------
 
 function PageView({
-  token, slug, updates, onWiki, onChanged, onDeleted,
+  token, slug, updates, onAllUpdates, onWiki, onChanged, onDeleted,
 }: {
   token: string;
   slug: string;
   updates: PersonaUpdate[] | null;
+  onAllUpdates: () => void;
   onWiki: (slug: string) => void;
   onChanged: () => void;
   onDeleted: () => void;
@@ -205,7 +210,8 @@ function PageView({
   const page = load.data?.page ?? null;
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [allUpdates, setAllUpdates] = useState(false);
+  const [moreUpdates, setMoreUpdates] = useState(false);
+  const [allSources, setAllSources] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -229,7 +235,12 @@ function PageView({
   const avatarName = isPerson ? page.title : page.facts.find((f) => f.label.toLowerCase() === 'name')?.value || '';
   const showAvatar = (page.kind === 'overview' || page.kind === 'profile' || isPerson) && !!avatarName;
   const hasBox = page.facts.length > 0 || showAvatar;
-  const shown = updates ? (allUpdates ? updates : updates.slice(0, 3)) : [];
+  const shown = updates ? updates.slice(0, moreUpdates ? UPDATES_MORE : UPDATES_SHORT) : [];
+  const sources = allSources ? page.sources : page.sources.slice(0, SOURCES_SHORT);
+  // Links to pages that no longer exist or to the page itself are noise.
+  const links = (list: PageLink[] | undefined) => (list ?? []).filter((l) => l.slug && l.title && l.slug !== page.slug);
+  const backlinks = links(load.data?.backlinks);
+  const related = links(load.data?.related);
 
   if (editing)
     return (
@@ -238,7 +249,7 @@ function PageView({
         page={page}
         onCancel={() => setEditing(false)}
         onSaved={(p) => {
-          load.setData({ page: p });
+          load.setData((d) => ({ ...d, page: p }));
           setEditing(false);
           onChanged();
         }}
@@ -267,13 +278,16 @@ function PageView({
             <h2>
               <IconClock size={17} /> Letzte Aktualisierungen
             </h2>
-            {updates.length > 3 && (
-              <button className="w-btn ghost" onClick={() => setAllUpdates((a) => !a)}>
-                {allUpdates ? 'Weniger anzeigen' : 'Alle anzeigen'}
-              </button>
-            )}
+            <button className="pz-textlink" onClick={onAllUpdates}>
+              Alle Aktualisierungen anzeigen <span aria-hidden="true">→</span>
+            </button>
           </div>
           <UpdateList updates={shown} onWiki={onWiki} />
+          {updates.length > UPDATES_SHORT && (
+            <button className={`pz-more-toggle${moreUpdates ? ' open' : ''}`} aria-expanded={moreUpdates} onClick={() => setMoreUpdates((m) => !m)}>
+              {moreUpdates ? 'Weniger anzeigen' : 'Mehr anzeigen'} <IconChevronDown size={14} />
+            </button>
+          )}
         </section>
       )}
 
@@ -292,7 +306,7 @@ function PageView({
             {page.facts.length > 0 && (
               <dl>
                 {page.facts.map((f, i) => (
-                  <div key={i}>
+                  <div key={i} className="pz-fact">
                     <dt>{f.label}</dt>
                     <dd>{f.value}</dd>
                   </div>
@@ -303,6 +317,13 @@ function PageView({
         )}
       </div>
 
+      {(backlinks.length > 0 || related.length > 0) && (
+        <nav className="pz-links" aria-label="Verknüpfte Seiten">
+          {backlinks.length > 0 && <LinkColumn title="Verweise auf diese Seite" icon={<IconLoop size={16} />} links={backlinks} onWiki={onWiki} />}
+          {related.length > 0 && <LinkColumn title="Verwandte Seiten" icon={<IconLink size={16} />} links={related} onWiki={onWiki} />}
+        </nav>
+      )}
+
       <footer className="pz-page-foot">
         <span className="w-muted">
           Zuletzt bearbeitet {fmtDate(page.updatedAt)}
@@ -312,13 +333,18 @@ function PageView({
           <section className="pz-sources">
             <h2>Quellen</h2>
             <ol>
-              {page.sources.map((s) => (
+              {sources.map((s) => (
                 <li key={s.n} value={s.n}>
                   {s.label}
                   {s.date ? <span className="w-muted"> · {fmtDate(s.date)}</span> : null}
                 </li>
               ))}
             </ol>
+            {page.sources.length > SOURCES_SHORT && (
+              <button className="pz-textlink" aria-expanded={allSources} onClick={() => setAllSources((a) => !a)}>
+                {allSources ? 'Weniger Quellen anzeigen' : `Alle ${page.sources.length} Quellen anzeigen`}
+              </button>
+            )}
           </section>
         )}
       </footer>
@@ -327,6 +353,23 @@ function PageView({
         <Confirm title="Kontakt löschen?" body={<>„{page.title}“ wird aus deinem Wiki entfernt.</>} confirmLabel="Löschen" busy={busy} onConfirm={() => void remove()} onCancel={() => setRemoving(false)} />
       )}
     </article>
+  );
+}
+
+function LinkColumn({ title, icon, links, onWiki }: { title: string; icon: ReactNode; links: PageLink[]; onWiki: (slug: string) => void }) {
+  return (
+    <section className="pz-links-col">
+      <h2>
+        {icon} {title}
+      </h2>
+      <ul>
+        {links.map((l) => (
+          <li key={l.slug}>
+            <button onClick={() => onWiki(l.slug)}>{l.title}</button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

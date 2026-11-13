@@ -1,5 +1,5 @@
 // Pure helpers for the personal-context sections (Für dich, Funktionen, Wiki, Bibliothek). Tested.
-import type { LibraryFile, RoutineSchedule } from '../workspace/api';
+import type { LibraryFile, RoutineSchedule, Suggestion, SuggestionGroup, SuggestionSection } from '../workspace/api';
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 export const WEEKDAY_OPTIONS: ReadonlyArray<{ value: number; label: string }> = [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: WEEKDAYS[value] }));
@@ -70,6 +70,92 @@ export function splitCitations(text: string): Array<string | { n: number }> {
   }
   if (at < text.length) out.push(text.slice(at));
   return out;
+}
+
+/**
+ * Like `splitCitations`, but adjacent markers (separated by nothing, spaces or commas) form one run with
+ * unique numbers in order, and the whitespace before a run is dropped so the marks sit on the word.
+ */
+export function citationRuns(text: string): Array<string | { ns: number[] }> {
+  const out: Array<string | { ns: number[] }> = [];
+  for (const part of splitCitations(text)) {
+    const last = out[out.length - 1];
+    if (typeof part === 'string') {
+      // A separator between two markers is swallowed once the next marker arrives (see below).
+      out.push(part);
+      continue;
+    }
+    const before = out[out.length - 2];
+    if (typeof last === 'string' && /^[\s,;]*$/.test(last) && before && typeof before !== 'string') {
+      out.pop();
+      if (!before.ns.includes(part.n)) before.ns.push(part.n);
+    } else if (last && typeof last !== 'string') {
+      if (!last.ns.includes(part.n)) last.ns.push(part.n);
+    } else {
+      if (typeof last === 'string') {
+        const trimmed = last.replace(/\s+$/, '');
+        if (trimmed) out[out.length - 1] = trimmed;
+        else out.pop();
+      }
+      out.push({ ns: [part.n] });
+    }
+  }
+  return out;
+}
+
+/** How a run is shown: up to `max` marks; a longer run shows its first mark and folds the rest into "+N". */
+export function foldCitations(ns: number[], max = 2): { shown: number[]; folded: number[] } {
+  return ns.length <= max ? { shown: ns, folded: [] } : { shown: ns.slice(0, 1), folded: ns.slice(1) };
+}
+
+// ---- Für dich -------------------------------------------------------------------------
+
+/** v2 `sections`, or the v1 `groups` wrapped as the untitled projects section. */
+export function suggestionSections(data: { sections?: SuggestionSection[] | null; groups?: SuggestionGroup[] | null } | null | undefined): SuggestionSection[] {
+  if (data?.sections && Array.isArray(data.sections)) return data.sections.map((s) => ({ ...s, title: s.title ?? '', groups: s.groups ?? [] }));
+  return data?.groups?.length ? [{ key: 'projects', title: '', groups: data.groups }] : [];
+}
+
+/** Left filter list: v2 = Alle, Schnell erledigt, Routinen, one per titled section; v1 = Alle, Aufgaben, Routinen. */
+export function suggestionFilters(sections: SuggestionSection[], v2: boolean): Array<{ id: string; label: string }> {
+  if (!v2) return [{ id: 'all', label: 'Alle' }, { id: 'task', label: 'Aufgaben' }, { id: 'routine', label: 'Routinen' }];
+  const out = [{ id: 'all', label: 'Alle' }, { id: 'quick', label: 'Schnell erledigt' }, { id: 'routine', label: 'Routinen' }];
+  for (const s of sections) if (s.key !== 'projects' && s.title && !out.some((o) => o.id === `section:${s.key}`)) out.push({ id: `section:${s.key}`, label: s.title });
+  return out;
+}
+
+export function filterSuggestionSections(
+  sections: SuggestionSection[],
+  filter: string,
+  opts: { hidden?: ReadonlySet<string>; onlyFresh?: boolean } = {},
+): SuggestionSection[] {
+  const keep = (i: Suggestion) => {
+    if (opts.hidden?.has(i.id)) return false;
+    if (opts.onlyFresh && !i.fresh) return false;
+    if (filter === 'quick') return !!i.quick && i.kind === 'task';
+    if (filter === 'task' || filter === 'routine') return i.kind === filter;
+    return true;
+  };
+  return sections
+    .filter((s) => !filter.startsWith('section:') || filter === `section:${s.key}`)
+    .map((s) => ({ ...s, groups: s.groups.map((g) => ({ ...g, items: g.items.filter(keep) })).filter((g) => g.items.length > 0) }))
+    .filter((s) => s.groups.length > 0);
+}
+
+/** Every suggestion once, in order (a suggestion can sit in more than one section). */
+export function allSuggestions(sections: SuggestionSection[]): Suggestion[] {
+  const seen = new Set<string>();
+  const out: Suggestion[] = [];
+  for (const s of sections) for (const g of s.groups) for (const i of g.items) if (!seen.has(i.id)) (seen.add(i.id), out.push(i));
+  return out;
+}
+
+/** Case-insensitive "all words appear somewhere" match for the client-side search fields. */
+export function matchesQuery(query: string, ...fields: Array<string | null | undefined>): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = fields.filter(Boolean).join(' ').toLowerCase();
+  return words.every((w) => hay.includes(w));
 }
 
 export function initials(name: string): string {

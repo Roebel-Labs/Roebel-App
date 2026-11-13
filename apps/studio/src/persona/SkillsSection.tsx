@@ -10,7 +10,7 @@ import {
   IconRadar, IconScroll, IconSearch, IconSun, IconUpload,
 } from '../ui/shell/line-icons';
 import { Confirm, Frame, LoadError, Modal, MoreMenu, SearchField, SignedOutHint, Toggle, useGoogleConnect, useLoad, useSessionToken, type NavEntry } from './common';
-import { fmtDate, friendlyError, hueIndex, makeSchedule, parseSkillFile, scheduleText, WEEKDAY_OPTIONS } from './format';
+import { allSuggestions, fmtDate, friendlyError, hueIndex, makeSchedule, matchesQuery, parseSkillFile, scheduleText, suggestionSections, WEEKDAY_OPTIONS } from './format';
 import { takeSkillsTab, type SkillsTab } from './intent';
 import './persona.css';
 
@@ -45,7 +45,7 @@ export function SkillsSection() {
   const [tab, setTab] = useState<SkillsTab>(() => takeSkillsTab() ?? 'overview');
 
   return (
-    <Frame title="Funktionen" nav={NAV} active={tab} onSelect={(id) => setTab(id as SkillsTab)}>
+    <Frame title="Funktionen" nav={NAV} active={tab} onSelect={(id) => setTab(id as SkillsTab)} wide>
       {session.state === 'loading' && <div className="pz-state w-muted">Lade …</div>}
       {session.state === 'signed-out' && <SignedOutHint what="deine Routinen und Fähigkeiten" />}
       {token && tab === 'overview' && <Overview token={token} onTab={setTab} onUnauthorized={session.signedOut} />}
@@ -65,15 +65,18 @@ export function SkillsSection() {
 
 function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: SkillsTab) => void; onUnauthorized: () => void }) {
   const routines = useLoad(() => fetchRoutines(token), onUnauthorized);
+  const skills = useLoad(() => fetchSkills(token));
   const suggestions = useLoad(() => fetchSuggestions(token));
   const connectors = useLoad(() => listConnectors(token));
+  const [q, setQ] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const searching = q.trim().length > 0;
 
   const ideas = useMemo(
-    () => (suggestions.data?.groups ?? []).flatMap((g) => g.items).filter((s) => s.kind === 'routine' && !done.has(s.id)).slice(0, 3),
-    [suggestions.data, done],
+    () => allSuggestions(suggestionSections(suggestions.data)).filter((s) => s.kind === 'routine' && !done.has(s.id) && matchesQuery(q, s.title, s.reason)).slice(0, 12),
+    [suggestions.data, done, q],
   );
   const create = async (s: Suggestion) => {
     setBusy(s.id);
@@ -90,106 +93,150 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
   };
   const google = connectors.data?.connectors.find((c) => c.kind === 'google');
   const mcp = connectors.data?.connectors.filter((c) => c.kind === 'mcp') ?? [];
-  const first = (routines.data?.routines ?? []).slice(0, 4);
+  // Without a search the overview shows the first few; a search looks through all of them.
+  const matchedRoutines = (routines.data?.routines ?? []).filter((r) => matchesQuery(q, r.title, r.prompt));
+  const matchedSkills = (skills.data?.skills ?? []).filter((k) => matchesQuery(q, k.name, k.description));
+  const firstRoutines = searching ? matchedRoutines : matchedRoutines.slice(0, 4);
+  const firstSkills = searching ? matchedSkills : matchedSkills.slice(0, 4);
+  const nothing = searching && ideas.length === 0 && matchedRoutines.length === 0 && matchedSkills.length === 0;
 
   return (
     <>
-      <h1 className="pz-title">Meine Funktionen</h1>
-      <p className="pz-lead">Was Ortis regelmäßig für dich erledigt, was es kann und worauf es zugreifen darf.</p>
+      <h1 className="pz-title pz-title-lg">Meine Funktionen</h1>
+      <p className="pz-lead">Verbinde deine Werkzeuge, automatisiere wiederkehrende Aufgaben und zeig Ortis, wie du arbeitest.</p>
+      <div className="pz-toolbar pz-toolbar-search">
+        <span className="pz-search-wrap">
+          <IconSearch size={17} />
+          <SearchField value={q} onChange={setQ} placeholder="Funktionen suchen" />
+        </span>
+      </div>
       {error && <div className="ws-error">{error}</div>}
+      {nothing && <div className="pz-state w-muted">Nichts gefunden für „{q.trim()}“.</div>}
 
       {ideas.length > 0 && (
         <section className="pz-block">
-          <h2>Vorschläge für Routinen</h2>
-          <div className="pz-cards">
+          <h2>Vorschläge</h2>
+          <div className="pz-hrow" role="list">
             {ideas.map((s) => (
-              <article key={s.id} className="pz-card">
-                <div className="pz-card-top">
-                  <Tile color={safeColor(undefined, s.title)} />
-                  <button className="w-btn" disabled={busy === s.id} onClick={() => void create(s)}>
-                    {busy === s.id ? '…' : 'Erstellen'}
-                  </button>
-                </div>
-                <strong>{s.title}</strong>
-                <span className="w-muted pz-clamp">{s.reason}</span>
-                {s.schedule && <span className="w-tag pz-self-start">{scheduleText(s.schedule)}</span>}
+              <article key={s.id} className="pz-idea" role="listitem">
+                <Tile color={safeColor(undefined, s.title)} size={44} />
+                <strong className="pz-idea-title" title={s.title}>
+                  {s.title}
+                </strong>
+                <span className="pz-idea-caption">Für dich vorgeschlagen</span>
+                <span className="pz-idea-text" title={s.reason}>
+                  {s.reason}
+                </span>
+                {s.schedule && <span className="w-tag pz-idea-chip">{scheduleText(s.schedule)}</span>}
+                <button className="w-btn pz-idea-btn" disabled={busy === s.id} onClick={() => void create(s)}>
+                  {busy === s.id ? 'Erstelle …' : 'Erstellen'}
+                </button>
               </article>
             ))}
           </div>
         </section>
       )}
 
-      <section className="pz-block">
-        <div className="pz-block-head">
-          <h2>Integrationen</h2>
-          <button className="w-btn ghost" onClick={() => onTab('integrations')}>
-            Verwalten
-          </button>
-        </div>
-        {connectors.error && !connectors.data ? (
-          <LoadError message={connectors.error} onRetry={() => void connectors.reload()} />
-        ) : (
-          <ul className="pz-rows">
-            <li className="pz-row">
-              <div className="pz-row-text">
-                <strong>Google</strong>
-                <span className="w-muted">Kalender, Gmail, Drive</span>
-              </div>
-              <span className={`w-tag${google ? ' ok' : ''}`}>{connectors.loading && !connectors.data ? '…' : google ? 'Verbunden' : 'Nicht verbunden'}</span>
-            </li>
-            <li className="pz-row">
-              <div className="pz-row-text">
-                <strong>Röbel App</strong>
-                <span className="w-muted">Veranstaltungen, Orte, Kontakte, Röbel Münzen</span>
-              </div>
-              <span className="w-tag ok">Immer verbunden</span>
-            </li>
-            {mcp.map((c) => (
-              <li className="pz-row" key={c.id}>
-                <div className="pz-row-text">
-                  <strong>{c.name}</strong>
-                  <span className="w-muted">{c.toolCount} Werkzeuge</span>
-                </div>
-                <span className={`w-tag${c.status === 'active' ? ' ok' : ''}`}>{c.status === 'active' ? 'Verbunden' : 'Fehler'}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="pz-block">
-        <div className="pz-block-head">
-          <h2>Routinen</h2>
-          <button className="w-btn ghost" onClick={() => onTab('routines')}>
-            Alle anzeigen
-          </button>
-        </div>
-        {routines.loading && !routines.data && <div className="w-muted">Lade …</div>}
-        {routines.error && !routines.data && <LoadError message={routines.error} onRetry={() => void routines.reload()} />}
-        {routines.data && first.length === 0 && (
-          <div className="pz-empty">
-            <strong>Noch keine Routinen</strong>
-            <span className="w-muted">Routinen erledigen wiederkehrende Aufgaben nach Zeitplan.</span>
-            <button className="w-btn" onClick={() => onTab('discover')}>
-              Routinen entdecken
+      {!searching && (
+        <section className="pz-block">
+          <div className="pz-block-head">
+            <h2>Integrationen</h2>
+            <button className="w-btn ghost" onClick={() => onTab('integrations')}>
+              Verwalten
             </button>
           </div>
-        )}
-        {first.length > 0 && (
-          <ul className="pz-rows">
-            {first.map((r) => (
-              <li className="pz-row" key={r.id}>
-                <Tile color={safeColor(undefined, r.title)} size={32} />
+          {connectors.error && !connectors.data ? (
+            <LoadError message={connectors.error} onRetry={() => void connectors.reload()} />
+          ) : (
+            <ul className="pz-rows">
+              <li className="pz-row">
                 <div className="pz-row-text">
-                  <strong className="w-ellipsis">{r.title}</strong>
-                  <span className="w-muted">{scheduleText(r.schedule)}</span>
+                  <strong>Google</strong>
+                  <span className="w-muted">Kalender, Gmail, Drive</span>
                 </div>
-                <span className={`w-tag${r.enabled ? ' ok' : ''}`}>{r.enabled ? 'Aktiv' : 'Pausiert'}</span>
+                <span className={`w-tag${google ? ' ok' : ''}`}>{connectors.loading && !connectors.data ? '…' : google ? 'Verbunden' : 'Nicht verbunden'}</span>
+              </li>
+              <li className="pz-row">
+                <div className="pz-row-text">
+                  <strong>Röbel App</strong>
+                  <span className="w-muted">Veranstaltungen, Orte, Kontakte, Röbel Münzen</span>
+                </div>
+                <span className="w-tag ok">Immer verbunden</span>
+              </li>
+              {mcp.map((c) => (
+                <li className="pz-row" key={c.id}>
+                  <div className="pz-row-text">
+                    <strong>{c.name}</strong>
+                    <span className="w-muted">{c.toolCount} Werkzeuge</span>
+                  </div>
+                  <span className={`w-tag${c.status === 'active' ? ' ok' : ''}`}>{c.status === 'active' ? 'Verbunden' : 'Fehler'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {(!searching || firstRoutines.length > 0) && (
+        <section className="pz-block">
+          <div className="pz-block-head">
+            <h2>Routinen</h2>
+            <button className="w-btn ghost" onClick={() => onTab('routines')}>
+              Alle anzeigen
+            </button>
+          </div>
+          {routines.loading && !routines.data && <div className="w-muted">Lade …</div>}
+          {routines.error && !routines.data && <LoadError message={routines.error} onRetry={() => void routines.reload()} />}
+          {routines.data && firstRoutines.length === 0 && (
+            <div className="pz-empty">
+              <strong>Noch keine Routinen</strong>
+              <span className="w-muted">Routinen erledigen wiederkehrende Aufgaben nach Zeitplan.</span>
+              <button className="w-btn" onClick={() => onTab('discover')}>
+                Routinen entdecken
+              </button>
+            </div>
+          )}
+          {firstRoutines.length > 0 && (
+            <ul className="pz-rows">
+              {firstRoutines.map((r) => (
+                <li className="pz-row" key={r.id}>
+                  <Tile color={safeColor(undefined, r.title)} size={32} />
+                  <div className="pz-row-text">
+                    <strong className="w-ellipsis">{r.title}</strong>
+                    <span className="w-muted">{scheduleText(r.schedule)}</span>
+                  </div>
+                  <span className={`w-tag${r.enabled ? ' ok' : ''}`}>{r.enabled ? 'Aktiv' : 'Pausiert'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {firstSkills.length > 0 && (
+        <section className="pz-block">
+          <div className="pz-block-head">
+            <h2>Fähigkeiten</h2>
+            <button className="w-btn ghost" onClick={() => onTab('abilities')}>
+              Alle anzeigen
+            </button>
+          </div>
+          <ul className="pz-rows">
+            {firstSkills.map((k) => (
+              <li className="pz-row" key={k.id}>
+                <span className="pz-tile plain" style={{ width: 32, height: 32 }} aria-hidden="true">
+                  <IconScroll size={17} />
+                </span>
+                <div className="pz-row-text">
+                  <strong className="w-ellipsis">{k.name}</strong>
+                  <span className="w-muted w-ellipsis">{k.description || 'Ohne Beschreibung'}</span>
+                </div>
+                <span className={`w-tag${k.enabled ? ' ok' : ''}`}>{k.enabled ? 'Aktiv' : 'Aus'}</span>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
     </>
   );
 }
