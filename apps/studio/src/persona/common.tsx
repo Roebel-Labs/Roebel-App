@@ -156,13 +156,12 @@ export function Frame({
   );
 }
 
-const BADGE_HUES = ['#4f7fe0', '#3e9e6d', '#e08a3c', '#c95a8c', '#8a63d2', '#2f9aa8'];
+const BADGE_HUES = 6; // colour pairs per theme are in persona.css (.pz-initial[data-hue])
 
 /** Square initial badge (people, avatar tiles); the colour is stable per name. */
 export function Initial({ name, size = 22 }: { name: string; size?: number }) {
-  const hue = BADGE_HUES[hueIndex(name, BADGE_HUES.length)];
   return (
-    <span className="pz-initial" style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.48)), ['--hue' as string]: hue }} aria-hidden="true">
+    <span className="pz-initial" data-hue={hueIndex(name, BADGE_HUES)} style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.48)) }} aria-hidden="true">
       {initials(name)}
     </span>
   );

@@ -1,4 +1,4 @@
-import meckyUrl from '../assets/mecky.png';
+import meckyUrl from '../assets/mecky-welcome.png';
 import type { ChatBot } from './types';
 
 /** Mecky is the only assistant with artwork; the others get a tile with their initial. */
@@ -12,14 +12,14 @@ export function botInitial(name: string | null | undefined): string {
 }
 
 /**
- * Assistant avatar: a rounded-square tile filled with a tint of the selected accent colour, holding the
- * Mecky mascot or the assistant's initial. Without a bot (nothing loaded yet) it shows Mecky, the default
- * assistant.
+ * Assistant avatar: a rounded-square tile with a flat fill, holding the Mecky artwork (unmodified, cropped
+ * at the bottom of the tile) or the assistant's initial. Without a bot (nothing loaded yet) it shows Mecky,
+ * the default assistant.
  */
-export function BotAvatar({ bot, size = 28 }: { bot?: Pick<ChatBot, 'id' | 'name'> | null; size?: number }) {
+export function BotAvatar({ bot, size = 28, radius = 6 }: { bot?: Pick<ChatBot, 'id' | 'name'> | null; size?: number; radius?: number }) {
   const mecky = !bot || isMecky(bot);
   return (
-    <span className={`ws-avatar${mecky ? ' mecky' : ''}`} aria-hidden="true" style={{ width: size, height: size, fontSize: Math.max(11, Math.round(size * 0.46)) }}>
+    <span className={`ws-avatar${mecky ? ' mecky' : ''}`} aria-hidden="true" style={{ width: size, height: size, borderRadius: radius, fontSize: Math.max(10, Math.round(size * 0.5)) }}>
       {mecky ? <img src={meckyUrl} alt="" draggable={false} /> : botInitial(bot?.name)}
     </span>
   );

@@ -1,13 +1,13 @@
 import { emitCommand } from '../../workspace/desktop';
 import { hms, useOnAir, useTick } from '../studio';
-import { IconCapture, IconMic, IconSearch, IconSidebar } from './line-icons';
+import { IconBack, IconCapture, IconForward, IconMic, IconSearch, IconSidebar } from './line-icons';
 import type { Section } from './nav';
 import { SettingsDialog } from './SettingsDialog';
 import { Tip } from '../Tooltip';
 import { shortcutHint } from './shortcuts';
 
 /** Window toolbar on the glass (Town layout): list toggle left, quick actions centred, on-air state right. */
-export function Toolbar({ section, onSection }: { section: Section; onSection: (s: Section) => void }) {
+export function Toolbar({ section, onSection, nav }: { section: Section; onSection: (s: Section) => void; nav: { canBack: boolean; canForward: boolean; back: () => void; forward: () => void } }) {
   const air = useOnAir();
   const now = useTick(1000);
   const live = air.phase !== 'off';
@@ -21,6 +21,16 @@ export function Toolbar({ section, onSection }: { section: Section; onSection: (
         <Tip label="Seitenleiste" keys={shortcutHint('toggleList')} side="bottom">
           <button className="tb-icon" aria-label="Seitenleiste" onClick={toHome(() => emitCommand({ kind: 'toggleList' }))}>
               <IconSidebar size={16} />
+          </button>
+        </Tip>
+        <Tip label="Zurück" keys={shortcutHint('back')} side="bottom">
+          <button className="tb-icon" aria-label="Zurück" disabled={!nav.canBack} onClick={nav.back}>
+            <IconBack size={16} />
+          </button>
+        </Tip>
+        <Tip label="Vor" keys={shortcutHint('forward')} side="bottom">
+          <button className="tb-icon" aria-label="Vor" disabled={!nav.canForward} onClick={nav.forward}>
+            <IconForward size={16} />
           </button>
         </Tip>
       </div>

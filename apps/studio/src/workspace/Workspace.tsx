@@ -3,14 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { parseMarkdown } from '../help/markdown';
 import {
-  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconLogout, IconMic, IconPanelRight, IconPlus, IconSearch,
+  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconFilter, IconMic, IconPanelRight, IconPlus, IconSearch,
   IconSend, IconStop, IconWave,
 } from '../ui/shell/line-icons';
-import { approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, markRead, rejectAction, sendMessage, transcribe, uploadImage } from './api';
+import {
+  approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, transcribe, uploadImage,
+} from './api';
+import { Briefing } from './Briefing';
 import { SkChat, SkDoc, SkThreads } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
 import { shortcutHint } from '../ui/shell/shortcuts';
-import { mainThreadOf, marqueeShift } from './thread-list';
+import { agentsOf, mainThreadOf, marqueeShift, needsBriefing, splitThreads, threadLabel } from './thread-list';
 import { BotAvatar } from './BotAvatar';
 import { markHandled, onDesktopCommand, takePending, type DesktopCommand } from './desktop';
 import { Part, type PartHandlers } from './Parts';
@@ -45,8 +48,8 @@ function textOf(m: ChatMessage | undefined): string {
  * the text slides left to show the rest (CSS; off under reduced motion) and a card to the right gives the
  * full title and the last activity.
  */
-function ThreadRow({ thread, selected, onSelect }: { thread: ChatThread; selected: boolean; onSelect: () => void }) {
-  const title = thread.title || thread.bots[0]?.name || 'Unterhaltung';
+function ThreadRow({ thread, selected, onSelect, label }: { thread: ChatThread; selected: boolean; onSelect: () => void; label?: string }) {
+  const title = label ?? threadLabel(thread);
   const text = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0);
   const measure = () => {
@@ -56,7 +59,9 @@ function ThreadRow({ thread, selected, onSelect }: { thread: ChatThread; selecte
   const card = (
     <>
       <strong>{title}</strong>
-      <span>Aktualisiert {relTime(thread.lastMessageAt)}</span>
+      <span>
+        {thread.bots[0]?.name ? `${thread.bots[0].name} · ` : ''}Aktualisiert {relTime(thread.lastMessageAt)}
+      </span>
     </>
   );
   return (
@@ -68,12 +73,42 @@ function ThreadRow({ thread, selected, onSelect }: { thread: ChatThread; selecte
         onMouseEnter={measure}
         style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(0.6, shift / 60)}s` } as React.CSSProperties) : undefined}
       >
+        <BotAvatar bot={thread.bots[0]} size={18} radius={4} />
         <span className="ws-thread-title" ref={text}>
           <span>{title}</span>
         </span>
         {thread.unread && <span className="ws-unread" aria-label="ungelesen" />}
       </button>
     </Tip>
+  );
+}
+
+/**
+ * Agent card at the top of the Start sidebar. No colour change on hover: the latest message slides left to
+ * show more of itself (off under reduced motion). Clicking opens the main conversation.
+ */
+function AgentCard({ name, bot, status, disabled, onOpen }: { name: string; bot?: ChatBot | null; status: string; disabled?: boolean; onOpen: () => void }) {
+  const text = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0);
+  const measure = () => {
+    const el = text.current;
+    setShift(el ? marqueeShift(el.scrollWidth, el.clientWidth, 24) : 0);
+  };
+  return (
+    <button
+      className={`ws-agent${shift > 0 ? ' slides' : ''}`}
+      aria-label={`${name}: Hauptunterhaltung öffnen`}
+      disabled={disabled}
+      onClick={onOpen}
+      onMouseEnter={measure}
+      style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(1, shift / 45)}s` } as React.CSSProperties) : undefined}
+    >
+      <BotAvatar bot={bot} size={45} radius={0} />
+      <span className="ws-agent-name">{name}</span>
+      <span className="ws-agent-status" ref={text}>
+        <span>{status}</span>
+      </span>
+    </button>
   );
 }
 
@@ -113,6 +148,19 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const [listOpen, setListOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
   const [search, setSearch] = useState<string | null>(null);
+  const [agentFilter, setAgentFilter] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Conversations that belong to a routine are listed under "Aufgaben".
+  const [routineThreads, setRoutineThreads] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    let alive = true;
+    fetchRoutines(token)
+      .then((r) => alive && setRoutineThreads(new Set(r.routines.map((x) => x.threadId))))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [token]);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string }>>([]);
   const [uploading, setUploading] = useState(false);
@@ -346,39 +394,44 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
 
   const pickable = [...(boot?.presets ?? []), ...(boot?.bots ?? [])];
   const q = (search ?? '').trim().toLowerCase();
+  const agents = agentsOf(boot?.threads ?? []);
   const threads = (boot?.threads ?? []).filter(
-    (t: ChatThread) => !q || `${t.title} ${t.lastMessagePreview} ${t.bots.map((b) => b.name).join(' ')}`.toLowerCase().includes(q),
+    (t: ChatThread) =>
+      (!agentFilter || t.bots[0]?.id === agentFilter) && (!q || `${t.title} ${t.lastMessagePreview} ${t.bots.map((b) => b.name).join(' ')}`.toLowerCase().includes(q)),
   );
+  const lists = splitThreads(threads, routineThreads);
+  const isMain = !!thread && thread.id === mainThread?.id;
   const streaming = view.streaming.length > 0;
 
   return (
     <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen ? ' with-panel' : ''}`}>
       {listOpen && (
         <aside className="ws-list">
-          <button
-            className={`ws-agent${streaming ? ' running' : ''}`}
-            aria-label={`${agent?.name ?? 'Mecky'}: Hauptunterhaltung öffnen`}
+          <AgentCard
+            name={agent?.name ?? 'Mecky'}
+            bot={agent}
+            status={streaming ? 'Arbeitet …' : (mainThread && mainThread.id !== threadId ? mainThread.lastMessagePreview : textOf(lastBotMsg)) || mainThread?.lastMessagePreview || 'Bereit'}
             disabled={!boot}
-            onClick={() => {
+            onOpen={() => {
               if (mainThread) setThreadId(mainThread.id);
               else if (agent) void newThread(agent);
             }}
-          >
-            <BotAvatar bot={agent} size={40} />
-            <span className="ws-agent-name">{agent?.name ?? 'Mecky'}</span>
-            <span className="ws-agent-status">
-              {streaming ? 'Arbeitet …' : (mainThread && mainThread.id !== threadId ? mainThread.lastMessagePreview : textOf(lastBotMsg)) || mainThread?.lastMessagePreview || 'Bereit'}
-            </span>
-            {streaming && <span className="ws-spinner" aria-label="arbeitet" />}
-          </button>
+          />
 
           <div className="ws-list-tools">
             <div className="ws-new">
-              <Tip label="Neue Unterhaltung" keys={shortcutHint('newChat')} side="bottom" disabled={picker}>
-                <button className="w-pill" onClick={() => setPicker((p) => !p)} disabled={!boot}>
-                  <IconPlus size={15} /> Neu <IconChevronDown size={13} />
-                </button>
-              </Tip>
+              <div className="ws-split">
+                <Tip label="Neue Unterhaltung" keys={shortcutHint('newChat')} side="bottom">
+                  <button className="ws-split-main" disabled={!boot} onClick={() => startNew.current()}>
+                    <IconPlus size={15} /> Neu
+                  </button>
+                </Tip>
+                <Tip label="Assistent wählen" side="bottom" disabled={picker}>
+                  <button className="ws-split-more" disabled={!boot} aria-label="Assistent wählen" aria-haspopup="menu" aria-expanded={picker} onClick={() => setPicker((p) => !p)}>
+                    <IconChevronDown size={13} />
+                  </button>
+                </Tip>
+              </div>
               {picker && (
                 <div className="ws-picker" role="menu">
                   {pickable.map((b) => (
@@ -393,18 +446,46 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 </div>
               )}
             </div>
-            <Tip label="Aufnehmen" side="bottom">
-              <button className={`w-round${recording ? ' rec' : ''}`} aria-label="Aufnehmen" onClick={() => void toggleDictation()}>
+            <Tip label={recording ? 'Aufnahme beenden' : 'Aufnehmen'} side="bottom">
+              <button className={`w-round${recording ? ' rec' : ''}`} aria-label={recording ? 'Aufnahme beenden' : 'Aufnehmen'} onClick={() => void toggleDictation()}>
                 <IconWave size={15} />
               </button>
             </Tip>
             <span className="ws-tools-spacer" />
+            {agents.length > 1 && (
+              <div className="ws-new">
+                <Tip label="Nach Assistent filtern" side="bottom" disabled={filterOpen}>
+                  <button className={`w-icon${agentFilter || filterOpen ? ' on' : ''}`} aria-label="Nach Assistent filtern" aria-haspopup="menu" aria-expanded={filterOpen} onClick={() => setFilterOpen((o) => !o)}>
+                    <IconFilter size={16} />
+                  </button>
+                </Tip>
+                {filterOpen && (
+                  <div className="ws-picker ws-filter" role="menu">
+                    {[{ id: null as string | null, name: 'Alle Assistenten' }, ...agents].map((a) => (
+                      <button
+                        key={a.id ?? 'all'}
+                        className="ws-picker-item"
+                        role="menuitemradio"
+                        aria-checked={agentFilter === a.id}
+                        onClick={() => {
+                          setAgentFilter(a.id);
+                          setFilterOpen(false);
+                        }}
+                      >
+                        {a.id ? <BotAvatar bot={{ id: a.id, name: a.name }} size={18} radius={4} /> : <span className="ws-filter-all" />}
+                        <span>{a.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <Tip label="Suchen" keys={shortcutHint('search')} side="bottom">
               <button
-                className="w-icon"
+                className={`w-icon${search !== null ? ' on' : ''}`}
                 aria-label="Suchen"
                 onClick={() => {
-                  setSearch((s) => (s === null ? '' : null));
+                  setSearch((x) => (x === null ? '' : null));
                   setTimeout(() => searchInput.current?.focus(), 0);
                 }}
               >
@@ -425,23 +506,22 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
 
           {bootError && <div className="ws-error">{bootError}</div>}
           <div className="ws-threads">
-            <div className="ws-group">Zuletzt verwendet</div>
-            {threads.map((t) => (
+            <div className="ws-group">Aufgaben</div>
+            {lists.tasks.map((t) => (
               <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} />
             ))}
-            {!boot && !bootError && <SkThreads />}
-            {boot && threads.length === 0 && <div className="ws-empty">{q ? 'Nichts gefunden.' : 'Noch keine Unterhaltung. Starte mit „Neu“.'}</div>}
+            {!boot && !bootError && <SkThreads rows={2} />}
+            {boot && lists.tasks.length === 0 && <div className="ws-empty">{q || agentFilter ? 'Nichts gefunden.' : 'Noch keine Unterhaltungen aus Routinen.'}</div>}
+
+            <div className="ws-group">Zuletzt verwendet</div>
+            {lists.recent.map((t) => (
+              <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} label={t.id === mainThread?.id ? 'Hauptunterhaltung' : undefined} />
+            ))}
+            {!boot && !bootError && <SkThreads rows={6} />}
+            {boot && lists.recent.length === 0 && <div className="ws-empty">{q || agentFilter ? 'Nichts gefunden.' : 'Noch keine Unterhaltung. Starte mit „Neu“.'}</div>}
           </div>
 
-          <div className="ws-list-foot">
-            <span className="w-muted">{boot ? `Heute ${Math.round((boot.quota.used / Math.max(1, boot.quota.limit)) * 100)} % genutzt` : ''}</span>
-            {footer}
-            <Tip label="Abmelden" side="top">
-              <button className="w-icon" onClick={onSignOut} aria-label="Abmelden">
-                <IconLogout size={16} />
-              </button>
-            </Tip>
-          </div>
+          {footer && <div className="ws-list-foot">{footer}</div>}
         </aside>
       )}
 
@@ -449,8 +529,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
         {thread ? (
           <>
             <header className="ws-chat-head">
-              <BotAvatar bot={leadBot} size={26} />
-              <strong className="w-ellipsis">{thread.title || leadBot?.name}</strong>
+              <strong className="w-ellipsis">{isMain ? 'Hauptunterhaltung' : threadLabel(thread)}</strong>
               <span className="ws-tools-spacer" />
               <Tip label="Details zur Unterhaltung" keys={shortcutHint('togglePanel')} side="bottom">
                 <button className={`w-icon${panelOpen ? ' on' : ''}`} aria-label="Details zur Unterhaltung" onClick={() => setPanelOpen((o) => !o)}>
@@ -473,7 +552,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     );
                   return (
                     <div key={m.id} className="ws-msg bot">
-                      <BotAvatar bot={bot ?? leadBot} size={32} />
+                      <BotAvatar bot={bot ?? leadBot} size={32} radius={8} />
                       <div className="ws-msg-body">
                         <div className="ws-msg-meta">
                           <strong className="ws-bot-name">{bot?.name ?? 'Assistent'}</strong>
@@ -487,6 +566,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     </div>
                   );
                 })}
+                {isMain && !historyLoading && !streaming && needsBriefing(view.messages) && <Briefing token={token} bot={agent} />}
                 {view.error && <div className="ws-error">{view.error}</div>}
               </div>
             </div>
@@ -523,7 +603,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
               <textarea
                 ref={input}
                 value={draft}
-                placeholder={`Schreib ${leadBot?.name ?? 'deinem Assistenten'} oder sprich mit ihm`}
+                placeholder={`Nachricht an ${leadBot?.name ?? 'Mecky'}`}
                 rows={2}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -549,19 +629,40 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 <span className="ws-tools-spacer" />
                 <Tip label={recording ? 'Aufnahme beenden' : 'Diktieren'} side="top">
                   <button type="button" className={`w-circle ink${recording ? ' rec' : ''}`} onClick={() => void toggleDictation()} aria-label={recording ? 'Aufnahme beenden' : 'Diktieren'}>
-                    {recording ? <IconStop size={16} /> : <IconMic size={17} />}
+                    {recording ? <IconStop size={15} /> : <IconMic size={16} />}
                   </button>
                 </Tip>
-                <Tip label="Senden" keys="↵" side="top">
-                  <button className="w-circle green" disabled={busy || uploading || (!draft.trim() && attachments.length === 0)} aria-label="Senden">
-                    {busy ? <span className="ws-spinner light" /> : <IconSend size={17} />}
-                  </button>
-                </Tip>
+                {draft.trim() || attachments.length > 0 || busy ? (
+                  <Tip label="Senden" keys="↵" side="top">
+                    <button className="w-circle green" disabled={busy || uploading} aria-label="Senden">
+                      {busy ? <span className="ws-spinner light" /> : <IconSend size={16} />}
+                    </button>
+                  </Tip>
+                ) : (
+                  // Nothing to send yet: the accent button starts voice input instead.
+                  <Tip label="Sprechen" side="top">
+                    <button type="button" className="w-circle green" disabled={recording} aria-label="Sprechen" onClick={() => void toggleDictation()}>
+                      <IconWave size={16} />
+                    </button>
+                  </Tip>
+                )}
               </div>
             </form>
           </>
         ) : (
-          <>{boot || bootError ? <div className="placeholder">Wähle links eine Unterhaltung oder starte eine neue.</div> : <SkChat />}</>
+          <>
+            {boot ? (
+              <div className="ws-messages">
+                <div className="ws-messages-inner">
+                  <Briefing token={token} bot={agent} />
+                </div>
+              </div>
+            ) : bootError ? (
+              <div className="placeholder">Wähle links eine Unterhaltung oder starte eine neue.</div>
+            ) : (
+              <SkChat />
+            )}
+          </>
         )}
       </section>
 

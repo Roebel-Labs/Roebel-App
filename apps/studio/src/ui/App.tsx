@@ -374,14 +374,24 @@ function Shell() {
   const [section, setSectionState] = useState<Section>(() => loadSection());
   const [tab, setTab] = useState<Tab>('show');
   // Visited sections for Zurück / Vor (⌘[ / ⌘⇧]).
-  const history = useRef<NavHistory<Section>>({ items: [section], at: 0 });
+  const [history, setHistory] = useState<NavHistory<Section>>(() => ({ items: [section], at: 0 }));
   const show = (next: Section) => {
     setSectionState(next);
     saveSection(next);
   };
   const setSection = (next: Section) => {
-    history.current = historyPush(history.current, next);
+    setHistory((h) => historyPush(h, next));
     show(next);
+  };
+  const step = (delta: -1 | 1) => {
+    const h = historyMove(history, delta);
+    if (h === history) return;
+    setHistory(h);
+    show(h.items[h.at]);
+  };
+  const search = () => {
+    if (section !== 'home') setSection('home');
+    emitCommand({ kind: 'search' });
   };
   // Keyboard shortcuts (table in shell/shortcuts.ts). All need ⌘ / Ctrl, so typing is never affected.
   const keys = useRef((_: ShortcutId) => {});
@@ -395,13 +405,8 @@ function Shell() {
     else if (id === 'toggleList') inHome({ kind: 'toggleList' });
     else if (id === 'togglePanel') inHome({ kind: 'togglePanel' });
     else if (id === 'settings') emitCommand({ kind: 'settings' });
-    else if (id === 'back' || id === 'forward') {
-      const h = historyMove(history.current, id === 'back' ? -1 : 1);
-      if (h !== history.current) {
-        history.current = h;
-        show(h.items[h.at]);
-      }
-    } else {
+    else if (id === 'back' || id === 'forward') step(id === 'back' ? -1 : 1);
+    else {
       const target = ({ goHome: 'home', goForYou: 'foryou', goSkills: 'skills', goWiki: 'wiki', goLibrary: 'library' } as Partial<Record<ShortcutId, Section>>)[id];
       if (target) setSection(target);
     }
@@ -428,7 +433,7 @@ function Shell() {
   useEffect(
     () =>
       onDesktopCommand((cmd) => {
-        if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : 'home');
+        if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : cmd.section === 'wiki' ? 'wiki' : 'home');
         else if (cmd.kind !== 'settings' && cmd.kind !== 'connected' && cmd.kind !== 'signedin') setSection('home');
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,9 +441,9 @@ function Shell() {
   );
   return (
     <div className="app shell">
-      <Toolbar section={section} onSection={setSection} />
+      <Toolbar section={section} onSection={setSection} nav={{ canBack: history.at > 0, canForward: history.at < history.items.length - 1, back: () => step(-1), forward: () => step(1) }} />
       <div className="shell-body">
-        <Rail section={section} onSelect={setSection} />
+        <Rail section={section} onSelect={setSection} onSearch={search} />
         <div className={`shell-card ${section === 'live' && !isWebBuild() ? 'live-mode' : 'ws-mode'}`}>
           {/* Broadcast alarms stay visible in every section. */}
           <RecordingBanner />

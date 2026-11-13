@@ -1,7 +1,7 @@
 {
   "name": "@ortis/studio",
   "productName": "Ortis Studio",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -20,6 +20,8 @@
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@hugeicons/core-free-icons": "4.4.0",
+    "@hugeicons/react": "1.1.10",
     "@supabase/supabase-js": "^2.75.0",
     "livekit-client": "2.23.0",
     "react": "^19.1.0",

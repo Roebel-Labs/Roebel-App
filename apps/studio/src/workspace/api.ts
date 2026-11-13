@@ -330,6 +330,15 @@ export const dismissSuggestion = (token: string, id: string) =>
 export const startSuggestion = (token: string, id: string) =>
   call<{ threadId: string; prompt: string; routine: ChatRoutine | null }>(`/api/chat/persona/suggestions/${enc(id)}`, { token, json: { action: 'start' } });
 
+/** Start page briefing (v3). The endpoint may not exist yet (404): callers fall back to the suggestions. */
+export interface Briefing {
+  name: string | null;
+  date: string | null;
+  items: { label: string; text: string }[];
+  suggestions: Suggestion[];
+}
+export const fetchBriefing = (token: string) => call<Partial<Briefing>>('/api/chat/persona/briefing', { token });
+
 // Link with Claude (two-way sync over MCP). The endpoint may not exist yet (404).
 export interface LinkToken {
   id: string;

@@ -130,3 +130,60 @@ describe('Start sidebar', () => {
     expect(botInitial('')).toBe('·');
   });
 });
+
+import { agentsOf, firstName, greeting, needsBriefing, splitThreads, threadLabel } from '../../../workspace/thread-list';
+import { applyAccent, DEFAULT_ACCENT, loadAccent } from '../accent';
+
+describe('Start sidebar labels and sections', () => {
+  const bot = (id: string, name: string) => ({ id, name, description: '', avatar: { shape: 'circle', color: '#000', eyes: 'dots' }, isPreset: false });
+  const th = (o: Partial<ChatThread>): ChatThread => ({ id: 'x', title: '', topic: null, kind: 'direct', bots: [bot('m', 'Mecky')], lastMessageAt: '2026-11-13T07:00:00Z', lastMessagePreview: '', unread: false, ...o });
+
+  it('prefers the real title, then the latest message, then the assistant', () => {
+    expect(threadLabel(th({ title: 'Kassenbericht Oktober' }))).toBe('Kassenbericht Oktober');
+    expect(threadLabel(th({ title: 'Mecky', lastMessagePreview: '**Status:** Die Rückerstattung ist noch offen' }))).toBe('Status: Die Rückerstattung ist noch offen');
+    expect(threadLabel(th({ title: '', lastMessagePreview: '' }))).toBe('Mecky');
+    expect(threadLabel(th({ title: '', bots: [] }))).toBe('Unterhaltung');
+    const long = threadLabel(th({ lastMessagePreview: 'Ein sehr langer Satz, der weit über die Zeile hinausgeht und deshalb gekürzt wird' }), 30);
+    expect(long.endsWith('…')).toBe(true);
+    expect(long.length).toBeLessThanOrEqual(32);
+  });
+
+  it('puts routine conversations under Aufgaben', () => {
+    const r = splitThreads([{ id: 'a' }, { id: 'b' }, { id: 'c' }], new Set(['b']));
+    expect(r.tasks.map((t) => t.id)).toEqual(['b']);
+    expect(r.recent.map((t) => t.id)).toEqual(['a', 'c']);
+  });
+
+  it('lists each leading assistant once for the filter', () => {
+    expect(agentsOf([th({}), th({ bots: [bot('o', 'Olaf')] }), th({})]).map((a) => a.name)).toEqual(['Mecky', 'Olaf']);
+  });
+
+  it('greets by time of day with a first name only', () => {
+    expect([6, 10, 11, 17, 18, 23].map(greeting)).toEqual(['Guten Morgen', 'Guten Morgen', 'Guten Tag', 'Guten Tag', 'Guten Abend', 'Guten Abend']);
+    expect(firstName('Max Brych')).toBe('Max');
+    expect(firstName('max.brych03@example.com')).toBeNull();
+    expect(firstName('max_03')).toBeNull();
+    expect(firstName(null)).toBeNull();
+  });
+
+  it('shows the start block until there is a message from today', () => {
+    const now = new Date('2026-11-13T09:00:00');
+    expect(needsBriefing([], now)).toBe(true);
+    expect(needsBriefing([{ createdAt: '2026-11-12T20:00:00' }], now)).toBe(true);
+    expect(needsBriefing([{ createdAt: '2026-11-13T08:00:00' }], now)).toBe(false);
+  });
+});
+
+describe('accent default', () => {
+  it('maps the pre-0.3.2 default to the new one and marks other colours as custom', () => {
+    const st = { getItem: () => '#3e8e66' };
+    expect(loadAccent(st)).toBe(DEFAULT_ACCENT);
+    const props: Record<string, string> = {};
+    const root = { style: { setProperty: (k: string, v: string) => void (props[k] = v) }, dataset: {} as Record<string, string | undefined> };
+    applyAccent(DEFAULT_ACCENT, root);
+    expect(root.dataset.accent).toBeUndefined();
+    applyAccent('#7a5af5', root);
+    expect(root.dataset.accent).toBe('custom');
+    expect(props['--w-accent']).toBe('#7a5af5');
+  });
+});

@@ -25,8 +25,9 @@
   padding: 0 14px;
   border: 1px solid var(--w-line-strong);
   border-radius: 999px;
-  background: var(--w-card);
+  background: transparent;
   color: var(--w-text);
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -55,13 +56,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 32px;
   padding: 0 12px 0 10px;
-  border: 1px solid var(--w-line);
+  border: 0;
   border-radius: 999px;
-  background: var(--w-card);
-  color: var(--w-text);
-  font-weight: 600;
+  background: var(--w-control);
+  color: var(--w-control-text);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .w-pill:hover:not(:disabled) {
@@ -88,11 +90,11 @@
 .w-round {
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--w-line);
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--w-line-strong);
   border-radius: 50%;
-  background: var(--w-card);
+  background: transparent;
   color: var(--w-text);
 }
 
@@ -110,8 +112,8 @@
 .w-circle {
   display: inline-grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: 50%;
 }
@@ -170,12 +172,12 @@
   display: inline-grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: 6px;
+  /* Flat fill behind the artwork or the initial; follows the accent (shell.css). */
   background: var(--w-accent-tile);
-  /* Dark ink on the tile in both themes: the tile is a light-to-mid tint (at least 7:1). */
-  color: #161616;
+  color: var(--w-text);
   font-family: var(--font-head);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -183,17 +185,20 @@
   display: block;
   width: 100%;
   height: 100%;
+  /* The artwork is shown as it is: the figure fills the tile and is cut off at the tile's bottom edge. */
   object-fit: cover;
-  /* The mascot artwork has a white ground: multiply lets the accent tile show through it. */
-  mix-blend-mode: multiply;
+  object-position: 50% 0;
+  transform: scale(1.12);
+  transform-origin: 50% 0;
 }
 
-/* Assistant names: spaced caps in the heading face. */
+/* Assistant names: spaced caps. The semi-condensed face reads best at this size. */
 .ws-agent-name,
 .ws-bot-name {
-  font-family: var(--font-head);
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-family: 'Mona Sans SemiCondensed', var(--font-head);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -204,7 +209,7 @@
   min-height: 0;
   display: grid;
   /* --ws-list: width of the Start sidebar (thread list). */
-  --ws-list: 260px;
+  --ws-list: 240px;
   grid-template-columns: var(--ws-list) minmax(0, 1fr);
   font-size: 14px;
 }
@@ -226,34 +231,33 @@
 .ws-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
-  padding: 12px 10px;
-  border-right: 1px solid var(--w-line);
+  padding: 6px 6px 8px;
+  border-right: 1px solid var(--w-divider);
   background: var(--w-side);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* Agent card: tinted with the accent; the latest message fades out at the right edge. */
 .ws-agent {
   flex: 0 0 auto;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--w-accent-line);
+  height: 45px;
+  padding: 0 10px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--w-agent-line);
   border-radius: 8px;
-  background: var(--w-accent-agent);
+  background: var(--w-agent-bg);
   color: var(--w-text);
   font: inherit;
   text-align: left;
-}
-
-.ws-agent:hover:not(:disabled) {
-  border-color: var(--w-accent);
 }
 
 .ws-agent:disabled {
@@ -262,7 +266,6 @@
 
 .ws-agent-name {
   flex: none;
-  font-size: 13px;
   line-height: 1;
 }
 
@@ -271,16 +274,100 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  color: var(--w-text-2);
-  font-size: 13.5px;
-  -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent);
-  mask-image: linear-gradient(90deg, #000 60%, transparent);
+  color: var(--w-agent-text);
+  font-size: 14px;
+  -webkit-mask-image: linear-gradient(90deg, #000 62%, transparent);
+  mask-image: linear-gradient(90deg, #000 62%, transparent);
+}
+
+.ws-agent-status > span {
+  display: inline-block;
+}
+
+/* Hover: no colour change; the latest message slides left to show more (--shift / --slide from AgentCard). */
+@media (prefers-reduced-motion: no-preference) {
+  .ws-agent.slides:hover .ws-agent-status {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  }
+
+  .ws-agent.slides .ws-agent-status > span {
+    transition: transform 0.3s ease-out;
+  }
+
+  .ws-agent.slides:hover .ws-agent-status > span {
+    transform: translateX(var(--shift));
+    transition: transform var(--slide) linear 0.2s;
+  }
 }
 
 .ws-list-tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+
+/* "Neu" split button: raised pill; the chevron half opens the assistant picker. */
+.ws-split {
+  display: inline-flex;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--w-control);
+  color: var(--w-control-text);
+}
+
+.ws-split button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ws-split-main {
+  padding: 0 4px 0 11px;
+  border-radius: 999px 0 0 999px;
+}
+
+.ws-split-more {
+  padding: 0 10px 0 6px;
+  border-radius: 0 999px 999px 0;
+  color: var(--w-muted);
+}
+
+.ws-split button:hover:not(:disabled) {
+  color: var(--w-text);
+}
+
+.ws-split button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ws-filter {
+  right: 0;
+  left: auto;
+  width: 220px;
+}
+
+.ws-filter .ws-picker-item {
+  align-items: center;
+}
+
+.ws-filter .ws-picker-item[aria-checked='true'] {
+  background: var(--w-selected);
+}
+
+.ws-filter-all {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 4px;
 }
 
 .ws-new {
@@ -343,7 +430,7 @@
 }
 
 .ws-group {
-  padding: 6px 4px;
+  padding: 10px 6px 4px;
   color: var(--w-muted);
   font-size: 13px;
   font-weight: 500;
@@ -352,13 +439,13 @@
 .ws-thread {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 10px 0 30px;
+  height: 34px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: none;
   color: var(--w-text);
   font-size: 14px;
@@ -419,15 +506,18 @@
 }
 
 .ws-empty {
-  padding: 10px 4px;
-  color: var(--w-muted);
+  padding: 4px 8px 6px;
+  color: var(--w-faint);
+  font-size: 13.5px;
+  line-height: 1.45;
 }
 
 .ws-list-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
+  padding: 0 4px;
   font-size: 12px;
 }
 
@@ -444,10 +534,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 46px;
-  padding: 0 12px 0 16px;
+  height: 56px;
+  padding: 0 14px 0 20px;
   border-bottom: 1px solid var(--w-line);
-  font-size: 14.5px;
+  font-size: 15px;
+}
+
+.ws-chat-head strong {
+  font-weight: 600;
 }
 
 .ws-messages {
@@ -458,13 +552,14 @@
 }
 
 .ws-messages-inner {
-  max-width: 860px;
+  max-width: 818px;
   margin: 0 auto;
-  padding: 24px 28px 8px;
+  padding: 24px 24px 8px;
 }
 
 .ws-msg {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -526,7 +621,7 @@
 }
 
 .ws-md a {
-  color: var(--w-accent);
+  color: var(--w-link);
 }
 
 .ws-md code,
@@ -667,12 +762,13 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 560px;
-  margin: 8px 0;
+  max-width: 600px;
+  margin: 10px 0;
   padding: 14px 16px;
   border: 1px solid var(--w-line-strong);
-  border-radius: 14px;
-  background: var(--w-card);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 14px;
 }
 
 .ws-approval-head {
@@ -710,16 +806,17 @@
 }
 
 .ws-approval-body {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--w-raised);
+  /* The draft sits on the card itself, set apart by a hairline instead of an inner box. */
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--w-line-strong);
   white-space: pre-wrap;
 }
 
 .ws-approval-actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .ws-task ol {
@@ -741,13 +838,14 @@
 .ws-composer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 860px;
-  width: calc(100% - 56px);
-  margin: 0 auto 20px;
-  padding: 12px 12px 10px 16px;
+  gap: 6px;
+  max-width: 770px;
+  width: calc(100% - 48px);
+  min-height: 93px;
+  margin: 0 auto 18px;
+  padding: 12px 10px 9px 14px;
   border: 1px solid var(--w-line-strong);
-  border-radius: 20px;
+  border-radius: 14px;
   background: var(--w-card);
 }
 
@@ -759,6 +857,9 @@
 }
 
 .ws-composer textarea {
+  flex: 1;
+  min-height: 24px;
+  max-height: 40vh;
   resize: none;
   border: 0;
   outline: none;
@@ -767,17 +868,19 @@
   font-size: 15px;
   line-height: 1.5;
   color: var(--w-text);
+  field-sizing: content;
   user-select: text;
 }
 
 .ws-composer textarea::placeholder {
-  color: var(--w-muted);
+  color: var(--w-placeholder);
 }
 
 .ws-composer-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  margin-left: -6px;
 }
 
 .ws-composer-row .w-circle {
@@ -910,7 +1013,7 @@
 
 .ws-signin-card h1 {
   margin: 0 0 8px;
-  font: 700 24px/1.2 var(--font-head);
+  font: 600 24px/1.2 var(--font-head);
 }
 
 .ws-signin-wait {
@@ -1031,7 +1134,7 @@ html.mac-inset .rail {
   place-items: center;
   background: var(--w-accent);
   color: #fff;
-  font: 700 20px/1 var(--font-head);
+  font: 600 20px/1 var(--font-head);
 }
 
 .app-card-title {
@@ -1126,7 +1229,7 @@ html.mac-inset .rail {
 }
 
 .kpi-value {
-  font: 700 26px/1.1 var(--font-head);
+  font: 600 26px/1.1 var(--font-head);
 }
 
 .kpi-sub {
@@ -1142,7 +1245,7 @@ html.mac-inset .rail {
 
 .chart-title {
   margin-bottom: 10px;
-  font: 700 14px/1.2 var(--font-head);
+  font: 600 14px/1.2 var(--font-head);
 }
 
 .chart-wrap {
@@ -1203,4 +1306,98 @@ html.mac-inset .rail {
 .events-table td.num {
   text-align: right;
   color: var(--w-text-2);
+}
+
+/* Start block of the main conversation (Briefing.tsx) */
+
+.ws-brief {
+  display: flex;
+  gap: 12px;
+  margin: 4px 0 28px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.ws-brief-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-brief-date {
+  color: var(--w-muted);
+}
+
+.ws-brief-title {
+  margin: 18px 0 16px;
+  font: 600 23px/1.25 var(--font-head);
+  letter-spacing: -0.01em;
+}
+
+.ws-brief-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.ws-brief-items a {
+  color: var(--w-link);
+}
+
+.ws-brief-sub {
+  margin: 24px 0 8px;
+  font: 600 15px/1.4 var(--font-head);
+}
+
+.ws-brief-sugs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-brief-sugs li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+}
+
+.ws-brief-sugs li:hover {
+  background: var(--w-hover);
+}
+
+.ws-brief-sug {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 0;
+  background: none;
+  color: var(--w-text);
+  font: inherit;
+  text-align: left;
+}
+
+.ws-brief-sug:disabled {
+  opacity: 0.5;
+}
+
+.ws-brief-sug-icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--w-muted);
+}
+
+.ws-brief-sug-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ws-brief-sugs .pz-sug-people {
+  padding: 8px 10px 0 0;
 }
