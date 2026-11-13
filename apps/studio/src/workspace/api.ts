@@ -330,6 +330,63 @@ export const dismissSuggestion = (token: string, id: string) =>
 export const startSuggestion = (token: string, id: string) =>
   call<{ threadId: string; prompt: string; routine: ChatRoutine | null }>(`/api/chat/persona/suggestions/${enc(id)}`, { token, json: { action: 'start' } });
 
+// ---- the assistant's own profile: name, mailbox, phones, personality (contract 2026-11-13) --------
+
+export interface AgentChannel {
+  id: string;
+  kind: 'sms' | 'whatsapp';
+  /** Already masked by the server. */
+  address: string;
+  verifiedAt: string;
+}
+export interface Agent {
+  botId: string;
+  name: string;
+  defaultName: string;
+  description: string;
+  since: string;
+  personality: string;
+  customInstructions: string;
+  spokenName: string;
+  tools: string[];
+  mail: { enabled: boolean; address: string | null; alias: string | null; ownerEmail: string | null; ownerVerified: boolean; briefing: boolean; routines: boolean };
+  /** A null number means the channel is not set up on the server. */
+  phone: { sms: { number: string | null }; whatsapp: { number: string | null } };
+  channels: AgentChannel[];
+}
+export interface AgentPersonality {
+  key: string;
+  title: string;
+  description: string;
+}
+export interface AgentResponse {
+  agent: Agent;
+  personalities: AgentPersonality[];
+}
+export type AgentPatch = Partial<{
+  name: string | null;
+  personality: string;
+  customInstructions: string;
+  spokenName: string;
+  mailAlias: string;
+  emailBriefing: boolean;
+  emailRoutines: boolean;
+  botId: string | null;
+}>;
+export interface AgentLinkCode {
+  code: string;
+  expiresAt: string;
+  number: string;
+  link: string;
+}
+export const fetchAgent = (token: string) => call<AgentResponse>('/api/chat/agent', { token });
+export const patchAgent = (token: string, patch: AgentPatch) => call<AgentResponse>('/api/chat/agent', { token, method: 'PATCH', json: patch });
+export const createAgentChannel = (token: string, kind: 'sms' | 'whatsapp') => call<AgentLinkCode>('/api/chat/agent/channels', { token, json: { kind } });
+export const deleteAgentChannel = (token: string, id: string) => call<{ ok: boolean }>(`/api/chat/agent/channels?id=${enc(id)}`, { token, method: 'DELETE' });
+export const requestAgentEmailCode = (token: string, email: string) => call<{ ok: boolean }>('/api/chat/agent/email', { token, json: { email } });
+export const confirmAgentEmailCode = (token: string, code: string) =>
+  call<{ ok: boolean; ownerEmail: string }>('/api/chat/agent/email', { token, method: 'PUT', json: { code } });
+
 /** Start page briefing (v3). The endpoint may not exist yet (404): callers fall back to the suggestions. */
 export interface Briefing {
   name: string | null;

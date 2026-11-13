@@ -187,3 +187,44 @@ describe('accent default', () => {
     expect(props['--w-accent']).toBe('#7a5af5');
   });
 });
+
+import { cleanAlias, displayBotName, isExpired, newChannel, splitAddress, toolLabel } from '../../../agent/agent-format';
+
+describe('assistant profile helpers', () => {
+  const agent = { botId: 'preset-mecky', name: 'Frieda', defaultName: 'Mecky' };
+
+  it('uses the profile name for the base bot only when it was changed', () => {
+    expect(displayBotName({ id: 'preset-mecky', name: 'Mecky' }, agent)).toBe('Frieda');
+    expect(displayBotName({ id: 'b2', name: 'Kassenwart' }, agent)).toBe('Kassenwart');
+    expect(displayBotName({ id: 'preset-mecky', name: 'Mecky' }, { ...agent, name: 'Mecky' })).toBe('Mecky');
+    expect(displayBotName({ id: 'preset-mecky', name: 'Mecky' }, null)).toBe('Mecky');
+    expect(displayBotName(null, null)).toBe('Mecky');
+    expect(displayBotName(null, null, 'Assistent')).toBe('Assistent');
+  });
+
+  it('splits and cleans the mailbox alias', () => {
+    expect(splitAddress('mecky.max@ortis.app')).toEqual({ alias: 'mecky.max', domain: 'ortis.app' });
+    expect(splitAddress(null)).toEqual({ alias: '', domain: '' });
+    expect(cleanAlias('Mäx Brych+1@x')).toBe('mxbrych1x');
+    expect(cleanAlias('max.brych-03_a')).toBe('max.brych-03_a');
+  });
+
+  it('labels known tools in German and shows unknown keys as they are', () => {
+    expect(toolLabel('web_search')).toBe('Im Internet suchen');
+    expect(toolLabel('quantum_oven')).toBe('quantum_oven');
+  });
+
+  it('detects the phone that was linked while the dialog was open', () => {
+    const ch = (id: string, kind: 'sms' | 'whatsapp') => ({ id, kind, address: '+49 … 12', verifiedAt: '2026-11-13T08:00:00Z' });
+    expect(newChannel([ch('a', 'sms')], [ch('a', 'sms')], 'sms')).toBeNull();
+    expect(newChannel([ch('a', 'sms')], [ch('a', 'sms'), ch('b', 'whatsapp')], 'sms')).toBeNull();
+    expect(newChannel([ch('a', 'sms')], [ch('a', 'sms'), ch('c', 'sms')], 'sms')?.id).toBe('c');
+  });
+
+  it('knows when a link code has run out', () => {
+    const now = Date.parse('2026-11-13T09:00:00Z');
+    expect(isExpired('2026-11-13T08:59:59Z', now)).toBe(true);
+    expect(isExpired('2026-11-13T09:10:00Z', now)).toBe(false);
+    expect(isExpired(null, now)).toBe(false);
+  });
+});

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { emitCommand, onDesktopCommand } from '../../workspace/desktop';
 import { fetchMe, type Me } from '../../workspace/api';
 import { loadSession } from '../../workspace/session';
-import { IconLogout, IconMoon, IconSettings, IconSun } from './line-icons';
+import { IconAgent, IconLogout, IconMoon, IconSettings, IconSun } from './line-icons';
+import { useAgent } from '../../agent/agent-store';
 import { currentTheme, isSystemDark, onThemeChange, resolveTheme, setTheme, toggledTheme } from './theme';
 import { Busy, Skeleton } from '../Skeleton';
 import { Tip } from '../Tooltip';
@@ -20,11 +21,14 @@ export function AccountMenu() {
   const [me, setMe] = useState<Me | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [meFailed, setMeFailed] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const agent = useAgent(token);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = async () => {
     const s = await loadSession();
     setSignedIn(!!s);
+    setToken(s?.token ?? null);
     if (!s) return setMe(null);
     try {
       setMe(await fetchMe(s.token));
@@ -99,6 +103,17 @@ export function AccountMenu() {
                   <i style={{ width: `${me?.quota.ownKey ? 100 : 100 - pct}%` }} />
                 </div>
               </div>
+              {agent.status === 'ready' && (
+                <button
+                  className="account-item"
+                  onClick={() => {
+                    setOpen(false);
+                    emitCommand({ kind: 'navigate', section: 'agent' });
+                  }}
+                >
+                  <IconAgent size={16} /> Mein Assistent
+                </button>
+              )}
               <button
                 className="account-item"
                 onClick={() => {

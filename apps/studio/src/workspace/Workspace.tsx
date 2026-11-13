@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { parseMarkdown } from '../help/markdown';
 import {
-  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconFilter, IconMic, IconPanelRight, IconPlus, IconSearch,
+  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconFilter, IconMic, IconPanelRight, IconPencil, IconPlus, IconSearch,
   IconSend, IconStop, IconWave,
 } from '../ui/shell/line-icons';
 import {
   approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, transcribe, uploadImage,
 } from './api';
 import { Briefing } from './Briefing';
+import { displayBotName } from '../agent/agent-format';
+import { agentOf, useAgent } from '../agent/agent-store';
+import { emitCommand } from './desktop';
 import { SkChat, SkDoc, SkThreads } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
 import { shortcutHint } from '../ui/shell/shortcuts';
@@ -48,7 +51,7 @@ function textOf(m: ChatMessage | undefined): string {
  * the text slides left to show the rest (CSS; off under reduced motion) and a card to the right gives the
  * full title and the last activity.
  */
-function ThreadRow({ thread, selected, onSelect, label }: { thread: ChatThread; selected: boolean; onSelect: () => void; label?: string }) {
+function ThreadRow({ thread, selected, onSelect, label, botName }: { thread: ChatThread; selected: boolean; onSelect: () => void; label?: string; botName?: string }) {
   const title = label ?? threadLabel(thread);
   const text = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0);
@@ -60,7 +63,7 @@ function ThreadRow({ thread, selected, onSelect, label }: { thread: ChatThread; 
     <>
       <strong>{title}</strong>
       <span>
-        {thread.bots[0]?.name ? `${thread.bots[0].name} · ` : ''}Aktualisiert {relTime(thread.lastMessageAt)}
+        {botName ? `${botName} · ` : ''}Aktualisiert {relTime(thread.lastMessageAt)}
       </span>
     </>
   );
@@ -87,7 +90,7 @@ function ThreadRow({ thread, selected, onSelect, label }: { thread: ChatThread; 
  * Agent card at the top of the Start sidebar. No colour change on hover: the latest message slides left to
  * show more of itself (off under reduced motion). Clicking opens the main conversation.
  */
-function AgentCard({ name, bot, status, disabled, onOpen }: { name: string; bot?: ChatBot | null; status: string; disabled?: boolean; onOpen: () => void }) {
+function AgentCard({ name, bot, status, disabled, onOpen, onEdit }: { name: string; bot?: ChatBot | null; status: string; disabled?: boolean; onOpen: () => void; onEdit?: () => void }) {
   const text = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0);
   const measure = () => {
@@ -95,20 +98,22 @@ function AgentCard({ name, bot, status, disabled, onOpen }: { name: string; bot?
     setShift(el ? marqueeShift(el.scrollWidth, el.clientWidth, 24) : 0);
   };
   return (
-    <button
-      className={`ws-agent${shift > 0 ? ' slides' : ''}`}
-      aria-label={`${name}: Hauptunterhaltung öffnen`}
-      disabled={disabled}
-      onClick={onOpen}
-      onMouseEnter={measure}
-      style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(1, shift / 45)}s` } as React.CSSProperties) : undefined}
-    >
-      <BotAvatar bot={bot} size={45} radius={0} />
-      <span className="ws-agent-name">{name}</span>
-      <span className="ws-agent-status" ref={text}>
-        <span>{status}</span>
-      </span>
-    </button>
+    <div className={`ws-agent${shift > 0 ? ' slides' : ''}${onEdit ? ' editable' : ''}`} onMouseEnter={measure} style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(1, shift / 45)}s` } as React.CSSProperties) : undefined}>
+      <button className="ws-agent-main" aria-label={`${name}: Hauptunterhaltung öffnen`} disabled={disabled} onClick={onOpen}>
+        <BotAvatar bot={bot} size={45} radius={0} />
+        <span className="ws-agent-name">{name}</span>
+        <span className="ws-agent-status" ref={text}>
+          <span>{status}</span>
+        </span>
+      </button>
+      {onEdit && (
+        <Tip label="Assistent bearbeiten" side="bottom">
+          <button className="ws-agent-edit" aria-label="Assistent bearbeiten" onClick={onEdit}>
+            <IconPencil size={16} />
+          </button>
+        </Tip>
+      )}
+    </div>
   );
 }
 
@@ -148,6 +153,9 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const [listOpen, setListOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
   const [search, setSearch] = useState<string | null>(null);
+  // The assistant's profile: its own name replaces the base bot's name wherever that bot is shown.
+  const profile = agentOf(useAgent(token));
+  const nameOf = (b: { id: string; name: string } | null | undefined, fallback = 'Mecky') => displayBotName(b, b ? profile : null, fallback);
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   // Conversations that belong to a routine are listed under "Aufgaben".
@@ -349,6 +357,23 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     }
   }, [token, guard]);
 
+  // The assistant picker and the filter menu close on a click elsewhere and on Escape.
+  useEffect(() => {
+    if (!picker && !filterOpen) return;
+    const close = () => {
+      setPicker(false);
+      setFilterOpen(false);
+    };
+    const away = (e: MouseEvent) => !(e.target as Element | null)?.closest?.('.ws-new') && close();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', away);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [picker, filterOpen]);
+
   // ⌘N: a new conversation with the default assistant (latest state through a ref).
   const startNew = useRef(() => {});
   startNew.current = () => {
@@ -408,7 +433,8 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
       {listOpen && (
         <aside className="ws-list">
           <AgentCard
-            name={agent?.name ?? 'Mecky'}
+            name={nameOf(agent)}
+            onEdit={profile ? () => emitCommand({ kind: 'navigate', section: 'agent' }) : undefined}
             bot={agent}
             status={streaming ? 'Arbeitet …' : (mainThread && mainThread.id !== threadId ? mainThread.lastMessagePreview : textOf(lastBotMsg)) || mainThread?.lastMessagePreview || 'Bereit'}
             disabled={!boot}
@@ -438,7 +464,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     <button key={b.id} className="ws-picker-item" role="menuitem" onClick={() => void newThread(b)}>
                       <BotAvatar bot={b} size={26} />
                       <span>
-                        <strong>{b.name}</strong>
+                        <strong>{nameOf(b)}</strong>
                         <span className="w-muted">{b.description}</span>
                       </span>
                     </button>
@@ -461,7 +487,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 </Tip>
                 {filterOpen && (
                   <div className="ws-picker ws-filter" role="menu">
-                    {[{ id: null as string | null, name: 'Alle Assistenten' }, ...agents].map((a) => (
+                    {[{ id: null as string | null, name: 'Alle Assistenten' }, ...agents.map((a) => ({ ...a, name: nameOf(a) }))].map((a) => (
                       <button
                         key={a.id ?? 'all'}
                         className="ws-picker-item"
@@ -508,14 +534,14 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
           <div className="ws-threads">
             <div className="ws-group">Aufgaben</div>
             {lists.tasks.map((t) => (
-              <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} />
+              <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} botName={nameOf(t.bots[0], '')} />
             ))}
             {!boot && !bootError && <SkThreads rows={2} />}
             {boot && lists.tasks.length === 0 && <div className="ws-empty">{q || agentFilter ? 'Nichts gefunden.' : 'Noch keine Unterhaltungen aus Routinen.'}</div>}
 
             <div className="ws-group">Zuletzt verwendet</div>
             {lists.recent.map((t) => (
-              <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} label={t.id === mainThread?.id ? 'Hauptunterhaltung' : undefined} />
+              <ThreadRow key={t.id} thread={t} selected={t.id === threadId} onSelect={() => setThreadId(t.id)} label={t.id === mainThread?.id ? 'Hauptunterhaltung' : undefined} botName={nameOf(t.bots[0], '')} />
             ))}
             {!boot && !bootError && <SkThreads rows={6} />}
             {boot && lists.recent.length === 0 && <div className="ws-empty">{q || agentFilter ? 'Nichts gefunden.' : 'Noch keine Unterhaltung. Starte mit „Neu“.'}</div>}
@@ -555,7 +581,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                       <BotAvatar bot={bot ?? leadBot} size={32} radius={8} />
                       <div className="ws-msg-body">
                         <div className="ws-msg-meta">
-                          <strong className="ws-bot-name">{bot?.name ?? 'Assistent'}</strong>
+                          <strong className="ws-bot-name">{nameOf(bot, 'Assistent')}</strong>
                           <span className="w-muted">{relTime(m.createdAt)}</span>
                         </div>
                         {m.parts.map((p, i) => (
@@ -566,7 +592,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     </div>
                   );
                 })}
-                {isMain && !historyLoading && !streaming && needsBriefing(view.messages) && <Briefing token={token} bot={agent} />}
+                {isMain && !historyLoading && !streaming && needsBriefing(view.messages) && <Briefing token={token} bot={agent} name={nameOf(agent)} />}
                 {view.error && <div className="ws-error">{view.error}</div>}
               </div>
             </div>
@@ -603,7 +629,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
               <textarea
                 ref={input}
                 value={draft}
-                placeholder={`Nachricht an ${leadBot?.name ?? 'Mecky'}`}
+                placeholder={`Nachricht an ${nameOf(leadBot)}`}
                 rows={2}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -654,7 +680,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
             {boot ? (
               <div className="ws-messages">
                 <div className="ws-messages-inner">
-                  <Briefing token={token} bot={agent} />
+                  <Briefing token={token} bot={agent} name={nameOf(agent)} />
                 </div>
               </div>
             ) : bootError ? (

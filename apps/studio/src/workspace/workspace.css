@@ -245,22 +245,57 @@
   flex: 0 0 auto;
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
   width: 100%;
   min-width: 0;
   height: 45px;
-  padding: 0 10px 0 0;
   overflow: hidden;
   border: 1px solid var(--w-agent-line);
   border-radius: 8px;
   background: var(--w-agent-bg);
   color: var(--w-text);
+}
+
+.ws-agent-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 10px 0 0;
+  border: 0;
+  background: none;
+  color: inherit;
   font: inherit;
   text-align: left;
 }
 
-.ws-agent:disabled {
+/* Hover action at the right edge, on the card's own colour (fades in; always there for the keyboard). */
+.ws-agent-edit {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  padding-left: 8px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--w-agent-bg) 34%);
+  color: var(--w-text);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ws-agent:hover .ws-agent-edit,
+.ws-agent-edit:focus-visible {
+  opacity: 1;
+}
+
+.ws-agent.editable:hover .ws-agent-main {
+  padding-right: 40px;
+}
+
+.ws-agent-main:disabled {
   cursor: default;
 }
 
@@ -348,7 +383,7 @@
   cursor: default;
 }
 
-.ws-filter {
+.ws-picker.ws-filter {
   right: 0;
   left: auto;
   width: 220px;

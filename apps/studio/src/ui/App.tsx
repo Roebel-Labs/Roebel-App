@@ -24,7 +24,8 @@ import { ForYouSection } from '../persona/ForYouSection';
 import { SkillsSection } from '../persona/SkillsSection';
 import { WikiSection } from '../persona/WikiSection';
 import { LibrarySection } from '../persona/LibrarySection';
-import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
+import { loadSection, saveSection, visibleLiveTab, type AppSection, type LiveTab, type Section } from './shell/nav';
+import { AgentSection } from '../agent/AgentSection';
 import { Rail } from './shell/Rail';
 import { Toolbar } from './shell/Toolbar';
 import { emitCommand, onDesktopCommand, type DesktopCommand } from '../workspace/desktop';
@@ -371,15 +372,16 @@ function QuitConfirm() {
 }
 
 function Shell() {
-  const [section, setSectionState] = useState<Section>(() => loadSection());
+  const [section, setSectionState] = useState<AppSection>(() => loadSection());
   const [tab, setTab] = useState<Tab>('show');
   // Visited sections for Zurück / Vor (⌘[ / ⌘⇧]).
-  const [history, setHistory] = useState<NavHistory<Section>>(() => ({ items: [section], at: 0 }));
-  const show = (next: Section) => {
+  const [history, setHistory] = useState<NavHistory<AppSection>>(() => ({ items: [section], at: 0 }));
+  const show = (next: AppSection) => {
     setSectionState(next);
-    saveSection(next);
+    // Pages outside the rail (Assistent) are not restored at the next start.
+    if (next !== 'agent') saveSection(next);
   };
-  const setSection = (next: Section) => {
+  const setSection = (next: AppSection) => {
     setHistory((h) => historyPush(h, next));
     show(next);
   };
@@ -422,8 +424,10 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   // Cameras and microphones may open only in the livestream section (or while on air).
-  useEffect(() => setCaptureSection(section), [section]);
-  useShowRuntime(visibleLiveTab(section, tab));
+  // For capture and the show runtime the assistant page counts as the workspace.
+  const railSection: Section = section === 'agent' ? 'home' : section;
+  useEffect(() => setCaptureSection(railSection), [railSection]);
+  useShowRuntime(visibleLiveTab(railSection, tab));
   useSponsorRuntime();
   const { dispatch } = useShow();
   const { onAir } = useStudio();
@@ -433,7 +437,7 @@ function Shell() {
   useEffect(
     () =>
       onDesktopCommand((cmd) => {
-        if (cmd.kind === 'navigate') setSection(cmd.section === 'live' ? 'live' : cmd.section === 'wiki' ? 'wiki' : 'home');
+        if (cmd.kind === 'navigate') setSection(cmd.section);
         else if (cmd.kind !== 'settings' && cmd.kind !== 'connected' && cmd.kind !== 'signedin') setSection('home');
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -500,6 +504,7 @@ function Shell() {
           {section === 'wiki' && <WikiSection />}
           {section === 'library' && <LibrarySection />}
           {section === 'apps' && <AppsSection />}
+          {section === 'agent' && <AgentSection onNavigate={setSection} />}
           {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
           {((section === 'live' && !isWebBuild()) || air.phase !== 'off') && <HealthBar />}
         </div>

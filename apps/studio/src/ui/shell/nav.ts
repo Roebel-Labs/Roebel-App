@@ -2,6 +2,8 @@
 // Pure helpers only (tested); the components live next to this file.
 
 export type Section = 'home' | 'foryou' | 'skills' | 'wiki' | 'library' | 'live' | 'apps';
+/** Everything the content frame can show: the rail sections plus pages reached from elsewhere. */
+export type AppSection = Section | 'agent';
 export type LiveTab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'help';
 
 export const SECTIONS: ReadonlyArray<{ id: Section; label: string; soon?: boolean }> = [

@@ -12,7 +12,7 @@ export type DesktopCommand =
   | { kind: 'togglePanel' }
   | { kind: 'dictate' }
   | { kind: 'signout' }
-  | { kind: 'navigate'; section: 'home' | 'live' | 'wiki' }
+  | { kind: 'navigate'; section: 'home' | 'live' | 'wiki' | 'skills' | 'agent' }
   /** Open a thread in Start; `message` is sent as the first user message once the thread is on screen. */
   | { kind: 'openThread'; threadId: string; message?: string }
   | { kind: 'capture'; name: string; type: string; bytes: Uint8Array };

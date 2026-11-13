@@ -34,7 +34,7 @@ async function load(token: string): Promise<Data> {
   return { name: firstName(me?.displayName), items: [], suggestions: allSuggestions(suggestionSections(sug)).slice(0, MAX_SUGGESTIONS) };
 }
 
-export function Briefing({ token, bot, now = new Date() }: { token: string; bot?: ChatBot | null; now?: Date }) {
+export function Briefing({ token, bot, name, now = new Date() }: { token: string; bot?: ChatBot | null; name?: string; now?: Date }) {
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(() => new Set());
@@ -77,7 +77,7 @@ export function Briefing({ token, bot, now = new Date() }: { token: string; bot?
       <BotAvatar bot={bot} size={32} radius={8} />
       <div className="ws-brief-body">
         <div className="ws-msg-meta">
-          <strong className="ws-bot-name">{bot?.name ?? 'Mecky'}</strong>
+          <strong className="ws-bot-name">{name ?? bot?.name ?? 'Mecky'}</strong>
           <span className="w-muted">{now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div className="ws-brief-date">{now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</div>

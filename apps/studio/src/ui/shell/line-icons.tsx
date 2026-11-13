@@ -7,7 +7,7 @@ import {
   FilterHorizontalIcon, Folder01Icon, HelpCircleIcon, Home01Icon, Idea01Icon, Image01Icon, InboxIcon, Link01Icon, LiveStreaming01Icon, Logout01Icon,
   Mail01Icon, Mic01Icon, Moon02Icon, MoreHorizontalIcon, News01Icon, Notification01Icon, PanelRightIcon, PencilEdit02Icon, Plug01Icon, PlusSignIcon,
   Radar01Icon, RefreshIcon, RepeatIcon, Search01Icon, Settings01Icon, Share01Icon, SidebarLeftIcon, StopIcon, Sun01Icon, Task01Icon, Tick02Icon,
-  Upload01Icon, UserMultipleIcon, ZapIcon,
+  Message01Icon, Robot01Icon, Upload01Icon, UserMultipleIcon, WhatsappIcon, ZapIcon,
 } from '@hugeicons/core-free-icons';
 
 export const ICON_STROKE = 1.5;
@@ -66,6 +66,9 @@ export const IconImage = make(Image01Icon);
 export const IconBack = make(ArrowLeft02Icon);
 export const IconForward = make(ArrowRight02Icon);
 export const IconShare = make(Share01Icon);
+export const IconSms = make(Message01Icon);
+export const IconWhatsapp = make(WhatsappIcon);
+export const IconAgent = make(Robot01Icon);
 
 // Rail sections (20px).
 export const IconHome = make(Home01Icon, 20);
