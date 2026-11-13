@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createCode, redeemCode } from "@/lib/chat/agent/channels";
 import { agentAddress, mailEnabled, sendMail } from "@/lib/chat/agent/mail";
-import { agentBot, getAgentProfile, patchProfileRaw } from "@/lib/chat/agent/profile";
+import { agentBot, getAgentProfile, setOwnerEmail } from "@/lib/chat/agent/profile";
 import { badRequest, handleError, readJson, requireWallet, unauthorized } from "../../_lib/http";
 
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ export async function PUT(request: Request) {
     const hit = await redeemCode(code, "email");
     if (!hit || hit.wallet !== wallet || !hit.address) return badRequest("Der Code stimmt nicht oder ist abgelaufen.");
     await getAgentProfile(wallet);
-    await patchProfileRaw(wallet, { owner_email: hit.address, owner_email_verified_at: new Date().toISOString() });
+    await setOwnerEmail(wallet, hit.address);
     return NextResponse.json({ ok: true, ownerEmail: hit.address });
   } catch (err) {
     return handleError(err, "agent/email");

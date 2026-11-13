@@ -4,7 +4,7 @@
 import { NextResponse, after } from "next/server";
 import { firstSight, runChannelTurn } from "@/lib/chat/agent/channels";
 import { fetchReceivedMail, mailDomain, mailEnabled, sendAgentMail, verifySvix } from "@/lib/chat/agent/mail";
-import { profileByAlias } from "@/lib/chat/agent/profile";
+import { profileByOwnerEmail } from "@/lib/chat/agent/profile";
 import { htmlToText, ownText, scrubSecrets } from "@/lib/chat/persona/classify";
 
 export const runtime = "nodejs";
@@ -27,17 +27,18 @@ export async function POST(request: Request) {
   if (!(await firstSight(`resend:${id}`))) return NextResponse.json({ ok: true });
 
   const domain = mailDomain();
-  const aliases = [...(event.data?.to ?? []), ...(event.data?.received_for ?? [])]
-    .map((a) => (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/.exec(a)?.[0] ?? "").toLowerCase())
-    .filter((a) => a.endsWith(`@${domain}`)).map((a) => a.split("@")[0]);
+  const toUs = [...(event.data?.to ?? []), ...(event.data?.received_for ?? [])]
+    .some((a) => (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/.exec(a)?.[0] ?? "").toLowerCase().endsWith(`@${domain}`));
+  if (!toUs) return NextResponse.json({ ok: true });
 
   after(async () => {
     try {
-      const profile = (await Promise.all([...new Set(aliases)].slice(0, 3).map(profileByAlias))).find(Boolean);
-      if (!profile?.owner_email || !profile.owner_email_verified_at) return;
       const mail = await fetchReceivedMail(id);
-      // Not from the owner, or not authenticated by the sender's domain: silently ignored.
-      if (!mail || mail.from !== profile.owner_email.toLowerCase() || !mail.authenticated) return;
+      // Shared address (mecky@…): the authenticated sender decides whose assistant answers.
+      // Unknown or unauthenticated senders are ignored without an answer.
+      if (!mail?.from || !mail.authenticated) return;
+      const profile = await profileByOwnerEmail(mail.from);
+      if (!profile?.owner_email) return;
       const body = scrubSecrets(ownText(mail.text || htmlToText(mail.html ?? ""), 6000));
       if (!body && !mail.subject) return;
       const answer = await runChannelTurn({

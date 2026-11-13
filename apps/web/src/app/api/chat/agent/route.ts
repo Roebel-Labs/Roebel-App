@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { channelNumber, listChannels } from "@/lib/chat/agent/channels";
 import type { ChannelRow } from "@/lib/chat/agent/channels";
 import { agentAddress, mailEnabled } from "@/lib/chat/agent/mail";
-import { AgentInputError, PERSONALITIES, agentBot, getAgentProfile, patchProfileRaw, updateAgentProfile } from "@/lib/chat/agent/profile";
+import { AgentInputError, PERSONALITIES, agentBot, getAgentProfile, setOwnerEmail, updateAgentProfile } from "@/lib/chat/agent/profile";
 import type { AgentProfileRow } from "@/lib/chat/agent/profile";
 import { googleApi, googleEnabled, hasScope } from "@/lib/chat/harness/connectors/google";
 import type { GoogleSecret } from "@/lib/chat/harness/connectors/google";
@@ -28,7 +28,7 @@ async function adoptGoogleAddress(wallet: string, profile: AgentProfileRow): Pro
     const email = (me.emailAddress ?? "").toLowerCase();
     if (!email) return profile;
     const at = new Date().toISOString();
-    await patchProfileRaw(wallet, { owner_email: email, owner_email_verified_at: at });
+    await setOwnerEmail(wallet, email);
     return { ...profile, owner_email: email, owner_email_verified_at: at };
   } catch {
     return profile;

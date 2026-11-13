@@ -59,9 +59,29 @@ async function resendFetch(path: string, init?: RequestInit): Promise<Response> 
   });
 }
 
+export interface MailFooter { name: string; address: string }
+
+const siteOrigin = (): string => (process.env.NEXT_PUBLIC_SITE_URL || "https://www.roebel.app").replace(/\/$/, "");
+
+/** The assistant's signature, like a colleague's: picture, name, and what you can do from here. */
+export function footerHtml(f: MailFooter): string {
+  const site = siteOrigin();
+  const link = (href: string, text: string) => `<a href="${esc(href)}" style="color:#2f6f5e;text-decoration:none">${esc(text)}</a>`;
+  const feedback = `mailto:${f.address}?subject=${encodeURIComponent(`Feedback zu ${f.name}`)}`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:28px;border-top:1px solid #e7e6e1;padding-top:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"><tr>`
+    + `<td style="vertical-align:top;padding-right:12px"><img src="${site}/mascot/mecky-mail.png" width="44" height="44" alt="${esc(f.name)}" style="display:block;border-radius:9px"></td>`
+    + `<td style="vertical-align:top;font-size:13px;line-height:1.5;color:#737267"><div style="font-size:15px;font-weight:600;color:#1a1a16">${esc(f.name)}</div>`
+    + `Antworte hier, um zu schreiben · ${link(`${site}/ortis/open`, "In Ortis öffnen")} · ${link(feedback, "Feedback senden")}</td></tr></table>`;
+}
+
+export function footerText(f: MailFooter): string {
+  return `\n\n--\n${f.name}\nAntworte hier, um zu schreiben · In Ortis öffnen: ${siteOrigin()}/ortis/open`;
+}
+
 /** Low level send. `to` must already be decided by the caller. */
 export async function sendMail(input: {
   fromName: string; fromAddress: string; to: string; subject: string; markdown: string; inReplyTo?: string | null; references?: string | null;
+  footer?: MailFooter | null;
 }): Promise<boolean> {
   if (!mailEnabled()) return false;
   const headers: Record<string, string> = {};
@@ -70,7 +90,10 @@ export async function sendMail(input: {
     method: "POST",
     body: JSON.stringify({
       from: `${input.fromName.replace(/[<>"]/g, "")} <${input.fromAddress}>`, to: [input.to], subject: input.subject.slice(0, 160),
-      text: mailText(input.markdown), html: mailHtml(input.markdown), ...(Object.keys(headers).length ? { headers } : {}),
+      text: mailText(input.markdown) + (input.footer ? footerText(input.footer) : ""),
+      html: mailHtml(input.markdown).replace(/<\/div>$/, `${input.footer ? footerHtml(input.footer) : ""}</div>`),
+      reply_to: input.fromAddress,
+      ...(Object.keys(headers).length ? { headers } : {}),
     }),
   });
   if (!res.ok) console.error("[chat/agent/mail] send failed", res.status, (await res.text().catch(() => "")).slice(0, 300));
@@ -84,13 +107,14 @@ export async function sendAgentMail(wallet: string, input: { subject: string; ma
   const from = agentAddress(profile);
   if (!from || !profile.owner_email || !profile.owner_email_verified_at) return false;
   const bot = await agentBot(profile);
-  return sendMail({ fromName: profile.name || bot.name, fromAddress: from, to: profile.owner_email, ...input });
+  const name = profile.name || bot.name;
+  return sendMail({ fromName: name, fromAddress: from, to: profile.owner_email, footer: { name, address: from }, ...input });
 }
 
 const textOf = (messages: ChatMessage[]): string =>
   messages.flatMap((m) => m.parts.flatMap((p) => (p.type === "text" ? [p.text] : []))).join("\n\n").trim();
 
-const APP_HINT = "\n\nAntworte einfach auf diese Mail oder öffne Ortis, um weiterzumachen.";
+const APP_HINT = "";
 
 /** After a routine posted into its thread: the same text by mail, when the person turned that on. */
 export async function mailRoutineResult(wallet: string, title: string, messages: ChatMessage[]): Promise<boolean> {

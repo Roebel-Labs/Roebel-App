@@ -1,6 +1,5 @@
 // The person's own assistant: a profile laid over a preset bot (presets are shared
 // and read-only, so name, personality and extra instructions live per wallet).
-import { randomBytes } from "node:crypto";
 import { db } from "../store";
 import type { BotRow } from "../store";
 import { workBot } from "../persona/catalog";
@@ -23,27 +22,27 @@ export interface AgentProfileRow {
   welcomed_at: string | null; created_at: string; updated_at: string;
 }
 
-const RESERVED = new Set(["admin", "support", "hello", "hallo", "info", "mail", "postmaster", "abuse", "noreply", "no-reply", "security", "billing", "team", "ortis", "mecky"]);
+const RESERVED = new Set(["admin", "support", "hello", "hallo", "info", "mail", "postmaster", "abuse", "noreply", "no-reply", "security", "billing", "team", "ortis", "bounce", "bounces"]);
 export const ALIAS_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 
 function slug(name: string): string {
   return name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "assistent";
 }
 
-/** Loads the profile; creates it (with a fresh mail alias) on first use. */
+/**
+ * Loads the profile; creates it on first use. The mail address is shared like
+ * duke@town.com: every Mecky is mecky@<domain>. Inbound mail is matched to its
+ * person by the verified sender address, not by the address it was sent to.
+ */
 export async function getAgentProfile(wallet: string): Promise<AgentProfileRow> {
   const found = await db().from("chat_agent_profiles").select("*").eq("wallet", wallet).maybeSingle();
   if (found.error) throw new Error(`[chat/agent] profile: ${found.error.message}`);
   if (found.data) return found.data as AgentProfileRow;
   const base = await workBot();
-  for (let i = 0; i < 4; i++) {
-    const alias = `${slug(base.name)}-${randomBytes(4).toString("hex").slice(0, 5)}`;
-    const res = await db().from("chat_agent_profiles").insert({ wallet, mail_alias: alias }).select("*").maybeSingle();
-    if (res.data) return res.data as AgentProfileRow;
-    // A concurrent insert for the same wallet wins: read it back.
-    const again = await db().from("chat_agent_profiles").select("*").eq("wallet", wallet).maybeSingle();
-    if (again.data) return again.data as AgentProfileRow;
-  }
+  const res = await db().from("chat_agent_profiles").upsert({ wallet, mail_alias: slug(base.name) }, { onConflict: "wallet", ignoreDuplicates: true });
+  if (res.error) throw new Error(`[chat/agent] create profile: ${res.error.message}`);
+  const again = await db().from("chat_agent_profiles").select("*").eq("wallet", wallet).maybeSingle();
+  if (again.data) return again.data as AgentProfileRow;
   throw new Error("[chat/agent] could not create profile");
 }
 
@@ -52,9 +51,18 @@ export async function findProfile(wallet: string): Promise<AgentProfileRow | nul
   return (res.data as AgentProfileRow | null) ?? null;
 }
 
-export async function profileByAlias(alias: string): Promise<AgentProfileRow | null> {
-  const res = await db().from("chat_agent_profiles").select("*").eq("mail_alias", alias.toLowerCase()).maybeSingle();
-  return (res.data as AgentProfileRow | null) ?? null;
+/** The profile whose verified owner address is `email` (unique: verifying an address moves it). */
+export async function profileByOwnerEmail(email: string): Promise<AgentProfileRow | null> {
+  const res = await db().from("chat_agent_profiles").select("*").eq("owner_email", email.toLowerCase())
+    .not("owner_email_verified_at", "is", null).order("owner_email_verified_at", { ascending: false }).limit(1);
+  return ((res.data ?? [])[0] as AgentProfileRow | undefined) ?? null;
+}
+
+/** Sets the owner address; any other profile that had it loses it (the caller proved control). */
+export async function setOwnerEmail(wallet: string, email: string): Promise<void> {
+  const addr = email.toLowerCase();
+  await db().from("chat_agent_profiles").update({ owner_email: null, owner_email_verified_at: null }).eq("owner_email", addr).neq("wallet", wallet);
+  await patchProfileRaw(wallet, { owner_email: addr, owner_email_verified_at: new Date().toISOString() });
 }
 
 export class AgentInputError extends Error {}
@@ -77,14 +85,12 @@ export async function updateAgentProfile(wallet: string, patch: Partial<{
   if (patch.botId !== undefined) update.bot_id = patch.botId;
   if (patch.mailAlias !== undefined) {
     const alias = patch.mailAlias.trim().toLowerCase();
-    if (!ALIAS_RE.test(alias) || RESERVED.has(alias)) throw new AgentInputError("Die Adresse braucht 3 bis 30 Zeichen: Kleinbuchstaben, Ziffern und Bindestriche.");
-    const taken = await db().from("chat_agent_profiles").select("wallet").eq("mail_alias", alias).neq("wallet", wallet).maybeSingle();
-    if (taken.data) throw new AgentInputError("Diese Adresse ist schon vergeben.");
+    if (!ALIAS_RE.test(alias)) throw new AgentInputError("Die Adresse braucht 3 bis 30 Zeichen: Kleinbuchstaben, Ziffern und Bindestriche.");
+    if (RESERVED.has(alias)) throw new AgentInputError("Diese Adresse ist reserviert.");
     update.mail_alias = alias;
   }
   const res = await db().from("chat_agent_profiles").update(update).eq("wallet", wallet).select("*").single();
   if (res.error) {
-    if (/duplicate|unique/i.test(res.error.message)) throw new AgentInputError("Diese Adresse ist schon vergeben.");
     throw new Error(`[chat/agent] update profile: ${res.error.message}`);
   }
   return res.data as AgentProfileRow;
