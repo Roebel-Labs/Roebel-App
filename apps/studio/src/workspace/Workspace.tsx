@@ -556,7 +556,10 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const isMain = !!thread && thread.id === mainThread?.id;
   const streaming = view.streaming.length > 0;
   const liveMsg = streaming ? view.messages.find((m) => m.id === view.streaming[view.streaming.length - 1]) : undefined;
-  const outline = useMemo(() => outlineEntries(view.messages, me || 'Du'), [view.messages, me]);
+  const outline = useMemo(
+    () => outlineEntries(view.messages, me || 'Du', (m) => displayBotName(m.botId ? botsById.get(m.botId) : undefined, profile, 'Assistent')),
+    [view.messages, me, botsById, profile],
+  );
 
   return (
     <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen || brief ? ' with-panel' : ''}${brief && briefWide ? ' panel-wide' : ''}`}>
@@ -714,7 +717,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                   if (live && m.parts.length === 0) return [divider];
                   return [
                     divider,
-                    <div key={m.id} className="ws-msg bot">
+                    <div key={m.id} className="ws-msg bot" data-mid={m.id}>
                       <BotAvatar bot={bot ?? leadBot} size={32} radius={8} />
                       <div className="ws-msg-body">
                         <div className="ws-msg-meta">

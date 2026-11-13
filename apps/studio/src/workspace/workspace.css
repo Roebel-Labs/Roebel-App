@@ -1880,7 +1880,7 @@ html.mac-inset .rail {
 .ws-outline {
   position: absolute;
   top: 50%;
-  left: 10px;
+  left: 2px;
   z-index: 6;
   display: flex;
   flex-direction: column;
@@ -1893,9 +1893,9 @@ html.mac-inset .rail {
 .ws-outline-line {
   display: flex;
   align-items: center;
-  width: 34px;
-  height: 11px;
-  padding: 0 0 0 4px;
+  width: 30px;
+  height: 10px;
+  padding: 0 0 0 6px;
   border: 0;
   background: none;
   cursor: pointer;
@@ -1903,23 +1903,22 @@ html.mac-inset .rail {
 
 .ws-outline-line span {
   display: block;
-  width: var(--w, 9px);
+  width: 6px;
   height: 2px;
   border-radius: 1px;
-  background: var(--w-faint);
+  background: color-mix(in srgb, var(--w-muted) 70%, transparent);
   transition:
     width 160ms ease,
     background-color 160ms ease;
 }
 
 .ws-outline-line.active span {
-  width: 24px;
-  background: var(--w-muted);
+  background: var(--w-text);
 }
 
 .ws-outline-line.hover span,
 .ws-outline-line:focus-visible span {
-  width: 24px;
+  width: 20px;
   background: var(--w-text);
 }
 
@@ -1929,7 +1928,7 @@ html.mac-inset .rail {
 
 .ws-outline-card {
   position: absolute;
-  left: 40px;
+  left: 34px;
   width: 320px;
   padding: 10px 14px 11px;
   border: 1px solid var(--w-line-strong);

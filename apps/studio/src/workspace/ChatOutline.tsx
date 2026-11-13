@@ -22,8 +22,8 @@ export function ActivityBar({ bot, label }: { bot?: Pick<ChatBot, 'id' | 'name'>
 }
 
 /**
- * Chat outline: one short line per turn the person wrote, stacked on the left edge of the conversation.
- * The turn being read draws long; hovering a line previews that message, clicking scrolls to it.
+ * Chat outline: one short line per message, stacked on the left edge of the conversation. The message being
+ * read draws brighter; hovering a line draws it long and previews that message, clicking scrolls to it.
  */
 export function ChatOutline({ entries, scroller }: { entries: OutlineEntry[]; scroller: React.RefObject<HTMLDivElement | null> }) {
   const [active, setActive] = useState(-1);
@@ -89,7 +89,6 @@ export function ChatOutline({ entries, scroller }: { entries: OutlineEntry[]; sc
           key={e.id}
           type="button"
           className={`ws-outline-line${i === active ? ' active' : ''}${i === hover ? ' hover' : ''}`}
-          style={{ ['--w' as string]: `${8 + Math.round(e.weight * 6)}px` }}
           aria-label={`${e.author}: ${e.preview.slice(0, 80)}`}
           aria-current={i === active ? 'location' : undefined}
           onMouseEnter={(ev) => show(i, ev.currentTarget)}

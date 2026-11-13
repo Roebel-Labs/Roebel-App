@@ -32,26 +32,28 @@ export interface OutlineEntry {
   id: string;
   author: string;
   preview: string;
-  /** 0..1, drives the resting width of the line so the rail reads like the conversation's shape. */
-  weight: number;
+}
+
+function fallbackPreview(parts: ChatPart[]): string {
+  if (parts.some((p) => p.type === 'image' || p.type === 'generated_image')) return 'Bild';
+  if (parts.some((p) => p.type === 'file')) return 'Datei';
+  if (parts.some((p) => p.type === 'task')) return 'Aufgabe';
+  return 'Nachricht';
 }
 
 /**
- * One outline entry per message the person wrote: those are the turns of a conversation, like headings in
- * a document. Messages without text (an image only) fall back to a neutral label.
+ * One outline entry per message, the person's and the assistant's, like headings in a document.
+ * Local echoes and replies still empty while streaming are left out; messages without text (an image
+ * only) get a neutral label.
  */
-export function outlineEntries(messages: ChatMessage[], author: string): OutlineEntry[] {
+export function outlineEntries(messages: ChatMessage[], me: string, botName: (m: ChatMessage) => string): OutlineEntry[] {
   return messages
-    .filter((m) => m.role === 'user' && !m.id.startsWith('local-'))
-    .map((m) => {
-      const text = messageText(m.parts).replace(/\s+/g, ' ').trim();
-      return {
-        id: m.id,
-        author,
-        preview: text || (m.parts.some((p) => p.type === 'image') ? 'Bild' : 'Nachricht'),
-        weight: Math.min(1, text.length / 240),
-      };
-    });
+    .filter((m) => (m.role === 'user' || m.role === 'bot') && !m.id.startsWith('local-') && m.parts.length > 0)
+    .map((m) => ({
+      id: m.id,
+      author: m.role === 'user' ? me : botName(m),
+      preview: messageText(m.parts).replace(/\s+/g, ' ').trim() || fallbackPreview(m.parts),
+    }));
 }
 
 /**

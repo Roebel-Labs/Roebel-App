@@ -44,19 +44,22 @@ describe('activityLabel', () => {
 });
 
 describe('outlineEntries', () => {
-  it('lists only persisted user turns with flattened previews', () => {
+  it('lists persisted messages of both sides with flattened previews', () => {
     const list = outlineEntries(
       [
         msg('u1', 'user', [{ type: 'text', text: 'Hier ist\n\nein Sheet' }]),
         msg('b1', 'bot', [{ type: 'text', text: 'Antwort' }]),
         msg('u2', 'user', [{ type: 'image', url: 'https://x/y.png' }]),
+        msg('b2', 'bot', []),
         msg('local-1', 'user', [{ type: 'text', text: 'pending' }]),
       ],
       'Max',
+      () => 'Mecky',
     );
-    expect(list.map((e) => e.id)).toEqual(['u1', 'u2']);
+    expect(list.map((e) => e.id)).toEqual(['u1', 'b1', 'u2']);
     expect(list[0]).toMatchObject({ author: 'Max', preview: 'Hier ist ein Sheet' });
-    expect(list[1].preview).toBe('Bild');
+    expect(list[1]).toMatchObject({ author: 'Mecky', preview: 'Antwort' });
+    expect(list[2].preview).toBe('Bild');
   });
 });
 
