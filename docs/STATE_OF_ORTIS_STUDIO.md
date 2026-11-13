@@ -152,6 +152,7 @@ Code in `apps/web/src/lib/chat/agent/` (`profile.ts`, `mail.ts`, `channels.ts`),
 - **An agent = an own `chat_bots` row** whose `avatar` jsonb carries `character` + `personality` (no migration). It gets the default assistant's tools; `agentOverlay` adds the character prompt for every character bot. `GET /api/chat/agent` now also returns `agents[]`; `POST /api/chat/agent/agents`, `PATCH|DELETE /api/chat/agent/agents/:id`. Deleting moves the agent's threads and routines to Mecky first (the FKs would otherwise drop/cascade them).
 - **Main assistant** = `chat_agent_profiles.bot_id` (mailbox, phone, briefings). `PATCH /api/chat/agent {botId}` → `setMainAgent`: clears the profile name, moves the mail alias to the new name. Renaming a main character agent writes to its bot row. Mail signature shows the main agent's `mail.png`.
 - **Share page** `/ortis/agent/<id>?name=…` (public, OG card).
+- **Studio 0.3.9** (`61037b30`, branch, not OTA'd): roster + Ansehen/Teilen/Ändern (`src/agent/CharacterPicker.tsx`, `AgentShowcase.tsx`, `characters.ts`). **App icon follows the main assistant's character** (`src/agent/app-icon.ts` draws the PNG → `desktop:setAppIcon` IPC → `app.dock.setIcon` / `win.setIcon`): main-process change, so it needs the next **installer**; older shells ignore it. Runtime-only: Finder/installer icon stays Ortis.
 
 ## 7. Release and deploy runbook
 
