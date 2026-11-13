@@ -4,6 +4,7 @@ import { fetchMe, type Me } from '../../workspace/api';
 import { loadSession } from '../../workspace/session';
 import { IconAgent, IconLogout, IconMoon, IconSettings, IconSun } from './line-icons';
 import { useAgent } from '../../agent/agent-store';
+import { useAgentAppIcon } from '../../agent/app-icon';
 import { currentTheme, isSystemDark, onThemeChange, resolveTheme, setTheme, toggledTheme } from './theme';
 import { Busy, Skeleton } from '../Skeleton';
 import { Tip } from '../Tooltip';
@@ -23,6 +24,8 @@ export function AccountMenu() {
   const [meFailed, setMeFailed] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const agent = useAgent(token);
+  // Signed out: back to the Ortis icon.
+  useAgentAppIcon(agent.status === 'ready' ? agent.data.agent.characterId : null, agent.status === 'ready' || agent.status === 'unavailable' || !signedIn);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = async () => {

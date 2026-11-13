@@ -102,6 +102,8 @@ contextBridge.exposeInMainWorld('studio', {
   desktop: {
     onCommand: (cb) => subscribe('desktop:command', cb),
     capture: () => ipcRenderer.invoke('desktop:capture'),
+    // PNG data URL, or null for the bundled icon (installer ≥ 0.3.9).
+    setAppIcon: (dataUrl) => ipcRenderer.invoke('desktop:setAppIcon', dataUrl),
   },
   app: {
     // Main asks the renderer to end the broadcast cleanly before quitting.

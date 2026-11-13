@@ -344,6 +344,9 @@ export interface Agent {
   name: string;
   defaultName: string;
   description: string;
+  /** Illustrated character of the main assistant; null for Mecky (older servers omit it). */
+  characterId?: string | null;
+  isPreset?: boolean;
   since: string;
   personality: string;
   customInstructions: string;
@@ -359,9 +362,23 @@ export interface AgentPersonality {
   title: string;
   description: string;
 }
+/** One of the person's agents: the default assistant or an own character agent. */
+export interface AgentSummary {
+  botId: string;
+  name: string;
+  characterId: string | null;
+  role: string;
+  isMain: boolean;
+  isPreset: boolean;
+  personality: string;
+  since: string;
+}
 export interface AgentResponse {
   agent: Agent;
   personalities: AgentPersonality[];
+  /** Missing on servers before 2026-11-13. */
+  agents?: AgentSummary[];
+  createdId?: string;
 }
 export type AgentPatch = Partial<{
   name: string | null;
@@ -381,6 +398,11 @@ export interface AgentLinkCode {
 }
 export const fetchAgent = (token: string) => call<AgentResponse>('/api/chat/agent', { token });
 export const patchAgent = (token: string, patch: AgentPatch) => call<AgentResponse>('/api/chat/agent', { token, method: 'PATCH', json: patch });
+export const createCharacterAgent = (token: string, input: { character: string; name?: string; personality?: string; main?: boolean }) =>
+  call<AgentResponse>('/api/chat/agent/agents', { token, json: input });
+export const patchCharacterAgent = (token: string, id: string, patch: { name?: string; character?: string; personality?: string }) =>
+  call<AgentResponse>(`/api/chat/agent/agents/${enc(id)}`, { token, method: 'PATCH', json: patch });
+export const deleteCharacterAgent = (token: string, id: string) => call<AgentResponse>(`/api/chat/agent/agents/${enc(id)}`, { token, method: 'DELETE' });
 export const createAgentChannel = (token: string, kind: 'sms' | 'whatsapp') => call<AgentLinkCode>('/api/chat/agent/channels', { token, json: { kind } });
 export const deleteAgentChannel = (token: string, id: string) => call<{ ok: boolean }>(`/api/chat/agent/channels?id=${enc(id)}`, { token, method: 'DELETE' });
 export const requestAgentEmailCode = (token: string, email: string) => call<{ ok: boolean }>('/api/chat/agent/email', { token, json: { email } });

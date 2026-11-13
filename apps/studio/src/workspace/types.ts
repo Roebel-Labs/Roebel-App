@@ -28,6 +28,8 @@ export interface BotAvatarSpec {
   shape: string;
   color: string;
   eyes: string;
+  /** Illustrated agent character (src/agent/characters.ts). */
+  character?: string;
 }
 
 export interface ChatBot {

@@ -2128,3 +2128,8 @@ html.mac-inset .rail {
     transform: translateY(2px);
   }
 }
+
+/* Character tiles are already cropped to head and shoulders. */
+.ws-avatar.character img {
+  transform: none;
+}

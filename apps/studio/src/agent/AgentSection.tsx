@@ -1,21 +1,26 @@
-// "Assistent": the assistant's own profile page (name, mailbox, phones, personality, tools). Not a rail
+// "Assistent": the agents page. The person's agents (default assistant + illustrated character agents), the
+// selected one's profile (Ansehen / Teilen / Ändern), and for the main assistant its name, mailbox, phones,
+// personality and tools. Not a rail
 // item; opened from the agent card on Start and from the account menu.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import qrcode from 'qrcode-generator';
 import meckyUrl from '../assets/mecky-welcome.png';
-import { LoadError, Modal, SignedOutHint, Toggle, useSessionToken } from '../persona/common';
+import { Confirm, LoadError, Modal, SignedOutHint, Toggle, useSessionToken } from '../persona/common';
 import { fmtDate, friendlyError } from '../persona/format';
 import { hintSkillsTab } from '../persona/intent';
 import '../persona/persona.css';
 import { Busy, SkLines, SkRows, Skeleton } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
-import { IconCheck, IconCopy, IconSms, IconWhatsapp } from '../ui/shell/line-icons';
+import { IconCheck, IconCopy, IconPlus, IconRefresh, IconShare, IconSms, IconView, IconWhatsapp } from '../ui/shell/line-icons';
 import type { Section } from '../ui/shell/nav';
 import {
-  confirmAgentEmailCode, createAgentChannel, deleteAgentChannel, fetchMe, patchAgent, requestAgentEmailCode,
-  type Agent, type AgentChannel, type AgentLinkCode, type AgentPatch, type AgentPersonality,
+  confirmAgentEmailCode, createAgentChannel, createCharacterAgent, deleteAgentChannel, deleteCharacterAgent, fetchMe, patchAgent, patchCharacterAgent, requestAgentEmailCode,
+  type Agent, type AgentChannel, type AgentLinkCode, type AgentPatch, type AgentPersonality, type AgentResponse, type AgentSummary,
 } from '../workspace/api';
-import { botInitial, isMecky } from '../workspace/BotAvatar';
+import { BotAvatar, botInitial, isMecky } from '../workspace/BotAvatar';
+import { AgentView, ShareDialog } from './AgentShowcase';
+import { CharacterPicker, type PickerResult } from './CharacterPicker';
+import { CHARACTERS, characterById, roleLine } from './characters';
 import { firstName } from '../workspace/thread-list';
 import { CHANNEL_LABEL, cleanAlias, isExpired, newChannel, splitAddress, toolLabel } from './agent-format';
 import { loadAgent, setAgentData, useAgent } from './agent-store';
@@ -76,7 +81,7 @@ export function AgentSection({ onNavigate }: { onNavigate: (s: Section) => void 
           {(session.state === 'loading' || (token && state.status === 'loading')) && <AgentSkeleton />}
           {token && state.status === 'unavailable' && <div className="pz-state w-muted">Die Seite deines Assistenten ist auf diesem Server noch nicht verfügbar.</div>}
           {token && state.status === 'error' && <LoadError message={state.message} onRetry={() => void loadAgent(token)} />}
-          {token && state.status === 'ready' && <AgentPage token={token} agent={state.data.agent} personalities={state.data.personalities ?? []} owner={owner} onNavigate={onNavigate} />}
+          {token && state.status === 'ready' && <AgentPage token={token} data={state.data} owner={owner} onNavigate={onNavigate} />}
         </div>
       </div>
     </div>
@@ -107,9 +112,21 @@ function AgentSkeleton() {
   );
 }
 
-function AgentPage({ token, agent, personalities, owner, onNavigate }: { token: string; agent: Agent; personalities: AgentPersonality[]; owner: string | null; onNavigate: (s: Section) => void }) {
+type Overlay = { kind: 'view' | 'share' } | { kind: 'pick'; mode: 'add' | 'change' } | { kind: 'remove' } | null;
+
+function AgentPage({ token, data, owner, onNavigate }: { token: string; data: AgentResponse; owner: string | null; onNavigate: (s: Section) => void }) {
+  const agent = data.agent;
+  const personalities = data.personalities ?? [];
+  // Older servers send no list: the main assistant is the only agent.
+  const agents: AgentSummary[] = data.agents?.length
+    ? data.agents
+    : [{ botId: agent.botId, name: agent.name, characterId: agent.characterId ?? null, role: agent.description, isMain: true, isPreset: agent.isPreset ?? true, personality: agent.personality, since: agent.since }];
+  const canAdd = Boolean(data.agents);
+  const [selectedId, setSelectedId] = useState<string>(agent.botId);
+  const selected = agents.find((a) => a.botId === selectedId) ?? agents.find((a) => a.isMain) ?? agents[0];
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<Overlay>(null);
 
   /** PATCH and adopt the answer; returns the server's message on failure (e.g. alias taken). */
   const save = async (key: string, patch: AgentPatch): Promise<string | null> => {
@@ -128,88 +145,251 @@ function AgentPage({ token, agent, personalities, owner, onNavigate }: { token: 
     const failed = await save(key, patch);
     if (failed) setError(failed);
   };
+  /** Runs a request that answers with the full view; returns an error message or null. */
+  const run = async (key: string, req: () => Promise<AgentResponse>): Promise<string | null> => {
+    setSaving(key);
+    setError(null);
+    try {
+      setAgentData(await req());
+      return null;
+    } catch (e) {
+      return friendlyError(e);
+    } finally {
+      setSaving(null);
+    }
+  };
 
-  const mecky = isMecky({ id: agent.botId, name: agent.defaultName });
+  const character = characterById(selected.characterId);
+  const isMain = selected.isMain;
+  const name = isMain ? agent.name : selected.name;
+  const showcase = { name, character };
+  const phone = agent.phone.sms.number || agent.phone.whatsapp.number;
+  const mainName = agents.find((a) => a.isMain)?.name ?? agent.name;
+  const word = character?.feminine ? 'Agentin' : character ? 'Agent' : 'Assistent';
+
+  const onPicked = async (r: PickerResult): Promise<string | null> => {
+    if (overlay?.kind !== 'pick') return null;
+    let failed: string | null;
+    if (overlay.mode === 'change' && !selected.isPreset) {
+      failed = await run('pick', () => patchCharacterAgent(token, selected.botId, { character: r.character, name: r.name, personality: r.personality }));
+      // The main assistant's personality lives on the profile.
+      if (!failed && isMain && r.personality !== agent.personality) failed = await save('personality', { personality: r.personality });
+    } else {
+      // A new agent; "Ändern" on the default assistant makes the new one the main assistant.
+      const main = overlay.mode === 'change' && isMain;
+      let created: string | undefined;
+      failed = await run('pick', async () => {
+        const res = await createCharacterAgent(token, { character: r.character, name: r.name, personality: r.personality, main });
+        created = res.createdId;
+        return res;
+      });
+      if (!failed && created) setSelectedId(created);
+    }
+    if (!failed) setOverlay(null);
+    return failed;
+  };
+
   return (
     <>
+      {(agents.length > 1 || canAdd) && (
+        <nav className="ag-roster" aria-label="Deine Agenten">
+          {agents.map((a) => {
+            const c = characterById(a.characterId);
+            return (
+              <button key={a.botId} className="ag-roster-item" aria-current={a.botId === selected.botId} onClick={() => setSelectedId(a.botId)}>
+                <BotAvatar bot={{ id: a.botId, name: a.name, avatar: c ? { character: c.id } : null }} size={40} radius={10} />
+                <span className="ag-roster-text">
+                  <strong>{a.isMain ? agent.name : a.name}</strong>
+                  <span className="w-muted">{a.isMain ? 'Hauptassistent' : c ? roleLine(c) : a.role}</span>
+                </span>
+              </button>
+            );
+          })}
+          {canAdd && (
+            <button className="ag-roster-item add" onClick={() => setOverlay({ kind: 'pick', mode: 'add' })}>
+              <span className="ag-roster-plus" aria-hidden="true">
+                <IconPlus size={18} />
+              </span>
+              <span className="ag-roster-text">
+                <strong>Agent hinzufügen</strong>
+                <span className="w-muted">{CHARACTERS.length} Figuren</span>
+              </span>
+            </button>
+          )}
+        </nav>
+      )}
+
       <header className="ag-head">
-        {mecky ? (
+        {character ? (
+          <img className="ag-figure" src={character.figure} alt="" draggable={false} />
+        ) : selected.isPreset || isMecky({ id: selected.botId, name: agent.defaultName }) ? (
           <img className="ag-figure" src={meckyUrl} alt="" draggable={false} />
         ) : (
           <span className="ag-figure initial" aria-hidden="true">
-            {botInitial(agent.name)}
+            {botInitial(name)}
           </span>
         )}
         <div className="ag-head-text">
-          <h1 className="ag-name">{agent.name}</h1>
-          {agent.mail.address && <span className="ag-address">{agent.mail.address}</span>}
+          <h1 className="ag-name">{name}</h1>
+          {isMain && (agent.mail.address || phone) && <span className="ag-address">{[agent.mail.address, phone].filter(Boolean).join(' • ')}</span>}
           <span className="w-muted">
-            Assistent{owner ? ` von ${owner}` : ''}
-            {fmtDate(agent.since) ? ` seit ${fmtDate(agent.since)}` : ''}
+            {character ? `${roleLine(character)} · ` : ''}
+            {word}
+            {owner ? ` von ${owner}` : ''}
+            {fmtDate(selected.since) ? ` seit ${fmtDate(selected.since)}` : ''}
           </span>
+          <div className="ag-actions">
+            <button className="w-btn" onClick={() => setOverlay({ kind: 'view' })}>
+              <IconView size={16} /> Ansehen
+            </button>
+            <button className="w-btn" onClick={() => setOverlay({ kind: 'share' })}>
+              <IconShare size={16} /> Teilen
+            </button>
+            {canAdd && (
+              <button className="w-btn" onClick={() => setOverlay({ kind: 'pick', mode: 'change' })}>
+                <IconRefresh size={16} /> Ändern
+              </button>
+            )}
+          </div>
         </div>
       </header>
       {error && <div className="ws-error">{error}</div>}
 
-      <section className="ag-card">
-        <h2>Name und Kontakt</h2>
-        <NameField agent={agent} busy={saving === 'name'} onSave={(name) => saveOrShow('name', { name })} />
-        <MailBlock token={token} agent={agent} saving={saving} save={save} onError={setError} />
-      </section>
+      {isMain ? (
+        <>
+          <section className="ag-card">
+            <h2>Name und Kontakt</h2>
+            <NameField agent={agent} busy={saving === 'name'} onSave={(n) => saveOrShow('name', { name: n })} />
+            <MailBlock token={token} agent={agent} saving={saving} save={save} onError={setError} />
+          </section>
 
-      <PhoneCard token={token} agent={agent} onError={setError} />
+          <PhoneCard token={token} agent={agent} onError={setError} />
 
-      <section className="ag-card">
-        <h2>Persönlichkeit</h2>
-        {personalities.length > 0 && (
-          <>
-            <h3>Wähle eine Persönlichkeit</h3>
-            <div className="ag-presets" role="radiogroup" aria-label="Persönlichkeit">
-              {personalities.map((p) => (
-                <button key={p.key} className="ag-preset" role="radio" aria-checked={agent.personality === p.key} disabled={saving === 'personality'} onClick={() => agent.personality !== p.key && void saveOrShow('personality', { personality: p.key })}>
-                  <span className="ag-preset-mark" aria-hidden="true">
-                    {agent.personality === p.key && <IconCheck size={14} />}
-                  </span>
-                  <span className="ag-preset-text">
-                    <strong>{p.title}</strong>
-                    <span className="w-muted">{p.description}</span>
-                  </span>
-                </button>
-              ))}
+          <section className="ag-card">
+            <h2>Persönlichkeit</h2>
+            {personalities.length > 0 && (
+              <>
+                <h3>Wähle eine Persönlichkeit</h3>
+                <PersonalityPresets personalities={personalities} value={agent.personality} busy={saving === 'personality'} onPick={(key) => void saveOrShow('personality', { personality: key })} />
+              </>
+            )}
+            <Instructions agent={agent} busy={saving === 'instructions'} onSave={(customInstructions) => saveOrShow('instructions', { customInstructions })} />
+            <h3>So klingt dein Name</h3>
+            <p className="ag-hint">Schreib deinen Namen so, wie er klingt, etwa „Niew“ für Niamh. Dein Assistent richtet sich danach, wenn er dich anspricht.</p>
+            <BlurInput value={agent.spokenName} placeholder="Optional" maxLength={80} ariaLabel="So klingt dein Name" onSave={(spokenName) => saveOrShow('spoken', { spokenName })} />
+          </section>
+
+          <section className="ag-card">
+            <h2>Funktionen</h2>
+            <p className="ag-hint">Das darf dein Assistent nutzen. Welche Dienste verbunden sind, legst du unter Funktionen fest.</p>
+            {agent.tools.length === 0 ? (
+              <div className="w-muted">Keine Werkzeuge freigeschaltet.</div>
+            ) : (
+              <ul className="ag-tools">
+                {agent.tools.map((t) => (
+                  <li key={t}>
+                    <IconCheck size={15} /> {toolLabel(t)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              className="pz-textlink ag-link"
+              onClick={() => {
+                hintSkillsTab('integrations');
+                onNavigate('skills');
+              }}
+            >
+              Integrationen verwalten <span aria-hidden="true">→</span>
+            </button>
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="ag-card">
+            <h2>Name</h2>
+            <BlurInput
+              value={selected.name}
+              placeholder={character?.name}
+              maxLength={30}
+              ariaLabel={`Name von ${selected.name}`}
+              disabled={saving === 'agent-name'}
+              onSave={(n) => void run('agent-name', () => patchCharacterAgent(token, selected.botId, { name: n })).then((f) => f && setError(f))}
+            />
+            <p className="ag-hint">
+              E-Mail, Telefon und Tagesbriefing laufen über deinen Hauptassistenten {mainName}. Mach {selected.name} zum Hauptassistenten, damit diese Wege bei {character?.feminine ? 'ihr' : 'ihm'} ankommen.
+            </p>
+            <div className="ag-row-actions">
+              <button className="w-btn green" disabled={saving === 'main'} onClick={() => void saveOrShow('main', { botId: selected.botId })}>
+                Zum Hauptassistenten machen
+              </button>
+              <button className="w-btn danger" onClick={() => setOverlay({ kind: 'remove' })}>
+                Entfernen
+              </button>
             </div>
-          </>
-        )}
-        <Instructions agent={agent} busy={saving === 'instructions'} onSave={(customInstructions) => saveOrShow('instructions', { customInstructions })} />
-        <h3>So klingt dein Name</h3>
-        <p className="ag-hint">Schreib deinen Namen so, wie er klingt, etwa „Niew“ für Niamh. Dein Assistent richtet sich danach, wenn er dich anspricht.</p>
-        <BlurInput value={agent.spokenName} placeholder="Optional" maxLength={80} ariaLabel="So klingt dein Name" onSave={(spokenName) => saveOrShow('spoken', { spokenName })} />
-      </section>
+          </section>
+          <section className="ag-card">
+            <h2>Persönlichkeit</h2>
+            <PersonalityPresets
+              personalities={personalities}
+              value={selected.personality}
+              busy={saving === 'agent-personality'}
+              onPick={(key) => void run('agent-personality', () => patchCharacterAgent(token, selected.botId, { personality: key })).then((f) => f && setError(f))}
+            />
+          </section>
+        </>
+      )}
 
-      <section className="ag-card">
-        <h2>Funktionen</h2>
-        <p className="ag-hint">Das darf dein Assistent nutzen. Welche Dienste verbunden sind, legst du unter Funktionen fest.</p>
-        {agent.tools.length === 0 ? (
-          <div className="w-muted">Keine Werkzeuge freigeschaltet.</div>
-        ) : (
-          <ul className="ag-tools">
-            {agent.tools.map((t) => (
-              <li key={t}>
-                <IconCheck size={15} /> {toolLabel(t)}
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          className="pz-textlink ag-link"
-          onClick={() => {
-            hintSkillsTab('integrations');
-            onNavigate('skills');
-          }}
-        >
-          Integrationen verwalten <span aria-hidden="true">→</span>
-        </button>
-      </section>
+      {overlay?.kind === 'view' && <AgentView agent={showcase} onClose={() => setOverlay(null)} onShare={() => setOverlay({ kind: 'share' })} />}
+      {overlay?.kind === 'share' && <ShareDialog agent={showcase} onClose={() => setOverlay(null)} />}
+      {overlay?.kind === 'pick' && (
+        <CharacterPicker
+          initialCharacter={overlay.mode === 'change' ? selected.characterId : null}
+          initialName={overlay.mode === 'change' && character ? name : undefined}
+          initialPersonality={overlay.mode === 'change' ? selected.personality : undefined}
+          personalities={personalities}
+          mailAddress={overlay.mode === 'change' && isMain ? agent.mail.address : null}
+          ownerEmail={agent.mail.ownerVerified ? agent.mail.ownerEmail : null}
+          confirmVerb={overlay.mode === 'add' ? 'Hinzufügen' : 'Bestätigen'}
+          onClose={() => setOverlay(null)}
+          onConfirm={onPicked}
+        />
+      )}
+      {overlay?.kind === 'remove' && (
+        <Confirm
+          title={`${selected.name} entfernen?`}
+          body={`Gespräche und Routinen von ${selected.name} bleiben erhalten und laufen ab jetzt über Mecky.`}
+          confirmLabel="Entfernen"
+          busy={saving === 'remove'}
+          onCancel={() => setOverlay(null)}
+          onConfirm={() =>
+            void run('remove', () => deleteCharacterAgent(token, selected.botId)).then((f) => {
+              if (f) setError(f);
+              else setSelectedId(agent.botId);
+              setOverlay(null);
+            })
+          }
+        />
+      )}
     </>
+  );
+}
+
+function PersonalityPresets({ personalities, value, busy, onPick }: { personalities: AgentPersonality[]; value: string; busy: boolean; onPick: (key: string) => void }) {
+  return (
+    <div className="ag-presets" role="radiogroup" aria-label="Persönlichkeit">
+      {personalities.map((p) => (
+        <button key={p.key} className="ag-preset" role="radio" aria-checked={value === p.key} disabled={busy} onClick={() => value !== p.key && onPick(p.key)}>
+          <span className="ag-preset-mark" aria-hidden="true">
+            {value === p.key && <IconCheck size={14} />}
+          </span>
+          <span className="ag-preset-text">
+            <strong>{p.title}</strong>
+            <span className="w-muted">{p.description}</span>
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 

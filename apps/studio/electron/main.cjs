@@ -1,7 +1,7 @@
 'use strict';
 // Electron main process for Ortis Studio.
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, powerSaveBlocker, session, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, powerSaveBlocker, session, shell, systemPreferences } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { resolveUserDataDir } = require('./userdata.cjs');
@@ -639,6 +639,28 @@ ipcMain.handle('media:askAccess', async (e) => {
 ipcMain.handle('desktop:capture', (e) => {
   guard('desktop:capture', e);
   return desktop ? desktop.capture() : null;
+});
+// The app icon follows the selected agent (Dock on macOS, taskbar on Windows). The renderer draws the PNG;
+// null goes back to the bundled icon. Only lasts while the app runs: Finder and the installer keep the Ortis icon.
+const MAX_ICON_URL = 4 * 1024 * 1024;
+ipcMain.handle('desktop:setAppIcon', (e, dataUrl) => {
+  guard('desktop:setAppIcon', e);
+  try {
+    let img;
+    if (dataUrl == null) {
+      img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', process.platform === 'darwin' ? 'icon.png' : 'icon-win.png'));
+    } else {
+      if (typeof dataUrl !== 'string' || dataUrl.length > MAX_ICON_URL || !dataUrl.startsWith('data:image/png;base64,')) return false;
+      img = nativeImage.createFromDataURL(dataUrl);
+    }
+    if (img.isEmpty()) return false;
+    if (process.platform === 'darwin' && app.dock) app.dock.setIcon(img);
+    else if (win && !win.isDestroyed()) win.setIcon(img);
+    return true;
+  } catch (err) {
+    log(`setAppIcon failed: ${err && err.message}`);
+    return false;
+  }
 });
 
 app.whenReady().then(() => {

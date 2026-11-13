@@ -84,6 +84,8 @@ declare global {
       desktop?: {
         onCommand(cb: (cmd: unknown) => void): () => void;
         capture(): Promise<null>;
+        /** Installer ≥ 0.3.9 only. */
+        setAppIcon?(dataUrl: string | null): Promise<boolean>;
       };
       app: {
         onWillQuit(cb: () => void): () => void;

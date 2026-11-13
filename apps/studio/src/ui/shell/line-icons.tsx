@@ -8,6 +8,7 @@ import {
   Mail01Icon, Mic01Icon, Moon02Icon, MoreHorizontalIcon, News01Icon, Notification01Icon, PanelRightIcon, PencilEdit02Icon, Plug01Icon, PlusSignIcon,
   Radar01Icon, RefreshIcon, RepeatIcon, Search01Icon, Settings01Icon, Share01Icon, SidebarLeftIcon, StopIcon, Sun01Icon, Task01Icon, Tick02Icon,
   ArrowExpand01Icon, ArrowShrink01Icon, GoBackward15SecIcon, GoForward15SecIcon, HeadphonesIcon, Message01Icon, PauseIcon, PlayIcon, Robot01Icon, SmileIcon, Upload01Icon, UserMultipleIcon, WhatsappIcon, ZapIcon,
+  Download04Icon, ShuffleIcon, NewTwitterIcon, Linkedin01Icon, ViewIcon,
 } from '@hugeicons/core-free-icons';
 
 /** Stroke weight of every workspace icon (matched to the reference at 16 to 20px). */
@@ -88,3 +89,8 @@ export const IconWiki = make(BookOpen01Icon, 18);
 export const IconLibrary = make(Books01Icon, 18);
 export const IconLive = make(LiveStreaming01Icon, 18);
 export const IconApps = make(DashboardSquareAddIcon, 18);
+export const IconDownload = make(Download04Icon);
+export const IconShuffle = make(ShuffleIcon);
+export const IconX = make(NewTwitterIcon);
+export const IconLinkedin = make(Linkedin01Icon);
+export const IconView = make(ViewIcon);
