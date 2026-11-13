@@ -212,7 +212,7 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
   };
 
   const [core, profile, suggest] = await Promise.all([
-    callModel(wallet, "bot-smart", "synthesize", { schema: coreSchema, system: SYNTH_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 9000 }),
+    callModel(wallet, "bot-smart", "synthesize", { schema: coreSchema, system: SYNTH_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 11000 }),
     callModel(wallet, "bot-smart", "profile", { schema: profileSchema, system: PROFILE_SYSTEM, prompt: dossier(input, { forProfile: true }), maxOutputTokens: 7000 }),
     // Suggestions are worth their own call, but never worth failing the build.
     callModel(wallet, "bot-smart", "suggest", { schema: suggestSchema, system: SUGGEST_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 9000 })
@@ -248,7 +248,7 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
 
   // The greeting of the day (hidden page; read by /api/chat/persona/briefing).
   await store.upsertPage(wallet, {
-    slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: "",
+    slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: stripCitations(core.briefingDoc ?? "").trim().slice(0, 6000),
     facts: (core.briefing ?? []).slice(0, 3).map((b) => ({ label: b.label.trim().slice(0, 40), value: stripCitations(b.text).trim().slice(0, 400) })),
   });
 

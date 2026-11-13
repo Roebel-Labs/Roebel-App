@@ -86,6 +86,7 @@ export const coreSchema = z.object({
     label: z.string().describe("Zwei bis drei Wörter, z. B. „Jetzt handeln“, „Antwort offen“, „Heute im Kalender“, „Diese Woche“"),
     text: z.string().describe("Ein bis zwei Sätze in Du-Form mit dem konkreten Sachverhalt (Name, Datum, Uhrzeit, Betrag) und was daraus folgt. Ohne Belege."),
   })).nullish().describe("Höchstens 3. Das Tagesbriefing, mit dem der Assistent den Menschen heute begrüßt: nur was HEUTE oder in den nächsten Tagen wirklich zählt (ablaufende Fristen, jemand wartet auf seine Antwort, Termine von heute; ist der Kalender leer, darf das ein Punkt sein mit einem Vorschlag, wofür der freie Tag gut wäre). Nichts Erledigtes, nichts Allgemeines. Leer lassen, wenn nichts ansteht."),
+  briefingDoc: z.string().nullish().describe("Das ganze Tagesbriefing als Markdown in Du-Form, 150 bis 350 Wörter, auch zum Vorlesen geeignet (ganze Sätze, keine Tabellen, keine ausgeschriebenen Internetadressen, keine Belege). Aufbau: ein Eröffnungssatz mit Anrede und Wochentag und dem Wichtigsten des Tages; dann nur die Abschnitte, für die es Stoff gibt: ## Kalender (Termine von heute und morgen, oder dass er frei ist), ## E-Mails (was seit gestern kam und eine Reaktion braucht, mit Namen), ## Offen bei dir (Zusagen und Fristen der nächsten Tage), ## Dabei kann ich helfen (zwei bis vier Angebote), ## In <Ort> (zwei bis vier Veranstaltungen oder Neuigkeiten aus dem Abschnitt über den Ort, falls vorhanden). Verweise auf Wiki-Seiten als [Text](wiki:slug)."),
   updateNote: z.string().nullish().describe("Zwei bis drei Sätze für das Änderungsprotokoll: was sich GEGENÜBER dem bisherigen Wiki konkret geändert hat (welches Ziel erledigt oder gestrichen, welches Projekt neu, welcher Stand neu), mit [Text](wiki:slug)-Verweisen. Beim ersten Aufbau: die wichtigsten drei Erkenntnisse."),
 });
 
@@ -234,6 +235,13 @@ export function dossier(input: SynthInput, opts: { forProfile: boolean }): strin
   }
   if (corpus.events.length) {
     parts.push(`## Kalender\n${corpus.events.map((e) => `- [${e.ref}] ${e.start}${e.recurring ? " (wiederkehrend)" : ""} ${e.title}${e.location ? ` @ ${e.location}` : ""}${e.attendees.length ? ` mit ${e.attendees.join(", ")}` : ""}`).join("\n")}`);
+  }
+  if (!opts.forProfile && corpus.local && (corpus.local.events.length || corpus.local.news.length)) {
+    parts.push([
+      `## In ${corpus.local.place} (öffentliche Angaben aus der App, nur für das Tagesbriefing; keine Fakten über den Menschen, ohne Beleg verwenden)`,
+      corpus.local.events.length ? `Veranstaltungen der nächsten Tage:\n${corpus.local.events.map((e) => `- ${e}`).join("\n")}` : "",
+      corpus.local.news.length ? `Neuigkeiten der letzten Woche:\n${corpus.local.news.map((n) => `- ${n}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n"));
   }
   if (input.profileContacts.length) parts.push(`## Wichtigste Kontakte (eigene Wiki-Seiten)\n${input.profileContacts.map(contactLine).join("\n")}`);
   if (input.previousPages.length) {

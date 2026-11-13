@@ -65,6 +65,8 @@ export interface Corpus {
   roebel: string[];
   imports: { ref: string; kind: string; title: string; text: string }[];
   memories: string[];
+  /** Public happenings in the person's town from the app (events of the next days, fresh news). */
+  local?: { place: string; events: string[]; news: string[] };
   warnings: string[];
   counts: { sent: number; inboxHuman: number; inboxAutomated: number; events: number };
 }

@@ -13,6 +13,8 @@ import type { GoogleSecret } from "../harness/connectors/google";
 import { listConnectors, secretOf } from "../harness/connectors/store";
 import type { ConnectorRow } from "../harness/connectors/store";
 import { loadProfile } from "../harness/context";
+import { getTenant } from "../harness/tenants";
+import { listEvents, listNews } from "../../roebel-data/public";
 import { listMemories } from "../harness/memory";
 import {
   htmlToText, isAutomated, isSelfAlias, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
@@ -306,6 +308,27 @@ async function collectRoebel(wallet: string, corpus: Corpus): Promise<void> {
   corpus.roebel = lines;
 }
 
+/** What is on in the person's town: approved events of the next four days and news of the last week. */
+async function collectLocal(corpus: Corpus, now: Date): Promise<void> {
+  const tenant = getTenant();
+  const { createAdminClient } = await import("../../supabase/admin");
+  const admin = createAdminClient();
+  const ref = { id: tenant.id, appOrigin: tenant.appOrigin };
+  const day = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: tenant.timezone }).format(d);
+  const [ev, nw] = await Promise.all([
+    listEvents(admin, ref, { limit: 8, upcoming: true, from: day(now), to: day(new Date(now.getTime() + 4 * 86_400_000)) }),
+    listNews(admin, ref, { limit: 6 }),
+  ]);
+  const weekAgo = now.getTime() - 7 * 86_400_000;
+  corpus.local = {
+    place: tenant.name,
+    events: ev.events.filter((e) => !e.is_cancelled).map((e) =>
+      `${e.date}${e.time ? ` ${String(e.time).slice(0, 5)}` : ""} ${e.title}${e.location ? ` (${e.location})` : ""}`.slice(0, 160)),
+    news: nw.articles.filter((n) => n.published_at && Date.parse(n.published_at) > weekAgo).slice(0, 4)
+      .map((n) => `${String(n.published_at).slice(0, 10)} ${n.title}${n.excerpt ? `: ${String(n.excerpt).slice(0, 140)}` : ""}`),
+  };
+}
+
 /** The whole corpus for one build. Never throws for a missing source; a broken Google link is reported in `warnings`. */
 export async function collectCorpus(wallet: string, mode: "full" | "refresh", since: Date | null, now: Date = new Date()): Promise<Corpus> {
   const corpus: Corpus = {
@@ -332,6 +355,7 @@ export async function collectCorpus(wallet: string, mode: "full" | "refresh", si
   const aliases = new Set(corpus.selfAliases);
   corpus.contacts = rankContacts(corpus.contacts.filter((c) => !aliases.has(c.email)), now.getTime()).slice(0, 60);
 
+  await collectLocal(corpus, now).catch((err) => console.error("[chat/persona] local happenings failed (non-fatal)", err));
   try {
     corpus.imports = (await listImports(wallet, { withContent: true })).map((imp, i) => ({
       ref: `x${i + 1}`, kind: imp.kind, title: imp.title, text: scrubSecrets(imp.content ?? "").slice(0, 24_000),

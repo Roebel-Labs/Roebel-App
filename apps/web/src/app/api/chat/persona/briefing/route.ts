@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-/** GET /api/chat/persona/briefing → {name, date, items, suggestions}: what the start page greets the person with. */
+/** GET /api/chat/persona/briefing → {name, date, items, suggestions, doc, title, audio}: what the start page greets the person with. */
 export async function GET(request: Request) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
@@ -22,7 +22,13 @@ export async function GET(request: Request) {
     const name = /^[\p{L}][\p{L}'-]{1,30}$/u.test(first) ? first : null;
     // Quick tasks first, then the rest in their order; never more than five.
     const picked = [...rows.filter((r) => r.quick), ...rows.filter((r) => !r.quick)].slice(0, 5).map(persona.toSuggestion);
+    const doc = row?.body?.trim() || null;
+    const when = row?.updated_at ? new Date(row.updated_at) : null;
+    const title = doc && when
+      ? `Tagesbriefing · ${new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Berlin" }).format(when)}`
+      : null;
     return NextResponse.json({
+      doc, title, audio: Boolean(doc && process.env.ELEVENLABS_API_KEY),
       name,
       date: row?.updated_at ?? null,
       items: (row?.facts ?? []).map((f) => ({ label: f.label, text: f.value })),
