@@ -7,10 +7,11 @@ import {
   FilterHorizontalIcon, Folder01Icon, HelpCircleIcon, Home01Icon, Idea01Icon, Image01Icon, InboxIcon, Link01Icon, LiveStreaming01Icon, Logout01Icon,
   Mail01Icon, Mic01Icon, Moon02Icon, MoreHorizontalIcon, News01Icon, Notification01Icon, PanelRightIcon, PencilEdit02Icon, Plug01Icon, PlusSignIcon,
   Radar01Icon, RefreshIcon, RepeatIcon, Search01Icon, Settings01Icon, Share01Icon, SidebarLeftIcon, StopIcon, Sun01Icon, Task01Icon, Tick02Icon,
-  Message01Icon, Robot01Icon, Upload01Icon, UserMultipleIcon, WhatsappIcon, ZapIcon,
+  ArrowExpand01Icon, ArrowShrink01Icon, GoBackward15SecIcon, GoForward15SecIcon, HeadphonesIcon, Message01Icon, PauseIcon, PlayIcon, Robot01Icon, SmileIcon, Upload01Icon, UserMultipleIcon, WhatsappIcon, ZapIcon,
 } from '@hugeicons/core-free-icons';
 
-export const ICON_STROKE = 1.5;
+/** Stroke weight of every workspace icon (matched to the reference at 16 to 20px). */
+export const ICON_STROKE = 1.9;
 type P = { size?: number };
 
 const make = (icon: IconSvgElement, defaultSize = 18) =>
@@ -69,12 +70,20 @@ export const IconShare = make(Share01Icon);
 export const IconSms = make(Message01Icon);
 export const IconWhatsapp = make(WhatsappIcon);
 export const IconAgent = make(Robot01Icon);
+export const IconSmile = make(SmileIcon);
+export const IconPlay = make(PlayIcon);
+export const IconPause = make(PauseIcon);
+export const IconBack15 = make(GoBackward15SecIcon);
+export const IconForward15 = make(GoForward15SecIcon);
+export const IconHeadphones = make(HeadphonesIcon);
+export const IconExpand = make(ArrowExpand01Icon);
+export const IconShrink = make(ArrowShrink01Icon);
 
-// Rail sections (20px).
-export const IconHome = make(Home01Icon, 20);
-export const IconForYou = make(Idea01Icon, 20);
-export const IconSkills = make(ZapIcon, 20);
-export const IconWiki = make(BookOpen01Icon, 20);
-export const IconLibrary = make(Books01Icon, 20);
-export const IconLive = make(LiveStreaming01Icon, 20);
-export const IconApps = make(DashboardSquareAddIcon, 20);
+// Rail sections (18px).
+export const IconHome = make(Home01Icon, 18);
+export const IconForYou = make(Idea01Icon, 18);
+export const IconSkills = make(ZapIcon, 18);
+export const IconWiki = make(BookOpen01Icon, 18);
+export const IconLibrary = make(Books01Icon, 18);
+export const IconLive = make(LiveStreaming01Icon, 18);
+export const IconApps = make(DashboardSquareAddIcon, 18);

@@ -393,8 +393,30 @@ export interface Briefing {
   date: string | null;
   items: { label: string; text: string }[];
   suggestions: Suggestion[];
+  /** The full briefing as Markdown (wiki: links and normal links); null or absent when there is none. */
+  doc: string | null;
+  title: string | null;
+  /** The server can read the briefing aloud (GET …/briefing/audio). */
+  audio: boolean;
 }
 export const fetchBriefing = (token: string) => call<Partial<Briefing>>('/api/chat/persona/briefing', { token });
+/** The spoken briefing (audio/mpeg). The first request renders it and can take 10 to 30 seconds; 503 = no voice on the server, 404 = no briefing. */
+export async function fetchBriefingAudio(token: string): Promise<Blob> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/api/chat/persona/briefing/audio`, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new ChatApiError(0, 'network', 'Server nicht erreichbar. Internetverbindung prüfen.');
+  }
+  if (!res.ok) throw await errorOf(res);
+  const blob = await res.blob();
+  if (!blob.size || !/^audio\//.test(blob.type || 'audio/mpeg')) throw new ChatApiError(502, 'failed', 'Die Audiodatei ist leer.');
+  return blob;
+}
+
+/** Toggles the owner's reaction on a message (sending the same emoji again removes it). */
+export const toggleReaction = (token: string, messageId: string, emoji: string) =>
+  call<{ reactions: Record<string, number> }>(`/api/chat/messages/${encodeURIComponent(messageId)}/reactions`, { token, json: { emoji } });
 
 // Link with Claude (two-way sync over MCP). The endpoint may not exist yet (404).
 export interface LinkToken {

@@ -7,7 +7,8 @@ import { allSuggestions, friendlyError, suggestionSections } from '../persona/fo
 import '../persona/persona.css';
 import { Busy, SkLines, Skeleton } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
-import { IconClock, IconPencil } from '../ui/shell/line-icons';
+import { IconClock, IconFile, IconHeadphones, IconPencil } from '../ui/shell/line-icons';
+import type { BriefingDoc, BriefingTab } from './BriefingPanel';
 import { ChatApiError, fetchBriefing, fetchMe, fetchSuggestions, startSuggestion, type Suggestion } from './api';
 import { BotAvatar } from './BotAvatar';
 import { emitCommand } from './desktop';
@@ -15,6 +16,8 @@ import { firstName, greeting } from './thread-list';
 import type { ChatBot } from './types';
 
 interface Data {
+  /** The full briefing for the side panel; null when the server sent none. */
+  full: BriefingDoc | null;
   name: string | null;
   items: { label: string; text: string }[];
   suggestions: Suggestion[];
@@ -26,15 +29,17 @@ const MAX_SUGGESTIONS = 5;
 async function load(token: string): Promise<Data> {
   try {
     const b = await fetchBriefing(token);
-    return { name: firstName(b.name), items: b.items ?? [], suggestions: (b.suggestions ?? []).slice(0, MAX_SUGGESTIONS) };
+    const doc = typeof b.doc === 'string' ? b.doc.trim() : '';
+    const full = doc ? { doc, title: b.title?.trim() || 'Tagesbriefing', audio: b.audio === true } : null;
+    return { full, name: firstName(b.name), items: b.items ?? [], suggestions: (b.suggestions ?? []).slice(0, MAX_SUGGESTIONS) };
   } catch (e) {
     if (e instanceof ChatApiError && e.status === 401) throw e;
   }
   const [me, sug] = await Promise.all([fetchMe(token).catch(() => null), fetchSuggestions(token).catch(() => null)]);
-  return { name: firstName(me?.displayName), items: [], suggestions: allSuggestions(suggestionSections(sug)).slice(0, MAX_SUGGESTIONS) };
+  return { full: null, name: firstName(me?.displayName), items: [], suggestions: allSuggestions(suggestionSections(sug)).slice(0, MAX_SUGGESTIONS) };
 }
 
-export function Briefing({ token, bot, name, now = new Date() }: { token: string; bot?: ChatBot | null; name?: string; now?: Date }) {
+export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token: string; bot?: ChatBot | null; name?: string; onOpen?: (tab: BriefingTab, briefing: BriefingDoc) => void; now?: Date }) {
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(() => new Set());
@@ -45,7 +50,7 @@ export function Briefing({ token, bot, name, now = new Date() }: { token: string
     let alive = true;
     load(token)
       .then((d) => alive && setData(d))
-      .catch(() => alive && setData({ name: null, items: [], suggestions: [] }));
+      .catch(() => alive && setData({ full: null, name: null, items: [], suggestions: [] }));
     return () => {
       alive = false;
     };
@@ -93,6 +98,16 @@ export function Briefing({ token, bot, name, now = new Date() }: { token: string
             <Skeleton h={15} w={250} style={{ margin: '26px 0 14px' }} />
             <SkLines lines={4} h={14} gap={22} widths={['62%', '48%', '70%', '54%']} />
           </Busy>
+        )}
+        {data?.full && onOpen && (
+          <div className="ws-brief-actions">
+            <button className="w-btn" onClick={() => onOpen('audio', data.full!)}>
+              <IconHeadphones size={15} /> Briefing anhören
+            </button>
+            <button className="w-btn" onClick={() => onOpen('text', data.full!)}>
+              <IconFile size={15} /> Ganzes Briefing lesen
+            </button>
+          </div>
         )}
         {data && data.items.length > 0 && (
           <ul className="ws-brief-items">

@@ -228,3 +228,54 @@ describe('assistant profile helpers', () => {
     expect(isExpired(null, now)).toBe(false);
   });
 });
+
+import { dayLabel, docChapters, fmtClock, messageText, nextSpeed, plainText, reactionChips, startsNewDay } from '../../../workspace/briefing-format';
+
+describe('briefing panel helpers', () => {
+  const doc = '# Morgenbriefing\n\nGuten Morgen, Max. **Freitag** ist frei.\n\n## E-Mails (2)\n\n- Schlüssel läuft ab ([ansehen](https://example.org))\n- Antwort von [Fred](wiki:person-1) offen[[3]]\n\n## Aufgaben\n\n1. CI reparieren\n';
+
+  it('turns markdown into text a voice can read', () => {
+    expect(plainText('**Jetzt handeln:** Schlüssel [ersetzen](https://x.y) `heute`[[2]].')).toBe('Jetzt handeln: Schlüssel ersetzen heute.');
+    expect(plainText('- eins\n- zwei')).toBe('eins. zwei.');
+  });
+
+  it('derives chapters from the ## headings and skips the document title', () => {
+    const c = docChapters(doc);
+    expect(c.map((x) => x.title)).toEqual(['Einstieg', 'E-Mails (2)', 'Aufgaben']);
+    expect(c[0].text).toBe('Guten Morgen, Max. Freitag ist frei.');
+    expect(c[1].text).toBe('E-Mails (2). Schlüssel läuft ab (ansehen). Antwort von Fred offen.');
+    expect(docChapters('Nur ein Absatz.').map((x) => x.title)).toEqual(['Einstieg']);
+    expect(docChapters('## Eins\n\nText')).toHaveLength(1);
+    expect(docChapters('')).toEqual([]);
+  });
+
+  it('formats the clock and cycles the speed', () => {
+    expect(fmtClock(75)).toBe('1:15');
+    expect(fmtClock(-3)).toBe('0:00');
+    expect(fmtClock(NaN)).toBe('0:00');
+    expect([1, 1.25, 1.5, 7].map(nextSpeed)).toEqual([1.25, 1.5, 1, 1]);
+  });
+});
+
+describe('conversation days and reactions', () => {
+  const now = new Date('2026-11-13T09:00:00');
+  it('labels the divider Heute, Gestern or with the date', () => {
+    expect(dayLabel('2026-11-13T07:00:00', now)).toBe('Heute');
+    expect(dayLabel('2026-11-12T23:00:00', now)).toBe('Gestern');
+    expect(dayLabel('2026-11-09T10:00:00', now)).toBe('Montag, 9. November');
+    expect(dayLabel('2025-12-24T10:00:00', now)).toMatch(/2025$/);
+    expect(dayLabel('nonsense', now)).toBe('');
+  });
+
+  it('puts a divider only where the day changes', () => {
+    expect(startsNewDay(undefined, { createdAt: '2026-11-13T07:00:00' })).toBe(false);
+    expect(startsNewDay({ createdAt: '2026-11-12T22:00:00' }, { createdAt: '2026-11-13T07:00:00' })).toBe(true);
+    expect(startsNewDay({ createdAt: '2026-11-13T06:00:00' }, { createdAt: '2026-11-13T07:00:00' })).toBe(false);
+  });
+
+  it('shows reactions that are set and copies only the text parts', () => {
+    expect(reactionChips({ '👍': 1, '🎉': 0, '✅': 2 })).toEqual([{ emoji: '👍', count: 1 }, { emoji: '✅', count: 2 }]);
+    expect(reactionChips(null)).toEqual([]);
+    expect(messageText([{ type: 'text', text: ' Hallo ' }, { type: 'approval', title: 'x' }, { type: 'text', text: 'Welt' }])).toBe('Hallo\n\nWelt');
+  });
+});

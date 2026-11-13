@@ -213,8 +213,11 @@ html.mac-inset .toolbar {
 
 .shell-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
+  /* A small gap keeps the content frame clear of the window's right and bottom edge. */
+  padding: 0 7px 7px 0;
 }
 
 .rail {
@@ -245,9 +248,9 @@ html.mac-inset .toolbar {
   color: var(--w-muted);
 }
 
+/* Hover only brightens the icon; the tile is reserved for the active section. */
 .rail-item:hover {
   color: var(--w-text);
-  background: rgba(127, 127, 127, 0.12);
 }
 
 .rail-item[aria-selected='true'] {
@@ -281,12 +284,13 @@ html.mac-inset .toolbar {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* The content frame: a hairline on its top and left edge and one rounded corner separate it from the
-     title bar and the rail; it runs to the window's right and bottom edge. */
-  border: 0;
-  border-top: 1px solid var(--w-frame-line);
-  border-left: 1px solid var(--w-frame-line);
-  border-radius: var(--w-r) 0 0 0;
+  /* The content frame: a hairline and rounded corners set it apart from the title bar, the rail and the
+     window edge. `isolation` + `contain` make the rounded clip hold for everything inside (sidebars with
+     their own background, scrolling panels). */
+  border: 1px solid var(--w-frame-line);
+  border-radius: var(--w-r);
+  isolation: isolate;
+  contain: paint;
   background: var(--w-card);
   color: var(--w-text);
   color-scheme: light;

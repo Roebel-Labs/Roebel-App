@@ -30,7 +30,7 @@ export function Rail({ section, onSelect, onSearch }: { section: AppSection; onS
       <span className="rail-spacer" />
       <Tip label="Suchen" keys={shortcutHint('search')} side="right">
         <button className="rail-item" aria-label="Suchen" onClick={onSearch}>
-          <IconSearch size={20} />
+          <IconSearch size={18} />
         </button>
       </Tip>
       <AccountMenu />

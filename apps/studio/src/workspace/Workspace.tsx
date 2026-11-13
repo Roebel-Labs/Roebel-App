@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { parseMarkdown } from '../help/markdown';
 import {
-  IconAt, IconCapture, IconChevronDown, IconClose, IconFile, IconFilter, IconMic, IconPanelRight, IconPencil, IconPlus, IconSearch,
+  IconAt, IconCapture, IconChevronDown, IconClose, IconCopy, IconFile, IconFilter, IconMic, IconMore, IconPanelRight, IconPencil, IconPlus, IconSearch, IconShare, IconSmile,
   IconSend, IconStop, IconWave,
 } from '../ui/shell/line-icons';
 import {
-  approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, transcribe, uploadImage,
+  approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, toggleReaction, transcribe, uploadImage,
 } from './api';
 import { Briefing } from './Briefing';
+import { BriefingPanel, type BriefingDoc, type BriefingTab } from './BriefingPanel';
+import { dayLabel, messageText, MORE_REACTIONS, QUICK_REACTIONS, reactionChips, startsNewDay } from './briefing-format';
+import { hintWikiSlug } from '../persona/intent';
 import { displayBotName } from '../agent/agent-format';
 import { agentOf, useAgent } from '../agent/agent-store';
 import { emitCommand } from './desktop';
@@ -90,28 +93,126 @@ function ThreadRow({ thread, selected, onSelect, label, botName }: { thread: Cha
  * Agent card at the top of the Start sidebar. No colour change on hover: the latest message slides left to
  * show more of itself (off under reduced motion). Clicking opens the main conversation.
  */
-function AgentCard({ name, bot, status, disabled, onOpen, onEdit }: { name: string; bot?: ChatBot | null; status: string; disabled?: boolean; onOpen: () => void; onEdit?: () => void }) {
+function AgentCard({ name, bot, status, disabled, onOpen, onEdit, share }: { name: string; bot?: ChatBot | null; status: string; disabled?: boolean; onOpen: () => void; onEdit?: () => void; share?: boolean }) {
   const text = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0);
+  // Name and message slide together; the room the hover buttons take is part of what has to be revealed.
+  const buttons = (onEdit ? 1 : 0) + (share ? 1 : 0);
   const measure = () => {
     const el = text.current;
-    setShift(el ? marqueeShift(el.scrollWidth, el.clientWidth, 24) : 0);
+    setShift(el ? marqueeShift(el.scrollWidth, el.clientWidth - buttons * 30, 24) : 0);
   };
   return (
-    <div className={`ws-agent${shift > 0 ? ' slides' : ''}${onEdit ? ' editable' : ''}`} onMouseEnter={measure} style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(1, shift / 45)}s` } as React.CSSProperties) : undefined}>
+    <div className={`ws-agent${shift > 0 ? ' slides' : ''}${buttons ? ' has-actions' : ''}`} onMouseEnter={measure} style={shift > 0 ? ({ '--shift': `${-shift}px`, '--slide': `${Math.max(1, shift / 45)}s` } as React.CSSProperties) : undefined}>
       <button className="ws-agent-main" aria-label={`${name}: Hauptunterhaltung öffnen`} disabled={disabled} onClick={onOpen}>
         <BotAvatar bot={bot} size={45} radius={0} />
-        <span className="ws-agent-name">{name}</span>
-        <span className="ws-agent-status" ref={text}>
-          <span>{status}</span>
+        <span className="ws-agent-text" ref={text}>
+          <span>
+            <span className="ws-agent-name">{name}</span>
+            <span className="ws-agent-status">{status}</span>
+          </span>
         </span>
       </button>
-      {onEdit && (
-        <Tip label="Assistent bearbeiten" side="bottom">
-          <button className="ws-agent-edit" aria-label="Assistent bearbeiten" onClick={onEdit}>
-            <IconPencil size={16} />
+      {buttons > 0 && (
+        <span className="ws-agent-actions">
+          {onEdit && (
+            <Tip label="Assistent bearbeiten" side="bottom">
+              <button aria-label="Assistent bearbeiten" onClick={onEdit}>
+                <IconPencil size={16} />
+              </button>
+            </Tip>
+          )}
+          {share && (
+            // Placeholder: what sharing an assistant does is not specified yet.
+            <Tip label="Teilen" side="bottom">
+              <button aria-label="Teilen">
+                <IconShare size={16} />
+              </button>
+            </Tip>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DayDivider({ label }: { label: string }) {
+  return label ? (
+    <div className="ws-day" role="separator" aria-label={label}>
+      <span>{label}</span>
+    </div>
+  ) : null;
+}
+
+/** Floating bar on a hovered assistant message: quick reactions, more emojis, and a small menu. */
+function MessageBar({ text, onReact }: { text: string; onReact: (emoji: string) => void }) {
+  const [open, setOpen] = useState<'emoji' | 'menu' | null>(null);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(null);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(null);
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', away);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const pick = (emoji: string) => {
+    setOpen(null);
+    onReact(emoji);
+  };
+  return (
+    <div className={`ws-msg-bar${open ? ' open' : ''}`} ref={ref}>
+      {QUICK_REACTIONS.map((e) => (
+        <Tip key={e} label="Reagieren" side="top">
+          <button className="emoji" aria-label={`Mit ${e} reagieren`} onClick={() => pick(e)}>
+            {e}
           </button>
         </Tip>
+      ))}
+      <Tip label="Weitere Reaktionen" side="top" disabled={open === 'emoji'}>
+        <button aria-label="Weitere Reaktionen" aria-haspopup="menu" aria-expanded={open === 'emoji'} onClick={() => setOpen((o) => (o === 'emoji' ? null : 'emoji'))}>
+          <IconSmile size={16} />
+        </button>
+      </Tip>
+      <Tip label="Mehr" side="top" disabled={open === 'menu'}>
+        <button aria-label="Mehr" aria-haspopup="menu" aria-expanded={open === 'menu'} onClick={() => setOpen((o) => (o === 'menu' ? null : 'menu'))}>
+          <IconMore size={16} />
+        </button>
+      </Tip>
+      {open === 'emoji' && (
+        <div className="ws-msg-pop emojis" role="menu">
+          {MORE_REACTIONS.map((e) => (
+            <button key={e} className="emoji" role="menuitem" aria-label={`Mit ${e} reagieren`} onClick={() => pick(e)}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+      {open === 'menu' && (
+        <div className="ws-msg-pop" role="menu">
+          <button
+            role="menuitem"
+            disabled={!text}
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(text)
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => {
+                    setCopied(false);
+                    setOpen(null);
+                  }, 900);
+                })
+                .catch(() => setOpen(null))
+            }
+          >
+            <IconCopy size={15} /> {copied ? 'Kopiert' : 'Text kopieren'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -156,6 +257,21 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   // The assistant's profile: its own name replaces the base bot's name wherever that bot is shown.
   const profile = agentOf(useAgent(token));
   const nameOf = (b: { id: string; name: string } | null | undefined, fallback = 'Mecky') => displayBotName(b, b ? profile : null, fallback);
+  // The day's briefing in the side panel (Audio | Text); `wide` gives it the conversation's place too.
+  const [brief, setBrief] = useState<{ doc: BriefingDoc; tab: BriefingTab } | null>(null);
+  const [briefWide, setBriefWide] = useState(false);
+  const openWiki = (slug: string) => {
+    hintWikiSlug(slug);
+    emitCommand({ kind: 'navigate', section: 'wiki' });
+  };
+  const react = async (messageId: string, emoji: string) => {
+    try {
+      const r = await toggleReaction(token, messageId, emoji);
+      setView((v) => ({ ...v, messages: v.messages.map((m) => (m.id === messageId ? { ...m, reactions: r.reactions ?? {} } : m)) }));
+    } catch (e) {
+      setView((v) => ({ ...v, error: guard(e) }));
+    }
+  };
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   // Conversations that belong to a routine are listed under "Aufgaben".
@@ -429,12 +545,13 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const streaming = view.streaming.length > 0;
 
   return (
-    <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen ? ' with-panel' : ''}`}>
+    <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen || brief ? ' with-panel' : ''}${brief && briefWide ? ' panel-wide' : ''}`}>
       {listOpen && (
         <aside className="ws-list">
           <AgentCard
             name={nameOf(agent)}
             onEdit={profile ? () => emitCommand({ kind: 'navigate', section: 'agent' }) : undefined}
+            share
             bot={agent}
             status={streaming ? 'Arbeitet …' : (mainThread && mainThread.id !== threadId ? mainThread.lastMessagePreview : textOf(lastBotMsg)) || mainThread?.lastMessagePreview || 'Bereit'}
             disabled={!boot}
@@ -566,17 +683,21 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
             <div className="ws-messages" ref={scroller}>
               <div className="ws-messages-inner">
                 {historyLoading && view.messages.length === 0 && <SkChat />}
-                {view.messages.map((m) => {
+                {view.messages.map((m, mi) => {
                   const bot = m.botId ? botsById.get(m.botId) : undefined;
+                  const divider = startsNewDay(view.messages[mi - 1], m) ? <DayDivider key={`d-${m.id}`} label={dayLabel(m.createdAt)} /> : null;
                   if (m.role === 'user')
-                    return (
+                    return [
+                      divider,
                       <div key={m.id} className="ws-msg user">
                         {m.parts.map((p, i) => (
                           <Part key={i} part={p} h={handlers(m.id)} />
                         ))}
-                      </div>
-                    );
-                  return (
+                      </div>,
+                    ];
+                  const live = view.streaming.includes(m.id);
+                  return [
+                    divider,
                     <div key={m.id} className="ws-msg bot">
                       <BotAvatar bot={bot ?? leadBot} size={32} radius={8} />
                       <div className="ws-msg-body">
@@ -587,12 +708,30 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                         {m.parts.map((p, i) => (
                           <Part key={i} part={p} h={handlers(m.id)} />
                         ))}
-                        {view.streaming.includes(m.id) && m.parts.length === 0 && <span className="ws-typing">schreibt …</span>}
+                        {live && m.parts.length === 0 && <span className="ws-typing">schreibt …</span>}
+                        {reactionChips(m.reactions).length > 0 && (
+                          <div className="ws-reactions">
+                            {reactionChips(m.reactions).map((r) => (
+                              <Tip key={r.emoji} label="Reaktion entfernen" side="top">
+                                <button className="ws-reaction" aria-label={`Reaktion ${r.emoji} entfernen`} onClick={() => void react(m.id, r.emoji)}>
+                                  {r.emoji}
+                                  {r.count > 1 && <span>{r.count}</span>}
+                                </button>
+                              </Tip>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
+                      {!live && !m.id.startsWith('local-') && <MessageBar text={messageText(m.parts)} onReact={(emoji) => void react(m.id, emoji)} />}
+                    </div>,
+                  ];
                 })}
-                {isMain && !historyLoading && !streaming && needsBriefing(view.messages) && <Briefing token={token} bot={agent} name={nameOf(agent)} />}
+                {isMain && !historyLoading && !streaming && needsBriefing(view.messages) && (
+                  <>
+                    {view.messages.length > 0 && <DayDivider label="Heute" />}
+                    <Briefing token={token} bot={agent} name={nameOf(agent)} onOpen={(tab, doc) => setBrief({ doc, tab })} />
+                  </>
+                )}
                 {view.error && <div className="ws-error">{view.error}</div>}
               </div>
             </div>
@@ -680,7 +819,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
             {boot ? (
               <div className="ws-messages">
                 <div className="ws-messages-inner">
-                  <Briefing token={token} bot={agent} name={nameOf(agent)} />
+                  <Briefing token={token} bot={agent} name={nameOf(agent)} onOpen={(tab, doc) => setBrief({ doc, tab })} />
                 </div>
               </div>
             ) : bootError ? (
@@ -692,7 +831,24 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
         )}
       </section>
 
-      {panelOpen && (
+      {brief && (
+        <aside className="ws-panel">
+          <BriefingPanel
+            token={token}
+            briefing={brief.doc}
+            tab={brief.tab}
+            onTab={(tab) => setBrief((x) => (x ? { ...x, tab } : x))}
+            onClose={() => {
+              setBrief(null);
+              setBriefWide(false);
+            }}
+            wide={briefWide}
+            onWide={setBriefWide}
+            onWiki={openWiki}
+          />
+        </aside>
+      )}
+      {panelOpen && !brief && (
         <aside className="ws-panel">
           <div className="ws-panel-card">
             {doc ? (
