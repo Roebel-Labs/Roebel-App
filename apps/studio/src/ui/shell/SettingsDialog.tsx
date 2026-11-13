@@ -5,10 +5,16 @@ import { loadSession } from '../../workspace/session';
 import { Connections } from './Connections';
 import { ACCENT_PRESETS, applyAccent, loadAccent, normalizeAccent, saveAccent } from './accent';
 import { IconCheck, IconClose, IconSettings } from './line-icons';
+import { currentTheme, onThemeChange, setTheme, THEME_OPTIONS } from './theme';
+import { Busy, Skeleton } from '../Skeleton';
+import '../tooltip.css';
+import { Tip } from '../Tooltip';
+import { SHORTCUTS, shortcutHint, shortcutKeys } from './shortcuts';
 
-type Section = 'appearance' | 'connections' | 'keys' | 'account';
+type Section = 'appearance' | 'shortcuts' | 'connections' | 'keys' | 'account';
 const SECTIONS: Array<[Section, string]> = [
   ['appearance', 'Darstellung'],
+  ['shortcuts', 'Tastenkürzel'],
   ['connections', 'Verbindungen'],
   ['keys', 'KI-Schlüssel'],
   ['account', 'Konto'],
@@ -44,9 +50,11 @@ export function SettingsDialog() {
 
   return (
     <>
-      <button className="tb-icon" title="Einstellungen" aria-label="Einstellungen" onClick={() => setOpen(true)}>
-        <IconSettings />
-      </button>
+      <Tip label="Einstellungen" keys={shortcutHint('settings')} side="bottom">
+        <button className="tb-icon" aria-label="Einstellungen" onClick={() => setOpen(true)}>
+          <IconSettings size={16} />
+        </button>
+      </Tip>
       {open && (
         <div className="dlg-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div className="dlg" role="dialog" aria-label="Einstellungen">
@@ -63,6 +71,7 @@ export function SettingsDialog() {
                 <IconClose size={16} />
               </button>
               {section === 'appearance' && <Appearance />}
+              {section === 'shortcuts' && <Shortcuts />}
               {section === 'connections' && (token ? <Connections token={token} /> : <SignedOut />)}
               {section === 'keys' && (token ? <Keys token={token} /> : <SignedOut />)}
               {section === 'account' && (token ? <Account token={token} onSignOut={() => setOpen(false)} /> : <SignedOut />)}
@@ -87,9 +96,20 @@ function Appearance() {
     applyAccent(v);
     saveAccent(v);
   };
+  const [theme, setThemeState] = useState(currentTheme);
+  useEffect(() => onThemeChange(setThemeState), []);
   return (
     <>
-      <h2>Akzentfarbe</h2>
+      <h2>Darstellung</h2>
+      <p className="w-muted">„System“ folgt der Einstellung deines Computers. Wird auf diesem Gerät gespeichert.</p>
+      <div className="tb-seg" role="radiogroup" aria-label="Darstellung">
+        {THEME_OPTIONS.map((o) => (
+          <button key={o.id} role="radio" aria-checked={theme === o.id} onClick={() => setTheme(o.id)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <h3>Akzentfarbe</h3>
       <p className="w-muted">Gilt für Schaltflächen, Vorschläge und Hervorhebungen im Arbeitsbereich. Wird auf diesem Gerät gespeichert.</p>
       <div className="tb-swatches">
         {ACCENT_PRESETS.map((p) => (
@@ -103,6 +123,35 @@ function Appearance() {
         <input type="color" value={accent} onChange={(e) => choose(e.target.value)} />
         <code>{accent}</code>
       </label>
+    </>
+  );
+}
+
+function Shortcuts() {
+  const groups = ['Allgemein', 'Start', 'Bereiche'] as const;
+  return (
+    <>
+      <h2>Tastenkürzel</h2>
+      <p className="w-muted">Die Kürzel stehen auch in den Hinweisen, die beim Überfahren eines Symbols erscheinen.</p>
+      {groups.map((g) => (
+        <div key={g}>
+          <h3>{g}</h3>
+          <dl className="keys-list">
+            {SHORTCUTS.filter((s) => s.group === g).map((s) => (
+              <div key={s.id}>
+                <dt>{s.label}</dt>
+                <dd>
+                  {shortcutKeys(s).map((k) => (
+                    <kbd key={k} className="kbd">
+                      {k}
+                    </kbd>
+                  ))}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
     </>
   );
 }
@@ -147,7 +196,18 @@ function Keys({ token }: { token: string }) {
         werden verschlüsselt gespeichert, geprüft und nie angezeigt.
       </p>
       {error && <div className="ws-error">{error}</div>}
-      {PROVIDERS.map((p) => {
+      {!me && !error && (
+        <Busy>
+          {PROVIDERS.map((p) => (
+            <div className="key-row" key={p.id} aria-hidden="true">
+              <Skeleton h={14} w={150} />
+              <Skeleton h={12} w="80%" />
+              <Skeleton h={36} />
+            </div>
+          ))}
+        </Busy>
+      )}
+      {(me || error) && PROVIDERS.map((p) => {
         const stored = me?.providerKeys.find((k) => k.provider === p.id);
         return (
           <div className="key-row" key={p.id}>
@@ -183,22 +243,39 @@ function Keys({ token }: { token: string }) {
 
 function Account({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [me, setMe] = useState<Me | null>(null);
-  useEffect(() => void fetchMe(token).then(setMe).catch(() => setMe(null)), [token]);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => void fetchMe(token).then(setMe).catch(() => setFailed(true)), [token]);
+  const loading = !me && !failed;
   const pct = me ? Math.min(100, Math.round((me.quota.used / Math.max(1, me.quota.limit)) * 100)) : 0;
   return (
     <>
       <h2>Konto</h2>
-      <div className="account-card">
-        <strong>{me?.displayName || me?.username || '…'}</strong>
-        {me?.username && <span className="w-muted">@{me.username}</span>}
-        <span className="w-muted">{me?.isCitizen ? 'Verifizierte Bürgerin / verifizierter Bürger' : 'Noch nicht verifiziert'}</span>
-      </div>
+      {loading ? (
+        <Busy className="account-card">
+          <Skeleton h={15} w={160} />
+          <Skeleton h={12} w={110} />
+          <Skeleton h={12} w={210} />
+        </Busy>
+      ) : (
+        <div className="account-card">
+          <strong>{me?.displayName || me?.username || 'Angemeldet'}</strong>
+          {me?.username && <span className="w-muted">@{me.username}</span>}
+          <span className="w-muted">{me?.isCitizen ? 'Verifizierte Bürgerin / verifizierter Bürger' : 'Noch nicht verifiziert'}</span>
+        </div>
+      )}
       <h3>Plan</h3>
       <div className="account-card">
-        <div className="account-quota-row">
-          <strong>{TIER[me?.tier ?? ''] ?? me?.tier ?? '…'}</strong>
-          <span className="w-muted">{me?.quota.ownKey ? 'Eigener Schlüssel: unbegrenzt' : `Heute ${pct} % des Tageskontingents genutzt`}</span>
-        </div>
+        {loading ? (
+          <Busy className="account-quota-row">
+            <Skeleton h={15} w={80} />
+            <Skeleton h={12} w={220} />
+          </Busy>
+        ) : (
+          <div className="account-quota-row">
+            <strong>{TIER[me?.tier ?? ''] ?? me?.tier ?? 'Unbekannt'}</strong>
+            <span className="w-muted">{me?.quota.ownKey ? 'Eigener Schlüssel: unbegrenzt' : `Heute ${pct} % des Tageskontingents genutzt`}</span>
+          </div>
+        )}
         <div className="account-bar">
           <i style={{ width: `${me?.quota.ownKey ? 100 : 100 - pct}%` }} />
         </div>

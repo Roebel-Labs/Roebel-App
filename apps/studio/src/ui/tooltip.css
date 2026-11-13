@@ -1,0 +1,91 @@
+/* Tooltips (ui/Tooltip.tsx): an inverted pill for icon-only controls and a bordered hover card. No arrow,
+   no shadow, 4px radius. */
+
+.tip {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  font-family: var(--font-body);
+  animation: tip-in 0.12s ease-out;
+}
+
+.tip.right {
+  transform: translateY(-50%);
+}
+
+.tip.right.start {
+  transform: none;
+}
+
+.tip.bottom {
+  transform: translateX(-50%);
+}
+
+.tip.top {
+  transform: translate(-50%, -100%);
+}
+
+.tip.pill {
+  padding: 5px 9px;
+  border-radius: 4px;
+  background: var(--w-ink);
+  color: var(--w-ink-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Shortcut hint: a small keycap after the label. */
+.tip-keys,
+.kbd {
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 38%, transparent);
+  border-radius: 4px;
+  font: 500 11px/1.4 var(--font-body);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.tip.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  max-width: 340px;
+  padding: 12px 14px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 4px;
+  background: var(--w-raised);
+  color: var(--w-text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.tip.card strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tip.card span {
+  color: var(--w-muted);
+  font-size: 12.5px;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip {
+    animation: none;
+  }
+}

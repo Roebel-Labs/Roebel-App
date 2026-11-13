@@ -27,7 +27,8 @@ import { LibrarySection } from '../persona/LibrarySection';
 import { loadSection, saveSection, visibleLiveTab, type LiveTab, type Section } from './shell/nav';
 import { Rail } from './shell/Rail';
 import { Toolbar } from './shell/Toolbar';
-import { onDesktopCommand } from '../workspace/desktop';
+import { emitCommand, onDesktopCommand, type DesktopCommand } from '../workspace/desktop';
+import { historyMove, historyPush, matchShortcut, type NavHistory, type ShortcutId } from './shell/shortcuts';
 import { setCaptureSection } from '../media/gate';
 import { isWebBuild } from '../web-shim';
 import './theme.css';
@@ -372,10 +373,49 @@ function QuitConfirm() {
 function Shell() {
   const [section, setSectionState] = useState<Section>(() => loadSection());
   const [tab, setTab] = useState<Tab>('show');
-  const setSection = (next: Section) => {
+  // Visited sections for Zurück / Vor (⌘[ / ⌘⇧]).
+  const history = useRef<NavHistory<Section>>({ items: [section], at: 0 });
+  const show = (next: Section) => {
     setSectionState(next);
     saveSection(next);
   };
+  const setSection = (next: Section) => {
+    history.current = historyPush(history.current, next);
+    show(next);
+  };
+  // Keyboard shortcuts (table in shell/shortcuts.ts). All need ⌘ / Ctrl, so typing is never affected.
+  const keys = useRef((_: ShortcutId) => {});
+  keys.current = (id) => {
+    const inHome = (cmd: DesktopCommand) => {
+      if (section !== 'home') setSection('home');
+      emitCommand(cmd);
+    };
+    if (id === 'search') inHome({ kind: 'search' });
+    else if (id === 'newChat') inHome({ kind: 'newChat' });
+    else if (id === 'toggleList') inHome({ kind: 'toggleList' });
+    else if (id === 'togglePanel') inHome({ kind: 'togglePanel' });
+    else if (id === 'settings') emitCommand({ kind: 'settings' });
+    else if (id === 'back' || id === 'forward') {
+      const h = historyMove(history.current, id === 'back' ? -1 : 1);
+      if (h !== history.current) {
+        history.current = h;
+        show(h.items[h.at]);
+      }
+    } else {
+      const target = ({ goHome: 'home', goForYou: 'foryou', goSkills: 'skills', goWiki: 'wiki', goLibrary: 'library' } as Partial<Record<ShortcutId, Section>>)[id];
+      if (target) setSection(target);
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const id = matchShortcut(e);
+      if (!id) return;
+      e.preventDefault();
+      keys.current(id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // Cameras and microphones may open only in the livestream section (or while on air).
   useEffect(() => setCaptureSection(section), [section]);
   useShowRuntime(visibleLiveTab(section, tab));

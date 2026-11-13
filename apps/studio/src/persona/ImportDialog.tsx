@@ -4,6 +4,8 @@ import {
   type ImportKind, type LinkCreated, type LinkToken,
 } from '../workspace/api';
 import { IconCheck, IconCopy, IconTrash } from '../ui/shell/line-icons';
+import { Busy, SkDoc, SkRows, Skeleton } from '../ui/Skeleton';
+import { Tip } from '../ui/Tooltip';
 import { LoadError, Modal, useLoad } from './common';
 import { fmtDate, friendlyError } from './format';
 
@@ -133,7 +135,7 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
             </ol>
             <div className="pz-prompt">
               {imports.loading && !imports.data ? (
-                <span className="w-muted">Lade …</span>
+                <SkDoc lines={4} />
               ) : prompt ? (
                 <pre>{prompt}</pre>
               ) : (
@@ -181,7 +183,9 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
         <h3 className="pz-h3">Bisherige Importe</h3>
         {imports.error && !imports.data ? (
           <LoadError message={imports.error} onRetry={() => void imports.reload()} />
-        ) : imports.data && imports.data.imports.length === 0 ? (
+        ) : imports.loading && !imports.data ? (
+        <SkRows rows={2} trailing={28} />
+      ) : imports.data && imports.data.imports.length === 0 ? (
           <div className="w-muted">Noch nichts importiert.</div>
         ) : (
           <ul className="pz-rows">
@@ -193,9 +197,11 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
                     {KIND_LABEL[im.kind]} · {im.chars.toLocaleString('de-DE')} Zeichen · {fmtDate(im.createdAt)}
                   </span>
                 </div>
-                <button className="w-icon" aria-label="Import löschen" title="Import löschen" disabled={busy} onClick={() => void remove(im.id)}>
-                  <IconTrash size={16} />
-                </button>
+                <Tip label="Import löschen" side="top">
+                  <button className="w-icon" aria-label="Import löschen" disabled={busy} onClick={() => void remove(im.id)}>
+                    <IconTrash size={16} />
+                  </button>
+                </Tip>
               </li>
             ))}
           </ul>
@@ -282,7 +288,17 @@ function LinkPanel({ token }: { token: string }) {
     }
   };
 
-  if (links.state === 'loading') return <span className="w-muted">Lade …</span>;
+  if (links.state === 'loading')
+    return (
+      <>
+        <Busy>
+          <SkDoc lines={3} />
+        </Busy>
+        <Skeleton h={32} w={190} style={{ borderRadius: 16 }} />
+        <h3 className="pz-h3">Bestehende Verbindungen</h3>
+        <SkRows rows={2} trailing={84} />
+      </>
+    );
   if (links.state === 'unavailable') return <p className="w-muted pz-p">Die Verbindung mit Claude ist noch nicht verfügbar. Sie kommt mit einem der nächsten Updates.</p>;
   if (links.state === 'error') return <LoadError message={links.message} onRetry={() => void reload()} />;
 

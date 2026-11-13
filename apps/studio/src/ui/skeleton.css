@@ -1,0 +1,326 @@
+/* Shimmer skeletons. Base and highlight derive from the text/card tokens, so they follow light, dark and
+   the livestream theme without their own colours. No shadows; 4px radii (circles for avatars). */
+
+.sk {
+  --sk-base: color-mix(in srgb, var(--w-text) 9%, var(--w-card));
+  --sk-shine: color-mix(in srgb, var(--w-text) 16%, var(--w-card));
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(100deg, var(--sk-base) 30%, var(--sk-shine) 50%, var(--sk-base) 70%) 0 0 / 300% 100%;
+  animation: sk-shimmer 1.6s linear infinite;
+}
+
+.sk.circle {
+  border-radius: 50%;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    background: var(--sk-base);
+    animation: none;
+  }
+}
+
+.sk-busy {
+  position: relative;
+  cursor: progress;
+}
+
+.sk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sk-lines,
+.sk-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sk-row-text {
+  flex: 1;
+  gap: 7px;
+}
+
+/* rows: same box as .pz-row / .pz-list-row / .conn-row */
+
+.sk-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+
+.sk-list {
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+
+.sk-list .sk-row {
+  min-height: 78px;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
+}
+
+.sk-list .sk-row + .sk-row {
+  border-top: 1px solid var(--w-line);
+}
+
+/* cards: same box as .pz-idea / .pz-card / .app-card */
+
+.sk-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.sk-hrow {
+  display: flex;
+  gap: 12px;
+  overflow: hidden;
+  padding: 2px 0 10px;
+}
+
+.sk-hrow .sk-card {
+  flex: 0 0 272px;
+}
+
+.sk-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+
+/* Für dich */
+
+.sk-sugs {
+  display: flex;
+  flex-direction: column;
+  gap: 44px;
+  margin-top: 30px;
+}
+
+.sk-sug-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sk-sug-group > .sk:first-child {
+  margin: 7px 0;
+}
+
+.sk-sug {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 61px;
+  padding: 12px 0 9px;
+}
+
+/* sub-navigation */
+
+.sk-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sk-nav-item {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+}
+
+.sk-nav-item.indent {
+  padding-left: 26px;
+}
+
+/* wiki page */
+
+.sk-page,
+.sk-page-head,
+.sk-page-text,
+.sk-page-foot,
+.sk-box,
+.sk-infobox,
+.sk-fact,
+.sk-doc {
+  display: flex;
+  flex-direction: column;
+}
+
+.sk-page-head {
+  gap: 12px;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid var(--w-line);
+}
+
+.sk-box {
+  gap: 16px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+  background: var(--w-raised);
+}
+
+.sk-page-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  margin-top: 26px;
+}
+
+.sk-page-body.with-box {
+  grid-template-columns: minmax(0, 1fr) 264px;
+}
+
+.sk-page-text {
+  gap: 12px;
+  max-width: 80ch;
+}
+
+.sk-infobox {
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+
+.sk-fact {
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--w-line);
+}
+
+.sk-page-foot {
+  gap: 0;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--w-line);
+}
+
+.sk-page-foot .sk-lines {
+  margin-top: 12px;
+}
+
+@media (max-width: 1100px) {
+  .sk-page-body.with-box {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sk-infobox {
+    order: -1;
+    max-width: 320px;
+  }
+}
+
+.sk-doc {
+  padding: 4px 0;
+}
+
+/* library */
+
+.sk-files {
+  display: flex;
+  flex-direction: column;
+  margin-top: 60px;
+}
+
+.sk-file {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 57px;
+  padding: 0 8px;
+}
+
+.sk-file + .sk-file {
+  border-top: 1px solid var(--w-line);
+}
+
+/* Start: thread list and conversation */
+
+.sk-threads {
+  display: flex;
+  flex-direction: column;
+}
+
+.sk-thread {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px 0 30px;
+}
+
+.sk-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+
+.sk-chat-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.sk-chat-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sk-chat-user .sk {
+  border-radius: 12px;
+}
+
+.sk-chat-bot {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.sk-chat-bot .sk-lines {
+  margin-top: 4px;
+}
+
+.sk-kpis-wrap .kpi {
+  gap: 8px;
+}

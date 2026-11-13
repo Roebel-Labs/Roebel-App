@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchMiniAppAnalytics, type AnalyticsRange, type AnalyticsSummary, type MyMiniApp } from '../../workspace/api';
+import { SkKpis } from '../Skeleton';
 
 const RANGES: Array<[AnalyticsRange, string]> = [
   ['7d', '7 Tage'],
@@ -66,7 +67,7 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
         </div>
       </div>
       {error && <div className="ws-error">{error}</div>}
-      {!data && !error && <div className="w-muted">Lade …</div>}
+      {!data && !error && <SkKpis />}
       {data && (
         <>
           <div className="kpis">

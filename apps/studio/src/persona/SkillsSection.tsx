@@ -12,6 +12,7 @@ import {
 import { Confirm, Frame, LoadError, Modal, MoreMenu, SearchField, SignedOutHint, Toggle, useGoogleConnect, useLoad, useSessionToken, type NavEntry } from './common';
 import { allSuggestions, fmtDate, friendlyError, hueIndex, makeSchedule, matchesQuery, parseSkillFile, scheduleText, suggestionSections, WEEKDAY_OPTIONS } from './format';
 import { takeSkillsTab, type SkillsTab } from './intent';
+import { Busy, SkCards, SkRows, Skeleton } from '../ui/Skeleton';
 import './persona.css';
 
 const NAV: NavEntry[] = [
@@ -46,7 +47,13 @@ export function SkillsSection() {
 
   return (
     <Frame title="Funktionen" nav={NAV} active={tab} onSelect={(id) => setTab(id as SkillsTab)} wide>
-      {session.state === 'loading' && <div className="pz-state w-muted">Lade …</div>}
+      {session.state === 'loading' && (
+        <Busy>
+          <Skeleton h={28} w={260} style={{ marginBottom: 14 }} />
+          <Skeleton h={14} w="52%" style={{ marginBottom: 26 }} />
+          <SkRows rows={4} tile={32} />
+        </Busy>
+      )}
       {session.state === 'signed-out' && <SignedOutHint what="deine Routinen und Fähigkeiten" />}
       {token && tab === 'overview' && <Overview token={token} onTab={setTab} onUnauthorized={session.signedOut} />}
       {token && tab === 'routines' && <Routines token={token} onUnauthorized={session.signedOut} onTab={setTab} />}
@@ -113,6 +120,12 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
       {error && <div className="ws-error">{error}</div>}
       {nothing && <div className="pz-state w-muted">Nichts gefunden für „{q.trim()}“.</div>}
 
+      {suggestions.loading && !suggestions.data && (
+        <section className="pz-block">
+          <h2>Vorschläge</h2>
+          <SkCards row cards={4} />
+        </section>
+      )}
       {ideas.length > 0 && (
         <section className="pz-block">
           <h2>Vorschläge</h2>
@@ -147,6 +160,8 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
           </div>
           {connectors.error && !connectors.data ? (
             <LoadError message={connectors.error} onRetry={() => void connectors.reload()} />
+          ) : connectors.loading && !connectors.data ? (
+            <SkRows rows={2} />
           ) : (
             <ul className="pz-rows">
               <li className="pz-row">
@@ -154,7 +169,7 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
                   <strong>Google</strong>
                   <span className="w-muted">Kalender, Gmail, Drive</span>
                 </div>
-                <span className={`w-tag${google ? ' ok' : ''}`}>{connectors.loading && !connectors.data ? '…' : google ? 'Verbunden' : 'Nicht verbunden'}</span>
+                <span className={`w-tag${google ? ' ok' : ''}`}>{google ? 'Verbunden' : 'Nicht verbunden'}</span>
               </li>
               <li className="pz-row">
                 <div className="pz-row-text">
@@ -185,7 +200,7 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
               Alle anzeigen
             </button>
           </div>
-          {routines.loading && !routines.data && <div className="w-muted">Lade …</div>}
+          {routines.loading && !routines.data && <SkRows rows={3} tile={32} />}
           {routines.error && !routines.data && <LoadError message={routines.error} onRetry={() => void routines.reload()} />}
           {routines.data && firstRoutines.length === 0 && (
             <div className="pz-empty">
@@ -213,6 +228,14 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
         </section>
       )}
 
+      {skills.loading && !skills.data && !searching && (
+        <section className="pz-block">
+          <div className="pz-block-head">
+            <h2>Fähigkeiten</h2>
+          </div>
+          <SkRows rows={2} tile={32} />
+        </section>
+      )}
       {firstSkills.length > 0 && (
         <section className="pz-block">
           <div className="pz-block-head">
@@ -294,7 +317,7 @@ function Routines({ token, onUnauthorized, onTab }: { token: string; onUnauthori
         </button>
       </div>
       {error && <div className="ws-error">{error}</div>}
-      {load.loading && !load.data && <div className="pz-state w-muted">Lade …</div>}
+      {load.loading && !load.data && <SkRows rows={4} tile={40} trailing={34} joined />}
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {load.data && load.data.routines.length === 0 && (
         <div className="pz-empty">
@@ -487,7 +510,7 @@ function Abilities({ token, onUnauthorized }: { token: string; onUnauthorized: (
         </button>
       </div>
       {error && <div className="ws-error">{error}</div>}
-      {load.loading && !load.data && <div className="pz-state w-muted">Lade …</div>}
+      {load.loading && !load.data && <SkRows rows={3} tile={40} trailing={34} joined />}
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {load.data && skills.length === 0 && (
         <div className="pz-empty">
@@ -640,7 +663,16 @@ function Discover({ token, onUnauthorized, onTab }: { token: string; onUnauthori
           </button>
         )}
       </div>
-      {load.loading && !load.data && <div className="pz-state w-muted">Lade …</div>}
+      {load.loading && !load.data && (
+        <>
+          <Busy className="pz-tabs">
+            {[52, 96, 84, 110].map((w) => (
+              <Skeleton key={w} h={32} w={w} />
+            ))}
+          </Busy>
+          <SkCards cards={6} height={150} />
+        </>
+      )}
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {(error || google.error) && <div className="ws-error">{error || google.error}</div>}
       {google.waiting && <div className="conn-notice">Warte auf Google im Browser …</div>}

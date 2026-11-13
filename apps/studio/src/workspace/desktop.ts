@@ -7,6 +7,9 @@ export type DesktopCommand =
   | { kind: 'signedin' }
   | { kind: 'connected'; provider: 'google'; result: 'ok' | 'cancelled' | 'error' }
   | { kind: 'toggleList' }
+  /** Keyboard shortcuts handled by the workspace (Start). */
+  | { kind: 'newChat' }
+  | { kind: 'togglePanel' }
   | { kind: 'dictate' }
   | { kind: 'signout' }
   | { kind: 'navigate'; section: 'home' | 'live' }

@@ -7,6 +7,8 @@ import { BuildProgress, Frame, Initial, LoadError, MoreMenu, PersonaOnboarding, 
 import { allSuggestions, filterSuggestionSections, friendlyError, scheduleText, suggestionFilters, suggestionSections } from './format';
 import { ImportDialog } from './ImportDialog';
 import { hintSkillsTab, hintWikiSlug } from './intent';
+import { SkSuggestions } from '../ui/Skeleton';
+import { Tip } from '../ui/Tooltip';
 import './persona.css';
 
 /** Für dich: suggested tasks and routines derived from the personal wiki. */
@@ -120,18 +122,18 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
               {s.people.length > 0 && (
                 <span className="pz-sug-people">
                   {s.people.slice(0, 4).map((p) => (
-                    <button
-                      key={p.slug}
-                      className="pz-person-chip"
-                      title={p.name}
-                      aria-label={p.name}
-                      onClick={() => {
-                        hintWikiSlug(p.slug);
-                        onNavigate('wiki');
-                      }}
-                    >
-                      <Initial name={p.name} size={22} />
-                    </button>
+                    <Tip key={p.slug} label={p.name} side="top">
+                      <button
+                        className="pz-person-chip"
+                        aria-label={p.name}
+                        onClick={() => {
+                          hintWikiSlug(p.slug);
+                          onNavigate('wiki');
+                        }}
+                      >
+                        <Initial name={p.name} size={22} />
+                      </button>
+                    </Tip>
                   ))}
                 </span>
               )}
@@ -145,9 +147,8 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
   return (
     <Frame title="Für dich" nav={nav} active={active} onSelect={setFilter} actions={actions} narrow>
       <h1 className="pz-title pz-title-lg">Vorschläge für deine Aufgaben und Routinen</h1>
-      {session.state === 'loading' && <div className="pz-state w-muted">Lade …</div>}
+      {(session.state === 'loading' || (token && load.loading && !load.data)) && <SkSuggestions />}
       {session.state === 'signed-out' && <SignedOutHint what="deine Vorschläge" />}
-      {token && load.loading && !load.data && <div className="pz-state w-muted">Lade …</div>}
       {token && load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
 
       {created && (

@@ -4,6 +4,8 @@ import { ChatApiError, buildPersona, googleStart, type PersonaStatus } from '../
 import { onDesktopCommand } from '../workspace/desktop';
 import { loadSession } from '../workspace/session';
 import { IconClose, IconMore } from '../ui/shell/line-icons';
+import { SkNav } from '../ui/Skeleton';
+import { Tip } from '../ui/Tooltip';
 import { friendlyError, hueIndex, initials } from './format';
 
 /** Opens a link outside the app; works in Electron and in the browser build. */
@@ -113,7 +115,7 @@ export interface NavEntry {
 
 /** Section layout: title + sub-navigation on the left, scrolling content on the right. */
 export function Frame({
-  title, nav, active, onSelect, actions, children, wide, narrow,
+  title, nav, active, onSelect, actions, children, wide, narrow, navLoading,
 }: {
   title: string;
   nav: NavEntry[];
@@ -124,6 +126,8 @@ export function Frame({
   wide?: boolean;
   /** Reading column for lists (Für dich). */
   narrow?: boolean;
+  /** The entries are not known yet: show skeleton rows below the ones given. */
+  navLoading?: boolean;
 }) {
   return (
     <div className="section pz">
@@ -139,6 +143,7 @@ export function Frame({
               </button>
             </div>
           ))}
+          {navLoading && <SkNav />}
         </nav>
       </aside>
       <div className="pz-main">
@@ -165,9 +170,11 @@ export function Initial({ name, size = 22 }: { name: string; size?: number }) {
 
 export function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange: (next: boolean) => void; disabled?: boolean; label: string }) {
   return (
-    <button type="button" className="pz-toggle" role="switch" aria-checked={checked} aria-label={label} title={label} disabled={disabled} onClick={() => onChange(!checked)}>
-      <i />
-    </button>
+    <Tip label={label} side="top">
+      <button type="button" className="pz-toggle" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}>
+        <i />
+      </button>
+    </Tip>
   );
 }
 
@@ -232,9 +239,11 @@ export function MoreMenu({ items, label = 'Mehr' }: { items: Array<{ label: stri
   }, [open]);
   return (
     <div className="pz-more" ref={ref}>
-      <button className={`w-icon${open ? ' on' : ''}`} aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <IconMore size={18} />
-      </button>
+      <Tip label={label} side="top" disabled={open}>
+        <button className={`w-icon${open ? ' on' : ''}`} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <IconMore size={18} />
+        </button>
+      </Tip>
       {open && (
         <div className="pz-menu" role="menu">
           {items.map((it) => (

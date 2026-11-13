@@ -3,6 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <title>Ortis Studio</title>
+    <!-- Appearance before the first paint (same key and rules as src/ui/shell/theme.ts). -->
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var dark = false;
+        try {
+          dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        } catch (e) {}
+        var choice = null;
+        try {
+          choice = localStorage.getItem('ortis-studio-theme-v1');
+        } catch (e) {}
+        var system = dark ? 'dark' : 'light';
+        var theme = choice === 'light' || choice === 'dark' ? choice : system;
+        root.dataset.theme = theme;
+        if (theme !== system) root.dataset.themeForced = '';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

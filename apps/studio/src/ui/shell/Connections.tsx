@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { addMcpConnector, deleteConnector, googleStart, listConnectors, type Connector } from '../../workspace/api';
 import { onDesktopCommand } from '../../workspace/desktop';
+import { Busy, Skeleton } from '../Skeleton';
 
 /** Connectors list (Google, MCP servers). Shown in Einstellungen › Verbindungen and Funktionen › Integrationen. */
 export function Connections({ token, title = 'Verbindungen' }: { token: string; title?: string }) {
@@ -109,7 +110,11 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
             <strong>Google</strong>
             <span className="w-muted">{google ? google.name.replace(/^Google \((.*)\)$/, '$1') : 'Kalender, Gmail, Drive'}</span>
           </div>
-          {google ? (
+          {rows === null && !error ? (
+            <Busy as="span">
+              <Skeleton h={32} w={104} style={{ borderRadius: 16 }} />
+            </Busy>
+          ) : google ? (
             <div className="conn-actions">
               <span className="w-tag ok">Verbunden</span>
               <button className="w-btn" disabled={busy} onClick={() => void remove(google.id)}>

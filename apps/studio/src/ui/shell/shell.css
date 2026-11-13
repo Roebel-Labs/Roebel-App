@@ -9,7 +9,8 @@
   --w-line-strong: #dcdcdc;
   --w-text: #1c1c1c;
   --w-text-2: #4a4a4a;
-  --w-muted: #8b8b8b;
+  /* 4.9:1 on the card, 4.6:1 on --w-raised (WCAG AA for small text). */
+  --w-muted: #6f6f6f;
   --w-hover: #f3f3f3;
   --w-selected: #ededed;
   --w-raised: #f7f7f7;
@@ -22,31 +23,37 @@
   --w-accent-hover: color-mix(in srgb, var(--w-accent) 86%, black);
   --w-accent-soft: color-mix(in srgb, var(--w-accent) 11%, var(--w-card));
   --w-accent-line: color-mix(in srgb, var(--w-accent) 24%, var(--w-card));
-  --w-accent-text: color-mix(in srgb, var(--w-accent) 72%, black);
+  --w-accent-text: color-mix(in srgb, var(--w-accent) 60%, black);
   --w-accent-agent: color-mix(in srgb, var(--w-accent) 15%, var(--w-card));
+  /* Assistant avatar tile and the Start sidebar's faint tint: both follow the selected accent. */
+  --w-accent-tile: color-mix(in srgb, var(--w-accent) 38%, white);
+  --w-side: color-mix(in srgb, var(--w-accent) 3%, var(--w-raised));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --w-frame: #1b1b1b;
-    --w-card: #141414;
-    --w-line: #262626;
-    --w-line-strong: #333333;
-    --w-text: #ececec;
-    --w-text-2: #c4c4c4;
-    --w-muted: #8a8a8a;
-    --w-hover: #1f1f1f;
-    --w-selected: #262626;
-    --w-raised: #1c1c1c;
-    --w-ink: #f2f2f2;
-    --w-ink-text: #141414;
-    --w-danger: #ff7a74;
-    --w-accent-hover: color-mix(in srgb, var(--w-accent) 86%, white);
-    --w-accent-soft: color-mix(in srgb, var(--w-accent) 16%, var(--w-card));
-    --w-accent-line: color-mix(in srgb, var(--w-accent) 30%, var(--w-card));
-    --w-accent-text: color-mix(in srgb, var(--w-accent) 40%, white);
-    --w-accent-agent: color-mix(in srgb, var(--w-accent) 22%, var(--w-card));
-  }
+/* The theme is the resolved appearance (System / Hell / Dunkel, see ui/shell/theme.ts), written to
+   <html data-theme> before the first paint. */
+:root[data-theme='dark'] {
+  /* Layering: rail and toolbar darkest, sidebars one step up, the content card between them. */
+  --w-frame: #0e0e0e;
+  --w-card: #141414;
+  --w-line: #262626;
+  --w-line-strong: #333333;
+  --w-text: #ececec;
+  --w-text-2: #c4c4c4;
+  --w-muted: #8f8f8f;
+  --w-hover: #1f1f1f;
+  --w-selected: #262626;
+  --w-raised: #1c1c1c;
+  --w-ink: #f2f2f2;
+  --w-ink-text: #141414;
+  --w-danger: #ff7a74;
+  --w-accent-hover: color-mix(in srgb, var(--w-accent) 86%, white);
+  --w-accent-soft: color-mix(in srgb, var(--w-accent) 16%, var(--w-card));
+  --w-accent-line: color-mix(in srgb, var(--w-accent) 30%, var(--w-card));
+  --w-accent-text: color-mix(in srgb, var(--w-accent) 40%, white);
+  --w-accent-agent: color-mix(in srgb, var(--w-accent) 26%, var(--w-card));
+  --w-accent-tile: color-mix(in srgb, var(--w-accent) 62%, white);
+  --w-side: color-mix(in srgb, var(--w-accent) 5%, var(--w-raised));
 }
 
 body {
@@ -59,6 +66,13 @@ html.glass body {
   background: transparent;
 }
 
+/* The native glass behind the frame follows the system appearance, not the app's. When the chosen theme
+   differs from the system, the frame is painted in its own colour so rail and toolbar stay legible. */
+html.glass[data-theme-forced],
+html.glass[data-theme-forced] body {
+  background: var(--w-frame);
+}
+
 .app.shell {
   flex-direction: column;
   color: var(--w-text);
@@ -67,7 +81,8 @@ html.glass body {
 /* toolbar */
 
 .toolbar {
-  flex: 0 0 48px;
+  /* 44px keeps the macOS traffic lights (fixed by the shell at y 18) inside the bar's vertical centre band. */
+  flex: 0 0 44px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -104,7 +119,7 @@ html.mac-inset .toolbar {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 28px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -112,7 +127,7 @@ html.mac-inset .toolbar {
 }
 
 .tb-icon {
-  width: 30px;
+  width: 32px;
   justify-content: center;
 }
 
@@ -151,11 +166,11 @@ html.mac-inset .toolbar {
 }
 
 .rail {
-  flex: 0 0 64px;
+  flex: 0 0 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 4px 0 8px;
 }
 
@@ -164,10 +179,8 @@ html.mac-inset .toolbar {
   opacity: 0.9;
 }
 
-@media (prefers-color-scheme: light) {
-  .rail-logo {
-    filter: invert(1);
-  }
+:root:not([data-theme='dark']) .rail-logo {
+  filter: invert(1);
 }
 
 .rail-items {
@@ -181,8 +194,8 @@ html.mac-inset .toolbar {
   position: relative;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -229,7 +242,11 @@ html.mac-inset .toolbar {
   border-radius: var(--w-r);
   background: var(--w-card);
   color: var(--w-text);
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] .shell-card {
+  color-scheme: dark;
 }
 
 /* The livestream keeps its dark control-room theme inside the card. */
@@ -251,8 +268,8 @@ html.mac-inset .toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  height: 52px;
-  padding: 0 20px;
+  height: 44px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--w-line);
 }
 
@@ -293,6 +310,40 @@ html.mac-inset .toolbar {
 .tb-popover-title {
   margin-bottom: 10px;
   font: 700 13px/1 var(--font-head);
+}
+
+/* Darstellung: System / Hell / Dunkel */
+
+.tb-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  background: var(--w-raised);
+}
+
+.tb-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--w-text-2);
+  font-weight: 600;
+}
+
+.tb-seg button:hover {
+  color: var(--w-text);
+}
+
+.tb-seg button[aria-checked='true'] {
+  background: var(--w-card);
+  color: var(--w-text);
+  outline: 1px solid var(--w-line-strong);
 }
 
 .tb-swatches {
@@ -387,8 +438,8 @@ html.mac-inset .toolbar {
 .rail-avatar {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: 0;
   border-radius: 50%;
   background: #d94c8c;
@@ -399,7 +450,7 @@ html.mac-inset .toolbar {
 .account-pop {
   position: absolute;
   z-index: 60;
-  left: 56px;
+  left: 48px;
   bottom: 0;
   width: 280px;
   padding: 14px;
@@ -556,6 +607,28 @@ html.mac-inset .toolbar {
 .dlg-body > p {
   margin: 0 0 14px;
   line-height: 1.5;
+}
+
+/* Tastenkürzel */
+
+.keys-list {
+  margin: 0;
+}
+
+.keys-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--w-line);
+}
+
+.keys-list dd {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  color: var(--w-text-2);
 }
 
 .dlg-close {

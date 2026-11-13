@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { emitCommand, onDesktopCommand } from '../../workspace/desktop';
 import { fetchMe, type Me } from '../../workspace/api';
 import { loadSession } from '../../workspace/session';
-import { IconLogout, IconSettings } from './line-icons';
+import { IconLogout, IconMoon, IconSettings, IconSun } from './line-icons';
+import { currentTheme, isSystemDark, onThemeChange, resolveTheme, setTheme, toggledTheme } from './theme';
+import { Busy, Skeleton } from '../Skeleton';
+import { Tip } from '../Tooltip';
 
 const TIER: Record<string, string> = { free: 'Kostenlos', plus: 'Plus', ultra: 'Ultra' };
 
@@ -16,6 +19,7 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const [meFailed, setMeFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = async () => {
@@ -24,8 +28,10 @@ export function AccountMenu() {
     if (!s) return setMe(null);
     try {
       setMe(await fetchMe(s.token));
+      setMeFailed(false);
     } catch {
       setMe(null);
+      setMeFailed(true);
     }
   };
 
@@ -43,26 +49,52 @@ export function AccountMenu() {
     return () => window.removeEventListener('mousedown', close);
   }, [open]);
 
+  // Quick appearance toggle (the full System / Hell / Dunkel choice is in Einstellungen → Darstellung).
+  const [theme, setThemeState] = useState(currentTheme);
+  useEffect(() => onThemeChange(setThemeState), []);
+  const dark = resolveTheme(theme, isSystemDark()) === 'dark';
+  const themeItem = (
+    <button className="account-item" onClick={() => setTheme(toggledTheme(theme, isSystemDark()))}>
+      {dark ? <IconSun size={16} /> : <IconMoon size={16} />} {dark ? 'Helle Darstellung' : 'Dunkle Darstellung'}
+    </button>
+  );
+
   const pct = me ? Math.min(100, Math.round((me.quota.used / Math.max(1, me.quota.limit)) * 100)) : 0;
   return (
     <div className="rail-account" ref={ref}>
-      <button className="rail-avatar" aria-label="Konto" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {initials(me)}
-      </button>
+      <Tip label="Konto" side="right" disabled={open}>
+        <button className="rail-avatar" aria-label="Konto" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {initials(me)}
+        </button>
+      </Tip>
       {open && (
         <div className="account-pop" role="dialog" aria-label="Konto">
           {signedIn ? (
             <>
-              <div className="account-head">
-                <strong>{me?.displayName || me?.username || 'Angemeldet'}</strong>
-                <span className="w-tag">{TIER[me?.tier ?? ''] ?? me?.tier ?? '…'}</span>
-              </div>
+              {me || meFailed ? (
+                <div className="account-head">
+                  <strong>{me?.displayName || me?.username || 'Angemeldet'}</strong>
+                  {me && <span className="w-tag">{TIER[me.tier ?? ''] ?? me.tier}</span>}
+                </div>
+              ) : (
+                <Busy className="account-head">
+                  <Skeleton h={15} w={130} />
+                  <Skeleton h={20} w={64} />
+                </Busy>
+              )}
               {me?.username && <div className="w-muted account-sub">@{me.username}</div>}
               <div className="account-quota">
-                <div className="account-quota-row">
-                  <span>{me?.quota.ownKey ? 'Eigener Schlüssel' : 'Tageskontingent'}</span>
-                  <span className="w-muted">{me?.quota.ownKey ? 'unbegrenzt' : `${100 - pct} % übrig`}</span>
-                </div>
+                {me || meFailed ? (
+                  <div className="account-quota-row">
+                    <span>{me?.quota.ownKey ? 'Eigener Schlüssel' : 'Tageskontingent'}</span>
+                    <span className="w-muted">{me?.quota.ownKey ? 'unbegrenzt' : me ? `${100 - pct} % übrig` : 'nicht abrufbar'}</span>
+                  </div>
+                ) : (
+                  <Busy className="account-quota-row">
+                    <Skeleton h={13} w={110} />
+                    <Skeleton h={13} w={70} />
+                  </Busy>
+                )}
                 <div className="account-bar">
                   <i style={{ width: `${me?.quota.ownKey ? 100 : 100 - pct}%` }} />
                 </div>
@@ -76,6 +108,7 @@ export function AccountMenu() {
               >
                 <IconSettings size={16} /> Einstellungen
               </button>
+              {themeItem}
               <button
                 className="account-item danger"
                 onClick={() => {
@@ -87,7 +120,10 @@ export function AccountMenu() {
               </button>
             </>
           ) : (
-            <div className="w-muted account-sub">Nicht angemeldet. Verbinde Ortis Studio unter Start mit deinem Konto.</div>
+            <>
+              <div className="w-muted account-sub">Nicht angemeldet. Verbinde Ortis Studio unter Start mit deinem Konto.</div>
+              {themeItem}
+            </>
           )}
         </div>
       )}

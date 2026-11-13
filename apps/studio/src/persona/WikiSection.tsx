@@ -10,6 +10,7 @@ import { fmtDate, fmtDay, friendlyError } from './format';
 import { ImportDialog } from './ImportDialog';
 import { takeWikiSlug } from './intent';
 import { Md, MdInline } from './Md';
+import { SkPage } from '../ui/Skeleton';
 import './persona.css';
 
 const UPDATES = '~updates';
@@ -62,7 +63,9 @@ export function WikiSection() {
     lastBuilt.current = builtAt;
   }, [status, builtAt]);
 
-  const nav = useMemo(() => buildNav(persona), [persona]);
+  const firstLoad = session.state === 'loading' || (!!token && load.loading && !persona);
+  // While the page list is unknown the sub-navigation shows skeleton rows instead of guessed entries.
+  const nav = useMemo(() => (persona ? buildNav(persona) : []), [persona]);
   const hasContent = !!persona && (persona.pages.length > 0 || persona.people.length > 0);
 
   const refresh = async () => {
@@ -98,7 +101,7 @@ export function WikiSection() {
 
   const actions = token && persona && (
     <>
-      <button className="w-btn ghost" onClick={() => emitCommand({ kind: 'compose' })} title="Im Chat fragen">
+      <button className="w-btn ghost" onClick={() => emitCommand({ kind: 'compose' })}>
         <IconChat size={16} /> Im Chat fragen
       </button>
       <button className="w-btn" disabled={busy || building} onClick={() => void refresh()}>
@@ -112,10 +115,9 @@ export function WikiSection() {
   );
 
   return (
-    <Frame title="Wiki" nav={nav} active={slug} onSelect={setSlug} actions={actions || undefined} wide>
-      {session.state === 'loading' && <div className="pz-state w-muted">Lade …</div>}
+    <Frame title="Wiki" nav={nav} active={slug} onSelect={setSlug} actions={actions || undefined} wide navLoading={firstLoad}>
+      {firstLoad && <SkPage updates={slug === 'overview'} />}
       {session.state === 'signed-out' && <SignedOutHint what="die Seiten deines Wikis" />}
-      {token && load.loading && !persona && <div className="pz-state w-muted">Lade …</div>}
       {token && load.error && !persona && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {error && <div className="ws-error">{error}</div>}
 
@@ -227,7 +229,7 @@ function PageView({
     }
   };
 
-  if (load.loading && !page) return <div className="pz-state w-muted">Lade …</div>;
+  if (load.loading && !page) return <SkPage updates={!!updates && updates.length > 0} box={slug === 'overview' || slug === 'profile' || slug.startsWith('person-')} />;
   if (load.error && !page) return <LoadError message={load.error} onRetry={() => void load.reload()} />;
   if (!page) return null;
 

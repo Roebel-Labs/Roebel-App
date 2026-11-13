@@ -4,6 +4,7 @@ import { IconClock, IconFile, IconFolder, IconImage, IconLoop } from '../ui/shel
 import { Frame, LoadError, Modal, openExternal, SearchField, SignedOutHint, useLoad, useSessionToken, type NavEntry } from './common';
 import { filterLibrary, fmtDate, friendlyError } from './format';
 import { Md } from './Md';
+import { SkDoc, SkFiles } from '../ui/Skeleton';
 import './persona.css';
 
 type Kind = 'all' | 'document' | 'image';
@@ -35,11 +36,10 @@ export function LibrarySection() {
   const total = load.data?.files.length ?? 0;
 
   return (
-    <Frame title="Bibliothek" nav={nav} active={collection} onSelect={setCollection} wide>
+    <Frame title="Bibliothek" nav={nav} active={collection} onSelect={setCollection} wide navLoading={session.state === 'loading' || (!!token && load.loading && !load.data)}>
       <h1 className="pz-title">{collection === RECENT ? 'Meine Dateien' : current?.label ?? 'Sammlung'}</h1>
-      {session.state === 'loading' && <div className="pz-state w-muted">Lade …</div>}
+      {(session.state === 'loading' || (token && load.loading && !load.data)) && <SkFiles />}
       {session.state === 'signed-out' && <SignedOutHint what="deine Dateien" />}
-      {token && load.loading && !load.data && <div className="pz-state w-muted">Lade …</div>}
       {token && load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
 
       {load.data && (
@@ -132,7 +132,7 @@ function Reader({ token, file, onClose }: { token: string; file: LibraryFile; on
       {error ? (
         <div className="ws-error">{error}</div>
       ) : content === null ? (
-        <div className="w-muted">Lade …</div>
+        <SkDoc lines={10} />
       ) : markdown ? (
         <Md source={content} />
       ) : (

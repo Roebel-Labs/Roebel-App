@@ -7,6 +7,7 @@ import { loadFonts } from './render/fonts';
 import { StoreProvider } from './state/store';
 import { App } from './ui/App';
 import { applyAccent, loadAccent } from './ui/shell/accent';
+import { initTheme } from './ui/shell/theme';
 
 // A file dropped anywhere on the window must never navigate the page (the renderer would
 // unload and the MediaRecorder with it: dead stream). Drop zones that accept files call
@@ -24,7 +25,8 @@ document.addEventListener('drop', (e) => e.preventDefault());
   if (ui?.platform === 'darwin') document.documentElement.classList.add('mac-inset');
 }
 
-// The user's primary colour before the first paint.
+// The user's appearance and primary colour before the first paint.
+initTheme();
 applyAccent(loadAccent());
 
 // Fonts first: canvas text never triggers font loading, so the first program

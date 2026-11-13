@@ -164,17 +164,37 @@
   font-style: italic;
 }
 
+/* Assistant avatar: rounded-square tile in a tint of the accent, with the mascot or an initial. */
 .ws-avatar {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--w-accent-tile);
+  /* Dark ink on the tile in both themes: the tile is a light-to-mid tint (at least 7:1). */
+  color: #161616;
+  font-family: var(--font-head);
+  font-weight: 700;
+  line-height: 1;
 }
 
-.ws-avatar i {
+.ws-avatar img {
   display: block;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.78);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* The mascot artwork has a white ground: multiply lets the accent tile show through it. */
+  mix-blend-mode: multiply;
+}
+
+/* Assistant names: spaced caps in the heading face. */
+.ws-agent-name,
+.ws-bot-name {
+  font-family: var(--font-head);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 /* layout */
@@ -183,7 +203,9 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  /* --ws-list: width of the Start sidebar (thread list). */
+  --ws-list: 260px;
+  grid-template-columns: var(--ws-list) minmax(0, 1fr);
   font-size: 14px;
 }
 
@@ -192,7 +214,7 @@
 }
 
 .ws.with-panel {
-  grid-template-columns: 300px minmax(0, 1fr) minmax(300px, 32%);
+  grid-template-columns: var(--ws-list) minmax(0, 1fr) minmax(300px, 32%);
 }
 
 .ws.no-list.with-panel {
@@ -204,44 +226,55 @@
 .ws-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
   min-height: 0;
-  padding: 12px;
+  padding: 12px 10px;
   border-right: 1px solid var(--w-line);
+  background: var(--w-side);
+  font-size: 13px;
 }
 
+/* Agent card: tinted with the accent; the latest message fades out at the right edge. */
 .ws-agent {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border-radius: 14px;
-  background: var(--w-raised);
-}
-
-.ws-agent.running {
-  background: var(--w-accent-agent);
-}
-
-.ws-agent-text {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+  width: 100%;
   min-width: 0;
-  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--w-accent-line);
+  border-radius: 8px;
+  background: var(--w-accent-agent);
+  color: var(--w-text);
+  font: inherit;
+  text-align: left;
+}
+
+.ws-agent:hover:not(:disabled) {
+  border-color: var(--w-accent);
+}
+
+.ws-agent:disabled {
+  cursor: default;
 }
 
 .ws-agent-name {
   flex: none;
-  font: 800 14px/1 var(--font-head);
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .ws-agent-status {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--w-muted);
+  color: var(--w-text-2);
+  font-size: 13.5px;
+  -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent);
+  mask-image: linear-gradient(90deg, #000 60%, transparent);
 }
 
 .ws-list-tools {
@@ -311,8 +344,9 @@
 
 .ws-group {
   padding: 6px 4px;
-  color: var(--w-text-2);
-  font-size: 15px;
+  color: var(--w-muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .ws-thread {
@@ -320,14 +354,51 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 38px;
-  padding: 0 12px 0 36px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px 0 30px;
   border: 0;
   border-radius: 10px;
   background: none;
   color: var(--w-text);
-  font-size: 15px;
+  font-size: 14px;
   text-align: left;
+}
+
+.ws-thread-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ws-thread-title > span {
+  display: inline-block;
+}
+
+/* An overflowing title slides on hover to show its end, with faded edges; --shift and --slide are set by
+   ThreadRow from the measured overflow. Under reduced motion it stays truncated. */
+@media (prefers-reduced-motion: no-preference) {
+  .ws-thread.slides .ws-thread-title {
+    text-overflow: clip;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  }
+
+  .ws-thread.slides .ws-thread-title > span {
+    transition: transform 0.25s ease-out;
+  }
+
+  .ws-thread.slides:hover .ws-thread-title {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  }
+
+  .ws-thread.slides:hover .ws-thread-title > span {
+    transform: translateX(var(--shift));
+    transition: transform var(--slide) linear 0.25s;
+  }
 }
 
 .ws-thread:hover {
@@ -373,10 +444,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 64px;
-  padding: 0 16px 0 20px;
+  height: 46px;
+  padding: 0 12px 0 16px;
   border-bottom: 1px solid var(--w-line);
-  font-size: 16px;
+  font-size: 14.5px;
 }
 
 .ws-messages {
@@ -420,7 +491,15 @@
   display: flex;
   gap: 8px;
   align-items: baseline;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+}
+
+.ws-bot-name {
+  font-size: 13px;
+}
+
+.ws-msg-meta .w-muted {
+  font-size: 12.5px;
 }
 
 .ws-typing {

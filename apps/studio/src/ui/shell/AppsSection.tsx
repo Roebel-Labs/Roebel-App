@@ -3,6 +3,7 @@ import { ChatApiError, fetchMyMiniApps, type MyMiniApp } from '../../workspace/a
 import { apiBase, loadSession } from '../../workspace/session';
 import { IconPlus } from './line-icons';
 import { AppAnalytics } from './AppAnalytics';
+import { SkCards } from '../Skeleton';
 
 const STATUS: Record<MyMiniApp['status'], string> = {
   draft: 'Entwurf',
@@ -67,7 +68,7 @@ export function AppsSection() {
         </button>
       </header>
       <div className="apps-body">
-        {state === 'loading' && <div className="w-muted">Lade …</div>}
+        {state === 'loading' && <SkCards cards={3} height={168} className="apps-grid" />}
         {state === 'signed-out' && <div className="w-muted">Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Mini-Apps.</div>}
         {state === 'error' && <div className="ws-error">{error}</div>}
         {state === 'ready' && apps && apps.length === 0 && (
