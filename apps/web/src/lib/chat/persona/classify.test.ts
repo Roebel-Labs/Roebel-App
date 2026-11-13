@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   chunk, contactScore, isAutomated, isProfileWorthy, nameFromEmail, numberCitations, ownText, parseAddresses,
-  personSlug, rankContacts, scrubSecrets, stripCitations,
+  personSlug, rankContacts, scrubSecrets, stripCitations, isRoleAddress, isSelfAlias, noticeKey,
 } from "./classify";
 import type { ContactStat, MailHeaders } from "./classify";
 
@@ -118,4 +118,35 @@ test("stripCitations", () => {
 
 test("chunk", () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+});
+
+test("role mailboxes never get a person page; a cc colleague who answers does", () => {
+  assert.equal(isRoleAddress("support@kie.ai"), true);
+  assert.equal(isRoleAddress("help@gnosispay.com"), true);
+  assert.equal(isRoleAddress("x@acme.zendesk.com"), true);
+  assert.equal(isRoleAddress("info@segelverein.de"), false);
+  assert.equal(isRoleAddress("anne.eckloff@stic.de"), false);
+  assert.equal(isProfileWorthy({ email: "support@kie.ai", name: "kie.ai Support", sent: 4, received: 3, lastAt: 0, meetings: 0 }), false);
+  assert.equal(isProfileWorthy({ email: "lars@example.org", name: "Lars Richter", sent: 0, received: 1, lastAt: 0, meetings: 0, shared: 1 }), true);
+});
+
+test("the person's own second mailbox is recognised as an alias", () => {
+  assert.equal(isSelfAlias({ email: "m.brych@sv-gruppe.de", name: "" }, ["Max Brych"]), true);
+  assert.equal(isSelfAlias({ email: "other@firma.de", name: "Brych, Max" }, ["Max Brych"]), true);
+  assert.equal(isSelfAlias({ email: "guido.brych@web.de", name: "Guido Brych" }, ["Max Brych"]), false);
+  assert.equal(isSelfAlias({ email: "max@web.de", name: "" }, ["Max"]), false);
+});
+
+test("look-alike notices share one key", () => {
+  const a = noticeKey("GitHub", "[Roebel-Labs/Roebel-App] Run failed: CI - main (3f1671a)");
+  const b = noticeKey("GitHub", "[Roebel-Labs/Roebel-App] Run failed: CI - main (30a1d32)");
+  assert.equal(a, b);
+  assert.notEqual(a, noticeKey("Vercel", "Payment failed"));
+});
+
+test("a citation run is capped at three sources", () => {
+  const known = new Map(["a1", "a2", "a3", "a4", "a5"].map((r) => [r, { ref: r, label: r, date: null }]));
+  const out = numberCitations("Builds schlagen fehl [a1, a2, a3, a4, a5].", known);
+  assert.equal(out.sources.length, 3);
+  assert.equal(out.body, "Builds schlagen fehl [[1]][[2]][[3]].");
 });

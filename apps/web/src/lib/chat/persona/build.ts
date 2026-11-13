@@ -18,8 +18,8 @@ import { chunk, isProfileWorthy, nameFromEmail, numberCitations, personSlug, str
 import type { ContactStat, SourceRef } from "./classify";
 import { collectCorpus } from "./collect";
 import {
-  DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SYNTH_SYSTEM, coreSchema, digestPrompt, digestSchema, dossier,
-  personPrompt, personSchema, profileSchema,
+  DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, coreSchema, digestPrompt, digestSchema, dossier,
+  personPrompt, personSchema, profileSchema, suggestSchema,
 } from "./prompts";
 import type { SynthInput } from "./prompts";
 import * as store from "./store";
@@ -128,7 +128,10 @@ export function knownRefs(corpus: Corpus): Map<string, SourceRef> {
     const who = m.dir === "sent" ? `E-Mail an ${m.to[0] ?? "unbekannt"}${m.to.length > 1 ? ` (+${m.to.length - 1})` : ""}` : `E-Mail von ${m.fromName || m.from}`;
     known.set(m.ref, { ref: m.ref, label: `${who} · „${m.subject || "ohne Betreff"}“`, date: m.date });
   }
-  for (const n of corpus.notices) known.set(n.ref, { ref: n.ref, label: `Benachrichtigung von ${n.sender} · „${n.subject}“`, date: n.date });
+  for (const n of corpus.notices) {
+    const count = n.count ?? 1;
+    known.set(n.ref, { ref: n.ref, label: `${count > 1 ? `${count} Benachrichtigungen` : "Benachrichtigung"} von ${n.sender} · „${n.subject}“`, date: n.date });
+  }
   for (const e of corpus.events) known.set(e.ref, { ref: e.ref, label: `Kalender · ${e.title}`, date: e.start.slice(0, 10) });
   for (const i of corpus.imports) known.set(i.ref, { ref: i.ref, label: `Import aus ${i.kind === "claude" ? "Claude" : i.kind === "chatgpt" ? "ChatGPT" : "eigenem Text"}${i.title ? ` · ${i.title}` : ""}`, date: null });
   known.set("r1", { ref: "r1", label: "Profil in der Röbel-App", date: null });
@@ -169,7 +172,7 @@ async function stageDigest(wallet: string, cp: Checkpoint, deadline: number, sav
     const start = cp.nextChunk ?? 0;
     const batch = chunks.slice(start, start + DIGEST_PARALLEL);
     const results = await Promise.allSettled(batch.map((mails) => callModel(wallet, "bot-fast", "digest", {
-      schema: digestSchema, system: DIGEST_SYSTEM, prompt: digestPrompt(mails, corpus.selfEmail), maxOutputTokens: 4000,
+      schema: digestSchema, system: DIGEST_SYSTEM, prompt: digestPrompt(mails, corpus.selfEmail, corpus.selfAliases ?? []), maxOutputTokens: 4000,
     })));
     const refs = new Set(corpus.mails.map((m) => m.ref));
     for (const r of results) {
@@ -207,9 +210,12 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     dismissed: [...tombstones].filter((k) => k.startsWith("suggestion:")).map((k) => k.slice(11)).slice(0, 30),
   };
 
-  const [core, profile] = await Promise.all([
+  const [core, profile, suggest] = await Promise.all([
     callModel(wallet, "bot-smart", "synthesize", { schema: coreSchema, system: SYNTH_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 9000 }),
     callModel(wallet, "bot-smart", "profile", { schema: profileSchema, system: PROFILE_SYSTEM, prompt: dossier(input, { forProfile: true }), maxOutputTokens: 7000 }),
+    // Suggestions are worth their own call, but never worth failing the build.
+    callModel(wallet, "bot-smart", "suggest", { schema: suggestSchema, system: SUGGEST_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 9000 })
+      .catch((err) => { console.error("[chat/persona] suggestions failed", err); return null; }),
   ]);
 
   const known = knownRefs(corpus);
@@ -239,23 +245,39 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     body: `${stripCitations(core.core).trim()}\n\nSo schreibt der Mensch: ${stripCitations(profile.styleCore).trim()}`,
   });
 
-  // Suggestions: fresh set, never the ones the person dismissed.
-  const bySlug = new Map(contacts.map((c) => [c.email, { name: c.name || nameFromEmail(c.email), slug: personSlug(c.email, c.name) }]));
-  const suggestions = core.suggestions.slice(0, 10)
-    .filter((s) => !tombstones.has(`suggestion:${s.title.trim().toLowerCase()}`))
-    .map((s, i) => {
-      const schedule = s.kind === "routine" && s.schedule
-        ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute ?? 0, tz: "Europe/Berlin" })
-        : null;
-      return {
-        group_title: (s.group ?? "").trim().slice(0, 80) || "Allgemein",
-        kind: (s.kind === "routine" && schedule ? "routine" : "task") as "task" | "routine",
-        title: s.title.trim().slice(0, 140), reason: (s.reason ?? "").trim().slice(0, 200), prompt: s.prompt.trim().slice(0, 1000),
-        schedule, people: (s.people ?? []).map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4),
-        sort: i,
-      };
-    });
-  await store.replaceSuggestions(wallet, suggestions);
+  // Suggestions: fresh set, never the ones the person dismissed. A failed call keeps the old set.
+  if (suggest) {
+    const bySlug = new Map(contacts.map((c) => [c.email, { name: c.name || nameFromEmail(c.email), slug: personSlug(c.email, c.name) }]));
+    const before = new Set((await store.listSuggestionRows(wallet)).map((r) => r.title.trim().toLowerCase()));
+    const SECTIONS = { projekt: "projects", zusammenarbeit: "collab", verbessern: "improve", profil: "peers" } as const;
+    const peersTitle = (suggest.peersTitle ?? "").trim().slice(0, 60) || "Für Menschen wie dich";
+    const seenTitles = new Set<string>();
+    const suggestions = suggest.suggestions.slice(0, 30)
+      .filter((s) => {
+        const key = s.title.trim().toLowerCase();
+        if (!key || seenTitles.has(key) || tombstones.has(`suggestion:${key}`)) return false;
+        seenTitles.add(key);
+        return true;
+      })
+      .map((s, i) => {
+        const schedule = s.kind === "routine" && s.schedule
+          ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute ?? 0, tz: "Europe/Berlin" })
+          : null;
+        const kind = (s.kind === "routine" && schedule ? "routine" : "task") as "task" | "routine";
+        const section = SECTIONS[s.section] ?? "projects";
+        return {
+          section, section_title: section === "peers" ? peersTitle : "",
+          group_title: (s.group ?? "").trim().slice(0, 80) || "Allgemein",
+          kind, quick: kind === "task" && Boolean(s.quick),
+          // On the very first set nothing is "new": the badge marks what a later update added.
+          fresh: before.size > 0 && !before.has(s.title.trim().toLowerCase()),
+          title: s.title.trim().slice(0, 140), reason: (s.reason ?? "").trim().slice(0, 200), prompt: s.prompt.trim().slice(0, 1200),
+          schedule, people: (s.people ?? []).map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4),
+          sort: i,
+        };
+      });
+    await store.replaceSuggestions(wallet, suggestions);
+  }
 
   cp.changed = changed;
   cp.peopleQueue = contacts.map((c) => c.email);
@@ -376,7 +398,7 @@ export async function startPersonaBuild(wallet: string, mode: "full" | "refresh"
   if (job?.state === "building") throw new PersonaBusyError();
   const since = new Date(Date.now() - 86_400_000).toISOString();
   const runs = await chatStore.db().from("chat_runs").select("id", { count: "exact", head: true })
-    .eq("owner_wallet", wallet).eq("route", "persona:synthesize").gte("created_at", since);
+    .eq("owner_wallet", wallet).eq("route", "persona:synthesize").eq("status", "ok").gte("created_at", since);
   if ((runs.count ?? 0) >= MAX_BUILDS_PER_DAY) throw new PersonaRateError();
   // A refresh reads what is new since the last build (with a day of overlap); without a wiki it is a full build.
   const effective = mode === "refresh" && job?.built_at ? "refresh" : "full";

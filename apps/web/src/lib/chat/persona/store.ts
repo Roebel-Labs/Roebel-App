@@ -3,7 +3,7 @@ import { db, isUuid } from "../store";
 import type { RoutineSchedule } from "../types";
 import type {
   Checkpoint, ImportMeta, Page, PageFact, PageKind, PageMeta, PageSource, PersonMeta, PersonaStage, PersonaState,
-  PersonaUpdate, Suggestion,
+  PersonaUpdate, Suggestion, SuggestionSectionKey,
 } from "./types";
 
 function must<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
@@ -169,11 +169,13 @@ export async function deleteImport(wallet: string, id: string): Promise<boolean>
 export interface SuggestionRow {
   id: string; wallet: string; group_title: string; kind: "task" | "routine"; title: string; reason: string; prompt: string;
   schedule: RoutineSchedule | null; people: { name: string; slug: string }[] | null; status: string; sort: number;
+  section?: SuggestionSectionKey; section_title?: string; quick?: boolean; fresh?: boolean;
 }
 
 export const toSuggestion = (r: SuggestionRow): Suggestion => ({
   id: r.id, kind: r.kind, title: r.title, reason: r.reason, prompt: r.prompt, schedule: r.schedule ?? null,
   people: Array.isArray(r.people) ? r.people : [],
+  quick: Boolean(r.quick), fresh: Boolean(r.fresh),
 });
 
 export async function listSuggestionRows(wallet: string): Promise<SuggestionRow[]> {

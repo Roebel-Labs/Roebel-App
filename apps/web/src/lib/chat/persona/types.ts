@@ -29,7 +29,12 @@ export interface PersonaUpdate { at: string; text: string }
 export interface Suggestion {
   id: string; kind: "task" | "routine"; title: string; reason: string; prompt: string;
   schedule: RoutineSchedule | null; people: { name: string; slug: string }[];
+  /** Done in minutes. */
+  quick: boolean;
+  /** Not in the previous set. */
+  fresh: boolean;
 }
+export type SuggestionSectionKey = "projects" | "collab" | "improve" | "peers";
 
 export interface ImportMeta { id: string; kind: "claude" | "chatgpt" | "text"; title: string; chars: number; createdAt: string }
 
@@ -39,12 +44,20 @@ export interface CorpusMail {
   ref: string; dir: "sent" | "received"; threadId: string;
   from: string; fromName: string; to: string[]; subject: string; date: string; text: string;
 }
-export interface CorpusNotice { ref: string; sender: string; subject: string; date: string }
+/** One cluster of look-alike automated mails (ten CI failures are one notice with count 10). */
+export interface CorpusNotice {
+  ref: string; sender: string; subject: string; date: string;
+  count?: number; firstDate?: string; snippet?: string;
+}
 export interface CorpusEvent {
   ref: string; title: string; start: string; allDay: boolean; recurring: boolean; location: string | null; attendees: string[];
 }
 export interface Corpus {
   selfEmail: string | null;
+  /** The person's name as it appears on their own mails. */
+  selfName?: string | null;
+  /** Other addresses that belong to the person (work mailbox, old address). */
+  selfAliases?: string[];
   mails: CorpusMail[];
   notices: CorpusNotice[];
   events: CorpusEvent[];

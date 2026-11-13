@@ -25,7 +25,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         page.body = `${page.body.trim()}${page.body.trim() ? "\n\n" : ""}## Im Chat gemerkt\n${memories.map((m) => `- ${m.fact}`).join("\n")}`;
       }
     }
-    return NextResponse.json({ page });
+    // Links in both directions, from the [Text](wiki:slug) references in the bodies.
+    const all = await persona.listPageRows(wallet, { withBody: true });
+    const visible = all.filter((r) => r.kind !== "core" && r.slug !== slug);
+    const linksOf = (body: string) => new Set([...body.matchAll(/\]\(wiki:([a-z0-9-]+)\)/g)].map((m) => m[1]));
+    const out = linksOf(row.body);
+    const link = (r: { slug: string; title: string }) => ({ slug: r.slug, title: r.title });
+    const backlinks = visible.filter((r) => linksOf(r.body).has(slug)).map(link).slice(0, 12);
+    const related = visible.filter((r) => out.has(r.slug) || (row.parent && r.parent === row.parent) || r.parent === slug || r.slug === row.parent).map(link).slice(0, 12);
+    return NextResponse.json({ page, backlinks, related });
   } catch (err) {
     return handleError(err, "persona/pages");
   }

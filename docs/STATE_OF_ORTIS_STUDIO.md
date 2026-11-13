@@ -116,6 +116,25 @@ Design and research: `docs/superpowers/specs/2026-11-12-ortis-personal-context-d
   Wiki, Bibliothek. Interface-only change (no `electron/` edits), so it can ship as an interface OTA.
 - **Not verified yet:** a build on a real mailbox, and the new screens on a device.
 
+
+### 6a.1 Quality pass after the first real build (2026-11-13)
+
+Compared side by side with Town.com on the same mailbox. What was wrong and what changed:
+
+| Finding | Fix |
+|---|---|
+| The newest 220 inbox mails of a developer are CI failures, so 2 human mails got read and decisions (an answer to an application) were missed | Three Gmail lanes: sent, personal (`-category:{promotions,social,updates,forums}`, 90 days), notices (`category:updates/forums`, 30 days) |
+| Replies were only read from people the user had written to directly | Whole threads the user wrote in are fetched (`threads.get`), including replies from people in cc (`ContactStat.shared`) |
+| Ten identical CI mails became ten citations | Notices are clustered (`noticeKey`), carry count, date range and the Gmail preview text; a citation run is capped at 3 |
+| Mail from January weighed like mail from yesterday | Dossier splits facts into "Aktuell (45 Tage)" and "Älter"; prompts: status follows the newest message |
+| Support desks and the user's own second mailbox got person pages | `isRoleAddress`, `isSelfAlias` |
+| Street address and admin access to 12 org profiles shown as facts | Sensitive rule extended (city level only); Röbel org access is described as app access, not ownership |
+| 7 generic suggestions | Own model call (`persona:suggest`), up to 26, sections projects / collab / improve / peers, `quick`, `fresh` |
+
+Prompts must stay neutral about who the user is (club member, craftsperson, pensioner, founder): examples in them only show the form.
+
+**Link with Claude (two-way).** `POST /api/chat/persona/link` issues a link token (hash stored in `persona_link_tokens`). `POST /api/ortis/mcp` is a stateless MCP endpoint (Bearer token or `?key=`) with `ortis_profile`, `ortis_search`, `ortis_read`, `ortis_suggestions`, `ortis_remember` (appends to the notes page) and `ortis_push_context` (stores or replaces an import by title and starts a wiki refresh). `SYNC_PROMPT` in `persona/link.ts` is the prompt the user gives Claude. Migration `20261113b_persona_sections_and_link.sql` (applied).
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`

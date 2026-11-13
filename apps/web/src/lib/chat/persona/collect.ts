@@ -1,7 +1,7 @@
-// Collects the raw material for a persona build: sent mail (the user's own
-// words — the best signal for style and real relationships), human inbox mail
-// from people the user writes to, a subject-only lane of automated notices
-// (billing, CI, bookings: they reveal open problems, never people), calendar,
+// Collects the raw material for a persona build: whole threads the user wrote
+// in (their own words plus every answer), mail from people outside those
+// threads, a clustered lane of automated notices (billing, CI, bookings: they
+// reveal open problems, never people), calendar,
 // the Röbel App profile, imported memory and chat memory.
 //
 // Everything is clipped and scrubbed here; nothing in the corpus is longer
@@ -15,7 +15,7 @@ import type { ConnectorRow } from "../harness/connectors/store";
 import { loadProfile } from "../harness/context";
 import { listMemories } from "../harness/memory";
 import {
-  htmlToText, isAutomated, nameFromEmail, ownText, parseAddresses, rankContacts, scrubSecrets,
+  htmlToText, isAutomated, isSelfAlias, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
 } from "./classify";
 import type { ContactStat, MailHeaders } from "./classify";
 import { listImports } from "./store";
@@ -25,9 +25,22 @@ const G = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 const LIMITS = {
-  full: { sentList: 220, inboxList: 220, sentBodies: 90, inboxBodies: 50, notices: 140, events: 200, sentDays: 365, inboxDays: 45 },
-  refresh: { sentList: 60, inboxList: 100, sentBodies: 30, inboxBodies: 25, notices: 60, events: 120, sentDays: 0, inboxDays: 0 },
+  full: {
+    sentList: 200, sentDays: 365, threads: 70,
+    personalList: 250, personalDays: 90, personalBodies: 50,
+    noticeList: 400, noticeDays: 30, noticeClusters: 90, events: 200,
+  },
+  refresh: {
+    sentList: 60, sentDays: 0, threads: 30,
+    personalList: 100, personalDays: 0, personalBodies: 25,
+    noticeList: 150, noticeDays: 0, noticeClusters: 60, events: 120,
+  },
 } as const;
+const MAX_MAILS = 260;
+const PER_THREAD = 8;
+const NOT_MINE = "-in:sent -in:chats -in:spam -in:trash";
+// Gmail's own sorting: without this the newest 200 mails of a developer are all CI failures.
+const NO_BULK = "-category:promotions -category:social -category:updates -category:forums";
 
 type GmailList = { messages?: { id: string; threadId: string }[] };
 interface GmailPart { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] }
@@ -97,6 +110,8 @@ async function listIds(row: ConnectorRow, q: string, max: number): Promise<strin
   return ids;
 }
 
+interface GmailThread { id: string; messages?: GmailMessage[] }
+
 async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: Date | null, corpus: Corpus): Promise<void> {
   const L = LIMITS[mode];
   const window = (days: number) => (since ? `after:${gmailDate(since)}` : `newer_than:${days}d`);
@@ -104,72 +119,81 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
   const self = (profile.emailAddress ?? "").toLowerCase();
   corpus.selfEmail = self || null;
 
-  const [sentIds, inboxIds] = await Promise.all([
+  // Three lanes: what the person wrote, what people wrote to them, and what machines reported.
+  const [sentIds, personalIds, noticeIds] = await Promise.all([
     listIds(row, `in:sent -in:chats ${window(L.sentDays)}`, L.sentList),
-    listIds(row, `-in:sent -in:chats -in:spam -in:trash ${window(L.inboxDays)}`, L.inboxList),
+    listIds(row, `${NOT_MINE} ${NO_BULK} ${window(L.personalDays)}`, L.personalList),
+    listIds(row, `${NOT_MINE} {category:updates category:forums} ${window(L.noticeDays)}`, L.noticeList),
   ]);
   const meta = (id: string) => googleApi<GmailMessage>(row, `${G}/messages/${id}?format=metadata&${META}`).catch(() => null);
-  const [sentMeta, inboxMeta] = await Promise.all([pool(sentIds, 10, meta), pool(inboxIds, 10, meta)]);
+  const [sentMeta, personalMeta, noticeMeta] = await Promise.all([pool(sentIds, 10, meta), pool(personalIds, 10, meta), pool(noticeIds, 10, meta)]);
 
-  // Contacts: who the user writes to, who writes back.
   const stats = new Map<string, ContactStat>();
   const touch = (email: string, name: string, at: number): ContactStat => {
     let c = stats.get(email);
-    if (!c) { c = { email, name, sent: 0, received: 0, lastAt: 0, meetings: 0 }; stats.set(email, c); }
+    if (!c) { c = { email, name, sent: 0, received: 0, lastAt: 0, meetings: 0, shared: 0 }; stats.set(email, c); }
     if (name && (!c.name || c.name.includes("@"))) c.name = name;
     if (at > c.lastAt) c.lastAt = at;
     return c;
   };
-  for (const m of sentMeta) {
-    if (!m) continue;
+  const sent = sentMeta.filter((m): m is GmailMessage => Boolean(m));
+  for (const m of sent) {
     const h = headersOf(m);
     const at = Number(m.internalDate ?? 0);
+    if (!corpus.selfName) corpus.selfName = parseAddresses(h.from)[0]?.name || null;
     for (const a of [...parseAddresses(h.to), ...parseAddresses(h.cc)]) {
       if (a.email === self) continue;
       touch(a.email, a.name, at).sent++;
     }
   }
+
+  // Notices: look-alike mails become one line with a count, a date range and the newest preview text.
+  const clusters = new Map<string, CorpusNotice>();
+  const addNotice = (m: GmailMessage, h: MailHeaders, from: { name: string; email: string }) => {
+    const sender = (from.name || from.email.split("@")[1]).slice(0, 60);
+    const subject = scrubSecrets(h.subject).slice(0, 140);
+    const date = isoDate(Number(m.internalDate ?? 0));
+    const key = noticeKey(sender, subject);
+    const c = clusters.get(key);
+    if (!c) {
+      if (clusters.size >= L.noticeClusters) return;
+      clusters.set(key, { ref: `a${clusters.size + 1}`, sender, subject, date, count: 1, firstDate: date, snippet: scrubSecrets(htmlToText(m.snippet ?? "")).slice(0, 220) });
+      return;
+    }
+    c.count = (c.count ?? 1) + 1;
+    if (date < (c.firstDate ?? date)) c.firstDate = date;
+    if (date > c.date) { c.date = date; c.subject = subject; c.snippet = scrubSecrets(htmlToText(m.snippet ?? "")).slice(0, 220); }
+  };
+
   const humanInbox: GmailMessage[] = [];
-  const notices: CorpusNotice[] = [];
-  for (const m of inboxMeta) {
-    if (!m) continue;
+  const seen = new Set<string>();
+  let automated = 0;
+  for (const m of [...personalMeta, ...noticeMeta]) {
+    if (!m || seen.has(m.id)) continue;
+    seen.add(m.id);
     const h = headersOf(m);
     const from = parseAddresses(h.from)[0];
-    const at = Number(m.internalDate ?? 0);
     if (!from || from.email === self) continue;
-    if (isAutomated(h)) {
-      if (notices.length < L.notices) {
-        notices.push({
-          ref: `a${notices.length + 1}`, sender: (from.name || from.email.split("@")[1]).slice(0, 60),
-          subject: scrubSecrets(h.subject).slice(0, 140), date: isoDate(at),
-        });
-      }
-      continue;
-    }
-    touch(from.email, from.name, at).received++;
+    if (isAutomated(h)) { automated++; addNotice(m, h, from); continue; }
+    touch(from.email, from.name, Number(m.internalDate ?? 0)).received++;
     humanInbox.push(m);
   }
-  corpus.notices = notices;
-  corpus.counts.sent = sentMeta.filter(Boolean).length;
+  corpus.notices = [...clusters.values()];
+  corpus.counts.sent = sent.length;
   corpus.counts.inboxHuman = humanInbox.length;
-  corpus.counts.inboxAutomated = inboxMeta.filter(Boolean).length - humanInbox.length;
+  corpus.counts.inboxAutomated = automated;
 
-  // Bodies: the user's own mails first; inbox only from people the user also writes to.
-  const full = (id: string) => googleApi<GmailMessage>(row, `${G}/messages/${id}?format=full`).catch(() => null);
-  const sentPick = sentMeta.filter((m): m is GmailMessage => Boolean(m)).slice(0, L.sentBodies);
-  const inboxPick = humanInbox
-    .filter((m) => (stats.get(parseAddresses(header(m, "from"))[0]?.email ?? "")?.sent ?? 0) > 0)
-    .slice(0, L.inboxBodies);
-  const [sentFull, inboxFull] = await Promise.all([pool(sentPick.map((m) => m.id), 8, full), pool(inboxPick.map((m) => m.id), 8, full)]);
-
-  const toMail = (m: GmailMessage, dir: "sent" | "received", n: number): CorpusMail | null => {
+  const mails: CorpusMail[] = [];
+  let sentN = 0;
+  let recvN = 0;
+  const toMail = (m: GmailMessage, dir: "sent" | "received"): CorpusMail | null => {
     const h = headersOf(m);
-    const text = scrubSecrets(ownText(bodyOf(m.payload) || m.snippet || ""));
+    const text = scrubSecrets(ownText(bodyOf(m.payload) || m.snippet || "", dir === "sent" ? 1400 : 1000));
     if (!text && !h.subject) return null;
     const from = parseAddresses(h.from)[0];
     const to = [...parseAddresses(h.to), ...parseAddresses(h.cc)].filter((a) => a.email !== self).slice(0, 6);
     return {
-      ref: `${dir === "sent" ? "s" : "i"}${n}`, dir, threadId: m.threadId,
+      ref: dir === "sent" ? `s${++sentN}` : `i${++recvN}`, dir, threadId: m.threadId,
       from: dir === "sent" ? "ich" : (from?.email ?? ""),
       fromName: dir === "sent" ? "" : (from?.name || nameFromEmail(from?.email ?? "")),
       to: to.map((a) => a.email),
@@ -178,11 +202,38 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
       text,
     };
   };
-  let n = 0;
-  corpus.mails = [
-    ...sentFull.map((m) => (m ? toMail(m, "sent", ++n) : null)),
-    ...inboxFull.map((m, i) => (m ? toMail(m, "received", i + 1) : null)),
-  ].filter((m): m is CorpusMail => Boolean(m));
+
+  // Whole threads the person wrote in: their mail plus every answer, including replies from
+  // people in cc. The answer to a question is usually the fact that matters.
+  const threadIds = [...new Set(sent.map((m) => m.threadId))].slice(0, L.threads);
+  const threads = await pool(threadIds, 6, (id) => googleApi<GmailThread>(row, `${G}/threads/${id}?format=full`).catch(() => null));
+  const inThreads = new Set<string>();
+  for (const t of threads) {
+    for (const m of (t?.messages ?? []).slice(-PER_THREAD)) {
+      inThreads.add(m.id);
+      const h = headersOf(m);
+      const from = parseAddresses(h.from)[0];
+      const mine = (m.labelIds ?? []).includes("SENT") || from?.email === self;
+      if (!mine) {
+        if (!from || isAutomated(h)) continue;
+        const c = touch(from.email, from.name, Number(m.internalDate ?? 0));
+        c.shared = (c.shared ?? 0) + 1;
+        if (!seen.has(m.id)) { c.received++; corpus.counts.inboxHuman++; }
+      }
+      const mail = toMail(m, mine ? "sent" : "received");
+      if (mail) mails.push(mail);
+    }
+  }
+
+  // Mail from people outside those threads (an unanswered report is exactly what the assistant should notice).
+  const full = (id: string) => googleApi<GmailMessage>(row, `${G}/messages/${id}?format=full`).catch(() => null);
+  const loose = humanInbox.filter((m) => !inThreads.has(m.id)).slice(0, L.personalBodies);
+  for (const m of await pool(loose.map((x) => x.id), 8, full)) {
+    const mail = m ? toMail(m, "received") : null;
+    if (mail) mails.push(mail);
+  }
+
+  corpus.mails = mails.sort((a, b) => b.date.localeCompare(a.date)).slice(0, MAX_MAILS);
   corpus.contacts = [...stats.values()];
 }
 
@@ -240,7 +291,11 @@ async function collectRoebel(wallet: string, corpus: Corpus): Promise<void> {
   if (profile.displayName) lines.push(`Name in der Röbel-App: ${profile.displayName}`);
   if (profile.username) lines.push(`Benutzername: @${profile.username}`);
   lines.push(profile.isCitizen ? "Verifizierte Bürgerin / verifizierter Bürger von Röbel/Müritz." : "In der Röbel-App angemeldet (nicht als Bürger/in verifiziert).");
-  for (const o of profile.orgs.slice(0, 12)) lines.push(`Organisation: ${o.name} (${o.kind}, Rolle ${o.role})`);
+  if (profile.orgs.length) {
+    // Admin access in the app is not ownership in real life (operators hold it for many profiles).
+    const names = profile.orgs.slice(0, 6).map((o) => o.name).join(", ");
+    lines.push(`Hat in der Röbel-App Verwaltungszugriff auf ${profile.orgs.length} Organisationsprofil(e), z. B. ${names}. Das ist ein Zugriff in der App und kein Beleg dafür, dass ihm diese Organisationen gehören oder er dort Mitglied ist.`);
+  }
   try {
     const res = await db().from("users").select("bio, district, interests").ilike("wallet_address", wallet).limit(1).maybeSingle();
     const u = res.data as { bio?: string | null; district?: string | null; interests?: unknown } | null;
@@ -269,9 +324,14 @@ export async function collectCorpus(wallet: string, mode: "full" | "refresh", si
     try { await collectCalendar(google, mode, corpus, now); }
     catch (err) { corpus.warnings.push(`Kalender konnte nicht gelesen werden: ${err instanceof Error ? err.message.slice(0, 160) : "Fehler"}`); }
   }
-  corpus.contacts = rankContacts(corpus.contacts, now.getTime()).slice(0, 60);
-
   await collectRoebel(wallet, corpus).catch(() => {});
+  // The person's own second mailbox is not a contact.
+  const roebelName = (await loadProfile(wallet).catch(() => null))?.displayName ?? "";
+  const selfNames = [corpus.selfName ?? "", roebelName].filter(Boolean);
+  corpus.selfAliases = corpus.contacts.filter((c) => isSelfAlias(c, selfNames)).map((c) => c.email);
+  const aliases = new Set(corpus.selfAliases);
+  corpus.contacts = rankContacts(corpus.contacts.filter((c) => !aliases.has(c.email)), now.getTime()).slice(0, 60);
+
   try {
     corpus.imports = (await listImports(wallet, { withContent: true })).map((imp, i) => ({
       ref: `x${i + 1}`, kind: imp.kind, title: imp.title, text: scrubSecrets(imp.content ?? "").slice(0, 24_000),

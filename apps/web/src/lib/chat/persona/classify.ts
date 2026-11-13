@@ -87,23 +87,74 @@ export interface ContactStat {
   received: number;    // human mails from this address
   lastAt: number;      // ms epoch of the latest exchange
   meetings: number;    // calendar events shared
+  /** Mails this address wrote in threads the user also wrote in (a reply-all colleague counts, a cold mail does not). */
+  shared?: number;
 }
 
 const HALF_LIFE_DAYS = 60;
 
 /** Reciprocity × recency × log frequency (+ shared meetings). 0 = not a real contact. */
 export function contactScore(c: ContactStat, now: number): number {
-  if (c.sent === 0 && c.meetings === 0) return 0; // never written to, never met: not a relationship
+  const shared = c.shared ?? 0;
+  if (c.sent === 0 && c.meetings === 0 && shared === 0) return 0; // never written to, never met, never in a shared thread
   const ageDays = Math.max(0, (now - c.lastAt) / 86_400_000);
   const recency = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
-  const reciprocity = c.sent > 0 && c.received > 0 ? 2 : 1;
-  const volume = Math.log2(1 + c.sent * 2 + c.received + c.meetings * 2);
+  const reciprocity = (c.sent > 0 || shared > 0) && c.received > 0 ? 2 : 1;
+  const volume = Math.log2(1 + c.sent * 2 + c.received + shared + c.meetings * 2);
   return reciprocity * volume * (0.25 + 0.75 * recency);
 }
 
-/** A person page needs evidence of a real exchange: ≥ 2 mails written to them, or one each way, or a meeting plus a mail. */
+/**
+ * A person page needs evidence of a real exchange with a real person: ≥ 2 mails written
+ * to them, or one each way, or a reply in a thread the user takes part in, or a meeting
+ * plus a mail. Support desks and other role mailboxes never get a page.
+ */
 export function isProfileWorthy(c: ContactStat): boolean {
-  return c.sent >= 2 || (c.sent >= 1 && c.received >= 1) || (c.meetings >= 1 && c.sent + c.received >= 1);
+  if (isRoleAddress(c.email)) return false;
+  return c.sent >= 2 || (c.sent >= 1 && c.received >= 1) || (c.shared ?? 0) >= 1 || (c.meetings >= 1 && c.sent + c.received >= 1);
+}
+
+const ROLE_LOCAL = /^(support|help|helpdesk|hilfe|service|kundenservice|kundendienst|customer[-_.]?(service|care|support)|care|feedback|abuse|legal|privacy|datenschutz|compliance|kyc|sales|vertrieb|press|presse|jobs|karriere|admin|webmaster|hostmaster|hello|hallo|hi|contact|kontakt)([-_.+].*)?$/;
+const ROLE_DOMAIN = /(^|\.)(zendesk\.com|freshdesk\.com|intercom(-mail)?\.(com|io)|helpscout\.(com|net)|frontapp\.com|crisp\.chat|mail\.anthropic\.com)$/;
+
+/**
+ * A shared mailbox (support@, help@, a ticket system), not one person. Mails with it are
+ * real evidence about open cases, but it is not a relationship. "info@" and "team@" are
+ * deliberately not here: small clubs and shops write personally from those.
+ */
+export function isRoleAddress(email: string): boolean {
+  const [local, domain] = email.toLowerCase().split("@");
+  return ROLE_LOCAL.test(local ?? "") || ROLE_DOMAIN.test(domain ?? "");
+}
+
+const nameKey = (name: string): string =>
+  name.toLowerCase().normalize("NFKD").replace(/[^a-z ]/g, " ").split(/\s+/).filter((p) => p.length > 1).sort().join(" ");
+
+/**
+ * True when an address is most likely the person's own second mailbox: its display name,
+ * or the name spelled in the address, is the person's own name ("Max Brych" ↔ m.brych@firma.de).
+ */
+export function isSelfAlias(c: { email: string; name: string }, selfNames: string[]): boolean {
+  const selves = selfNames.map(nameKey).filter((k) => k.includes(" "));
+  if (!selves.length) return false;
+  if (c.name && selves.includes(nameKey(c.name))) return true;
+  const local = c.email.split("@")[0].replace(/\+.*$/, "").replace(/\d+/g, "");
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length < 2) return false;
+  return selves.some((self) => {
+    const [a, b] = [self.split(" ")[0], self.split(" ").slice(-1)[0]];
+    const hit = (x: string, y: string) => parts.some((p) => p === x || (p.length === 1 && x.startsWith(p))) && parts.includes(y);
+    return hit(a, b) || hit(b, a);
+  });
+}
+
+/** Groups look-alike notices: "Run failed: CI - main (3f1671a)" and "… (30a1d32)" are one cluster. */
+export function noticeKey(sender: string, subject: string): string {
+  const s = subject.toLowerCase()
+    .replace(/\b[0-9a-f]{7,40}\b/g, "#")
+    .replace(/v?\d+(?:[.,:/-]\d+)*/g, "#")
+    .replace(/[^a-zäöüß# ]+/g, " ").replace(/\s+/g, " ").trim();
+  return `${sender.toLowerCase()}|${s.slice(0, 80)}`;
 }
 
 export function rankContacts(stats: ContactStat[], now: number): ContactStat[] {
@@ -187,6 +238,7 @@ export function scrubSecrets(text: string): string {
 export interface SourceRef { ref: string; label: string; date: string | null }
 export interface NumberedSource { n: number; label: string; date: string | null }
 
+const MAX_MARKS = 3;
 const REF = /\[((?:[sicaxrm]\d{1,4})(?:\s*,\s*[sicaxrm]\d{1,4})*)\]/g;
 
 /**
@@ -199,7 +251,8 @@ export function numberCitations(body: string, known: Map<string, SourceRef>): { 
   const out = body.replace(REF, (_m, list: string) => {
     const marks: string[] = [];
     for (const ref of list.split(",").map((r) => r.trim())) {
-      if (!known.has(ref)) continue;
+      // Two sources are evidence; nine in a row are noise.
+      if (marks.length >= MAX_MARKS || !known.has(ref)) continue;
       let idx = order.indexOf(ref);
       if (idx < 0) { order.push(ref); idx = order.length - 1; }
       marks.push(`[[${idx + 1}]]`);
