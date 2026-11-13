@@ -578,6 +578,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
 
 .ws-chat-head {
@@ -883,6 +884,8 @@
 /* composer */
 
 .ws-composer {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1786,4 +1789,177 @@ html.mac-inset .rail {
 
 .ws-chapters button[aria-current='true'] {
   background: var(--w-selected);
+}
+
+/* agent activity: a tab tucked behind the composer's top edge */
+
+.ws-activity {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 744px;
+  width: calc(100% - 74px);
+  height: 46px;
+  margin: 0 auto -14px;
+  padding: 6px 16px 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--w-agent-line);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: var(--w-agent-bg);
+  color: var(--w-agent-text);
+  font-size: 14px;
+}
+
+/* the artwork runs past the visible strip so the composer crops its bottom, like a head over a counter */
+.ws-activity-avatar {
+  flex: none;
+  display: flex;
+}
+
+.ws-activity-avatar .ws-avatar {
+  background: transparent;
+}
+
+.ws-activity-label {
+  min-width: 0;
+  line-height: 26px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: linear-gradient(90deg, var(--w-agent-text) 0%, var(--w-agent-text) 40%, var(--w-text) 50%, var(--w-agent-text) 60%, var(--w-agent-text) 100%);
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-activity {
+    animation: ws-activity-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .ws-activity-label {
+    animation:
+      ws-shimmer 2.2s linear infinite,
+      ws-fade-in 220ms ease both;
+  }
+  .ws-activity-avatar {
+    animation: ws-peek 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes ws-activity-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes ws-shimmer {
+  to {
+    background-position: -150% 0;
+  }
+}
+
+@keyframes ws-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ws-peek {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* chat outline: one line per turn on the left edge, hover previews, click jumps */
+
+.ws-outline {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  max-height: 60%;
+  padding: 6px 0;
+  overflow: visible;
+  transform: translateY(-50%);
+}
+
+.ws-outline-line {
+  display: flex;
+  align-items: center;
+  width: 34px;
+  height: 11px;
+  padding: 0 0 0 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.ws-outline-line span {
+  display: block;
+  width: var(--w, 9px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--w-faint);
+  transition:
+    width 160ms ease,
+    background-color 160ms ease;
+}
+
+.ws-outline-line.active span {
+  width: 24px;
+  background: var(--w-muted);
+}
+
+.ws-outline-line.hover span,
+.ws-outline-line:focus-visible span {
+  width: 24px;
+  background: var(--w-text);
+}
+
+.ws-outline-line:focus-visible {
+  outline: none;
+}
+
+.ws-outline-card {
+  position: absolute;
+  left: 40px;
+  width: 320px;
+  padding: 10px 14px 11px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 12px;
+  background: var(--w-raised);
+  color: var(--w-text);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.ws-outline-card strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ws-outline-card p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--w-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-outline-card {
+    animation: ws-fade-in 120ms ease both;
+  }
 }

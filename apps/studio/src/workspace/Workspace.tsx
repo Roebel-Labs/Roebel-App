@@ -7,7 +7,7 @@ import {
   IconSend, IconStop, IconWave,
 } from '../ui/shell/line-icons';
 import {
-  approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, toggleReaction, transcribe, uploadImage,
+  approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMe, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, toggleReaction, transcribe, uploadImage,
 } from './api';
 import { Briefing } from './Briefing';
 import { BriefingPanel, type BriefingDoc, type BriefingTab } from './BriefingPanel';
@@ -21,6 +21,8 @@ import { Tip } from '../ui/Tooltip';
 import { shortcutHint } from '../ui/shell/shortcuts';
 import { agentsOf, mainThreadOf, marqueeShift, needsBriefing, splitThreads, threadLabel } from './thread-list';
 import { BotAvatar } from './BotAvatar';
+import { activityLabel, outlineEntries } from './chat-activity';
+import { ActivityBar, ChatOutline } from './ChatOutline';
 import { markHandled, onDesktopCommand, takePending, type DesktopCommand } from './desktop';
 import { Part, type PartHandlers } from './Parts';
 import { applyEvent, emptyThread, optimisticUser, type ThreadView } from './thread-state';
@@ -286,6 +288,16 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     };
   }, [token]);
   const [doc, setDoc] = useState<Doc | null>(null);
+  const [me, setMe] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchMe(token)
+      .then((m) => alive && setMe(m.displayName || m.username || null))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [token]);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string }>>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -543,6 +555,8 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const lists = splitThreads(threads, routineThreads);
   const isMain = !!thread && thread.id === mainThread?.id;
   const streaming = view.streaming.length > 0;
+  const liveMsg = streaming ? view.messages.find((m) => m.id === view.streaming[view.streaming.length - 1]) : undefined;
+  const outline = useMemo(() => outlineEntries(view.messages, me || 'Du'), [view.messages, me]);
 
   return (
     <div className={`ws${listOpen ? '' : ' no-list'}${panelOpen || brief ? ' with-panel' : ''}${brief && briefWide ? ' panel-wide' : ''}`}>
@@ -689,13 +703,15 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                   if (m.role === 'user')
                     return [
                       divider,
-                      <div key={m.id} className="ws-msg user">
+                      <div key={m.id} className="ws-msg user" data-mid={m.id}>
                         {m.parts.map((p, i) => (
                           <Part key={i} part={p} h={handlers(m.id)} />
                         ))}
                       </div>,
                     ];
                   const live = view.streaming.includes(m.id);
+                  // An empty streaming reply stays hidden: the activity bar above the composer shows the work.
+                  if (live && m.parts.length === 0) return [divider];
                   return [
                     divider,
                     <div key={m.id} className="ws-msg bot">
@@ -708,7 +724,6 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                         {m.parts.map((p, i) => (
                           <Part key={i} part={p} h={handlers(m.id)} />
                         ))}
-                        {live && m.parts.length === 0 && <span className="ws-typing">schreibt …</span>}
                         {reactionChips(m.reactions).length > 0 && (
                           <div className="ws-reactions">
                             {reactionChips(m.reactions).map((r) => (
@@ -736,6 +751,8 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
               </div>
             </div>
 
+            <ChatOutline entries={outline} scroller={scroller} />
+            {streaming && <ActivityBar bot={(liveMsg?.botId && botsById.get(liveMsg.botId)) || leadBot} label={activityLabel(liveMsg)} />}
             <form
               className="ws-composer"
               onSubmit={(e) => {
