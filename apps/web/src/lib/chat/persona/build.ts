@@ -16,6 +16,7 @@ import type { ModelRoute } from "../types";
 import { loadProfile } from "../harness/context";
 import { chunk, isProfileWorthy, nameFromEmail, numberCitations, personSlug, stripCitations } from "./classify";
 import type { ContactStat, SourceRef } from "./classify";
+import { mailAfterWikiBuild } from "../agent/mail";
 import { collectCorpus } from "./collect";
 import {
   DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, coreSchema, digestPrompt, digestSchema, dossier,
@@ -335,6 +336,20 @@ async function finish(wallet: string, cp: Checkpoint): Promise<void> {
     : "";
   const lead = cp.mode === "full" ? "Wiki neu aufgebaut" : "Wiki aktualisiert";
   await store.addUpdate(wallet, `${lead}${basis ? ` aus ${basis}` : ""}. ${note ?? ""}${c?.warnings.length ? ` Hinweis: ${c.warnings.join(" ")}` : ""}`.trim());
+  // The assistant writes to its person: once after getting to know them, then a daily briefing.
+  try {
+    const [brief, overview, rows] = await Promise.all([store.getPageRow(wallet, "_briefing"), store.getPageRow(wallet, "overview"), store.listSuggestionRows(wallet)]);
+    const full = (overview?.facts ?? []).find((f) => f.label.toLowerCase() === "name")?.value ?? "";
+    const first = full.trim().split(/\s+/)[0] ?? "";
+    await mailAfterWikiBuild(wallet, {
+      firstBuild: cp.mode === "full", firstName: /^[\p{L}][\p{L}'-]{1,30}$/u.test(first) ? first : null,
+      briefing: (brief?.facts ?? []).map((f) => ({ label: f.label, text: f.value })),
+      suggestions: [...rows.filter((r) => r.quick), ...rows.filter((r) => !r.quick)].map((r) => ({ title: r.title, reason: r.reason })),
+      learned: note ? stripCitations(note).replace(/\[([^\]]+)\]\(wiki:[^)]+\)/g, "$1") : null,
+    });
+  } catch (err) {
+    console.error("[chat/persona] mail after build failed (non-fatal)", err);
+  }
   await store.patchJob(wallet, {
     state: "ready", stage: null, progress: 1, error: c?.warnings.length ? c.warnings.join(" ") : null, attempts: 0,
     checkpoint: null, leaseUntil: null, builtAt: new Date().toISOString(),

@@ -23,6 +23,9 @@ import * as store from "./store";
 import type { BotRow, MessageRow } from "./store";
 import type { CalendarContextEvent, ChatMessage, ChatPart, ChatStreamEvent, ChatThread, SendMessageInput } from "./types";
 
+import { agentOverlay } from "./agent/profile";
+import type { Channel } from "./agent/profile";
+import { mailRoutineResult } from "./agent/mail";
 export type Emit = (e: ChatStreamEvent) => void;
 
 export const CONTEXT_MESSAGES = 30;
@@ -154,6 +157,8 @@ interface BotTurnContext {
   initialParts?: ChatPart[];
   /** Pre-loaded profile (skips the DB read). */
   profile?: HarnessProfile | null;
+  /** The turn arrived over SMS, WhatsApp or e-mail: plain answers, no cards. */
+  channel?: Channel | null;
 }
 
 /** Stops the loop once a gated tool asked for approval: the human decides next. */
@@ -184,9 +189,10 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   ]);
   const botNames = new Map(ctx.threadBots.map((b) => [b.id, b.name]));
   const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText, { imageUrls: enabled.has("images") });
+  const overlay = await agentOverlay(wallet, bot, ctx.channel);
   const baseSystem = buildSystemPrompt({
-    botName: bot.name,
-    instructions: bot.instructions,
+    botName: overlay.name,
+    instructions: overlay.block ? `${bot.instructions.trim()}\n\n${overlay.block}` : bot.instructions,
     otherBots: ctx.threadBots.filter((b) => b.id !== bot.id).map((b) => b.name),
     files,
     now: new Date(),
@@ -381,7 +387,7 @@ export const QUOTA_MESSAGE = "Dein Tageskontingent ist aufgebraucht. Mit Ultra g
  * for invalid input BEFORE anything is emitted or persisted.
  */
 export async function runUserTurn(opts: {
-  wallet: string; thread: ChatThread; input: SendMessageInput; emit: Emit;
+  wallet: string; thread: ChatThread; input: SendMessageInput; emit: Emit; channel?: Channel | null;
 }): Promise<void> {
   const { wallet, thread, input, emit } = opts;
   const text = typeof input.text === "string" ? input.text.trim().slice(0, MAX_TEXT_CHARS) : "";
@@ -441,6 +447,7 @@ export async function runUserTurn(opts: {
     const res = await runBotTurn({
       wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0,
       calendarContext: input.calendarContext ?? null,
+      channel: opts.channel ?? null,
     });
     spent += res.inputTokens + res.outputTokens;
     if (res.messages.length) last = res.messages[res.messages.length - 1];
@@ -598,6 +605,8 @@ export async function runDueRoutines(now: Date = new Date()): Promise<RoutineRep
           wallet: row.owner_wallet, threadId: thread.id, title: `${bot.name} · ${row.title}`, body: preview,
         });
         if (pushed) report.pushed++;
+        // The same result by mail, when the person wants it (never fails the run).
+        await mailRoutineResult(row.owner_wallet, row.title, res.messages).catch((err) => console.error("[chat/runtime] routine mail failed", err));
       }
       report.ran++;
     } catch (err) {

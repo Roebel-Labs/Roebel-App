@@ -135,6 +135,17 @@ Prompts must stay neutral about who the user is (club member, craftsperson, pens
 
 **Link with Claude (two-way).** `POST /api/chat/persona/link` issues a link token (hash stored in `persona_link_tokens`). `POST /api/ortis/mcp` is a stateless MCP endpoint (Bearer token or `?key=`) with `ortis_profile`, `ortis_search`, `ortis_read`, `ortis_suggestions`, `ortis_remember` (appends to the notes page) and `ortis_push_context` (stores or replaces an import by title and starts a wiki refresh). `SYNC_PROMPT` in `persona/link.ts` is the prompt the user gives Claude. Migration `20261113b_persona_sections_and_link.sql` (applied).
 
+### 6a.2 The assistant as its own contact: profile, mailbox, SMS / WhatsApp (2026-11-13)
+
+Code in `apps/web/src/lib/chat/agent/` (`profile.ts`, `mail.ts`, `channels.ts`), migration `20261113c_agent_profile_channels.sql` (applied).
+
+- **Profile** (`chat_agent_profiles`, one per wallet): presets are shared and read-only, so the person's own name for the assistant, a personality preset and free instructions are laid over the base bot in `runBotTurn` (`agentOverlay`). `GET/PATCH /api/chat/agent`.
+- **Mailbox** `<alias>@ORTIS_MAIL_DOMAIN` via Resend. Outbound only to the person's verified address (adopted from the connected Google account, or confirmed with a code: `POST/PUT /api/chat/agent/email`). Inbound webhook `/api/chat/channels/resend` (`email.received`, Svix signature): a mail reaches the assistant only when it comes from that address AND passed DMARC (or DKIM and SPF); everything else is dropped silently. The answer goes back as a threaded reply.
+- **Proactive mail**: after the first wiki build one "Ich habe mich eingearbeitet" mail; after later builds at most one briefing mail per Berlin day, only when there are briefing points (`mailAfterWikiBuild`); routine results are mailed too (`mailRoutineResult`). Both can be switched off in the profile.
+- **Phone**: one Twilio webhook `/api/chat/channels/twilio` for SMS and WhatsApp (signature checked, message ids deduplicated). Linking like Town: `POST /api/chat/agent/channels {kind}` returns a six-digit code and the number; the person texts the code, which binds the phone. Later messages run `runChannelTurn` in one thread per channel (topic "SMS" / "WhatsApp" / "E-Mail"), so the exchange is visible in Ortis. Channel turns get a plain-text rule and cannot approve actions: drafts wait in the app.
+- **Off by default**: mail needs `ORTIS_MAIL_DOMAIN` (+ `RESEND_API_KEY`, `RESEND_INBOUND_WEBHOOK_SECRET`); phone needs `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_SMS_FROM` / `TWILIO_WHATSAPP_FROM`. Without them the endpoints report the channel as not set up.
+- Not built: voice notes and images over SMS/WhatsApp, proactive SMS, group chats.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
