@@ -2,7 +2,7 @@
 // The export names are the app's own; swap an icon here and every screen follows.
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
-  AgreementIcon, ArrowDown01Icon, ArrowLeft02Icon, ArrowRight02Icon, ArrowUp02Icon, AtIcon, AudioWave01Icon, BookOpen01Icon, Books01Icon, BubbleChatIcon,
+  AgreementIcon, ArrowDown01Icon, ArrowDown02Icon, ArrowLeft02Icon, ArrowRight02Icon, ArrowUp02Icon, AtIcon, AudioWave01Icon, BookOpen01Icon, Books01Icon, BubbleChatIcon,
   Calendar01Icon, Cancel01Icon, ChartHistogramIcon, CheckListIcon, Clock01Icon, Copy01Icon, CropIcon, DashboardSquareAddIcon, Delete02Icon, File01Icon,
   FilterHorizontalIcon, Folder01Icon, HelpCircleIcon, Home01Icon, Idea01Icon, Image01Icon, InboxIcon, Link01Icon, LiveStreaming01Icon, Logout01Icon,
   Mail01Icon, Mic01Icon, Moon02Icon, MoreHorizontalIcon, News01Icon, Notification01Icon, PanelRightIcon, PencilEdit02Icon, Plug01Icon, PlusSignIcon,
@@ -33,6 +33,7 @@ export const IconFilter = make(FilterHorizontalIcon);
 export const IconBell = make(Notification01Icon);
 export const IconFile = make(File01Icon);
 export const IconSend = make(ArrowUp02Icon);
+export const IconArrowDown = make(ArrowDown02Icon);
 export const IconStop = make(StopIcon);
 export const IconLogout = make(Logout01Icon);
 export const IconClose = make(Cancel01Icon);

@@ -786,22 +786,137 @@
   font-weight: 600;
 }
 
+.ws-gallery {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+
+.ws-image-tile {
+  flex: none;
+  display: block;
+  height: 340px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--w-raised);
+  cursor: zoom-in;
+}
+
 .ws-image {
   display: block;
-  max-width: min(100%, 640px);
-  margin: 8px 0;
-  border-radius: 14px;
+  width: auto;
+  height: 100%;
+  max-width: none;
+}
+
+/* one image on its own keeps its own shape, up to the column width */
+.ws-gallery[data-count='1'] .ws-image-tile {
+  height: auto;
+  max-width: 100%;
+}
+
+.ws-gallery[data-count='1'] .ws-image {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 460px;
 }
 
 .ws-image-wait {
-  width: 360px;
-  height: 220px;
-  margin: 8px 0;
+  position: relative;
+  flex: none;
   display: grid;
-  place-items: center;
-  border-radius: 14px;
+  place-items: end start;
+  width: 255px;
+  height: 340px;
+  padding: 14px;
+  overflow: hidden;
+  border-radius: 12px;
   background: var(--w-raised);
   color: var(--w-muted);
+  font-size: 13px;
+}
+
+.ws-gallery[data-count='1'] .ws-image-wait {
+  width: min(100%, 420px);
+}
+
+.ws-image-wait::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--w-text) 7%, transparent) 50%, transparent 70%);
+  background-size: 250% 100%;
+  background-position: 100% 0;
+}
+
+.ws-image-wait span {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-image-wait::before {
+    animation: ws-shimmer 1.6s linear infinite;
+  }
+}
+
+.ws-image-failed {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 255px;
+  height: 340px;
+  padding: 16px;
+  border: 1px dashed var(--w-line-strong);
+  border-radius: 12px;
+  color: var(--w-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* lightbox */
+
+.ws-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px;
+  background: color-mix(in srgb, #000 82%, transparent);
+  cursor: zoom-out;
+}
+
+.ws-lightbox img {
+  max-width: 100%;
+  max-height: calc(100% - 56px);
+  border-radius: 10px;
+  cursor: default;
+}
+
+.ws-lightbox-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: default;
+}
+
+.ws-lightbox-bar .w-icon {
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-lightbox {
+    animation: ws-fade-in 140ms ease both;
+  }
 }
 
 .ws-approval,
@@ -1960,5 +2075,56 @@ html.mac-inset .rail {
 @media (prefers-reduced-motion: no-preference) {
   .ws-outline-card {
     animation: ws-fade-in 120ms ease both;
+  }
+}
+
+/* jump to the latest message: a pill floating over the composer's top edge while scrolled up */
+
+.ws-latest {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 16px 0 13px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 999px;
+  background: var(--w-card);
+  color: var(--w-text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px) scale(0.96);
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ws-latest.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.ws-latest:hover {
+  background: var(--w-hover);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-latest.show svg {
+    animation: ws-nudge 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes ws-nudge {
+  50% {
+    transform: translateY(2px);
   }
 }

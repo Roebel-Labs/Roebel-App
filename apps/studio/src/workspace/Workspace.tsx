@@ -4,7 +4,7 @@ import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { parseMarkdown } from '../help/markdown';
 import {
   IconAt, IconCapture, IconChevronDown, IconClose, IconCopy, IconFile, IconFilter, IconMic, IconMore, IconPanelRight, IconPencil, IconPlus, IconSearch, IconShare, IconSmile,
-  IconSend, IconStop, IconWave,
+  IconSend, IconStop, IconWave, IconArrowDown,
 } from '../ui/shell/line-icons';
 import {
   approveAction, ChatApiError, createThread, fetchBootstrap, fetchFile, fetchMe, fetchMessages, fetchRoutines, markRead, rejectAction, sendMessage, toggleReaction, transcribe, uploadImage,
@@ -24,7 +24,7 @@ import { BotAvatar } from './BotAvatar';
 import { activityLabel, outlineEntries } from './chat-activity';
 import { ActivityBar, ChatOutline } from './ChatOutline';
 import { markHandled, onDesktopCommand, takePending, type DesktopCommand } from './desktop';
-import { Part, type PartHandlers } from './Parts';
+import { isImagePart, Part, type PartHandlers } from './Parts';
 import { applyEvent, emptyThread, optimisticUser, type ThreadView } from './thread-state';
 import type { ChatBootstrap, ChatBot, ChatMessage, ChatPart, ChatStreamEvent, ChatThread } from './types';
 
@@ -136,6 +136,28 @@ function AgentCard({ name, bot, status, disabled, onOpen, onEdit, share }: { nam
       )}
     </div>
   );
+}
+
+/** A message's parts; consecutive images sit side by side in one gallery row, like a contact sheet. */
+function PartList({ parts, h }: { parts: ChatPart[]; h: PartHandlers }) {
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (!isImagePart(parts[i])) {
+      out.push(<Part key={i} part={parts[i]} h={h} />);
+      continue;
+    }
+    const start = i;
+    while (i + 1 < parts.length && isImagePart(parts[i + 1])) i++;
+    const run = parts.slice(start, i + 1);
+    out.push(
+      <div key={`g${start}`} className="ws-gallery" data-count={Math.min(run.length, 4)}>
+        {run.map((p, j) => (
+          <Part key={start + j} part={p} h={h} />
+        ))}
+      </div>,
+    );
+  }
+  return <>{out}</>;
 }
 
 function DayDivider({ label }: { label: string }) {
@@ -303,6 +325,11 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   const [recording, setRecording] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const scrollInner = useRef<HTMLDivElement>(null);
+  // Follow new messages only while the reader is at the bottom; scrolled up, the pill offers the way back.
+  const stick = useRef(true);
+  const [away, setAway] = useState(false);
+  const [zoom, setZoom] = useState<{ url: string; alt: string } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   // "openThread" command (Für dich → Starten): the first message waits until the thread's history is loaded.
@@ -339,6 +366,8 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     let alive = true;
     setView(emptyThread);
     setDoc(null);
+    stick.current = true;
+    setAway(false);
     setHistoryLoading(true);
     fetchMessages(token, threadId)
       .then((r) => {
@@ -363,8 +392,41 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
   }, [token, threadId, guard]);
 
   useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+    if (stick.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [view.messages]);
+
+  // Images and late layout grow the list after the messages changed: keep the bottom in view while sticking.
+  useEffect(() => {
+    const inner = scrollInner.current;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setZoom(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoom]);
+
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stick.current = fromBottom < 80;
+    setAway(fromBottom > 240);
+  };
+
+  const toLatest = () => {
+    const el = scroller.current;
+    if (!el) return;
+    stick.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
 
   const thread = boot?.threads.find((t) => t.id === threadId) ?? null;
   const botsById = useMemo(() => {
@@ -404,6 +466,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     const text = raw.trim() || (imageUrls.length ? 'Schau dir das bitte an.' : '');
     if (!threadId || !text || busy || uploading) return;
     const tid = threadId;
+    stick.current = true;
     setView((v) => ({ ...v, error: null, messages: [...v.messages, optimisticUser(tid, text)] }));
     if (!optionAnswer) {
       setDraft('');
@@ -543,6 +606,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
     onOpenFile: (id, name) => void openFile(id, name),
     onApprove: (actionId) => threadId && void run(() => approveAction(token, actionId, onEvent(threadId))),
     onReject: (actionId) => threadId && void run(() => rejectAction(token, actionId, onEvent(threadId))),
+    onZoom: (url, alt) => setZoom({ url, alt }),
   });
 
   const pickable = [...(boot?.presets ?? []), ...(boot?.bots ?? [])];
@@ -697,8 +761,8 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 </button>
               </Tip>
             </header>
-            <div className="ws-messages" ref={scroller}>
-              <div className="ws-messages-inner">
+            <div className="ws-messages" ref={scroller} onScroll={onScroll}>
+              <div className="ws-messages-inner" ref={scrollInner}>
                 {historyLoading && view.messages.length === 0 && <SkChat />}
                 {view.messages.map((m, mi) => {
                   const bot = m.botId ? botsById.get(m.botId) : undefined;
@@ -707,9 +771,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     return [
                       divider,
                       <div key={m.id} className="ws-msg user" data-mid={m.id}>
-                        {m.parts.map((p, i) => (
-                          <Part key={i} part={p} h={handlers(m.id)} />
-                        ))}
+                        <PartList parts={m.parts} h={handlers(m.id)} />
                       </div>,
                     ];
                   const live = view.streaming.includes(m.id);
@@ -724,9 +786,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                           <strong className="ws-bot-name">{nameOf(bot, 'Assistent')}</strong>
                           <span className="w-muted">{relTime(m.createdAt)}</span>
                         </div>
-                        {m.parts.map((p, i) => (
-                          <Part key={i} part={p} h={handlers(m.id)} />
-                        ))}
+                        <PartList parts={m.parts} h={handlers(m.id)} />
                         {reactionChips(m.reactions).length > 0 && (
                           <div className="ws-reactions">
                             {reactionChips(m.reactions).map((r) => (
@@ -755,7 +815,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
             </div>
 
             <ChatOutline entries={outline} scroller={scroller} />
-            {streaming && <ActivityBar bot={(liveMsg?.botId && botsById.get(liveMsg.botId)) || leadBot} label={activityLabel(liveMsg)} />}
+            {(busy || streaming) && <ActivityBar bot={(liveMsg?.botId && botsById.get(liveMsg.botId)) || leadBot} label={activityLabel(liveMsg)} />}
             <form
               className="ws-composer"
               onSubmit={(e) => {
@@ -763,6 +823,10 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 send(draft);
               }}
             >
+              <button type="button" className={`ws-latest${away ? ' show' : ''}`} tabIndex={away ? 0 : -1} aria-hidden={!away} onClick={toLatest}>
+                <IconArrowDown size={14} />
+                Zur neuesten Nachricht springen
+              </button>
               {chips.length > 0 && (
                 <div className="ws-chips">
                   {chips.map((c) => (
@@ -817,10 +881,11 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                     {recording ? <IconStop size={15} /> : <IconMic size={16} />}
                   </button>
                 </Tip>
-                {draft.trim() || attachments.length > 0 || busy ? (
+                {draft.trim() || attachments.length > 0 ? (
+                  // While the assistant works the button stays as it is; the activity bar shows the work.
                   <Tip label="Senden" keys="↵" side="top">
                     <button className="w-circle green" disabled={busy || uploading} aria-label="Senden">
-                      {busy ? <span className="ws-spinner light" /> : <IconSend size={16} />}
+                      <IconSend size={16} />
                     </button>
                   </Tip>
                 ) : (
@@ -914,6 +979,19 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
             )}
           </div>
         </aside>
+      )}
+      {zoom && (
+        <div className="ws-lightbox" role="dialog" aria-label="Bild" onClick={() => setZoom(null)}>
+          <img src={zoom.url} alt={zoom.alt} onClick={(e) => e.stopPropagation()} />
+          <div className="ws-lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="w-btn" onClick={() => void window.studio.shell.openExternal(zoom.url)}>
+              Im Browser öffnen
+            </button>
+            <button type="button" className="w-icon" aria-label="Schließen" onClick={() => setZoom(null)}>
+              <IconClose size={16} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

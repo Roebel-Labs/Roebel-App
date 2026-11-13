@@ -8,8 +8,12 @@ export interface PartHandlers {
   onOpenFile(fileId: string, name: string): void;
   onApprove(actionId: string): void;
   onReject(actionId: string): void;
+  /** Opens an image large (lightbox). */
+  onZoom(url: string, alt: string): void;
   busy: boolean;
 }
+
+export const isImagePart = (p: ChatPart): boolean => p.type === 'image' || p.type === 'generated_image';
 
 const open = (href: string) => {
   const safe = safeHref(href);
@@ -79,9 +83,18 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
     case 'image':
     case 'generated_image': {
       const p = part as { url?: string; status?: string; prompt?: string; error?: string };
-      if (p.status === 'generating') return <div className="ws-image-wait">Bild wird erstellt …</div>;
-      if (p.status === 'failed') return <div className="ws-note">Bild fehlgeschlagen: {p.error ?? 'unbekannt'}</div>;
-      return p.url ? <img className="ws-image" src={p.url} alt={p.prompt ?? ''} /> : null;
+      if (p.status === 'generating')
+        return (
+          <div className="ws-image-wait" role="status" aria-label="Bild wird erstellt">
+            <span>Bild wird erstellt</span>
+          </div>
+        );
+      if (p.status === 'failed') return <div className="ws-image-failed">Bild fehlgeschlagen: {p.error ?? 'unbekannt'}</div>;
+      return p.url ? (
+        <button type="button" className="ws-image-tile" aria-label="Bild groß anzeigen" onClick={() => h.onZoom(p.url!, p.prompt ?? '')}>
+          <img className="ws-image" src={p.url} alt={p.prompt ?? ''} loading="lazy" draggable={false} />
+        </button>
+      ) : null;
     }
     case 'sources': {
       const p = part as Extract<ChatPart, { type: 'sources' }>;
