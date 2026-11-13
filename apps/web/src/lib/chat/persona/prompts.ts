@@ -82,6 +82,10 @@ export const coreSchema = z.object({
   goals: pageOut.describe("Abschnitte ## Heute, ## Diese Woche, ## Diesen Monat. Pro Ziel ein fetter Satz, dann 1–2 Sätze Begründung mit Belegen. Nur Ziele mit Anlass aus den letzten 30 Tagen."),
   projects: pageOut.describe("Pro Projekt ein Abschnitt ## Name. Erste Zeile fett: **Stand:** aktiv | wartet auf … | pausiert | abgeschlossen, mit Datum der neuesten Nachricht. Dann 2–5 Sätze Fließtext: worum es geht, wer beteiligt ist (als [Name](wiki:slug)), was zuletzt geschah, nächster Schritt. Aktive Projekte zuerst, ältere unter ## Frühere Vorhaben in je einem Satz."),
   core: z.string().describe("Kurzprofil für den Assistenten, höchstens 220 Wörter, Fließtext ohne Belege: wer der Mensch ist, woran er gerade arbeitet, was diese Woche zählt, wichtigste Personen mit Rolle, feste Vorlieben."),
+  briefing: z.array(z.object({
+    label: z.string().describe("Zwei bis drei Wörter, z. B. „Jetzt handeln“, „Antwort offen“, „Heute im Kalender“, „Diese Woche“"),
+    text: z.string().describe("Ein bis zwei Sätze in Du-Form mit dem konkreten Sachverhalt (Name, Datum, Uhrzeit, Betrag) und was daraus folgt. Ohne Belege."),
+  })).nullish().describe("Höchstens 3. Das Tagesbriefing, mit dem der Assistent den Menschen heute begrüßt: nur was HEUTE oder in den nächsten Tagen wirklich zählt (ablaufende Fristen, jemand wartet auf seine Antwort, Termine von heute; ist der Kalender leer, darf das ein Punkt sein mit einem Vorschlag, wofür der freie Tag gut wäre). Nichts Erledigtes, nichts Allgemeines. Leer lassen, wenn nichts ansteht."),
   updateNote: z.string().nullish().describe("Zwei bis drei Sätze für das Änderungsprotokoll: was sich GEGENÜBER dem bisherigen Wiki konkret geändert hat (welches Ziel erledigt oder gestrichen, welches Projekt neu, welcher Stand neu), mit [Text](wiki:slug)-Verweisen. Beim ersten Aufbau: die wichtigsten drei Erkenntnisse."),
 });
 

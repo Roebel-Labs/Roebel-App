@@ -245,6 +245,12 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     body: `${stripCitations(core.core).trim()}\n\nSo schreibt der Mensch: ${stripCitations(profile.styleCore).trim()}`,
   });
 
+  // The greeting of the day (hidden page; read by /api/chat/persona/briefing).
+  await store.upsertPage(wallet, {
+    slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: "",
+    facts: (core.briefing ?? []).slice(0, 3).map((b) => ({ label: b.label.trim().slice(0, 40), value: stripCitations(b.text).trim().slice(0, 400) })),
+  });
+
   // Suggestions: fresh set, never the ones the person dismissed. A failed call keeps the old set.
   if (suggest) {
     const bySlug = new Map(contacts.map((c) => [c.email, { name: c.name || nameFromEmail(c.email), slug: personSlug(c.email, c.name) }]));
