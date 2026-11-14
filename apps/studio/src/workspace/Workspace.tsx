@@ -823,7 +823,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                 send(draft);
               }}
             >
-              <button type="button" className={`ws-latest${away ? ' show' : ''}`} tabIndex={away ? 0 : -1} aria-hidden={!away} onClick={toLatest}>
+              <button type="button" className={`ws-latest${away ? ' is-away' : ''}`} tabIndex={away ? 0 : -1} aria-hidden={!away} onClick={toLatest}>
                 <IconArrowDown size={14} />
                 Zur neuesten Nachricht springen
               </button>
