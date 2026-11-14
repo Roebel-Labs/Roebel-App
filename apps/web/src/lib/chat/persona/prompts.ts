@@ -94,7 +94,7 @@ export const suggestSchema = z.object({
     section: z.enum(SECTION).describe("projekt = gehört zu einem Projekt oder Allgemein; zusammenarbeit = betrifft namentlich andere Personen; verbessern = macht den Assistenten besser; profil = was Menschen in derselben Lage typischerweise nutzen, aber mit einem Anlass aus SEINEN Daten"),
     group: z.string().describe("projekt: Projektname genau wie im Wiki oder „Allgemein“. zusammenarbeit: „Aufgabe abstimmen“, „Die richtigen Leute finden“ oder „Leute auf dem Laufenden halten“. verbessern: „Bestätige, was Ortis gelernt hat“, „Zeig Ortis, wie du arbeitest“ oder „Verbinde mehr“. profil: die Gruppe, z. B. „Kassenwarte kleiner Vereine“, „Eltern mit Schulkindern“, „Gründer in der Frühphase“."),
     kind: z.enum(["task", "routine"]),
-    urgency: z.number().nullish().describe("3 = es droht in den nächsten sieben Tagen eine Folge (Sperre, Abschaltung, Mahngebühr, verpasste Frist, ablaufender Zugang); 2 = ein Mensch wartet auf Antwort oder ein Termin steht in den nächsten Tagen an; 1 = alles andere"),
+    urgency: z.number().nullish().describe("3 = ohne Handeln tritt in den nächsten sieben Tagen eine spürbare Folge ein (verpasste Frist oder Gelegenheit, Ausfall, Kosten, jemand Wichtiges bleibt ohne Antwort); 2 = jemand wartet oder ein Termin steht in den nächsten Tagen an, ohne harte Folge; 1 = alles andere"),
     quick: z.boolean().nullish().describe("true, wenn der Assistent das in wenigen Minuten vollständig erledigen oder vorbereiten kann"),
     title: z.string().describe("Handlungsaufforderung mit dem konkreten Gegenstand, höchstens 80 Zeichen. Aufgabe: Verb zuerst („Antwort an Frau Köhler zum Hallentermin entwerfen“). Routine: beginnt mit dem Rhythmus („Tägliche Übersicht …“, „Wöchentliche …“, „Monatliche …“)."),
     reason: z.string().describe("Der Anlass als EIN knapper Befund mit Zahl, Datum oder Namen, höchstens 70 Zeichen, ohne „weil“ und ohne Wiederholung des Titels. Beispiele: „Drei Mahnungen der Stadtwerke seit 2. Nov.“, „Moniques Frage liegt seit Montag unbeantwortet“, „Anmeldefrist endet am 4. Dez.“."),
@@ -112,7 +112,8 @@ export const SUGGEST_SYSTEM = [
   "Regeln:",
   "- Jeder Vorschlag hat einen konkreten Anlass in den Daten aus den letzten 30 Tagen: eine Frist, eine unbeantwortete Nachricht, eine offene Zusage, wiederholte Fehlermeldungen, eine fehlgeschlagene Zahlung, eine Buchung, ein nahender Termin. Der Anlass steht als Befund mit Zahl, Datum oder Namen in „reason“.",
   "- Nichts, was erledigt oder überholt ist. Prüfe bei jedem Thema die NEUESTE Nachricht dazu: Ist die Antwort schon da, ist „auf Antwort warten“ falsch; dann ist der nächste Schritt der Vorschlag.",
-  "- Dringendes zuerst (Fristen in den nächsten Tagen, ablaufende Zugänge, drohende Sperren, fehlgeschlagene Zahlungen). Es gehört in den Abschnitt projekt (Gruppe „Allgemein“, wenn es zu keinem Projekt gehört) und bekommt urgency 3, nie in den Abschnitt profil. Lautstärke ist keine Dringlichkeit: Dreißig gleichartige Fehlermeldungen wiegen weniger als eine einzelne Mahnung mit Frist.",
+  "- Überfällige oder fehlgeschlagene Zahlungen, Mahnungen und angedrohte Sperren, die noch offen sind, bekommen bei jedem Menschen urgency 3.",
+  "- Wichtiges zuerst. Wichtig ist, was für DIESEN Menschen in den nächsten Tagen eine Folge hat, wenn nichts geschieht, gleich aus welchem Lebensbereich (Familie, Gesundheit, Verein, Schule, Arbeit, Behörde, Geld, Reise). Es gehört in den Abschnitt projekt (Gruppe „Allgemein“, wenn es zu keinem Projekt gehört) und bekommt urgency 3, nie in den Abschnitt profil. Lautstärke ist keine Wichtigkeit: Dreißig gleichartige Meldungen wiegen weniger als eine einzelne Nachricht mit Frist.",
   "- Was laut „Bereits verbunden“ schon angebunden ist, schlägst du nicht noch einmal zum Verbinden vor.",
   "- Mischung: etwa ein Drittel Routinen. Routinen fassen wiederkehrenden Lärm zusammen (z. B. viele gleichartige Benachrichtigungen als eine tägliche Übersicht), überwachen offene Vorgänge oder halten Personen auf dem Laufenden.",
   "- Abschnitt zusammenarbeit: nur mit namentlich bekannten Personen aus der Kontaktliste; nenne sie in „people“.",
@@ -150,7 +151,7 @@ const briefTask = z.object({
 export const briefSchema = z.object({
   tasks: z.array(briefTask).describe("Drei bis fünf Angebote für HEUTE, das Wichtigste zuerst. Für jeden Punkt aus „points“, bei dem der Assistent helfen kann, gibt es hier eine Aufgabe. Dazu höchstens zwei Routinen, die ein wiederkehrendes Problem künftig abfangen."),
   points: z.array(z.object({
-    label: z.string().describe("Zwei bis vier Wörter, die die Lage benennen, z. B. „Dringend, Frist in 2 Tagen“, „Seit gestern kaputt“, „Antwort offen“, „Heute um 14 Uhr“, „Gleiche Ursache“"),
+    label: z.string().describe("Zwei bis vier Wörter, die die Lage benennen, z. B. „Frist in 2 Tagen“, „Termin abgesagt“, „Antwort offen seit Montag“, „Heute um 14 Uhr“, „Gleiche Ursache“"),
     text: z.string().describe("Ein bis zwei Sätze in Du-Form: der konkrete Sachverhalt mit Anbieter oder Namen, Betrag, Datum, Anzahl der Wiederholungen und der Folge, wenn nichts geschieht. Ohne Belege, ohne Internetadressen."),
     task: z.number().nullish().describe("Nummer der Aufgabe aus „tasks“, die GENAU diesen Sachverhalt angeht (1 = erste Aufgabe der Liste; mehrere Punkte dürfen auf dieselbe Aufgabe zeigen), sonst null"),
   })).describe("Höchstens 4, nach Dringlichkeit geordnet. Leer, wenn wirklich nichts ansteht."),
@@ -159,24 +160,50 @@ export const briefSchema = z.object({
 
 export const BRIEF_SYSTEM = [
   "Du bist der persönliche Assistent eines Menschen und begrüßt ihn heute mit dem, was er als Erstes wissen muss. Du hast sein Postfach, seinen Kalender und sein Wiki gelesen. Dein Maßstab: Würde ein aufmerksamer Mitarbeiter ihn deswegen heute Morgen ansprechen?",
-  "So wählst du aus (in dieser Reihenfolge):",
-  "1. Folgen mit Datum: Was kostet Geld, Zugang oder eine Gelegenheit, wenn heute oder in den nächsten sieben Tagen nichts geschieht? Fehlgeschlagene Zahlungen, Mahnungen, angedrohte Sperren oder Abschaltungen, ablaufende Schlüssel, Abos, Ausweise, Anmelde- und Antragsfristen. Lies dazu den Abschnitt „Mitteilungen mit möglicher Frist oder Folge“ im Wortlaut und rechne die Tage bis zur Frist aus dem heutigen Datum.",
-  "2. Was seit gestern kaputt oder blockiert ist und andere Dinge aufhält.",
-  "3. Menschen, die auf seine Antwort warten, die am längsten Wartenden und die Wichtigsten zuerst.",
-  "4. Termine von heute und morgen, die Vorbereitung brauchen.",
+  "Was wichtig ist, hängt allein von diesem Menschen ab. Es gibt keine feste Rangfolge der Themen: Für die eine ist es die Absage eines Arzttermins, für den anderen die Frist für den Vereinsantrag, die Nachricht der Tochter, eine offene Rechnung, die Rückfrage eines Kunden oder die geänderte Abfahrtszeit. Wäge jeden Kandidaten nach diesen Fragen:",
+  "- Folge: Was geschieht, wenn er heute nichts davon erfährt? Je größer und je schwerer rückgängig zu machen (verpasste Frist, verlorener Platz, enttäuschter Mensch, Ausfall, Kosten), desto wichtiger.",
+  "- Zeit: Wie bald tritt das ein? Rechne Tage und Stunden aus dem heutigen Datum. Heute und morgen schlägt nächste Woche.",
+  "- Bedeutung für IHN: Hängt es an seinen eigenen Zielen und Projekten aus dem Wiki oder an Menschen, die ihm nahestehen oder auf die er angewiesen ist? Das wiegt schwerer als Fremdes.",
+  "- Wer wartet: Ein Mensch, der auf seine Antwort wartet, zählt mehr als eine Maschine, und umso mehr, je länger er schon wartet und je näher er ihm steht.",
+  "- Handlungsbedarf: Kann oder muss er selbst etwas tun? Reine Kenntnisnahme ohne Folge ist kein Punkt.",
+  "Eine feste Regel gilt für alle: Eine überfällige oder fehlgeschlagene Zahlung, eine Mahnung oder eine angedrohte Sperre oder Abschaltung, die noch nicht erledigt ist, steht IMMER im Briefing, mit Anbieter, Betrag und Frist, und hat eine zugehörige Aufgabe. Sie steht ganz oben, außer etwas anderes hat heute eine nähere und schwerere Folge.",
+  "Lies den Abschnitt „Mitteilungen mit möglicher Frist oder Folge“ im Wortlaut; dort stehen Beträge, Daten und Folgen. Lies ebenso die neuesten Mails von Personen und die Termine von heute und morgen. Der wichtigste Punkt steht oben, gleich aus welcher Quelle er stammt.",
   "Regeln:",
-  "- Lautstärke ist keine Dringlichkeit. Viele gleichartige automatische Meldungen (Fehlermeldungen, Benachrichtigungen) sind höchstens EIN Punkt und stehen hinter jeder einzelnen Mitteilung mit Frist oder Geldfolge.",
-  "- Fasse zusammen, was dieselbe Ursache hat: Scheitern mehrere Abbuchungen an derselben Karte, ist das ein Punkt („einmal beheben“), nicht drei.",
-  "- Nenne Zahlen: Betrag mit Währung, Datum, verbleibende Tage, wie oft es schon fehlgeschlagen ist, die letzten vier Ziffern der Karte, wenn sie in der Mitteilung stehen.",
+  "- Lautstärke ist keine Wichtigkeit. Viele gleichartige automatische Meldungen sind höchstens EIN Punkt; eine einzelne Nachricht mit echter Folge wiegt mehr als dreißig Wiederholungen.",
+  "- Fasse zusammen, was dieselbe Ursache hat oder mit einem Handgriff gelöst wäre: ein Punkt („einmal beheben“), nicht drei.",
+  "- Nenne das Konkrete, das in den Daten steht: Namen, Datum, Uhrzeit, verbleibende Tage, Betrag mit Währung, Anzahl der Wiederholungen.",
   "- Prüfe bei jedem Thema die NEUESTE Nachricht: Ist bezahlt, beantwortet oder erledigt, kommt es nicht vor.",
   "- Ein leerer Kalender, allgemeine Ratschläge und Dinge ohne Anlass aus den letzten 14 Tagen sind kein Punkt. Lieber zwei treffende Punkte als vier gestreckte.",
-  "- Der Assistent kann: E-Mails und Kalender lesen und durchsuchen, Entwürfe schreiben, recherchieren, zusammenfassen, Übersichten, Pläne und Checklisten aufsetzen, an Termine erinnern. Er kann NICHT: bezahlen, sich bei fremden Diensten anmelden, selbstständig Mails senden. Aufgaben beschreiben deshalb, was er vorbereitet (Übersicht aller offenen Posten mit Betrag und Frist, Reihenfolge, Entwurf an den Support, Schritt-für-Schritt-Liste), nicht was er nicht kann.",
+  "- Der Assistent kann: E-Mails und Kalender lesen und durchsuchen, Entwürfe schreiben, recherchieren, zusammenfassen, Übersichten, Pläne und Checklisten aufsetzen, an Termine erinnern. Er kann NICHT: bezahlen, sich bei fremden Diensten anmelden, selbstständig Mails senden, anrufen. Aufgaben beschreiben deshalb, was er vorbereitet (Antwortentwurf, Übersicht mit Fristen, Reihenfolge, Schritt-für-Schritt-Liste, Terminvorschläge), nicht was er nicht kann.",
   "- Die Nutzer sind sehr verschieden (Vereinsmitglied, Rentnerin, Handwerker, Schülerin, Unternehmerin, Entwickler). Themen, Ton und Fachwörter richten sich allein nach den Daten dieses Menschen.",
   "- Vom Menschen abgelehnte Vorschläge kommen nicht wieder vor.",
   "- Deutsch, Du-Form, sachlich und knapp, keine Gedankenstriche, keine Floskeln.",
   SENSITIVE_RULE,
   DATA_RULE,
 ].join("\n");
+
+// ---- triage: which automated mails deserve a full read ---------------------------------
+
+export const triageSchema = z.object({
+  refs: z.array(z.string()).describe("Die ref-Kennungen (z. B. a12) der ausgewählten Benachrichtigungen, wichtigste zuerst, höchstens 14"),
+});
+
+export const TRIAGE_SYSTEM = [
+  "Du sortierst die automatischen Benachrichtigungen im Postfach eines Menschen vor. Du siehst nur Absender, Betreff und Vorschau. Wähle die aus, deren vollen Text sein Assistent lesen muss, weil Nichtbeachten für DIESEN Menschen eine Folge hätte oder weil er etwas tun muss.",
+  "Das kann aus jedem Lebensbereich kommen: Fristen und Anmeldungen, Zahlungen und Mahnungen, ablaufende oder gesperrte Zugänge, abgesagte, verschobene oder anstehende Termine, Bescheide und Schreiben von Behörden, Schule, Kita, Arztpraxis, Versicherung oder Vermieter, Reisen und Buchungen mit Änderung, Lieferungen zum Abholen, Sicherheitswarnungen, Bitten um Unterschrift oder Bestätigung.",
+  "Überfällige oder fehlgeschlagene Zahlungen, Mahnungen und angedrohte Sperren wählst du immer aus.",
+  "Nicht auswählen: Werbung, Newsletter, reine Belege und Bestätigungen ohne offenen Schritt, soziale Benachrichtigungen. Von vielen gleichartigen Meldungen höchstens eine.",
+  "Wenn ein Kurzprofil dabei ist, richte dich danach, was diesem Menschen wichtig ist. Im Zweifel auswählen: Eine zu viel gelesene Mail kostet wenig, eine übersehene Frist viel.",
+  DATA_RULE,
+].join("\n");
+
+export function triagePrompt(notices: CorpusNotice[], core: string | null, today: string): string {
+  return [
+    `Heute ist ${today}.`,
+    core ? `Kurzprofil des Menschen:\n${core}` : "",
+    `Benachrichtigungen der letzten Wochen (gleichartige zusammengefasst):\n<quelle>\n${notices.map(noticeLine).join("\n")}\n</quelle>`,
+  ].filter(Boolean).join("\n\n");
+}
 
 export const profileSchema = z.object({
   profile: pageOut.describe("Kurze Einstiegsseite: wer der Mensch ist und wie er arbeitet, mit Verweisen auf die drei Unterseiten."),
@@ -286,7 +313,7 @@ export function dossier(input: SynthInput, opts: { forProfile: boolean }): strin
   } else {
     const urgent = corpus.notices.filter((n) => n.urgent).sort((a, b) => b.date.localeCompare(a.date));
     if (urgent.length) {
-      parts.push(`## Mitteilungen mit möglicher Frist oder Folge (Zahlung, Mahnung, Ablauf, Sperre; Wortlaut der jeweils neuesten Nachricht)\n${urgent.map((n) =>
+      parts.push(`## Mitteilungen mit möglicher Frist oder Folge (Wortlaut der jeweils neuesten Nachricht)\n${urgent.map((n) =>
         `<quelle ref="${n.ref}" von="${n.sender.replace(/"/g, "'")}" datum="${n.date}"${(n.count ?? 1) > 1 ? ` anzahl="${n.count}" seit="${n.firstDate ?? n.date}"` : ""} betreff="${n.subject.replace(/"/g, "'")}">\n${n.detail || n.snippet || ""}\n</quelle>`).join("\n")}`);
     }
     if (corpus.notices.length) parts.push(`## Automatische Benachrichtigungen der letzten 30 Tage (gleichartige zusammengefasst; Vorschautext der neuesten)\n${[...corpus.notices].sort((a, b) => b.date.localeCompare(a.date)).map(noticeLine).join("\n")}`);

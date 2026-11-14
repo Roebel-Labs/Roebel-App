@@ -291,10 +291,17 @@ const URGENT = new RegExp([
   "expire[sd]?\\b", "expiring", "expiration", "läuft (?:bald )?ab", "abgelaufen", "ablauf", "runs? out",
   // dates that pass
   "deadline", "frist", "due (?:on|by|in|date|today|tomorrow)", "fällig", "bis spätestens", "verify (?:your|within)", "bestätig\\w* (?:sie|bitte|bis)",
+  // things that change or need the person
+  "cancell?ed", "storniert", "abgesagt", "verschoben", "rescheduled", "geändert", "delayed", "verspät", "termin", "appointment", "erinnerung", "reminder",
+  "abholbereit", "abholung", "ready for pick ?up", "bescheid", "einspruch", "widerspruch", "unterschrift", "signature (?:required|needed)", "bitte unterschreiben",
+  "new sign-?in", "neue anmeldung", "sicherheitswarnung", "security alert", "unusual activity", "ungewöhnliche aktivität", "verlängerung", "renew",
   "storage (?:is )?(?:almost )?full", "speicher (?:ist )?(?:fast )?voll", "quota exceeded", "limit (?:reached|exceeded)", "kontingent",
 ].join("|"), "i");
 
-/** True when an automated mail looks like it carries a deadline, a failed payment or an access that ends. */
+/**
+ * Keyword fallback for picking automated mails worth a full read (deadlines, money, access, changes,
+ * things that need the person). The build asks a model first (triage); this only backs it up.
+ */
 export function isUrgentNotice(subject: string, snippet = ""): boolean {
   return URGENT.test(`${subject} ${snippet}`);
 }

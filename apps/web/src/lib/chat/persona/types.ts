@@ -48,7 +48,9 @@ export interface CorpusMail {
 export interface CorpusNotice {
   ref: string; sender: string; subject: string; date: string;
   count?: number; firstDate?: string; snippet?: string;
-  /** Looks like a failed payment, a deadline or an access that ends (see isUrgentNotice). */
+  /** Gmail id of the newest mail of the cluster (to read it in full). */
+  id?: string;
+  /** Picked for a full read: ignoring it could have a consequence for this person. */
   urgent?: boolean;
   /** Body excerpt of the newest mail of an urgent cluster: amount, due date and consequence live there. */
   detail?: string;

@@ -14,13 +14,13 @@ import * as chatStore from "../store";
 import { validateSchedule } from "../schedule";
 import type { ModelRoute } from "../types";
 import { loadProfile } from "../harness/context";
-import { chunk, isProfileWorthy, nameFromEmail, numberCitations, personSlug, stripCitations, titleOverlap } from "./classify";
+import { chunk, isProfileWorthy, isUrgentNotice, nameFromEmail, numberCitations, personSlug, stripCitations, titleOverlap } from "./classify";
 import type { ContactStat, SourceRef } from "./classify";
 import { mailAfterWikiBuild } from "../agent/mail";
-import { collectCorpus } from "./collect";
+import { collectCorpus, readNoticeDetails } from "./collect";
 import {
-  BRIEF_SYSTEM, DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, briefSchema, coreSchema, digestPrompt, digestSchema, dossier,
-  personPrompt, personSchema, profileSchema, suggestSchema,
+  BRIEF_SYSTEM, DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, TRIAGE_SYSTEM, briefSchema, coreSchema, digestPrompt, digestSchema, dossier,
+  personPrompt, personSchema, profileSchema, suggestSchema, triagePrompt, triageSchema,
 } from "./prompts";
 import type { SynthInput } from "./prompts";
 import * as store from "./store";
@@ -162,7 +162,27 @@ async function stageCollect(wallet: string, cp: Checkpoint): Promise<PersonaStag
   if (!hasAnything) {
     throw new BuildError("Es gibt noch nichts, woraus ich dich kennenlernen kann. Verbinde Google oder importiere dein Gedächtnis aus Claude oder ChatGPT.", true);
   }
+  await readImportantNotices(wallet, c).catch((err) => console.error("[chat/persona] notice triage failed (non-fatal)", err));
   return c.mails.length ? "digest" : "synthesize";
+}
+
+const MAX_NOTICE_READS = 16;
+
+/**
+ * Which automated mails get read in full. A model that knows the person picks them (what matters
+ * differs from person to person); the keyword filter only fills up and stands in when the call fails.
+ */
+async function readImportantNotices(wallet: string, corpus: Corpus): Promise<void> {
+  if (!corpus.notices.length) return;
+  const known = new Set(corpus.notices.map((n) => n.ref));
+  const core = (await store.getPageRow(wallet, "_core").catch(() => null))?.body?.slice(0, 1800) ?? null;
+  const picked = await callModel(wallet, "bot-fast", "triage", {
+    schema: triageSchema, system: TRIAGE_SYSTEM, maxOutputTokens: 600,
+    prompt: triagePrompt(corpus.notices, core, new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date())),
+  }).then((r) => r.refs.filter((x) => known.has(x)).slice(0, 14)).catch((err) => { console.error("[chat/persona] triage call failed", err); return [] as string[]; });
+  const byKeyword = [...corpus.notices].filter((n) => isUrgentNotice(n.subject, n.snippet)).sort((a, b) => b.date.localeCompare(a.date)).map((n) => n.ref);
+  const refs = [...new Set([...picked, ...byKeyword])].slice(0, MAX_NOTICE_READS);
+  await readNoticeDetails(wallet, corpus, refs);
 }
 
 async function stageDigest(wallet: string, cp: Checkpoint, deadline: number, save: (progress: number) => Promise<void>): Promise<PersonaStage> {

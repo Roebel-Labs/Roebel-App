@@ -17,7 +17,7 @@ import { getTenant } from "../harness/tenants";
 import { listEvents, listNews } from "../../roebel-data/public";
 import { listMemories } from "../harness/memory";
 import {
-  htmlToText, isAutomated, isSelfAlias, isUrgentNotice, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
+  htmlToText, isAutomated, isSelfAlias, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
 } from "./classify";
 import type { ContactStat, MailHeaders } from "./classify";
 import { listImports } from "./store";
@@ -30,12 +30,12 @@ const LIMITS = {
   full: {
     sentList: 200, sentDays: 365, threads: 70,
     personalList: 250, personalDays: 90, personalBodies: 50,
-    noticeList: 400, noticeDays: 30, noticeClusters: 90, urgentBodies: 14, events: 200,
+    noticeList: 400, noticeDays: 30, noticeClusters: 90, events: 200,
   },
   refresh: {
     sentList: 60, sentDays: 0, threads: 30,
     personalList: 100, personalDays: 0, personalBodies: 25,
-    noticeList: 300, noticeDays: 21, noticeClusters: 70, urgentBodies: 12, events: 120,
+    noticeList: 300, noticeDays: 21, noticeClusters: 70, events: 120,
   },
 } as const;
 const MAX_MAILS = 260;
@@ -185,17 +185,7 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
     humanInbox.push(m);
   }
   corpus.notices = [...clusters.values()];
-  // Amount, due date and consequence ("your project is paused on the 16th") are in the body, not in
-  // the subject: read the newest mail of every cluster that looks like a deadline or a failed payment.
-  const urgent = [...clusters.entries()].filter(([, n]) => isUrgentNotice(n.subject, n.snippet))
-    .sort((a, b) => b[1].date.localeCompare(a[1].date)).slice(0, L.urgentBodies);
-  await pool(urgent, 6, async ([key, n]) => {
-    n.urgent = true;
-    const id = newestId.get(key);
-    const m = id ? await googleApi<GmailMessage>(row, `${G}/messages/${id}?format=full`).catch(() => null) : null;
-    const text = m ? scrubSecrets(ownText(bodyOf(m.payload), 900)).replace(/\s+/g, " ").trim() : "";
-    if (text) n.detail = text;
-  });
+  for (const [key, n] of clusters) n.id = newestId.get(key);
   corpus.counts.sent = sent.length;
   corpus.counts.inboxHuman = humanInbox.length;
   corpus.counts.inboxAutomated = automated;
@@ -342,6 +332,23 @@ async function collectLocal(corpus: Corpus, now: Date): Promise<void> {
     news: nw.articles.filter((n) => n.published_at && Date.parse(n.published_at) > weekAgo).slice(0, 4)
       .map((n) => `${String(n.published_at).slice(0, 10)} ${n.title}${n.excerpt ? `: ${String(n.excerpt).slice(0, 140)}` : ""}`),
   };
+}
+
+/**
+ * Reads the newest mail of the given notice clusters in full. What matters about a notice (amount,
+ * date, what happens otherwise, what to do) is in the body, not in the subject line.
+ */
+export async function readNoticeDetails(wallet: string, corpus: Corpus, refs: string[]): Promise<void> {
+  const picked = corpus.notices.filter((n) => refs.includes(n.ref) && n.id);
+  if (!picked.length || !googleEnabled()) return;
+  const row = (await listConnectors(wallet, { activeOnly: true })).find((r) => r.kind === "google");
+  if (!row) return;
+  await pool(picked, 6, async (n) => {
+    n.urgent = true;
+    const m = await googleApi<GmailMessage>(row, `${G}/messages/${n.id}?format=full`).catch(() => null);
+    const text = m ? scrubSecrets(ownText(bodyOf(m.payload), 900)).replace(/\s+/g, " ").trim() : "";
+    if (text) n.detail = text;
+  });
 }
 
 /** The whole corpus for one build. Never throws for a missing source; a broken Google link is reported in `warnings`. */
