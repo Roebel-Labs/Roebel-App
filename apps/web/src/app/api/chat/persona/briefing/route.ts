@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-/** GET /api/chat/persona/briefing → {name, date, items, suggestions, doc, title, audio}: what the start page greets the person with. */
+/** GET /api/chat/persona/briefing → {name, date, items[{label, text, task}], suggestions, doc, title, audio}: what the start page greets the person with. */
 export async function GET(request: Request) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
@@ -20,8 +20,9 @@ export async function GET(request: Request) {
     const full = (overview?.facts ?? []).find((f) => f.label.toLowerCase() === "name")?.value || profile?.displayName || "";
     const first = full.trim().split(/\s+/)[0] ?? "";
     const name = /^[\p{L}][\p{L}'-]{1,30}$/u.test(first) ? first : null;
-    // Quick tasks first, then the rest in their order; never more than five.
-    const picked = [...rows.filter((r) => r.quick), ...rows.filter((r) => !r.quick)].slice(0, 5).map(persona.toSuggestion);
+    // The build sorts by urgency (today's offers first), so the order is kept; never more than five.
+    const picked = rows.slice(0, 5).map(persona.toSuggestion);
+    const byTitle = new Map(rows.map((r) => [r.title, r]));
     const doc = row?.body?.trim() || null;
     const when = row?.updated_at ? new Date(row.updated_at) : null;
     const title = doc && when
@@ -31,7 +32,11 @@ export async function GET(request: Request) {
       doc, title, audio: Boolean(doc && process.env.ELEVENLABS_API_KEY),
       name,
       date: row?.updated_at ?? null,
-      items: (row?.facts ?? []).map((f) => ({ label: f.label, text: f.value })),
+      // A point links to the suggestion that tackles it, as long as that one is still open.
+      items: (row?.facts ?? []).map((f) => {
+        const hit = f.action ? byTitle.get(f.action) : undefined;
+        return { label: f.label, text: f.value, task: hit ? persona.toSuggestion(hit) : null };
+      }),
       suggestions: picked,
     });
   } catch (err) {

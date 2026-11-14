@@ -19,7 +19,8 @@ export const SENSITIVE_RULE =
   "Lass besonders schützenswerte Angaben vollständig weg: Gesundheit, Religion, politische Meinung, Sexualität, Gewerkschaft, Herkunft, " +
   "Strafsachen, genaue Finanzdaten (Kontostände, Kartennummern, Gehalt), Passwörter, Schlüssel, Wallet-Adressen, " +
   "Straße und Hausnummer, Telefonnummern, Geburtsdatum, Ausweis- und Kundennummern. Den Wohnort nennst du höchstens als Ort oder Region. " +
-  "Dass eine Zahlung fehlgeschlagen ist oder eine Rechnung offen ist, darfst du nennen, aber ohne Karten- oder Kontodaten.";
+  "Dass eine Zahlung fehlgeschlagen ist oder eine Rechnung offen ist, darfst und sollst du nennen, mit Anbieter, Betrag, Fälligkeit und angedrohter Folge. " +
+  "Von einer Karte höchstens die letzten vier Ziffern („Karte mit Endung 1234“), nie mehr, und keine Kontonummern.";
 
 // ---- stage 2: digest (fast model, one chunk of mails) -------------------------------
 
@@ -82,11 +83,6 @@ export const coreSchema = z.object({
   goals: pageOut.describe("Abschnitte ## Heute, ## Diese Woche, ## Diesen Monat. Pro Ziel ein fetter Satz, dann 1–2 Sätze Begründung mit Belegen. Nur Ziele mit Anlass aus den letzten 30 Tagen."),
   projects: pageOut.describe("Pro Projekt ein Abschnitt ## Name. Erste Zeile fett: **Stand:** aktiv | wartet auf … | pausiert | abgeschlossen, mit Datum der neuesten Nachricht. Dann 2–5 Sätze Fließtext: worum es geht, wer beteiligt ist (als [Name](wiki:slug)), was zuletzt geschah, nächster Schritt. Aktive Projekte zuerst, ältere unter ## Frühere Vorhaben in je einem Satz."),
   core: z.string().describe("Kurzprofil für den Assistenten, höchstens 220 Wörter, Fließtext ohne Belege: wer der Mensch ist, woran er gerade arbeitet, was diese Woche zählt, wichtigste Personen mit Rolle, feste Vorlieben."),
-  briefing: z.array(z.object({
-    label: z.string().describe("Zwei bis drei Wörter, z. B. „Jetzt handeln“, „Antwort offen“, „Heute im Kalender“, „Diese Woche“"),
-    text: z.string().describe("Ein bis zwei Sätze in Du-Form mit dem konkreten Sachverhalt (Name, Datum, Uhrzeit, Betrag) und was daraus folgt. Ohne Belege."),
-  })).nullish().describe("Höchstens 3. Das Tagesbriefing, mit dem der Assistent den Menschen heute begrüßt: nur was HEUTE oder in den nächsten Tagen wirklich zählt (ablaufende Fristen, jemand wartet auf seine Antwort, Termine von heute; ist der Kalender leer, darf das ein Punkt sein mit einem Vorschlag, wofür der freie Tag gut wäre). Nichts Erledigtes, nichts Allgemeines. Leer lassen, wenn nichts ansteht."),
-  briefingDoc: z.string().nullish().describe("Das ganze Tagesbriefing als Markdown in Du-Form, 150 bis 350 Wörter, auch zum Vorlesen geeignet (ganze Sätze, keine Tabellen, keine ausgeschriebenen Internetadressen, keine Belege). Aufbau: ein Eröffnungssatz mit Anrede und Wochentag und dem Wichtigsten des Tages; dann nur die Abschnitte, für die es Stoff gibt: ## Kalender (Termine von heute und morgen, oder dass er frei ist), ## E-Mails (was seit gestern kam und eine Reaktion braucht, mit Namen), ## Offen bei dir (Zusagen und Fristen der nächsten Tage), ## Dabei kann ich helfen (zwei bis vier Angebote), ## In <Ort> (zwei bis vier Veranstaltungen oder Neuigkeiten aus dem Abschnitt über den Ort, falls vorhanden). Verweise auf Wiki-Seiten als [Text](wiki:slug)."),
   updateNote: z.string().nullish().describe("Zwei bis drei Sätze für das Änderungsprotokoll: was sich GEGENÜBER dem bisherigen Wiki konkret geändert hat (welches Ziel erledigt oder gestrichen, welches Projekt neu, welcher Stand neu), mit [Text](wiki:slug)-Verweisen. Beim ersten Aufbau: die wichtigsten drei Erkenntnisse."),
 });
 
@@ -98,6 +94,7 @@ export const suggestSchema = z.object({
     section: z.enum(SECTION).describe("projekt = gehört zu einem Projekt oder Allgemein; zusammenarbeit = betrifft namentlich andere Personen; verbessern = macht den Assistenten besser; profil = was Menschen in derselben Lage typischerweise nutzen, aber mit einem Anlass aus SEINEN Daten"),
     group: z.string().describe("projekt: Projektname genau wie im Wiki oder „Allgemein“. zusammenarbeit: „Aufgabe abstimmen“, „Die richtigen Leute finden“ oder „Leute auf dem Laufenden halten“. verbessern: „Bestätige, was Ortis gelernt hat“, „Zeig Ortis, wie du arbeitest“ oder „Verbinde mehr“. profil: die Gruppe, z. B. „Kassenwarte kleiner Vereine“, „Eltern mit Schulkindern“, „Gründer in der Frühphase“."),
     kind: z.enum(["task", "routine"]),
+    urgency: z.number().nullish().describe("3 = es droht in den nächsten sieben Tagen eine Folge (Sperre, Abschaltung, Mahngebühr, verpasste Frist, ablaufender Zugang); 2 = ein Mensch wartet auf Antwort oder ein Termin steht in den nächsten Tagen an; 1 = alles andere"),
     quick: z.boolean().nullish().describe("true, wenn der Assistent das in wenigen Minuten vollständig erledigen oder vorbereiten kann"),
     title: z.string().describe("Handlungsaufforderung mit dem konkreten Gegenstand, höchstens 80 Zeichen. Aufgabe: Verb zuerst („Antwort an Frau Köhler zum Hallentermin entwerfen“). Routine: beginnt mit dem Rhythmus („Tägliche Übersicht …“, „Wöchentliche …“, „Monatliche …“)."),
     reason: z.string().describe("Der Anlass als EIN knapper Befund mit Zahl, Datum oder Namen, höchstens 70 Zeichen, ohne „weil“ und ohne Wiederholung des Titels. Beispiele: „Drei Mahnungen der Stadtwerke seit 2. Nov.“, „Moniques Frage liegt seit Montag unbeantwortet“, „Anmeldefrist endet am 4. Dez.“."),
@@ -115,7 +112,8 @@ export const SUGGEST_SYSTEM = [
   "Regeln:",
   "- Jeder Vorschlag hat einen konkreten Anlass in den Daten aus den letzten 30 Tagen: eine Frist, eine unbeantwortete Nachricht, eine offene Zusage, wiederholte Fehlermeldungen, eine fehlgeschlagene Zahlung, eine Buchung, ein nahender Termin. Der Anlass steht als Befund mit Zahl, Datum oder Namen in „reason“.",
   "- Nichts, was erledigt oder überholt ist. Prüfe bei jedem Thema die NEUESTE Nachricht dazu: Ist die Antwort schon da, ist „auf Antwort warten“ falsch; dann ist der nächste Schritt der Vorschlag.",
-  "- Dringendes zuerst (Fristen in den nächsten Tagen, ablaufende Zugänge, drohende Sperren).",
+  "- Dringendes zuerst (Fristen in den nächsten Tagen, ablaufende Zugänge, drohende Sperren, fehlgeschlagene Zahlungen). Es gehört in den Abschnitt projekt (Gruppe „Allgemein“, wenn es zu keinem Projekt gehört) und bekommt urgency 3, nie in den Abschnitt profil. Lautstärke ist keine Dringlichkeit: Dreißig gleichartige Fehlermeldungen wiegen weniger als eine einzelne Mahnung mit Frist.",
+  "- Was laut „Bereits verbunden“ schon angebunden ist, schlägst du nicht noch einmal zum Verbinden vor.",
   "- Mischung: etwa ein Drittel Routinen. Routinen fassen wiederkehrenden Lärm zusammen (z. B. viele gleichartige Benachrichtigungen als eine tägliche Übersicht), überwachen offene Vorgänge oder halten Personen auf dem Laufenden.",
   "- Abschnitt zusammenarbeit: nur mit namentlich bekannten Personen aus der Kontaktliste; nenne sie in „people“.",
   "- Abschnitt verbessern: 3 bis 5 Vorschläge. „Bestätige, was Ortis gelernt hat“ für wichtige Annahmen, die nur vermutet sind (der Auftrag bittet den Assistenten, gezielt nachzufragen und das Wiki zu korrigieren). „Zeig Ortis, wie du arbeitest“ für wiederkehrende Arbeitsweisen, die als Fähigkeit gespeichert werden sollten. „Verbinde mehr“ nur für: Gedächtnis aus Claude oder ChatGPT importieren, Claude per Verbindung dauerhaft anbinden, eigene Texte importieren, Google-Kalender oder Gmail verbinden, falls noch nicht geschehen.",
@@ -125,6 +123,57 @@ export const SUGGEST_SYSTEM = [
   "- Die Nutzer sind sehr verschieden (Vereinsmitglied, Rentnerin, Handwerker, Schülerin, Unternehmerin, Entwickler). Beispiele in dieser Anleitung zeigen nur die Form. Themen, Ton und Fachwörter richten sich allein nach den Daten dieses Menschen; technische Begriffe nur, wenn er sie selbst benutzt.",
   "- Bei dünner Datenlage lieber 6 gute Vorschläge als 20 gestreckte. Dann zählen besonders die unter „Verbinde mehr“.",
   "- Deutsch, Du-Form im Auftrag, keine Gedankenstriche, keine Floskeln.",
+  SENSITIVE_RULE,
+  DATA_RULE,
+].join("\n");
+
+// ---- the day's briefing (own call: it decides what the person sees first) -----------
+
+const briefTask = z.object({
+  kind: z.enum(["task", "routine"]),
+  title: z.string().describe("Handlungsaufforderung mit dem konkreten Gegenstand, höchstens 80 Zeichen. Aufgabe: Verb zuerst. Routine: beginnt mit dem Rhythmus („Tägliche …“, „Wöchentliche …“)."),
+  reason: z.string().describe("Der Anlass als EIN knapper Befund mit Zahl, Datum oder Namen, höchstens 70 Zeichen, ohne Wiederholung des Titels."),
+  prompt: z.string().describe(
+    "Der vollständige Auftrag an den Assistenten, so geschrieben, als gäbe der Mensch ihn selbst. Aufbau: " +
+    "erste Zeile „Ziel: …“ (das Ergebnis, an dem der Mensch merkt, dass es erledigt ist). " +
+    "Dann „Bekannt:“ mit einer Aufzählung aller belegten Einzelheiten, je Punkt Absender oder Anbieter, Datum, Betrag, Frist, angedrohte Folge, Anzahl der Wiederholungen, beteiligte Personen. " +
+    "Dann ein Satz, wo der Assistent nach Weiterem suchen soll (z. B. im Postfach nach gleichartigen Mitteilungen anderer Absender, im Kalender). " +
+    "Dann „Ergebnis:“ was am Ende vorliegen soll (Übersicht nach Dringlichkeit, Entwürfe, Checkliste, nächste Schritte je Punkt). " +
+    "Höchstens 180 Wörter. Keine Internetadressen."),
+  schedule: z.object({
+    kind: z.enum(["daily", "weekly"]), weekday: z.number().nullish().describe("0 = Sonntag … 6 = Samstag; nur bei weekly"),
+    hour: z.number().describe("0 bis 23"), minute: z.number().nullish().describe("0 bis 59"),
+  }).nullish().describe("Nur bei kind = routine, sonst null"),
+  people: z.array(z.string()).nullish().describe("E-Mail-Adressen beteiligter Personen aus der Kontaktliste"),
+});
+
+export const briefSchema = z.object({
+  tasks: z.array(briefTask).describe("Drei bis fünf Angebote für HEUTE, das Wichtigste zuerst. Für jeden Punkt aus „points“, bei dem der Assistent helfen kann, gibt es hier eine Aufgabe. Dazu höchstens zwei Routinen, die ein wiederkehrendes Problem künftig abfangen."),
+  points: z.array(z.object({
+    label: z.string().describe("Zwei bis vier Wörter, die die Lage benennen, z. B. „Dringend, Frist in 2 Tagen“, „Seit gestern kaputt“, „Antwort offen“, „Heute um 14 Uhr“, „Gleiche Ursache“"),
+    text: z.string().describe("Ein bis zwei Sätze in Du-Form: der konkrete Sachverhalt mit Anbieter oder Namen, Betrag, Datum, Anzahl der Wiederholungen und der Folge, wenn nichts geschieht. Ohne Belege, ohne Internetadressen."),
+    task: z.number().nullish().describe("Nummer der zugehörigen Aufgabe aus „tasks“ (1 = erste), sonst null"),
+  })).describe("Höchstens 4, nach Dringlichkeit geordnet. Leer, wenn wirklich nichts ansteht."),
+  doc: z.string().describe("Das ganze Tagesbriefing als Markdown in Du-Form, 150 bis 350 Wörter, auch zum Vorlesen geeignet (ganze Sätze, keine Tabellen, keine ausgeschriebenen Internetadressen, keine Belege). Aufbau: ein Eröffnungssatz mit Anrede, Wochentag und dem Wichtigsten des Tages; dann nur die Abschnitte, für die es Stoff gibt: ## Dringend (Fristen, Zahlungen, ablaufende Zugänge, mit Betrag und Datum), ## Kalender (Termine von heute und morgen), ## E-Mails (was seit gestern kam und eine Reaktion braucht, mit Namen), ## Offen bei dir (Zusagen der nächsten Tage), ## Dabei kann ich helfen (die Angebote aus tasks in je einem Satz), ## In <Ort> (zwei bis vier Veranstaltungen oder Neuigkeiten aus dem Abschnitt über den Ort, falls vorhanden). Verweise auf Wiki-Seiten als [Text](wiki:slug)."),
+});
+
+export const BRIEF_SYSTEM = [
+  "Du bist der persönliche Assistent eines Menschen und begrüßt ihn heute mit dem, was er als Erstes wissen muss. Du hast sein Postfach, seinen Kalender und sein Wiki gelesen. Dein Maßstab: Würde ein aufmerksamer Mitarbeiter ihn deswegen heute Morgen ansprechen?",
+  "So wählst du aus (in dieser Reihenfolge):",
+  "1. Folgen mit Datum: Was kostet Geld, Zugang oder eine Gelegenheit, wenn heute oder in den nächsten sieben Tagen nichts geschieht? Fehlgeschlagene Zahlungen, Mahnungen, angedrohte Sperren oder Abschaltungen, ablaufende Schlüssel, Abos, Ausweise, Anmelde- und Antragsfristen. Lies dazu den Abschnitt „Mitteilungen mit möglicher Frist oder Folge“ im Wortlaut und rechne die Tage bis zur Frist aus dem heutigen Datum.",
+  "2. Was seit gestern kaputt oder blockiert ist und andere Dinge aufhält.",
+  "3. Menschen, die auf seine Antwort warten, die am längsten Wartenden und die Wichtigsten zuerst.",
+  "4. Termine von heute und morgen, die Vorbereitung brauchen.",
+  "Regeln:",
+  "- Lautstärke ist keine Dringlichkeit. Viele gleichartige automatische Meldungen (Fehlermeldungen, Benachrichtigungen) sind höchstens EIN Punkt und stehen hinter jeder einzelnen Mitteilung mit Frist oder Geldfolge.",
+  "- Fasse zusammen, was dieselbe Ursache hat: Scheitern mehrere Abbuchungen an derselben Karte, ist das ein Punkt („einmal beheben“), nicht drei.",
+  "- Nenne Zahlen: Betrag mit Währung, Datum, verbleibende Tage, wie oft es schon fehlgeschlagen ist, die letzten vier Ziffern der Karte, wenn sie in der Mitteilung stehen.",
+  "- Prüfe bei jedem Thema die NEUESTE Nachricht: Ist bezahlt, beantwortet oder erledigt, kommt es nicht vor.",
+  "- Ein leerer Kalender, allgemeine Ratschläge und Dinge ohne Anlass aus den letzten 14 Tagen sind kein Punkt. Lieber zwei treffende Punkte als vier gestreckte.",
+  "- Der Assistent kann: E-Mails und Kalender lesen und durchsuchen, Entwürfe schreiben, recherchieren, zusammenfassen, Übersichten, Pläne und Checklisten aufsetzen, an Termine erinnern. Er kann NICHT: bezahlen, sich bei fremden Diensten anmelden, selbstständig Mails senden. Aufgaben beschreiben deshalb, was er vorbereitet (Übersicht aller offenen Posten mit Betrag und Frist, Reihenfolge, Entwurf an den Support, Schritt-für-Schritt-Liste), nicht was er nicht kann.",
+  "- Die Nutzer sind sehr verschieden (Vereinsmitglied, Rentnerin, Handwerker, Schülerin, Unternehmerin, Entwickler). Themen, Ton und Fachwörter richten sich allein nach den Daten dieses Menschen.",
+  "- Vom Menschen abgelehnte Vorschläge kommen nicht wieder vor.",
+  "- Deutsch, Du-Form, sachlich und knapp, keine Gedankenstriche, keine Floskeln.",
   SENSITIVE_RULE,
   DATA_RULE,
 ].join("\n");
@@ -206,7 +255,11 @@ export interface SynthInput {
 export function dossier(input: SynthInput, opts: { forProfile: boolean }): string {
   const { corpus } = input;
   const parts: string[] = [];
-  parts.push(`Heute ist ${input.now.toISOString().slice(0, 10)}.`);
+  const weekday = new Intl.DateTimeFormat("de-DE", { weekday: "long", timeZone: "Europe/Berlin" }).format(input.now);
+  parts.push(`Heute ist ${weekday}, ${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(input.now)}.`);
+  if (corpus.connected && (corpus.connected.mail || corpus.connected.calendar)) {
+    parts.push(`Bereits verbunden: ${[corpus.connected.mail ? "Gmail (Postfach wird gelesen)" : "", corpus.connected.calendar ? "Google Kalender" : ""].filter(Boolean).join(", ")}.`);
+  }
   if (corpus.selfEmail) parts.push(`E-Mail-Adresse des Menschen: ${corpus.selfEmail}${corpus.selfName ? ` (Name auf seinen Mails: ${corpus.selfName})` : ""}`);
   if (corpus.selfAliases?.length) parts.push(`Weitere eigene Adressen des Menschen (keine anderen Personen, nicht als Arbeitgeber deuten): ${corpus.selfAliases.join(", ")}`);
   if (corpus.roebel.length) parts.push(`## Röbel-App-Profil [r1]\n${corpus.roebel.map((l) => `- ${l}`).join("\n")}`);
@@ -231,6 +284,11 @@ export function dossier(input: SynthInput, opts: { forProfile: boolean }): strin
     if (samples.length) parts.push(`## Gesendete Mails im Wortlaut (Stilproben)\n${samples.map((m) => `<quelle ref="${m.ref}" an="${m.to.join(", ")}" datum="${m.date}" betreff="${m.subject.replace(/"/g, "'")}">\n${m.text.slice(0, 700)}\n</quelle>`).join("\n")}`);
     parts.push(`Ausgewertet: ${corpus.counts.sent} gesendete Mails, ${corpus.counts.inboxHuman} Mails von Personen, ${corpus.counts.events} Termine.`);
   } else {
+    const urgent = corpus.notices.filter((n) => n.urgent).sort((a, b) => b.date.localeCompare(a.date));
+    if (urgent.length) {
+      parts.push(`## Mitteilungen mit möglicher Frist oder Folge (Zahlung, Mahnung, Ablauf, Sperre; Wortlaut der jeweils neuesten Nachricht)\n${urgent.map((n) =>
+        `<quelle ref="${n.ref}" von="${n.sender.replace(/"/g, "'")}" datum="${n.date}"${(n.count ?? 1) > 1 ? ` anzahl="${n.count}" seit="${n.firstDate ?? n.date}"` : ""} betreff="${n.subject.replace(/"/g, "'")}">\n${n.detail || n.snippet || ""}\n</quelle>`).join("\n")}`);
+    }
     if (corpus.notices.length) parts.push(`## Automatische Benachrichtigungen der letzten 30 Tage (gleichartige zusammengefasst; Vorschautext der neuesten)\n${[...corpus.notices].sort((a, b) => b.date.localeCompare(a.date)).map(noticeLine).join("\n")}`);
   }
   if (corpus.events.length) {

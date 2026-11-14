@@ -17,7 +17,7 @@ import { getTenant } from "../harness/tenants";
 import { listEvents, listNews } from "../../roebel-data/public";
 import { listMemories } from "../harness/memory";
 import {
-  htmlToText, isAutomated, isSelfAlias, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
+  htmlToText, isAutomated, isSelfAlias, isUrgentNotice, nameFromEmail, noticeKey, ownText, parseAddresses, rankContacts, scrubSecrets,
 } from "./classify";
 import type { ContactStat, MailHeaders } from "./classify";
 import { listImports } from "./store";
@@ -30,12 +30,12 @@ const LIMITS = {
   full: {
     sentList: 200, sentDays: 365, threads: 70,
     personalList: 250, personalDays: 90, personalBodies: 50,
-    noticeList: 400, noticeDays: 30, noticeClusters: 90, events: 200,
+    noticeList: 400, noticeDays: 30, noticeClusters: 90, urgentBodies: 14, events: 200,
   },
   refresh: {
     sentList: 60, sentDays: 0, threads: 30,
     personalList: 100, personalDays: 0, personalBodies: 25,
-    noticeList: 150, noticeDays: 0, noticeClusters: 60, events: 120,
+    noticeList: 300, noticeDays: 21, noticeClusters: 70, urgentBodies: 12, events: 120,
   },
 } as const;
 const MAX_MAILS = 260;
@@ -125,7 +125,9 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
   const [sentIds, personalIds, noticeIds] = await Promise.all([
     listIds(row, `in:sent -in:chats ${window(L.sentDays)}`, L.sentList),
     listIds(row, `${NOT_MINE} ${NO_BULK} ${window(L.personalDays)}`, L.personalList),
-    listIds(row, `${NOT_MINE} {category:updates category:forums} ${window(L.noticeDays)}`, L.noticeList),
+    // Notices always cover their whole window, also on a refresh: an unpaid invoice from last week is
+    // still open today, and only the newest mail of a series says whether it was settled.
+    listIds(row, `${NOT_MINE} {category:updates category:forums} newer_than:${L.noticeDays}d`, L.noticeList),
   ]);
   const meta = (id: string) => googleApi<GmailMessage>(row, `${G}/messages/${id}?format=metadata&${META}`).catch(() => null);
   const [sentMeta, personalMeta, noticeMeta] = await Promise.all([pool(sentIds, 10, meta), pool(personalIds, 10, meta), pool(noticeIds, 10, meta)]);
@@ -151,6 +153,7 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
 
   // Notices: look-alike mails become one line with a count, a date range and the newest preview text.
   const clusters = new Map<string, CorpusNotice>();
+  const newestId = new Map<string, string>();
   const addNotice = (m: GmailMessage, h: MailHeaders, from: { name: string; email: string }) => {
     const sender = (from.name || from.email.split("@")[1]).slice(0, 60);
     const subject = scrubSecrets(h.subject).slice(0, 140);
@@ -159,12 +162,13 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
     const c = clusters.get(key);
     if (!c) {
       if (clusters.size >= L.noticeClusters) return;
+      newestId.set(key, m.id);
       clusters.set(key, { ref: `a${clusters.size + 1}`, sender, subject, date, count: 1, firstDate: date, snippet: scrubSecrets(htmlToText(m.snippet ?? "")).slice(0, 220) });
       return;
     }
     c.count = (c.count ?? 1) + 1;
     if (date < (c.firstDate ?? date)) c.firstDate = date;
-    if (date > c.date) { c.date = date; c.subject = subject; c.snippet = scrubSecrets(htmlToText(m.snippet ?? "")).slice(0, 220); }
+    if (date > c.date) { newestId.set(key, m.id); c.date = date; c.subject = subject; c.snippet = scrubSecrets(htmlToText(m.snippet ?? "")).slice(0, 220); }
   };
 
   const humanInbox: GmailMessage[] = [];
@@ -181,6 +185,17 @@ async function collectMail(row: ConnectorRow, mode: "full" | "refresh", since: D
     humanInbox.push(m);
   }
   corpus.notices = [...clusters.values()];
+  // Amount, due date and consequence ("your project is paused on the 16th") are in the body, not in
+  // the subject: read the newest mail of every cluster that looks like a deadline or a failed payment.
+  const urgent = [...clusters.entries()].filter(([, n]) => isUrgentNotice(n.subject, n.snippet))
+    .sort((a, b) => b[1].date.localeCompare(a[1].date)).slice(0, L.urgentBodies);
+  await pool(urgent, 6, async ([key, n]) => {
+    n.urgent = true;
+    const id = newestId.get(key);
+    const m = id ? await googleApi<GmailMessage>(row, `${G}/messages/${id}?format=full`).catch(() => null) : null;
+    const text = m ? scrubSecrets(ownText(bodyOf(m.payload), 900)).replace(/\s+/g, " ").trim() : "";
+    if (text) n.detail = text;
+  });
   corpus.counts.sent = sent.length;
   corpus.counts.inboxHuman = humanInbox.length;
   corpus.counts.inboxAutomated = automated;
@@ -340,11 +355,11 @@ export async function collectCorpus(wallet: string, mode: "full" | "refresh", si
     : null;
   const scope = google ? secretOf<GoogleSecret>(google)?.scope : undefined;
   if (google && hasScope(scope, "gmail.readonly")) {
-    try { await collectMail(google, mode, since, corpus); }
+    try { await collectMail(google, mode, since, corpus); corpus.connected = { mail: true, calendar: corpus.connected?.calendar ?? false }; }
     catch (err) { corpus.warnings.push(`Gmail konnte nicht gelesen werden: ${err instanceof Error ? err.message.slice(0, 160) : "Fehler"}`); }
   }
   if (google && (hasScope(scope, "calendar") || hasScope(scope, "calendar.readonly"))) {
-    try { await collectCalendar(google, mode, corpus, now); }
+    try { await collectCalendar(google, mode, corpus, now); corpus.connected = { mail: corpus.connected?.mail ?? false, calendar: true }; }
     catch (err) { corpus.warnings.push(`Kalender konnte nicht gelesen werden: ${err instanceof Error ? err.message.slice(0, 160) : "Fehler"}`); }
   }
   await collectRoebel(wallet, corpus).catch(() => {});

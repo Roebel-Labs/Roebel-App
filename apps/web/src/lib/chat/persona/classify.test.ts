@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   chunk, contactScore, isAutomated, isProfileWorthy, nameFromEmail, numberCitations, ownText, parseAddresses,
-  personSlug, rankContacts, scrubSecrets, stripCitations, isRoleAddress, isSelfAlias, noticeKey,
+  personSlug, rankContacts, scrubSecrets, stripCitations, isRoleAddress, isSelfAlias, noticeKey, isUrgentNotice, titleOverlap,
 } from "./classify";
 import type { ContactStat, MailHeaders } from "./classify";
 
@@ -149,4 +149,22 @@ test("a citation run is capped at three sources", () => {
   const out = numberCitations("Builds schlagen fehl [a1, a2, a3, a4, a5].", known);
   assert.equal(out.sources.length, 3);
   assert.equal(out.body, "Builds schlagen fehl [[1]][[2]][[3]].");
+});
+
+test("isUrgentNotice: failed payments, ending access and deadlines, not routine mail", () => {
+  assert.ok(isUrgentNotice("$50.14 payment to Fly.io, Inc. was unsuccessful again"));
+  assert.ok(isUrgentNotice("[Action Required] Payment Failed for the Supabase Integration"));
+  assert.ok(isUrgentNotice("Your Figma account is past due"));
+  assert.ok(isUrgentNotice("Letzte Mahnung", "Ihr Zugang wird gesperrt"));
+  assert.ok(isUrgentNotice("API key update", "Your key expired at 13:47 UTC"));
+  assert.ok(isUrgentNotice("Anmeldung zum Turnier", "Die Frist endet am 4. Dezember"));
+  assert.ok(!isUrgentNotice("[Roebel-Labs/Roebel-App] Run failed: CI - main"));
+  assert.ok(!isUrgentNotice("Ihre Bestellung wurde versandt", "Die Lieferung kommt morgen"));
+  assert.ok(!isUrgentNotice("Your receipt from Vercel Inc."));
+});
+
+test("titleOverlap: same matter in other words counts, different matters do not", () => {
+  assert.ok(titleOverlap("Supabase-Rechnung vor der finalen Mahnung klären", "Offene Supabase Rechnung über 25 $ begleichen") >= 0.5);
+  assert.ok(titleOverlap("Fragebogen für A. K. Eckloff fertigstellen", "Supabase Rechnung begleichen") < 0.5);
+  assert.equal(titleOverlap("", "x"), 0);
 });

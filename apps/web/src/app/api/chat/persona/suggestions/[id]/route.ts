@@ -9,6 +9,14 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 /**
+ * Closes the brief of every started task: look at the real state first, then ask what to cover
+ * before doing the work, so a suggestion written hours ago never runs on stale assumptions.
+ */
+const TASK_START =
+  "Prüf zuerst den aktuellen Stand in meinem Postfach und Kalender, auch ob etwas davon inzwischen erledigt ist und ob es Gleichartiges gibt, das hier noch fehlt. " +
+  "Zeig mir dann in wenigen Zeilen, was du gefunden hast, und frag mich mit einer Auswahlkarte, was genau du übernehmen sollst, bevor du loslegst.";
+
+/**
  * POST /api/chat/persona/suggestions/:id — {action: 'dismiss' | 'start'}.
  * start → {threadId, prompt, routine}: a task gets a fresh thread (the client sends the prompt),
  * a routine is created in its own thread.
@@ -36,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     const threadId = await createTaskThread(wallet, row.title);
     await persona.setSuggestionStatus(wallet, id, "started");
-    return NextResponse.json({ threadId, prompt: row.prompt, routine: null });
+    return NextResponse.json({ threadId, prompt: `${row.prompt}\n\n${TASK_START}`, routine: null });
   } catch (err) {
     return handleError(err, "persona/suggestions");
   }

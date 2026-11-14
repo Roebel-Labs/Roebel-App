@@ -14,12 +14,12 @@ import * as chatStore from "../store";
 import { validateSchedule } from "../schedule";
 import type { ModelRoute } from "../types";
 import { loadProfile } from "../harness/context";
-import { chunk, isProfileWorthy, nameFromEmail, numberCitations, personSlug, stripCitations } from "./classify";
+import { chunk, isProfileWorthy, nameFromEmail, numberCitations, personSlug, stripCitations, titleOverlap } from "./classify";
 import type { ContactStat, SourceRef } from "./classify";
 import { mailAfterWikiBuild } from "../agent/mail";
 import { collectCorpus } from "./collect";
 import {
-  DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, coreSchema, digestPrompt, digestSchema, dossier,
+  BRIEF_SYSTEM, DIGEST_SYSTEM, PERSON_SYSTEM, PROFILE_SYSTEM, SUGGEST_SYSTEM, SYNTH_SYSTEM, briefSchema, coreSchema, digestPrompt, digestSchema, dossier,
   personPrompt, personSchema, profileSchema, suggestSchema,
 } from "./prompts";
 import type { SynthInput } from "./prompts";
@@ -34,6 +34,8 @@ const DIGEST_PARALLEL = 4;
 const PEOPLE_PARALLEL = 4;
 const MAX_PEOPLE = { full: 12, refresh: 6 } as const;
 export const MAX_BUILDS_PER_DAY = 4;
+/** Group of the suggestions that belong to today's briefing (they lead the list and the start page). */
+export const TODAY_GROUP = "Heute";
 
 export const STAGE_LABELS: Record<PersonaStage, string> = {
   collect: "Lese gesendete E-Mails, Termine und Importe …",
@@ -211,12 +213,15 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     dismissed: [...tombstones].filter((k) => k.startsWith("suggestion:")).map((k) => k.slice(11)).slice(0, 30),
   };
 
-  const [core, profile, suggest] = await Promise.all([
+  const [core, profile, suggest, brief] = await Promise.all([
     callModel(wallet, "bot-smart", "synthesize", { schema: coreSchema, system: SYNTH_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 11000 }),
     callModel(wallet, "bot-smart", "profile", { schema: profileSchema, system: PROFILE_SYSTEM, prompt: dossier(input, { forProfile: true }), maxOutputTokens: 7000 }),
     // Suggestions are worth their own call, but never worth failing the build.
     callModel(wallet, "bot-smart", "suggest", { schema: suggestSchema, system: SUGGEST_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 9000 })
       .catch((err) => { console.error("[chat/persona] suggestions failed", err); return null; }),
+    // The briefing is what the person sees first, so it gets a call of its own; a failure keeps yesterday's.
+    callModel(wallet, "bot-smart", "brief", { schema: briefSchema, system: BRIEF_SYSTEM, prompt: dossier(input, { forProfile: false }), maxOutputTokens: 6000 })
+      .catch((err) => { console.error("[chat/persona] briefing failed", err); return null; }),
   ]);
 
   const known = knownRefs(corpus);
@@ -246,32 +251,66 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     body: `${stripCitations(core.core).trim()}\n\nSo schreibt der Mensch: ${stripCitations(profile.styleCore).trim()}`,
   });
 
-  // The greeting of the day (hidden page; read by /api/chat/persona/briefing).
-  await store.upsertPage(wallet, {
-    slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: stripCitations(core.briefingDoc ?? "").trim().slice(0, 6000),
-    facts: (core.briefing ?? []).slice(0, 3).map((b) => ({ label: b.label.trim().slice(0, 40), value: stripCitations(b.text).trim().slice(0, 400) })),
-  });
+  const bySlug = new Map(contacts.map((c) => [c.email, { name: c.name || nameFromEmail(c.email), slug: personSlug(c.email, c.name) }]));
+  const peopleOf = (emails: string[] | null | undefined) =>
+    (emails ?? []).map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4);
+  const scheduleOf = (s: { kind: "task" | "routine"; schedule?: { kind: "daily" | "weekly"; weekday?: number | null; hour: number; minute?: number | null } | null }) =>
+    s.kind === "routine" && s.schedule
+      ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute ?? 0, tz: "Europe/Berlin" })
+      : null;
+  const old = await store.listSuggestionRows(wallet);
+  const before = new Set(old.map((r) => r.title.trim().toLowerCase()));
+  const strip = ({ id: _id, wallet: _w, status: _s, ...rest }: store.SuggestionRow) => rest;
+  type NewSuggestion = Omit<store.SuggestionRow, "id" | "wallet" | "status">;
 
-  // Suggestions: fresh set, never the ones the person dismissed. A failed call keeps the old set.
+  // Today's offers from the briefing: they lead the list, and the briefing points link to them.
+  let today: NewSuggestion[] = old.filter((r) => r.group_title === TODAY_GROUP).map(strip);
+  if (brief) {
+    const kept = brief.tasks.slice(0, 5).map((t, i) => ({ t, n: i + 1 }))
+      .filter(({ t }) => t.title.trim() && t.prompt.trim() && !tombstones.has(`suggestion:${t.title.trim().toLowerCase()}`) && !tombstones.has(`suggestion:${t.title.trim()}`));
+    today = kept.map(({ t }, i) => {
+      const schedule = scheduleOf(t);
+      const kind = (t.kind === "routine" && schedule ? "routine" : "task") as "task" | "routine";
+      return {
+        section: "projects" as const, section_title: "", group_title: TODAY_GROUP, kind, quick: kind === "task",
+        fresh: before.size > 0 && !before.has(t.title.trim().toLowerCase()),
+        title: t.title.trim().slice(0, 140), reason: (t.reason ?? "").trim().slice(0, 200), prompt: t.prompt.trim().slice(0, 2400),
+        schedule, people: peopleOf(t.people), sort: i - 100,
+      };
+    });
+    const titleByNumber = new Map(kept.map(({ t, n }) => [n, t.title.trim().slice(0, 140)]));
+    // The greeting of the day (hidden page; read by /api/chat/persona/briefing).
+    await store.upsertPage(wallet, {
+      slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: stripCitations(brief.doc ?? "").trim().slice(0, 6000),
+      facts: brief.points.slice(0, 4).map((b) => {
+        const action = b.task ? titleByNumber.get(b.task) : undefined;
+        return { label: b.label.trim().slice(0, 40), value: stripCitations(b.text).trim().slice(0, 400), ...(action ? { action } : {}) };
+      }),
+    });
+  }
+
+  // The wider set for "Für dich": most urgent first, never what the person dismissed, never what
+  // today's offers already cover. A failed call keeps the old set.
+  let rest: NewSuggestion[] = old.filter((r) => r.group_title !== TODAY_GROUP).map(strip);
   if (suggest) {
-    const bySlug = new Map(contacts.map((c) => [c.email, { name: c.name || nameFromEmail(c.email), slug: personSlug(c.email, c.name) }]));
-    const before = new Set((await store.listSuggestionRows(wallet)).map((r) => r.title.trim().toLowerCase()));
     const SECTIONS = { projekt: "projects", zusammenarbeit: "collab", verbessern: "improve", profil: "peers" } as const;
     const peersTitle = (suggest.peersTitle ?? "").trim().slice(0, 60) || "Für Menschen wie dich";
     const seenTitles = new Set<string>();
-    const suggestions = suggest.suggestions.slice(0, 30)
-      .filter((s) => {
+    rest = suggest.suggestions.slice(0, 30)
+      .map((s, i) => ({ s, i, urgency: Math.max(1, Math.min(3, Math.round(s.urgency ?? 1))) }))
+      .filter(({ s }) => {
         const key = s.title.trim().toLowerCase();
-        if (!key || seenTitles.has(key) || tombstones.has(`suggestion:${key}`)) return false;
+        if (!key || seenTitles.has(key) || tombstones.has(`suggestion:${key}`) || tombstones.has(`suggestion:${s.title.trim()}`)) return false;
+        if (today.some((t) => t.kind === s.kind && titleOverlap(t.title, s.title) >= 0.6)) return false;
         seenTitles.add(key);
         return true;
       })
-      .map((s, i) => {
-        const schedule = s.kind === "routine" && s.schedule
-          ? validateSchedule({ kind: s.schedule.kind, weekday: s.schedule.weekday ?? undefined, hour: s.schedule.hour, minute: s.schedule.minute ?? 0, tz: "Europe/Berlin" })
-          : null;
+      .sort((a, b) => b.urgency - a.urgency || a.i - b.i)
+      .map(({ s, urgency }, i) => {
+        const schedule = scheduleOf(s);
         const kind = (s.kind === "routine" && schedule ? "routine" : "task") as "task" | "routine";
-        const section = SECTIONS[s.section] ?? "projects";
+        // Something with a consequence this week is never filed under "people like you".
+        const section = urgency === 3 ? "projects" : SECTIONS[s.section] ?? "projects";
         return {
           section, section_title: section === "peers" ? peersTitle : "",
           group_title: (s.group ?? "").trim().slice(0, 80) || "Allgemein",
@@ -279,12 +318,11 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
           // On the very first set nothing is "new": the badge marks what a later update added.
           fresh: before.size > 0 && !before.has(s.title.trim().toLowerCase()),
           title: s.title.trim().slice(0, 140), reason: (s.reason ?? "").trim().slice(0, 200), prompt: s.prompt.trim().slice(0, 1200),
-          schedule, people: (s.people ?? []).map((e) => bySlug.get(e.toLowerCase())).filter((x): x is { name: string; slug: string } => Boolean(x)).slice(0, 4),
-          sort: i,
+          schedule, people: peopleOf(s.people), sort: i,
         };
       });
-    await store.replaceSuggestions(wallet, suggestions);
   }
+  if (brief || suggest) await store.replaceSuggestions(wallet, [...today, ...rest]);
 
   cp.changed = changed;
   cp.peopleQueue = contacts.map((c) => c.email);
@@ -344,7 +382,7 @@ async function finish(wallet: string, cp: Checkpoint): Promise<void> {
     await mailAfterWikiBuild(wallet, {
       firstBuild: cp.mode === "full", firstName: /^[\p{L}][\p{L}'-]{1,30}$/u.test(first) ? first : null,
       briefing: (brief?.facts ?? []).map((f) => ({ label: f.label, text: f.value })),
-      suggestions: [...rows.filter((r) => r.quick), ...rows.filter((r) => !r.quick)].map((r) => ({ title: r.title, reason: r.reason })),
+      suggestions: rows.map((r) => ({ title: r.title, reason: r.reason })),
       learned: note ? stripCitations(note).replace(/\[([^\]]+)\]\(wiki:[^)]+\)/g, "$1") : null,
     });
   } catch (err) {
@@ -428,6 +466,18 @@ export async function startPersonaBuild(wallet: string, mode: "full" | "refresh"
   return personaStatus(wallet);
 }
 
+/**
+ * The most recent 05:00 in Berlin. A wiki built before it is refreshed, so the briefing is new every
+ * morning before the person gets up instead of drifting an hour later each day.
+ */
+export function lastMorning(now: Date, hour = 5): Date {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(now).map((p) => [p.type, p.value]));
+  const sinceMidnight = (Number(parts.hour) * 60 + Number(parts.minute)) * 60_000;
+  const sinceMorning = sinceMidnight - hour * 3_600_000;
+  return new Date(now.getTime() - (sinceMorning >= 0 ? sinceMorning : sinceMorning + 24 * 3_600_000));
+}
+
 /** Cron: continue running builds, then start the daily refresh for a few stale wikis of active users. */
 export async function runPersonaCron(now: Date = new Date()): Promise<{ ticked: number; refreshed: number }> {
   const started = Date.now();
@@ -439,7 +489,7 @@ export async function runPersonaCron(now: Date = new Date()): Promise<{ ticked: 
   }
   let refreshed = 0;
   if (!ticked) {
-    for (const wallet of await store.staleWallets(new Date(now.getTime() - 24 * 3_600_000), 2)) {
+    for (const wallet of await store.staleWallets(lastMorning(now), 2)) {
       // Only for people who used the assistant in the last three days: nobody pays for a wiki nobody reads.
       const active = await chatStore.db().from("chat_runs").select("id", { count: "exact", head: true })
         .eq("owner_wallet", wallet).not("route", "like", "persona:%").gte("created_at", new Date(now.getTime() - 3 * 86_400_000).toISOString());

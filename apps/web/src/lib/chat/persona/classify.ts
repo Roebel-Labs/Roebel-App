@@ -276,3 +276,40 @@ export function chunk<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+// ---- urgency ---------------------------------------------------------------------
+
+const URGENT = new RegExp([
+  // money that did not move
+  "payment (?:has )?(?:failed|was unsuccessful|declined|is due)", "unsuccessful", "payment failed", "failed payment", "past due", "overdue", "unpaid",
+  "card (?:was )?declined", "zahlung (?:ist )?fehlgeschlagen", "fehlgeschlagene zahlung", "zahlung nicht möglich", "lastschrift", "rücklastschrift",
+  "mahnung", "zahlungserinnerung", "überfällig", "offene rechnung", "offener betrag",
+  // access that ends
+  "final (?:notice|reminder|warning)", "last (?:notice|reminder|chance)", "letzte (?:mahnung|erinnerung|chance)", "action (?:required|needed)", "handlungsbedarf",
+  "will be (?:suspended|deleted|paused|shut ?down|deactivated|cancell?ed|removed|downgraded)", "has been (?:suspended|paused|deactivated|restricted)",
+  "suspend", "wird (?:gesperrt|gelöscht|deaktiviert|gekündigt|abgeschaltet|pausiert)", "wurde (?:gesperrt|deaktiviert|pausiert)", "sperrung", "abschaltung",
+  "expire[sd]?\\b", "expiring", "expiration", "läuft (?:bald )?ab", "abgelaufen", "ablauf", "runs? out",
+  // dates that pass
+  "deadline", "frist", "due (?:on|by|in|date|today|tomorrow)", "fällig", "bis spätestens", "verify (?:your|within)", "bestätig\\w* (?:sie|bitte|bis)",
+  "storage (?:is )?(?:almost )?full", "speicher (?:ist )?(?:fast )?voll", "quota exceeded", "limit (?:reached|exceeded)", "kontingent",
+].join("|"), "i");
+
+/** True when an automated mail looks like it carries a deadline, a failed payment or an access that ends. */
+export function isUrgentNotice(subject: string, snippet = ""): boolean {
+  return URGENT.test(`${subject} ${snippet}`);
+}
+
+const STOP = new Set(["eine", "einen", "einer", "eines", "dein", "deine", "deinen", "deiner", "über", "nach", "wegen", "sowie", "oder", "nicht", "noch", "jetzt", "heute", "bitte", "klären", "prüfen", "entwerfen", "vorbereiten", "erstellen", "with", "from", "your", "that", "this"]);
+const words = (s: string): Set<string> => new Set(
+  s.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w)),
+);
+
+/** Share of the shorter title's content words that also appear in the other one (0…1). */
+export function titleOverlap(a: string, b: string): number {
+  const x = words(a);
+  const y = words(b);
+  if (!x.size || !y.size) return 0;
+  let hit = 0;
+  for (const w of x) if (y.has(w)) hit++;
+  return hit / Math.min(x.size, y.size);
+}

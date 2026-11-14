@@ -20,7 +20,7 @@ export interface PersonaStatus {
 export interface PageMeta {
   slug: string; kind: PageKind; title: string; summary: string; parent: string | null; updatedAt: string; editedByUser: boolean;
 }
-export interface PageFact { label: string; value: string }
+export interface PageFact { label: string; value: string; /** Briefing points only: title of the suggestion that tackles the point. */ action?: string }
 export interface PageSource { n: number; label: string; date: string | null }
 export interface Page extends PageMeta { body: string; facts: PageFact[]; sources: PageSource[] }
 export interface PersonMeta { slug: string; name: string; email: string | null; description: string; priority: number }
@@ -48,6 +48,10 @@ export interface CorpusMail {
 export interface CorpusNotice {
   ref: string; sender: string; subject: string; date: string;
   count?: number; firstDate?: string; snippet?: string;
+  /** Looks like a failed payment, a deadline or an access that ends (see isUrgentNotice). */
+  urgent?: boolean;
+  /** Body excerpt of the newest mail of an urgent cluster: amount, due date and consequence live there. */
+  detail?: string;
 }
 export interface CorpusEvent {
   ref: string; title: string; start: string; allDay: boolean; recurring: boolean; location: string | null; attendees: string[];
@@ -68,6 +72,8 @@ export interface Corpus {
   /** Public happenings in the person's town from the app (events of the next days, fresh news). */
   local?: { place: string; events: string[]; news: string[] };
   warnings: string[];
+  /** Which Google sources this build could read (so nobody is told to connect what is connected). */
+  connected?: { mail: boolean; calendar: boolean };
   counts: { sent: number; inboxHuman: number; inboxAutomated: number; events: number };
 }
 

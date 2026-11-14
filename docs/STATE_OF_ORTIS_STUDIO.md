@@ -154,6 +154,19 @@ Code in `apps/web/src/lib/chat/agent/` (`profile.ts`, `mail.ts`, `channels.ts`),
 - **Share page** `/ortis/agent/<id>?name=…` (public, OG card).
 - **Studio 0.3.9** (`61037b30`, branch, not OTA'd): roster + Ansehen/Teilen/Ändern (`src/agent/CharacterPicker.tsx`, `AgentShowcase.tsx`, `characters.ts`). **App icon follows the main assistant's character** (`src/agent/app-icon.ts` draws the PNG → `desktop:setAppIcon` IPC → `app.dock.setIcon` / `win.setIcon`): main-process change, so it needs the next **installer**; older shells ignore it. Runtime-only: Finder/installer icon stays Ortis.
 
+### 6a.4 Briefing that finds what is urgent (2026-11-14)
+
+Compared with Town on the same mailbox again: Town greeted with three overdue invoices, Ortis with an empty calendar. The billing mails had reached the model, but ended up as suggestions 10 to 12 (section "peers") while the start page shows five, and the three briefing points were a side output of the big synthesis call.
+
+- **Own call `persona:brief`** (`briefSchema`, `BRIEF_SYSTEM`): up to 4 points ranked by consequence and deadline (money, access, deadlines before broken things, waiting people, appointments), never "your calendar is empty". It also writes 3 to 5 offers for today with a full brief (Ziel / Bekannt / where to look / Ergebnis). They are stored as suggestions in group `Heute` (`TODAY_GROUP`, sort below 0) and each point links to its offer (`persona_pages._briefing.facts[].action` = suggestion title; `GET /briefing` returns `items[].task`).
+- **Bodies of urgent notices**: `isUrgentNotice` (payment failed, past due, Mahnung, expires, will be suspended, Frist …) picks up to 14 notice clusters; the newest mail of each is read in full (`CorpusNotice.detail`) and shown to the models in its own dossier section. Amount, due date and consequence live there.
+- **Notices are no longer incremental**: a refresh reads the last 21 days of notices, not only mail since the last build.
+- **Suggestions carry `urgency` 1 to 3** and are sorted by it; urgency 3 is never filed under "peers". Offers that today's list already covers are dropped (`titleOverlap`).
+- **Started tasks** get a closing instruction (`TASK_START` in `suggestions/[id]/route.ts`): check the current state in mailbox and calendar, then ask with an option card before working.
+- **Daily refresh at 05:00 Berlin** (`lastMorning`) instead of 24 h after the last build.
+- The dossier says what is already connected, so "connect Gmail" is not suggested to someone who has.
+- **Studio 0.3.10** (branch, not OTA'd): briefing points show "Jetzt angehen" / "Routine einrichten".
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
