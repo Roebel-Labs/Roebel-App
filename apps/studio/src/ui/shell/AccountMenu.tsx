@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { emitCommand, onDesktopCommand } from '../../workspace/desktop';
 import { fetchMe, type Me } from '../../workspace/api';
 import { loadSession } from '../../workspace/session';
@@ -62,26 +63,26 @@ export function AccountMenu() {
   const dark = resolveTheme(theme, isSystemDark()) === 'dark';
   const themeItem = (
     <button className="account-item" onClick={() => setTheme(toggledTheme(theme, isSystemDark()))}>
-      {dark ? <IconSun size={16} /> : <IconMoon size={16} />} {dark ? 'Helle Darstellung' : 'Dunkle Darstellung'}
+      {dark ? <IconSun size={16} /> : <IconMoon size={16} />} {dark ? t('Helle Darstellung') : t('Dunkle Darstellung')}
     </button>
   );
 
   const pct = me ? Math.min(100, Math.round((me.quota.used / Math.max(1, me.quota.limit)) * 100)) : 0;
   return (
     <div className="rail-account" ref={ref}>
-      <Tip label="Konto" side="right" disabled={open}>
-        <button className="rail-avatar" aria-label="Konto" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <Tip label={t('Konto')} side="right" disabled={open}>
+        <button className="rail-avatar" aria-label={t('Konto')} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           {initials(me)}
         </button>
       </Tip>
       {open && (
-        <div className="account-pop" role="dialog" aria-label="Konto">
+        <div className="account-pop" role="dialog" aria-label={t('Konto')}>
           {signedIn ? (
             <>
               {me || meFailed ? (
                 <div className="account-head">
-                  <strong>{me?.displayName || me?.username || 'Angemeldet'}</strong>
-                  {me && <span className="w-tag">{TIER[me.tier ?? ''] ?? me.tier}</span>}
+                  <strong>{me?.displayName || me?.username || t('Angemeldet')}</strong>
+                  {me && <span className="w-tag">{TIER[me.tier ?? ''] ? t(TIER[me.tier ?? '']) : me.tier}</span>}
                 </div>
               ) : (
                 <Busy className="account-head">
@@ -93,8 +94,8 @@ export function AccountMenu() {
               <div className="account-quota">
                 {me || meFailed ? (
                   <div className="account-quota-row">
-                    <span>{me?.quota.ownKey ? 'Eigener Schlüssel' : 'Tageskontingent'}</span>
-                    <span className="w-muted">{me?.quota.ownKey ? 'unbegrenzt' : me ? `${100 - pct} % übrig` : 'nicht abrufbar'}</span>
+                    <span>{me?.quota.ownKey ? t('Eigener Schlüssel') : t('Tageskontingent')}</span>
+                    <span className="w-muted">{me?.quota.ownKey ? t('unbegrenzt') : me ? t('{n} % übrig', { n: 100 - pct }) : t('nicht abrufbar')}</span>
                   </div>
                 ) : (
                   <Busy className="account-quota-row">
@@ -114,7 +115,7 @@ export function AccountMenu() {
                     emitCommand({ kind: 'navigate', section: 'agent' });
                   }}
                 >
-                  <IconAgent size={16} /> Mein Assistent
+                  <IconAgent size={16} /> {t('Mein Assistent')}
                 </button>
               )}
               <button
@@ -124,7 +125,7 @@ export function AccountMenu() {
                   emitCommand({ kind: 'settings' });
                 }}
               >
-                <IconSettings size={16} /> Einstellungen
+                <IconSettings size={16} /> {t('Einstellungen')}
               </button>
               {themeItem}
               <button
@@ -134,12 +135,12 @@ export function AccountMenu() {
                   emitCommand({ kind: 'signout' });
                 }}
               >
-                <IconLogout size={16} /> Abmelden
+                <IconLogout size={16} /> {t('Abmelden')}
               </button>
             </>
           ) : (
             <>
-              <div className="w-muted account-sub">Nicht angemeldet. Verbinde Ortis Studio unter Start mit deinem Konto.</div>
+              <div className="w-muted account-sub">{t('Nicht angemeldet. Verbinde Ortis Studio unter Start mit deinem Konto.')}</div>
               {themeItem}
             </>
           )}

@@ -2,6 +2,7 @@
 // so a hung or failed destination can be switched off and dropped without ending the show.
 
 import { useState } from 'react';
+import { t } from '../../i18n';
 import { useShow } from '../../state/store';
 import { ConfirmDialog } from '../Dialog';
 import { errorText, outputConfig } from '../engine';
@@ -21,21 +22,19 @@ export function ReconnectButton({ className = 'btn' }: { className?: string }) {
         className={className}
         onClick={() => setConfirm(true)}
         disabled={busy || none}
-        title={none ? 'Mindestens ein Ziel muss an bleiben – sonst Sendung beenden.' : error ?? undefined}
+        title={none ? t('Mindestens ein Ziel muss an bleiben – sonst Sendung beenden.') : error ?? undefined}
       >
-        {busy ? 'Verbinde neu…' : 'Ziel neu verbinden'}
+        {busy ? t('Verbinde neu…') : t('Ziel neu verbinden')}
       </button>
       {confirm && (
         <ConfirmDialog
-          title="Ziel neu verbinden?"
+          title={t('Ziel neu verbinden?')}
           body={
             <p>
-              Der Encoder startet neu, mit den Zielen, die jetzt eingeschaltet sind ({cfg.destinations.length}). ALLE Ziele
-              sind für einige Sekunden unterbrochen, auch die, die gerade laufen. Die Aufnahme geht in einer neuen Datei
-              weiter.
+              {t('Der Encoder startet neu, mit den Zielen, die jetzt eingeschaltet sind ({n}). ALLE Ziele sind für einige Sekunden unterbrochen, auch die, die gerade laufen. Die Aufnahme geht in einer neuen Datei weiter.', { n: cfg.destinations.length })}
             </p>
           }
-          confirmLabel="Neu verbinden"
+          confirmLabel={t('Neu verbinden')}
           onConfirm={() => {
             setConfirm(false);
             setBusy(true);

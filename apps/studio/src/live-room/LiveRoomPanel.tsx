@@ -1,6 +1,7 @@
 // "Live-Raum" tab: connects Ortis Studio to the Röbel App live room (docs/superpowers/specs/2026-11-05-live-room-design.md).
 
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
 import { useShow } from '../state/store';
 import { ConfirmDialog } from '../ui/Dialog';
 import { broadcasting } from '../ui/live-room-seams';
@@ -49,7 +50,7 @@ export function LiveRoomRuntime() {
 const STATUS_LABEL: Record<LiveShowStatus, string> = { scheduled: 'Geplant', live: 'LIVE', ended: 'Beendet' };
 
 function realtimeText(s: string): string {
-  return s === 'connected' ? 'Echtzeit verbunden' : s === 'connecting' ? 'Echtzeit verbindet …' : s === 'error' ? 'Echtzeit gestört' : 'Echtzeit aus';
+  return s === 'connected' ? t('Echtzeit verbunden') : s === 'connecting' ? t('Echtzeit verbindet …') : s === 'error' ? t('Echtzeit gestört') : t('Echtzeit aus');
 }
 
 function ConnectionSection() {
@@ -60,33 +61,33 @@ function ConnectionSection() {
   const tokenDirty = draft.trim() !== lr.token;
 
   return (
-    <Section title="Verbindung">
+    <Section title={t('Verbindung')}>
       <div className="lr-form">
         <label className="field lr-grow">
-          <span>Übertragung</span>
+          <span>{t('Übertragung')}</span>
           <select className="input" value={lr.showId ?? ''} onChange={(e) => void liveRoom.selectShow(e.target.value || null)}>
-            <option value="">Bitte wählen …</option>
+            <option value="">{t('Bitte wählen …')}</option>
             {lr.shows.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.title}
-                {s.is_test ? ' (Test)' : ''} · {STATUS_LABEL[s.status] ?? s.status}
+                {s.is_test ? ' (Test)' : ''} · {STATUS_LABEL[s.status] ? t(STATUS_LABEL[s.status]) : s.status}
               </option>
             ))}
           </select>
         </label>
         <button className="btn ghost lr-align-end" onClick={() => void liveRoom.refreshShows()}>
-          Neu laden
+          {t('Neu laden')}
         </button>
       </div>
       <div className="lr-form">
         <label className="field lr-grow">
-          <span>Studio-Schlüssel</span>
+          <span>{t('Studio-Schlüssel')}</span>
           <input
             className="input"
             type="password"
             autoComplete="off"
             spellCheck={false}
-            placeholder="Vom Admin erhalten, einmal einfügen"
+            placeholder={t('Vom Admin erhalten, einmal einfügen')}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => tokenDirty && liveRoom.setToken(draft)}
@@ -100,13 +101,13 @@ function ConnectionSection() {
             void test.run(() => liveRoom.testConnection());
           }}
         >
-          {lr.conn.state === 'testing' ? 'Teste …' : 'Verbindung testen'}
+          {lr.conn.state === 'testing' ? t('Teste …') : t('Verbindung testen')}
         </button>
       </div>
       <div className="lr-status">
         <span className={`lr-badge ${lr.conn.state === 'ok' ? 'ok' : lr.conn.state === 'error' ? 'bad' : 'off'}`}>
           <span className="lr-dot" />
-          {lr.conn.state === 'ok' ? 'Schlüssel gültig' : lr.conn.state === 'error' ? 'Schlüssel abgelehnt' : lr.token ? 'Schlüssel nicht getestet' : 'Kein Schlüssel'}
+          {lr.conn.state === 'ok' ? t('Schlüssel gültig') : lr.conn.state === 'error' ? t('Schlüssel abgelehnt') : lr.token ? t('Schlüssel nicht getestet') : t('Kein Schlüssel')}
         </span>
         {lr.showId && (
           <span className={`lr-badge ${lr.realtime === 'connected' ? 'ok' : lr.realtime === 'error' ? 'bad' : 'off'}`}>
@@ -117,10 +118,10 @@ function ConnectionSection() {
         {lr.show && (
           <>
             <span className="lr-stat">
-              <strong className="num">{lr.viewers ?? '–'}</strong> Zuschauer
+              <strong className="num">{lr.viewers ?? '–'}</strong> {t('Zuschauer')}
             </span>
             <span className="lr-stat">
-              <strong className="num">{lr.reactionsPerMin}</strong> Reaktionen/min
+              <strong className="num">{lr.reactionsPerMin}</strong> {t('Reaktionen/min')}
             </span>
           </>
         )}
@@ -138,55 +139,55 @@ function BroadcastSection() {
   const status = lr.show.status;
 
   const confirmText: Record<LiveShowStatus, { title: string; body: string; label: string }> = {
-    live: { title: 'Übertragung in der App starten?', body: 'Die App zeigt die Übertragung als LIVE an.', label: 'LIVE schalten' },
+    live: { title: t('Übertragung in der App starten?'), body: t('Die App zeigt die Übertragung als LIVE an.'), label: t('LIVE schalten') },
     ended: {
-      title: 'Übertragung in der App beenden?',
-      body: 'Die App zeigt „Beendet“; die Aufzeichnung wird zur Wiederholung. Der Studio-Stream läuft unabhängig davon weiter.',
-      label: 'Beenden',
+      title: t('Übertragung in der App beenden?'),
+      body: t('Die App zeigt „Beendet“; die Aufzeichnung wird zur Wiederholung. Der Studio-Stream läuft unabhängig davon weiter.'),
+      label: t('Beenden'),
     },
-    scheduled: { title: 'Zurück auf „Geplant“?', body: 'Die App zeigt wieder den Countdown.', label: 'Zurücksetzen' },
+    scheduled: { title: t('Zurück auf „Geplant“?'), body: t('Die App zeigt wieder den Countdown.'), label: t('Zurücksetzen') },
   };
 
   return (
     <Section
-      title="Status in der App"
+      title={t('Status in der App')}
       aside={
         <span className={`lr-badge ${status === 'live' ? 'live' : 'off'}`}>
           <span className="lr-dot" />
-          {STATUS_LABEL[status]}
+          {t(STATUS_LABEL[status])}
         </span>
       }
     >
       <div className="lr-row">
         <span className="hint">
-          Studio: {lr.studioOnAir === null ? 'unbekannt' : lr.studioOnAir ? 'auf Sendung' : 'nicht auf Sendung'}
+          {t('Studio: {state}', { state: lr.studioOnAir === null ? t('unbekannt') : lr.studioOnAir ? t('auf Sendung') : t('nicht auf Sendung') })}
         </span>
         <span className="lr-push">
-          <Toggle label="Folgt dem Studio" on={lr.autoFollowAir} onChange={(v) => liveRoom.setAutoFollowAir(v)} />
+          <Toggle label={t('Folgt dem Studio')} on={lr.autoFollowAir} onChange={(v) => liveRoom.setAutoFollowAir(v)} />
         </span>
       </div>
-      {lr.autoFollowAir && <span className="hint">Sobald das Studio auf Sendung geht, steht die App auf LIVE. Beim Beenden fragen wir nach.</span>}
+      {lr.autoFollowAir && <span className="hint">{t('Sobald das Studio auf Sendung geht, steht die App auf LIVE. Beim Beenden fragen wir nach.')}</span>}
       {lr.askEnd && (
         <div className="lr-warn lr-row">
-          <span className="lr-grow">Das Studio sendet nicht mehr. Übertragung auch in der App beenden?</span>
+          <span className="lr-grow">{t('Das Studio sendet nicht mehr. Übertragung auch in der App beenden?')}</span>
           <button className="btn solid-danger" disabled={r.busy} onClick={() => void r.run(() => liveRoom.setStatus('ended'))}>
-            In der App beenden
+            {t('In der App beenden')}
           </button>
           <button className="btn ghost" onClick={() => liveRoom.dismissAskEnd()}>
-            Noch nicht
+            {t('Noch nicht')}
           </button>
         </div>
       )}
       <div className="lr-row">
         <button className="btn" disabled={status === 'live' || r.busy} onClick={() => setAsk('live')}>
-          LIVE schalten
+          {t('LIVE schalten')}
         </button>
         <button className="btn danger" disabled={status !== 'live' || r.busy} onClick={() => setAsk('ended')}>
-          Beenden
+          {t('Beenden')}
         </button>
         {status === 'ended' && (
           <button className="btn ghost" disabled={r.busy} onClick={() => setAsk('scheduled')}>
-            Auf „Geplant“ zurücksetzen
+            {t('Auf „Geplant“ zurücksetzen')}
           </button>
         )}
       </div>
@@ -230,7 +231,7 @@ export function LiveRoomPanel() {
             <VotingSection />
           </>
         ) : (
-          <div className="placeholder">Übertragung wählen, um Chat, Unterstützungen und Gäste zu sehen.</div>
+          <div className="placeholder">{t('Übertragung wählen, um Chat, Unterstützungen und Gäste zu sehen.')}</div>
         )}
       </div>
     </div>

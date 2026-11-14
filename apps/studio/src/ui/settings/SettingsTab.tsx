@@ -3,6 +3,7 @@
 // and only ever shown in password fields (with an explicit "Zeigen").
 
 import { useEffect, useRef, useState } from 'react';
+import { locale, t } from '../../i18n';
 import { replaceStoredShow, useShow } from '../../state/store';
 import { serialize } from '../../state/reducer';
 import { annotateDevices, relinkDevices } from '../../state/relink';
@@ -51,7 +52,7 @@ function SecretInput({
         onBlur={() => setShown(false)}
       />
       <button className="btn ghost" type="button" onClick={() => setShown((v) => !v)} aria-pressed={shown} disabled={disabled}>
-        {shown ? 'Verbergen' : 'Zeigen'}
+        {shown ? t('Verbergen') : t('Zeigen')}
       </button>
     </div>
   );
@@ -75,7 +76,7 @@ function AddDestinationMenu({ onPick, onClose }: { onPick: (p: PresetId) => void
     <div className="menu menu-down" ref={ref} role="menu">
       {PRESETS.map((p) => (
         <button key={p.id} className="menu-item" role="menuitem" onClick={() => onPick(p.id)}>
-          {p.label}
+          {t(p.label)}
         </button>
       ))}
     </div>
@@ -99,7 +100,7 @@ function DestinationCard({
 }) {
   const [test, setTest] = useState<TestState>({ phase: 'idle' });
   const [now, setNow] = useState(Date.now());
-  const t = d.target;
+  const tg = d.target;
   const problem = destinationProblem(d);
   const setTarget = (target: OutputTarget) => {
     onChange({ ...d, target });
@@ -113,12 +114,12 @@ function DestinationCard({
   }, [test.phase]);
 
   const runTest = async () => {
-    if (t.kind === 'none') return;
+    if (tg.kind === 'none') return;
     setTest({ phase: 'running', startedAt: Date.now() });
     try {
       const r = await trackTest(
         window.studio.output.test({
-          destination: t,
+          destination: tg,
           fps: settings.fps,
           videoKbps: settings.videoKbps,
           audioKbps: settings.audioKbps,
@@ -136,61 +137,60 @@ function DestinationCard({
       <div className="dest-head">
         <label className="dest-toggle">
           <input type="checkbox" checked={d.enabled} onChange={(e) => onChange({ ...d, enabled: e.target.checked })} />
-          <span>{d.enabled ? 'An' : 'Aus'}</span>
+          <span>{d.enabled ? t('An') : t('Aus')}</span>
         </label>
         <input
           className="input dest-name"
-          aria-label="Name des Ziels"
+          aria-label={t('Name des Ziels')}
           value={d.name}
           disabled={locked}
           onChange={(e) => onChange({ ...d, name: e.target.value })}
         />
-        <span className="dest-kind">{t.kind === 'srt' ? 'SRT' : t.kind === 'rtmp' ? (t.url.startsWith('rtmps') ? 'RTMPS' : 'RTMP') : '–'}</span>
+        <span className="dest-kind">{tg.kind === 'srt' ? 'SRT' : tg.kind === 'rtmp' ? (tg.url.startsWith('rtmps') ? 'RTMPS' : 'RTMP') : '–'}</span>
         <button className="btn ghost" onClick={onRemove} disabled={locked}>
-          Entfernen
+          {t('Entfernen')}
         </button>
       </div>
 
-      {t.kind === 'srt' && (
+      {tg.kind === 'srt' && (
         <label className="field">
-          <span>SRT-Adresse</span>
-          <SecretInput disabled={locked} label="SRT-Adresse" placeholder="srt://live.cloudflare.com:778?passphrase=…&streamid=…" value={t.url} onChange={(url) => setTarget({ kind: 'srt', url })} />
+          <span>{t('SRT-Adresse')}</span>
+          <SecretInput disabled={locked} label={t('SRT-Adresse')} placeholder="srt://live.cloudflare.com:778?passphrase=…&streamid=…" value={tg.url} onChange={(url) => setTarget({ kind: 'srt', url })} />
         </label>
       )}
-      {t.kind === 'srt' && t.url.includes('live.cloudflare.com') && (
+      {tg.kind === 'srt' && tg.url.includes('live.cloudflare.com') && (
         <span className="err-text">
-          Cloudflare über SRT stockt in der App (gemessen: Aussetzer bis 35 s). Besser RTMPS: Live-Raum → Zugangsdaten holen →
-          „RTMPS als Ziel übernehmen“.
+          {t('Cloudflare über SRT stockt in der App (gemessen: Aussetzer bis 35 s). Besser RTMPS: Live-Raum → Zugangsdaten holen → „RTMPS als Ziel übernehmen“.')}
         </span>
       )}
-      {t.kind === 'rtmp' && (
+      {tg.kind === 'rtmp' && (
         <div className="grid2">
           <label className="field">
-            <span>Server-Adresse</span>
+            <span>{t('Server-Adresse')}</span>
             <input
               className="input"
               spellCheck={false}
               placeholder="rtmps://…"
               disabled={locked}
-              value={t.url}
-              onChange={(e) => setTarget({ ...t, url: clean(e.target.value) })}
+              value={tg.url}
+              onChange={(e) => setTarget({ ...tg, url: clean(e.target.value) })}
             />
           </label>
           <label className="field">
-            <span>Streamschlüssel</span>
-            <SecretInput disabled={locked} label="Streamschlüssel" value={t.key} onChange={(key) => setTarget({ ...t, key })} />
+            <span>{t('Streamschlüssel')}</span>
+            <SecretInput disabled={locked} label={t('Streamschlüssel')} value={tg.key} onChange={(key) => setTarget({ ...tg, key })} />
           </label>
         </div>
       )}
 
       <div className="dest-foot">
-        <button className="btn" onClick={runTest} disabled={locked || !!problem || test.phase === 'running'} title={`${TEST_SECONDS} s Testbild nur an dieses Ziel`}>
-          {test.phase === 'running' ? `Teste… ${Math.min(TEST_SECONDS, Math.round((now - test.startedAt) / 1000))} / ${TEST_SECONDS} s` : 'Testen'}
+        <button className="btn" onClick={runTest} disabled={locked || !!problem || test.phase === 'running'} title={t('{s} s Testbild nur an dieses Ziel', { s: TEST_SECONDS })}>
+          {test.phase === 'running' ? t('Teste… {done} / {total} s', { done: Math.min(TEST_SECONDS, Math.round((now - test.startedAt) / 1000)), total: TEST_SECONDS }) : t('Testen')}
         </button>
         {problem && d.enabled && <span className="hint">{problem}</span>}
-        {!problem && test.phase === 'idle' && <span className="hint">Sendet {TEST_SECONDS} s Testbild mit Ton nur an dieses Ziel.</span>}
-        {test.phase === 'done' && test.ok && <span className="ok-text">Test erfolgreich: {TEST_SECONDS} s gesendet. Bild beim Ziel prüfen.</span>}
-        {test.phase === 'done' && !test.ok && <span className="err-text">Test fehlgeschlagen: {test.error ?? 'unbekannter Fehler'}</span>}
+        {!problem && test.phase === 'idle' && <span className="hint">{t('Sendet {s} s Testbild mit Ton nur an dieses Ziel.', { s: TEST_SECONDS })}</span>}
+        {test.phase === 'done' && test.ok && <span className="ok-text">{t('Test erfolgreich: {s} s gesendet. Bild beim Ziel prüfen.', { s: TEST_SECONDS })}</span>}
+        {test.phase === 'done' && !test.ok && <span className="err-text">{t('Test fehlgeschlagen: {error}', { error: test.error ?? t('unbekannter Fehler') })}</span>}
       </div>
     </div>
   );
@@ -241,27 +241,26 @@ export function SettingsTab() {
 
   return (
     <div className="settings">
-      <h2>Einstellungen</h2>
-      <p>Wohin gesendet wird und wo die Aufnahme landet. Änderungen gelten ab dem nächsten Sendestart.</p>
+      <h2>{t('Einstellungen')}</h2>
+      <p>{t('Wohin gesendet wird und wo die Aufnahme landet. Änderungen gelten ab dem nächsten Sendestart.')}</p>
       {locked && (
         <div className="locked">
-          Während der Sendung gesperrt. Nur Ziele lassen sich an- und ausschalten; das wirkt erst mit „Ziel neu verbinden“.
+          {t('Während der Sendung gesperrt. Nur Ziele lassen sich an- und ausschalten; das wirkt erst mit „Ziel neu verbinden“.')}
         </div>
       )}
 
       {/* Outside the locked fieldset: on air, the destination on/off toggles stay usable. */}
       <section>
-        <h3>Sendeziele</h3>
+        <h3>{t('Sendeziele')}</h3>
         <span className="hint">
-          Alle eingeschalteten Ziele bekommen gleichzeitig dasselbe Bild. Jedes Ziel braucht seinen eigenen Schlüssel: denselben
-          Schlüssel nie zweimal verwenden (auch nicht parallel in OBS).
+          {t('Alle eingeschalteten Ziele bekommen gleichzeitig dasselbe Bild. Jedes Ziel braucht seinen eigenen Schlüssel: denselben Schlüssel nie zweimal verwenden (auch nicht parallel in OBS).')}
         </span>
         {s.destinations.map((d) => (
           <DestinationCard key={d.id} d={d} settings={s} locked={locked} onChange={setDest} onRemove={() => removeDest(d.id)} />
         ))}
         <div className="dest-add">
           <button className="btn" onClick={() => setMenu((v) => !v)} aria-expanded={menu} disabled={locked}>
-            + Ziel
+            {t('+ Ziel')}
           </button>
           {menu && !locked && <AddDestinationMenu onPick={addDest} onClose={() => setMenu(false)} />}
           {streaming && <ReconnectButton />}
@@ -270,28 +269,26 @@ export function SettingsTab() {
         {destinationsWarning(s.destinations) && <div className="dialog-warn">{destinationsWarning(s.destinations)}</div>}
         {streaming && (
           <span className="hint">
-            Tempo fällt gegen 0 oder ein Ziel ist ausgefallen: das Ziel ausschalten, dann „Ziel neu verbinden“. Alle Ziele sind
-            dabei kurz unterbrochen.
+            {t('Tempo fällt gegen 0 oder ein Ziel ist ausgefallen: das Ziel ausschalten, dann „Ziel neu verbinden“. Alle Ziele sind dabei kurz unterbrochen.')}
           </span>
         )}
         {n === 0 ? (
-          <span className="hint">Kein Ziel eingeschaltet: „Nur aufnehmen“ speichert die Sendung lokal, ohne zu streamen.</span>
+          <span className="hint">{t('Kein Ziel eingeschaltet: „Nur aufnehmen“ speichert die Sendung lokal, ohne zu streamen.')}</span>
         ) : (
           <span className={up.warn ? 'warn-text' : 'hint'}>
-            ≈ {n} × ({s.videoKbps} + {s.audioKbps}) kbit/s = {up.mbit.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s Upload
-            nötig.
-            {up.warn && ` ${n === 2 ? 'Zwei Ziele brauchen' : `${n} Ziele brauchen`} ${n === 2 ? 'doppelte' : `${n}-fache`} Upload-Bandbreite.`}
+            {t('≈ {n} × ({video} + {audio}) kbit/s = {mbit} Mbit/s Upload nötig.', { n, video: s.videoKbps, audio: s.audioKbps, mbit: up.mbit.toLocaleString(locale(), { maximumFractionDigits: 1 }) })}
+            {up.warn && ` ${n === 2 ? t('Zwei Ziele brauchen doppelte Upload-Bandbreite.') : t('{n} Ziele brauchen {n}-fache Upload-Bandbreite.', { n })}`}
           </span>
         )}
       </section>
 
       <fieldset disabled={locked} style={{ all: 'unset', display: 'block' }}>
         <section>
-          <h3>Bild und Ton</h3>
+          <h3>{t('Bild und Ton')}</h3>
           <div className="grid2">
             <div className="field">
-              <span>Bildrate</span>
-              <div className="seg" role="group" aria-label="Bildrate">
+              <span>{t('Bildrate')}</span>
+              <div className="seg" role="group" aria-label={t('Bildrate')}>
                 {([30, 50] as const).map((f) => (
                   <button key={f} aria-pressed={s.fps === f} onClick={() => set({ fps: f })}>
                     {f} fps
@@ -300,7 +297,7 @@ export function SettingsTab() {
               </div>
             </div>
             <label className="field">
-              <span>Video-Bitrate: {s.videoKbps} kbit/s</span>
+              <span>{t('Video-Bitrate: {kbps} kbit/s', { kbps: s.videoKbps })}</span>
               <input
                 type="range"
                 min={KBPS_MIN}
@@ -311,7 +308,7 @@ export function SettingsTab() {
               />
             </label>
             <label className="field">
-              <span>Audio-Bitrate</span>
+              <span>{t('Audio-Bitrate')}</span>
               <select className="input" value={s.audioKbps} onChange={(e) => set({ audioKbps: Number(e.target.value) })}>
                 {[128, 160, 192, 256].map((k) => (
                   <option key={k} value={k}>
@@ -321,23 +318,22 @@ export function SettingsTab() {
               </select>
             </label>
           </div>
-          <span className="hint">1080p mit 30 fps ist Standard. 50 fps nur bei viel Bewegung und genug Upload.</span>
+          <span className="hint">{t('1080p mit 30 fps ist Standard. 50 fps nur bei viel Bewegung und genug Upload.')}</span>
         </section>
 
         <section>
-          <h3>Aufnahme</h3>
+          <h3>{t('Aufnahme')}</h3>
           <label className="check">
             <input type="checkbox" checked={s.record} onChange={(e) => set({ record: e.target.checked })} />
-            Lokal aufnehmen
+            {t('Lokal aufnehmen')}
           </label>
           {!s.record && (
             <span className="hint">
-              Aus: nichts wird auf diesem Rechner gespeichert (gut für lange Sendungen). Der Stream läuft unverändert; die
-              Aufzeichnung in der App macht Cloudflare.
+              {t('Aus: nichts wird auf diesem Rechner gespeichert (gut für lange Sendungen). Der Stream läuft unverändert; die Aufzeichnung in der App macht Cloudflare.')}
             </span>
           )}
           <label className="field">
-            <span>Ordner</span>
+            <span>{t('Ordner')}</span>
             <div className="with-btn">
               <input className="input" spellCheck={false} value={s.recordDir} onChange={(e) => set({ recordDir: e.target.value })} />
               <button
@@ -347,21 +343,21 @@ export function SettingsTab() {
                   if (dir) set({ recordDir: dir });
                 }}
               >
-                Wählen…
+                {t('Wählen…')}
               </button>
             </div>
           </label>
           {s.record && (
             <span className="hint">
-              Jede Sendung wird zusätzlich lokal als .mkv gespeichert, auch bei „Nur aufnehmen“. Bedarf: etwa 5–6 GB pro Stunde.
+              {t('Jede Sendung wird zusätzlich lokal als .mkv gespeichert, auch bei „Nur aufnehmen“. Bedarf: etwa 5–6 GB pro Stunde.')}
             </span>
           )}
         </section>
 
         <section>
-          <h3>Technik</h3>
+          <h3>{t('Technik')}</h3>
           <label className="field">
-            <span>ffmpeg-Pfad</span>
+            <span>{t('ffmpeg-Pfad')}</span>
             <div className="with-btn">
               <input
                 className="input"
@@ -373,20 +369,20 @@ export function SettingsTab() {
                 }}
               />
               <button className="btn" onClick={runCheck} disabled={check === 'running'}>
-                {check === 'running' ? 'Prüfe…' : 'Prüfen'}
+                {check === 'running' ? t('Prüfe…') : t('Prüfen')}
               </button>
             </div>
           </label>
           {check && check !== 'running' && check.ok && check.softwareEncoder && (
-            <span className="err-text">Kein Grafikkarten-Encoder gefunden: Software-Encoder, höhere CPU-Last.</span>
+            <span className="err-text">{t('Kein Grafikkarten-Encoder gefunden: Software-Encoder, höhere CPU-Last.')}</span>
           )}
           {check && check !== 'running' && (
             <span className={check.ok ? 'ok-text' : 'err-text'}>
               {check.error
-                ? `ffmpeg nicht nutzbar: ${check.error}`
-                : `ffmpeg ${check.version ?? '?'}${check.source === 'bundled' ? ' (mitgeliefert)' : ''} · SRT ${check.srt ? 'ja' : 'fehlt'} · Encoder ${
-                    check.encoder ? encoderLabel(check.encoder) : 'fehlt'
-                  }${check.ok ? '' : ` (${FFMPEG_INSTALL_HINT})`}`}
+                ? t('ffmpeg nicht nutzbar: {error}', { error: check.error })
+                : `ffmpeg ${check.version ?? '?'}${check.source === 'bundled' ? ` (${t('mitgeliefert')})` : ''} · SRT ${check.srt ? t('ja') : t('fehlt')} · Encoder ${
+                    check.encoder ? encoderLabel(check.encoder) : t('fehlt')
+                  }${check.ok ? '' : ` (${t(FFMPEG_INSTALL_HINT)})`}`}
             </span>
           )}
         </section>
@@ -432,12 +428,12 @@ function ShowTransfer() {
       const annotated = annotateDevices(JSON.parse(serialize(state)) as Record<string, unknown>, await devices());
       const r = await window.studio.show.exportPackage(JSON.stringify(annotated), withKeys);
       if (r) {
-        const miss = r.missing.length ? ` ${r.missing.length} Datei(en) fehlten und sind nicht dabei.` : '';
-        const keys = withKeys ? ' Enthält die Stream-Schlüssel: nicht weitergeben.' : '';
-        setMsg({ ok: r.missing.length === 0, text: `Gespeichert: ${r.dir} (${r.files} Mediendateien).${miss} Den ganzen Ordner auf den anderen Rechner kopieren.${keys}` });
+        const miss = r.missing.length ? ` ${t('{n} Datei(en) fehlten und sind nicht dabei.', { n: r.missing.length })}` : '';
+        const keys = withKeys ? ` ${t('Enthält die Stream-Schlüssel: nicht weitergeben.')}` : '';
+        setMsg({ ok: r.missing.length === 0, text: `${t('Gespeichert: {dir} ({files} Mediendateien).', { dir: r.dir, files: r.files })}${miss} ${t('Den ganzen Ordner auf den anderen Rechner kopieren.')}${keys}` });
       }
     } catch (e) {
-      setMsg({ ok: false, text: `Export fehlgeschlagen: ${errorText(e)}` });
+      setMsg({ ok: false, text: t('Export fehlgeschlagen: {error}', { error: errorText(e) }) });
     } finally {
       setBusy(false);
     }
@@ -450,7 +446,7 @@ function ShowTransfer() {
       const r = await window.studio.show.importPackage();
       if (r) setConfirm(r);
     } catch (e) {
-      setMsg({ ok: false, text: `Import fehlgeschlagen: ${errorText(e)}` });
+      setMsg({ ok: false, text: t('Import fehlgeschlagen: {error}', { error: errorText(e) }) });
     } finally {
       setBusy(false);
     }
@@ -468,35 +464,36 @@ function ShowTransfer() {
 
   return (
     <section>
-      <h3>Show übertragen</h3>
+      <h3>{t('Show übertragen')}</h3>
       <p className="hint">
-        Nimmt die ganze Show auf einen anderen Rechner mit: Quellen, Videos, Bilder, Logos, Einblendungen, Tabelle, Sponsoren und Mixer.
-        Kameras und Mikrofone werden am neuen Rechner über ihren Namen wiedergefunden (z. B. „OsmoPocket4P“), wenn sie beim Import angeschlossen sind.
+        {t('Nimmt die ganze Show auf einen anderen Rechner mit: Quellen, Videos, Bilder, Logos, Einblendungen, Tabelle, Sponsoren und Mixer. Kameras und Mikrofone werden am neuen Rechner über ihren Namen wiedergefunden (z. B. „OsmoPocket4P“), wenn sie beim Import angeschlossen sind.')}
       </p>
       <label className="check">
         <input type="checkbox" checked={withKeys} onChange={(e) => setWithKeys(e.target.checked)} />
-        Sendeziele und Stream-Schlüssel mitnehmen (Paket dann nicht weitergeben)
+        {t('Sendeziele und Stream-Schlüssel mitnehmen (Paket dann nicht weitergeben)')}
       </label>
       <div className="with-btn">
         <button className="btn" onClick={doExport} disabled={busy}>
-          Show exportieren…
+          {t('Show exportieren…')}
         </button>
         <button className="btn" onClick={doImport} disabled={busy}>
-          Show importieren…
+          {t('Show importieren…')}
         </button>
       </div>
       {confirm && (
         <div className="locked">
           <p>
-            Show-Paket gelesen ({confirm.files} Mediendateien
-            {confirm.missing.length ? `, ${confirm.missing.length} fehlen: ${confirm.missing.slice(0, 3).join(', ')}` : ''}). Die aktuelle Show auf diesem Rechner wird ersetzt.
+            {confirm.missing.length
+              ? t('Show-Paket gelesen ({files} Mediendateien, {n} fehlen: {names}).', { files: confirm.files, n: confirm.missing.length, names: confirm.missing.slice(0, 3).join(', ') })
+              : t('Show-Paket gelesen ({files} Mediendateien).', { files: confirm.files })}{' '}
+            {t('Die aktuelle Show auf diesem Rechner wird ersetzt.')}
           </p>
           <div className="with-btn">
             <button className="btn primary" onClick={() => void apply()}>
-              Show ersetzen
+              {t('Show ersetzen')}
             </button>
             <button className="btn" onClick={() => setConfirm(null)}>
-              Abbrechen
+              {t('Abbrechen')}
             </button>
           </div>
         </div>

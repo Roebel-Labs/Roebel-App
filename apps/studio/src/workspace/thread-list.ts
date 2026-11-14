@@ -1,4 +1,5 @@
 // Pure helpers for the Start sidebar (tested).
+import { t } from '../i18n';
 import type { ChatThread } from './types';
 
 /** The default assistant's main conversation: its most recent direct thread, else the most recent thread. */
@@ -26,12 +27,12 @@ function clip(text: string, max: number): string {
  * What a conversation is called in the list and the header: its own title; when the title is empty or
  * just repeats the assistant's name, the start of the latest message; the assistant's name as a last resort.
  */
-export function threadLabel(t: Pick<ChatThread, 'title' | 'bots' | 'lastMessagePreview'>, max = 64): string {
-  const bot = t.bots[0]?.name?.trim() ?? '';
-  const title = (t.title ?? '').trim();
+export function threadLabel(thread: Pick<ChatThread, 'title' | 'bots' | 'lastMessagePreview'>, max = 64): string {
+  const bot = thread.bots[0]?.name?.trim() ?? '';
+  const title = (thread.title ?? '').trim();
   if (title && title.toLowerCase() !== bot.toLowerCase()) return title;
-  const preview = clip(t.lastMessagePreview ?? '', max);
-  return preview || title || bot || 'Unterhaltung';
+  const preview = clip(thread.lastMessagePreview ?? '', max);
+  return preview || title || bot || t('Unterhaltung');
 }
 
 /** "Aufgaben" = conversations that belong to a routine; everything else is "Zuletzt verwendet". */
@@ -50,7 +51,7 @@ export function agentsOf(threads: ChatThread[]): Array<{ id: string; name: strin
 }
 
 export function greeting(hour: number): string {
-  return hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
+  return hour < 11 ? t('Guten Morgen') : hour < 18 ? t('Guten Tag') : t('Guten Abend');
 }
 
 /** "Max Brych" → "Max"; handles and e-mail-like names are not first names. */

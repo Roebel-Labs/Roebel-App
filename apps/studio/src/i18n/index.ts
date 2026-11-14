@@ -5,6 +5,7 @@
 // Rules for callers:
 //  - Call t() while rendering (or in an event handler), never at module level: a table of labels
 //    defined at module level keeps its German strings and is translated where it is shown, t(label).
+//  - Same German word, different English by place: tx('stream', 'Ziele') with the key 'stream|Ziele'.
 //  - Placeholders: t('Routine eingerichtet: {title}', { title }). No string concatenation.
 //  - Dates and numbers: locale() instead of a hardcoded 'de-DE'.
 //  - What goes on air (lower thirds, full screens, the show's own texts) is content, not interface:
@@ -86,6 +87,15 @@ const fill = (text: string, vars?: Record<string, string | number>): string =>
 export function t(de: string, vars?: Record<string, string | number>): string {
   const dict = DICTS[lang];
   return fill(dict?.[de] ?? de, vars);
+}
+
+/**
+ * Like t(), for a German word whose English depends on where it stands ("Ziele": goals in the wiki,
+ * destinations of a stream). Looks up "context|German" first, then the plain German key.
+ */
+export function tx(context: string, de: string, vars?: Record<string, string | number>): string {
+  const dict = DICTS[lang];
+  return fill(dict?.[`${context}|${de}`] ?? dict?.[de] ?? de, vars);
 }
 
 /** Every German string the English dictionary covers (tests). */

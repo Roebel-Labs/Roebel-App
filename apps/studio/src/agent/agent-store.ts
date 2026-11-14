@@ -1,6 +1,7 @@
 // The assistant's profile, shared by the Start page (display name) and the "Assistent" page. One cached
 // copy per session; `null` means the endpoint is not available (older backend) and every entry point hides.
 import { useEffect, useState } from 'react';
+import { t } from '../i18n';
 import { ChatApiError, fetchAgent, type Agent, type AgentResponse } from '../workspace/api';
 
 export type AgentState = { status: 'loading' } | { status: 'unavailable' } | { status: 'error'; message: string } | { status: 'ready'; data: AgentResponse };
@@ -29,7 +30,7 @@ export async function loadAgent(token: string, quiet = false): Promise<AgentStat
     // A background refresh never throws away what is on screen.
     if (quiet && state.status === 'ready') return state;
     if (e instanceof ChatApiError && e.status === 404) set({ status: 'unavailable' });
-    else set({ status: 'error', message: (e as Error).message || 'Das hat nicht geklappt.' });
+    else set({ status: 'error', message: (e as Error).message || t('Das hat nicht geklappt.') });
   }
   return state;
 }

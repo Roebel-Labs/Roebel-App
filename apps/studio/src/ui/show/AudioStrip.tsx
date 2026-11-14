@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DB_FLOOR, MAX_DELAY_MS, type Mixer } from '../../audio/mixer';
+import { t } from '../../i18n';
 import { listDevices } from '../../media/devices';
 import { useShow } from '../../state/store';
 import type { AudioChannel } from '../../state/types';
@@ -29,11 +30,11 @@ function useMeters(mixer: Mixer | null) {
     if (!mixer) return;
     let raf = 0;
     let last = 0;
-    const tick = (t: number) => {
+    const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
-      const dt = t - last;
+      const dt = ts - last;
       if (dt < 1000 / METER_HZ - 2) return;
-      last = t;
+      last = ts;
       const levels = mixer.levels();
       for (const [id, m] of meters.current) {
         if (!m.bar || !m.read) continue;
@@ -43,7 +44,7 @@ function useMeters(mixer: Mixer | null) {
         if (lost) m.shown = DB_FLOOR;
         m.bar.style.transform = `scaleY(${meterFrac(m.shown)})`;
         m.bar.style.background = colorFor(m.shown);
-        if (lost !== m.lost) m.read.title = lost ? 'Signal verloren' : '';
+        if (lost !== m.lost) m.read.title = lost ? t('Signal verloren') : '';
         const text = lost ? '—' : fmtDb(raw);
         if (m.read.textContent !== text) m.read.textContent = text;
         m.lost = lost;
@@ -131,9 +132,9 @@ function AddMenu({ onClose }: { onClose: () => void }) {
   const videos = state.sources.filter((s) => s.kind === 'video');
   return (
     <div className="au-menu" ref={ref} role="menu">
-      <div className="au-menu-sub">Audiogerät</div>
-      {devices === null && <div className="au-menu-empty">Suche Geräte…</div>}
-      {devices?.length === 0 && <div className="au-menu-empty">Keine Audiogeräte gefunden</div>}
+      <div className="au-menu-sub">{t('Audiogerät')}</div>
+      {devices === null && <div className="au-menu-empty">{t('Suche Geräte…')}</div>}
+      {devices?.length === 0 && <div className="au-menu-empty">{t('Keine Audiogeräte gefunden')}</div>}
       {devices?.map((d, i) => (
         <button
           key={d.deviceId}
@@ -141,11 +142,11 @@ function AddMenu({ onClose }: { onClose: () => void }) {
           className="au-menu-item"
           onClick={() => add({ ...base, label: d.label || `Audiogerät ${i + 1}`, input: { kind: 'device', deviceId: d.deviceId } })}
         >
-          {d.label || `Audiogerät ${i + 1}`}
+          {d.label || t('Audiogerät {n}', { n: i + 1 })}
         </button>
       ))}
-      <div className="au-menu-sub">Ton einer Quelle</div>
-      {videos.length === 0 && <div className="au-menu-empty">Keine Videoquelle vorhanden</div>}
+      <div className="au-menu-sub">{t('Ton einer Quelle')}</div>
+      {videos.length === 0 && <div className="au-menu-empty">{t('Keine Videoquelle vorhanden')}</div>}
       {videos.map((s) => (
         <button
           key={s.id}
@@ -177,17 +178,17 @@ function ChannelStrip({ ch, bind }: { ch: AudioChannel; bind: Bind }) {
           max={FADER_MAX}
           step={0.5}
           value={ch.gainDb}
-          aria-label={`Pegel ${ch.label}`}
+          aria-label={t('Pegel {name}', { name: ch.label })}
           onChange={(e) => patch({ gainDb: Number(e.target.value) })}
           onDoubleClick={() => patch({ gainDb: 0 })}
         />
       </div>
       <div className="au-db">{fmtDb(ch.gainDb)} dB</div>
       <button className={`au-btn${ch.muted ? ' on' : ''}`} aria-pressed={ch.muted} onClick={() => patch({ muted: !ch.muted })}>
-        Stumm
+        {t('Stumm')}
       </button>
       <label className="au-field">
-        <span>Verzögerung</span>
+        <span>{t('Verzögerung')}</span>
         <span className="au-num">
           <input
             type="number"
@@ -204,9 +205,9 @@ function ChannelStrip({ ch, bind }: { ch: AudioChannel; bind: Bind }) {
         </span>
       </label>
       <label className="au-field">
-        <span>Folgt Bild</span>
+        <span>{t('Folgt Bild')}</span>
         <select value={ch.followsVideoSourceId ?? ''} onChange={(e) => patch({ followsVideoSourceId: e.target.value || undefined })}>
-          <option value="">Keine</option>
+          <option value="">{t('Keine')}</option>
           {state.sources.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
@@ -215,7 +216,7 @@ function ChannelStrip({ ch, bind }: { ch: AudioChannel; bind: Bind }) {
         </select>
       </label>
       <button className="au-btn" onClick={() => dispatch({ type: 'removeAudioChannel', id: ch.id })}>
-        Entfernen
+        {t('Entfernen')}
       </button>
     </div>
   );
@@ -234,7 +235,7 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
         <span className="au-title">Audio</span>
         <div className="au-add">
           <button className="au-btn" onClick={() => setAdding((v) => !v)} aria-haspopup="menu" aria-expanded={adding}>
-            + Kanal
+            {t('+ Kanal')}
           </button>
           {adding && <AddMenu onClose={() => setAdding(false)} />}
         </div>
@@ -243,7 +244,7 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
         {channels.map((c) => (
           <ChannelStrip key={c.id} ch={c} bind={bind} />
         ))}
-        {channels.length === 0 && <div className="au-empty">Noch kein Audiokanal. Mit „+ Kanal“ ein Gerät oder den Ton einer Videoquelle hinzufügen.</div>}
+        {channels.length === 0 && <div className="au-empty">{t('Noch kein Audiokanal. Mit „+ Kanal“ ein Gerät oder den Ton einer Videoquelle hinzufügen.')}</div>}
         <div className="au-strip au-master">
           <div className="au-label">Master</div>
           <div className="au-body">
@@ -255,7 +256,7 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
               max={FADER_MAX}
               step={0.5}
               value={masterDb}
-              aria-label="Pegel Master"
+              aria-label={t('Pegel Master')}
               onChange={(e) => dispatch({ type: 'setMasterDb', db: Number(e.target.value) })}
               onDoubleClick={() => dispatch({ type: 'setMasterDb', db: 0 })}
             />
@@ -265,13 +266,13 @@ export function AudioStrip({ mixer }: { mixer: Mixer | null }) {
             className={`au-btn${monitor ? ' on' : ''}`}
             aria-pressed={monitor}
             disabled={!mixer}
-            title="Master auf Kopfhörer / Lautsprecher. Mit Raummikrofon Rückkopplung vermeiden."
+            title={t('Master auf Kopfhörer / Lautsprecher. Mit Raummikrofon Rückkopplung vermeiden.')}
             onClick={() => {
               mixer?.setMonitor(!monitor);
               rerender((n) => n + 1);
             }}
           >
-            Mithören
+            {t('Mithören')}
           </button>
         </div>
       </div>

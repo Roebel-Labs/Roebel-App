@@ -1,5 +1,6 @@
 // SSE parsing for the chat send/approve streams. Same algorithm as apps/expo/lib/chat/stream.ts
 // (kept in sync by hand: the studio is not a workspace consumer of the app).
+import { t } from '../i18n';
 import type { ChatStreamEvent } from './types';
 
 const KNOWN_EVENTS = new Set(['user', 'bot_start', 'delta', 'part', 'bot_done', 'done', 'error']);
@@ -18,7 +19,7 @@ function toEvent(name: string, data: string): ChatStreamEvent | null {
     return {
       type: 'error',
       code: typeof body.code === 'string' ? body.code : 'unknown',
-      message: typeof body.message === 'string' ? body.message : 'Es ist ein Fehler aufgetreten.',
+      message: typeof body.message === 'string' ? body.message : t('Es ist ein Fehler aufgetreten.'),
     };
   }
   return { ...(body as object), type: name } as ChatStreamEvent;

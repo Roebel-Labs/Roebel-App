@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { defaultRenderContext } from '../../media/program';
 import { renderFrame, templateHasContent } from '../../render/draw';
 import { useShow } from '../../state/store';
@@ -21,11 +22,11 @@ function bindingsOf(t: Template): Record<string, string[]> {
 }
 
 /** Where an empty graphic gets its data from, as a hint on the tile. */
-function emptyHint(t: Template): string {
-  const b = bindingsOf(t);
-  if (b.chat) return 'Wartet auf Chat – im Live-Raum „Auf Sendung“';
-  if (b.sponsor) return 'Erscheint im Werbeblock';
-  return 'Keine Daten – Tabelle füllen';
+function emptyHint(tpl: Template): string {
+  const b = bindingsOf(tpl);
+  if (b.chat) return t('Wartet auf Chat – im Live-Raum „Auf Sendung“');
+  if (b.sponsor) return t('Erscheint im Werbeblock');
+  return t('Keine Daten – Tabelle füllen');
 }
 
 /** Sample data so an empty graphic still shows what it looks like (column names as text). */
@@ -102,18 +103,18 @@ function AddOverlayMenu({ onClose }: { onClose: () => void }) {
   }, [onClose]);
   return (
     <div className="menu" ref={ref} role="menu" style={{ width: 240 }}>
-      <div className="menu-sub hint">Vorlage wählen</div>
-      {state.templates.map((t) => (
+      <div className="menu-sub hint">{t('Vorlage wählen')}</div>
+      {state.templates.map((tpl) => (
         <button
-          key={t.id}
+          key={tpl.id}
           className="menu-item"
           onClick={() => {
-            dispatch({ type: 'addOverlay', templateId: t.id });
+            dispatch({ type: 'addOverlay', templateId: tpl.id });
             onClose();
           }}
         >
-          {t.name}
-          {t.fullScreen && <span className="hint" style={{ marginLeft: 'auto' }}>Vollbild</span>}
+          {tpl.name}
+          {tpl.fullScreen && <span className="hint" style={{ marginLeft: 'auto' }}>{t('Vollbild')}</span>}
         </button>
       ))}
     </div>
@@ -132,22 +133,22 @@ export function OverlayRow() {
   return (
     <section>
       <div className="row-head">
-        <span className="row-title">Einblendungen</span>
-        <span className="row-hint">Klick blendet direkt im Live-Bild ein oder aus · Ziehen = umsortieren</span>
+        <span className="row-title">{t('Einblendungen')}</span>
+        <span className="row-hint">{t('Klick blendet direkt im Live-Bild ein oder aus · Ziehen = umsortieren')}</span>
       </div>
       <div className="strip wrap">
         {state.overlays.map((o, i) => {
-          const t = state.templates.find((x) => x.id === o.templateId);
+          const tpl = state.templates.find((x) => x.id === o.templateId);
           const n = (seen.get(o.templateId) ?? 0) + 1;
           seen.set(o.templateId, n);
-          const name = `${t?.name ?? 'Unbekannte Vorlage'}${n > 1 ? ` ${n}` : ''}`;
+          const name = `${tpl?.name ?? t('Unbekannte Vorlage')}${n > 1 ? ` ${n}` : ''}`;
           const key = hotkeyFor(state, o.id);
-          const empty = !!t && !templateHasContent(t, rc);
+          const empty = !!tpl && !templateHasContent(tpl, rc);
           return (
             <div key={o.id} className={`ovl-wrap${drag.overIndex === i ? ' drag-target' : ''}`} {...drag.tileProps(o.id, i)}>
               <button
                 className={`ovl${o.visible ? ' on' : ''}`}
-                title={empty ? `${emptyHint(t!)}. Die Vorschau zeigt Beispieltext.` : undefined}
+                title={empty ? t('{hint}. Die Vorschau zeigt Beispieltext.', { hint: emptyHint(tpl!) }) : undefined}
                 aria-pressed={o.visible}
                 onClick={(e) => {
                   e.currentTarget.blur();
@@ -157,7 +158,7 @@ export function OverlayRow() {
                 <canvas className="ovl-preview" ref={previewRef(o.id)} width={PREVIEW_W} height={PREVIEW_H} aria-hidden />
                 <span className="ovl-name">{name}</span>
                 <span className="ovl-state">
-                  {empty ? <span className="ovl-empty">{emptyHint(t!)}</span> : o.visible ? 'Eingeblendet' : 'Aus'}
+                  {empty ? <span className="ovl-empty">{emptyHint(tpl!)}</span> : o.visible ? t('Eingeblendet') : t('Aus')}
                   {key && (
                     <span className="key" style={{ marginLeft: 'auto' }}>
                       {key}
@@ -168,7 +169,7 @@ export function OverlayRow() {
               {!o.visible && (
                 <button
                   className="tile-remove"
-                  aria-label={`${name} entfernen`}
+                  aria-label={t('{name} entfernen', { name })}
                   onClick={() => dispatch({ type: 'removeOverlay', id: o.id })}
                 >
                   ×

@@ -1,5 +1,6 @@
 // Cloudflare live-input credentials → studio send targets. Pure; nothing here is persisted.
 
+import { t } from '../i18n';
 import type { CfInputInfo } from './types';
 
 /** What `addDestination` receives (the owner maps it onto Settings.destinations). */
@@ -43,6 +44,6 @@ export function outputLabel(url: string): string {
   try {
     return new URL(url).host;
   } catch {
-    return 'Eigenes Ziel';
+    return t('Eigenes Ziel');
   }
 }

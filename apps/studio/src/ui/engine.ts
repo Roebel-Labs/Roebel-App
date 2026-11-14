@@ -1,6 +1,7 @@
 // Non-React runtime behind the UI: live sources, the 1920×1080 program canvas
 // and the on-air session (MediaRecorder → main → ffmpeg + recording file).
 
+import { t } from '../i18n';
 import { createProgramOutput, type ProgramOutput } from '../media/program';
 import { SourceRegistry, type SourceHealth } from '../media/sources';
 import { programAudioTrack } from '../output/program-audio';
@@ -241,9 +242,9 @@ export function errorText(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   // ipcRenderer.invoke wraps main errors: "Error invoking remote method 'x': Error: msg"
   const msg = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
-  if (msg === 'no_target') return 'Kein Sendeziel eingestellt';
-  if (msg === 'nothing_to_do') return 'Kein Sendeziel und Aufnahme aus: es gibt nichts zu tun';
-  if (msg === 'recorder_mime_unsupported') return 'Dieses System kann den Programm-Stream nicht kodieren';
+  if (msg === 'no_target') return t('Kein Sendeziel eingestellt');
+  if (msg === 'nothing_to_do') return t('Kein Sendeziel und Aufnahme aus: es gibt nichts zu tun');
+  if (msg === 'recorder_mime_unsupported') return t('Dieses System kann den Programm-Stream nicht kodieren');
   return msg;
 }
 
@@ -266,13 +267,13 @@ export function outputConfig(s: Settings): OutputConfig {
 }
 
 /** Display form of a target: never the stream key, never SRT query secrets. */
-export function maskedTarget(t: Settings['destinations'][number]['target']): string {
-  if (t.kind === 'none') return 'Kein Ziel';
-  if (t.kind === 'srt') {
-    const q = t.url.indexOf('?');
-    return q === -1 ? t.url : `${t.url.slice(0, q)}?…`;
+export function maskedTarget(target: Settings['destinations'][number]['target']): string {
+  if (target.kind === 'none') return t('Kein Ziel');
+  if (target.kind === 'srt') {
+    const q = target.url.indexOf('?');
+    return q === -1 ? target.url : `${target.url.slice(0, q)}?…`;
   }
   // The last four characters only for long keys, so a short key is never shown whole.
-  const key = !t.key ? 'ohne Schlüssel' : t.key.length >= 12 ? `Schlüssel •••• ${t.key.slice(-4)}` : 'Schlüssel ••••';
-  return `${t.url} (${key})`;
+  const key = !target.key ? t('ohne Schlüssel') : target.key.length >= 12 ? t('Schlüssel •••• {last}', { last: target.key.slice(-4) }) : t('Schlüssel ••••');
+  return `${target.url} (${key})`;
 }

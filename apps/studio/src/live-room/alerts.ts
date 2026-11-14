@@ -1,5 +1,6 @@
 // Unterstützen alerts: a de-duplicating queue of kind='support' chat rows plus the running total.
 
+import { t } from '../i18n';
 import type { ChatMessage } from './types';
 
 export type SupportAlert = { id: string; name: string; amount: string; amountCents: number; message: string; createdAt: string };
@@ -39,7 +40,7 @@ export function toAlert(m: ChatMessage): SupportAlert {
   const cents = m.amount_cents ?? 0;
   return {
     id: m.id,
-    name: displayName(m.display_name),
+    name: displayName(m.display_name, t('Jemand')),
     amount: formatEuro(cents),
     amountCents: cents,
     message: (m.body ?? '').trim(),

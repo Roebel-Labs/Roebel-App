@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { t } from '../i18n';
 import guide from '../../../../docs/STUDIO_RUNBOOK.md?raw';
 import { parseMarkdown, safeHref, toSections, type Block, type Inline, type Section } from './markdown';
 import './help.css';
@@ -135,17 +136,17 @@ export function HelpView({ source }: { source: string }) {
 
   return (
     <div className="help">
-      <aside className="help-toc" aria-label="Inhalt">
+      <aside className="help-toc" aria-label={t('Inhalt')}>
         <input
           className="help-search"
           type="search"
-          placeholder="In der Hilfe suchen …"
-          aria-label="In der Hilfe suchen"
+          placeholder={t('In der Hilfe suchen …')}
+          aria-label={t('In der Hilfe suchen')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <nav>
-          {visible.length === 0 && <p className="help-empty">Nichts gefunden.</p>}
+          {visible.length === 0 && <p className="help-empty">{t('Nichts gefunden.')}</p>}
           {visible.map((s) => (
             <div key={s.id}>
               <a href={`#${s.id}`} className="toc-h2" onClick={(e) => ctx.onLink(e, `#${s.id}`)}>

@@ -1,6 +1,7 @@
 // Operator API (POST /api/live/admin, `Authorization: Studio <token>`) and public REST reads.
 // The token is only ever placed in the Authorization header; it is never logged or echoed in errors.
 
+import { t } from '../i18n';
 import { API_BASE, CHAT_COLUMNS, SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 import type { ChatMessage, LiveShow, RundownItem, VoteResults } from './types';
 
@@ -28,28 +29,28 @@ async function request(r: NetRequest, timeoutMs = 15000): Promise<NetResponse> {
   const bridge = netBridge();
   if (bridge) return bridge(r);
   const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetch(r.url, { method: r.method, headers: r.headers, body: r.body, signal: ctl.signal });
     const json = await res.json().catch(() => null);
     return { status: res.status, json };
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw new LiveApiError('TIMEOUT', 'Keine Antwort vom Server (Zeitüberschreitung).', 0);
-    throw new LiveApiError('NETWORK', 'Server nicht erreichbar. Internetverbindung prüfen.', 0);
+    if ((e as Error).name === 'AbortError') throw new LiveApiError('TIMEOUT', t('Keine Antwort vom Server (Zeitüberschreitung).'), 0);
+    throw new LiveApiError('NETWORK', t('Server nicht erreichbar. Internetverbindung prüfen.'), 0);
   } finally {
-    clearTimeout(t);
+    clearTimeout(timer);
   }
 }
 
 function unwrap<T>(res: NetResponse): T {
   const j = res.json as { ok?: boolean; data?: T; code?: string; message?: string } | null;
   if (j && j.ok === true) return j.data as T;
-  if (res.status === 401) throw new LiveApiError('UNAUTHORIZED', 'Studio-Schlüssel ungültig oder auf dem Server nicht gesetzt.', 401);
-  throw new LiveApiError(j?.code ?? 'FAILED', j?.message ?? `Fehler ${res.status}`, res.status);
+  if (res.status === 401) throw new LiveApiError('UNAUTHORIZED', t('Studio-Schlüssel ungültig oder auf dem Server nicht gesetzt.'), 401);
+  throw new LiveApiError(j?.code ?? 'FAILED', j?.message ?? t('Fehler {status}', { status: res.status }), res.status);
 }
 
 export async function adminCall<T = unknown>(token: string, showId: string, action: string, extra: Record<string, unknown> = {}): Promise<T> {
-  if (!token) throw new LiveApiError('NO_TOKEN', 'Bitte zuerst den Studio-Schlüssel eintragen.', 0);
+  if (!token) throw new LiveApiError('NO_TOKEN', t('Bitte zuerst den Studio-Schlüssel eintragen.'), 0);
   const res = await request({
     url: `${API_BASE}/api/live/admin`,
     method: 'POST',
@@ -70,7 +71,7 @@ async function rest<T>(path: string): Promise<T> {
     method: 'GET',
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
   });
-  if (res.status >= 400 || !Array.isArray(res.json)) throw new LiveApiError('REST', `Lesen fehlgeschlagen (${res.status})`, res.status);
+  if (res.status >= 400 || !Array.isArray(res.json)) throw new LiveApiError('REST', t('Lesen fehlgeschlagen ({status})', { status: res.status }), res.status);
   return res.json as T;
 }
 

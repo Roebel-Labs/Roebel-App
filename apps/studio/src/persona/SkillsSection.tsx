@@ -4,6 +4,7 @@ import {
   installRoutineTemplate, listConnectors, startSuggestion, updateRoutine, updateSkill,
   type ChatRoutine, type RoutineTemplate, type Skill, type SkillInput, type Suggestion,
 } from '../workspace/api';
+import { locale, t } from '../i18n';
 import { Connections } from '../ui/shell/Connections';
 import {
   IconBell, IconCalendar, IconChart, IconCheck, IconHandshake, IconInbox, IconList, IconLoop, IconMail, IconNews, IconPeople, IconPlug, IconPlus,
@@ -46,7 +47,7 @@ export function SkillsSection() {
   const [tab, setTab] = useState<SkillsTab>(() => takeSkillsTab() ?? 'overview');
 
   return (
-    <Frame title="Funktionen" nav={NAV} active={tab} onSelect={(id) => setTab(id as SkillsTab)} wide>
+    <Frame title={t('Funktionen')} nav={NAV.map((n) => ({ ...n, label: t(n.label) }))} active={tab} onSelect={(id) => setTab(id as SkillsTab)} wide>
       {session.state === 'loading' && (
         <Busy>
           <Skeleton h={28} w={260} style={{ marginBottom: 14 }} />
@@ -54,13 +55,13 @@ export function SkillsSection() {
           <SkRows rows={4} tile={32} />
         </Busy>
       )}
-      {session.state === 'signed-out' && <SignedOutHint what="deine Routinen und Fähigkeiten" />}
+      {session.state === 'signed-out' && <SignedOutHint what={t('deine Routinen und Fähigkeiten')} />}
       {token && tab === 'overview' && <Overview token={token} onTab={setTab} onUnauthorized={session.signedOut} />}
       {token && tab === 'routines' && <Routines token={token} onUnauthorized={session.signedOut} onTab={setTab} />}
       {token && tab === 'abilities' && <Abilities token={token} onUnauthorized={session.signedOut} />}
       {token && tab === 'integrations' && (
         <div className="pz-integrations">
-          <Connections token={token} title="Integrationen" />
+          <Connections token={token} title={t('Integrationen')} />
         </div>
       )}
       {token && tab === 'discover' && <Discover token={token} onUnauthorized={session.signedOut} onTab={setTab} />}
@@ -109,26 +110,26 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
 
   return (
     <>
-      <h1 className="pz-title pz-title-lg">Meine Funktionen</h1>
-      <p className="pz-lead">Verbinde deine Werkzeuge, automatisiere wiederkehrende Aufgaben und zeig Ortis, wie du arbeitest.</p>
+      <h1 className="pz-title pz-title-lg">{t('Meine Funktionen')}</h1>
+      <p className="pz-lead">{t('Verbinde deine Werkzeuge, automatisiere wiederkehrende Aufgaben und zeig Ortis, wie du arbeitest.')}</p>
       <div className="pz-toolbar pz-toolbar-search">
         <span className="pz-search-wrap">
           <IconSearch size={17} />
-          <SearchField value={q} onChange={setQ} placeholder="Funktionen suchen" />
+          <SearchField value={q} onChange={setQ} placeholder={t('Funktionen suchen')} />
         </span>
       </div>
       {error && <div className="ws-error">{error}</div>}
-      {nothing && <div className="pz-state w-muted">Nichts gefunden für „{q.trim()}“.</div>}
+      {nothing && <div className="pz-state w-muted">{t('Nichts gefunden für „{query}“.', { query: q.trim() })}</div>}
 
       {suggestions.loading && !suggestions.data && (
         <section className="pz-block">
-          <h2>Vorschläge</h2>
+          <h2>{t('Vorschläge')}</h2>
           <SkCards row cards={4} />
         </section>
       )}
       {ideas.length > 0 && (
         <section className="pz-block">
-          <h2>Vorschläge</h2>
+          <h2>{t('Vorschläge')}</h2>
           <div className="pz-hrow" role="list">
             {ideas.map((s) => (
               <article key={s.id} className="pz-idea" role="listitem">
@@ -136,13 +137,13 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
                 <strong className="pz-idea-title" title={s.title}>
                   {s.title}
                 </strong>
-                <span className="pz-idea-caption">Für dich vorgeschlagen</span>
+                <span className="pz-idea-caption">{t('Für dich vorgeschlagen')}</span>
                 <span className="pz-idea-text" title={s.reason}>
                   {s.reason}
                 </span>
                 {s.schedule && <span className="w-tag pz-idea-chip">{scheduleText(s.schedule)}</span>}
                 <button className="w-btn pz-idea-btn" disabled={busy === s.id} onClick={() => void create(s)}>
-                  {busy === s.id ? 'Erstelle …' : 'Erstellen'}
+                  {busy === s.id ? t('Erstelle …') : t('Erstellen')}
                 </button>
               </article>
             ))}
@@ -153,9 +154,9 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
       {!searching && (
         <section className="pz-block">
           <div className="pz-block-head">
-            <h2>Integrationen</h2>
+            <h2>{t('Integrationen')}</h2>
             <button className="w-btn ghost" onClick={() => onTab('integrations')}>
-              Verwalten
+              {t('Verwalten')}
             </button>
           </div>
           {connectors.error && !connectors.data ? (
@@ -167,24 +168,24 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
               <li className="pz-row">
                 <div className="pz-row-text">
                   <strong>Google</strong>
-                  <span className="w-muted">Kalender, Gmail, Drive</span>
+                  <span className="w-muted">{t('Kalender, Gmail, Drive')}</span>
                 </div>
-                <span className={`w-tag${google ? ' ok' : ''}`}>{google ? 'Verbunden' : 'Nicht verbunden'}</span>
+                <span className={`w-tag${google ? ' ok' : ''}`}>{google ? t('Verbunden') : t('Nicht verbunden')}</span>
               </li>
               <li className="pz-row">
                 <div className="pz-row-text">
                   <strong>Röbel App</strong>
-                  <span className="w-muted">Veranstaltungen, Orte, Kontakte, Röbel Münzen</span>
+                  <span className="w-muted">{t('Veranstaltungen, Orte, Kontakte, Röbel Münzen')}</span>
                 </div>
-                <span className="w-tag ok">Immer verbunden</span>
+                <span className="w-tag ok">{t('Immer verbunden')}</span>
               </li>
               {mcp.map((c) => (
                 <li className="pz-row" key={c.id}>
                   <div className="pz-row-text">
                     <strong>{c.name}</strong>
-                    <span className="w-muted">{c.toolCount} Werkzeuge</span>
+                    <span className="w-muted">{c.toolCount === 1 ? t('1 Werkzeug') : t('{n} Werkzeuge', { n: c.toolCount })}</span>
                   </div>
-                  <span className={`w-tag${c.status === 'active' ? ' ok' : ''}`}>{c.status === 'active' ? 'Verbunden' : 'Fehler'}</span>
+                  <span className={`w-tag${c.status === 'active' ? ' ok' : ''}`}>{c.status === 'active' ? t('Verbunden') : t('Fehler')}</span>
                 </li>
               ))}
             </ul>
@@ -195,19 +196,19 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
       {(!searching || firstRoutines.length > 0) && (
         <section className="pz-block">
           <div className="pz-block-head">
-            <h2>Routinen</h2>
+            <h2>{t('Routinen')}</h2>
             <button className="w-btn ghost" onClick={() => onTab('routines')}>
-              Alle anzeigen
+              {t('Alle anzeigen')}
             </button>
           </div>
           {routines.loading && !routines.data && <SkRows rows={3} tile={32} />}
           {routines.error && !routines.data && <LoadError message={routines.error} onRetry={() => void routines.reload()} />}
           {routines.data && firstRoutines.length === 0 && (
             <div className="pz-empty">
-              <strong>Noch keine Routinen</strong>
-              <span className="w-muted">Routinen erledigen wiederkehrende Aufgaben nach Zeitplan.</span>
+              <strong>{t('Noch keine Routinen')}</strong>
+              <span className="w-muted">{t('Routinen erledigen wiederkehrende Aufgaben nach Zeitplan.')}</span>
               <button className="w-btn" onClick={() => onTab('discover')}>
-                Routinen entdecken
+                {t('Routinen entdecken')}
               </button>
             </div>
           )}
@@ -220,7 +221,7 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
                     <strong className="w-ellipsis">{r.title}</strong>
                     <span className="w-muted">{scheduleText(r.schedule)}</span>
                   </div>
-                  <span className={`w-tag${r.enabled ? ' ok' : ''}`}>{r.enabled ? 'Aktiv' : 'Pausiert'}</span>
+                  <span className={`w-tag${r.enabled ? ' ok' : ''}`}>{r.enabled ? t('Aktiv') : t('Pausiert')}</span>
                 </li>
               ))}
             </ul>
@@ -231,7 +232,7 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
       {skills.loading && !skills.data && !searching && (
         <section className="pz-block">
           <div className="pz-block-head">
-            <h2>Fähigkeiten</h2>
+            <h2>{t('Fähigkeiten')}</h2>
           </div>
           <SkRows rows={2} tile={32} />
         </section>
@@ -239,9 +240,9 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
       {firstSkills.length > 0 && (
         <section className="pz-block">
           <div className="pz-block-head">
-            <h2>Fähigkeiten</h2>
+            <h2>{t('Fähigkeiten')}</h2>
             <button className="w-btn ghost" onClick={() => onTab('abilities')}>
-              Alle anzeigen
+              {t('Alle anzeigen')}
             </button>
           </div>
           <ul className="pz-rows">
@@ -252,9 +253,9 @@ function Overview({ token, onTab, onUnauthorized }: { token: string; onTab: (t: 
                 </span>
                 <div className="pz-row-text">
                   <strong className="w-ellipsis">{k.name}</strong>
-                  <span className="w-muted w-ellipsis">{k.description || 'Ohne Beschreibung'}</span>
+                  <span className="w-muted w-ellipsis">{k.description || t('Ohne Beschreibung')}</span>
                 </div>
-                <span className={`w-tag${k.enabled ? ' ok' : ''}`}>{k.enabled ? 'Aktiv' : 'Aus'}</span>
+                <span className={`w-tag${k.enabled ? ' ok' : ''}`}>{k.enabled ? t('Aktiv') : t('Aus')}</span>
               </li>
             ))}
           </ul>
@@ -308,12 +309,12 @@ function Routines({ token, onUnauthorized, onTab }: { token: string; onUnauthori
 
   return (
     <>
-      <h1 className="pz-title">Routinen</h1>
-      <p className="pz-lead">Automatisiere wiederkehrende Aufgaben nach Zeitplan.</p>
+      <h1 className="pz-title">{t('Routinen')}</h1>
+      <p className="pz-lead">{t('Automatisiere wiederkehrende Aufgaben nach Zeitplan.')}</p>
       <div className="pz-toolbar">
-        <SearchField value={q} onChange={setQ} placeholder="Routinen suchen" />
+        <SearchField value={q} onChange={setQ} placeholder={t('Routinen suchen')} />
         <button className="w-btn green" onClick={() => setCreating(true)}>
-          <IconPlus size={16} /> Erstellen
+          <IconPlus size={16} /> {t('Erstellen')}
         </button>
       </div>
       {error && <div className="ws-error">{error}</div>}
@@ -321,14 +322,14 @@ function Routines({ token, onUnauthorized, onTab }: { token: string; onUnauthori
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {load.data && load.data.routines.length === 0 && (
         <div className="pz-empty">
-          <strong>Noch keine Routinen</strong>
-          <span className="w-muted">Erstelle eine eigene Routine oder installiere eine fertige aus dem Katalog.</span>
+          <strong>{t('Noch keine Routinen')}</strong>
+          <span className="w-muted">{t('Erstelle eine eigene Routine oder installiere eine fertige aus dem Katalog.')}</span>
           <button className="w-btn" onClick={() => onTab('discover')}>
-            Routinen entdecken
+            {t('Routinen entdecken')}
           </button>
         </div>
       )}
-      {load.data && load.data.routines.length > 0 && rows.length === 0 && <div className="pz-state w-muted">Nichts gefunden.</div>}
+      {load.data && load.data.routines.length > 0 && rows.length === 0 && <div className="pz-state w-muted">{t('Nichts gefunden.')}</div>}
       {rows.length > 0 && (
         <ul className="pz-list">
           {rows.map((r) => (
@@ -339,11 +340,11 @@ function Routines({ token, onUnauthorized, onTab }: { token: string; onUnauthori
                 <span className="w-muted w-ellipsis">{r.prompt}</span>
                 <span className="pz-meta">
                   {scheduleText(r.schedule)}
-                  {r.lastRunAt ? ` · Zuletzt ${fmtDate(r.lastRunAt)}` : ''}
+                  {r.lastRunAt ? ` · ${t('Zuletzt {date}', { date: fmtDate(r.lastRunAt) })}` : ''}
                 </span>
               </div>
-              <Toggle checked={r.enabled} disabled={busy === r.id} label={r.enabled ? 'Routine pausieren' : 'Routine einschalten'} onChange={(v) => void toggle(r, v)} />
-              <MoreMenu items={[{ label: 'Löschen', danger: true, onSelect: () => setRemoving(r) }]} />
+              <Toggle checked={r.enabled} disabled={busy === r.id} label={r.enabled ? t('Routine pausieren') : t('Routine einschalten')} onChange={(v) => void toggle(r, v)} />
+              <MoreMenu items={[{ label: t('Löschen'), danger: true, onSelect: () => setRemoving(r) }]} />
             </li>
           ))}
         </ul>
@@ -360,9 +361,9 @@ function Routines({ token, onUnauthorized, onTab }: { token: string; onUnauthori
       )}
       {removing && (
         <Confirm
-          title="Routine löschen?"
-          body={<>„{removing.title}“ läuft danach nicht mehr. Die bisherigen Ergebnisse bleiben in der Unterhaltung.</>}
-          confirmLabel="Löschen"
+          title={t('Routine löschen?')}
+          body={t('„{title}“ läuft danach nicht mehr. Die bisherigen Ergebnisse bleiben in der Unterhaltung.', { title: removing.title })}
+          confirmLabel={t('Löschen')}
           busy={busy === removing.id}
           onConfirm={() => void remove()}
           onCancel={() => setRemoving(null)}
@@ -395,53 +396,53 @@ function RoutineDialog({ token, onClose, onCreated }: { token: string; onClose: 
 
   return (
     <Modal
-      title="Routine erstellen"
+      title={t('Routine erstellen')}
       onClose={onClose}
       footer={
         <>
           <button className="w-btn" onClick={onClose} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className="w-btn green" disabled={busy || !title.trim() || !prompt.trim()} onClick={() => void save()}>
-            {busy ? 'Erstelle …' : 'Erstellen'}
+            {busy ? t('Erstelle …') : t('Erstellen')}
           </button>
         </>
       }
     >
       <label className="pz-field">
-        <span>Titel</span>
-        <input value={title} maxLength={80} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder="z. B. Wochenüberblick" />
+        <span>{t('Titel')}</span>
+        <input value={title} maxLength={80} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={t('z. B. Wochenüberblick')} />
       </label>
       <label className="pz-field">
-        <span>Was soll Ortis tun?</span>
-        <textarea rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Beschreib die Aufgabe so, wie du sie einem Kollegen erklären würdest." />
+        <span>{t('Was soll Ortis tun?')}</span>
+        <textarea rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('Beschreib die Aufgabe so, wie du sie einem Kollegen erklären würdest.')} />
       </label>
       <div className="pz-field-row">
         <label className="pz-field">
-          <span>Rhythmus</span>
+          <span>{t('Rhythmus')}</span>
           <select value={kind} onChange={(e) => setKind(e.target.value as 'weekly' | 'daily')}>
-            <option value="weekly">Wöchentlich</option>
-            <option value="daily">Täglich</option>
+            <option value="weekly">{t('Wöchentlich')}</option>
+            <option value="daily">{t('Täglich')}</option>
           </select>
         </label>
         {kind === 'weekly' && (
           <label className="pz-field">
-            <span>Wochentag</span>
+            <span>{t('Wochentag')}</span>
             <select value={weekday} onChange={(e) => setWeekday(Number(e.target.value))}>
               {WEEKDAY_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label}
+                  {t(o.label)}
                 </option>
               ))}
             </select>
           </label>
         )}
         <label className="pz-field">
-          <span>Uhrzeit</span>
+          <span>{t('Uhrzeit')}</span>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         </label>
       </div>
-      <span className="w-muted">{scheduleText(makeSchedule(kind, weekday, time))} (deutsche Zeit)</span>
+      <span className="w-muted">{t('{schedule} (deutsche Zeit)', { schedule: scheduleText(makeSchedule(kind, weekday, time)) })}</span>
       {error && <div className="ws-error">{error}</div>}
     </Modal>
   );
@@ -487,26 +488,26 @@ function Abilities({ token, onUnauthorized }: { token: string; onUnauthorized: (
   const upload = async (f: File | undefined) => {
     if (!f) return;
     setError(null);
-    if (f.size > 200_000) return setError('Die Datei ist zu groß. Eine SKILL.md darf höchstens 20.000 Zeichen haben.');
+    if (f.size > 200_000) return setError(t('Die Datei ist zu groß. Eine SKILL.md darf höchstens 20.000 Zeichen haben.'));
     try {
       setEditing({ skill: null, draft: parseSkillFile(await f.text(), f.name) });
     } catch {
-      setError('Die Datei konnte nicht gelesen werden.');
+      setError(t('Die Datei konnte nicht gelesen werden.'));
     }
   };
 
   const skills = load.data?.skills ?? [];
   return (
     <>
-      <h1 className="pz-title">Fähigkeiten</h1>
-      <p className="pz-lead">Bring Ortis bei, wie du bestimmte Aufgaben erledigt haben möchtest. Eingeschaltete Fähigkeiten nutzt es von selbst, wenn sie passen.</p>
+      <h1 className="pz-title">{t('Fähigkeiten')}</h1>
+      <p className="pz-lead">{t('Bring Ortis bei, wie du bestimmte Aufgaben erledigt haben möchtest. Eingeschaltete Fähigkeiten nutzt es von selbst, wenn sie passen.')}</p>
       <div className="pz-toolbar end">
         <input ref={file} type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
         <button className="w-btn" onClick={() => file.current?.click()}>
-          <IconUpload size={16} /> Hochladen
+          <IconUpload size={16} /> {t('Hochladen')}
         </button>
         <button className="w-btn green" onClick={() => setEditing({ skill: null, draft: { name: '', description: '', body: '' } })}>
-          <IconPlus size={16} /> Erstellen
+          <IconPlus size={16} /> {t('Erstellen')}
         </button>
       </div>
       {error && <div className="ws-error">{error}</div>}
@@ -514,8 +515,8 @@ function Abilities({ token, onUnauthorized }: { token: string; onUnauthorized: (
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {load.data && skills.length === 0 && (
         <div className="pz-empty">
-          <strong>Noch keine Fähigkeiten</strong>
-          <span className="w-muted">Erstelle eine oder lade eine SKILL.md hoch.</span>
+          <strong>{t('Noch keine Fähigkeiten')}</strong>
+          <span className="w-muted">{t('Erstelle eine oder lade eine SKILL.md hoch.')}</span>
         </div>
       )}
       {skills.length > 0 && (
@@ -527,14 +528,14 @@ function Abilities({ token, onUnauthorized }: { token: string; onUnauthorized: (
               </span>
               <button className="pz-row-text pz-row-button" onClick={() => setEditing({ skill: s, draft: { name: s.name, description: s.description, body: s.body } })}>
                 <strong className="w-ellipsis">{s.name}</strong>
-                <span className="w-muted w-ellipsis">{s.description || 'Ohne Beschreibung'}</span>
-                <span className="pz-meta">Geändert {fmtDate(s.updatedAt)}</span>
+                <span className="w-muted w-ellipsis">{s.description || t('Ohne Beschreibung')}</span>
+                <span className="pz-meta">{t('Geändert {date}', { date: fmtDate(s.updatedAt) })}</span>
               </button>
-              <Toggle checked={s.enabled} disabled={busy === s.id} label={s.enabled ? 'Fähigkeit ausschalten' : 'Fähigkeit einschalten'} onChange={(v) => void toggle(s, v)} />
+              <Toggle checked={s.enabled} disabled={busy === s.id} label={s.enabled ? t('Fähigkeit ausschalten') : t('Fähigkeit einschalten')} onChange={(v) => void toggle(s, v)} />
               <MoreMenu
                 items={[
-                  { label: 'Bearbeiten', onSelect: () => setEditing({ skill: s, draft: { name: s.name, description: s.description, body: s.body } }) },
-                  { label: 'Löschen', danger: true, onSelect: () => setRemoving(s) },
+                  { label: t('Bearbeiten'), onSelect: () => setEditing({ skill: s, draft: { name: s.name, description: s.description, body: s.body } }) },
+                  { label: t('Löschen'), danger: true, onSelect: () => setRemoving(s) },
                 ]}
               />
             </li>
@@ -555,9 +556,9 @@ function Abilities({ token, onUnauthorized }: { token: string; onUnauthorized: (
       )}
       {removing && (
         <Confirm
-          title="Fähigkeit löschen?"
-          body={<>„{removing.name}“ wird endgültig entfernt.</>}
-          confirmLabel="Löschen"
+          title={t('Fähigkeit löschen?')}
+          body={t('„{name}“ wird endgültig entfernt.', { name: removing.name })}
+          confirmLabel={t('Löschen')}
           busy={busy === removing.id}
           onConfirm={() => void remove()}
           onCancel={() => setRemoving(null)}
@@ -587,33 +588,33 @@ function SkillDialog({ token, skill, initial, onClose, onSaved }: { token: strin
 
   return (
     <Modal
-      title={skill ? 'Fähigkeit bearbeiten' : 'Fähigkeit erstellen'}
+      title={skill ? t('Fähigkeit bearbeiten') : t('Fähigkeit erstellen')}
       size="lg"
       onClose={onClose}
       footer={
         <>
           <button className="w-btn" onClick={onClose} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className="w-btn green" disabled={busy || !draft.name.trim() || !draft.body.trim()} onClick={() => void save()}>
-            {busy ? 'Speichere …' : 'Speichern'}
+            {busy ? t('Speichere …') : t('Speichern')}
           </button>
         </>
       }
     >
       <label className="pz-field">
-        <span>Name</span>
-        <input value={draft.name} maxLength={60} autoFocus onChange={set('name')} placeholder="z. B. Sitzungsprotokoll" />
+        <span>{t('Name')}</span>
+        <input value={draft.name} maxLength={60} autoFocus onChange={set('name')} placeholder={t('z. B. Sitzungsprotokoll')} />
       </label>
       <label className="pz-field">
-        <span>Beschreibung</span>
-        <input value={draft.description} maxLength={300} onChange={set('description')} placeholder="Wann soll Ortis diese Fähigkeit nutzen?" />
+        <span>{t('Beschreibung')}</span>
+        <input value={draft.description} maxLength={300} onChange={set('description')} placeholder={t('Wann soll Ortis diese Fähigkeit nutzen?')} />
       </label>
       <label className="pz-field">
-        <span>Anweisungen</span>
-        <textarea rows={12} className="mono" value={draft.body} maxLength={20_000} onChange={set('body')} placeholder="Schritt für Schritt, in Markdown." />
+        <span>{t('Anweisungen')}</span>
+        <textarea rows={12} className="mono" value={draft.body} maxLength={20_000} onChange={set('body')} placeholder={t('Schritt für Schritt, in Markdown.')} />
       </label>
-      <div className="pz-count">{draft.body.length.toLocaleString('de-DE')} / 20.000 Zeichen</div>
+      <div className="pz-count">{t('{count} / {max} Zeichen', { count: draft.body.length.toLocaleString(locale()), max: (20_000).toLocaleString(locale()) })}</div>
       {error && <div className="ws-error">{error}</div>}
     </Modal>
   );
@@ -651,15 +652,15 @@ function Discover({ token, onUnauthorized, onTab }: { token: string; onUnauthori
 
   return (
     <>
-      <h1 className="pz-title">Entdecken</h1>
+      <h1 className="pz-title">{t('Entdecken')}</h1>
       <div className="pz-block-head">
         <div>
-          <h2>Routinen von Ortis</h2>
-          <p className="pz-lead">Vorgefertigte Routinen für einen einfachen Einstieg.</p>
+          <h2>{t('Routinen von Ortis')}</h2>
+          <p className="pz-lead">{t('Vorgefertigte Routinen für einen einfachen Einstieg.')}</p>
         </div>
         {anyInstalled && (
           <button className="w-btn ghost" onClick={() => onTab('routines')}>
-            Zu meinen Routinen
+            {t('Zu meinen Routinen')}
           </button>
         )}
       </div>
@@ -675,41 +676,41 @@ function Discover({ token, onUnauthorized, onTab }: { token: string; onUnauthori
       )}
       {load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {(error || google.error) && <div className="ws-error">{error || google.error}</div>}
-      {google.waiting && <div className="conn-notice">Warte auf Google im Browser …</div>}
+      {google.waiting && <div className="conn-notice">{t('Warte auf Google im Browser …')}</div>}
       {load.data && (
         <>
           <div className="pz-tabs" role="tablist">
-            {[{ id: 'all', label: 'Alle' }, ...load.data.categories].map((c) => (
+            {[{ id: 'all', label: t('Alle') }, ...load.data.categories].map((c) => (
               <button key={c.id} role="tab" className="pz-chip" aria-selected={category === c.id} onClick={() => setCategory(c.id)}>
                 {c.label}
               </button>
             ))}
           </div>
-          {templates.length === 0 && <div className="pz-state w-muted">In dieser Kategorie gibt es noch keine Routinen.</div>}
+          {templates.length === 0 && <div className="pz-state w-muted">{t('In dieser Kategorie gibt es noch keine Routinen.')}</div>}
           <div className="pz-cards">
-            {templates.map((t) => {
-              const needsGoogle = !t.installed && googleMissing && t.requires.includes('google');
+            {templates.map((tpl) => {
+              const needsGoogle = !tpl.installed && googleMissing && tpl.requires.includes('google');
               return (
-                <article key={t.id} className="pz-card" title={t.description}>
+                <article key={tpl.id} className="pz-card" title={tpl.description}>
                   <div className="pz-card-top">
-                    <Tile icon={t.icon} color={safeColor(t.color, t.id)} />
-                    {t.installed ? (
+                    <Tile icon={tpl.icon} color={safeColor(tpl.color, tpl.id)} />
+                    {tpl.installed ? (
                       <span className="pz-installed">
-                        <IconCheck size={15} /> Installiert
+                        <IconCheck size={15} /> {t('Installiert')}
                       </span>
                     ) : needsGoogle ? (
                       <button className="w-btn" disabled={google.busy || google.waiting} onClick={() => void google.start()}>
-                        Google verbinden
+                        {t('Google verbinden')}
                       </button>
                     ) : (
-                      <button className="w-btn" disabled={busy === t.id} onClick={() => void install(t)}>
-                        {busy === t.id ? '…' : 'Installieren'}
+                      <button className="w-btn" disabled={busy === tpl.id} onClick={() => void install(tpl)}>
+                        {busy === tpl.id ? '…' : t('Installieren')}
                       </button>
                     )}
                   </div>
-                  <strong>{t.title}</strong>
-                  <span className="w-muted pz-clamp">{t.tagline}</span>
-                  <span className="pz-meta">{scheduleText(t.schedule)}</span>
+                  <strong>{tpl.title}</strong>
+                  <span className="w-muted pz-clamp">{tpl.tagline}</span>
+                  <span className="pz-meta">{scheduleText(tpl.schedule)}</span>
                 </article>
               );
             })}

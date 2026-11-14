@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { decodeText, parseCsv, type ParsedCsv } from '../../csv';
+import { t, useLang } from '../../i18n';
 import { templatesUsingColumn } from '../../state/columns';
 import { commitValue } from './edit';
 import type { Action } from '../../state/reducer';
@@ -76,6 +77,7 @@ const DataRow = memo(function DataRow({
   current: boolean;
   dispatch: Dispatch;
 }) {
+  useLang(); // memoised: re-render on a language change
   return (
     <tr className={current ? 'current' : undefined}>
       <td className="num">{index + 1}</td>
@@ -86,15 +88,15 @@ const DataRow = memo(function DataRow({
       ))}
       <td className="act">
         <button disabled={current} onClick={() => dispatch({ type: 'selectRow', rowId: row.id })}>
-          Auf Sendung
+          {t('Auf Sendung')}
         </button>
-        <button className="icon" title="Nach oben" disabled={index === 0} onClick={() => dispatch({ type: 'moveRow', rowId: row.id, delta: -1 })}>
+        <button className="icon" title={t('Nach oben')} disabled={index === 0} onClick={() => dispatch({ type: 'moveRow', rowId: row.id, delta: -1 })}>
           ↑
         </button>
-        <button className="icon" title="Nach unten" disabled={index === count - 1} onClick={() => dispatch({ type: 'moveRow', rowId: row.id, delta: 1 })}>
+        <button className="icon" title={t('Nach unten')} disabled={index === count - 1} onClick={() => dispatch({ type: 'moveRow', rowId: row.id, delta: 1 })}>
           ↓
         </button>
-        <button className="icon" title="Zeile löschen" onClick={() => dispatch({ type: 'removeRow', rowId: row.id })}>
+        <button className="icon" title={t('Zeile löschen')} onClick={() => dispatch({ type: 'removeRow', rowId: row.id })}>
           ✕
         </button>
       </td>
@@ -107,8 +109,8 @@ function ColumnHeader({ name, usedBy, dispatch }: { name: string; usedBy: string
   const cancelled = useRef(false);
   useEffect(() => setDraft(name), [name]);
   const remove = () => {
-    const uses = usedBy.length > 0 ? `\n\nVerwendet in: ${usedBy.join(', ')}. Diese Platzhalter bleiben dann leer.` : '';
-    if (window.confirm(`Spalte „${name}“ mit allen Werten löschen?${uses}`)) dispatch({ type: 'removeColumn', name });
+    const uses = usedBy.length > 0 ? `\n\n${t('Verwendet in: {names}. Diese Platzhalter bleiben dann leer.', { names: usedBy.join(', ') })}` : '';
+    if (window.confirm(t('Spalte „{name}“ mit allen Werten löschen?', { name }) + uses)) dispatch({ type: 'removeColumn', name });
   };
   return (
     <div className="hd">
@@ -130,7 +132,7 @@ function ColumnHeader({ name, usedBy, dispatch }: { name: string; usedBy: string
           }
         }}
       />
-      <button title="Spalte löschen" onClick={remove}>
+      <button title={t('Spalte löschen')} onClick={remove}>
         ✕
       </button>
     </div>
@@ -158,7 +160,7 @@ function ImportPanel({ table, dispatch, onClose }: { table: Table; dispatch: Dis
   const toRows = (p: ParsedCsv): Row[] => p.rows.map((values) => ({ id: crypto.randomUUID(), values }));
   const replace = () => {
     if (!parsed) return;
-    if (table.rows.length > 0 && !window.confirm(`Die aktuelle Tabelle (${table.rows.length} Zeilen) wird ersetzt. Fortfahren?`)) return;
+    if (table.rows.length > 0 && !window.confirm(t('Die aktuelle Tabelle ({n} Zeilen) wird ersetzt. Fortfahren?', { n: table.rows.length }))) return;
     const rows = toRows(parsed);
     dispatch({ type: 'setTable', table: { columns: parsed.columns, rows, currentRowId: rows[0]?.id ?? null } });
     onClose();
@@ -176,7 +178,7 @@ function ImportPanel({ table, dispatch, onClose }: { table: Table; dispatch: Dis
   return (
     <div className="tbl-import">
       <textarea
-        placeholder="Tabelle aus Google Sheets oder Excel hier einfügen (Tab-, Semikolon- oder Komma-getrennt)"
+        placeholder={t('Tabelle aus Google Sheets oder Excel hier einfügen (Tab-, Semikolon- oder Komma-getrennt)')}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
@@ -185,25 +187,25 @@ function ImportPanel({ table, dispatch, onClose }: { table: Table; dispatch: Dis
       />
       <div className="tbl-bar">
         <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-        <button onClick={() => fileRef.current?.click()}>Datei laden…</button>
+        <button onClick={() => fileRef.current?.click()}>{t('Datei laden…')}</button>
         {parsed && !empty && (
           <span className="tbl-hint">
-            {parsed.rows.length} Zeilen, {parsed.columns.length} Spalten
+            {t('{rows} Zeilen, {columns} Spalten', { rows: parsed.rows.length, columns: parsed.columns.length })}
           </span>
         )}
         {parsed && parsed.overflowRows > 0 && (
           <span className="tbl-hint" style={{ color: 'var(--amber)' }}>
-            {parsed.overflowRows} Zeilen haben mehr Felder als Spalten — überzählige Werte ignoriert
+            {t('{n} Zeilen haben mehr Felder als Spalten — überzählige Werte ignoriert', { n: parsed.overflowRows })}
           </span>
         )}
         <span className="spacer" />
         <button disabled={empty} onClick={append}>
-          Anhängen
+          {t('Anhängen')}
         </button>
         <button disabled={empty} onClick={replace}>
-          Ersetzen
+          {t('Ersetzen')}
         </button>
-        <button onClick={onClose}>Abbrechen</button>
+        <button onClick={onClose}>{t('Abbrechen')}</button>
       </div>
       {parsed && !empty && (
         <div className="tbl-preview">
@@ -247,32 +249,32 @@ export function TableTab() {
   return (
     <div className="tbl">
       <div className="tbl-bar">
-        <button onClick={() => setImporting((v) => !v)}>CSV einfügen / Datei laden</button>
-        <button onClick={() => stable({ type: 'addRow' })}>Zeile hinzufügen</button>
+        <button onClick={() => setImporting((v) => !v)}>{t('CSV einfügen / Datei laden')}</button>
+        <button onClick={() => stable({ type: 'addRow' })}>{t('Zeile hinzufügen')}</button>
         <input
           value={newCol}
-          placeholder="Neue Spalte"
+          placeholder={t('Neue Spalte')}
           onChange={(e) => setNewCol(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addColumn()}
           style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--line-strong)', borderRadius: 4, padding: '6px 8px', font: 'inherit', fontSize: 13, width: 140 }}
         />
         <button disabled={newCol.trim() === ''} onClick={addColumn}>
-          Spalte hinzufügen
+          {t('Spalte hinzufügen')}
         </button>
         <span className="spacer" />
         <span className="tbl-hint">
-          {rows.length === 0 ? 'Keine Zeilen' : idx >= 0 ? `Auf Sendung: Zeile ${idx + 1} von ${rows.length}` : 'Keine Zeile auf Sendung'}
+          {rows.length === 0 ? t('Keine Zeilen') : idx >= 0 ? t('Auf Sendung: Zeile {n} von {total}', { n: idx + 1, total: rows.length }) : t('Keine Zeile auf Sendung')}
         </span>
         <button disabled={idx <= 0} onClick={() => stable({ type: 'prevRow' })}>
-          ◂ Zurück
+          {t('◂ Zurück')}
         </button>
         <button className="primary" disabled={rows.length === 0 || idx >= rows.length - 1} onClick={() => stable({ type: 'nextRow' })}>
-          Weiter ▸
+          {t('Weiter ▸')}
         </button>
       </div>
       {importing && <ImportPanel table={state.table} dispatch={stable} onClose={() => setImporting(false)} />}
       {columns.length === 0 ? (
-        <div className="tbl-hint">Noch keine Tabelle. Füge Daten aus Google Sheets ein oder lege eine Spalte an. Lower Thirds nutzen {'{{row.Spalte}}'} und {'{{next.Spalte}}'}.</div>
+        <div className="tbl-hint">{t('Noch keine Tabelle. Füge Daten aus Google Sheets ein oder lege eine Spalte an. Lower Thirds nutzen {row} und {next}.', { row: `{{row.${t('Spalte')}}}`, next: `{{next.${t('Spalte')}}}` })}</div>
       ) : (
         <div className="tbl-scroll">
           <table className="tbl-grid">

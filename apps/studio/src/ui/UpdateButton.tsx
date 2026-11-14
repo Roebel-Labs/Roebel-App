@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '../i18n';
 import { errorText } from './engine';
 import { useOnAir } from './studio';
 
@@ -55,8 +56,8 @@ export function UpdateButton() {
       }
     };
     return (
-      <button className="btn update-btn" onClick={() => void restart()} title={error ?? `Startet das Studio mit Version ${ota} neu (ca. 2 Sekunden). Die Show bleibt erhalten.`}>
-        {error ? 'Neustart fehlgeschlagen – erneut' : `Neu starten · Update ${ota}`}
+      <button className="btn update-btn" onClick={() => void restart()} title={error ?? t('Startet das Studio mit Version {version} neu (ca. 2 Sekunden). Die Show bleibt erhalten.', { version: ota })}>
+        {error ? t('Neustart fehlgeschlagen – erneut') : t('Neu starten · Update {version}', { version: ota })}
       </button>
     );
   }
@@ -66,8 +67,8 @@ export function UpdateButton() {
   const install = async () => {
     const what =
       update.os === 'win'
-        ? `Neue App-Version ${update.version} installieren? Die App schließt sich und startet nach etwa einer Minute neu. Die Show bleibt erhalten.`
-        : `Neue App-Version ${update.version} herunterladen? Danach die neue App in den Programme-Ordner ziehen und die alte ersetzen. Die Show bleibt erhalten.`;
+        ? t('Neue App-Version {version} installieren? Die App schließt sich und startet nach etwa einer Minute neu. Die Show bleibt erhalten.', { version: update.version })
+        : t('Neue App-Version {version} herunterladen? Danach die neue App in den Programme-Ordner ziehen und die alte ersetzen. Die Show bleibt erhalten.', { version: update.version });
     if (!window.confirm(what)) return;
     setError(null);
     setProgress(0);
@@ -82,7 +83,7 @@ export function UpdateButton() {
 
   return (
     <button className="btn update-btn" onClick={() => void install()} disabled={progress !== null} title={error ?? undefined}>
-      {progress !== null ? `Update lädt… ${Math.round(progress * 100)} %` : error ? 'Update fehlgeschlagen – erneut' : `Neue App-Version ${update.version}`}
+      {progress !== null ? t('Update lädt… {percent} %', { percent: Math.round(progress * 100) }) : error ? t('Update fehlgeschlagen – erneut') : t('Neue App-Version {version}', { version: update.version })}
     </button>
   );
 }

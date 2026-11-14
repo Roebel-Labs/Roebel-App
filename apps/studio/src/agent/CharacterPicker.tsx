@@ -1,6 +1,7 @@
 // "Ändern" / "Agent hinzufügen": pick a character in two steps (grid, then confirm with personality), like the
 // reference flow. The caller decides what confirming does (new agent, new look for an agent, new main assistant).
 import { useEffect, useRef, useState } from 'react';
+import { t, tx } from '../i18n';
 import { IconBack, IconCheck, IconChevronDown, IconClose, IconCopy, IconPencil, IconShuffle } from '../ui/shell/line-icons';
 import { Tip } from '../ui/Tooltip';
 import type { AgentPersonality } from '../workspace/api';
@@ -22,6 +23,7 @@ export function CharacterPicker({
   /** Shown when the agent is (or becomes) the main assistant. */
   mailAddress?: string | null;
   ownerEmail?: string | null;
+  /** German source text; translated where it is shown. */
   confirmVerb?: string;
   onClose: () => void;
   /** Resolves with an error message, or null when done. */
@@ -69,17 +71,17 @@ export function CharacterPicker({
 
   return (
     <div className="dlg-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="cp" role="dialog" aria-label="Agent auswählen" style={{ ['--cp-color' as string]: character.color }}>
+      <div className="cp" role="dialog" aria-label={t('Agent auswählen')} style={{ ['--cp-color' as string]: character.color }}>
         <header className="cp-hero">
           <div className="cp-hero-bar">
             {step === 2 ? (
-              <button className="w-icon" aria-label="Zurück" onClick={() => setStep(1)} disabled={busy}>
+              <button className="w-icon" aria-label={t('Zurück')} onClick={() => setStep(1)} disabled={busy}>
                 <IconBack size={18} />
               </button>
             ) : (
               <span />
             )}
-            <button className="w-icon" aria-label="Schließen" onClick={onClose} disabled={busy}>
+            <button className="w-icon" aria-label={t('Schließen')} onClick={onClose} disabled={busy}>
               <IconClose size={18} />
             </button>
           </div>
@@ -90,7 +92,7 @@ export function CharacterPicker({
                 className="cp-name"
                 value={name}
                 maxLength={30}
-                aria-label="Name"
+                aria-label={t('Name')}
                 size={Math.max(3, shownName.length)}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -98,24 +100,24 @@ export function CharacterPicker({
                 }}
                 onBlur={() => !name.trim() && (setName(character.name), setNameTouched(false))}
               />
-              <Tip label="Namen ändern" side="top">
-                <button className="w-icon" aria-label="Namen ändern" onClick={() => nameRef.current?.select()}>
+              <Tip label={t('Namen ändern')} side="top">
+                <button className="w-icon" aria-label={t('Namen ändern')} onClick={() => nameRef.current?.select()}>
                   <IconPencil size={17} />
                 </button>
               </Tip>
-              <Tip label="Zufällige Figur" side="top">
-                <button className="w-icon" aria-label="Zufällige Figur" onClick={shuffle}>
+              <Tip label={t('Zufällige Figur')} side="top">
+                <button className="w-icon" aria-label={t('Zufällige Figur')} onClick={shuffle}>
                   <IconShuffle size={17} />
                 </button>
               </Tip>
             </div>
-            <p className="cp-tagline">{character.tagline}</p>
+            <p className="cp-tagline">{t(character.tagline)}</p>
             <p className="cp-role">{roleLine(character)}</p>
             {mailShown && (
               <span className="cp-mail">
                 {mailShown}
                 {step === 2 && (
-                  <button className="w-icon" aria-label="Adresse kopieren" onClick={() => void navigator.clipboard.writeText(mailShown).catch(() => {})}>
+                  <button className="w-icon" aria-label={t('Adresse kopieren')} onClick={() => void navigator.clipboard.writeText(mailShown).catch(() => {})}>
                     <IconCopy size={14} />
                   </button>
                 )}
@@ -126,7 +128,7 @@ export function CharacterPicker({
         </header>
 
         {step === 1 ? (
-          <div className="cp-grid" role="radiogroup" aria-label="Figuren">
+          <div className="cp-grid" role="radiogroup" aria-label={t('Figuren')}>
             {CHARACTERS.map((c) => (
               <button key={c.id} className="cp-tile" role="radio" aria-checked={c.id === character.id} aria-label={c.name} style={{ ['--tile-color' as string]: c.color }} onClick={() => choose(c)} onDoubleClick={() => (choose(c), setStep(2))}>
                 <img src={c.tile} alt="" draggable={false} />
@@ -139,27 +141,29 @@ export function CharacterPicker({
             {mailShown && (
               <section className="cp-card">
                 <div className="cp-card-head">
-                  <strong>E-Mail-Adresse</strong>
+                  <strong>{t('E-Mail-Adresse')}</strong>
                   <span>{mailShown}</span>
                 </div>
                 <p className="w-muted">
-                  Du kannst {shownName} E-Mails schreiben oder beliebige Inhalte weiterleiten.
-                  {ownerEmail ? ` ${shownName} antwortet nur auf Nachrichten von ${ownerEmail}. Andere können ${shownName} nicht per E-Mail an diese Adresse aktivieren.` : ` ${shownName} antwortet nur auf Nachrichten von deiner bestätigten Adresse.`}
+                  {t('Du kannst {name} E-Mails schreiben oder beliebige Inhalte weiterleiten.', { name: shownName })}{' '}
+                  {ownerEmail
+                    ? t('{name} antwortet nur auf Nachrichten von {email}. Andere können {name} nicht per E-Mail an diese Adresse aktivieren.', { name: shownName, email: ownerEmail })
+                    : t('{name} antwortet nur auf Nachrichten von deiner bestätigten Adresse.', { name: shownName })}
                 </p>
               </section>
             )}
             <section className="cp-card">
               <div className="cp-card-head">
-                <strong>Aufgabe</strong>
+                <strong>{tx('role', 'Aufgabe')}</strong>
               </div>
               <p className="w-muted">
-                {roleLine(character)}. {character.tagline} Bei allem anderen hilft {shownName} trotzdem.
+                {roleLine(character)}. {t(character.tagline)} {t('Bei allem anderen hilft {name} trotzdem.', { name: shownName })}
               </p>
             </section>
             <section className="cp-card">
               <button className="cp-card-toggle" aria-expanded={openPersonality} onClick={() => setOpenPersonality((v) => !v)}>
                 <span>
-                  <strong>Persönlichkeit</strong>
+                  <strong>{t('Persönlichkeit')}</strong>
                   <span className="w-muted">{chosen ? `${chosen.title}: ${chosen.description}` : ''}</span>
                 </span>
                 <span className={`cp-chev${openPersonality ? ' open' : ''}`}>
@@ -167,7 +171,7 @@ export function CharacterPicker({
                 </span>
               </button>
               {openPersonality && (
-                <div className="cp-presets" role="radiogroup" aria-label="Persönlichkeit">
+                <div className="cp-presets" role="radiogroup" aria-label={t('Persönlichkeit')}>
                   {personalities.map((p) => (
                     <button
                       key={p.key}
@@ -196,14 +200,14 @@ export function CharacterPicker({
         )}
 
         <footer className="cp-foot">
-          <span className="w-muted">{step === 1 ? `${CHARACTERS.length} Figuren` : 'Du kannst die Figur oder den Namen jederzeit ändern.'}</span>
+          <span className="w-muted">{step === 1 ? t('{n} Figuren', { n: CHARACTERS.length }) : t('Du kannst die Figur oder den Namen jederzeit ändern.')}</span>
           {step === 1 ? (
             <button className="w-btn green cp-cta" onClick={() => setStep(2)}>
-              Weiter <span aria-hidden="true">›</span>
+              {t('Weiter')} <span aria-hidden="true">›</span>
             </button>
           ) : (
             <button className="w-btn green cp-cta" onClick={() => void confirm()} disabled={busy}>
-              {busy ? '…' : `${confirmVerb}: ${shownName}`} {!busy && <span aria-hidden="true">›</span>}
+              {busy ? '…' : `${t(confirmVerb)}: ${shownName}`} {!busy && <span aria-hidden="true">›</span>}
             </button>
           )}
         </footer>

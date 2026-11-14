@@ -3,6 +3,7 @@ import {
   addPersonaImport, buildPersona, ChatApiError, createPersonaLink, deletePersonaImport, deletePersonaLink, fetchPersonaImports, fetchPersonaLinks,
   type ImportKind, type LinkCreated, type LinkToken,
 } from '../workspace/api';
+import { locale, t } from '../i18n';
 import { IconCheck, IconCopy, IconTrash } from '../ui/shell/line-icons';
 import { Busy, SkDoc, SkRows, Skeleton } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
@@ -39,7 +40,7 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
   const [copied, setCopied] = useState(false);
   const [changed, setChanged] = useState(false);
   const imports = useLoad(() => fetchPersonaImports(token));
-  const app = TABS.find((t) => t.id === tab)?.app ?? '';
+  const app = TABS.find((x) => x.id === tab)?.app ?? '';
   const prompt = imports.data?.exportPrompt ?? '';
 
   const save = async () => {
@@ -94,31 +95,31 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
 
   return (
     <Modal
-      title="Importieren"
+      title={t('Importieren')}
       size="lg"
       onClose={onClose}
       footer={
         <>
-          {changed && <span className="w-muted pz-foot-note">{mode === 'full' ? 'Gespeichert. Jetzt kannst du dein Wiki aufbauen.' : 'Gespeichert. Damit das Wiki die Änderung übernimmt, aktualisiere es.'}</span>}
+          {changed && <span className="w-muted pz-foot-note">{mode === 'full' ? t('Gespeichert. Jetzt kannst du dein Wiki aufbauen.') : t('Gespeichert. Damit das Wiki die Änderung übernimmt, aktualisiere es.')}</span>}
           <button className="w-btn" onClick={onClose}>
-            Schließen
+            {t('Schließen')}
           </button>
           {tab === 'link' ? null : changed ? (
             <button className="w-btn green" disabled={busy} onClick={() => void refresh()}>
-              {mode === 'full' ? 'Wiki jetzt aufbauen' : 'Wiki aktualisieren'}
+              {mode === 'full' ? t('Wiki jetzt aufbauen') : t('Wiki aktualisieren')}
             </button>
           ) : (
             <button className="w-btn green" disabled={busy || !text.trim() || tooLong} onClick={() => void save()}>
-              {busy ? 'Speichere …' : 'Speichern'}
+              {busy ? t('Speichere …') : t('Speichern')}
             </button>
           )}
         </>
       }
     >
       <div className="pz-tabs" role="tablist">
-        {TABS.map((t) => (
-          <button key={t.id} role="tab" className="pz-chip" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
-            {t.label}
+        {TABS.map((x) => (
+          <button key={x.id} role="tab" className="pz-chip" aria-selected={tab === x.id} onClick={() => setTab(x.id)}>
+            {t(x.label)}
           </button>
         ))}
       </div>
@@ -130,8 +131,8 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
         {tab !== 'text' ? (
           <>
             <ol className="pz-steps">
-              <li>Kopiere diesen Text in {app}.</li>
-              <li>Füge die Antwort hier ein.</li>
+              <li>{t('Kopiere diesen Text in {app}.', { app })}</li>
+              <li>{t('Füge die Antwort hier ein.')}</li>
             </ol>
             <div className="pz-prompt">
               {imports.loading && !imports.data ? (
@@ -139,7 +140,7 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
               ) : prompt ? (
                 <pre>{prompt}</pre>
               ) : (
-                <span className="w-muted">Der Text zum Kopieren ist gerade nicht verfügbar. Du kannst trotzdem eine Antwort einfügen.</span>
+                <span className="w-muted">{t('Der Text zum Kopieren ist gerade nicht verfügbar. Du kannst trotzdem eine Antwort einfügen.')}</span>
               )}
               {prompt && (
                 <button
@@ -151,54 +152,54 @@ export function ImportDialog({ token, mode = 'refresh', onClose, onBuildStarted 
                     })
                   }
                 >
-                  {copied ? <IconCheck size={15} /> : <IconCopy size={15} />} {copied ? 'Kopiert' : 'Kopieren'}
+                  {copied ? <IconCheck size={15} /> : <IconCopy size={15} />} {copied ? t('Kopiert') : t('Kopieren')}
                 </button>
               )}
             </div>
           </>
         ) : (
           <>
-            <p className="w-muted pz-p">Schreib oder füge ein, was Ortis über dich wissen soll: Lebenslauf, Vereinsbeschreibung, Notizen, Arbeitsweise.</p>
+            <p className="w-muted pz-p">{t('Schreib oder füge ein, was Ortis über dich wissen soll: Lebenslauf, Vereinsbeschreibung, Notizen, Arbeitsweise.')}</p>
             <label className="pz-field">
-              <span>Titel (optional)</span>
-              <input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="z. B. Über meinen Verein" />
+              <span>{t('Titel (optional)')}</span>
+              <input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder={t('z. B. Über meinen Verein')} />
             </label>
           </>
         )}
 
         <label className="pz-field">
-          <span>{tab === 'text' ? 'Text' : `Antwort von ${app}`}</span>
-          <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={tab === 'text' ? 'Text hier einfügen' : 'Antwort hier einfügen'} />
+          <span>{tab === 'text' ? t('Text') : t('Antwort von {app}', { app })}</span>
+          <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={tab === 'text' ? t('Text hier einfügen') : t('Antwort hier einfügen')} />
         </label>
         <div className={`pz-count${tooLong ? ' over' : ''}`}>
-          {text.length.toLocaleString('de-DE')} / {MAX_CHARS.toLocaleString('de-DE')} Zeichen
+          {t('{count} / {max} Zeichen', { count: text.length.toLocaleString(locale()), max: MAX_CHARS.toLocaleString(locale()) })}
         </div>
         {changed && text.trim() && !tooLong && (
           <button className="w-btn" disabled={busy} onClick={() => void save()}>
-            Weiteren Import speichern
+            {t('Weiteren Import speichern')}
           </button>
         )}
         {error && <div className="ws-error">{error}</div>}
 
-        <h3 className="pz-h3">Bisherige Importe</h3>
+        <h3 className="pz-h3">{t('Bisherige Importe')}</h3>
         {imports.error && !imports.data ? (
           <LoadError message={imports.error} onRetry={() => void imports.reload()} />
         ) : imports.loading && !imports.data ? (
         <SkRows rows={2} trailing={28} />
       ) : imports.data && imports.data.imports.length === 0 ? (
-          <div className="w-muted">Noch nichts importiert.</div>
+          <div className="w-muted">{t('Noch nichts importiert.')}</div>
         ) : (
           <ul className="pz-rows">
             {imports.data?.imports.map((im) => (
               <li key={im.id} className="pz-row">
                 <div className="pz-row-text">
-                  <strong className="w-ellipsis">{im.title || KIND_LABEL[im.kind]}</strong>
+                  <strong className="w-ellipsis">{im.title || t(KIND_LABEL[im.kind])}</strong>
                   <span className="w-muted">
-                    {KIND_LABEL[im.kind]} · {im.chars.toLocaleString('de-DE')} Zeichen · {fmtDate(im.createdAt)}
+                    {t(KIND_LABEL[im.kind])} · {t('{n} Zeichen', { n: im.chars.toLocaleString(locale()) })} · {fmtDate(im.createdAt)}
                   </span>
                 </div>
-                <Tip label="Import löschen" side="top">
-                  <button className="w-icon" aria-label="Import löschen" disabled={busy} onClick={() => void remove(im.id)}>
+                <Tip label={t('Import löschen')} side="top">
+                  <button className="w-icon" aria-label={t('Import löschen')} disabled={busy} onClick={() => void remove(im.id)}>
                     <IconTrash size={16} />
                   </button>
                 </Tip>
@@ -228,7 +229,7 @@ function CopyBlock({ label, value, hint }: { label: string; value: string; hint?
             })
           }
         >
-          {copied ? <IconCheck size={15} /> : <IconCopy size={15} />} {copied ? 'Kopiert' : 'Kopieren'}
+          {copied ? <IconCheck size={15} /> : <IconCopy size={15} />} {copied ? t('Kopiert') : t('Kopieren')}
         </button>
       </div>
       {hint && <span className="w-muted">{hint}</span>}
@@ -295,50 +296,51 @@ function LinkPanel({ token }: { token: string }) {
           <SkDoc lines={3} />
         </Busy>
         <Skeleton h={32} w={190} style={{ borderRadius: 16 }} />
-        <h3 className="pz-h3">Bestehende Verbindungen</h3>
+        <h3 className="pz-h3">{t('Bestehende Verbindungen')}</h3>
         <SkRows rows={2} trailing={84} />
       </>
     );
-  if (links.state === 'unavailable') return <p className="w-muted pz-p">Die Verbindung mit Claude ist noch nicht verfügbar. Sie kommt mit einem der nächsten Updates.</p>;
+  if (links.state === 'unavailable') return <p className="w-muted pz-p">{t('Die Verbindung mit Claude ist noch nicht verfügbar. Sie kommt mit einem der nächsten Updates.')}</p>;
   if (links.state === 'error') return <LoadError message={links.message} onRetry={() => void reload()} />;
 
   const full = links.tokens.length >= MAX_LINKS;
   return (
     <>
       <p className="pz-p">
-        Claude (claude.ai, Claude Code oder Claude Desktop) kann dein Ortis-Wiki lesen und neues Wissen aus euren Gesprächen dorthin zurückschreiben. Du
-        erstellst dafür eine persönliche Verbindung und fügst sie in Claude ein.
+        {t(
+          'Claude (claude.ai, Claude Code oder Claude Desktop) kann dein Ortis-Wiki lesen und neues Wissen aus euren Gesprächen dorthin zurückschreiben. Du erstellst dafür eine persönliche Verbindung und fügst sie in Claude ein.',
+        )}
       </p>
       {created ? (
         <div className="pz-link-created" role="status">
-          <span className="pz-link-once">Diese Angaben siehst du nur jetzt. Kopiere, was du brauchst, bevor du das Fenster schließt.</span>
-          <CopyBlock label="Adresse für claude.ai und Claude Desktop" hint="Unter Einstellungen → Konnektoren als eigenen Konnektor hinzufügen." value={created.connectorUrl} />
-          <CopyBlock label="Befehl für Claude Code" hint="Einmal im Terminal ausführen." value={created.claudeCodeCommand} />
-          <CopyBlock label="Text für den Abgleich" hint="In Claude einfügen, damit es dein Wiki liest und Neues einträgt." value={created.syncPrompt} />
+          <span className="pz-link-once">{t('Diese Angaben siehst du nur jetzt. Kopiere, was du brauchst, bevor du das Fenster schließt.')}</span>
+          <CopyBlock label={t('Adresse für claude.ai und Claude Desktop')} hint={t('Unter Einstellungen → Konnektoren als eigenen Konnektor hinzufügen.')} value={created.connectorUrl} />
+          <CopyBlock label={t('Befehl für Claude Code')} hint={t('Einmal im Terminal ausführen.')} value={created.claudeCodeCommand} />
+          <CopyBlock label={t('Text für den Abgleich')} hint={t('In Claude einfügen, damit es dein Wiki liest und Neues einträgt.')} value={created.syncPrompt} />
         </div>
       ) : (
         <button className="w-btn green" disabled={busy || full} onClick={() => void create()}>
-          {busy ? 'Erstelle …' : 'Verbindung erstellen'}
+          {busy ? t('Erstelle …') : t('Verbindung erstellen')}
         </button>
       )}
-      {full && !created && <span className="w-muted">Du hast schon {MAX_LINKS} Verbindungen. Trenne eine, um eine neue zu erstellen.</span>}
+      {full && !created && <span className="w-muted">{t('Du hast schon {n} Verbindungen. Trenne eine, um eine neue zu erstellen.', { n: MAX_LINKS })}</span>}
       {error && <div className="ws-error">{error}</div>}
 
-      <h3 className="pz-h3">Bestehende Verbindungen</h3>
+      <h3 className="pz-h3">{t('Bestehende Verbindungen')}</h3>
       {links.tokens.length === 0 ? (
-        <div className="w-muted">Noch keine Verbindung.</div>
+        <div className="w-muted">{t('Noch keine Verbindung.')}</div>
       ) : (
         <ul className="pz-rows">
-          {links.tokens.map((t) => (
-            <li key={t.id} className="pz-row">
+          {links.tokens.map((tok) => (
+            <li key={tok.id} className="pz-row">
               <div className="pz-row-text">
-                <strong className="w-ellipsis">{t.label || 'Claude'}</strong>
+                <strong className="w-ellipsis">{tok.label || 'Claude'}</strong>
                 <span className="w-muted">
-                  Erstellt {fmtDate(t.createdAt)} · {t.lastUsedAt ? `zuletzt genutzt ${fmtDate(t.lastUsedAt)}` : 'noch nicht genutzt'}
+                  {t('Erstellt {date}', { date: fmtDate(tok.createdAt) })} · {tok.lastUsedAt ? t('zuletzt genutzt {date}', { date: fmtDate(tok.lastUsedAt) }) : t('noch nicht genutzt')}
                 </span>
               </div>
-              <button className="w-btn" disabled={busy} onClick={() => void remove(t.id)}>
-                Trennen
+              <button className="w-btn" disabled={busy} onClick={() => void remove(tok.id)}>
+                {t('Trennen')}
               </button>
             </li>
           ))}

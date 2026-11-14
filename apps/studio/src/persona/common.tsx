@@ -1,5 +1,6 @@
 // Shared building blocks of the personal-context sections: session, layout frame, dialogs, small controls.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { t } from '../i18n';
 import { ChatApiError, buildPersona, googleStart, type PersonaStatus } from '../workspace/api';
 import { onDesktopCommand } from '../workspace/desktop';
 import { loadSession } from '../workspace/session';
@@ -82,13 +83,14 @@ export function usePoll(active: boolean, fn: () => void, ms = 3000): void {
   ref.current = fn;
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => ref.current(), ms);
-    return () => clearInterval(t);
+    const timer = setInterval(() => ref.current(), ms);
+    return () => clearInterval(timer);
   }, [active, ms]);
 }
 
+/** `what` is already translated by the caller. */
 export function SignedOutHint({ what }: { what: string }) {
-  return <div className="pz-state w-muted">Melde dich unter Start mit deinem Konto an, dann erscheinen hier {what}.</div>;
+  return <div className="pz-state w-muted">{t('Melde dich unter Start mit deinem Konto an, dann erscheinen hier {what}.', { what })}</div>;
 }
 
 export function LoadError({ message, onRetry }: { message: string; onRetry?: () => void }) {
@@ -97,7 +99,7 @@ export function LoadError({ message, onRetry }: { message: string; onRetry?: () 
       <div className="ws-error">{message}</div>
       {onRetry && (
         <button className="w-btn" onClick={onRetry}>
-          Erneut versuchen
+          {t('Erneut versuchen')}
         </button>
       )}
     </div>
@@ -188,7 +190,7 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: { title
       <div className={`pz-modal ${size}`} role="dialog" aria-label={title}>
         <header className="pz-modal-head">
           <strong className="w-ellipsis">{title}</strong>
-          <button className="w-icon" aria-label="Schließen" onClick={onClose}>
+          <button className="w-icon" aria-label={t('Schließen')} onClick={onClose}>
             <IconClose size={16} />
           </button>
         </header>
@@ -208,7 +210,7 @@ export function Confirm({ title, body, confirmLabel, busy, onConfirm, onCancel }
       footer={
         <>
           <button className="w-btn" onClick={onCancel} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className="w-btn danger" onClick={onConfirm} disabled={busy}>
             {confirmLabel}
@@ -222,7 +224,8 @@ export function Confirm({ title, body, confirmLabel, busy, onConfirm, onCancel }
 }
 
 /** "⋯" button with a small menu; closes on outside click and Escape. */
-export function MoreMenu({ items, label = 'Mehr' }: { items: Array<{ label: string; danger?: boolean; onSelect: () => void }>; label?: string }) {
+export function MoreMenu({ items, label: labelProp }: { items: Array<{ label: string; danger?: boolean; onSelect: () => void }>; label?: string }) {
+  const label = labelProp ?? t('Mehr');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -284,17 +287,17 @@ export function useGoogleConnect(token: string | null, onChange: () => void) {
     const off = onDesktopCommand((c) => {
       if (c.kind !== 'connected') return;
       setWaiting(false);
-      if (c.result === 'error') setError('Google-Verbindung fehlgeschlagen.');
+      if (c.result === 'error') setError(t('Google-Verbindung fehlgeschlagen.'));
       changed.current();
     });
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       if (Date.now() - started > 5 * 60_000) setWaiting(false);
       else changed.current();
     }, 3000);
     return () => {
       window.removeEventListener('focus', onFocus);
       off();
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, [waiting]);
 
@@ -350,41 +353,42 @@ export function PersonaOnboarding({ token, status, onChanged, onImport }: { toke
   const failed = status.state === 'error';
   return (
     <div className="pz-onboard">
-      <h2>{failed ? 'Das Wiki konnte nicht aufgebaut werden' : 'Lern mich kennen'}</h2>
+      <h2>{failed ? t('Das Wiki konnte nicht aufgebaut werden') : t('Lern mich kennen')}</h2>
       {failed ? (
-        <p>{status.error || 'Beim Aufbau ist etwas schiefgegangen.'} Du kannst es einfach noch einmal versuchen.</p>
+        <p>{status.error || t('Beim Aufbau ist etwas schiefgegangen.')} {t('Du kannst es einfach noch einmal versuchen.')}</p>
       ) : (
         <p>
-          Ortis baut aus deinen verbundenen Quellen ein persönliches Wiki: wer du bist, woran du arbeitest und mit wem. Daraus entstehen
-          Vorschläge für Aufgaben und Routinen. Du kannst jede Seite lesen, korrigieren und jederzeit alles löschen.
+          {t(
+            'Ortis baut aus deinen verbundenen Quellen ein persönliches Wiki: wer du bist, woran du arbeitest und mit wem. Daraus entstehen Vorschläge für Aufgaben und Routinen. Du kannst jede Seite lesen, korrigieren und jederzeit alles löschen.',
+          )}
         </p>
       )}
       <ul className="pz-onboard-sources">
         <li>
-          <span>Google (Kalender, Gmail)</span>
-          {connected ? <span className="w-tag ok">Verbunden</span> : google.waiting ? <span className="w-muted">Warte auf Google im Browser …</span> : <span className="w-tag">Nicht verbunden</span>}
+          <span>{t('Google (Kalender, Gmail)')}</span>
+          {connected ? <span className="w-tag ok">{t('Verbunden')}</span> : google.waiting ? <span className="w-muted">{t('Warte auf Google im Browser …')}</span> : <span className="w-tag">{t('Nicht verbunden')}</span>}
         </li>
         <li>
           <span>Röbel App</span>
-          <span className="w-tag ok">Immer verbunden</span>
+          <span className="w-tag ok">{t('Immer verbunden')}</span>
         </li>
         <li>
-          <span>Importe aus Claude oder ChatGPT</span>
+          <span>{t('Importe aus Claude oder ChatGPT')}</span>
           <span className="w-tag">{status.sources.imports}</span>
         </li>
       </ul>
       {(error || google.error) && <div className="ws-error">{error || google.error}</div>}
       <div className="pz-onboard-actions">
         <button className="w-btn green" disabled={busy} onClick={() => void build()}>
-          {busy ? 'Starte …' : failed ? 'Erneut aufbauen' : 'Wiki jetzt aufbauen'}
+          {busy ? t('Starte …') : failed ? t('Erneut aufbauen') : t('Wiki jetzt aufbauen')}
         </button>
         {!connected && (
           <button className="w-btn" disabled={google.busy || google.waiting} onClick={() => void google.start()}>
-            Google verbinden
+            {t('Google verbinden')}
           </button>
         )}
         <button className="w-btn" onClick={onImport}>
-          Aus Claude oder ChatGPT importieren
+          {t('Aus Claude oder ChatGPT importieren')}
         </button>
       </div>
     </div>
@@ -397,13 +401,13 @@ export function BuildProgress({ status, compact }: { status: PersonaStatus; comp
     <div className={`pz-build${compact ? ' compact' : ''}`} role="status">
       <div className="pz-build-row">
         <span className="ws-spinner" aria-hidden="true" />
-        <strong>{status.stageLabel || 'Ortis baut dein Wiki auf …'}</strong>
+        <strong>{status.stageLabel || t('Ortis baut dein Wiki auf …')}</strong>
         <span className="w-muted">{pct} %</span>
       </div>
       <div className="account-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
         <i style={{ width: `${Math.max(3, pct)}%` }} />
       </div>
-      {!compact && <span className="w-muted">Das dauert ein paar Minuten. Du kannst in der Zwischenzeit weiterarbeiten.</span>}
+      {!compact && <span className="w-muted">{t('Das dauert ein paar Minuten. Du kannst in der Zwischenzeit weiterarbeiten.')}</span>}
     </div>
   );
 }

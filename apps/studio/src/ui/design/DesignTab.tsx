@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t, tx } from '../../i18n';
 import { loadFonts } from '../../render/fonts';
 import { renderFrame } from '../../render/draw';
 import { isStarterTemplate } from '../../render/templates';
@@ -165,37 +166,37 @@ function AnimFields({ title, anim, onChange }: { title: string; anim: OverlayAni
     <fieldset className="ds-group">
       <legend>{title}</legend>
       <label className="ds-f">
-        <span>Art</span>
+        <span>{t('Art')}</span>
         <select value={anim.kind} onChange={(e) => set({ kind: e.target.value as OverlayAnim['kind'] })}>
-          <option value="none">Keine</option>
-          <option value="fade">Blende</option>
-          <option value="slide">Schieben</option>
-          <option value="scale">Skalieren</option>
-          <option value="wipe">Wischen</option>
+          <option value="none">{t('Keine')}</option>
+          <option value="fade">{t('Blende')}</option>
+          <option value="slide">{t('Schieben')}</option>
+          <option value="scale">{t('Skalieren')}</option>
+          <option value="wipe">{t('Wischen')}</option>
         </select>
       </label>
-      <Num label="Dauer (ms)" value={anim.durationMs} step={50} onChange={(v) => set({ durationMs: Math.max(0, v) })} />
+      <Num label={t('Dauer (ms)')} value={anim.durationMs} step={50} onChange={(v) => set({ durationMs: Math.max(0, v) })} />
       <label className="ds-f">
-        <span>Verlauf</span>
+        <span>{t('Verlauf')}</span>
         <select value={anim.easing} onChange={(e) => set({ easing: e.target.value as OverlayAnim['easing'] })}>
           <option value="linear">Linear</option>
-          <option value="easeInOut">Sanft</option>
-          <option value="easeOut">Abbremsen</option>
-          <option value="backOut">Überschwingen</option>
+          <option value="easeInOut">{t('Sanft')}</option>
+          <option value="easeOut">{t('Abbremsen')}</option>
+          <option value="backOut">{t('Überschwingen')}</option>
         </select>
       </label>
       {(anim.kind === 'slide' || anim.kind === 'wipe') && (
         <label className="ds-f">
-          <span>Richtung</span>
+          <span>{t('Richtung')}</span>
           <select value={anim.from ?? 'bottom'} onChange={(e) => set({ from: e.target.value as OverlayAnim['from'] })}>
-            <option value="left">Von links</option>
-            <option value="right">Von rechts</option>
-            <option value="top">Von oben</option>
-            <option value="bottom">Von unten</option>
+            <option value="left">{t('Von links')}</option>
+            <option value="right">{t('Von rechts')}</option>
+            <option value="top">{t('Von oben')}</option>
+            <option value="bottom">{t('Von unten')}</option>
           </select>
         </label>
       )}
-      <Num label="Versatz (ms)" value={anim.staggerMs ?? 0} step={10} onChange={(v) => set({ staggerMs: Math.max(0, v) })} />
+      <Num label={t('Versatz (ms)')} value={anim.staggerMs ?? 0} step={10} onChange={(v) => set({ staggerMs: Math.max(0, v) })} />
     </fieldset>
   );
 }
@@ -267,7 +268,7 @@ export function DesignTab() {
     };
   }, [template?.id]);
 
-  if (!template) return <div className="ds-empty">Keine Vorlagen vorhanden.</div>;
+  if (!template) return <div className="ds-empty">{t('Keine Vorlagen vorhanden.')}</div>;
 
   const edit = (id: string, patch: Partial<TemplateNode>) => dispatch({ type: 'updateTemplate', template: applyNodeEdit(template, id, patch) });
   const setAnim = (k: 'animIn' | 'animOut', a: OverlayAnim) => dispatch({ type: 'updateTemplate', template: { ...template, [k]: a } });
@@ -316,7 +317,7 @@ export function DesignTab() {
 
   const removeCustom = () => {
     const live = state.overlays.some((o) => o.templateId === template.id && o.visible);
-    const msg = `„${template.name}“ wirklich löschen?${live ? '\n\nDiese Grafik ist gerade eingeblendet.' : ''}`;
+    const msg = t('„{name}“ wirklich löschen?', { name: template.name }) + (live ? `\n\n${t('Diese Grafik ist gerade eingeblendet.')}` : '');
     if (!window.confirm(msg)) return;
     dispatch({ type: 'removeTemplate', id: template.id });
     setSelId(state.templates[0]?.id ?? '');
@@ -332,7 +333,7 @@ export function DesignTab() {
   return (
     <div className="ds">
       <aside className="ds-list">
-        <h3>Vorlagen</h3>
+        <h3>{t('Vorlagen')}</h3>
         <div className="ds-items">
           {state.templates.map((t) => (
             <button
@@ -350,15 +351,15 @@ export function DesignTab() {
         </div>
         <div className="ds-actions">
           <button className="btn" onClick={duplicate}>
-            Duplizieren
+            {t('Duplizieren')}
           </button>
           {isStarter ? (
             <button className="btn" onClick={() => dispatch({ type: 'resetTemplate', id: template.id })}>
-              Zurücksetzen
+              {t('Zurücksetzen')}
             </button>
           ) : (
             <button className="btn danger" onClick={removeCustom}>
-              Löschen
+              {t('Löschen')}
             </button>
           )}
         </div>
@@ -368,21 +369,21 @@ export function DesignTab() {
         <div className="ds-stage-head">
           <h3>{template.name}</h3>
           <button className="btn" onClick={() => (play.current = { t0: performance.now() })}>
-            Animation abspielen
+            {t('Animation abspielen')}
           </button>
         </div>
         <div className="ds-checker">
           <canvas ref={canvasRef} width={960} height={540} />
         </div>
-        <p className="ds-hint">Vorschau mit {state.table.rows.length > 0 ? 'der aktuellen Tabellenzeile' : 'Beispieldaten'}. Genau so geht die Grafik auf Sendung.</p>
+        <p className="ds-hint">{state.table.rows.length > 0 ? t('Vorschau mit der aktuellen Tabellenzeile. Genau so geht die Grafik auf Sendung.') : t('Vorschau mit Beispieldaten. Genau so geht die Grafik auf Sendung.')}</p>
       </section>
 
       <aside className="ds-inspector">
-        <h3>Elemente</h3>
+        <h3>{t('Elemente')}</h3>
         <div className="ds-nodes">
           {template.nodes.map((n) => (
             <button key={n.id} className={`ds-node${n.id === nodeId ? ' sel' : ''}`} onClick={() => setNodeId(n.id)}>
-              <span className="ds-node-type">{n.type === 'text' ? 'Text' : n.type === 'image' ? 'Bild' : 'Fläche'}</span>
+              <span className="ds-node-type">{n.type === 'text' ? 'Text' : n.type === 'image' ? t('Bild') : t('Fläche')}</span>
               <span className="ds-node-name">{n.type === 'text' ? n.text || n.id : n.id}</span>
             </button>
           ))}
@@ -397,7 +398,7 @@ export function DesignTab() {
                   <DraftText key={node.id} value={node.text ?? ''} data-field="text" {...trackFocus(node)} onCommit={(v) => edit(node.id, { text: v })} />
                 </label>
                 <div className="ds-bindings">
-                  <span className="ds-label">Platzhalter einfügen</span>
+                  <span className="ds-label">{t('Platzhalter einfügen')}</span>
                   <div>
                     {bindings.map((b) => (
                       <button key={b} className="ds-chip" onMouseDown={(e) => e.preventDefault()} onClick={() => insertBinding(b)}>
@@ -407,58 +408,58 @@ export function DesignTab() {
                   </div>
                 </div>
                 <label className="ds-f">
-                  <span>Schrift</span>
+                  <span>{t('Schrift')}</span>
                   <select value={node.font ?? 'Inter'} onChange={(e) => edit(node.id, { font: e.target.value as TemplateNode['font'] })}>
                     <option value="Inter">Inter</option>
                     <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
                   </select>
                 </label>
                 <label className="ds-f">
-                  <span>Stärke</span>
+                  <span>{t('Stärke')}</span>
                   <select value={node.weight ?? 600} onChange={(e) => edit(node.id, { weight: Number(e.target.value) as TemplateNode['weight'] })}>
-                    <option value={400}>400 Normal</option>
-                    <option value={600}>600 Halbfett</option>
-                    <option value={700}>700 Fett</option>
-                    <option value={800}>800 Extrafett</option>
+                    <option value={400}>{t('400 Normal')}</option>
+                    <option value={600}>{t('600 Halbfett')}</option>
+                    <option value={700}>{t('700 Fett')}</option>
+                    <option value={800}>{t('800 Extrafett')}</option>
                   </select>
                 </label>
-                <Num label="Größe" value={node.size} onChange={(v) => edit(node.id, { size: v })} />
-                <Colour label="Textfarbe" value={node.color} onChange={(v) => edit(node.id, { color: v })} />
+                <Num label={t('Größe')} value={node.size} onChange={(v) => edit(node.id, { size: v })} />
+                <Colour label={t('Textfarbe')} value={node.color} onChange={(v) => edit(node.id, { color: v })} />
                 <label className="ds-f">
-                  <span>Ausrichtung</span>
+                  <span>{t('Ausrichtung')}</span>
                   <select value={node.align ?? 'left'} onChange={(e) => edit(node.id, { align: e.target.value as TemplateNode['align'] })}>
-                    <option value="left">Links</option>
-                    <option value="center">Mitte</option>
-                    <option value="right">Rechts</option>
+                    <option value="left">{t('Links')}</option>
+                    <option value="center">{t('Mitte')}</option>
+                    <option value="right">{t('Rechts')}</option>
                   </select>
                 </label>
               </>
             )}
             {node.type === 'rect' && (
               <>
-                <Colour label="Füllfarbe" value={node.fill} onChange={(v) => edit(node.id, { fill: v })} />
-                <Num label="Eckenradius" value={node.radius ?? 0} onChange={(v) => edit(node.id, { radius: v })} />
+                <Colour label={t('Füllfarbe')} value={node.fill} onChange={(v) => edit(node.id, { fill: v })} />
+                <Num label={t('Eckenradius')} value={node.radius ?? 0} onChange={(v) => edit(node.id, { radius: v })} />
               </>
             )}
             {node.type === 'image' && (
               <>
                 <label className="ds-f">
-                  <span>Bild (Datei-URL oder Platzhalter)</span>
+                  <span>{t('Bild (Datei-URL oder Platzhalter)')}</span>
                   <DraftText key={node.id} value={node.src ?? ''} data-field="src" spellCheck={false} {...trackFocus(node)} onCommit={(v) => edit(node.id, { src: v })} />
                 </label>
                 <div className="ds-bindings">
                   <button className="btn" onClick={() => void pickImage(node)}>
-                    Bild wählen …
+                    {t('Bild wählen …')}
                   </button>
                   <button className="ds-chip" onMouseDown={(e) => e.preventDefault()} onClick={() => edit(node.id, { src: '{{sponsor.logo}}' })}>
                     {'{{sponsor.logo}}'}
                   </button>
                 </div>
                 <label className="ds-f">
-                  <span>Anpassung</span>
+                  <span>{t('Anpassung')}</span>
                   <select value={node.fit ?? 'contain'} onChange={(e) => edit(node.id, { fit: e.target.value as TemplateNode['fit'] })}>
-                    <option value="contain">Einpassen</option>
-                    <option value="cover">Füllen</option>
+                    <option value="contain">{t('Einpassen')}</option>
+                    <option value="cover">{t('Füllen')}</option>
                   </select>
                 </label>
               </>
@@ -466,10 +467,10 @@ export function DesignTab() {
             <div className="ds-grid">
               <Num label="X" value={node.x} onChange={(v) => edit(node.id, { x: v })} />
               <Num label="Y" value={node.y} onChange={(v) => edit(node.id, { y: v })} />
-              <Num label="Breite" value={node.w} onChange={(v) => edit(node.id, { w: v })} />
-              <Num label="Höhe" value={node.h} onChange={(v) => edit(node.id, { h: v })} />
-              <Num label="Deckkraft" value={node.opacity ?? 1} step={0.05} onChange={(v) => edit(node.id, { opacity: v })} />
-              <Num label="Verzögerung (ms)" value={node.delayMs ?? 0} step={10} onChange={(v) => edit(node.id, { delayMs: v })} />
+              <Num label={t('Breite')} value={node.w} onChange={(v) => edit(node.id, { w: v })} />
+              <Num label={t('Höhe')} value={node.h} onChange={(v) => edit(node.id, { h: v })} />
+              <Num label={t('Deckkraft')} value={node.opacity ?? 1} step={0.05} onChange={(v) => edit(node.id, { opacity: v })} />
+              <Num label={t('Verzögerung (ms)')} value={node.delayMs ?? 0} step={10} onChange={(v) => edit(node.id, { delayMs: v })} />
             </div>
             {!isProtectedNode(template, node.id) && !isStarter && (
               <button
@@ -479,14 +480,14 @@ export function DesignTab() {
                   setNodeId(null);
                 }}
               >
-                Element löschen
+                {t('Element löschen')}
               </button>
             )}
           </div>
         )}
 
-        <AnimFields title="Einblenden" anim={template.animIn} onChange={(a) => setAnim('animIn', a)} />
-        <AnimFields title="Ausblenden" anim={template.animOut} onChange={(a) => setAnim('animOut', a)} />
+        <AnimFields title={t('Einblenden')} anim={template.animIn} onChange={(a) => setAnim('animIn', a)} />
+        <AnimFields title={tx('animation', 'Ausblenden')} anim={template.animOut} onChange={(a) => setAnim('animOut', a)} />
       </aside>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   buildPersona, ChatApiError, createPerson, deletePersona, deletePersonaPage, fetchPersona, fetchPersonaPage, savePersonaPage,
   type Page, type PageLink, type Persona, type PersonaUpdate,
 } from '../workspace/api';
+import { locale, t, useLang } from '../i18n';
 import { emitCommand } from '../workspace/desktop';
 import { IconChat, IconChevronDown, IconClock, IconLink, IconLoop, IconPencil, IconPlus, IconRefresh, IconUpload } from '../ui/shell/line-icons';
 import { BuildProgress, Confirm, Frame, Initial, LoadError, Modal, MoreMenu, PersonaOnboarding, SearchField, SignedOutHint, useLoad, usePoll, useSessionToken, type NavEntry } from './common';
@@ -23,24 +24,25 @@ const FALLBACK_TITLES: Record<string, string> = { overview: 'Übersicht', goals:
 
 function buildNav(p: Persona | null): NavEntry[] {
   const pages = p?.pages ?? [];
-  const title = (slug: string) => pages.find((x) => x.slug === slug)?.title || FALLBACK_TITLES[slug] || slug;
+  const title = (slug: string) => pages.find((x) => x.slug === slug)?.title || (FALLBACK_TITLES[slug] ? t(FALLBACK_TITLES[slug]) : slug);
   const nav: NavEntry[] = [];
   for (const slug of TOP_ORDER) {
     if (slug !== 'overview' && p && !pages.some((x) => x.slug === slug)) continue;
     nav.push({ id: slug, label: title(slug) });
-    if (slug === 'overview') nav.push({ id: UPDATES, label: 'Letzte Aktualisierungen', indent: true });
+    if (slug === 'overview') nav.push({ id: UPDATES, label: t('Letzte Aktualisierungen'), indent: true });
     for (const child of pages.filter((x) => x.parent === slug)) nav.push({ id: child.slug, label: child.title, indent: true });
   }
   // Pages the client does not know yet still get an entry.
   for (const x of pages) if (!nav.some((n) => n.id === x.slug)) nav.push({ id: x.slug, label: x.title, indent: !!x.parent });
-  nav.push({ id: PEOPLE, label: 'Personen' });
-  for (const person of [...(p?.people ?? [])].sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name, 'de')))
+  nav.push({ id: PEOPLE, label: t('Personen') });
+  for (const person of [...(p?.people ?? [])].sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name, locale())))
     nav.push({ id: person.slug, label: person.name, indent: true, badge: person.name });
   return nav;
 }
 
 /** Wiki: what Ortis knows about the user, as readable and correctable pages. */
 export function WikiSection() {
+  const lang = useLang();
   const session = useSessionToken();
   const token = session.token;
   const [slug, setSlug] = useState<string>(() => takeWikiSlug() ?? 'overview');
@@ -65,7 +67,9 @@ export function WikiSection() {
 
   const firstLoad = session.state === 'loading' || (!!token && load.loading && !persona);
   // While the page list is unknown the sub-navigation shows skeleton rows instead of guessed entries.
-  const nav = useMemo(() => (persona ? buildNav(persona) : []), [persona]);
+  // The language is a dependency: the fixed entries are translated inside buildNav.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const nav = useMemo(() => (persona ? buildNav(persona) : []), [persona, lang]);
   const hasContent = !!persona && (persona.pages.length > 0 || persona.people.length > 0);
 
   const refresh = async () => {
@@ -102,28 +106,28 @@ export function WikiSection() {
   const actions = token && persona && (
     <>
       <button className="w-btn ghost" onClick={() => emitCommand({ kind: 'compose' })}>
-        <IconChat size={16} /> Im Chat fragen
+        <IconChat size={16} /> {t('Im Chat fragen')}
       </button>
       <button className="w-btn" disabled={busy || building} onClick={() => void refresh()}>
-        <IconRefresh size={15} /> Aktualisieren
+        <IconRefresh size={15} /> {t('Aktualisieren')}
       </button>
       <button className="w-btn" onClick={() => setImporting(true)}>
-        <IconUpload size={15} /> Importieren
+        <IconUpload size={15} /> {t('Importieren')}
       </button>
-      <MoreMenu items={[{ label: 'Wiki löschen', danger: true, onSelect: () => setWiping(true) }]} />
+      <MoreMenu items={[{ label: t('Wiki löschen'), danger: true, onSelect: () => setWiping(true) }]} />
     </>
   );
 
   return (
-    <Frame title="Wiki" nav={nav} active={slug} onSelect={setSlug} actions={actions || undefined} wide navLoading={firstLoad}>
+    <Frame title={t('Wiki')} nav={nav} active={slug} onSelect={setSlug} actions={actions || undefined} wide navLoading={firstLoad}>
       {firstLoad && <SkPage updates={slug === 'overview'} />}
-      {session.state === 'signed-out' && <SignedOutHint what="die Seiten deines Wikis" />}
+      {session.state === 'signed-out' && <SignedOutHint what={t('die Seiten deines Wikis')} />}
       {token && load.error && !persona && <LoadError message={load.error} onRetry={() => void load.reload()} />}
       {error && <div className="ws-error">{error}</div>}
 
       {token && persona && status && !hasContent && (
         <>
-          <h1 className="pz-title">Wiki</h1>
+          <h1 className="pz-title">{t('Wiki')}</h1>
           <PersonaOnboarding token={token} status={status} onChanged={() => void load.reload(true)} onImport={() => setImporting(true)} />
         </>
       )}
@@ -131,7 +135,7 @@ export function WikiSection() {
       {token && persona && status && hasContent && (
         <>
           {building && <BuildProgress status={status} compact />}
-          {status.state === 'error' && <div className="ws-error">{status.error || 'Die letzte Aktualisierung ist fehlgeschlagen.'}</div>}
+          {status.state === 'error' && <div className="ws-error">{status.error || t('Die letzte Aktualisierung ist fehlgeschlagen.')}</div>}
           {slug === UPDATES ? (
             <UpdatesPage updates={persona.updates} onWiki={setSlug} />
           ) : slug === PEOPLE ? (
@@ -159,9 +163,9 @@ export function WikiSection() {
       )}
       {wiping && (
         <Confirm
-          title="Wiki löschen?"
-          body={<>Alle Seiten, Importe und Vorschläge werden endgültig gelöscht. Deine Unterhaltungen und Routinen bleiben erhalten.</>}
-          confirmLabel="Wiki löschen"
+          title={t('Wiki löschen?')}
+          body={t('Alle Seiten, Importe und Vorschläge werden endgültig gelöscht. Deine Unterhaltungen und Routinen bleiben erhalten.')}
+          confirmLabel={t('Wiki löschen')}
           busy={busy}
           onConfirm={() => void wipe()}
           onCancel={() => setWiping(false)}
@@ -188,9 +192,9 @@ function UpdateList({ updates, onWiki }: { updates: PersonaUpdate[]; onWiki: (sl
 function UpdatesPage({ updates, onWiki }: { updates: PersonaUpdate[]; onWiki: (slug: string) => void }) {
   return (
     <>
-      <h1 className="pz-title">Letzte Aktualisierungen</h1>
-      <p className="pz-lead">Was Ortis zuletzt im Wiki ergänzt oder geändert hat.</p>
-      {updates.length === 0 ? <div className="pz-state w-muted">Noch keine Aktualisierungen.</div> : <UpdateList updates={updates} onWiki={onWiki} />}
+      <h1 className="pz-title">{t('Letzte Aktualisierungen')}</h1>
+      <p className="pz-lead">{t('Was Ortis zuletzt im Wiki ergänzt oder geändert hat.')}</p>
+      {updates.length === 0 ? <div className="pz-state w-muted">{t('Noch keine Aktualisierungen.')}</div> : <UpdateList updates={updates} onWiki={onWiki} />}
     </>
   );
 }
@@ -267,9 +271,9 @@ function PageView({
         </div>
         <div className="pz-page-actions">
           <button className="w-btn" onClick={() => setEditing(true)}>
-            <IconPencil size={15} /> Bearbeiten
+            <IconPencil size={15} /> {t('Bearbeiten')}
           </button>
-          {isPerson && <MoreMenu items={[{ label: 'Kontakt löschen', danger: true, onSelect: () => setRemoving(true) }]} />}
+          {isPerson && <MoreMenu items={[{ label: t('Kontakt löschen'), danger: true, onSelect: () => setRemoving(true) }]} />}
         </div>
       </header>
       {error && <div className="ws-error">{error}</div>}
@@ -278,16 +282,16 @@ function PageView({
         <section className="pz-updates-card">
           <div className="pz-block-head">
             <h2>
-              <IconClock size={17} /> Letzte Aktualisierungen
+              <IconClock size={17} /> {t('Letzte Aktualisierungen')}
             </h2>
             <button className="pz-textlink" onClick={onAllUpdates}>
-              Alle Aktualisierungen anzeigen <span aria-hidden="true">→</span>
+              {t('Alle Aktualisierungen anzeigen')} <span aria-hidden="true">→</span>
             </button>
           </div>
           <UpdateList updates={shown} onWiki={onWiki} />
           {updates.length > UPDATES_SHORT && (
             <button className={`pz-more-toggle${moreUpdates ? ' open' : ''}`} aria-expanded={moreUpdates} onClick={() => setMoreUpdates((m) => !m)}>
-              {moreUpdates ? 'Weniger anzeigen' : 'Mehr anzeigen'} <IconChevronDown size={14} />
+              {moreUpdates ? t('Weniger anzeigen') : t('Mehr anzeigen')} <IconChevronDown size={14} />
             </button>
           )}
         </section>
@@ -295,7 +299,7 @@ function PageView({
 
       <div className={`pz-page-body${hasBox ? ' with-box' : ''}`}>
         <div className="pz-page-text">
-          {page.body.trim() ? <Md source={page.body} sources={page.sources} onWiki={onWiki} /> : <div className="w-muted">Diese Seite ist noch leer. Mit „Bearbeiten“ kannst du selbst etwas eintragen.</div>}
+          {page.body.trim() ? <Md source={page.body} sources={page.sources} onWiki={onWiki} /> : <div className="w-muted">{t('Diese Seite ist noch leer. Mit „Bearbeiten“ kannst du selbst etwas eintragen.')}</div>}
         </div>
         {hasBox && (
           <aside className="pz-infobox">
@@ -320,20 +324,20 @@ function PageView({
       </div>
 
       {(backlinks.length > 0 || related.length > 0) && (
-        <nav className="pz-links" aria-label="Verknüpfte Seiten">
-          {backlinks.length > 0 && <LinkColumn title="Verweise auf diese Seite" icon={<IconLoop size={16} />} links={backlinks} onWiki={onWiki} />}
-          {related.length > 0 && <LinkColumn title="Verwandte Seiten" icon={<IconLink size={16} />} links={related} onWiki={onWiki} />}
+        <nav className="pz-links" aria-label={t('Verknüpfte Seiten')}>
+          {backlinks.length > 0 && <LinkColumn title={t('Verweise auf diese Seite')} icon={<IconLoop size={16} />} links={backlinks} onWiki={onWiki} />}
+          {related.length > 0 && <LinkColumn title={t('Verwandte Seiten')} icon={<IconLink size={16} />} links={related} onWiki={onWiki} />}
         </nav>
       )}
 
       <footer className="pz-page-foot">
         <span className="w-muted">
-          Zuletzt bearbeitet {fmtDate(page.updatedAt)}
-          {page.editedByUser ? ' · von dir korrigiert' : ''}
+          {t('Zuletzt bearbeitet {date}', { date: fmtDate(page.updatedAt) })}
+          {page.editedByUser ? ` · ${t('von dir korrigiert')}` : ''}
         </span>
         {page.sources.length > 0 && (
           <section className="pz-sources">
-            <h2>Quellen</h2>
+            <h2>{t('Quellen')}</h2>
             <ol>
               {sources.map((s) => (
                 <li key={s.n} value={s.n}>
@@ -344,7 +348,7 @@ function PageView({
             </ol>
             {page.sources.length > SOURCES_SHORT && (
               <button className="pz-textlink" aria-expanded={allSources} onClick={() => setAllSources((a) => !a)}>
-                {allSources ? 'Weniger Quellen anzeigen' : `Alle ${page.sources.length} Quellen anzeigen`}
+                {allSources ? t('Weniger Quellen anzeigen') : t('Alle {n} Quellen anzeigen', { n: page.sources.length })}
               </button>
             )}
           </section>
@@ -352,7 +356,7 @@ function PageView({
       </footer>
 
       {removing && (
-        <Confirm title="Kontakt löschen?" body={<>„{page.title}“ wird aus deinem Wiki entfernt.</>} confirmLabel="Löschen" busy={busy} onConfirm={() => void remove()} onCancel={() => setRemoving(false)} />
+        <Confirm title={t('Kontakt löschen?')} body={t('„{title}“ wird aus deinem Wiki entfernt.', { title: page.title })} confirmLabel={t('Löschen')} busy={busy} onConfirm={() => void remove()} onCancel={() => setRemoving(false)} />
       )}
     </article>
   );
@@ -399,15 +403,15 @@ function PageEditor({ token, page, onCancel, onSaved }: { token: string; page: P
     <div className="pz-page">
       <header className="pz-page-head">
         <div className="pz-page-heading">
-          <h1 className="pz-title">{page.title} bearbeiten</h1>
-          <p className="pz-lead">Deine Korrektur gilt: Ortis übernimmt sie bei späteren Aktualisierungen als verbindlich.</p>
+          <h1 className="pz-title">{t('{title} bearbeiten', { title: page.title })}</h1>
+          <p className="pz-lead">{t('Deine Korrektur gilt: Ortis übernimmt sie bei späteren Aktualisierungen als verbindlich.')}</p>
         </div>
         <div className="pz-page-actions">
           <button className="w-btn" onClick={onCancel} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className="w-btn green" onClick={() => void save()} disabled={busy}>
-            {busy ? 'Speichere …' : 'Speichern'}
+            {busy ? t('Speichere …') : t('Speichern')}
           </button>
         </div>
       </header>
@@ -415,20 +419,20 @@ function PageEditor({ token, page, onCancel, onSaved }: { token: string; page: P
       {isPerson && (
         <div className="pz-field-row">
           <label className="pz-field">
-            <span>Name</span>
+            <span>{t('Name')}</span>
             <input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
           </label>
           <label className="pz-field grow">
-            <span>Beschreibung</span>
+            <span>{t('Beschreibung')}</span>
             <input value={summary} maxLength={300} onChange={(e) => setSummary(e.target.value)} />
           </label>
         </div>
       )}
       <label className="pz-field">
-        <span>Inhalt (Markdown)</span>
+        <span>{t('Inhalt (Markdown)')}</span>
         <textarea className="mono pz-editor" value={body} onChange={(e) => setBody(e.target.value)} autoFocus />
       </label>
-      <span className="w-muted">Quellenangaben wie [[1]] und Verweise wie [Ziele](wiki:goals) kannst du stehen lassen.</span>
+      <span className="w-muted">{t('Quellenangaben wie [[1]] und Verweise wie [Ziele](wiki:goals) kannst du stehen lassen.')}</span>
     </div>
   );
 }
@@ -440,34 +444,34 @@ function PeoplePage({ token, persona, onOpen, onChanged }: { token: string; pers
   const [creating, setCreating] = useState(false);
   const needle = q.trim().toLowerCase();
   const people = [...persona.people]
-    .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name, 'de'))
+    .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name, locale()))
     .filter((p) => !needle || `${p.name} ${p.email ?? ''} ${p.description}`.toLowerCase().includes(needle));
 
   return (
     <>
-      <h1 className="pz-title">Personen</h1>
-      <p className="pz-lead">Menschen, mit denen du zu tun hast. Ortis nutzt diese Seiten, um Nachrichten und Termine einzuordnen.</p>
+      <h1 className="pz-title">{t('Personen')}</h1>
+      <p className="pz-lead">{t('Menschen, mit denen du zu tun hast. Ortis nutzt diese Seiten, um Nachrichten und Termine einzuordnen.')}</p>
       <div className="pz-toolbar">
-        <SearchField value={q} onChange={setQ} placeholder="Personen suchen" />
+        <SearchField value={q} onChange={setQ} placeholder={t('Personen suchen')} />
         <button className="w-btn green" onClick={() => setCreating(true)}>
-          <IconPlus size={16} /> Kontakt erstellen
+          <IconPlus size={16} /> {t('Kontakt erstellen')}
         </button>
       </div>
       {persona.people.length === 0 ? (
         <div className="pz-empty">
-          <strong>Noch keine Personen</strong>
-          <span className="w-muted">Ortis legt Kontakte beim Aufbau des Wikis an. Du kannst auch selbst welche erstellen.</span>
+          <strong>{t('Noch keine Personen')}</strong>
+          <span className="w-muted">{t('Ortis legt Kontakte beim Aufbau des Wikis an. Du kannst auch selbst welche erstellen.')}</span>
         </div>
       ) : people.length === 0 ? (
-        <div className="pz-state w-muted">Nichts gefunden.</div>
+        <div className="pz-state w-muted">{t('Nichts gefunden.')}</div>
       ) : (
         <div className="pz-table-wrap">
           <table className="pz-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Kontakt</th>
-                <th>Beschreibung</th>
+                <th>{t('Name')}</th>
+                <th>{t('Kontakt')}</th>
+                <th>{t('Beschreibung')}</th>
               </tr>
             </thead>
             <tbody>
@@ -522,30 +526,30 @@ function PersonDialog({ token, onClose, onCreated }: { token: string; onClose: (
 
   return (
     <Modal
-      title="Kontakt erstellen"
+      title={t('Kontakt erstellen')}
       onClose={onClose}
       footer={
         <>
           <button className="w-btn" onClick={onClose} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className="w-btn green" disabled={busy || !name.trim()} onClick={() => void save()}>
-            {busy ? 'Erstelle …' : 'Erstellen'}
+            {busy ? t('Erstelle …') : t('Erstellen')}
           </button>
         </>
       }
     >
       <label className="pz-field">
-        <span>Name</span>
+        <span>{t('Name')}</span>
         <input value={name} maxLength={120} autoFocus onChange={(e) => setName(e.target.value)} />
       </label>
       <label className="pz-field">
-        <span>E-Mail (optional)</span>
+        <span>{t('E-Mail (optional)')}</span>
         <input type="email" value={email} maxLength={200} onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="pz-field">
-        <span>Beschreibung (optional)</span>
-        <textarea rows={3} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} placeholder="Woher kennt ihr euch, woran arbeitet ihr zusammen?" />
+        <span>{t('Beschreibung (optional)')}</span>
+        <textarea rows={3} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} placeholder={t('Woher kennt ihr euch, woran arbeitet ihr zusammen?')} />
       </label>
       {error && <div className="ws-error">{error}</div>}
     </Modal>

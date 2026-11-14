@@ -2,6 +2,7 @@
 // running while the operator is on another tab (as long as something keeps it bound — see LiveRoomRuntime).
 // The studio token lives only here and in the controller's own localStorage key; it is never logged.
 
+import { t } from '../i18n';
 import type { Action } from '../state/reducer';
 import type { ShowState, Table, Template } from '../state/types';
 import { AlertQueue, displayName, safeAvatarUrl, type SupportAlert } from './alerts';
@@ -211,7 +212,7 @@ class LiveRoomController {
 
   private call<T>(action: string, extra?: Record<string, unknown>): Promise<T> {
     const id = this.snap.show?.id ?? this.snap.showId;
-    if (!id) return Promise.reject(new LiveApiError('NO_SHOW', 'Bitte zuerst eine Übertragung wählen.', 0));
+    if (!id) return Promise.reject(new LiveApiError('NO_SHOW', t('Bitte zuerst eine Übertragung wählen.'), 0));
     return adminCall<T>(this.snap.token, id, action, extra);
   }
 
@@ -383,7 +384,7 @@ class LiveRoomController {
     if (id !== null) {
       // Only plain chat lines may go on air. Unterstützungen never do (not in stream, not in the recording).
       const m = this.snap.chat.find((x) => x.id === id);
-      if (!m || m.kind !== 'chat') throw new LiveApiError('NOT_CHAT', 'Nur Chat-Nachrichten können auf Sendung gehen.', 0);
+      if (!m || m.kind !== 'chat') throw new LiveApiError('NOT_CHAT', t('Nur Chat-Nachrichten können auf Sendung gehen.'), 0);
     }
     const r = await this.call<{ overlay: Record<string, unknown> }>('feature_message', { message_id: id });
     if (this.snap.show) this.set({ show: { ...this.snap.show, overlay: r.overlay } });
@@ -475,7 +476,7 @@ class LiveRoomController {
     if (act === 'live') {
       this.setStatus('live').then(
         () => this.set({ followError: null }),
-        (e) => this.set({ followError: `App konnte nicht auf LIVE gestellt werden: ${errorMessage(e)}` }),
+        (e) => this.set({ followError: t('App konnte nicht auf LIVE gestellt werden: {error}', { error: errorMessage(e) }) }),
       );
     } else if (act === 'ask-end') this.set({ askEnd: true });
   }
@@ -501,9 +502,9 @@ class LiveRoomController {
 
   async pushRundown(table: Table): Promise<number> {
     const showId = this.snap.show?.id;
-    if (!showId) throw new LiveApiError('NO_SHOW', 'Bitte zuerst eine Übertragung wählen.', 0);
+    if (!showId) throw new LiveApiError('NO_SHOW', t('Bitte zuerst eine Übertragung wählen.'), 0);
     const { rows, rowIds } = this.previewRundown(table);
-    if (rows.length === 0) throw new LiveApiError('EMPTY', 'Keine Zeile mit Titel in der Tabelle.', 0);
+    if (rows.length === 0) throw new LiveApiError('EMPTY', t('Keine Zeile mit Titel in der Tabelle.'), 0);
     const r = await this.call<{ items: RundownItem[] }>('rundown_replace', { rows });
     const items = [...r.items].sort((a, b) => a.position - b.position);
     this.persist({ rowMaps: { ...this.snap.rowMaps, [showId]: mapRowsToItems(rowIds, items) } });
@@ -543,8 +544,8 @@ class LiveRoomController {
     if (d.kind === 'unmapped') {
       const map = this.columnMapFor(table.columns);
       const row = table.rows.find((r) => r.id === d.rowId);
-      const title = (map.title && row?.values[map.title]) || 'Diese Zeile';
-      this.set({ stageNote: `„${title}“ ist nicht im App-Programm. Erst „Tabelle → App“ senden.` });
+      const title = (map.title && row?.values[map.title]) || t('Diese Zeile');
+      this.set({ stageNote: t('„{title}“ ist nicht im App-Programm. Erst „Tabelle → App“ senden.', { title }) });
       return;
     }
     this.set({ stageNote: null });
@@ -566,11 +567,11 @@ class LiveRoomController {
 
   /** Manual "abgleichen": puts the studio's current row on stage in the app now. */
   async syncStageNow() {
-    const t = this.lastTable;
-    if (!t || t.currentRowId === null) throw new LiveApiError('NO_ROW', 'In der Tabelle ist keine Zeile aktiv.', 0);
-    const itemId = this.resolve(t)(t.currentRowId);
-    if (!itemId) throw new LiveApiError('UNMAPPED', 'Die aktive Zeile ist nicht im App-Programm. Erst „Tabelle → App“ senden.', 0);
-    this.lastHandledRowId = t.currentRowId;
+    const table = this.lastTable;
+    if (!table || table.currentRowId === null) throw new LiveApiError('NO_ROW', t('In der Tabelle ist keine Zeile aktiv.'), 0);
+    const itemId = this.resolve(table)(table.currentRowId);
+    if (!itemId) throw new LiveApiError('UNMAPPED', t('Die aktive Zeile ist nicht im App-Programm. Erst „Tabelle → App“ senden.'), 0);
+    this.lastHandledRowId = table.currentRowId;
     await this.sendOnStage(itemId);
     if (this.snap.stageError) throw new LiveApiError('FAILED', this.snap.stageError, 0);
   }

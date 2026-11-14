@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { dismissSuggestion, fetchSuggestions, startSuggestion, type Suggestion, type SuggestionGroup } from '../workspace/api';
+import { t } from '../i18n';
 import { emitCommand } from '../workspace/desktop';
 import { IconClock, IconPencil } from '../ui/shell/line-icons';
 import type { Section } from '../ui/shell/nav';
@@ -10,6 +11,9 @@ import { hintSkillsTab, hintWikiSlug } from './intent';
 import { SkSuggestions } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
 import './persona.css';
+
+// Filters with a fixed German label; the others carry a section title from the server.
+const FIXED_FILTERS = new Set(['all', 'task', 'quick', 'routine']);
 
 /** Für dich: suggested tasks and routines derived from the personal wiki. */
 export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void }) {
@@ -29,7 +33,8 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
   // An older backend sends only `groups`: one untitled section, the old three filters, no "Neu".
   const v2 = Array.isArray(load.data?.sections);
   const sections = useMemo(() => suggestionSections(load.data), [load.data]);
-  const nav = useMemo(() => suggestionFilters(sections, v2), [sections, v2]);
+  const filters = useMemo(() => suggestionFilters(sections, v2), [sections, v2]);
+  const nav = filters.map((n) => (FIXED_FILTERS.has(n.id) ? { ...n, label: t(n.label) } : n));
   const active = nav.some((n) => n.id === filter) ? filter : 'all';
   const everything = useMemo(() => allSuggestions(sections), [sections]);
   const total = everything.filter((i) => !hidden.has(i.id)).length;
@@ -85,7 +90,7 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
 
   const actions = hasFresh ? (
     <button className={`w-btn ghost pz-fresh-toggle${fresh ? ' on' : ''}`} aria-pressed={fresh} onClick={() => setOnlyFresh((v) => !v)}>
-      Nur neue anzeigen
+      {t('Nur neue anzeigen')}
     </button>
   ) : undefined;
 
@@ -95,7 +100,7 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
       <div key={key} className={`pz-group${sub ? ' sub' : ''}`}>
         <div className="pz-group-head">
           <Heading>{g.title}</Heading>
-          <MoreMenu label="Mehr zu dieser Gruppe" items={[{ label: 'Alle ausblenden', onSelect: () => void dismissGroup(g) }]} />
+          <MoreMenu label={t('Mehr zu dieser Gruppe')} items={[{ label: t('Alle ausblenden'), onSelect: () => void dismissGroup(g) }]} />
         </div>
         <ul className="pz-sugs">
           {g.items.map((s) => (
@@ -104,7 +109,7 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
               <div className="pz-sug-text">
                 <span className="pz-sug-title">
                   {s.title}
-                  {s.fresh && <span className="pz-new">Neu</span>}
+                  {s.fresh && <span className="pz-new">{t('Neu')}</span>}
                 </span>
                 <span className="pz-sug-reason">
                   {s.reason}
@@ -113,10 +118,10 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
               </div>
               <span className="pz-sug-actions">
                 <button className="w-btn" disabled={busyId === s.id} onClick={() => void start(s)}>
-                  {busyId === s.id ? '…' : s.kind === 'routine' ? 'Einrichten' : 'Starten'}
+                  {busyId === s.id ? '…' : s.kind === 'routine' ? t('Einrichten') : t('Starten')}
                 </button>
                 <button className="w-btn ghost" disabled={busyId === s.id} onClick={() => void dismiss(s)}>
-                  Ausblenden
+                  {t('Ausblenden')}
                 </button>
               </span>
               {s.people.length > 0 && (
@@ -145,15 +150,15 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
   };
 
   return (
-    <Frame title="Für dich" nav={nav} active={active} onSelect={setFilter} actions={actions} narrow>
-      <h1 className="pz-title pz-title-lg">Vorschläge für deine Aufgaben und Routinen</h1>
+    <Frame title={t('Für dich')} nav={nav} active={active} onSelect={setFilter} actions={actions} narrow>
+      <h1 className="pz-title pz-title-lg">{t('Vorschläge für deine Aufgaben und Routinen')}</h1>
       {(session.state === 'loading' || (token && load.loading && !load.data)) && <SkSuggestions />}
-      {session.state === 'signed-out' && <SignedOutHint what="deine Vorschläge" />}
+      {session.state === 'signed-out' && <SignedOutHint what={t('deine Vorschläge')} />}
       {token && load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
 
       {created && (
         <div className="conn-notice pz-notice" role="status">
-          <span>Routine eingerichtet: {created}</span>
+          <span>{t('Routine eingerichtet: {title}', { title: created })}</span>
           <button
             className="w-btn"
             onClick={() => {
@@ -161,7 +166,7 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
               onNavigate('skills');
             }}
           >
-            Zu den Routinen
+            {t('Zu den Routinen')}
           </button>
         </div>
       )}
@@ -173,11 +178,11 @@ export function ForYouSection({ onNavigate }: { onNavigate: (s: Section) => void
       {status?.state === 'building' && <BuildProgress status={status} compact={total > 0} />}
       {status?.state === 'ready' && total === 0 && (
         <div className="pz-empty">
-          <strong>Gerade keine Vorschläge</strong>
-          <span className="w-muted">Sobald Ortis in deinen Quellen etwas findet, das sich lohnt, erscheint es hier.</span>
+          <strong>{t('Gerade keine Vorschläge')}</strong>
+          <span className="w-muted">{t('Sobald Ortis in deinen Quellen etwas findet, das sich lohnt, erscheint es hier.')}</span>
         </div>
       )}
-      {total > 0 && visible.length === 0 && <div className="pz-state w-muted">{fresh ? 'Keine neuen Vorschläge in dieser Ansicht.' : 'Keine Vorschläge in dieser Ansicht.'}</div>}
+      {total > 0 && visible.length === 0 && <div className="pz-state w-muted">{fresh ? t('Keine neuen Vorschläge in dieser Ansicht.') : t('Keine Vorschläge in dieser Ansicht.')}</div>}
 
       {visible.map((sec) =>
         sec.title ? (

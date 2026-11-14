@@ -1,4 +1,5 @@
 // Pure helpers for the agent activity bar above the composer and the chat outline (section minimap).
+import { t } from '../i18n';
 import { messageText } from './briefing-format';
 import type { ChatMessage, ChatPart } from './types';
 
@@ -13,19 +14,19 @@ export function activityLabel(message: Pick<ChatMessage, 'parts'> | null | undef
   const parts = message?.parts ?? [];
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i];
-    if (p.type === 'generated_image' && (p as { status?: string }).status === 'generating') return 'Erstellt ein Bild';
+    if (p.type === 'generated_image' && (p as { status?: string }).status === 'generating') return t('Erstellt ein Bild');
     if (p.type === 'task') {
-      const t = p as TaskPart;
-      if (t.status === 'done' || t.status === 'failed' || t.status === 'cancelled') continue;
-      if (t.status === 'waiting_approval') return 'Wartet auf deine Freigabe';
-      const step = t.steps.find((s) => s.status === 'running') ?? t.steps.find((s) => s.status === 'pending');
-      return (step?.label || t.title || 'Arbeitet an der Aufgabe').trim();
+      const task = p as TaskPart;
+      if (task.status === 'done' || task.status === 'failed' || task.status === 'cancelled') continue;
+      if (task.status === 'waiting_approval') return t('Wartet auf deine Freigabe');
+      const step = task.steps.find((s) => s.status === 'running') ?? task.steps.find((s) => s.status === 'pending');
+      return (step?.label || task.title || t('Arbeitet an der Aufgabe')).trim();
     }
   }
   const last = parts[parts.length - 1];
-  if (!last) return 'Denkt nach';
-  if (last.type === 'text') return 'Schreibt die Antwort';
-  return 'Bereitet die Antwort vor';
+  if (!last) return t('Denkt nach');
+  if (last.type === 'text') return t('Schreibt die Antwort');
+  return t('Bereitet die Antwort vor');
 }
 
 export interface OutlineEntry {
@@ -35,10 +36,10 @@ export interface OutlineEntry {
 }
 
 function fallbackPreview(parts: ChatPart[]): string {
-  if (parts.some((p) => p.type === 'image' || p.type === 'generated_image')) return 'Bild';
-  if (parts.some((p) => p.type === 'file')) return 'Datei';
-  if (parts.some((p) => p.type === 'task')) return 'Aufgabe';
-  return 'Nachricht';
+  if (parts.some((p) => p.type === 'image' || p.type === 'generated_image')) return t('Bild');
+  if (parts.some((p) => p.type === 'file')) return t('Datei');
+  if (parts.some((p) => p.type === 'task')) return t('Aufgabe');
+  return t('Nachricht');
 }
 
 /**

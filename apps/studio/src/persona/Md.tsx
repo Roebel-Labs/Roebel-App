@@ -1,6 +1,7 @@
 // Markdown for wiki pages, updates and library documents. Built on the dependency-free parser of the help
 // guide (a data tree, never HTML), plus `[[n]]` citation marks and `[Text](wiki:slug)` internal links.
 import { useMemo, type ReactNode } from 'react';
+import { t } from '../i18n';
 import { parseMarkdown, type Block, type Inline } from '../help/markdown';
 import type { PageSource } from '../workspace/api';
 import { openExternal } from './common';
@@ -13,13 +14,13 @@ interface Ctx {
 
 function sourceTip(ctx: Ctx, n: number): string {
   const src = ctx.sources?.find((s) => s.n === n) ?? ctx.sources?.[n - 1];
-  return src ? [src.label, fmtDate(src.date)].filter(Boolean).join(' · ') : 'Quelle unbekannt';
+  return src ? [src.label, fmtDate(src.date)].filter(Boolean).join(' · ') : t('Quelle unbekannt');
 }
 
 function Cite({ n, ctx }: { n: number; ctx: Ctx }) {
   const tip = sourceTip(ctx, n);
   return (
-    <sup className="pz-cite" data-tip={tip} aria-label={`Quelle ${n}: ${tip}`} tabIndex={0}>
+    <sup className="pz-cite" data-tip={tip} aria-label={t('Quelle {n}: {tip}', { n, tip })} tabIndex={0}>
       {n}
     </sup>
   );
@@ -28,7 +29,7 @@ function Cite({ n, ctx }: { n: number; ctx: Ctx }) {
 /** "+N" mark for a long run of citations; hover, focus or click lists the folded sources. */
 function CiteMore({ ns, ctx }: { ns: number[]; ctx: Ctx }) {
   return (
-    <sup className="pz-cite pz-cite-more" tabIndex={0} role="button" aria-label={`${ns.length} weitere Quellen`}>
+    <sup className="pz-cite pz-cite-more" tabIndex={0} role="button" aria-label={t('{n} weitere Quellen', { n: ns.length })}>
       +{ns.length}
       <span className="pz-cite-pop" role="tooltip">
         <span className="pz-cite-pop-list">

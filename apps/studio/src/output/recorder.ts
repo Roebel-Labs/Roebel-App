@@ -1,6 +1,8 @@
 // Encodes the program MediaStream with MediaRecorder and ships each chunk to
 // Electron main (window.studio.output.chunk), which records + feeds ffmpeg.
 
+import { t } from '../i18n';
+
 const PRIMARY_MIME = 'video/x-matroska;codecs=avc1,opus';
 const FALLBACK_MIME = 'video/webm;codecs=h264,opus';
 // Last resort for a Chromium without an H.264 MediaRecorder encoder: ffmpeg re-encodes
@@ -42,7 +44,7 @@ export function startRecorder(
 
   rec.onerror = (ev: Event) => {
     const err = (ev as Event & { error?: DOMException }).error;
-    opts.onError?.(err?.message || err?.name || 'MediaRecorder-Fehler');
+    opts.onError?.(err?.message || err?.name || t('MediaRecorder-Fehler'));
   };
 
   rec.start(250);

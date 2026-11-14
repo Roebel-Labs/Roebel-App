@@ -2,8 +2,9 @@
 // selected one's profile (Ansehen / Teilen / Ändern), and for the main assistant its name, mailbox, phones,
 // personality and tools. Not a rail
 // item; opened from the agent card on Start and from the account menu.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import qrcode from 'qrcode-generator';
+import { locale, t } from '../i18n';
 import meckyUrl from '../assets/mecky-welcome.png';
 import { Confirm, LoadError, Modal, SignedOutHint, Toggle, useSessionToken } from '../persona/common';
 import { fmtDate, friendlyError } from '../persona/format';
@@ -37,10 +38,11 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
-function CopyButton({ value, label = 'Kopieren' }: { value: string; label?: string }) {
+function CopyButton({ value, label: given }: { value: string; label?: string }) {
   const [done, setDone] = useState(false);
+  const label = given ?? t('Kopieren');
   return (
-    <Tip label={done ? 'Kopiert' : label} side="top">
+    <Tip label={done ? t('Kopiert') : label} side="top">
       <button
         className="w-icon"
         aria-label={label}
@@ -77,9 +79,9 @@ export function AgentSection({ onNavigate }: { onNavigate: (s: Section) => void 
     <div className="section ag">
       <div className="ag-scroll">
         <div className="ag-col">
-          {session.state === 'signed-out' && <SignedOutHint what="die Einstellungen deines Assistenten" />}
+          {session.state === 'signed-out' && <SignedOutHint what={t('die Einstellungen deines Assistenten')} />}
           {(session.state === 'loading' || (token && state.status === 'loading')) && <AgentSkeleton />}
-          {token && state.status === 'unavailable' && <div className="pz-state w-muted">Die Seite deines Assistenten ist auf diesem Server noch nicht verfügbar.</div>}
+          {token && state.status === 'unavailable' && <div className="pz-state w-muted">{t('Die Seite deines Assistenten ist auf diesem Server noch nicht verfügbar.')}</div>}
           {token && state.status === 'error' && <LoadError message={state.message} onRetry={() => void loadAgent(token)} />}
           {token && state.status === 'ready' && <AgentPage token={token} data={state.data} owner={owner} onNavigate={onNavigate} />}
         </div>
@@ -192,7 +194,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
   return (
     <>
       {(agents.length > 1 || canAdd) && (
-        <nav className="ag-roster" aria-label="Deine Agenten">
+        <nav className="ag-roster" aria-label={t('Deine Agenten')}>
           {agents.map((a) => {
             const c = characterById(a.characterId);
             return (
@@ -200,7 +202,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
                 <BotAvatar bot={{ id: a.botId, name: a.name, avatar: c ? { character: c.id } : null }} size={40} radius={10} />
                 <span className="ag-roster-text">
                   <strong>{a.isMain ? agent.name : a.name}</strong>
-                  <span className="w-muted">{a.isMain ? 'Hauptassistent' : c ? roleLine(c) : a.role}</span>
+                  <span className="w-muted">{a.isMain ? t('Hauptassistent') : c ? roleLine(c) : a.role}</span>
                 </span>
               </button>
             );
@@ -211,8 +213,8 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
                 <IconPlus size={18} />
               </span>
               <span className="ag-roster-text">
-                <strong>Agent hinzufügen</strong>
-                <span className="w-muted">{CHARACTERS.length} Figuren</span>
+                <strong>{t('Agent hinzufügen')}</strong>
+                <span className="w-muted">{t('{n} Figuren', { n: CHARACTERS.length })}</span>
               </span>
             </button>
           )}
@@ -234,20 +236,20 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
           {isMain && (agent.mail.address || phone) && <span className="ag-address">{[agent.mail.address, phone].filter(Boolean).join(' • ')}</span>}
           <span className="w-muted">
             {character ? `${roleLine(character)} · ` : ''}
-            {word}
-            {owner ? ` von ${owner}` : ''}
-            {fmtDate(selected.since) ? ` seit ${fmtDate(selected.since)}` : ''}
+            {t(word)}
+            {owner ? ` ${t('von {owner}', { owner })}` : ''}
+            {fmtDate(selected.since) ? ` ${t('seit {date}', { date: fmtDate(selected.since) })}` : ''}
           </span>
           <div className="ag-actions">
             <button className="w-btn" onClick={() => setOverlay({ kind: 'view' })}>
-              <IconView size={16} /> Ansehen
+              <IconView size={16} /> {t('Ansehen')}
             </button>
             <button className="w-btn" onClick={() => setOverlay({ kind: 'share' })}>
-              <IconShare size={16} /> Teilen
+              <IconShare size={16} /> {t('Teilen')}
             </button>
             {canAdd && (
               <button className="w-btn" onClick={() => setOverlay({ kind: 'pick', mode: 'change' })}>
-                <IconRefresh size={16} /> Ändern
+                <IconRefresh size={16} /> {t('Ändern')}
               </button>
             )}
           </div>
@@ -258,7 +260,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
       {isMain ? (
         <>
           <section className="ag-card">
-            <h2>Name und Kontakt</h2>
+            <h2>{t('Name und Kontakt')}</h2>
             <NameField agent={agent} busy={saving === 'name'} onSave={(n) => saveOrShow('name', { name: n })} />
             <MailBlock token={token} agent={agent} saving={saving} save={save} onError={setError} />
           </section>
@@ -266,29 +268,29 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
           <PhoneCard token={token} agent={agent} onError={setError} />
 
           <section className="ag-card">
-            <h2>Persönlichkeit</h2>
+            <h2>{t('Persönlichkeit')}</h2>
             {personalities.length > 0 && (
               <>
-                <h3>Wähle eine Persönlichkeit</h3>
+                <h3>{t('Wähle eine Persönlichkeit')}</h3>
                 <PersonalityPresets personalities={personalities} value={agent.personality} busy={saving === 'personality'} onPick={(key) => void saveOrShow('personality', { personality: key })} />
               </>
             )}
             <Instructions agent={agent} busy={saving === 'instructions'} onSave={(customInstructions) => saveOrShow('instructions', { customInstructions })} />
-            <h3>So klingt dein Name</h3>
-            <p className="ag-hint">Schreib deinen Namen so, wie er klingt, etwa „Niew“ für Niamh. Dein Assistent richtet sich danach, wenn er dich anspricht.</p>
-            <BlurInput value={agent.spokenName} placeholder="Optional" maxLength={80} ariaLabel="So klingt dein Name" onSave={(spokenName) => saveOrShow('spoken', { spokenName })} />
+            <h3>{t('So klingt dein Name')}</h3>
+            <p className="ag-hint">{t('Schreib deinen Namen so, wie er klingt, etwa „Niew“ für Niamh. Dein Assistent richtet sich danach, wenn er dich anspricht.')}</p>
+            <BlurInput value={agent.spokenName} placeholder={t('Optional')} maxLength={80} ariaLabel={t('So klingt dein Name')} onSave={(spokenName) => saveOrShow('spoken', { spokenName })} />
           </section>
 
           <section className="ag-card">
-            <h2>Funktionen</h2>
-            <p className="ag-hint">Das darf dein Assistent nutzen. Welche Dienste verbunden sind, legst du unter Funktionen fest.</p>
+            <h2>{t('Funktionen')}</h2>
+            <p className="ag-hint">{t('Das darf dein Assistent nutzen. Welche Dienste verbunden sind, legst du unter Funktionen fest.')}</p>
             {agent.tools.length === 0 ? (
-              <div className="w-muted">Keine Werkzeuge freigeschaltet.</div>
+              <div className="w-muted">{t('Keine Werkzeuge freigeschaltet.')}</div>
             ) : (
               <ul className="ag-tools">
-                {agent.tools.map((t) => (
-                  <li key={t}>
-                    <IconCheck size={15} /> {toolLabel(t)}
+                {agent.tools.map((tool) => (
+                  <li key={tool}>
+                    <IconCheck size={15} /> {toolLabel(tool)}
                   </li>
                 ))}
               </ul>
@@ -300,36 +302,41 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
                 onNavigate('skills');
               }}
             >
-              Integrationen verwalten <span aria-hidden="true">→</span>
+              {t('Integrationen verwalten')} <span aria-hidden="true">→</span>
             </button>
           </section>
         </>
       ) : (
         <>
           <section className="ag-card">
-            <h2>Name</h2>
+            <h2>{t('Name')}</h2>
             <BlurInput
               value={selected.name}
               placeholder={character?.name}
               maxLength={30}
-              ariaLabel={`Name von ${selected.name}`}
+              ariaLabel={t('Name von {name}', { name: selected.name })}
               disabled={saving === 'agent-name'}
               onSave={(n) => void run('agent-name', () => patchCharacterAgent(token, selected.botId, { name: n })).then((f) => f && setError(f))}
             />
             <p className="ag-hint">
-              E-Mail, Telefon und Tagesbriefing laufen über deinen Hauptassistenten {mainName}. Mach {selected.name} zum Hauptassistenten, damit diese Wege bei {character?.feminine ? 'ihr' : 'ihm'} ankommen.
+              {t(
+                character?.feminine
+                  ? 'E-Mail, Telefon und Tagesbriefing laufen über deinen Hauptassistenten {main}. Mach {name} zum Hauptassistenten, damit diese Wege bei ihr ankommen.'
+                  : 'E-Mail, Telefon und Tagesbriefing laufen über deinen Hauptassistenten {main}. Mach {name} zum Hauptassistenten, damit diese Wege bei ihm ankommen.',
+                { main: mainName, name: selected.name },
+              )}
             </p>
             <div className="ag-row-actions">
               <button className="w-btn green" disabled={saving === 'main'} onClick={() => void saveOrShow('main', { botId: selected.botId })}>
-                Zum Hauptassistenten machen
+                {t('Zum Hauptassistenten machen')}
               </button>
               <button className="w-btn danger" onClick={() => setOverlay({ kind: 'remove' })}>
-                Entfernen
+                {t('Entfernen')}
               </button>
             </div>
           </section>
           <section className="ag-card">
-            <h2>Persönlichkeit</h2>
+            <h2>{t('Persönlichkeit')}</h2>
             <PersonalityPresets
               personalities={personalities}
               value={selected.personality}
@@ -357,9 +364,9 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
       )}
       {overlay?.kind === 'remove' && (
         <Confirm
-          title={`${selected.name} entfernen?`}
-          body={`Gespräche und Routinen von ${selected.name} bleiben erhalten und laufen ab jetzt über Mecky.`}
-          confirmLabel="Entfernen"
+          title={t('{name} entfernen?', { name: selected.name })}
+          body={t('Gespräche und Routinen von {name} bleiben erhalten und laufen ab jetzt über Mecky.', { name: selected.name })}
+          confirmLabel={t('Entfernen')}
           busy={saving === 'remove'}
           onCancel={() => setOverlay(null)}
           onConfirm={() =>
@@ -377,7 +384,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
 
 function PersonalityPresets({ personalities, value, busy, onPick }: { personalities: AgentPersonality[]; value: string; busy: boolean; onPick: (key: string) => void }) {
   return (
-    <div className="ag-presets" role="radiogroup" aria-label="Persönlichkeit">
+    <div className="ag-presets" role="radiogroup" aria-label={t('Persönlichkeit')}>
       {personalities.map((p) => (
         <button key={p.key} className="ag-preset" role="radio" aria-checked={value === p.key} disabled={busy} onClick={() => value !== p.key && onPick(p.key)}>
           <span className="ag-preset-mark" aria-hidden="true">
@@ -423,8 +430,8 @@ function NameField({ agent, busy, onSave }: { agent: Agent; busy: boolean; onSav
   return (
     <>
       {/* An empty field goes back to the assistant's own name. */}
-      <BlurInput value={agent.name} placeholder={agent.defaultName} maxLength={40} ariaLabel="Name deines Assistenten" disabled={busy} onSave={(v) => onSave(v || null)} />
-      <p className="ag-hint">So heißt dein Assistent überall in Ortis. Leer lassen stellt „{agent.defaultName}“ wieder her.</p>
+      <BlurInput value={agent.name} placeholder={agent.defaultName} maxLength={40} ariaLabel={t('Name deines Assistenten')} disabled={busy} onSave={(v) => onSave(v || null)} />
+      <p className="ag-hint">{t('So heißt dein Assistent überall in Ortis. Leer lassen stellt „{name}“ wieder her.', { name: agent.defaultName })}</p>
     </>
   );
 }
@@ -450,8 +457,8 @@ function MailBlock({ token, agent, saving, save, onError }: { token: string; age
 
   return (
     <div className={`ag-block${off ? ' off' : ''}`}>
-      <h3>E-Mail-Adresse deines Assistenten</h3>
-      {off && <p className="ag-hint">E-Mail ist auf diesem Server noch nicht eingerichtet.</p>}
+      <h3>{t('E-Mail-Adresse deines Assistenten')}</h3>
+      {off && <p className="ag-hint">{t('E-Mail ist auf diesem Server noch nicht eingerichtet.')}</p>}
       <div className="ag-box">
         {editing ? (
           <form
@@ -461,18 +468,18 @@ function MailBlock({ token, agent, saving, save, onError }: { token: string; age
               void saveAlias();
             }}
           >
-            <input className="ag-input mono" value={draft} autoFocus aria-label="Adresse vor dem @" onChange={(e) => setDraft(cleanAlias(e.target.value))} />
+            <input className="ag-input mono" value={draft} autoFocus aria-label={t('Adresse vor dem @')} onChange={(e) => setDraft(cleanAlias(e.target.value))} />
             <span className="ag-domain">@{domain}</span>
             <button type="button" className="w-btn" onClick={() => setEditing(false)}>
-              Abbrechen
+              {t('Abbrechen')}
             </button>
             <button className="w-btn" disabled={saving === 'alias' || !draft || draft === (mail.alias ?? alias)}>
-              {saving === 'alias' ? 'Prüfe …' : 'Übernehmen'}
+              {saving === 'alias' ? t('Prüfe …') : t('Übernehmen')}
             </button>
           </form>
         ) : (
           <div className="ag-address-row">
-            <code>{mail.address ?? 'Noch keine Adresse'}</code>
+            <code>{mail.address ?? t('Noch keine Adresse')}</code>
             {mail.address && !off && (
               <>
                 <button
@@ -483,9 +490,9 @@ function MailBlock({ token, agent, saving, save, onError }: { token: string; age
                     setEditing(true);
                   }}
                 >
-                  Adresse ändern
+                  {t('Adresse ändern')}
                 </button>
-                <CopyButton value={mail.address} label="Adresse kopieren" />
+                <CopyButton value={mail.address} label={t('Adresse kopieren')} />
               </>
             )}
           </div>
@@ -494,18 +501,18 @@ function MailBlock({ token, agent, saving, save, onError }: { token: string; age
         <p className="ag-box-note">
           {mail.ownerEmail ? (
             <>
-              Dein Assistent antwortet nur auf E-Mails von <strong>{mail.ownerEmail}</strong>. Andere können ihn über diese Adresse nicht erreichen.
+              {t('Dein Assistent antwortet nur auf E-Mails von')} <strong>{mail.ownerEmail}</strong>. {t('Andere können ihn über diese Adresse nicht erreichen.')}
             </>
           ) : (
-            <>Dein Assistent antwortet nur auf E-Mails von deiner bestätigten Adresse. Andere können ihn über diese Adresse nicht erreichen.</>
+            <>{t('Dein Assistent antwortet nur auf E-Mails von deiner bestätigten Adresse. Andere können ihn über diese Adresse nicht erreichen.')}</>
           )}
         </p>
       </div>
 
       {!off && !mail.ownerVerified && <VerifyEmail token={token} initial={mail.ownerEmail ?? ''} onError={onError} />}
 
-      <SwitchRow title="Tagesbriefing per E-Mail" text="Jeden Morgen der Überblick über deinen Tag in deinem Postfach." checked={mail.briefing} disabled={off || saving === 'emailBriefing'} onChange={(v) => void toggle('emailBriefing', v)} />
-      <SwitchRow title="Ergebnisse von Routinen per E-Mail" text="Was deine Routinen erarbeiten, kommt zusätzlich als E-Mail." checked={mail.routines} disabled={off || saving === 'emailRoutines'} onChange={(v) => void toggle('emailRoutines', v)} />
+      <SwitchRow title={t('Tagesbriefing per E-Mail')} text={t('Jeden Morgen der Überblick über deinen Tag in deinem Postfach.')} checked={mail.briefing} disabled={off || saving === 'emailBriefing'} onChange={(v) => void toggle('emailBriefing', v)} />
+      <SwitchRow title={t('Ergebnisse von Routinen per E-Mail')} text={t('Was deine Routinen erarbeiten, kommt zusätzlich als E-Mail.')} checked={mail.routines} disabled={off || saving === 'emailRoutines'} onChange={(v) => void toggle('emailRoutines', v)} />
     </div>
   );
 }
@@ -517,7 +524,7 @@ function SwitchRow({ title, text, checked, disabled, onChange }: { title: string
         <strong>{title}</strong>
         <span className="w-muted">{text}</span>
       </div>
-      <span className="ag-row-state w-muted">{checked ? 'Ein' : 'Aus'}</span>
+      <span className="ag-row-state w-muted">{checked ? t('Ein') : t('Aus')}</span>
       <Toggle checked={checked} disabled={disabled} label={title} onChange={onChange} />
     </div>
   );
@@ -562,23 +569,23 @@ function VerifyEmail({ token, initial, onError }: { token: string; initial: stri
         void (step === 'email' ? send() : confirm());
       }}
     >
-      <strong>Deine E-Mail-Adresse bestätigen</strong>
+      <strong>{t('Deine E-Mail-Adresse bestätigen')}</strong>
       <span className="w-muted">
-        {step === 'email' ? 'Dein Assistent antwortet erst, wenn feststeht, dass die Adresse dir gehört.' : `Wir haben einen sechsstelligen Code an ${email.trim()} geschickt.`}
+        {step === 'email' ? t('Dein Assistent antwortet erst, wenn feststeht, dass die Adresse dir gehört.') : t('Wir haben einen sechsstelligen Code an {email} geschickt.', { email: email.trim() })}
       </span>
       <div className="ag-verify-row">
         {step === 'email' ? (
-          <input className="ag-input" type="email" value={email} placeholder="du@beispiel.de" aria-label="Deine E-Mail-Adresse" onChange={(e) => setEmail(e.target.value)} />
+          <input className="ag-input" type="email" value={email} placeholder={t('du@beispiel.de')} aria-label={t('Deine E-Mail-Adresse')} onChange={(e) => setEmail(e.target.value)} />
         ) : (
-          <input className="ag-input mono" inputMode="numeric" value={code} placeholder="123456" maxLength={6} autoFocus aria-label="Code aus der E-Mail" onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+          <input className="ag-input mono" inputMode="numeric" value={code} placeholder="123456" maxLength={6} autoFocus aria-label={t('Code aus der E-Mail')} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
         )}
         {step === 'code' && (
           <button type="button" className="w-btn" disabled={busy} onClick={() => setStep('email')}>
-            Andere Adresse
+            {t('Andere Adresse')}
           </button>
         )}
         <button className="w-btn" disabled={busy || (step === 'email' ? !/^\S+@\S+\.\S+$/.test(email.trim()) : code.length !== 6)}>
-          {busy ? '…' : step === 'email' ? 'Code senden' : 'Bestätigen'}
+          {busy ? '…' : step === 'email' ? t('Code senden') : t('Bestätigen')}
         </button>
       </div>
       {error && <div className="ws-error">{error}</div>}
@@ -592,21 +599,22 @@ function Instructions({ agent, busy, onSave }: { agent: Agent; busy: boolean; on
   const dirty = draft !== agent.customInstructions;
   return (
     <>
-      <h3>Eigene Anweisungen</h3>
-      <p className="ag-hint">Was dein Assistent immer beachten soll: Ton, Vorlieben, was er lassen soll.</p>
-      <textarea className="ag-input ag-textarea" rows={6} value={draft} maxLength={MAX_INSTRUCTIONS} aria-label="Eigene Anweisungen" placeholder="z. B. Antworte kurz. Sprich mich mit Du an. Frag nach, bevor du etwas verschickst." onChange={(e) => setDraft(e.target.value)} />
+      <h3>{t('Eigene Anweisungen')}</h3>
+      <p className="ag-hint">{t('Was dein Assistent immer beachten soll: Ton, Vorlieben, was er lassen soll.')}</p>
+      <textarea className="ag-input ag-textarea" rows={6} value={draft} maxLength={MAX_INSTRUCTIONS} aria-label={t('Eigene Anweisungen')} placeholder={t('z. B. Antworte kurz. Sprich mich mit Du an. Frag nach, bevor du etwas verschickst.')} onChange={(e) => setDraft(e.target.value)} />
       <div className="ag-save">
         <span className="w-muted">
-          {draft.length.toLocaleString('de-DE')} / {MAX_INSTRUCTIONS.toLocaleString('de-DE')} Zeichen
+          {t('{n} / {max} Zeichen', { n: draft.length.toLocaleString(locale()), max: MAX_INSTRUCTIONS.toLocaleString(locale()) })}
         </span>
         <button className="w-btn green" disabled={busy || !dirty} onClick={() => onSave(draft.trim())}>
-          {busy ? 'Speichere …' : 'Speichern'}
+          {busy ? t('Speichere …') : t('Speichern')}
         </button>
       </div>
     </>
   );
 }
 
+// German source texts; translated where they are shown.
 const PHONE_ROWS: Array<{ kind: AgentChannel['kind']; title: string; text: string; icon: ReactNode }> = [
   { kind: 'sms', title: 'Per SMS schreiben', text: 'Schreib deinem Assistenten von deinem Handy, auch ohne die App.', icon: <IconSms size={20} /> },
   { kind: 'whatsapp', title: 'Per WhatsApp schreiben', text: 'Schreib deinem Assistenten in WhatsApp wie einem Kontakt.', icon: <IconWhatsapp size={20} /> },
@@ -631,18 +639,18 @@ function PhoneCard({ token, agent, onError }: { token: string; agent: Agent; onE
 
   return (
     <section className="ag-card">
-      <h2>Telefon</h2>
+      <h2>{t('Telefon')}</h2>
       {PHONE_ROWS.map((r) => {
         const ready = !!agent.phone[r.kind]?.number;
         return (
           <div key={r.kind} className={`ag-row boxed${ready ? '' : ' off'}`}>
             <span className={`ag-row-icon ${r.kind}`}>{r.icon}</span>
             <div className="ag-row-text">
-              <strong>{r.title}</strong>
-              <span className="w-muted">{ready ? r.text : `${CHANNEL_LABEL[r.kind]} ist auf diesem Server noch nicht eingerichtet.`}</span>
+              <strong>{t(r.title)}</strong>
+              <span className="w-muted">{ready ? t(r.text) : t('{channel} ist auf diesem Server noch nicht eingerichtet.', { channel: CHANNEL_LABEL[r.kind] })}</span>
             </div>
             <button className="w-btn" disabled={!ready} onClick={() => setLinking(r.kind)}>
-              Verbinden
+              {t('Verbinden')}
             </button>
           </div>
         );
@@ -650,18 +658,18 @@ function PhoneCard({ token, agent, onError }: { token: string; agent: Agent; onE
 
       {agent.channels.length > 0 && (
         <>
-          <h3>Verbundene Telefone</h3>
+          <h3>{t('Verbundene Telefone')}</h3>
           <ul className="ag-channels">
             {agent.channels.map((c) => (
               <li key={c.id} className="ag-row">
                 <div className="ag-row-text">
                   <strong className="ag-mono">{c.address}</strong>
                   <span className="w-muted">
-                    {CHANNEL_LABEL[c.kind] ?? c.kind} · verbunden {fmtDate(c.verifiedAt)}
+                    {CHANNEL_LABEL[c.kind] ?? c.kind} · {t('verbunden {date}', { date: fmtDate(c.verifiedAt) })}
                   </span>
                 </div>
                 <button className="w-btn" disabled={busy === c.id} onClick={() => void remove(c.id)}>
-                  Trennen
+                  {t('Trennen')}
                 </button>
               </li>
             ))}
@@ -686,7 +694,7 @@ function QrCode({ value, size = 208 }: { value: string; size?: number }) {
   }, [value]);
   const quiet = 3;
   return (
-    <svg className="ag-qr" width={size} height={size} viewBox={`${-quiet} ${-quiet} ${count + quiet * 2} ${count + quiet * 2}`} role="img" aria-label="QR-Code zum Verbinden" shapeRendering="crispEdges">
+    <svg className="ag-qr" width={size} height={size} viewBox={`${-quiet} ${-quiet} ${count + quiet * 2} ${count + quiet * 2}`} role="img" aria-label={t('QR-Code zum Verbinden')} shapeRendering="crispEdges">
       <rect x={-quiet} y={-quiet} width={count + quiet * 2} height={count + quiet * 2} fill="#ffffff" />
       <path d={path} fill="#000000" />
     </svg>
@@ -719,39 +727,39 @@ function LinkPhoneDialog({ token, kind, known, onClose }: { token: string; kind:
   // Wait for the message: the profile is polled until a new phone of this kind shows up.
   useEffect(() => {
     if (!link || linked || expired) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       if (isExpired(link.expiresAt)) return setExpired(true);
       void loadAgent(token, true).then((s) => {
         const found = s.status === 'ready' ? newChannel(before.current, s.data.agent.channels, kind) : null;
         if (found) setLinked(found);
       });
     }, 3000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [link, linked, expired, token, kind]);
   useEffect(() => {
     if (!linked) return;
-    const t = setTimeout(onClose, 1800);
-    return () => clearTimeout(t);
+    const timer = setTimeout(onClose, 1800);
+    return () => clearTimeout(timer);
   }, [linked, onClose]);
 
   return (
     <Modal
-      title={`Per ${label} verbinden`}
+      title={t('Per {channel} verbinden', { channel: label })}
       onClose={onClose}
       footer={
         <button className="w-btn" onClick={onClose}>
-          Schließen
+          {t('Schließen')}
         </button>
       }
     >
       <p className="ag-dialog-lead">
-        Scanne den Code mit deinem Handy. {kind === 'sms' ? 'Die Nachrichten-App' : 'WhatsApp'} öffnet sich mit einer fertigen Nachricht, die du nur noch abschicken musst.
+        {t('Scanne den Code mit deinem Handy. {app} öffnet sich mit einer fertigen Nachricht, die du nur noch abschicken musst.', { app: kind === 'sms' ? t('Die Nachrichten-App') : 'WhatsApp' })}
       </p>
       {error ? (
         <LoadError message={error} onRetry={() => void request()} />
       ) : linked ? (
         <div className="ag-linked" role="status">
-          <IconCheck size={20} /> Verbunden mit {linked.address}
+          <IconCheck size={20} /> {t('Verbunden mit {address}', { address: linked.address })}
         </div>
       ) : !link ? (
         <Busy className="ag-qr-wrap">
@@ -760,20 +768,33 @@ function LinkPhoneDialog({ token, kind, known, onClose }: { token: string; kind:
         </Busy>
       ) : expired ? (
         <div className="ag-qr-wrap">
-          <span className="w-muted">Der Code ist abgelaufen.</span>
+          <span className="w-muted">{t('Der Code ist abgelaufen.')}</span>
           <button className="w-btn" onClick={() => void request()}>
-            Neuen Code anfordern
+            {t('Neuen Code anfordern')}
           </button>
         </div>
       ) : (
         <div className="ag-qr-wrap">
           <QrCode value={link.link} />
           <span className="ag-waiting" role="status">
-            <span className="ws-spinner" aria-hidden="true" /> Warte auf deine Nachricht …
+            <span className="ws-spinner" aria-hidden="true" /> {t('Warte auf deine Nachricht …')}
           </span>
           <span className="ag-fallback">
-            Keine Kamera? Schreib <code>{link.code}</code>
-            <CopyButton value={link.code} label="Code kopieren" /> an <code>{link.number}</code>
+            {/* The sentence is one entry; {code} and {number} mark where the two values go. */}
+            {t('Keine Kamera? Schreib {code} an {number}')
+              .split(/(\{code\}|\{number\})/)
+              .map((part, i) =>
+                part === '{code}' ? (
+                  <Fragment key={i}>
+                    <code>{link.code}</code>
+                    <CopyButton value={link.code} label={t('Code kopieren')} />
+                  </Fragment>
+                ) : part === '{number}' ? (
+                  <code key={i}>{link.number}</code>
+                ) : (
+                  part
+                ),
+              )}
           </span>
         </div>
       )}

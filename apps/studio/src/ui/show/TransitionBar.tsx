@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { useShow } from '../../state/store';
 import { Dialog } from '../Dialog';
 
@@ -46,8 +47,8 @@ export function TransitionBar() {
 
   return (
     <div className="tbar">
-      <span className="tbar-label">Übergang</span>
-      <div className="chips" role="group" aria-label="Übergang">
+      <span className="tbar-label">{t('Übergang')}</span>
+      <div className="chips" role="group" aria-label={t('Übergang')}>
         {state.presets.map((p) => (
           <button
             key={p.id}
@@ -62,8 +63,8 @@ export function TransitionBar() {
       </div>
       <label className="duration">
         <span className="duration-row">
-          <span>Dauer</span>
-          <span className="num">{isCut ? 'sofort' : `${preset?.durationMs ?? 0} ms`}</span>
+          <span>{t('Dauer')}</span>
+          <span className="num">{isCut ? t('sofort') : `${preset?.durationMs ?? 0} ms`}</span>
         </span>
         <input
           type="range"
@@ -78,7 +79,7 @@ export function TransitionBar() {
         />
       </label>
       <button className="linkbtn" onClick={() => setSaving(true)} disabled={!preset}>
-        Als Preset speichern
+        {t('Als Preset speichern')}
       </button>
       <button
         className="take"
@@ -89,7 +90,7 @@ export function TransitionBar() {
         }}
       >
         TAKE
-        <span className="take-sub">Leertaste, C schneidet hart</span>
+        <span className="take-sub">{t('Leertaste, C schneidet hart')}</span>
       </button>
       {running && preset ? (
         <TakeProgress startedAt={state.transition.startedAt!} durationMs={preset.durationMs} />
@@ -99,21 +100,21 @@ export function TransitionBar() {
 
       {saving && (
         <Dialog
-          title="Übergang als Preset speichern"
+          title={t('Übergang als Preset speichern')}
           onCancel={() => setSaving(false)}
           actions={
             <>
               <button className="btn ghost" onClick={() => setSaving(false)}>
-                Abbrechen
+                {t('Abbrechen')}
               </button>
               <button className="btn primary" onClick={save} disabled={!name.trim()}>
-                Speichern
+                {t('Speichern')}
               </button>
             </>
           }
         >
           <p>
-            Speichert „{preset?.name}“ mit {preset?.durationMs} ms als eigenen Knopf.
+            {t('Speichert „{name}“ mit {ms} ms als eigenen Knopf.', { name: preset?.name ?? '', ms: preset?.durationMs ?? 0 })}
           </p>
           <label className="field" style={{ marginBottom: 18 }}>
             <span>Name</span>
@@ -121,7 +122,7 @@ export function TransitionBar() {
               className="input"
               autoFocus
               value={name}
-              placeholder="z. B. Langsame Blende"
+              placeholder={t('z. B. Langsame Blende')}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && save()}
             />

@@ -1,5 +1,6 @@
 // Unterstützungen for the operator only: queue, notice, running total. Never on air (not in stream or recording).
 
+import { t } from '../../i18n';
 import { formatEuro } from '../alerts';
 import { liveRoom } from '../controller';
 import { ErrorLine, Section, Toggle, timeOf, useLiveRoom } from './common';
@@ -8,15 +9,17 @@ export function SupportSection() {
   const lr = useLiveRoom();
   if (!lr.show) return null;
   return (
-    <Section title="Unterstützen" aside={<Toggle label="Automatisch anzeigen" on={lr.autoAlerts} onChange={(v) => liveRoom.setAutoAlerts(v)} />}>
+    <Section title={t('Unterstützen')} aside={<Toggle label={t('Automatisch anzeigen')} on={lr.autoAlerts} onChange={(v) => liveRoom.setAutoAlerts(v)} />}>
       <div className="lr-total">
         <strong className="num">{formatEuro(lr.supportTotal.cents)}</strong>
         <span className="hint">
-          von {lr.supportTotal.count} {lr.supportTotal.count === 1 ? 'Person' : 'Personen'} in dieser Übertragung
+          {lr.supportTotal.count === 1
+            ? t('von {n} Person in dieser Übertragung', { n: lr.supportTotal.count })
+            : t('von {n} Personen in dieser Übertragung', { n: lr.supportTotal.count })}
         </span>
       </div>
       <label className="lr-row">
-        <span className="hint">Anzeigedauer</span>
+        <span className="hint">{t('Anzeigedauer')}</span>
         <input
           className="input lr-small"
           type="number"
@@ -25,7 +28,7 @@ export function SupportSection() {
           value={lr.alertSeconds}
           onChange={(e) => liveRoom.setAlertSeconds(Number(e.target.value))}
         />
-        <span className="hint">Sekunden</span>
+        <span className="hint">{t('Sekunden')}</span>
       </label>
       {lr.currentAlert && (
         <div className="lr-alert on">
@@ -33,9 +36,9 @@ export function SupportSection() {
             <strong>{lr.currentAlert.name}</strong> · {lr.currentAlert.amount}
             {lr.currentAlert.message && <span className="hint"> · {lr.currentAlert.message}</span>}
           </span>
-          <span className="lr-tag">Neu</span>
+          <span className="lr-tag">{t('Neu')}</span>
           <button className="btn ghost" onClick={() => liveRoom.stopAlert()}>
-            Erledigt
+            {t('Erledigt')}
           </button>
         </div>
       )}
@@ -47,15 +50,15 @@ export function SupportSection() {
           </span>
           <span className="hint">{timeOf(a.createdAt)}</span>
           <button className="btn" disabled={!!lr.currentAlert} onClick={() => liveRoom.showAlertNow(a.id)}>
-            Hervorheben
+            {t('Hervorheben')}
           </button>
           <button className="btn ghost" onClick={() => liveRoom.dismissAlert(a.id)}>
-            Verwerfen
+            {t('Verwerfen')}
           </button>
         </div>
       ))}
       {!lr.currentAlert && lr.pendingAlerts.length === 0 && (
-        <span className="hint">Neue Unterstützungen erscheinen nur hier, nie im Stream oder in der Aufnahme. Die App zeigt sie selbst an.</span>
+        <span className="hint">{t('Neue Unterstützungen erscheinen nur hier, nie im Stream oder in der Aufnahme. Die App zeigt sie selbst an.')}</span>
       )}
       <ErrorLine text={lr.alertError} />
     </Section>

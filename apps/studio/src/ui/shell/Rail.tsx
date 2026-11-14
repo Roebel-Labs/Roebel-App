@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useOnAir } from '../studio';
 import { SECTION_ICONS } from './icons';
 import { SECTIONS, type AppSection, type Section } from './nav';
@@ -13,23 +14,23 @@ export function Rail({ section, onSelect, onSearch }: { section: AppSection; onS
   const air = useOnAir();
   const live = air.phase !== 'off';
   return (
-    <nav className="rail" aria-label="Bereiche">
+    <nav className="rail" aria-label={t('Bereiche')}>
       <div className="rail-items" role="tablist" aria-orientation="vertical">
         {SECTIONS.map((s) => {
           const Icon = SECTION_ICONS[s.id];
           return (
-            <Tip key={s.id} label={s.soon ? `${s.label} (bald)` : s.label} keys={SECTION_KEYS[s.id] && shortcutHint(SECTION_KEYS[s.id]!)} side="right">
-              <button className="rail-item" role="tab" aria-selected={section === s.id} aria-label={s.label} onClick={() => onSelect(s.id)}>
+            <Tip key={s.id} label={s.soon ? t('{label} (bald)', { label: t(s.label) }) : t(s.label)} keys={SECTION_KEYS[s.id] && shortcutHint(SECTION_KEYS[s.id]!)} side="right">
+              <button className="rail-item" role="tab" aria-selected={section === s.id} aria-label={t(s.label)} onClick={() => onSelect(s.id)}>
                 <Icon />
-                {s.id === 'live' && live && <span className="rail-dot" aria-label="Auf Sendung" />}
+                {s.id === 'live' && live && <span className="rail-dot" aria-label={t('Auf Sendung')} />}
               </button>
             </Tip>
           );
         })}
       </div>
       <span className="rail-spacer" />
-      <Tip label="Suchen" keys={shortcutHint('search')} side="right">
-        <button className="rail-item" aria-label="Suchen" onClick={onSearch}>
+      <Tip label={t('Suchen')} keys={shortcutHint('search')} side="right">
+        <button className="rail-item" aria-label={t('Suchen')} onClick={onSearch}>
           <IconSearch size={18} />
         </button>
       </Tip>

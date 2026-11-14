@@ -1,6 +1,8 @@
 // Show package: cameras and microphones have different device ids on every computer. The export
 // records each device's name; the import maps that name to the device with the same name here.
 
+import { t } from '../i18n';
+
 type Device = { deviceId: string; label: string; kind: string };
 type Json = Record<string, unknown>;
 
@@ -53,7 +55,7 @@ export function relinkDevices(state: Json, devices: Device[]): { state: Json; ma
     if (s.kind !== 'camera') return s;
     const id = find(s.deviceId, s.deviceLabel, 'videoinput');
     if (id === null) {
-      unmatched.push(String(s.deviceLabel ?? s.label ?? 'Kamera'));
+      unmatched.push(String(s.deviceLabel ?? s.label ?? t('Kamera')));
       return s;
     }
     if (id !== s.deviceId) matched++;
@@ -65,7 +67,7 @@ export function relinkDevices(state: Json, devices: Device[]): { state: Json; ma
     if (input?.kind !== 'device') return c;
     const id = find(input.deviceId, input.deviceLabel, 'audioinput');
     if (id === null) {
-      unmatched.push(String(input.deviceLabel ?? c.label ?? 'Mikrofon'));
+      unmatched.push(String(input.deviceLabel ?? c.label ?? t('Mikrofon')));
       return c;
     }
     if (id !== input.deviceId) matched++;

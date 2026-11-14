@@ -2,6 +2,7 @@
 // component's memory while it is mounted; they are never persisted or put into the show state.
 
 import { useEffect, useState } from 'react';
+import { t } from '../../i18n';
 import { ConfirmDialog } from '../../ui/Dialog';
 import { LiveApiError } from '../api';
 import { liveRoom } from '../controller';
@@ -17,10 +18,10 @@ function useSeams() {
 }
 
 function stateText(info: CfInputInfo): { text: string; tone: 'ok' | 'warn' | 'off' } {
-  if (info.connected) return { text: 'Signal kommt an', tone: 'ok' };
-  if (info.state === 'connected') return { text: 'Verbunden', tone: 'ok' };
-  if (info.state === 'reconnecting') return { text: 'Verbindet neu …', tone: 'warn' };
-  return { text: 'Kein Signal', tone: 'off' };
+  if (info.connected) return { text: t('Signal kommt an'), tone: 'ok' };
+  if (info.state === 'connected') return { text: t('Verbunden'), tone: 'ok' };
+  if (info.state === 'reconnecting') return { text: t('Verbindet neu …'), tone: 'warn' };
+  return { text: t('Kein Signal'), tone: 'off' };
 }
 
 function Outputs() {
@@ -41,19 +42,19 @@ function Outputs() {
   return (
     <div className="lr-sub">
       <div className="lr-row">
-        <strong>Weiterleitungen</strong>
-        <span className="hint">Cloudflare sendet den Stream zusätzlich an diese Plattformen.</span>
+        <strong>{t('Weiterleitungen')}</strong>
+        <span className="hint">{t('Cloudflare sendet den Stream zusätzlich an diese Plattformen.')}</span>
         <button className="btn ghost lr-push" onClick={() => void reload()} disabled={list.busy}>
-          Aktualisieren
+          {t('Aktualisieren')}
         </button>
       </div>
-      {outputs && outputs.length === 0 && <span className="hint">Noch keine Weiterleitung.</span>}
+      {outputs && outputs.length === 0 && <span className="hint">{t('Noch keine Weiterleitung.')}</span>}
       {outputs?.map((o) => (
         <div key={o.uid} className="lr-item">
           <span className="lr-grow">{outputLabel(o.url)}</span>
-          <span className="hint">{o.enabled ? (o.state === 'connected' ? 'sendet' : 'bereit') : 'aus'}</span>
+          <span className="hint">{o.enabled ? (o.state === 'connected' ? t('sendet') : t('bereit')) : t('aus')}</span>
           <button className="btn ghost" onClick={() => setDel(o)}>
-            Entfernen
+            {t('Entfernen')}
           </button>
         </div>
       ))}
@@ -68,7 +69,7 @@ function Outputs() {
         >
           {OUTPUT_PRESETS.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {t(p.label)}
             </option>
           ))}
         </select>
@@ -80,7 +81,7 @@ function Outputs() {
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="Streamschlüssel der Plattform"
+          placeholder={t('Streamschlüssel der Plattform')}
           value={key}
           onChange={(e) => setKey(e.target.value.trim())}
         />
@@ -98,15 +99,15 @@ function Outputs() {
               })
           }
         >
-          Hinzufügen
+          {t('Hinzufügen')}
         </button>
       </div>
       <ErrorLine text={list.error ?? add.error} />
       {del && (
         <ConfirmDialog
-          title="Weiterleitung entfernen?"
-          body={<p>{outputLabel(del.url)} bekommt den Stream dann nicht mehr.</p>}
-          confirmLabel="Entfernen"
+          title={t('Weiterleitung entfernen?')}
+          body={<p>{t('{name} bekommt den Stream dann nicht mehr.', { name: outputLabel(del.url) })}</p>}
+          confirmLabel={t('Entfernen')}
           danger
           onCancel={() => setDel(null)}
           onConfirm={() => {
@@ -144,10 +145,10 @@ export function StreamSection() {
   // Signal state every 10 s while the credentials are on screen.
   useEffect(() => {
     if (!info) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       liveRoom.cf<CfInputInfo>('cf_input_info').then(setInfo, () => {});
     }, 10_000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [info !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!lr.show) return null;
@@ -156,7 +157,7 @@ export function StreamSection() {
 
   return (
     <Section
-      title="Sendeziel Röbel App"
+      title={t('Sendeziel Röbel App')}
       aside={
         st && (
           <span className={`lr-badge ${st.tone}`}>
@@ -169,15 +170,15 @@ export function StreamSection() {
       {!info ? (
         <div className="lr-row">
           <button className="btn" onClick={() => void fetchInfo()} disabled={fetchRun.busy || !lr.token}>
-            {fetchRun.busy ? 'Hole …' : 'Zugangsdaten holen'}
+            {fetchRun.busy ? t('Hole …') : t('Zugangsdaten holen')}
           </button>
-          <span className="hint">Legt bei Bedarf den Cloudflare-Eingang an. Die Daten werden nicht gespeichert.</span>
+          <span className="hint">{t('Legt bei Bedarf den Cloudflare-Eingang an. Die Daten werden nicht gespeichert.')}</span>
         </div>
       ) : (
         <>
-          <CopyField label="SRT-Adresse (komplett)" value={dests?.srt?.kind === 'srt' ? dests.srt.url : null} secret />
-          <CopyField label="RTMPS-Adresse" value={info.rtmps_url} />
-          <CopyField label="Streamschlüssel" value={info.stream_key} secret />
+          <CopyField label={t('SRT-Adresse (komplett)')} value={dests?.srt?.kind === 'srt' ? dests.srt.url : null} secret />
+          <CopyField label={t('RTMPS-Adresse')} value={info.rtmps_url} />
+          <CopyField label={t('Streamschlüssel')} value={info.stream_key} secret />
           {seams.addDestination ? (
             <div className="lr-row">
               {/* RTMPS first: measured 2026-11-06, Cloudflare's SRT ingest published HLS segments in
@@ -190,7 +191,7 @@ export function StreamSection() {
                     setTaken('RTMPS');
                   }}
                 >
-                  RTMPS als Ziel übernehmen (empfohlen)
+                  {t('RTMPS als Ziel übernehmen (empfohlen)')}
                 </button>
               )}
               {dests?.srt && (
@@ -201,21 +202,24 @@ export function StreamSection() {
                     setTaken('SRT');
                   }}
                 >
-                  SRT als Ziel übernehmen
+                  {t('SRT als Ziel übernehmen')}
                 </button>
               )}
-              {taken && <span className="hint">{taken}-Ziel übernommen – in Einstellungen einschalten.</span>}
+              {taken && <span className="hint">{t('{kind}-Ziel übernommen – in Einstellungen einschalten.', { kind: taken })}</span>}
             </div>
           ) : (
             <p className="hint lr-note">
-              So kommt das Bild in die App: <strong>Einstellungen → Sendeziel</strong> öffnen, <strong>RTMPS</strong> wählen und
-              Adresse und Streamschlüssel einfügen (empfohlen: läuft in der App ohne Aussetzer). SRT geht auch, stockt bei Cloudflare aber.
-              Gilt ab dem nächsten Sendestart.
+              {/* The two markers stay in the translated sentence so each language can place the bold parts. */}
+              {t('So kommt das Bild in die App: {settings} öffnen, {rtmps} wählen und Adresse und Streamschlüssel einfügen (empfohlen: läuft in der App ohne Aussetzer). SRT geht auch, stockt bei Cloudflare aber. Gilt ab dem nächsten Sendestart.')
+                .split(/(\{settings\}|\{rtmps\})/)
+                .map((part, i) =>
+                  part === '{settings}' ? <strong key={i}>{t('Einstellungen → Sendeziel')}</strong> : part === '{rtmps}' ? <strong key={i}>RTMPS</strong> : part,
+                )}
             </p>
           )}
           <div className="lr-row">
             <button className="btn ghost" onClick={() => setInfo(null)}>
-              Zugangsdaten ausblenden
+              {t('Zugangsdaten ausblenden')}
             </button>
           </div>
           <Outputs />

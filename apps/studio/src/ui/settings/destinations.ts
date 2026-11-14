@@ -1,5 +1,6 @@
 // Pure helpers for stream destinations: presets for "+ Ziel", validation and the upload estimate.
 
+import { t } from '../../i18n';
 import type { LiveRoomDestination } from '../../live-room/destinations';
 import type { Destination, OutputTarget, StreamTarget } from '../../state/types';
 
@@ -53,12 +54,12 @@ export const clean = (v: string) => v.trim().replace(/^(['"])(.*)\1$/, '$2');
 
 /** German problem text for one destination, or null when it can go live. */
 export function destinationProblem(d: Destination): string | null {
-  const t = d.target;
-  const who = d.name.trim() || 'Ziel';
-  if (t.kind === 'none') return `${who}: kein Protokoll gewählt.`;
-  if (t.kind === 'srt' && !/^srt:\/\/.+/.test(t.url)) return `${who}: Die SRT-Adresse fehlt oder beginnt nicht mit srt://.`;
-  if (t.kind === 'rtmp' && !/^rtmps?:\/\/.+/.test(t.url)) return `${who}: Die Adresse fehlt oder beginnt nicht mit rtmp:// bzw. rtmps://.`;
-  if (t.kind === 'rtmp' && !t.key) return `${who}: Der Streamschlüssel fehlt.`;
+  const tg = d.target;
+  const who = d.name.trim() || t('Ziel');
+  if (tg.kind === 'none') return t('{who}: kein Protokoll gewählt.', { who });
+  if (tg.kind === 'srt' && !/^srt:\/\/.+/.test(tg.url)) return t('{who}: Die SRT-Adresse fehlt oder beginnt nicht mit srt://.', { who });
+  if (tg.kind === 'rtmp' && !/^rtmps?:\/\/.+/.test(tg.url)) return t('{who}: Die Adresse fehlt oder beginnt nicht mit rtmp:// bzw. rtmps://.', { who });
+  if (tg.kind === 'rtmp' && !tg.key) return t('{who}: Der Streamschlüssel fehlt.', { who });
   return null;
 }
 
@@ -110,9 +111,9 @@ export function duplicateIngestProblem(list: Destination[]): string | null {
     if (!k) continue;
     const first = seen.get(k);
     if (first) {
-      const a = first.name.trim() || 'Ziel';
-      const b = d.name.trim() || 'Ziel';
-      return `${a} und ${b} senden an die gleiche Adresse mit dem gleichen Schlüssel. Ein Ziel ausschalten oder löschen.`;
+      const a = first.name.trim() || t('Ziel');
+      const b = d.name.trim() || t('Ziel');
+      return t('{a} und {b} senden an die gleiche Adresse mit dem gleichen Schlüssel. Ein Ziel ausschalten oder löschen.', { a, b });
     }
     seen.set(k, d);
   }
@@ -123,7 +124,7 @@ export function duplicateIngestProblem(list: Destination[]): string | null {
 export function destinationsWarning(list: Destination[]): string | null {
   const cf = enabledDestinations(list).filter((d) => /(^|\.)cloudflare\.com$/.test(hostOf(d.target)));
   if (cf.length > 1)
-    return 'Zwei Cloudflare-Ziele: nur wenn es zwei verschiedene Live-Inputs sind – sonst wirft Cloudflare einen Stream raus.';
+    return t('Zwei Cloudflare-Ziele: nur wenn es zwei verschiedene Live-Inputs sind – sonst wirft Cloudflare einen Stream raus.');
   return null;
 }
 

@@ -1,4 +1,5 @@
 // Pure helpers of the "Assistent" page and the assistant's display name (tested).
+import { t } from '../i18n';
 import type { Agent, AgentChannel } from '../workspace/api';
 
 /**
@@ -39,9 +40,10 @@ const TOOL_LABELS: Record<string, string> = {
   roebel: 'Röbel App: Veranstaltungen, Orte, Kontakte',
 };
 
-/** German label for a tool key; unknown keys are shown as they are. */
+/** Label for a tool key in the interface language; unknown keys are shown as they are. */
 export function toolLabel(key: string): string {
-  return TOOL_LABELS[key] ?? key;
+  const label = TOOL_LABELS[key];
+  return label ? t(label) : key;
 }
 
 /** A channel of this kind that was not there when the link dialog opened. */
@@ -51,8 +53,8 @@ export function newChannel(before: ReadonlyArray<Pick<AgentChannel, 'id'>>, now:
 }
 
 export function isExpired(expiresAt: string | null | undefined, nowMs = Date.now()): boolean {
-  const t = expiresAt ? Date.parse(expiresAt) : NaN;
-  return Number.isFinite(t) && t <= nowMs;
+  const at = expiresAt ? Date.parse(expiresAt) : NaN;
+  return Number.isFinite(at) && at <= nowMs;
 }
 
 export const CHANNEL_LABEL: Record<AgentChannel['kind'], string> = { sms: 'SMS', whatsapp: 'WhatsApp' };

@@ -1,4 +1,5 @@
 // Chat API client (same endpoints as the Röbel app, spec 2026-09-25 §3.5 + pairing 2026-11-12 §3.1).
+import { t } from '../i18n';
 import { consumeSSE } from './sse';
 import { apiBase } from './session';
 import type { ChatBootstrap, ChatMessage, ChatStreamEvent, ChatThread } from './types';
@@ -15,7 +16,7 @@ export class ChatApiError extends Error {
 
 async function errorOf(res: Response): Promise<ChatApiError> {
   const j = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-  return new ChatApiError(res.status, j?.error?.code ?? 'failed', j?.error?.message ?? `Fehler ${res.status}`);
+  return new ChatApiError(res.status, j?.error?.code ?? 'failed', j?.error?.message ?? t('Fehler {status}', { status: res.status }));
 }
 
 async function call<T>(path: string, init: { method?: string; token?: string; json?: unknown } = {}): Promise<T> {
@@ -30,7 +31,7 @@ async function call<T>(path: string, init: { method?: string; token?: string; js
       body: init.json !== undefined ? JSON.stringify(init.json) : undefined,
     });
   } catch {
-    throw new ChatApiError(0, 'network', 'Server nicht erreichbar. Internetverbindung prüfen.');
+    throw new ChatApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
   }
   if (!res.ok) throw await errorOf(res);
   return (await res.json()) as T;
@@ -77,11 +78,11 @@ async function stream(path: string, token: string, json: unknown, onEvent: (e: C
       body: JSON.stringify(json),
     });
   } catch {
-    throw new ChatApiError(0, 'network', 'Server nicht erreichbar. Internetverbindung prüfen.');
+    throw new ChatApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
   }
   if (!res.ok) throw await errorOf(res);
   const terminal = await consumeSSE(res, onEvent);
-  if (!terminal) onEvent({ type: 'error', code: 'dropped', message: 'Verbindung unterbrochen. Die Antwort erscheint nach dem Neuladen.' });
+  if (!terminal) onEvent({ type: 'error', code: 'dropped', message: t('Verbindung unterbrochen. Die Antwort erscheint nach dem Neuladen.') });
 }
 
 export const sendMessage = (token: string, threadId: string, body: { text: string; imageUrls?: string[]; optionAnswer?: { messageId: string; key: string } }, onEvent: (e: ChatStreamEvent) => void) =>
@@ -102,7 +103,7 @@ async function upload<T>(path: string, token: string, field: string, blob: Blob,
   try {
     res = await fetch(`${apiBase()}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   } catch {
-    throw new ChatApiError(0, 'network', 'Server nicht erreichbar. Internetverbindung prüfen.');
+    throw new ChatApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
   }
   if (!res.ok) throw await errorOf(res);
   return (await res.json()) as T;
@@ -429,11 +430,11 @@ export async function fetchBriefingAudio(token: string): Promise<Blob> {
   try {
     res = await fetch(`${apiBase()}/api/chat/persona/briefing/audio`, { headers: { Authorization: `Bearer ${token}` } });
   } catch {
-    throw new ChatApiError(0, 'network', 'Server nicht erreichbar. Internetverbindung prüfen.');
+    throw new ChatApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
   }
   if (!res.ok) throw await errorOf(res);
   const blob = await res.blob();
-  if (!blob.size || !/^audio\//.test(blob.type || 'audio/mpeg')) throw new ChatApiError(502, 'failed', 'Die Audiodatei ist leer.');
+  if (!blob.size || !/^audio\//.test(blob.type || 'audio/mpeg')) throw new ChatApiError(502, 'failed', t('Die Audiodatei ist leer.'));
   return blob;
 }
 

@@ -1,5 +1,6 @@
 // Side panel of the Start page for the day's briefing: "Audio" (player) and "Text" (the full document).
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { locale, t, useLang } from '../i18n';
 import { Md } from '../persona/Md';
 import '../persona/persona.css';
 import { Busy, Skeleton } from '../ui/Skeleton';
@@ -39,23 +40,23 @@ export function BriefingPanel({
   return (
     <div className="ws-panel-card ws-brief-panel">
       <header className="ws-panel-head">
-        <strong className="w-ellipsis">Tagesbriefing</strong>
+        <strong className="w-ellipsis">{t('Tagesbriefing')}</strong>
         <span className="ws-tools-spacer" />
-        <Tip label={wide ? 'Verkleinern' : 'Auf ganze Breite'} side="bottom">
-          <button className="w-icon" aria-label={wide ? 'Verkleinern' : 'Auf ganze Breite'} onClick={() => onWide(!wide)}>
+        <Tip label={wide ? t('Verkleinern') : t('Auf ganze Breite')} side="bottom">
+          <button className="w-icon" aria-label={wide ? t('Verkleinern') : t('Auf ganze Breite')} onClick={() => onWide(!wide)}>
             {wide ? <IconShrink size={16} /> : <IconExpand size={16} />}
           </button>
         </Tip>
-        <Tip label="Schließen" side="bottom">
-          <button className="w-icon" aria-label="Schließen" onClick={onClose}>
+        <Tip label={t('Schließen')} side="bottom">
+          <button className="w-icon" aria-label={t('Schließen')} onClick={onClose}>
             <IconClose size={16} />
           </button>
         </Tip>
       </header>
       <div className="ws-brief-tabs" role="tablist">
-        {(['audio', 'text'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => onTab(t)}>
-            {t === 'audio' ? 'Audio' : 'Text'}
+        {(['audio', 'text'] as const).map((id) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}>
+            {id === 'audio' ? t('Audio') : t('Text')}
           </button>
         ))}
       </div>
@@ -76,7 +77,9 @@ export function BriefingPanel({
 type Source = { kind: 'loading' } | { kind: 'server'; url: string } | { kind: 'device' } | { kind: 'none' };
 
 function Player({ token, briefing }: { token: string; briefing: BriefingDoc }) {
-  const chapters = useMemo(() => docChapters(briefing.doc), [briefing.doc]);
+  // The opening chapter's name is interface text: recompute when the language changes.
+  const lang = useLang();
+  const chapters = useMemo(() => docChapters(briefing.doc), [briefing.doc, lang]); // eslint-disable-line react-hooks/exhaustive-deps
   const [source, setSource] = useState<Source>(briefing.audio ? { kind: 'loading' } : speech() ? { kind: 'device' } : { kind: 'none' });
 
   // Server audio first; when it is not offered or fails, the device's own voice reads the text.
@@ -99,7 +102,7 @@ function Player({ token, briefing }: { token: string; briefing: BriefingDoc }) {
 
   if (source.kind === 'loading')
     return (
-      <Busy className="ws-player" label="Dein Briefing wird eingesprochen">
+      <Busy className="ws-player" label={t('Dein Briefing wird eingesprochen')}>
         <Skeleton h={24} w="70%" />
         <span className="ws-player-controls" aria-hidden="true">
           <Skeleton h={18} w={44} />
@@ -108,14 +111,14 @@ function Player({ token, briefing }: { token: string; briefing: BriefingDoc }) {
           <Skeleton h={26} w={26} circle />
         </span>
         <Skeleton h={4} />
-        <span className="w-muted ws-player-note">Dein Briefing wird eingesprochen. Das dauert beim ersten Mal bis zu 30 Sekunden.</span>
+        <span className="w-muted ws-player-note">{t('Dein Briefing wird eingesprochen. Das dauert beim ersten Mal bis zu 30 Sekunden.')}</span>
         <ChapterList chapters={chapters} />
       </Busy>
     );
   if (source.kind === 'none')
     return (
       <div className="ws-player">
-        <span className="w-muted">Vorlesen ist auf diesem Gerät nicht möglich. Unter „Text“ kannst du das Briefing lesen.</span>
+        <span className="w-muted">{t('Vorlesen ist auf diesem Gerät nicht möglich. Unter „Text“ kannst du das Briefing lesen.')}</span>
       </div>
     );
   return source.kind === 'server' ? <ServerPlayer url={source.url} title={briefing.title} chapters={chapters} /> : <DevicePlayer title={briefing.title} chapters={chapters} />;
@@ -143,26 +146,26 @@ function ChapterList({ chapters, current, onPick }: { chapters: Chapter[]; curre
 function Controls({ playing, speed, onToggle, onSpeed, onSeek }: { playing: boolean; speed: number; onToggle: () => void; onSpeed: () => void; onSeek?: (delta: number) => void }) {
   return (
     <div className="ws-player-controls">
-      <Tip label="Tempo" side="top">
-        <button className="ws-player-speed" aria-label={`Tempo ${speed}x`} onClick={onSpeed}>
-          {String(speed).replace('.', ',')}x
+      <Tip label={t('Tempo')} side="top">
+        <button className="ws-player-speed" aria-label={t('Tempo {speed}x', { speed: speed.toLocaleString(locale()) })} onClick={onSpeed}>
+          {speed.toLocaleString(locale())}x
         </button>
       </Tip>
       {onSeek && (
-        <Tip label="15 Sekunden zurück" side="top">
-          <button className="w-icon" aria-label="15 Sekunden zurück" onClick={() => onSeek(-15)}>
+        <Tip label={t('15 Sekunden zurück')} side="top">
+          <button className="w-icon" aria-label={t('15 Sekunden zurück')} onClick={() => onSeek(-15)}>
             <IconBack15 size={22} />
           </button>
         </Tip>
       )}
-      <Tip label={playing ? 'Pause' : 'Abspielen'} side="top">
-        <button className="ws-player-play" aria-label={playing ? 'Pause' : 'Abspielen'} onClick={onToggle}>
+      <Tip label={playing ? t('Pause') : t('Abspielen')} side="top">
+        <button className="ws-player-play" aria-label={playing ? t('Pause') : t('Abspielen')} onClick={onToggle}>
           {playing ? <IconPause size={26} /> : <IconPlay size={26} />}
         </button>
       </Tip>
       {onSeek && (
-        <Tip label="15 Sekunden vor" side="top">
-          <button className="w-icon" aria-label="15 Sekunden vor" onClick={() => onSeek(15)}>
+        <Tip label={t('15 Sekunden vor')} side="top">
+          <button className="w-icon" aria-label={t('15 Sekunden vor')} onClick={() => onSeek(15)}>
             <IconForward15 size={22} />
           </button>
         </Tip>
@@ -216,7 +219,7 @@ function ServerPlayer({ url, title, chapters }: { url: string; title: string; ch
         max={total || 1}
         step={0.1}
         value={Math.min(time, total || 1)}
-        aria-label="Position"
+        aria-label={t('Position')}
         style={{ ['--done' as string]: `${total ? (time / total) * 100 : 0}%` }}
         onChange={(e) => {
           const a = el();
@@ -293,7 +296,7 @@ function DevicePlayer({ title, chapters }: { title: string; chapters: Chapter[] 
     <div className="ws-player">
       <strong className="ws-player-title">{title}</strong>
       <Controls playing={playing} speed={speed} onToggle={toggle} onSpeed={changeSpeed} />
-      <span className="w-muted ws-player-note">Vorgelesen mit der Stimme deines Geräts</span>
+      <span className="w-muted ws-player-note">{t('Vorgelesen mit der Stimme deines Geräts')}</span>
       <ChapterList chapters={chapters} current={index} onPick={(i) => speakFrom(i, speed)} />
     </div>
   );

@@ -1,6 +1,7 @@
 // Chat moderation + Publikumsliebling (a Meinungsbild).
 
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { ConfirmDialog } from '../../ui/Dialog';
 import { displayName, formatEuro } from '../alerts';
 import { fetchResults } from '../api';
@@ -12,13 +13,13 @@ const SLOW_MODES = [0, 3, 10, 30, 60];
 
 function Message({ m, featured, run }: { m: ChatMessage; featured: boolean; run: (f: () => Promise<unknown>) => void }) {
   const [askMute, setAskMute] = useState(false);
-  const name = displayName(m.display_name);
+  const name = displayName(m.display_name, t('Jemand'));
   return (
     <div className={`lr-msg ${m.kind} ${featured ? 'featured' : ''}`}>
       <div className="lr-msg-head">
         <span className="lr-msg-name">{name}</span>
-        {m.kind === 'support' && <span className="lr-tag">Unterstützt {formatEuro(m.amount_cents ?? 0)}</span>}
-        {m.kind === 'system' && <span className="lr-tag">Hinweis</span>}
+        {m.kind === 'support' && <span className="lr-tag">{t('Unterstützt {amount}', { amount: formatEuro(m.amount_cents ?? 0) })}</span>}
+        {m.kind === 'system' && <span className="lr-tag">{t('Hinweis')}</span>}
         <span className="hint">{timeOf(m.created_at)}</span>
       </div>
       {m.body && <div className="lr-msg-body">{m.body}</div>}
@@ -27,24 +28,24 @@ function Message({ m, featured, run }: { m: ChatMessage; featured: boolean; run:
           {/* Only chat lines can go on air; Unterstützungen never appear in the stream or the recording. */}
           {m.kind === 'chat' && (
             <button className="btn ghost" onClick={() => run(() => liveRoom.featureMessage(featured ? null : m.id))}>
-              {featured ? 'Von Sendung nehmen' : 'Auf Sendung'}
+              {featured ? t('Von Sendung nehmen') : t('Auf Sendung')}
             </button>
           )}
           <button className="btn ghost" onClick={() => run(() => liveRoom.hideMessage(m.id))}>
-            Ausblenden
+            {t('Ausblenden')}
           </button>
           {m.kind === 'chat' && (
             <button className="btn ghost" onClick={() => setAskMute(true)}>
-              Stummschalten
+              {t('Stummschalten')}
             </button>
           )}
         </div>
       )}
       {askMute && (
         <ConfirmDialog
-          title={`${name} stummschalten?`}
-          body={<p>Diese Person kann in dieser Übertragung nicht mehr schreiben. Alle ihre Nachrichten werden ausgeblendet.</p>}
-          confirmLabel="Stummschalten"
+          title={t('{name} stummschalten?', { name })}
+          body={<p>{t('Diese Person kann in dieser Übertragung nicht mehr schreiben. Alle ihre Nachrichten werden ausgeblendet.')}</p>}
+          confirmLabel={t('Stummschalten')}
           danger
           onCancel={() => setAskMute(false)}
           onConfirm={() => {
@@ -80,17 +81,17 @@ export function ChatSection() {
       title="Chat"
       aside={
         <>
-          <Toggle label="Chat offen" on={show.chat_enabled} disabled={flags.busy} onChange={(v) => void flags.run(() => liveRoom.setFlags({ chat_enabled: v }))} />
+          <Toggle label={t('Chat offen')} on={show.chat_enabled} disabled={flags.busy} onChange={(v) => void flags.run(() => liveRoom.setFlags({ chat_enabled: v }))} />
           <select
             className="input lr-small"
-            aria-label="Langsamer Modus"
+            aria-label={t('Langsamer Modus')}
             value={show.slow_mode_seconds}
             disabled={flags.busy}
             onChange={(e) => void flags.run(() => liveRoom.setFlags({ slow_mode_seconds: Number(e.target.value) }))}
           >
             {SLOW_MODES.map((s) => (
               <option key={s} value={s}>
-                {s === 0 ? 'Kein Tempolimit' : `1 Nachricht / ${s} s`}
+                {s === 0 ? t('Kein Tempolimit') : t('1 Nachricht / {s} s', { s })}
               </option>
             ))}
             {!SLOW_MODES.includes(show.slow_mode_seconds) && <option value={show.slow_mode_seconds}>{show.slow_mode_seconds} s</option>}
@@ -99,7 +100,7 @@ export function ChatSection() {
       }
     >
       {featuredId && !liveRoom.hasChatHighlightTemplate() && (
-        <span className="hint">Die hervorgehobene Nachricht erscheint in der App und im Web-Overlay. Eine Studio-Vorlage dafür gibt es noch nicht.</span>
+        <span className="hint">{t('Die hervorgehobene Nachricht erscheint in der App und im Web-Overlay. Eine Studio-Vorlage dafür gibt es noch nicht.')}</span>
       )}
       <div
         className="lr-chat"
@@ -109,7 +110,7 @@ export function ChatSection() {
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
       >
-        {lr.chat.length === 0 && <div className="hint lr-empty">Noch keine Nachrichten.</div>}
+        {lr.chat.length === 0 && <div className="hint lr-empty">{t('Noch keine Nachrichten.')}</div>}
         {lr.chat.map((m) => (
           <Message key={m.id} m={m} featured={m.id === featuredId} run={run} />
         ))}
@@ -123,9 +124,9 @@ export function ChatSection() {
           if (body) void act.run(() => liveRoom.systemMessage(body)).then((ok) => ok && setSys(''));
         }}
       >
-        <input className="input lr-grow" maxLength={280} placeholder="Hinweis an alle (erscheint als „Röbel App“)" value={sys} onChange={(e) => setSys(e.target.value)} />
+        <input className="input lr-grow" maxLength={280} placeholder={t('Hinweis an alle (erscheint als „Röbel App“)')} value={sys} onChange={(e) => setSys(e.target.value)} />
         <button className="btn" type="submit" disabled={!sys.trim() || act.busy}>
-          Senden
+          {t('Senden')}
         </button>
       </form>
     </Section>
@@ -145,13 +146,13 @@ export function VotingSection() {
     const load = () =>
       fetchResults(slug).then(
         (r) => alive && (setRes(r), setErr(null)),
-        () => alive && setErr('Ergebnis gerade nicht abrufbar.'),
+        () => alive && setErr(t('Ergebnis gerade nicht abrufbar.')),
       );
     void load();
-    const t = setInterval(load, 5000);
+    const timer = setInterval(load, 5000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, [slug]);
 
@@ -162,10 +163,12 @@ export function VotingSection() {
 
   return (
     <Section
-      title="Publikumsliebling"
-      aside={<Toggle label="Abstimmung offen" on={show.voting_open} disabled={flags.busy} onChange={(v) => void flags.run(() => liveRoom.setFlags({ voting_open: v }))} />}
+      title={t('Publikumsliebling')}
+      aside={<Toggle label={t('Abstimmung offen')} on={show.voting_open} disabled={flags.busy} onChange={(v) => void flags.run(() => liveRoom.setFlags({ voting_open: v }))} />}
     >
-      <span className="hint">Ein Meinungsbild der Zuschauer · {res ? `${res.total} Stimmen` : '…'}</span>
+      <span className="hint">
+        {t('Ein Meinungsbild der Zuschauer')} · {res ? (res.total === 1 ? t('1 Stimme') : t('{n} Stimmen', { n: res.total })) : '…'}
+      </span>
       <div className="lr-results">
         {res?.items.slice(0, 8).map((i, n) => (
           <div key={i.item_id} className="lr-result">
@@ -177,11 +180,11 @@ export function VotingSection() {
             <span className="num">{i.votes}</span>
           </div>
         ))}
-        {res && res.items.length === 0 && <span className="hint">Noch keine Stimmen.</span>}
+        {res && res.items.length === 0 && <span className="hint">{t('Noch keine Stimmen.')}</span>}
       </div>
       <div className="lr-row">
         <button className="btn" disabled={flags.busy} onClick={() => void flags.run(() => liveRoom.setAppOverlay({ poll: !pollOnAir }))}>
-          {pollOnAir ? 'Ergebnis ausblenden (App + Web-Overlay)' : 'Ergebnis zeigen (App + Web-Overlay)'}
+          {pollOnAir ? t('Ergebnis ausblenden (App + Web-Overlay)') : t('Ergebnis zeigen (App + Web-Overlay)')}
         </button>
       </div>
       <ErrorLine text={flags.error ?? err} />

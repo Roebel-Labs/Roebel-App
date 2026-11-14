@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchFile, fetchLibrary, type LibraryCollection, type LibraryFile } from '../workspace/api';
+import { t } from '../i18n';
 import { IconClock, IconFile, IconFolder, IconImage, IconLoop } from '../ui/shell/line-icons';
 import { Frame, LoadError, Modal, openExternal, SearchField, SignedOutHint, useLoad, useSessionToken, type NavEntry } from './common';
 import { filterLibrary, fmtDate, friendlyError } from './format';
@@ -28,7 +29,7 @@ export function LibrarySection() {
   const collections = load.data?.collections ?? [];
   const others = collections.filter((c) => c.kind !== 'recent');
   const nav: NavEntry[] = [
-    { id: RECENT, label: 'Meine Dateien' },
+    { id: RECENT, label: t('Meine Dateien') },
     ...others.map((c) => ({ id: c.id, label: c.label, indent: true, icon: <CollectionIcon kind={c.kind} size={16} /> })),
   ];
   const files = useMemo(() => filterLibrary(load.data?.files ?? [], collection, kind, q), [load.data, collection, kind, q]);
@@ -36,27 +37,27 @@ export function LibrarySection() {
   const total = load.data?.files.length ?? 0;
 
   return (
-    <Frame title="Bibliothek" nav={nav} active={collection} onSelect={setCollection} wide navLoading={session.state === 'loading' || (!!token && load.loading && !load.data)}>
-      <h1 className="pz-title">{collection === RECENT ? 'Meine Dateien' : current?.label ?? 'Sammlung'}</h1>
+    <Frame title={t('Bibliothek')} nav={nav} active={collection} onSelect={setCollection} wide navLoading={session.state === 'loading' || (!!token && load.loading && !load.data)}>
+      <h1 className="pz-title">{collection === RECENT ? t('Meine Dateien') : current?.label ?? t('Sammlung')}</h1>
       {(session.state === 'loading' || (token && load.loading && !load.data)) && <SkFiles />}
-      {session.state === 'signed-out' && <SignedOutHint what="deine Dateien" />}
+      {session.state === 'signed-out' && <SignedOutHint what={t('deine Dateien')} />}
       {token && load.error && !load.data && <LoadError message={load.error} onRetry={() => void load.reload()} />}
 
       {load.data && (
         <>
           <div className="pz-toolbar">
-            <SearchField value={q} onChange={setQ} placeholder="Dateien suchen" />
-            <select className="pz-select" aria-label="Art" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              <option value="all">Alle Arten</option>
-              <option value="document">Dokument</option>
-              <option value="image">Bild</option>
+            <SearchField value={q} onChange={setQ} placeholder={t('Dateien suchen')} />
+            <select className="pz-select" aria-label={t('Art')} value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+              <option value="all">{t('Alle Arten')}</option>
+              <option value="document">{t('Dokument')}</option>
+              <option value="image">{t('Bild')}</option>
             </select>
           </div>
 
           {collection === RECENT && collections.length > 0 && (
             <section className="pz-block">
-              <h2>Sammlungen</h2>
-              <p className="pz-lead">Inhalte aus deinen Unterhaltungen und Routinen, nach Herkunft gruppiert.</p>
+              <h2>{t('Sammlungen')}</h2>
+              <p className="pz-lead">{t('Inhalte aus deinen Unterhaltungen und Routinen, nach Herkunft gruppiert.')}</p>
               <div className="pz-collections">
                 {collections.map((c) => (
                   <button key={c.id} className="pz-collection" onClick={() => setCollection(c.id)}>
@@ -65,7 +66,7 @@ export function LibrarySection() {
                     </span>
                     <span className="pz-row-text">
                       <strong className="w-ellipsis">{c.label}</strong>
-                      <span className="w-muted">{c.count === 1 ? '1 Datei' : `${c.count} Dateien`}</span>
+                      <span className="w-muted">{c.count === 1 ? t('1 Datei') : t('{n} Dateien', { n: c.count })}</span>
                     </span>
                   </button>
                 ))}
@@ -74,14 +75,14 @@ export function LibrarySection() {
           )}
 
           <section className="pz-block">
-            <h2>{collection === RECENT ? 'Alle Dateien' : 'Dateien'}</h2>
+            <h2>{collection === RECENT ? t('Alle Dateien') : t('Dateien')}</h2>
             {total === 0 ? (
               <div className="pz-empty">
-                <strong>Noch keine Dateien</strong>
-                <span className="w-muted">Dokumente und Bilder, die deine Assistenten erstellen, erscheinen hier.</span>
+                <strong>{t('Noch keine Dateien')}</strong>
+                <span className="w-muted">{t('Dokumente und Bilder, die deine Assistenten erstellen, erscheinen hier.')}</span>
               </div>
             ) : files.length === 0 ? (
-              <div className="pz-state w-muted">Nichts gefunden.</div>
+              <div className="pz-state w-muted">{t('Nichts gefunden.')}</div>
             ) : (
               <ul className="pz-files">
                 {files.map((f) => (
@@ -98,7 +99,7 @@ export function LibrarySection() {
                         <span className="pz-file-name w-ellipsis">{f.name}</span>
                         <span className="w-muted w-ellipsis">{f.routineTitle || f.threadTitle}</span>
                       </span>
-                      <span className="w-tag">{KIND_LABEL[f.kind] ?? f.kind}</span>
+                      <span className="w-tag">{KIND_LABEL[f.kind] ? t(KIND_LABEL[f.kind]) : f.kind}</span>
                       <span className="w-muted pz-file-date">{fmtDate(f.createdAt)}</span>
                     </button>
                   </li>
@@ -150,16 +151,16 @@ function Lightbox({ file, onClose }: { file: LibraryFile; onClose: () => void })
   }, [onClose]);
   return (
     <div className="dlg-backdrop pz-lightbox" role="dialog" aria-label={file.name} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      {file.url ? <img src={file.url} alt={file.name} /> : <div className="ws-error">Dieses Bild ist nicht mehr verfügbar.</div>}
+      {file.url ? <img src={file.url} alt={file.name} /> : <div className="ws-error">{t('Dieses Bild ist nicht mehr verfügbar.')}</div>}
       <div className="pz-lightbox-bar">
         <span className="w-ellipsis">{file.name}</span>
         {file.url && (
           <button className="w-btn" onClick={() => openExternal(file.url ?? '')}>
-            Im Browser öffnen
+            {t('Im Browser öffnen')}
           </button>
         )}
         <button className="w-btn" onClick={onClose}>
-          Schließen
+          {t('Schließen')}
         </button>
       </div>
     </div>

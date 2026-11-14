@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '../../i18n';
 import { ChatApiError, fetchMyMiniApps, type MyMiniApp } from '../../workspace/api';
 import { apiBase, loadSession } from '../../workspace/session';
 import { IconPlus } from './line-icons';
@@ -61,22 +62,22 @@ export function AppsSection() {
   return (
     <div className="section apps">
       <header className="section-head">
-        <h1>Mini-Apps</h1>
+        <h1>{t('Mini-Apps')}</h1>
         <span className="ws-tools-spacer" />
         <button className="w-btn green" onClick={() => open(`${dashboard}/new`)}>
-          <IconPlus size={16} /> Neue Mini-App
+          <IconPlus size={16} /> {t('Neue Mini-App')}
         </button>
       </header>
       <div className="apps-body">
         {state === 'loading' && <SkCards cards={3} height={168} className="apps-grid" />}
-        {state === 'signed-out' && <div className="w-muted">Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Mini-Apps.</div>}
+        {state === 'signed-out' && <div className="w-muted">{t('Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Mini-Apps.')}</div>}
         {state === 'error' && <div className="ws-error">{error}</div>}
         {state === 'ready' && apps && apps.length === 0 && (
           <div className="apps-empty">
-            <strong>Noch keine Mini-App</strong>
-            <span className="w-muted">Bau deine erste Mini-App für Verein oder Betrieb. Sie erscheint nach der Prüfung in der Röbel App.</span>
+            <strong>{t('Noch keine Mini-App')}</strong>
+            <span className="w-muted">{t('Bau deine erste Mini-App für Verein oder Betrieb. Sie erscheint nach der Prüfung in der Röbel App.')}</span>
             <button className="w-btn green" onClick={() => open(`${dashboard}/new`)}>
-              Mini-App erstellen
+              {t('Mini-App erstellen')}
             </button>
           </div>
         )}
@@ -95,21 +96,21 @@ export function AppsSection() {
                   <div className="app-card-title">
                     <strong className="w-ellipsis">{a.name}</strong>
                     <span className={`app-status ${a.status}`}>
-                      {STATUS[a.status] ?? a.status}
-                      {a.pendingUpdate ? ' · Update in Prüfung' : ''}
+                      {STATUS[a.status] ? t(STATUS[a.status]) : a.status}
+                      {a.pendingUpdate ? ` · ${t('Update in Prüfung')}` : ''}
                     </span>
                   </div>
                 </div>
                 {a.description && <p className="app-desc">{a.description}</p>}
                 <div className="app-actions">
                   <button className="w-btn green" onClick={() => setSelected(a)}>
-                    Nutzung
+                    {t('Nutzung')}
                   </button>
                   <button className="w-btn" onClick={() => open(a.homeUrl)}>
-                    Öffnen
+                    {t('Öffnen')}
                   </button>
                   <button className="w-btn" onClick={() => open(`${dashboard}/${encodeURIComponent(a.id)}`)}>
-                    Bearbeiten
+                    {t('Bearbeiten')}
                   </button>
                 </div>
               </article>

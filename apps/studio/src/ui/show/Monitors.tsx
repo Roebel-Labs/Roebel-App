@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { t } from '../../i18n';
 import { defaultRenderContext } from '../../media/program';
 import { renderFrame } from '../../render/draw';
 import { useShow } from '../../state/store';
@@ -51,7 +52,7 @@ function PreviewMonitor() {
   return (
     <div className="pvw">
       <div className="monitor-head">
-        <span className="monitor-title">Vorschau</span>
+        <span className="monitor-title">{t('Vorschau')}</span>
         <span className="monitor-scene">{label}</span>
       </div>
       <div className="monitor-frame">
@@ -59,8 +60,8 @@ function PreviewMonitor() {
         {!state.previewSceneId && (
           <div className="monitor-empty">
             {state.scenes.length === 0
-              ? 'Füge unten mit „+ Quelle“ eine Kamera, ein Bild oder eine Farbe hinzu.'
-              : 'Klicke unten eine Quelle an, um sie hier vorzubereiten.'}
+              ? t('Füge unten mit „+ Quelle“ eine Kamera, ein Bild oder eine Farbe hinzu.')
+              : t('Klicke unten eine Quelle an, um sie hier vorzubereiten.')}
           </div>
         )}
       </div>
@@ -96,7 +97,7 @@ function LiveMonitor() {
       </div>
       <div className="monitor-frame">
         <canvas ref={ref} width={MON_W} height={MON_H} />
-        {!state.programSceneId && <div className="monitor-empty">Noch nichts live. TAKE schickt die Vorschau hierher.</div>}
+        {!state.programSceneId && <div className="monitor-empty">{t('Noch nichts live. TAKE schickt die Vorschau hierher.')}</div>}
       </div>
     </div>
   );

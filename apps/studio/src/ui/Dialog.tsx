@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { t } from '../i18n';
 
 /** Centered modal with a backdrop. Escape cancels; focus starts on the cancel button. */
 export function Dialog({
@@ -63,7 +64,7 @@ export function ConfirmDialog({
       actions={
         <>
           <button className="btn ghost" onClick={onCancel} data-autofocus>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           <button className={danger ? 'btn solid-danger' : 'btn primary'} onClick={onConfirm} disabled={busy}>
             {confirmLabel}

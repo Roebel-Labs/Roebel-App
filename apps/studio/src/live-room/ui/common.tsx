@@ -1,4 +1,5 @@
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { locale, t } from '../../i18n';
 import { errorMessage } from '../api';
 import { liveRoom, type Snapshot } from '../controller';
 
@@ -69,7 +70,7 @@ export function CopyField({ label, value, secret }: { label: string; value: stri
       <span className="lr-copy-label">{label}</span>
       <code className="lr-copy-value">{secret ? '•'.repeat(Math.min(24, Math.max(8, value.length))) : value}</code>
       <button className="btn" onClick={copy}>
-        {copied ? 'Kopiert' : 'Kopieren'}
+        {copied ? t('Kopiert') : t('Kopieren')}
       </button>
     </div>
   );
@@ -77,5 +78,5 @@ export function CopyField({ label, value, secret }: { label: string; value: stri
 
 export function timeOf(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }

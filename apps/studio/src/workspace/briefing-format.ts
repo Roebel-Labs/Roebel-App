@@ -1,4 +1,5 @@
 // Pure helpers for the briefing panel, the day divider and reactions (tested).
+import { locale, t } from '../i18n';
 
 export interface Chapter {
   title: string;
@@ -28,7 +29,7 @@ export function plainText(md: string): string {
  * Chapters from the `##` headings of the briefing. Text before the first heading is its own opening
  * chapter; a document without headings is one chapter.
  */
-export function docChapters(doc: string, opening = 'Einstieg'): Chapter[] {
+export function docChapters(doc: string, opening = t('Einstieg')): Chapter[] {
   const lines = doc.replace(/\r\n?/g, '\n').split('\n');
   const out: Array<{ title: string; body: string[] }> = [];
   let current: { title: string; body: string[] } = { title: opening, body: [] };
@@ -66,9 +67,9 @@ export function dayLabel(iso: string | Date, now = new Date()): string {
   if (Number.isNaN(d.getTime())) return '';
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(now) - day(d)) / 86_400_000);
-  if (diff === 0) return 'Heute';
-  if (diff === 1) return 'Gestern';
-  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
+  if (diff === 0) return t('Heute');
+  if (diff === 1) return t('Gestern');
+  return d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
 }
 
 /** True when a message starts a new calendar day compared with the one before it. */

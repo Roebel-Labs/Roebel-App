@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../../i18n';
 import { useShow } from '../../state/store';
 import { errorText } from '../engine';
 import { failedSponsorIds } from './sponsor-runtime';
@@ -33,7 +34,7 @@ function AddPartner({ onClose }: { onClose: () => void }) {
     <div className="spn-add">
       <input
         className="input"
-        placeholder="Name des Partners"
+        placeholder={t('Name des Partners')}
         value={name}
         autoFocus
         onChange={(e) => setName(e.target.value)}
@@ -43,13 +44,13 @@ function AddPartner({ onClose }: { onClose: () => void }) {
         }}
       />
       <button className="btn ghost" onClick={choose}>
-        {logo ? logo.file : 'Logo wählen …'}
+        {logo ? logo.file : t('Logo wählen …')}
       </button>
       <button className="btn" disabled={!ok} onClick={add}>
-        Hinzufügen
+        {t('Hinzufügen')}
       </button>
       <button className="btn ghost" onClick={onClose}>
-        Abbrechen
+        {t('Abbrechen')}
       </button>
       {error && <span className="spn-error">{error}</span>}
     </div>
@@ -85,10 +86,10 @@ export function SponsorPanel() {
   return (
     <section>
       <div className="row-head spn-head">
-        <span className="row-title">Werbung</span>
+        <span className="row-title">{t('Werbung')}</span>
         {sp.breakActive ? (
           <button className="btn danger" onClick={() => dispatch({ type: 'stopBreak', now: Date.now() })}>
-            Werbeblock beenden
+            {t('Werbeblock beenden')}
           </button>
         ) : (
           <button
@@ -96,13 +97,13 @@ export function SponsorPanel() {
             disabled={!usable || !hasOverlay}
             onClick={() => dispatch({ type: 'startBreak', now: Date.now(), failedIds: [...failed] })}
           >
-            Werbeblock starten
+            {t('Werbeblock starten')}
           </button>
         )}
-        {!sp.breakActive && !usable && <span className="hint">Erst Partner mit Logo hinzufügen</span>}
-        {!sp.breakActive && usable && !hasOverlay && <span className="hint">Die Einblendung „Werbepause“ fehlt</span>}
+        {!sp.breakActive && !usable && <span className="hint">{t('Erst Partner mit Logo hinzufügen')}</span>}
+        {!sp.breakActive && usable && !hasOverlay && <span className="hint">{t('Die Einblendung „Werbepause“ fehlt')}</span>}
         <label className="spn-rot">
-          <span className="hint">Wechsel alle</span>
+          <span className="hint">{t('Wechsel alle')}</span>
           <input
             className="input"
             type="number"
@@ -116,25 +117,25 @@ export function SponsorPanel() {
               if (e.key === 'Escape') setDraft(null);
             }}
           />
-          <span className="hint">Sekunden</span>
+          <span className="hint">{t('Sekunden')}</span>
         </label>
       </div>
       <div className="strip wrap">
         {sp.items.map((it, i) => (
           <div key={it.id} className={`spn${sp.breakActive && sp.currentId === it.id ? ' on' : ''}`}>
-            <button className="spn-logo" title="Logo ändern" aria-label={`Logo von ${it.name} ändern`} onClick={() => changeLogo(it.id)}>
-              {it.logoUrl ? <img src={it.logoUrl} alt="" /> : <span className="hint">Kein Logo</span>}
+            <button className="spn-logo" title={t('Logo ändern')} aria-label={t('Logo von {name} ändern', { name: it.name })} onClick={() => changeLogo(it.id)}>
+              {it.logoUrl ? <img src={it.logoUrl} alt="" /> : <span className="hint">{t('Kein Logo')}</span>}
             </button>
-            <span className="spn-name" title={failed.has(it.id) ? 'Logo konnte nicht geladen werden' : it.name}>
+            <span className="spn-name" title={failed.has(it.id) ? t('Logo konnte nicht geladen werden') : it.name}>
               {it.name}
-              {failed.has(it.id) && <span className="spn-warn"> · Logo defekt</span>}
+              {failed.has(it.id) && <span className="spn-warn"> · {t('Logo defekt')}</span>}
             </span>
-            <button className="spn-btn" aria-label={`${it.name} nach vorn`} disabled={i === 0} onClick={() => dispatch({ type: 'moveSponsor', id: it.id, delta: -1 })}>
+            <button className="spn-btn" aria-label={t('{name} nach vorn', { name: it.name })} disabled={i === 0} onClick={() => dispatch({ type: 'moveSponsor', id: it.id, delta: -1 })}>
               ↑
             </button>
             <button
               className="spn-btn"
-              aria-label={`${it.name} nach hinten`}
+              aria-label={t('{name} nach hinten', { name: it.name })}
               disabled={i === sp.items.length - 1}
               onClick={() => dispatch({ type: 'moveSponsor', id: it.id, delta: 1 })}
             >
@@ -142,7 +143,7 @@ export function SponsorPanel() {
             </button>
             <button
               className="spn-btn"
-              aria-label={`${it.name} entfernen`}
+              aria-label={t('{name} entfernen', { name: it.name })}
               onClick={() => dispatch({ type: 'removeSponsor', id: it.id, now: Date.now(), failedIds: [...failed] })}
             >
               ×

@@ -1,6 +1,7 @@
 // The illustrated agent characters, client side. Names, roles and colours mirror the server catalog
 // (apps/web/src/lib/chat/agent/characters.ts); artwork is built by scripts/build-agent-art.cjs. Small images
 // ship in the bundle (tile 256², figure 720 px tall); the 1600 px figure and the share card come from the site.
+import { t } from '../i18n';
 import { API_BASE } from '../live-room/config';
 
 import wolkeTile from '../assets/agents/wolke-tile.webp';
@@ -87,7 +88,7 @@ export function characterById(id: string | null | undefined): Character | null {
 }
 
 export function roleLine(c: Character): string {
-  return `${c.feminine ? 'Agentin' : 'Agent'} für ${c.role}`;
+  return t(c.feminine ? 'Agentin für {role}' : 'Agent für {role}', { role: t(c.role) });
 }
 
 /** Public page with a link preview, for "Teilen". */

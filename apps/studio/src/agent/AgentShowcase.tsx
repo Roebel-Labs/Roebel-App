@@ -1,6 +1,7 @@
 // "Ansehen" (the agent full-window on its colour, name set big across it) and "Teilen" (a card plus share
 // targets). The public link goes to the website's share page, which carries the link preview.
 import { useEffect, useState, type ReactNode } from 'react';
+import { t } from '../i18n';
 import logoUrl from '../assets/logo.svg';
 import meckyUrl from '../assets/mecky-welcome.png';
 import { openExternal } from '../persona/common';
@@ -28,7 +29,7 @@ function Stamp() {
   return (
     <span className="sc-stamp" aria-hidden="true">
       <img src={logoUrl} alt="" />
-      <span>Erstellt mit Ortis</span>
+      <span>{t('Erstellt mit Ortis')}</span>
     </span>
   );
 }
@@ -58,9 +59,9 @@ export function AgentView({ agent, onClose, onShare }: { agent: ShowcaseAgent; o
       </div>
       <div className="sc-view-actions">
         <button className="sc-pill" onClick={onShare}>
-          <IconShare size={17} /> Teilen
+          <IconShare size={17} /> {t('Teilen')}
         </button>
-        <button className="sc-round" aria-label="Schließen" onClick={onClose}>
+        <button className="sc-round" aria-label={t('Schließen')} onClick={onClose}>
           <IconClose size={18} />
         </button>
       </div>
@@ -98,7 +99,7 @@ async function cardPng(agent: ShowcaseAgent): Promise<Blob | null> {
   ctx.fillText(agent.name, W / 2, 1330);
   ctx.globalAlpha = 0.6;
   ctx.font = `600 30px 'Mona Sans', system-ui, sans-serif`;
-  ctx.fillText('Erstellt mit Ortis', W / 2, 1440);
+  ctx.fillText(t('Erstellt mit Ortis'), W / 2, 1440);
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
@@ -106,7 +107,7 @@ export function ShareDialog({ agent, onClose }: { agent: ShowcaseAgent; onClose:
   useEscape(onClose);
   const [copied, setCopied] = useState(false);
   const link = linkOf(agent);
-  const text = `Das ist ${agent.name}, mein Agent in Ortis.`;
+  const text = t('Das ist {name}, mein Agent in Ortis.', { name: agent.name });
   const download = async () => {
     const blob = await cardPng(agent);
     if (!blob) return;
@@ -119,21 +120,21 @@ export function ShareDialog({ agent, onClose }: { agent: ShowcaseAgent; onClose:
   const canShare = typeof navigator.share === 'function';
   const targets: { key: string; label: string; icon: ReactNode; run: () => void }[] = [
     {
-      key: 'copy', label: copied ? 'Kopiert' : 'Link kopieren', icon: copied ? <IconCheck size={18} /> : <IconCopy size={18} />,
+      key: 'copy', label: copied ? t('Kopiert') : t('Link kopieren'), icon: copied ? <IconCheck size={18} /> : <IconCopy size={18} />,
       run: () => void navigator.clipboard.writeText(link).then(() => (setCopied(true), setTimeout(() => setCopied(false), 1800))).catch(() => {}),
     },
-    { key: 'download', label: 'Herunterladen', icon: <IconDownload size={18} />, run: () => void download() },
-    ...(canShare ? [{ key: 'share', label: 'Teilen', icon: <IconShare size={18} />, run: () => void navigator.share({ title: agent.name, text, url: link }).catch(() => {}) }] : []),
+    { key: 'download', label: t('Herunterladen'), icon: <IconDownload size={18} />, run: () => void download() },
+    ...(canShare ? [{ key: 'share', label: t('Teilen'), icon: <IconShare size={18} />, run: () => void navigator.share({ title: agent.name, text, url: link }).catch(() => {}) }] : []),
     { key: 'x', label: 'X', icon: <IconX size={18} />, run: () => openExternal(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`) },
     { key: 'linkedin', label: 'LinkedIn', icon: <IconLinkedin size={18} />, run: () => openExternal(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(link)}`) },
     { key: 'whatsapp', label: 'WhatsApp', icon: <IconWhatsapp size={18} />, run: () => openExternal(`https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`) },
   ];
   return (
     <div className="dlg-backdrop sc-share-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sc-share" role="dialog" aria-label={`${agent.name} teilen`} style={{ ['--sc-color' as string]: colorOf(agent) }}>
+      <div className="sc-share" role="dialog" aria-label={t('{name} teilen', { name: agent.name })} style={{ ['--sc-color' as string]: colorOf(agent) }}>
         <header className="sc-share-head">
-          <strong>{agent.name} teilen</strong>
-          <button className="sc-x" aria-label="Schließen" onClick={onClose}>
+          <strong>{t('{name} teilen', { name: agent.name })}</strong>
+          <button className="sc-x" aria-label={t('Schließen')} onClick={onClose}>
             <IconClose size={18} />
           </button>
         </header>
@@ -143,10 +144,10 @@ export function ShareDialog({ agent, onClose }: { agent: ShowcaseAgent; onClose:
           <span className="sc-share-name">{agent.name}</span>
         </div>
         <div className="sc-share-targets">
-          {targets.map((t) => (
-            <button key={t.key} className="sc-target" onClick={t.run}>
-              <span className="sc-target-icon">{t.icon}</span>
-              <span className="sc-target-label">{t.label}</span>
+          {targets.map((target) => (
+            <button key={target.key} className="sc-target" onClick={target.run}>
+              <span className="sc-target-icon">{target.icon}</span>
+              <span className="sc-target-label">{target.label}</span>
             </button>
           ))}
         </div>

@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
 import type { ChatBot } from './types';
 import { BotAvatar } from './BotAvatar';
 import { activeEntry, type OutlineEntry } from './chat-activity';
@@ -83,7 +84,7 @@ export function ChatOutline({ entries, scroller }: { entries: OutlineEntry[]; sc
   const shown = hover !== null ? entries[hover] : null;
 
   return (
-    <nav className="ws-outline" aria-label="Abschnitte der Unterhaltung" ref={rail} onMouseLeave={() => setHover(null)}>
+    <nav className="ws-outline" aria-label={t('Abschnitte der Unterhaltung')} ref={rail} onMouseLeave={() => setHover(null)}>
       {entries.map((e, i) => (
         <button
           key={e.id}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { nextSilentSince, SILENT_ALERT_MS } from '../../audio/mixer';
+import { t } from '../../i18n';
 import { useShow } from '../../state/store';
 import type { OutputStatus, Settings } from '../../state/types';
 import { hms, useOnAir, useStudio, useTick } from '../studio';
@@ -32,7 +33,7 @@ function Item({ label, value, bad, title }: { label: string; value: string; bad?
  * pill until "Ziel neu verbinden" really drops it.
  */
 export function destinationPills(settings: Settings, st: OutputStatus | null) {
-  const nameOf = (id: string) => settings.destinations.find((d) => d.id === id)?.name.trim() || 'Ziel';
+  const nameOf = (id: string) => settings.destinations.find((d) => d.id === id)?.name.trim() || t('Ziel');
   const running = st?.destinations?.length
     ? st.destinations
     : settings.destinations.filter((d) => d.enabled && d.target.kind !== 'none').map((d) => ({ id: d.id, state: 'ok' as const }));
@@ -108,60 +109,60 @@ export function HealthBar() {
   const live = onAir && st?.state === 'live';
   const { speedBad, renderBad } = healthFlags({ speed: st?.speed, renderFps: clock.fps, targetFps: engine.fps, live });
   const recordOnly = onAir && !!st?.recordOnly;
-  const outState = !onAir ? 'Aus' : recordOnly ? 'Nur Aufnahme' : st ? STATE_TEXT[st.state] : 'Startet…';
+  const outState = !onAir ? t('Aus') : recordOnly ? t('Nur Aufnahme') : st ? t(STATE_TEXT[st.state]) : t('Startet…');
   const pills = onAir && !recordOnly ? destinationPills(state.settings, st) : [];
   const silent = useSilentMaster(onAir);
 
   return (
-    <footer className="health" aria-label="Zustand">
-      <Item label="Ausgang" value={outState} bad={onAir && (st?.state === 'error' || st?.state === 'reconnecting')} title={st?.lastError} />
+    <footer className="health" aria-label={t('Zustand')}>
+      <Item label={t('Ausgang')} value={outState} bad={onAir && (st?.state === 'error' || st?.state === 'reconnecting')} title={st?.lastError} />
       {pills.length > 0 &&
         pills.map((p) => (
           <span
             key={p.id}
             className={`dest-pill${p.failed ? ' failed' : ''}`}
-            title={p.failed ? `Ausgefallen: ${p.lastError ?? 'Verbindung verloren'}` : 'Verbunden'}
+            title={p.failed ? t('Ausgefallen: {error}', { error: p.lastError ?? t('Verbindung verloren') }) : t('Verbunden')}
           >
             <span className={`dot ${p.tone}`} />
             {p.name}
-            {p.failed ? ' ausgefallen' : ''}
+            {p.failed ? ` ${t('ausgefallen')}` : ''}
           </span>
         ))}
-      <Item label="Render" value={`${clock.fps.toFixed(1)} fps`} bad={renderBad} title={`Ziel: ${engine.fps} fps`} />
-      <Item label="Aussetzer" value={String(clock.overruns)} title="Ausgelassene Render-Takte seit dem Start" />
+      <Item label="Render" value={`${clock.fps.toFixed(1)} fps`} bad={renderBad} title={t('Ziel: {fps} fps', { fps: engine.fps })} />
+      <Item label={t('Aussetzer')} value={String(clock.overruns)} title={t('Ausgelassene Render-Takte seit dem Start')} />
       {onAir && !recordOnly && (
         <>
           <Item label="Encoder" value={st?.fps !== undefined ? `${st.fps.toFixed(0)} fps` : '–'} />
           <Item
             label="Bitrate"
             value={st?.kbps !== undefined ? `${Math.round(st.kbps)} kbit/s` : '–'}
-            title={pills.length > 1 ? 'Bei mehreren Zielen meldet ffmpeg keine Bitrate; Tempo und Encoder-fps zeigen, ob es läuft' : undefined}
+            title={pills.length > 1 ? t('Bei mehreren Zielen meldet ffmpeg keine Bitrate; Tempo und Encoder-fps zeigen, ob es läuft') : undefined}
           />
-          <Item label="Tempo" value={st?.speed !== undefined ? `${st.speed.toFixed(2)}×` : '–'} bad={speedBad} title="Unter 0,95× kommt der Rechner nicht mit" />
-          <Item label="Verworfen" value={String(st?.dropped ?? 0)} bad={(st?.dropped ?? 0) > 0} />
+          <Item label={t('Tempo')} value={st?.speed !== undefined ? `${st.speed.toFixed(2)}×` : '–'} bad={speedBad} title={t('Unter 0,95× kommt der Rechner nicht mit')} />
+          <Item label={t('Verworfen')} value={String(st?.dropped ?? 0)} bad={(st?.dropped ?? 0) > 0} />
         </>
       )}
       {onAir && (
         <>
           <Item
-            label="Aufnahme"
-            value={st?.recordingOff ? 'aus' : st?.recordingError ? 'unterbrochen' : mb(st?.recordingBytes ?? 0)}
+            label={t('Aufnahme')}
+            value={st?.recordingOff ? t('aus') : st?.recordingError ? t('unterbrochen') : mb(st?.recordingBytes ?? 0)}
             bad={!!st?.recordingError}
             title={st?.recordingFile}
           />
-          {air.recorderError && <Item label="Kodierer" value={`neu gestartet (${air.recorderRestarts}×)`} bad title={air.recorderError} />}
+          {air.recorderError && <Item label={t('Kodierer')} value={t('neu gestartet ({n}×)', { n: air.recorderRestarts })} bad title={air.recorderError} />}
         </>
       )}
       {silent && (
-        <Item label="Ton" value="stumm" bad title="Seit über 5 s kein Signal am Summenausgang. Mischpult prüfen: Show → Audio." />
+        <Item label={t('Ton')} value={t('stumm')} bad title={t('Seit über 5 s kein Signal am Summenausgang. Mischpult prüfen: Show → Audio.')} />
       )}
       {server && !server.ok && (
-        <Item label="Medienserver" value={server.error ?? 'nicht erreichbar'} bad title="Videos, Bilder und die OBS-Einblendungsseite brauchen ihn" />
+        <Item label={t('Medienserver')} value={server.error ?? t('nicht erreichbar')} bad title={t('Videos, Bilder und die OBS-Einblendungsseite brauchen ihn')} />
       )}
       <span className="health-end" />
-      <Item label="CPU" value={usage ? `${Math.round(usage.cpu)} %` : '–'} title="Anteil der gesamten Rechenleistung des Macs (alle Studio-Prozesse)" />
-      <Item label="Speicher" value={usage ? `${Math.round(usage.memMb)} MB` : '–'} />
-      <Item label="Sendezeit" value={air.startedAt ? hms(now - air.startedAt) : '–'} />
+      <Item label="CPU" value={usage ? `${Math.round(usage.cpu)} %` : '–'} title={t('Anteil der gesamten Rechenleistung des Macs (alle Studio-Prozesse)')} />
+      <Item label={t('Speicher')} value={usage ? `${Math.round(usage.memMb)} MB` : '–'} />
+      <Item label={t('Sendezeit')} value={air.startedAt ? hms(now - air.startedAt) : '–'} />
     </footer>
   );
 }

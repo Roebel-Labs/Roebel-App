@@ -51,24 +51,24 @@ export function SettingsDialog() {
 
   return (
     <>
-      <Tip label="Einstellungen" keys={shortcutHint('settings')} side="bottom">
-        <button className="tb-icon" aria-label="Einstellungen" onClick={() => setOpen(true)}>
+      <Tip label={t('Einstellungen')} keys={shortcutHint('settings')} side="bottom">
+        <button className="tb-icon" aria-label={t('Einstellungen')} onClick={() => setOpen(true)}>
           <IconSettings size={16} />
         </button>
       </Tip>
       {open && (
         <div className="dlg-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
-          <div className="dlg" role="dialog" aria-label="Einstellungen">
+          <div className="dlg" role="dialog" aria-label={t('Einstellungen')}>
             <aside className="dlg-nav">
-              <strong>Einstellungen</strong>
+              <strong>{t('Einstellungen')}</strong>
               {SECTIONS.map(([id, label]) => (
                 <button key={id} className="dlg-nav-item" aria-selected={section === id} onClick={() => setSection(id)}>
-                  {label}
+                  {t(label)}
                 </button>
               ))}
             </aside>
             <section className="dlg-body">
-              <button className="w-icon dlg-close" aria-label="Schließen" onClick={() => setOpen(false)}>
+              <button className="w-icon dlg-close" aria-label={t('Schließen')} onClick={() => setOpen(false)}>
                 <IconClose size={16} />
               </button>
               {section === 'appearance' && <Appearance />}
@@ -85,7 +85,7 @@ export function SettingsDialog() {
 }
 
 function SignedOut() {
-  return <p className="w-muted">Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Einstellungen.</p>;
+  return <p className="w-muted">{t('Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Einstellungen.')}</p>;
 }
 
 function Appearance() {
@@ -102,12 +102,12 @@ function Appearance() {
   useEffect(() => onThemeChange(setThemeState), []);
   return (
     <>
-      <h2>Darstellung</h2>
-      <p className="w-muted">„System“ folgt der Einstellung deines Computers. Wird auf diesem Gerät gespeichert.</p>
-      <div className="tb-seg" role="radiogroup" aria-label="Darstellung">
+      <h2>{t('Darstellung')}</h2>
+      <p className="w-muted">{t('„System“ folgt der Einstellung deines Computers. Wird auf diesem Gerät gespeichert.')}</p>
+      <div className="tb-seg" role="radiogroup" aria-label={t('Darstellung')}>
         {THEME_OPTIONS.map((o) => (
           <button key={o.id} role="radio" aria-checked={theme === o.id} onClick={() => setTheme(o.id)}>
-            {o.label}
+            {t(o.label)}
           </button>
         ))}
       </div>
@@ -120,17 +120,17 @@ function Appearance() {
           </button>
         ))}
       </div>
-      <h3>Akzentfarbe</h3>
-      <p className="w-muted">Gilt für Schaltflächen, Vorschläge und Hervorhebungen im Arbeitsbereich. Wird auf diesem Gerät gespeichert.</p>
+      <h3>{t('Akzentfarbe')}</h3>
+      <p className="w-muted">{t('Gilt für Schaltflächen, Vorschläge und Hervorhebungen im Arbeitsbereich. Wird auf diesem Gerät gespeichert.')}</p>
       <div className="tb-swatches">
         {ACCENT_PRESETS.map((p) => (
-          <button key={p.value} className="tb-swatch" style={{ background: p.value }} title={p.name} aria-label={p.name} aria-pressed={accent === p.value} onClick={() => choose(p.value)}>
+          <button key={p.value} className="tb-swatch" style={{ background: p.value }} title={t(p.name)} aria-label={t(p.name)} aria-pressed={accent === p.value} onClick={() => choose(p.value)}>
             {accent === p.value && <IconCheck size={14} />}
           </button>
         ))}
       </div>
       <label className="tb-custom">
-        <span>Eigene Farbe</span>
+        <span>{t('Eigene Farbe')}</span>
         <input type="color" value={accent} onChange={(e) => choose(e.target.value)} />
         <code>{accent}</code>
       </label>
@@ -142,15 +142,15 @@ function Shortcuts() {
   const groups = ['Allgemein', 'Start', 'Bereiche'] as const;
   return (
     <>
-      <h2>Tastenkürzel</h2>
-      <p className="w-muted">Die Kürzel stehen auch in den Hinweisen, die beim Überfahren eines Symbols erscheinen.</p>
+      <h2>{t('Tastenkürzel')}</h2>
+      <p className="w-muted">{t('Die Kürzel stehen auch in den Hinweisen, die beim Überfahren eines Symbols erscheinen.')}</p>
       {groups.map((g) => (
         <div key={g}>
-          <h3>{g}</h3>
+          <h3>{t(g)}</h3>
           <dl className="keys-list">
             {SHORTCUTS.filter((s) => s.group === g).map((s) => (
               <div key={s.id}>
-                <dt>{s.label}</dt>
+                <dt>{t(s.label)}</dt>
                 <dd>
                   {shortcutKeys(s).map((k) => (
                     <kbd key={k} className="kbd">
@@ -184,7 +184,7 @@ function Keys({ token }: { token: string }) {
       setDrafts((d) => ({ ...d, [p]: '' }));
       await load();
     } catch (e) {
-      setError(e instanceof ChatApiError ? e.message : 'Das hat nicht geklappt.');
+      setError(e instanceof ChatApiError ? e.message : t('Das hat nicht geklappt.'));
     } finally {
       setBusy(null);
     }
@@ -201,10 +201,9 @@ function Keys({ token }: { token: string }) {
 
   return (
     <>
-      <h2>Eigene KI-Schlüssel</h2>
+      <h2>{t('Eigene KI-Schlüssel')}</h2>
       <p className="w-muted">
-        Du kannst deine eigenen API-Schlüssel hinterlegen. Dann laufen die Modellaufrufe über dein Konto beim Anbieter. Die Schlüssel
-        werden verschlüsselt gespeichert, geprüft und nie angezeigt.
+        {t('Du kannst deine eigenen API-Schlüssel hinterlegen. Dann laufen die Modellaufrufe über dein Konto beim Anbieter. Die Schlüssel werden verschlüsselt gespeichert, geprüft und nie angezeigt.')}
       </p>
       {error && <div className="ws-error">{error}</div>}
       {!me && !error && (
@@ -224,12 +223,12 @@ function Keys({ token }: { token: string }) {
           <div className="key-row" key={p.id}>
             <div className="key-head">
               <strong>{p.name}</strong>
-              {stored && <span className={`w-tag${stored.status === 'active' ? ' ok' : ''}`}>Hinterlegt · …{stored.last4}</span>}
+              {stored && <span className={`w-tag${stored.status === 'active' ? ' ok' : ''}`}>{t('Hinterlegt · …{last4}', { last4: stored.last4 })}</span>}
             </div>
-            <span className="w-muted">{p.hint}</span>
+            <span className="w-muted">{t(p.hint)}</span>
             {stored ? (
               <button className="w-btn" disabled={busy === p.id} onClick={() => void remove(p.id)}>
-                Schlüssel entfernen
+                {t('Schlüssel entfernen')}
               </button>
             ) : (
               <form
@@ -241,7 +240,7 @@ function Keys({ token }: { token: string }) {
               >
                 <input type="password" placeholder={p.prefix} autoComplete="off" value={drafts[p.id] ?? ''} onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))} />
                 <button className="w-btn green" disabled={busy === p.id || !(drafts[p.id] ?? '').trim()}>
-                  {busy === p.id ? 'Prüfe …' : 'Speichern'}
+                  {busy === p.id ? t('Prüfe …') : t('Speichern')}
                 </button>
               </form>
             )}
@@ -260,7 +259,7 @@ function Account({ token, onSignOut }: { token: string; onSignOut: () => void })
   const pct = me ? Math.min(100, Math.round((me.quota.used / Math.max(1, me.quota.limit)) * 100)) : 0;
   return (
     <>
-      <h2>Konto</h2>
+      <h2>{t('Konto')}</h2>
       {loading ? (
         <Busy className="account-card">
           <Skeleton h={15} w={160} />
@@ -269,12 +268,12 @@ function Account({ token, onSignOut }: { token: string; onSignOut: () => void })
         </Busy>
       ) : (
         <div className="account-card">
-          <strong>{me?.displayName || me?.username || 'Angemeldet'}</strong>
+          <strong>{me?.displayName || me?.username || t('Angemeldet')}</strong>
           {me?.username && <span className="w-muted">@{me.username}</span>}
-          <span className="w-muted">{me?.isCitizen ? 'Verifizierte Bürgerin / verifizierter Bürger' : 'Noch nicht verifiziert'}</span>
+          <span className="w-muted">{me?.isCitizen ? t('Verifizierte Bürgerin / verifizierter Bürger') : t('Noch nicht verifiziert')}</span>
         </div>
       )}
-      <h3>Plan</h3>
+      <h3>{t('Plan')}</h3>
       <div className="account-card">
         {loading ? (
           <Busy className="account-quota-row">
@@ -283,14 +282,14 @@ function Account({ token, onSignOut }: { token: string; onSignOut: () => void })
           </Busy>
         ) : (
           <div className="account-quota-row">
-            <strong>{TIER[me?.tier ?? ''] ?? me?.tier ?? 'Unbekannt'}</strong>
-            <span className="w-muted">{me?.quota.ownKey ? 'Eigener Schlüssel: unbegrenzt' : `Heute ${pct} % des Tageskontingents genutzt`}</span>
+            <strong>{TIER[me?.tier ?? ''] ? t(TIER[me?.tier ?? '']) : me?.tier ?? t('Unbekannt')}</strong>
+            <span className="w-muted">{me?.quota.ownKey ? t('Eigener Schlüssel: unbegrenzt') : t('Heute {n} % des Tageskontingents genutzt', { n: pct })}</span>
           </div>
         )}
         <div className="account-bar">
           <i style={{ width: `${me?.quota.ownKey ? 100 : 100 - pct}%` }} />
         </div>
-        <span className="w-muted">Tarife und Aufladen kommen bald. Bis dahin: eigener Schlüssel unter „KI-Schlüssel“.</span>
+        <span className="w-muted">{t('Tarife und Aufladen kommen bald. Bis dahin: eigener Schlüssel unter „KI-Schlüssel“.')}</span>
       </div>
       <button
         className="w-btn"
@@ -299,7 +298,7 @@ function Account({ token, onSignOut }: { token: string; onSignOut: () => void })
           emitCommand({ kind: 'signout' });
         }}
       >
-        Abmelden
+        {t('Abmelden')}
       </button>
     </>
   );

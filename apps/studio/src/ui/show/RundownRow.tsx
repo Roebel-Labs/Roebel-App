@@ -1,6 +1,7 @@
 // Show tab: step through the Tabelle (start list) without leaving the Show tab. The lower thirds read
 // {{row.X}} / {{next.X}} from the active row; with "Automatisch mitschalten" the Röbel App follows.
 
+import { t } from '../../i18n';
 import { liveRoom } from '../../live-room/controller';
 import { useLiveRoom } from '../../live-room/ui/common';
 import { useShow } from '../../state/store';
@@ -19,12 +20,12 @@ function rowText(row: TableRow | undefined, columns: string[], titleCol: string 
 
 function AppState() {
   const lr = useLiveRoom();
-  if (!lr.show || !lr.token) return <span className="rd-app off">App: nicht verbunden (Live-Raum)</span>;
-  if (!lr.autoStage) return <span className="rd-app off">App folgt nicht (Live-Raum → Automatisch mitschalten)</span>;
+  if (!lr.show || !lr.token) return <span className="rd-app off">{t('App: nicht verbunden (Live-Raum)')}</span>;
+  if (!lr.autoStage) return <span className="rd-app off">{t('App folgt nicht (Live-Raum → Automatisch mitschalten)')}</span>;
   if (lr.stageError) return <span className="rd-app warn">App: {lr.stageError}</span>;
   if (lr.stageNote) return <span className="rd-app warn">{lr.stageNote}</span>;
   const onStage = lr.rundown.find((i) => i.id === lr.show?.current_item_id);
-  return <span className="rd-app on">{lr.stageSending ? 'App: sendet …' : `App: ${onStage?.title ?? '—'}`}</span>;
+  return <span className="rd-app on">{lr.stageSending ? t('App: sendet …') : `App: ${onStage?.title ?? '—'}`}</span>;
 }
 
 export function RundownRow() {
@@ -39,9 +40,9 @@ export function RundownRow() {
   return (
     <section>
       <div className="row-head">
-        <span className="row-title">Startliste</span>
+        <span className="row-title">{t('Startliste')}</span>
         <span className="row-hint">
-          {idx >= 0 ? `Zeile ${idx + 1} von ${rows.length}` : 'Keine Zeile aktiv'} · Tasten V zurück, N weiter
+          {idx >= 0 ? t('Zeile {n} von {total}', { n: idx + 1, total: rows.length }) : t('Keine Zeile aktiv')} · {t('Tasten V zurück, N weiter')}
         </span>
         <AppState />
       </div>
@@ -54,12 +55,12 @@ export function RundownRow() {
             dispatch({ type: 'prevRow' });
           }}
         >
-          ◂ Zurück
+          {t('◂ Zurück')}
         </button>
         <div className="rd-main">
           <strong className="rd-title">{cur.title}</strong>
           {cur.rest && <span className="rd-rest">{cur.rest}</span>}
-          {next && <span className="rd-next">Als Nächstes: {next.title}</span>}
+          {next && <span className="rd-next">{t('Als Nächstes: {title}', { title: next.title })}</span>}
         </div>
         <button
           className="rd-btn primary"
@@ -69,7 +70,7 @@ export function RundownRow() {
             dispatch({ type: 'nextRow' });
           }}
         >
-          Weiter ▸
+          {t('Weiter ▸')}
         </button>
       </div>
     </section>

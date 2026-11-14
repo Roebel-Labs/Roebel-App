@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { t } from '../../i18n';
 import { addMcpConnector, deleteConnector, googleStart, listConnectors, type Connector } from '../../workspace/api';
 import { onDesktopCommand } from '../../workspace/desktop';
 import { Busy, Skeleton } from '../Skeleton';
@@ -34,7 +35,7 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
     const off = onDesktopCommand((c) => {
       if (c.kind !== 'connected') return;
       setWaiting(false);
-      setNotice(c.result === 'ok' ? 'Google ist verbunden.' : c.result === 'cancelled' ? 'Google-Anmeldung abgebrochen.' : 'Google-Verbindung fehlgeschlagen.');
+      setNotice(c.result === 'ok' ? t('Google ist verbunden.') : c.result === 'cancelled' ? t('Google-Anmeldung abgebrochen.') : t('Google-Verbindung fehlgeschlagen.'));
       void load();
     });
     return () => {
@@ -47,15 +48,15 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
     if (!waiting) return;
     if (google) {
       setWaiting(false);
-      setNotice('Google ist verbunden.');
+      setNotice(t('Google ist verbunden.'));
       return;
     }
     const started = Date.now();
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       if (Date.now() - started > 5 * 60_000) setWaiting(false);
       else void load();
     }, 3000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [waiting, google, load]);
 
   const connectGoogle = async () => {
@@ -100,15 +101,15 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
 
   return (
     <>
-      <h2>{title}</h2>
-      <p className="w-muted">Was deine Assistenten lesen und nutzen dürfen. Lesen passiert bei Bedarf, nichts wird dauerhaft gespiegelt.</p>
+      <h2>{t(title)}</h2>
+      <p className="w-muted">{t('Was deine Assistenten lesen und nutzen dürfen. Lesen passiert bei Bedarf, nichts wird dauerhaft gespiegelt.')}</p>
       {error && <div className="ws-error">{error}</div>}
       {notice && <div className="conn-notice">{notice}</div>}
       <div className="conn-list">
         <div className="conn-row">
           <div>
             <strong>Google</strong>
-            <span className="w-muted">{google ? google.name.replace(/^Google \((.*)\)$/, '$1') : 'Kalender, Gmail, Drive'}</span>
+            <span className="w-muted">{google ? google.name.replace(/^Google \((.*)\)$/, '$1') : t('Kalender, Gmail, Drive')}</span>
           </div>
           {rows === null && !error ? (
             <Busy as="span">
@@ -116,58 +117,59 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
             </Busy>
           ) : google ? (
             <div className="conn-actions">
-              <span className="w-tag ok">Verbunden</span>
+              <span className="w-tag ok">{t('Verbunden')}</span>
               <button className="w-btn" disabled={busy} onClick={() => void remove(google.id)}>
-                Trennen
+                {t('Trennen')}
               </button>
             </div>
           ) : googleAvailable ? (
             waiting ? (
               <div className="conn-actions">
-                <span className="w-muted">Warte auf Google im Browser …</span>
+                <span className="w-muted">{t('Warte auf Google im Browser …')}</span>
                 <button className="w-btn" onClick={() => setWaiting(false)}>
-                  Abbrechen
+                  {t('Abbrechen')}
                 </button>
               </div>
             ) : (
               <button className="w-btn green" disabled={busy} onClick={() => void connectGoogle()}>
-                Verbinden
+                {t('Verbinden')}
               </button>
             )
           ) : (
-            <span className="w-tag">Noch nicht eingerichtet</span>
+            <span className="w-tag">{t('Noch nicht eingerichtet')}</span>
           )}
         </div>
         <div className="conn-row">
           <div>
             <strong>Microsoft 365</strong>
-            <span className="w-muted">Outlook, Kalender, OneDrive</span>
+            <span className="w-muted">{t('Outlook, Kalender, OneDrive')}</span>
           </div>
-          <span className="w-tag">Geplant</span>
+          <span className="w-tag">{t('Geplant')}</span>
         </div>
         <div className="conn-row">
           <div>
             <strong>Röbel App</strong>
-            <span className="w-muted">Veranstaltungen, Orte, Kontakte, Röbel Münzen</span>
+            <span className="w-muted">{t('Veranstaltungen, Orte, Kontakte, Röbel Münzen')}</span>
           </div>
-          <span className="w-tag ok">Immer verbunden</span>
+          <span className="w-tag ok">{t('Immer verbunden')}</span>
         </div>
         {rows?.filter((r) => r.kind === 'mcp').map((r) => (
           <div className="conn-row" key={r.id}>
             <div>
               <strong>{r.name}</strong>
               <span className="w-muted">
-                {r.url} · {r.toolCount} Werkzeuge{r.status === 'error' ? ` · Fehler: ${r.lastError ?? ''}` : ''}
+                {r.url} · {r.toolCount === 1 ? t('1 Werkzeug') : t('{n} Werkzeuge', { n: r.toolCount })}
+                {r.status === 'error' ? ` · ${t('Fehler: {message}', { message: r.lastError ?? '' })}` : ''}
               </span>
             </div>
             <button className="w-btn" disabled={busy} onClick={() => void remove(r.id)}>
-              Entfernen
+              {t('Entfernen')}
             </button>
           </div>
         ))}
       </div>
-      <h3>MCP-Server hinzufügen</h3>
-      <p className="w-muted">Eigene Werkzeuge über das Model Context Protocol (https-Adresse).</p>
+      <h3>{t('MCP-Server hinzufügen')}</h3>
+      <p className="w-muted">{t('Eigene Werkzeuge über das Model Context Protocol (https-Adresse).')}</p>
       <form
         className="conn-form"
         onSubmit={(e) => {
@@ -175,10 +177,10 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
           void add();
         }}
       >
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder={t('Name')} value={name} onChange={(e) => setName(e.target.value)} />
         <input placeholder="https://…/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
         <button className="w-btn" disabled={busy || !name.trim() || !/^https:\/\//.test(url.trim())}>
-          Hinzufügen
+          {t('Hinzufügen')}
         </button>
       </form>
     </>

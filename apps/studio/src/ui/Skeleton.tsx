@@ -3,6 +3,7 @@
 // with `prefers-reduced-motion` it is a static tint. Skeletons are decorative: the wrapper carries
 // `aria-busy` and a visually hidden "Wird geladen" for screen readers.
 import type { CSSProperties, ReactNode } from 'react';
+import { t } from '../i18n';
 import './skeleton.css';
 
 type Size = number | string;
@@ -14,7 +15,7 @@ export function Skeleton({ w, h = 14, circle, className, style }: { w?: Size; h?
 }
 
 /** Marks a loading region. Renders a div by default; pass `as` for list or inline contexts. */
-export function Busy({ children, className, as: Tag = 'div', label = 'Wird geladen' }: { children: ReactNode; className?: string; as?: 'div' | 'span' | 'ul' | 'section'; label?: string }) {
+export function Busy({ children, className, as: Tag = 'div', label = t('Wird geladen') }: { children: ReactNode; className?: string; as?: 'div' | 'span' | 'ul' | 'section'; label?: string }) {
   if (Tag === 'ul')
     return (
       <ul className={`sk-busy${className ? ` ${className}` : ''}`} aria-busy="true" aria-label={label}>

@@ -1,4 +1,4 @@
-import { useLang } from '../i18n';
+import { locale, t, tx, useLang } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { LiveRoomPanel, LiveRoomRuntime } from '../live-room/LiveRoomPanel';
 import { useShow } from '../state/store';
@@ -51,25 +51,25 @@ function StatusPill() {
   const now = useTick(500);
   const st = air.status?.state;
   if (air.phase === 'off') return <span className="pill">OFF AIR</span>;
-  if (air.phase === 'stopping') return <span className="pill">BEENDE …</span>;
-  if (air.phase === 'starting' || st === 'connecting' || !st || st === 'idle') return <span className="pill warn">VERBINDE …</span>;
+  if (air.phase === 'stopping') return <span className="pill">{t('BEENDE …')}</span>;
+  if (air.phase === 'starting' || st === 'connecting' || !st || st === 'idle') return <span className="pill warn">{t('VERBINDE …')}</span>;
   if (st === 'reconnecting')
     return (
       <span className="pill warn" title={air.status?.lastError}>
-        VERBINDE NEU …
+        {t('VERBINDE NEU …')}
       </span>
     );
   if (air.status?.recordOnly && st === 'live')
     return (
-      <span className="pill on" title="Nur Aufnahme, kein Livestream">
+      <span className="pill on" title={t('Nur Aufnahme, kein Livestream')}>
         <span className="pill-dot" />
-        AUFNAHME {hms(now - (air.startedAt ?? now))}
+        {t('AUFNAHME')} {hms(now - (air.startedAt ?? now))}
       </span>
     );
   if (st === 'error')
     return (
       <span className="pill err" title={air.status?.lastError}>
-        FEHLER <span className="pill-err-text">{air.status?.lastError}</span>
+        {t('FEHLER')} <span className="pill-err-text">{air.status?.lastError}</span>
       </span>
     );
   return (
@@ -108,12 +108,12 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
 
   return (
     <Dialog
-      title={recordOnly ? 'Nur aufnehmen?' : 'Auf Sendung gehen?'}
+      title={recordOnly ? t('Nur aufnehmen?') : t('Auf Sendung gehen?')}
       onCancel={busy ? () => {} : onClose}
       actions={
         <>
           <button className="btn ghost" onClick={onClose} disabled={busy} data-autofocus>
-            Abbrechen
+            {t('Abbrechen')}
           </button>
           {problem ? (
             <button
@@ -123,11 +123,11 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
                 onOpenSettings();
               }}
             >
-              Einstellungen öffnen
+              {t('Einstellungen öffnen')}
             </button>
           ) : (
             <button className="btn solid-danger" onClick={start} disabled={busy}>
-              {busy ? (recordOnly ? 'Starte…' : 'Verbinde…') : recordOnly ? 'Aufnahme starten' : 'Jetzt senden'}
+              {busy ? (recordOnly ? t('Starte…') : t('Verbinde…')) : recordOnly ? t('Aufnahme starten') : t('Jetzt senden')}
             </button>
           )}
         </>
@@ -135,23 +135,23 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
     >
       <p>
         {recordOnly
-          ? 'Kein Sendeziel eingeschaltet: Das Programm wird nur lokal aufgenommen, es geht nichts ins Internet.'
+          ? t('Kein Sendeziel eingeschaltet: Das Programm wird nur lokal aufgenommen, es geht nichts ins Internet.')
           : enabled.length > 1
-            ? `Das Live-Bild geht gleichzeitig an ${enabled.length} Ziele und wird lokal aufgenommen.`
-            : 'Das Live-Bild geht an das Sendeziel und wird gleichzeitig lokal aufgenommen.'}
+            ? t('Das Live-Bild geht gleichzeitig an {n} Ziele und wird lokal aufgenommen.', { n: enabled.length })
+            : t('Das Live-Bild geht an das Sendeziel und wird gleichzeitig lokal aufgenommen.')}
       </p>
       <dl className="facts">
-        <dt>{enabled.length > 1 ? 'Ziele' : 'Ziel'}</dt>
+        <dt>{enabled.length > 1 ? tx('stream', 'Ziele') : t('Ziel')}</dt>
         <dd>
           {recordOnly
-            ? 'Keins (nur Aufnahme)'
+            ? t('Keins (nur Aufnahme)')
             : enabled.map((d) => (
                 <div key={d.id}>
                   {d.name}: {maskedTarget(d.target)}
                 </div>
               ))}
         </dd>
-        <dt>Bild</dt>
+        <dt>{tx('video', 'Bild')}</dt>
         <dd>1920 × 1080, {s.fps} fps</dd>
         <dt>Bitrate</dt>
         <dd>
@@ -160,20 +160,20 @@ function GoLiveDialog({ onClose, onOpenSettings }: { onClose: () => void; onOpen
         {enabled.length > 1 && (
           <>
             <dt>Upload</dt>
-            <dd className="warn-text">≈ {up.mbit.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s ({enabled.length} Ziele)</dd>
+            <dd className="warn-text">≈ {up.mbit.toLocaleString(locale(), { maximumFractionDigits: 1 })} Mbit/s ({t('{n} Ziele', { n: enabled.length })})</dd>
           </>
         )}
-        <dt>Aufnahme</dt>
+        <dt>{t('Aufnahme')}</dt>
         <dd>{s.recordDir}</dd>
       </dl>
       {silent && (
         <div className="dialog-warn">
-          Kein Ton: Im Mischpult ist kein Kanal aktiv – der Stream wäre stumm. Show → Audio → „+ Kanal“.
+          {t('Kein Ton: Im Mischpult ist kein Kanal aktiv – der Stream wäre stumm. Show → Audio → „+ Kanal“.')}
         </div>
       )}
       {!problem && warning && <div className="dialog-warn">{warning}</div>}
       {problem && <div className="dialog-error">{problem}</div>}
-      {error && <div className="dialog-error">Start fehlgeschlagen: {error}</div>}
+      {error && <div className="dialog-error">{t('Start fehlgeschlagen: {error}', { error })}</div>}
     </Dialog>
   );
 }
@@ -193,10 +193,10 @@ function OnAirButton({ onOpenSettings }: { onOpenSettings: () => void }) {
           className="btn"
           onClick={() => setDialog('start')}
           disabled={air.phase === 'starting' || testing}
-          title={testing ? 'Ein Ziel-Test läuft noch (bis zu 20 s)' : undefined}
+          title={testing ? t('Ein Ziel-Test läuft noch (bis zu 20 s)') : undefined}
         >
           <span className="golive-dot" />
-          {testing ? 'Test läuft noch …' : recordOnlyNext ? 'Nur aufnehmen' : 'Auf Sendung gehen'}
+          {testing ? t('Test läuft noch …') : recordOnlyNext ? t('Nur aufnehmen') : t('Auf Sendung gehen')}
         </button>
         {dialog === 'start' && <GoLiveDialog onClose={() => setDialog(null)} onOpenSettings={onOpenSettings} />}
       </>
@@ -205,19 +205,19 @@ function OnAirButton({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <>
       <button className="btn danger" onClick={() => setDialog('stop')} disabled={air.phase === 'stopping'}>
-        {recordOnly ? 'Aufnahme beenden' : 'Sendung beenden'}
+        {recordOnly ? t('Aufnahme beenden') : t('Sendung beenden')}
       </button>
       {dialog === 'stop' && (
         <ConfirmDialog
-          title={recordOnly ? 'Aufnahme beenden?' : 'Sendung beenden?'}
+          title={recordOnly ? t('Aufnahme beenden?') : t('Sendung beenden?')}
           body={
             <p>
               {recordOnly
-                ? 'Die Aufnahme wird sauber abgeschlossen.'
-                : 'Der Livestream endet für alle Zuschauer. Die Aufnahme wird sauber abgeschlossen.'}
+                ? t('Die Aufnahme wird sauber abgeschlossen.')
+                : t('Der Livestream endet für alle Zuschauer. Die Aufnahme wird sauber abgeschlossen.')}
             </p>
           }
-          confirmLabel={recordOnly ? 'Aufnahme beenden' : 'Sendung beenden'}
+          confirmLabel={recordOnly ? t('Aufnahme beenden') : t('Sendung beenden')}
           danger
           onConfirm={() => {
             setDialog(null);
@@ -238,21 +238,20 @@ function RecordingBanner() {
   if (!err) return null;
   return (
     <div className="banner" role="alert">
-      <strong>Aufnahme unterbrochen</strong>
+      <strong>{t('Aufnahme unterbrochen')}</strong>
       <span>{err}</span>
       <button className="btn" onClick={() => setConfirm(true)}>
-        Aufnahme neu starten
+        {t('Aufnahme neu starten')}
       </button>
       {confirm && (
         <ConfirmDialog
-          title="Aufnahme neu starten?"
+          title={t('Aufnahme neu starten?')}
           body={
             <p>
-              Die Aufnahme beginnt in einer neuen Datei. Der Livestream verbindet sich dafür kurz neu, die Zuschauer sehen
-              eine Unterbrechung von wenigen Sekunden.
+              {t('Die Aufnahme beginnt in einer neuen Datei. Der Livestream verbindet sich dafür kurz neu, die Zuschauer sehen eine Unterbrechung von wenigen Sekunden.')}
             </p>
           }
-          confirmLabel="Neu starten"
+          confirmLabel={t('Neu starten')}
           onConfirm={() => {
             setConfirm(false);
             void onAir.restartRecorder();
@@ -271,13 +270,12 @@ function DestinationBanner() {
   const failed = air.phase === 'on' ? (air.status?.destinations ?? []).filter((d) => d.state === 'failed') : [];
   // A single destination reconnects on its own (the whole encoder restarts with backoff).
   if (failed.length === 0 || (air.status?.destinations?.length ?? 0) < 2) return null;
-  const names = failed.map((f) => state.settings.destinations.find((d) => d.id === f.id)?.name ?? 'Ziel').join(', ');
+  const names = failed.map((f) => state.settings.destinations.find((d) => d.id === f.id)?.name ?? t('Ziel')).join(', ');
   return (
     <div className="banner" role="alert">
-      <strong>Ziel ausgefallen: {names}</strong>
+      <strong>{t('Ziel ausgefallen: {names}', { names })}</strong>
       <span>
-        {failed[0].lastError ?? 'Verbindung verloren'}. Die anderen Ziele laufen weiter. Hängt es weiter: in den Einstellungen
-        ausschalten, dann neu verbinden.
+        {failed[0].lastError ?? t('Verbindung verloren')}. {t('Die anderen Ziele laufen weiter. Hängt es weiter: in den Einstellungen ausschalten, dann neu verbinden.')}
       </span>
       <ReconnectButton />
     </div>
@@ -295,8 +293,8 @@ function SlowDestinationBanner() {
   if (at === undefined || now - at > SLOW_BANNER_MS) return null;
   return (
     <div className="banner" role="alert">
-      <strong>Ziel zu langsam</strong>
-      <span>Ein Ziel kommt nicht hinterher – Pakete werden verworfen. Ziel prüfen oder ausschalten.</span>
+      <strong>{t('Ziel zu langsam')}</strong>
+      <span>{t('Ein Ziel kommt nicht hinterher – Pakete werden verworfen. Ziel prüfen oder ausschalten.')}</span>
     </div>
   );
 }
@@ -359,9 +357,9 @@ function QuitConfirm() {
   if (!open) return null;
   return (
     <ConfirmDialog
-      title="Sendung läuft – wirklich beenden?"
-      body={<p>Ortis Studio schließt. Der Livestream endet für alle Zuschauer, die Aufnahme wird vorher sauber abgeschlossen.</p>}
-      confirmLabel="Sendung beenden und schließen"
+      title={t('Sendung läuft – wirklich beenden?')}
+      body={<p>{t('Ortis Studio schließt. Der Livestream endet für alle Zuschauer, die Aufnahme wird vorher sauber abgeschlossen.')}</p>}
+      confirmLabel={t('Sendung beenden und schließen')}
       danger
       onConfirm={() => {
         setOpen(false);
@@ -457,13 +455,12 @@ function Shell() {
           {section === 'live' && isWebBuild() && (
             <div className="section web-live">
               <div className="web-live-card">
-                <h1>Livestream gibt es in der Desktop-App</h1>
+                <h1>{t('Livestream gibt es in der Desktop-App')}</h1>
                 <p>
-                  Kameras umschalten, Einblendungen und gleichzeitig in die Röbel App und auf YouTube senden: dafür braucht
-                  Ortis Studio deinen Rechner. Arbeitsbereich und Mini-Apps funktionieren auch hier im Browser.
+                  {t('Kameras umschalten, Einblendungen und gleichzeitig in die Röbel App und auf YouTube senden: dafür braucht Ortis Studio deinen Rechner. Arbeitsbereich und Mini-Apps funktionieren auch hier im Browser.')}
                 </p>
                 <a className="w-btn green" href="https://www.roebel.app/studio" target="_blank" rel="noreferrer">
-                  Ortis Studio herunterladen
+                  {t('Ortis Studio herunterladen')}
                 </a>
               </div>
             </div>
@@ -475,7 +472,7 @@ function Shell() {
                 <nav className="tabs" role="tablist">
                   {TABS.map(([id, label]) => (
                     <button key={id} className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-                      {label}
+                      {t(label)}
                     </button>
                   ))}
                 </nav>

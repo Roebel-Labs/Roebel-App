@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { listDevices } from '../../media/devices';
 import { defaultRenderContext } from '../../media/program';
 import { renderFrame } from '../../render/draw';
@@ -147,7 +148,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
       const paths = (await window.studio.dialog.pickFiles?.()) ?? [];
       if (paths.length === 0) return;
       const skipped = await addMediaFiles(paths, dispatch);
-      if (skipped) setError(`${skipped} Datei(en) übersprungen (kein Video oder Bild).`);
+      if (skipped) setError(t('{n} Datei(en) übersprungen (kein Video oder Bild).', { n: skipped }));
       else onClose();
     } catch (e) {
       setError(errorText(e));
@@ -173,7 +174,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
 
   const back = (
     <button className="menu-item menu-back" onClick={() => setView('root')}>
-      ‹ Zurück
+      {t('‹ Zurück')}
     </button>
   );
 
@@ -182,30 +183,30 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
       {view === 'root' && (
         <>
           <button className="menu-item" onClick={openCameras}>
-            Kamera
+            {t('Kamera')}
           </button>
           {window.studio.dialog.pickFiles && (
             <button className="menu-item" onClick={() => void pickMany()}>
-              Videos und Bilder (mehrere)…
+              {t('Videos und Bilder (mehrere)…')}
             </button>
           )}
           <button className="menu-item" onClick={() => void pickFile('video')}>
-            Video aus Datei…
+            {t('Video aus Datei…')}
           </button>
           <button className="menu-item" onClick={() => void pickFile('image')}>
-            Bild aus Datei…
+            {t('Bild aus Datei…')}
           </button>
           <button className="menu-item" onClick={() => setView('color')}>
-            Farbfläche
+            {t('Farbfläche')}
           </button>
           <div className="menu-sep" />
           <button className="menu-item" disabled={state.sources.length < 2} onClick={() => setView('split')}>
-            Split (zwei nebeneinander)
+            {t('Split (zwei nebeneinander)')}
           </button>
           <button className="menu-item" disabled={state.sources.length < 2} onClick={() => setView('pip')}>
-            Bild-im-Bild
+            {t('Bild-im-Bild')}
           </button>
-          {state.sources.length < 2 && <div className="menu-sub hint">Split und Bild-im-Bild brauchen zwei Quellen.</div>}
+          {state.sources.length < 2 && <div className="menu-sub hint">{t('Split und Bild-im-Bild brauchen zwei Quellen.')}</div>}
           {error && <div className="menu-sub dialog-error">{error}</div>}
         </>
       )}
@@ -214,8 +215,8 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
         <>
           {back}
           <div className="menu-sep" />
-          {cams === null && <div className="menu-sub hint">Suche Kameras…</div>}
-          {cams?.length === 0 && <div className="menu-sub hint">Keine Kamera gefunden.</div>}
+          {cams === null && <div className="menu-sub hint">{t('Suche Kameras…')}</div>}
+          {cams?.length === 0 && <div className="menu-sub hint">{t('Keine Kamera gefunden.')}</div>}
           {cams?.map((d, i) => {
             const used = state.sources.some((s) => s.kind === 'camera' && s.deviceId === d.deviceId);
             return (
@@ -229,13 +230,13 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
                 }}
               >
                 {cameraLabel(d, i)}
-                {used && <span className="hint" style={{ marginLeft: 'auto' }}>schon da</span>}
+                {used && <span className="hint" style={{ marginLeft: 'auto' }}>{t('schon da')}</span>}
               </button>
             );
           })}
           <div className="menu-sep" />
           <div className="menu-sub hint">
-            Kein Bild? Systemeinstellungen → Datenschutz & Sicherheit → Kamera → Electron erlauben
+            {t('Kein Bild? Systemeinstellungen → Datenschutz & Sicherheit → Kamera → Electron erlauben')}
           </div>
         </>
       )}
@@ -246,7 +247,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
           <div className="menu-sep" />
           <div className="menu-sub">
             <label className="field">
-              <span>Farbe</span>
+              <span>{t('Farbe')}</span>
               <div className="with-btn">
                 <input className="input" type="color" value={color} onChange={(e) => setColor(e.target.value)} />
                 <input className="input num" value={color} onChange={(e) => setColor(e.target.value)} />
@@ -259,7 +260,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
             >
-              Farbfläche hinzufügen
+              {t('Farbfläche hinzufügen')}
             </button>
           </div>
         </>
@@ -271,7 +272,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
           <div className="menu-sep" />
           <div className="menu-sub">
             <label className="field">
-              <span>{view === 'split' ? 'Links' : 'Hintergrund'}</span>
+              <span>{view === 'split' ? t('Links') : t('Hintergrund')}</span>
               <select className="input" value={a} onChange={(e) => setA(e.target.value)}>
                 {state.sources.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -281,7 +282,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
               </select>
             </label>
             <label className="field">
-              <span>{view === 'split' ? 'Rechts' : 'Kleines Bild'}</span>
+              <span>{view === 'split' ? t('Rechts') : t('Kleines Bild')}</span>
               <select className="input" value={b} onChange={(e) => setB(e.target.value)}>
                 {state.sources.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -292,7 +293,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
             </label>
             <ComboOptions layout={view} fill={fill} onFill={setFill} bg={bg} onBg={setBg} />
             <button className="btn" disabled={!a || !b || a === b} onClick={() => addCombo(view)}>
-              {view === 'split' ? 'Split anlegen' : 'Bild-im-Bild anlegen'}
+              {view === 'split' ? t('Split anlegen') : t('Bild-im-Bild anlegen')}
             </button>
           </div>
         </>
@@ -311,14 +312,14 @@ function ComboOptions(p: { layout: Scene['layout']; fill: boolean; onFill: (v: b
       {p.layout === 'split' && (
         <label className="check">
           <input type="checkbox" checked={p.fill} onChange={(e) => p.onFill(e.target.checked)} />
-          Bild ausfüllen (ohne Ränder, Ränder werden abgeschnitten)
+          {t('Bild ausfüllen (ohne Ränder, Ränder werden abgeschnitten)')}
         </label>
       )}
       {(p.layout === 'pip' || !p.fill) && (
         <label className="field">
-          <span>Hintergrund</span>
+          <span>{t('Hintergrund')}</span>
           <select className="input" value={p.bg} onChange={(e) => p.onBg(e.target.value)}>
-            <option value="">Schwarz</option>
+            <option value="">{t('Schwarz')}</option>
             {options.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.label}
@@ -328,7 +329,7 @@ function ComboOptions(p: { layout: Scene['layout']; fill: boolean; onFill: (v: b
         </label>
       )}
       {(p.layout === 'pip' || !p.fill) && options.length === 0 && (
-        <div className="hint">Eigenes Hintergrundbild: erst über „+ Quelle → Bild aus Datei…“ hinzufügen.</div>
+        <div className="hint">{t('Eigenes Hintergrundbild: erst über „+ Quelle → Bild aus Datei…“ hinzufügen.')}</div>
       )}
     </>
   );
@@ -360,7 +361,7 @@ function ComboEdit({ scene, onClose }: { scene: Scene; onClose: () => void }) {
           bg={scene.backgroundSourceId ?? ''}
           onBg={(v) => dispatch({ type: 'updateScene', id: scene.id, patch: { backgroundSourceId: v || undefined } })}
         />
-        <div className="hint">Änderungen gelten sofort, auch im Live-Bild.</div>
+        <div className="hint">{t('Änderungen gelten sofort, auch im Live-Bild.')}</div>
       </div>
     </div>
   );
@@ -378,11 +379,11 @@ export function SourceRow() {
   const drag = useTileDrag('scene', (id, to) => dispatch({ type: 'moveScene', id, to }), async (files) => {
     const pathFor = window.studio.dialog.pathForFile;
     if (!pathFor) {
-      setDropNote('Dateien hineinziehen geht erst mit der neuen App-Version 0.1.6 (Installer) – bis dahin „+ Quelle“.');
+      setDropNote(t('Dateien hineinziehen geht erst mit der neuen App-Version 0.1.6 (Installer) – bis dahin „+ Quelle“.'));
       return;
     }
     const skipped = await addMediaFiles(files.map((f) => pathFor(f)).filter(Boolean), dispatch);
-    setDropNote(skipped ? `${skipped} Datei(en) übersprungen (kein Video oder Bild).` : null);
+    setDropNote(skipped ? t('{n} Datei(en) übersprungen (kein Video oder Bild).', { n: skipped }) : null);
   });
 
   const remove = (scene: Scene) => {
@@ -404,8 +405,8 @@ export function SourceRow() {
   return (
     <section>
       <div className="row-head">
-        <span className="row-title">Quellen</span>
-        <span className="row-hint">Klick = in die Vorschau, Doppelklick = sofort live, Tasten 1–9 · Ziehen = umsortieren</span>
+        <span className="row-title">{t('Quellen')}</span>
+        <span className="row-hint">{t('Klick = in die Vorschau, Doppelklick = sofort live, Tasten 1–9 · Ziehen = umsortieren')}</span>
         {dropNote && <span className="row-hint warn">{dropNote}</span>}
       </div>
       <div className={`strip wrap${drag.fileOver ? ' drop-over' : ''}`} {...drag.stripProps}>
@@ -422,11 +423,11 @@ export function SourceRow() {
                   dispatch({ type: 'setPreview', sceneId: scene.id });
                   dispatch({ type: 'cut' });
                 }}
-                title={`${scene.label}: ${HEALTH_TEXT[h]}`}
+                title={`${scene.label}: ${t(HEALTH_TEXT[h])}`}
               >
                 <canvas ref={thumbRef(scene.id)} width={THUMB_W} height={THUMB_H} />
                 <div className="tile-foot">
-                  <span className={`dot ${h}`} aria-label={HEALTH_TEXT[h]} />
+                  <span className={`dot ${h}`} aria-label={t(HEALTH_TEXT[h])} />
                   <span className="tile-label">{scene.label}</span>
                   {i < 9 && <span className="key">{i + 1}</span>}
                 </div>
@@ -434,8 +435,8 @@ export function SourceRow() {
               {scene.layout !== 'full' && (
                 <button
                   className="tile-edit"
-                  aria-label={`${scene.label} anpassen`}
-                  title="Ausfüllen und Hintergrund"
+                  aria-label={t('{name} anpassen', { name: scene.label })}
+                  title={t('Ausfüllen und Hintergrund')}
                   aria-expanded={editing === scene.id}
                   onClick={() => setEditing((cur) => (cur === scene.id ? null : scene.id))}
                 >
@@ -444,14 +445,14 @@ export function SourceRow() {
               )}
               {editing === scene.id && <ComboEdit scene={scene} onClose={() => setEditing(null)} />}
               {isPgm && <span className="tile-tag pgm">Live</span>}
-              {isPvw && !isPgm && <span className="tile-tag pvw">Vorschau</span>}
+              {isPvw && !isPgm && <span className="tile-tag pvw">{t('Vorschau')}</span>}
               {(() => {
                 const blocked = removalPlan(state, scene.id).blockedByLive;
                 return (
                   <button
                     className="tile-remove"
-                    aria-label={`${scene.label} entfernen`}
-                    title={blocked ? 'Wird gerade live verwendet' : `${scene.label} entfernen`}
+                    aria-label={t('{name} entfernen', { name: scene.label })}
+                    title={blocked ? t('Wird gerade live verwendet') : t('{name} entfernen', { name: scene.label })}
                     disabled={blocked}
                     onClick={() => setRemoving(scene)}
                   >
@@ -464,22 +465,22 @@ export function SourceRow() {
         })}
         <div className="add-wrap">
           <button className="add-tile" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-            + Quelle
+            {t('+ Quelle')}
           </button>
           {menu && <AddSourceMenu onClose={() => setMenu(false)} />}
         </div>
       </div>
       {removing && (
         <ConfirmDialog
-          title={`„${removing.label}“ entfernen?`}
+          title={t('„{name}“ entfernen?', { name: removing.label })}
           body={
             removalPlan(state, removing.id).externalSourceId ? (
-              <p>Der Gast wird aus dem Live-Raum verabschiedet und verschwindet aus der Leiste.</p>
+              <p>{t('Der Gast wird aus dem Live-Raum verabschiedet und verschwindet aus der Leiste.')}</p>
             ) : (
-              <p>Die Quelle verschwindet aus der Leiste. Split- und Bild-im-Bild-Ansichten mit dieser Quelle werden ebenfalls entfernt.</p>
+              <p>{t('Die Quelle verschwindet aus der Leiste. Split- und Bild-im-Bild-Ansichten mit dieser Quelle werden ebenfalls entfernt.')}</p>
             )
           }
-          confirmLabel="Entfernen"
+          confirmLabel={t('Entfernen')}
           danger
           onConfirm={() => remove(removing)}
           onCancel={() => setRemoving(null)}

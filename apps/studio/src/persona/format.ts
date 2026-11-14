@@ -1,4 +1,5 @@
 // Pure helpers for the personal-context sections (Für dich, Funktionen, Wiki, Bibliothek). Tested.
+import { locale, t } from '../i18n';
 import type { LibraryFile, RoutineSchedule, Suggestion, SuggestionGroup, SuggestionSection } from '../workspace/api';
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -10,8 +11,8 @@ const two = (n: number) => String(Math.max(0, Math.floor(n) || 0)).padStart(2, '
 export function scheduleText(s: RoutineSchedule | null | undefined): string {
   if (!s) return '';
   const time = `${two(s.hour)}:${two(s.minute)}`;
-  if (s.kind === 'weekly') return `Jeden ${WEEKDAYS[s.weekday ?? 1] ?? 'Montag'}, ${time}`;
-  return `Täglich, ${time}`;
+  if (s.kind === 'weekly') return t('Jeden {day}, {time}', { day: t(WEEKDAYS[s.weekday ?? 1] ?? 'Montag'), time });
+  return t('Täglich, {time}', { time });
 }
 
 /** Builds a schedule from the create dialog ("HH:MM" from <input type="time">). */
@@ -116,7 +117,7 @@ export function suggestionSections(data: { sections?: SuggestionSection[] | null
   return data?.groups?.length ? [{ key: 'projects', title: '', groups: data.groups }] : [];
 }
 
-/** Left filter list: v2 = Alle, Schnell erledigt, Routinen, one per titled section; v1 = Alle, Aufgaben, Routinen. */
+/** Left filter list (German labels; the fixed ones are translated where they are shown): v2 = Alle, Schnell erledigt, Routinen, one per titled section; v1 = Alle, Aufgaben, Routinen. */
 export function suggestionFilters(sections: SuggestionSection[], v2: boolean): Array<{ id: string; label: string }> {
   if (!v2) return [{ id: 'all', label: 'Alle' }, { id: 'task', label: 'Aufgaben' }, { id: 'routine', label: 'Routinen' }];
   const out = [{ id: 'all', label: 'Alle' }, { id: 'quick', label: 'Schnell erledigt' }, { id: 'routine', label: 'Routinen' }];
@@ -159,8 +160,8 @@ export function matchesQuery(query: string, ...fields: Array<string | null | und
 }
 
 export function initials(name: string): string {
-  const t = name.trim();
-  return t ? t.slice(0, 1).toUpperCase() : '·';
+  const s = name.trim();
+  return s ? s.slice(0, 1).toUpperCase() : '·';
 }
 
 /** Stable index into a small palette, so a person keeps the same badge colour everywhere. */
@@ -173,13 +174,13 @@ export function hueIndex(key: string, size: number): number {
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function fmtDay(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 }
 
 /** Collection ids: 'recent' = all, 'thread:<threadId>', 'routine:<title>'. */
@@ -196,8 +197,8 @@ export function filterLibrary(files: LibraryFile[], collectionId: string, kind: 
 /** A not-yet-deployed endpoint (404) or a dropped connection reads as a friendly sentence, never a raw code. */
 export function friendlyError(e: unknown): string {
   const err = e as { status?: number; code?: string; message?: string } | null;
-  if (err?.status === 404 && err.code !== 'not_found') return 'Diese Funktion ist auf dem Server noch nicht verfügbar. Versuch es später noch einmal.';
-  if (err?.status === 404) return err.message && !/^Fehler \d+$/.test(err.message) ? err.message : 'Das wurde nicht gefunden.';
-  if (err?.status && err.status >= 500) return 'Der Server hat gerade ein Problem. Versuch es gleich noch einmal.';
-  return err?.message || 'Das hat nicht geklappt.';
+  if (err?.status === 404 && err.code !== 'not_found') return t('Diese Funktion ist auf dem Server noch nicht verfügbar. Versuch es später noch einmal.');
+  if (err?.status === 404) return err.message && !/^Fehler \d+$/.test(err.message) ? err.message : t('Das wurde nicht gefunden.');
+  if (err?.status && err.status >= 500) return t('Der Server hat gerade ein Problem. Versuch es gleich noch einmal.');
+  return err?.message || t('Das hat nicht geklappt.');
 }

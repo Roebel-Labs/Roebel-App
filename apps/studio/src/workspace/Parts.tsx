@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
+import { locale, t } from '../i18n';
 import { parseMarkdown, safeHref } from '../help/markdown';
 import type { ChatPart } from './types';
 
@@ -37,6 +38,7 @@ function kb(size: number): string {
   return size >= 1_000_000 ? `${(size / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1000))} KB`;
 }
 
+// German source texts; translated where the tag is rendered.
 const APPROVAL_STATUS: Record<string, string> = {
   approved: 'Freigegeben',
   executed: 'Erledigt',
@@ -85,13 +87,13 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
       const p = part as { url?: string; status?: string; prompt?: string; error?: string };
       if (p.status === 'generating')
         return (
-          <div className="ws-image-wait" role="status" aria-label="Bild wird erstellt">
-            <span>Bild wird erstellt</span>
+          <div className="ws-image-wait" role="status" aria-label={t('Bild wird erstellt')}>
+            <span>{t('Bild wird erstellt')}</span>
           </div>
         );
-      if (p.status === 'failed') return <div className="ws-image-failed">Bild fehlgeschlagen: {p.error ?? 'unbekannt'}</div>;
+      if (p.status === 'failed') return <div className="ws-image-failed">{t('Bild fehlgeschlagen: {error}', { error: p.error ?? t('unbekannt') })}</div>;
       return p.url ? (
-        <button type="button" className="ws-image-tile" aria-label="Bild groß anzeigen" onClick={() => h.onZoom(p.url!, p.prompt ?? '')}>
+        <button type="button" className="ws-image-tile" aria-label={t('Bild groß anzeigen')} onClick={() => h.onZoom(p.url!, p.prompt ?? '')}>
           <img className="ws-image" src={p.url} alt={p.prompt ?? ''} loading="lazy" draggable={false} />
         </button>
       ) : null;
@@ -114,7 +116,7 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
         <div className="ws-approval">
           <div className="ws-approval-head">
             <strong>{p.title}</strong>
-            {p.status !== 'pending' && <span className="ws-tag">{APPROVAL_STATUS[p.status] ?? p.status}</span>}
+            {p.status !== 'pending' && <span className="ws-tag">{APPROVAL_STATUS[p.status] ? t(APPROVAL_STATUS[p.status]) : p.status}</span>}
           </div>
           <div className="w-muted">{p.summary}</div>
           {p.preview.fields.length > 0 && (
@@ -131,14 +133,14 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
           {p.resultNote && <div className="w-muted">{p.resultNote}</div>}
           {p.status === 'pending' &&
             (p.risk === 'money' ? (
-              <div className="ws-note">Zahlungen bestätigst du in der Röbel App.</div>
+              <div className="ws-note">{t('Zahlungen bestätigst du in der Röbel App.')}</div>
             ) : (
               <div className="ws-approval-actions">
                 <button className="w-btn green" disabled={h.busy} onClick={() => h.onApprove(p.actionId)}>
-                  Freigeben
+                  {t('Freigeben')}
                 </button>
                 <button className="w-btn" disabled={h.busy} onClick={() => h.onReject(p.actionId)}>
-                  Ablehnen
+                  {t('Ablehnen')}
                 </button>
               </div>
             ))}
@@ -167,14 +169,14 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
         <div className="ws-event">
           <strong>{p.title}</strong>
           <span className="w-muted">
-            {d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })},{' '}
-            {d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+            {d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })},{' '}
+            {d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             {p.location ? ` · ${p.location}` : ''}
           </span>
         </div>
       );
     }
     default:
-      return <div className="ws-note">Dieser Inhalt wird in der Röbel App angezeigt.</div>;
+      return <div className="ws-note">{t('Dieser Inhalt wird in der Röbel App angezeigt.')}</div>;
   }
 }

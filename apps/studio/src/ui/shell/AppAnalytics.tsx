@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { locale, t } from '../../i18n';
 import { fetchMiniAppAnalytics, type AnalyticsRange, type AnalyticsSummary, type MyMiniApp } from '../../workspace/api';
 import { SkKpis } from '../Skeleton';
 
@@ -9,9 +10,11 @@ const RANGES: Array<[AnalyticsRange, string]> = [
   ['all', 'Gesamt'],
 ];
 
-const fmt = (n: number) => n.toLocaleString('de-DE');
+const fmt = (n: number) => n.toLocaleString(locale());
 const pct = (x: number) => `${Math.round(x * 100)} %`;
-const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+/** "3 Sitzungen" / "1 Sitzung": the keys are the German singular and plural with {n}. */
+const count = (n: number, one: string, many: string) => t(n === 1 ? one : many, { n: fmt(n) });
+const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 
 /** The web dashboard's "Nutzung" panel for one mini app: KPIs, opens per day, top events. */
 export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMiniApp; onBack: () => void }) {
@@ -53,7 +56,7 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
   return (
     <div className="apps-detail">
       <div className="apps-detail-head">
-        <button className="w-icon" onClick={onBack} aria-label="Zurück">
+        <button className="w-icon" onClick={onBack} aria-label={t('Zurück')}>
           ←
         </button>
         <strong className="w-ellipsis">{app.name}</strong>
@@ -61,7 +64,7 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
         <div className="ws-chips">
           {RANGES.map(([id, label]) => (
             <button key={id} className={`ws-chip${range === id ? ' on' : ''}`} onClick={() => setRange(id)}>
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -71,26 +74,30 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
       {data && (
         <>
           <div className="kpis">
-            <Kpi label="Öffnungen" value={fmt(data.opens)} />
-            <Kpi label="Aktive Nutzer" value={fmt(data.uniqueWallets)} sub={`${fmt(data.sessions)} Sitzungen`} />
-            <Kpi label="Wiederkehrer" value={pct(data.retentionRate)} sub={`${fmt(data.returningWallets)} Personen`} />
-            <Kpi label="Röbel Münzen" value={fmt(data.rewardsAmount)} sub={`${fmt(data.rewardsGranted)} Belohnungen${data.budget !== null ? ` · Budget ${fmt(data.spent ?? 0)} / ${fmt(data.budget)}` : ''}`} />
+            <Kpi label={t('Öffnungen')} value={fmt(data.opens)} />
+            <Kpi label={t('Aktive Nutzer')} value={fmt(data.uniqueWallets)} sub={count(data.sessions, '{n} Sitzung', '{n} Sitzungen')} />
+            <Kpi label={t('Wiederkehrer')} value={pct(data.retentionRate)} sub={count(data.returningWallets, '{n} Person', '{n} Personen')} />
+            <Kpi
+              label={t('Röbel Münzen')}
+              value={fmt(data.rewardsAmount)}
+              sub={`${count(data.rewardsGranted, '{n} Belohnung', '{n} Belohnungen')}${data.budget !== null ? ` · ${t('Budget {spent} / {budget}', { spent: fmt(data.spent ?? 0), budget: fmt(data.budget) })}` : ''}`}
+            />
           </div>
 
           <div className="chart-card">
-            <div className="chart-title">Öffnungen pro Tag</div>
+            <div className="chart-title">{t('Öffnungen pro Tag')}</div>
             {chart.bars.length === 0 ? (
-              <div className="w-muted">Noch keine Daten in diesem Zeitraum.</div>
+              <div className="w-muted">{t('Noch keine Daten in diesem Zeitraum.')}</div>
             ) : (
               <div className="chart-wrap">
-                <svg viewBox={`0 0 ${chart.w} ${chart.h}`} className="chart" role="img" aria-label="Öffnungen pro Tag">
-                  {chart.ticks.map((t) => {
-                    const y = chart.h - chart.padB - ((chart.h - chart.padB - chart.padT) * t) / Math.max(1, chart.ticks[2]);
+                <svg viewBox={`0 0 ${chart.w} ${chart.h}`} className="chart" role="img" aria-label={t('Öffnungen pro Tag')}>
+                  {chart.ticks.map((tick) => {
+                    const y = chart.h - chart.padB - ((chart.h - chart.padB - chart.padT) * tick) / Math.max(1, chart.ticks[2]);
                     return (
-                      <g key={t}>
+                      <g key={tick}>
                         <line x1={chart.padL} x2={chart.w} y1={y} y2={y} className="chart-grid" />
                         <text x={chart.padL - 6} y={y + 4} className="chart-tick" textAnchor="end">
-                          {fmt(t)}
+                          {fmt(tick)}
                         </text>
                       </g>
                     );
@@ -110,8 +117,8 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
                 {hover !== null && chart.bars[hover] && (
                   <div className="chart-tip" style={{ left: `${((chart.bars[hover].x + chart.bars[hover].w / 2) / chart.w) * 100}%` }}>
                     <strong>{day(chart.bars[hover].p.date)}</strong>
-                    <span>{fmt(chart.bars[hover].p.opens)} Öffnungen</span>
-                    <span className="w-muted">{fmt(chart.bars[hover].p.uniqueWallets)} Nutzer · {fmt(chart.bars[hover].p.rewards)} Belohnungen</span>
+                    <span>{count(chart.bars[hover].p.opens, '{n} Öffnung', '{n} Öffnungen')}</span>
+                    <span className="w-muted">{t('{n} Nutzer', { n: fmt(chart.bars[hover].p.uniqueWallets) })} · {count(chart.bars[hover].p.rewards, '{n} Belohnung', '{n} Belohnungen')}</span>
                   </div>
                 )}
               </div>
@@ -119,9 +126,9 @@ export function AppAnalytics({ token, app, onBack }: { token: string; app: MyMin
           </div>
 
           <div className="chart-card">
-            <div className="chart-title">Häufigste Ereignisse</div>
+            <div className="chart-title">{t('Häufigste Ereignisse')}</div>
             {data.topEvents.length === 0 ? (
-              <div className="w-muted">Noch keine Ereignisse.</div>
+              <div className="w-muted">{t('Noch keine Ereignisse.')}</div>
             ) : (
               <table className="events-table">
                 <tbody>
