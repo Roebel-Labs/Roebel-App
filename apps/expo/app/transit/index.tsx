@@ -28,6 +28,7 @@ import {
   type TransitLine,
   type TransitMode,
 } from '@/lib/supabase-transit';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const MODE_FILTERS: { mode: TransitMode | 'all'; label: string }[] = [
   { mode: 'all', label: 'Alle' },
@@ -207,9 +208,9 @@ export default function TransitScreen() {
 
       <View style={styles.navOverlay}>
         <BottomNavigation activeTab="explore" onTabPress={(t) => {
-          if (t === 'home') router.replace('/');
-          else if (t === 'explore') router.replace('/explore');
-          else if (t === 'profile') router.replace('/profile');
+          if (t === 'home') goToTab('home');
+          else if (t === 'explore') goToTab('explore');
+          else if (t === 'profile') goToTab('profile');
         }} glass />
       </View>
     </GlassProvider>

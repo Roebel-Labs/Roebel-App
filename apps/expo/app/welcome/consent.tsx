@@ -20,6 +20,7 @@ import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { useCreateCitizenRequest, REQUEST_STAGE_LABEL, DEFAULT_CITIZEN_REASON } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useSnackbar } from '@/context/SnackbarContext';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -41,7 +42,7 @@ export default function WelcomeConsentScreen() {
 
   const dismissToProfile = () => {
     dispatch({ type: 'RESET' });
-    router.replace('/profile');
+    goToTab('profile');
   };
 
   const handleAccept = async () => {
@@ -50,7 +51,7 @@ export default function WelcomeConsentScreen() {
     if (!user?.wallet_address) {
       await acceptAll('welcome_terms');
       await setNotificationPromptPending();
-      router.replace('/');
+      goToTab('home');
       return;
     }
     setSubmitting(true);

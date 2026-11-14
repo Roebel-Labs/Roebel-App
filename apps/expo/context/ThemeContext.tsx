@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, Platform, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, ColorTokens, ThemeVariant } from '@/constants/theme';
 
@@ -60,6 +60,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         : 'light'
       : preference;
   const effectiveTheme: EffectiveTheme = variant === 'light' ? 'light' : 'dark';
+
+  // iOS: hand the in-app choice to the system, so everything the OS draws
+  // (tab bar, alerts, menus, switches, sheets, keyboard) uses the same scheme
+  // as our own palette. Without this, "Dunkel" in the app on a light-mode
+  // phone leaves a light system tab bar over dark content. 'unspecified'
+  // returns control to the device setting; `systemScheme` is only read in
+  // that case, so the override cannot feed back into `variant`.
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !loaded) return;
+    Appearance.setColorScheme(preference === 'system' ? 'unspecified' : effectiveTheme);
+  }, [preference, effectiveTheme, loaded]);
 
   const setPreference = useCallback(async (pref: ThemePreference) => {
     await AsyncStorage.setItem(THEME_PREFERENCE_KEY, pref);

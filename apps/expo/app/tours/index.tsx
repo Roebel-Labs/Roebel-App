@@ -26,6 +26,7 @@ import {
   type TourHoursBucket,
   type TourRecord,
 } from '@/lib/supabase-tours';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const HOURS_OPTIONS: { value: TourHoursBucket | 'all'; label: string }[] = [
   { value: 'all', label: 'Alle Zeiten' },
@@ -251,9 +252,9 @@ export default function ToursScreen() {
         <BottomNavigation
           activeTab="explore"
           onTabPress={(t) => {
-            if (t === 'home') router.replace('/');
-            else if (t === 'explore') router.replace('/explore');
-            else if (t === 'profile') router.replace('/profile');
+            if (t === 'home') goToTab('home');
+            else if (t === 'explore') goToTab('explore');
+            else if (t === 'profile') goToTab('profile');
           }} glass />
       </View>
     </GlassProvider>

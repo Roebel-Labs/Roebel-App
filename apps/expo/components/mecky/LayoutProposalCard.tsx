@@ -19,6 +19,7 @@ import {
   saveExploreLayout,
   visibleBlockIds,
 } from '@/lib/explore-layout';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type Proposal = { order: string[]; hidden: string[]; presetId?: string | null; summary?: string };
 
@@ -68,7 +69,7 @@ export default function LayoutProposalCard({ proposal }: { proposal: Proposal })
       {applied ? (
         <View style={styles.actions}>
           <Text style={[styles.done, { color: colors.textSecondary }]}>Übernommen ✓</Text>
-          <Pressable onPress={() => router.push('/explore' as any)} hitSlop={8} accessibilityRole="link">
+          <Pressable onPress={() => goToTab('explore', 'push')} hitSlop={8} accessibilityRole="link">
             <Text style={[styles.link, { color: colors.primary }]}>Erkunden ansehen</Text>
           </Pressable>
         </View>

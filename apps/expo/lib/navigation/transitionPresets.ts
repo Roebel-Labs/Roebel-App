@@ -10,6 +10,7 @@
  */
 import type { ComponentProps } from 'react';
 import type { Stack } from 'expo-router';
+import { NATIVE_TABS } from './tabBar';
 
 type StackScreenOptions = ComponentProps<typeof Stack.Screen>['options'];
 
@@ -22,3 +23,11 @@ export const noTransition = (): StackScreenOptions => ({
   animation: 'none',
   gestureEnabled: false,
 });
+
+/**
+ * For the list screens that show the hand-drawn bottom bar (Veranstaltungen,
+ * Touren, …): an instant cut without back gesture where that bar exists
+ * (Android, web), so they feel like tab switches. With the system tab bar
+ * (iOS) they are plain pushed screens and keep the default slide + back swipe.
+ */
+export const sectionCut = (): StackScreenOptions => (NATIVE_TABS ? {} : noTransition());

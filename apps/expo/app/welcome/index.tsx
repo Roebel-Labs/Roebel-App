@@ -10,6 +10,7 @@ import LoginDrawer from '@/components/LoginDrawer';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 import { deferWelcomeWizard } from '@/lib/onboarding-deferral';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 /**
  * Welcome screen.
@@ -33,7 +34,7 @@ export default function WelcomeIntroScreen() {
   // welcome is a full-screen modal over home: leaving it returns to home.
   const leave = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/' as any);
+    else goToTab('home');
   };
   // A login that happens ON this screen (passkey or thirdweb) continues from home: UserContext
   // then shows the wizard for a new thirdweb account, or nothing for a deferred passkey account.

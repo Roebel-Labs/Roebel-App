@@ -49,6 +49,7 @@ import {
   type PosterOption,
   type ProposeOutcome,
 } from '@/lib/poster-api';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 // Structured event data used to render the pre-submit recap card.
 interface EventRecapData {
@@ -878,7 +879,7 @@ export function MinimalAIChat() {
 
   // Handle go to home
   const handleGoHome = () => {
-    router.replace('/');
+    goToTab('home');
   };
 
   // Handle go to my events

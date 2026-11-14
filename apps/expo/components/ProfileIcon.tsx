@@ -2,12 +2,13 @@ import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { UserIcon } from '@/components/Icons';
 import { useRouter } from 'expo-router';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function ProfileIcon() {
   const router = useRouter();
 
   const handlePress = () => {
-    router.push('/profile');
+    goToTab('profile', 'push');
   };
 
   return (

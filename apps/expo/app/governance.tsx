@@ -10,6 +10,7 @@ import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function GovernanceScreen() {
   const router = useRouter();
@@ -20,13 +21,13 @@ export default function GovernanceScreen() {
   const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') {
-      router.replace('/');
+      goToTab('home');
     } else if (tab === 'explore') {
-      router.push('/explore');
+      goToTab('explore', 'push');
     } else if (tab === 'map') {
       router.push('/location');
     } else if (tab === 'profile') {
-      router.push('/profile');
+      goToTab('profile', 'push');
     }
   };
 

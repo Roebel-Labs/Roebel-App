@@ -20,6 +20,7 @@ import { updateAccount } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import type { OpeningHours } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
@@ -59,7 +60,7 @@ export default function OrgOpeningHoursScreen() {
 
   useEffect(() => {
     if (!activeAccount || activeAccount.account_type !== 'organisation') {
-      router.replace('/profile');
+      goToTab('profile');
       return;
     }
     let cancelled = false;

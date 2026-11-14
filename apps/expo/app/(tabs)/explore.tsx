@@ -56,6 +56,7 @@ import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
 import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
@@ -279,9 +280,9 @@ export default function ExploreScreen() {
   const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') {
-      router.replace('/');
+      goToTab('home');
     } else if (tab === 'profile') {
-      router.push('/profile');
+      goToTab('profile', 'push');
     }
   };
 

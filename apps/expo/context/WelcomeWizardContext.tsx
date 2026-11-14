@@ -10,6 +10,7 @@ import {
   type WelcomeWizardState,
   type PreferredRole,
 } from '@/context/welcome-wizard-state';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export type { PreferredRole, WelcomeWizardState };
 
@@ -38,7 +39,7 @@ export function WelcomeWizardProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: 'RESET' });
     setShowExit(false);
-    router.replace('/profile');
+    goToTab('profile');
   }, [user?.wallet_address, refreshUser, router]);
 
   const openExit = useCallback(() => setShowExit(true), []);

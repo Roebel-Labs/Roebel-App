@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useExploreDot } from '@/context/ExploreDotContext';
 import GlassSurface from '@/components/GlassSurface';
 import { fontFamily } from '@/constants/theme';
+import { BOTTOM_NAV_HEIGHT, NATIVE_TABS } from '@/lib/navigation/tabBar';
 
 // Import SVG icons
 import HomeStroke from '../assets/icons/bottom-nav/home.svg';
@@ -18,7 +19,8 @@ import UserFilled from '../assets/icons/bottom-nav/user-circle-filled.svg';
 export type TabKey = 'home' | 'explore' | 'profile';
 
 // Content height only — the rendered bar adds Math.max(insets.bottom, 8) bottom padding, so on home-indicator devices the total is taller.
-export const BOTTOM_NAV_HEIGHT = 72;
+// Lives in lib/navigation/tabBar.ts (0 on iOS, where the system tab bar is part of the safe area).
+export { BOTTOM_NAV_HEIGHT };
 
 const ICON_SIZE = 24;
 
@@ -41,7 +43,18 @@ const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
   { key: 'profile', stroke: UserStroke, filled: UserFilled, label: 'Profil' },
 ];
 
-export default function BottomNavigation({ activeTab, onTabPress, transparent = false, glass = false }: Props) {
+/**
+ * The hand-drawn bar for Android and web. On iOS the system tab bar from
+ * app/(tabs)/_layout.tsx takes over, so this renders nothing there — which
+ * also removes it from the pushed list screens (Veranstaltungen, Touren, …)
+ * that used to repeat it; they are left the iOS way, with back.
+ */
+export default function BottomNavigation(props: Props) {
+  if (NATIVE_TABS) return null;
+  return <JsBottomNavigation {...props} />;
+}
+
+function JsBottomNavigation({ activeTab, onTabPress, transparent = false, glass = false }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();

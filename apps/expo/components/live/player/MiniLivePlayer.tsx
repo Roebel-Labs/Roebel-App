@@ -10,7 +10,7 @@ import { VideoView, type VideoPlayer } from 'expo-video';
 import LiveIcon from '@/components/live/LiveIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { ROOT_TAB_BAR_CLEARANCE } from '@/lib/navigation/tabBar';
 import { F } from '../tokens';
 import { haptic, LiveDot, safely, Spinner } from './chrome';
 import type { LiveSession } from './LivePlayerProvider';
@@ -36,7 +36,7 @@ export default function MiniLivePlayer({ player, session, onClose }: Props) {
     const left = MARGIN;
     const right = screenW - w - MARGIN;
     const top = insets.top + 56;
-    const bottom = screenH - h - Math.max(insets.bottom, 8) - BOTTOM_NAV_HEIGHT - MARGIN;
+    const bottom = screenH - h - Math.max(insets.bottom, 8) - ROOT_TAB_BAR_CLEARANCE - MARGIN;
     return { left, right, top, bottom };
   }, [screenW, screenH, w, h, insets.top, insets.bottom]);
 

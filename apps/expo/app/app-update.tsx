@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAppReleaseGate } from '@/hooks/useAppReleaseGate';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function AppUpdateModalScreen() {
   const { colors } = useTheme();
@@ -49,7 +50,7 @@ export default function AppUpdateModalScreen() {
   const handleDismiss = () => {
     dismiss();
     if (router.canGoBack()) router.back();
-    else router.replace('/' as any);
+    else goToTab('home');
   };
 
   const storeLabel = Platform.OS === 'ios' ? 'App Store' : 'Google Play';

@@ -14,7 +14,9 @@ import { fontFamily } from '@/constants/theme';
 import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
 import { LocationIcon } from '@/components/Icons';
 import { softShadow } from '@/lib/shadow';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { NATIVE_TABS } from '@/lib/navigation/tabBar';
 
 type Props = {
   /**
@@ -40,6 +42,7 @@ export default function MapFAB({
   accessibilityLabel,
   bottomOffset = 0,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const scaleAnim = useRef(new RNAnimated.Value(1)).current;
@@ -83,7 +86,17 @@ export default function MapFAB({
 
   return (
     <ReanimatedAnimated.View
-      style={[styles.container, bottomOffset ? { bottom: BOTTOM_NAV_HEIGHT + 40 + bottomOffset } : null, animatedStyle]}
+      style={[
+        styles.container,
+        // iOS: the safe-area inset of a tab already contains the system tab
+        // bar, so the pill floats just above it (and follows it when it shrinks).
+        NATIVE_TABS
+          ? { bottom: insets.bottom + 16 + (bottomOffset ?? 0) }
+          : bottomOffset
+            ? { bottom: BOTTOM_NAV_HEIGHT + 40 + bottomOffset }
+            : null,
+        animatedStyle,
+      ]}
     >
       <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <Pressable

@@ -19,6 +19,7 @@ import {
 import { SUB_TYPE_EMOJI } from '@/lib/types';
 import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function BlogFeedScreen() {
   const router = useRouter();
@@ -157,10 +158,10 @@ export default function BlogFeedScreen() {
         <BottomNavigation
           activeTab="home"
           onTabPress={(tab) => {
-            if (tab === 'home') router.replace('/');
-            else if (tab === 'explore') router.push('/explore');
+            if (tab === 'home') goToTab('home');
+            else if (tab === 'explore') goToTab('explore', 'push');
             else if (tab === 'map') router.push('/location');
-            else if (tab === 'profile') router.push('/profile');
+            else if (tab === 'profile') goToTab('profile', 'push');
           }} glass />
       </View>
     </GlassProvider>

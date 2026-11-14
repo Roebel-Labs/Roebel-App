@@ -29,6 +29,7 @@ import {
   type OrgChainState,
 } from '@/lib/org-safe/ops';
 import { encodeFunctionData } from 'viem';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type Props = { accountId: string; accountName: string };
 
@@ -180,7 +181,7 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
       setConfirmLeave(false);
       const personal = ownedAccounts.find((a) => a.account_type === 'personal');
       if (personal) await switchAccount(personal.id);
-      router.replace('/profile');
+      goToTab('profile');
     } catch (e) {
       console.error('org-safe leave failed', e);
       setError(e instanceof Error ? e.message : 'Austreten fehlgeschlagen');

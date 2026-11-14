@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type Props = {
   title?: string;
@@ -19,7 +20,7 @@ export default function MeckyNotFound({
   const { colors } = useTheme();
   const router = useRouter();
 
-  const handlePress = onPress ?? (() => router.replace('/'));
+  const handlePress = onPress ?? (() => goToTab('home'));
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

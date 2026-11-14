@@ -34,6 +34,7 @@ import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import FeedTabBar from './FeedTabBar';
+import { NATIVE_TABS, goToTab } from '@/lib/navigation/tabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
 import PostOptionsDrawer from './PostOptionsDrawer';
@@ -376,11 +377,11 @@ export default function FeedHome() {
   const handleNavTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
     setNavTab(tab);
     if (tab === 'explore') {
-      router.push('/explore');
+      goToTab('explore', 'push');
     } else if (tab === 'map') {
       router.push('/location');
     } else if (tab === 'profile') {
-      router.push('/profile');
+      goToTab('profile', 'push');
     }
   };
 
@@ -590,9 +591,13 @@ export default function FeedHome() {
           AFTER the header below so it paints above it and the status
           bar zone stays a constant colors.background regardless of
           scroll position. */}
-      <View pointerEvents="none" style={[styles.bottomSafeBand, { height: insets.bottom }]}>
-        <GlassSurface />
-      </View>
+      {/* Not with the system tab bar (iOS): there the inset IS the bar, and a
+          frosted band underneath would kill its Liquid Glass. */}
+      {!NATIVE_TABS && (
+        <View pointerEvents="none" style={[styles.bottomSafeBand, { height: insets.bottom }]}>
+          <GlassSurface />
+        </View>
+      )}
       {/* The Pager is ALWAYS rendered (even for non-citizens, where it's
           locked to the 'main' page via scrollEnabled={false}). Keeping the
           structure stable means the 'main' FeedList + its HomeStoryBar header
@@ -746,6 +751,8 @@ export default function FeedHome() {
         />
       )}
 
+      {/* Android and web only — iOS has the system tab bar. */}
+      {!NATIVE_TABS && (
       <Animated.View
         style={[styles.bottomFloating, bottomNavAnimatedStyle]}
       >
@@ -758,6 +765,7 @@ export default function FeedHome() {
             taller than the scroll content's reserved bottomPadding below. */}
         <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} transparent />
       </Animated.View>
+      )}
       </GlassProvider>
     </SafeAreaView>
   );

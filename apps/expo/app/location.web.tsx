@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNavigation from '@/components/BottomNavigation';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function LocationScreen() {
   const router = useRouter();
@@ -12,9 +13,9 @@ export default function LocationScreen() {
 
   const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
     setActiveTab(tab);
-    if (tab === 'home') router.replace('/');
-    else if (tab === 'explore') router.push('/explore');
-    else if (tab === 'profile') router.push('/profile');
+    if (tab === 'home') goToTab('home');
+    else if (tab === 'explore') goToTab('explore', 'push');
+    else if (tab === 'profile') goToTab('profile', 'push');
   };
 
   return (

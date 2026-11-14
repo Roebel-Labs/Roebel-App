@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SearchIcon, CalendarIcon } from '@/components/Icons';
@@ -14,7 +14,7 @@ import SearchModal from '@/components/SearchModal';
 import CalendarModal from '@/components/CalendarModal';
 import BottomNavigation from '@/components/BottomNavigation';
 import { Skeleton, EventCardSkeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import { isEventThisWeek, isEventTodayOrFuture, isEventInRoebel } from '@/lib/utils';
 import HomeCategoryChips from '@/components/HomeCategoryChips';
 import NearbyEventsSection from '@/components/NearbyEventsSection';
@@ -34,6 +34,7 @@ import { isNotificationPromptDue, markNotificationPromptDismissed } from '@/lib/
 import { useConsent } from '@/context/ConsentContext';
 import { useDebouncedValue as useDebounced } from '@/hooks/useDebouncedValue';
 import { bootState } from '@/lib/navigation/bootPathname';
+import { NATIVE_TABS, goToTab } from '@/lib/navigation/tabBar';
 
 // True once this screen has actually redirected away from a cold-start `/`
 // landing. Module scope (not a ref) so it survives this component unmounting
@@ -74,6 +75,32 @@ export default function HomeScreen() {
     if (isColdStartLandingOnRoot) hasRedirectedFromRoot = true;
   }, [isColdStartLandingOnRoot]);
 
+  // iOS (system tab bar): this screen is a TAB — it is created at launch
+  // together with the other two and then lives for the whole session, instead
+  // of being thrown away by the redirect like the stack screen on Android. So
+  // the cold-start redirect must happen exactly once and must not stick, and
+  // the feed should not be built at launch at all (the app opens on Erkunden):
+  // it mounts the first time the tab is actually shown.
+  const router = useRouter();
+  const { colors } = useTheme();
+  const redirectPending = useRef(NATIVE_TABS && isColdStartLandingOnRoot);
+  const [tabShown, setTabShown] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!NATIVE_TABS) return;
+      if (redirectPending.current) {
+        redirectPending.current = false;
+        // Plain replace on purpose (not goToTab): inside the tab bar a replace
+        // is a tab switch and must never pop screens above it.
+        router.replace('/explore');
+        return;
+      }
+      setTabShown(true);
+    }, [router]),
+  );
+  // Whether this render shows the feed (and may schedule its prompts).
+  const showsFeed = NATIVE_TABS ? tabShown : !isColdStartLandingOnRoot;
+
   // Feed is the home screen for ALL modes (spec section 2)
   // Content adapts per mode via the feed algorithm
   const [showNotificationSheet, setShowNotificationSheet] = useState(false);
@@ -94,8 +121,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     // This render redirects away instead of showing the feed — nothing to
-    // schedule (this instance unmounts as soon as the redirect takes hold).
-    if (isColdStartLandingOnRoot) return;
+    // schedule (on Android this instance unmounts as soon as the redirect
+    // takes hold; on iOS the tab waits until it is first shown).
+    if (!showsFeed) return;
     // Wait until permission + consent state are known, and never fight the
     // full-screen consent modal or the re-consent sheet for attention.
     if (promptedThisSession.current) return;
@@ -120,14 +148,16 @@ export default function HomeScreen() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isColdStartLandingOnRoot, notificationsLoading, consentReady, needsConsent, needsReconsent, pushActive]);
+  }, [showsFeed, notificationsLoading, consentReady, needsConsent, needsReconsent, pushActive]);
 
   const handleNotificationDismiss = async () => {
     setShowNotificationSheet(false);
     await Promise.all([clearNotificationPromptPending(), markNotificationPromptDismissed()]);
   };
 
-  if (isColdStartLandingOnRoot) {
+  if (NATIVE_TABS) {
+    if (!tabShown) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  } else if (isColdStartLandingOnRoot) {
     return <Redirect href="/explore" />;
   }
 
@@ -646,9 +676,9 @@ function DefaultHome() {
   const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'explore') {
-      router.push('/explore');
+      goToTab('explore', 'push');
     } else if (tab === 'profile') {
-      router.push('/profile');
+      goToTab('profile', 'push');
     }
   };
 

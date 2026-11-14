@@ -12,6 +12,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useConnectInstance } from '@/components/payments/useConnectInstance';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type Tab = 'payments' | 'payouts';
 
@@ -28,7 +29,7 @@ export default function OrgMoneyScreen() {
   const canManage = roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin';
 
   useEffect(() => {
-    if (!activeAccount || !isOrg) router.replace('/profile');
+    if (!activeAccount || !isOrg) goToTab('profile');
   }, [activeAccount, isOrg, router]);
 
   const onError = useCallback((message: string) => setFailed(message), []);

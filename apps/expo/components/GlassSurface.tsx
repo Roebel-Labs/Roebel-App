@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View, type ViewProps } from 'react-native';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import { requireOptionalNativeModule } from 'expo';
 import { useTheme } from '@/context/ThemeContext';
+import { LiquidGlassView, useLiquidGlass } from '@/lib/liquidGlass';
 
 // Real frosted glass, not lowered opacity: a backdrop blur with the iOS
 // "chrome" material tint (the material system bars use — heavily frosted
@@ -90,6 +91,15 @@ type Props = {
    * again, drop back to one sampler per screen (bottom nav).
    */
   androidExperimentalBlur?: boolean;
+  /**
+   * For FLOATING controls (pills, round buttons): the corner radius of the
+   * control. On iOS 26+ the surface then renders real Liquid Glass in that
+   * shape instead of the frosted blur. Leave unset for full-width bars —
+   * Apple keeps Liquid Glass to controls that float above content, and a
+   * bar-sized pane of it reads wrong. Everywhere else (Android, older iOS,
+   * Reduce Transparency) this prop changes nothing.
+   */
+  liquidRadius?: number;
 };
 
 /**
@@ -97,7 +107,7 @@ type Props = {
  * bar/pill (siblings paint above it); the container itself must stay
  * transparent and, for rounded shapes, clip with overflow:'hidden'.
  */
-export default function GlassSurface({ intensity = 100, edge = 'none', androidExperimentalBlur = false }: Props) {
+export default function GlassSurface({ intensity = 100, edge = 'none', androidExperimentalBlur = false, liquidRadius }: Props) {
   const { colors, isDark, variant } = useTheme();
   // Pure-black theme: the frost tints above are cut for the Dim palette and
   // read as bright grey bars against #000, so every glass surface gets an
@@ -117,6 +127,8 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
     if (target?.current) setTargetReady(true);
   }, [target]);
 
+  const liquid = useLiquidGlass();
+
   const edgeLine =
     edge === 'none' ? null : (
       <View
@@ -128,6 +140,20 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
         ]}
       />
     );
+
+  if (liquid && LiquidGlassView && liquidRadius !== undefined) {
+    // The glass draws its own rim and highlights, so no tint washes and no
+    // hairline here. Never fade this view (or a parent) with opacity — the
+    // material stops rendering below 1.
+    return (
+      <LiquidGlassView
+        pointerEvents="none"
+        glassEffectStyle="regular"
+        colorScheme={isDark ? 'dark' : 'light'}
+        style={[StyleSheet.absoluteFill, { borderRadius: liquidRadius }]}
+      />
+    );
+  }
 
   // iOS: authentic chrome material. Android: full blur radius but a LIGHTER
   // overlay — the tint's base alpha is the knob that's independent of radius

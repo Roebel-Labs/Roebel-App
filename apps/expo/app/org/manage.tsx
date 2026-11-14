@@ -21,6 +21,7 @@ import InviteDrawer from '@/components/InviteDrawer';
 import type { MemberWithProfile, InviteTokenWithUser, OrgRole } from '@/lib/types';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function OrgManageScreen() {
   const router = useRouter();
@@ -66,7 +67,7 @@ export default function OrgManageScreen() {
           break;
         case 'leave':
           await leaveOrg();
-          router.replace('/profile');
+          goToTab('profile');
           break;
         case 'change_role':
           if (confirmAction.target && confirmAction.newRole) {

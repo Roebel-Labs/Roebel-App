@@ -26,6 +26,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
 import { useWalletBoot } from '@/context/WalletBootContext';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 /** The gate check must never hold the first-launch screen: a slow answer counts as closed. */
 const GATE_WAIT_MS = 2_000;
@@ -56,7 +57,7 @@ export default function ConsentModalScreen() {
     const toWelcome = autoConnectFinished && !account && (await Promise.race([gate, timeout]));
     if (toWelcome) router.replace('/welcome' as any);
     else if (router.canGoBack()) router.back();
-    else router.replace('/' as any);
+    else goToTab('home');
   };
 
   const handleAcceptAll = async () => {

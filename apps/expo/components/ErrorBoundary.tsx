@@ -2,6 +2,7 @@ import React, { Component, ReactNode } from 'react';
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 // Hardcoded fallback colors — ErrorBoundary renders outside ThemeProvider
 const fallbackColors = {
@@ -118,7 +119,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     // home explicitly, once the remounted tree has had a frame to settle.
     setTimeout(() => {
       try {
-        router.replace('/');
+        goToTab('home');
       } catch {
         // Navigator not mounted yet — the remount's own landing stands.
       }

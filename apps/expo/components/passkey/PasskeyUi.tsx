@@ -9,6 +9,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 /**
  * The preview fence for deep-linked passkey screens: null while checking, false = closed (the
@@ -24,7 +25,7 @@ export function usePasskeyGate(redirectHome = true): boolean | null {
       .then((ok) => {
         if (cancelled) return;
         setAllowed(ok);
-        if (!ok && redirectHome) router.replace('/' as any);
+        if (!ok && redirectHome) goToTab('home');
       });
     return () => {
       cancelled = true;
@@ -39,7 +40,7 @@ export function ScreenHeader({ title, onBack }: { title: string; onBack?: () => 
   return (
     <View style={styles.header}>
       <Pressable
-        onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/' as any)))}
+        onPress={onBack ?? (() => (router.canGoBack() ? router.back() : goToTab('home')))}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel="Zurück"

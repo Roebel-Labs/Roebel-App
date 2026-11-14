@@ -19,6 +19,7 @@ import { redeemReferral } from '@/lib/supabase-rewards';
 import { claimReward } from '@/lib/rewards-claim';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import ReferralShareCard from '@/components/rewards/ReferralShareCard';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const HERO = require('../../assets/illustration/gamification/stack.png');
 const REFERRAL_BASE = 'https://www.roebel.app/r';
@@ -82,7 +83,7 @@ export default function ReferralScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/profile' as any);
+      goToTab('profile');
     }
   }, [router]);
 

@@ -9,6 +9,7 @@ import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import BottomDrawer from '@/components/BottomDrawer';
 import OrgSafeSection from '@/components/org/OrgSafeSection';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function OrgSettingsScreen() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function OrgSettingsScreen() {
   // Guard: this screen is only valid for org accounts.
   useEffect(() => {
     if (!activeAccount || activeAccount.account_type !== 'organisation') {
-      router.replace('/profile');
+      goToTab('profile');
     }
   }, [activeAccount, router]);
 
@@ -48,7 +49,7 @@ export default function OrgSettingsScreen() {
         await switchAccount(personal.id);
       }
       setShowConfirm(false);
-      router.replace('/profile');
+      goToTab('profile');
     } catch (err) {
       console.error('Failed to delete account', err);
       const message =

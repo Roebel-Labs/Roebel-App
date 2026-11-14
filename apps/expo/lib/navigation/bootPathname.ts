@@ -7,7 +7,7 @@
  * that screen's component body runs, `bootState.pathname` is already correct
  * if (and only if) that screen IS the one the app cold-booted into.
  *
- * `app/index.tsx` reads this to tell "cold start resolved to `/`" apart from
+ * `app/(tabs)/index.tsx` reads this to tell "cold start resolved to `/`" apart from
  * "the user navigated back to `/` later in the session" without ever mounting
  * the feed screen on the former.
  */

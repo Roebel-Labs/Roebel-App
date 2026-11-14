@@ -13,6 +13,7 @@ import {
   ColorTokens,
 } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const THEME_LABELS: Record<ThemePreference, string> = {
   system: 'System',
@@ -103,7 +104,7 @@ export default function DesignSystemScreen() {
 
   useEffect(() => {
     if (!isExtendedMode) {
-      router.replace('/profile');
+      goToTab('profile');
     }
   }, [isExtendedMode]);
 

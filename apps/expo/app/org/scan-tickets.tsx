@@ -16,6 +16,7 @@ import { useAccount } from '@/context/AccountContext';
 import QRScanner, { type QRScanResult } from '@/components/QRScanner';
 import { checkInTicket } from '@/lib/tickets';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 // Fixed, theme-independent tones — the scanner backdrop is always black
 // (like the header below), so a pale theme-derived badge would wash out.
@@ -50,7 +51,7 @@ export default function ScanTicketsScreen() {
   // Guard: this screen is only valid for org accounts.
   useEffect(() => {
     if (!activeAccount || activeAccount.account_type !== 'organisation') {
-      router.replace('/profile');
+      goToTab('profile');
     }
   }, [activeAccount, router]);
 

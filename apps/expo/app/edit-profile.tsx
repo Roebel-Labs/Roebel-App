@@ -25,6 +25,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import FrameCarousel from '@/components/rewards/FrameCarousel';
 import BannerSelectionGrid from '@/components/rewards/BannerSelectionGrid';
 import TierBadge from '@/components/RoleBadge';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -73,7 +74,7 @@ export default function EditProfileScreen() {
     if (wallet) {
       disconnect(wallet);
       setShowLogoutDrawer(false);
-      router.replace('/profile' as any);
+      goToTab('profile');
     }
   };
 

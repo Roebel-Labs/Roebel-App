@@ -41,6 +41,7 @@ import {
   formatListTime,
   useChatTokens,
 } from '@/components/chat';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 function pick<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)];
@@ -379,7 +380,7 @@ function ChatList({
       <View style={[styles.listHeader, { paddingTop: insets.top + 8 }]}>
         <GlassCircleButton
           accessibilityLabel="Zurück"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile' as Href))}
+          onPress={() => (router.canGoBack() ? router.back() : goToTab('profile'))}
         >
           <Feather name="chevron-left" size={26} color={t.icon} />
         </GlassCircleButton>

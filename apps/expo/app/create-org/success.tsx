@@ -6,6 +6,7 @@ import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useAccount } from '@/context/AccountContext';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function CreateOrgSuccessScreen() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function CreateOrgSuccessScreen() {
     if (state.newAccountId) {
       await switchAccount(state.newAccountId);
     }
-    router.replace('/profile');
+    goToTab('profile');
   };
 
   return (

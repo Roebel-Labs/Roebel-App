@@ -20,6 +20,7 @@ import { loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migrati
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import type { Person } from '@/lib/passkey/people';
 import { readRecoveryRequestSafe, resolvePeopleNow, sendGuardianConfirm } from '@/lib/passkey/guardians-runtime';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type Chain = {
   plan: GuardianConfirmPlan;
@@ -167,7 +168,7 @@ export default function ConfirmRecoveryScreen() {
                             : 'Danke! Du hast bestätigt.'
                         }
                       />
-                      <BigButton label="Fertig" onPress={() => router.replace('/' as any)} />
+                      <BigButton label="Fertig" onPress={() => goToTab('home')} />
                     </>
                   ) : (
                     <BigButton label={`Ja, es ist ${name}`} onPress={onConfirm} busy={busy} />

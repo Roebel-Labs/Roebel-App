@@ -40,6 +40,7 @@ import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import type { ColorTokens } from '@/constants/theme';
 import { deleteEventDraft, getEventDraft, newEventDraftId, saveEventDraft } from '@/lib/event-drafts';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -780,7 +781,7 @@ export default function SubmitEventScreen() {
             onPress={() => {
               setIsSuccess(false);
               setCreatedEventData(null);
-              router.push('/profile');
+              goToTab('profile', 'push');
             }}
           >
             <Text style={[styles.secondarySuccessButtonText, { color: colors.textPrimary }]}>Zum Profil</Text>

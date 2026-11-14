@@ -94,6 +94,7 @@ import {
 // Mapbox SDK + token init is centralized so embedded maps work regardless of
 // which screen loads first. Fails gracefully in Expo Go (Mapbox === null).
 import { isMapboxAvailable } from '@/lib/map/mapbox';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 /** How far the bottom fade reaches above the category row before it is gone. */
 const FADE_LEAD = 48;
@@ -493,7 +494,7 @@ export default function LocationScreen() {
   // it, so back falls through to the explore feed rather than doing nothing.
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/explore' as any);
+    else goToTab('explore');
   };
 
   const handleLocateMe = async () => {
@@ -659,7 +660,7 @@ export default function LocationScreen() {
               >
                 <CallIcon size={20} color={colors.textPrimary} />
               </MapIconButton>
-              <MapExploreButton onPress={() => router.push('/explore' as any)} />
+              <MapExploreButton onPress={() => goToTab('explore', 'push')} />
               <MapIconButton onPress={() => setShowSearchModal(true)} accessibilityLabel="Suchen">
                 <SearchIcon size={20} color={colors.textPrimary} />
               </MapIconButton>

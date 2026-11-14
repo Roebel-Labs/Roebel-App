@@ -12,7 +12,7 @@ import {
 } from '@/lib/referral-deeplink';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { routeForNotification } from '@/lib/navigation/notificationRoute';
-import { noTransition } from '@/lib/navigation/transitionPresets';
+import { noTransition, sectionCut } from '@/lib/navigation/transitionPresets';
 import { AuthGateProvider } from '@/context/AuthGateContext';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { InterestProvider } from '@/context/InterestContext';
@@ -77,7 +77,7 @@ if (Platform.OS !== 'web') {
  *
  * Cold start: the tap is read synchronously on mount, but navigation waits until
  * the boot navigation has settled (pathname off `/`). On a cold boot into `/`,
- * app/index.tsx replaces it with /explore; a push made before that replace was
+ * app/(tabs)/index.tsx replaces it with /explore; a push made before that replace was
  * swapped out by it, so the tap landed on Erkunden instead of the post. Pushing
  * after it keeps Erkunden underneath, so "back" leads there.
  */
@@ -149,7 +149,7 @@ function NotificationHandler() {
 // fonts finish loading and `ThemedLayout` mounts its own fresh instance.
 // Checked-and-spent INSIDE the effect (not during render) so it's only
 // flipped once a render has actually committed and its effect has run — the
-// same reasoning as the `hasRedirectedFromRoot` guard in `app/index.tsx`.
+// same reasoning as the `hasRedirectedFromRoot` guard in `app/(tabs)/index.tsx`.
 let hasScheduledUpdateCheck = false;
 
 /**
@@ -194,7 +194,7 @@ function DeferredUpdateCheck() {
  * render. Rendered as `ThemedLayout`'s FIRST child, so — siblings render in
  * declaration order, depth-first — it always runs before React descends into
  * the Stack's matched screen (the same tree position the old
- * `InitialRouteRedirect` occupied). `app/index.tsx` reads
+ * `InitialRouteRedirect` occupied). `app/(tabs)/index.tsx` reads
  * `bootState.pathname` to tell "cold start resolved to `/`" apart from "the
  * user navigated back to `/` later in the session" without ever mounting the
  * feed screen on the former. See `lib/navigation/bootPathname.ts`.
@@ -289,20 +289,21 @@ function ThemedLayout() {
           <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
           <TransitionStack.Screen name="games/speedrun" options={noTransition()} />
           <TransitionStack.Screen name="games/fortune-cards" options={noTransition()} />
-          {/* Pseudo-tab routes reachable from components/BottomNavigation.tsx — no tab
-              navigator exists, so these switches must stay instant cuts instead of
-              sliding sideways like a real push. */}
-          <TransitionStack.Screen name="index" options={noTransition()} />
-          <TransitionStack.Screen name="explore" options={noTransition()} />
-          <TransitionStack.Screen name="profile" options={noTransition()} />
-          <TransitionStack.Screen name="events" options={noTransition()} />
-          <TransitionStack.Screen name="calendar" options={noTransition()} />
-          <TransitionStack.Screen name="governance" options={noTransition()} />
-          <TransitionStack.Screen name="tours/index" options={noTransition()} />
-          <TransitionStack.Screen name="transit/index" options={noTransition()} />
-          <TransitionStack.Screen name="blog/index" options={noTransition()} />
-          <TransitionStack.Screen name="wildlife/index" options={noTransition()} />
-          <TransitionStack.Screen name="news/index" options={noTransition()} />
+          {/* The three main sections live in app/(tabs): the system tab bar on
+              iOS, a stack of instant cuts on Android and web (see its _layout). */}
+          <TransitionStack.Screen name="(tabs)" options={noTransition()} />
+          {/* List screens that repeat the hand-drawn bottom bar on Android and
+              web, where they must switch as instant cuts like the sections
+              themselves. On iOS they carry no bar and are ordinary pushes with
+              the back swipe (sectionCut() is a no-op there). */}
+          <TransitionStack.Screen name="events" options={sectionCut()} />
+          <TransitionStack.Screen name="calendar" options={sectionCut()} />
+          <TransitionStack.Screen name="governance" options={sectionCut()} />
+          <TransitionStack.Screen name="tours/index" options={sectionCut()} />
+          <TransitionStack.Screen name="transit/index" options={sectionCut()} />
+          <TransitionStack.Screen name="blog/index" options={sectionCut()} />
+          <TransitionStack.Screen name="wildlife/index" options={sectionCut()} />
+          <TransitionStack.Screen name="news/index" options={sectionCut()} />
           <TransitionStack.Screen
             name="welcome"
             options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}

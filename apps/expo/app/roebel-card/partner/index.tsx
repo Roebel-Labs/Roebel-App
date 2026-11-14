@@ -34,6 +34,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PartnerRevenueChart, {
   peakHourLabel,
 } from './_components/PartnerRevenueChart';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type LoadState =
   | { kind: 'loading' }
@@ -89,7 +90,7 @@ export default function PartnerDashboardScreen() {
     >
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
-          onPress={() => router.replace('/profile' as any)}
+          onPress={() => goToTab('profile')}
           style={styles.backButton}
           hitSlop={8}
           accessibilityRole="button"

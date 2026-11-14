@@ -6,6 +6,7 @@ import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { CreateOrgWizardProvider, useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const STEP_SCREENS = ['type', 'info', 'location', 'contact', 'photos', 'review'];
 
@@ -32,11 +33,11 @@ function WizardHeader() {
         onDelete={() => {
           dispatch({ type: 'RESET' });
           setShowExit(false);
-          router.replace('/profile');
+          goToTab('profile');
         }}
         onSaveAndExit={() => {
           setShowExit(false);
-          router.replace('/profile');
+          goToTab('profile');
         }}
         onCancel={() => setShowExit(false)}
       />

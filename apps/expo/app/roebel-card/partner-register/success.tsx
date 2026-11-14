@@ -5,6 +5,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export default function PartnerRegisterSuccessScreen() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function PartnerRegisterSuccessScreen() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => router.replace('/profile' as any)}
+          onPress={() => goToTab('profile')}
           style={styles.secondaryButton}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>

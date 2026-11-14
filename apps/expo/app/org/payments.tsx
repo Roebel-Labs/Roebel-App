@@ -11,6 +11,7 @@ import { canSignSilently } from '@/lib/signed-request';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import ConnectOnboardingModal from '@/components/payments/ConnectOnboardingModal';
 import { isStripeNativeAvailable } from '@/lib/stripe-native';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 /** Known `currently_due` keys mapped to German labels; anything else falls back to the raw key. */
 const CURRENTLY_DUE_LABELS: Record<string, string> = {
@@ -42,7 +43,7 @@ export default function OrgPaymentsScreen() {
   // Guard: this screen is only valid for org accounts.
   useEffect(() => {
     if (!activeAccount || activeAccount.account_type !== 'organisation') {
-      router.replace('/profile');
+      goToTab('profile');
     }
   }, [activeAccount, router]);
 

@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useOrderSession } from '@/context/OrderSessionContext';
 import { formatMenuPrice } from '@/lib/utils';
 import { ORDER_STATUS_LABELS } from '@/lib/types/orders';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   new: { bg: '#FEF3C7', text: '#92400E' },
@@ -24,7 +25,7 @@ export default function OrderStatusScreen() {
 
   const handleLeave = () => {
     leaveSession();
-    router.replace('/');
+    goToTab('home');
   };
 
   return (

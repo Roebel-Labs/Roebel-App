@@ -9,6 +9,7 @@ import DiscoverStroke from '@/assets/icons/bottom-nav/discover.svg';
 import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
 import PressableScale from '@/components/PressableScale';
 import { useTheme } from '@/context/ThemeContext';
+import { useLiquidGlass } from '@/lib/liquidGlass';
 import { fontFamily } from '@/constants/theme';
 import { softShadow } from '@/lib/shadow';
 
@@ -20,6 +21,8 @@ type Props = {
 
 export default function MapExploreButton({ onPress }: Props) {
   const { colors, isDark } = useTheme();
+  // Liquid Glass (iOS 26+) brings its own rim — drop our hairline there.
+  const liquid = useLiquidGlass();
 
   return (
     <PressableScale
@@ -29,8 +32,8 @@ export default function MapExploreButton({ onPress }: Props) {
       accessibilityLabel="Erkunden öffnen"
       style={[styles.shadow, softShadow(3, isDark)]}
     >
-      <View style={[styles.clip, { borderColor: glassEdgeColor(isDark) }]}>
-        <GlassSurface />
+      <View style={[styles.clip, { borderColor: liquid ? 'transparent' : glassEdgeColor(isDark) }]}>
+        <GlassSurface liquidRadius={EXPLORE_BUTTON_HEIGHT / 2} />
         <View style={styles.content}>
           <DiscoverStroke width={18} height={18} color={colors.textPrimary} />
           <Text style={[styles.label, { color: colors.textPrimary }]}>Erkunden</Text>

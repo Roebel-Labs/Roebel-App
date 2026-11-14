@@ -33,6 +33,7 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 type PillFilter = 'Alle' | EventCategory;
 
@@ -472,9 +473,9 @@ export default function EventsScreen() {
             activeTab="explore"
             glass
             onTabPress={(tab) => {
-              if (tab === 'home') router.replace('/');
-              else if (tab === 'explore') router.replace('/explore');
-              else if (tab === 'profile') router.push('/profile');
+              if (tab === 'home') goToTab('home');
+              else if (tab === 'explore') goToTab('explore');
+              else if (tab === 'profile') goToTab('profile', 'push');
             }}
           />
         </View>

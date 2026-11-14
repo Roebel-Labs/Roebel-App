@@ -20,6 +20,7 @@ import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { THEME_OPTIONS } from '@/constants/theme-options';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
@@ -168,7 +169,7 @@ export default function SettingsScreen() {
         disconnect(activeWallet);
       }
       setShowDeleteConfirm(false);
-      router.replace('/');
+      goToTab('home');
     } catch (err) {
       console.error('Account deletion failed', err);
       const message =

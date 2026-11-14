@@ -15,6 +15,7 @@ import {
   type DishPhoto, type SpotSource,
 } from '@/lib/sponsoring';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 const DEFAULT_PICKS = 3;
 
@@ -133,7 +134,7 @@ export default function SponsoringStatusScreen() {
 
   const header = (
     <View style={styles.header}>
-      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile' as any))} style={styles.backButton} hitSlop={8} accessibilityLabel="Zurück">
+      <Pressable onPress={() => (router.canGoBack() ? router.back() : goToTab('profile'))} style={styles.backButton} hitSlop={8} accessibilityLabel="Zurück">
         <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
       </Pressable>
       <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Eure Werbung</Text>

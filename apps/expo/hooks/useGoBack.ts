@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
+import { goToTab } from '@/lib/navigation/tabBar';
 
 export function useGoBack() {
   const router = useRouter();
@@ -7,7 +8,7 @@ export function useGoBack() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/');
+      goToTab('home');
     }
   }, [router]);
 }

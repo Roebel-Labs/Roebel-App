@@ -11,6 +11,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
 import PressableScale from '@/components/PressableScale';
 import { useTheme } from '@/context/ThemeContext';
+import { useLiquidGlass } from '@/lib/liquidGlass';
 import { softShadow } from '@/lib/shadow';
 
 export const MAP_ICON_BUTTON_SIZE = 48;
@@ -24,6 +25,8 @@ type Props = {
 
 export default function MapIconButton({ onPress, accessibilityLabel, children, style }: Props) {
   const { isDark } = useTheme();
+  // Liquid Glass (iOS 26+) brings its own rim — drop our hairline there.
+  const liquid = useLiquidGlass();
   return (
     <PressableScale
       onPress={onPress}
@@ -32,8 +35,8 @@ export default function MapIconButton({ onPress, accessibilityLabel, children, s
       accessibilityLabel={accessibilityLabel}
       style={[styles.shadow, softShadow(2, isDark), style]}
     >
-      <View style={[styles.clip, { borderColor: glassEdgeColor(isDark) }]}>
-        <GlassSurface />
+      <View style={[styles.clip, { borderColor: liquid ? 'transparent' : glassEdgeColor(isDark) }]}>
+        <GlassSurface liquidRadius={MAP_ICON_BUTTON_SIZE / 2} />
         <View style={styles.content}>{children}</View>
       </View>
     </PressableScale>

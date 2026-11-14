@@ -18,6 +18,8 @@ import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-act
 import { SUB_TYPE_EMOJI } from '@/lib/types';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import { useTabShown } from '@/lib/navigation/useTabShown';
+import { NATIVE_TABS, goToTab } from '@/lib/navigation/tabBar';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import BuergerWerdenBanner from '@/components/profile/BuergerWerdenBanner';
@@ -45,6 +47,14 @@ import QrCodeIcon from '@/assets/icons/qr-code.svg';
 type Tab = 'home' | 'explore' | 'profile';
 
 export default function ProfileScreen() {
+  // iOS: a tab that is created at launch — build it when first opened.
+  const shown = useTabShown();
+  const { colors } = useTheme();
+  if (!shown) return <View style={{ flex: 1, backgroundColor: colors.backdrop }} />;
+  return <ProfileContent />;
+}
+
+function ProfileContent() {
   const router = useRouter();
   const account = useActiveAccount();
   const wallet = useActiveWallet();
@@ -89,8 +99,8 @@ export default function ProfileScreen() {
 
   const handleTabPress = (tab: Tab) => {
     setActiveTab(tab);
-    if (tab === 'home') router.replace('/');
-    else if (tab === 'explore') router.push('/explore');
+    if (tab === 'home') goToTab('home');
+    else if (tab === 'explore') goToTab('explore', 'push');
   };
 
   const handleRefresh = async () => {
@@ -215,7 +225,7 @@ export default function ProfileScreen() {
         {hasAnyNFT && (
           <Pressable
             onPress={() => router.push('/verification/scan' as any)}
-            style={[styles.qrFab, { backgroundColor: colors.primary }]}
+            style={[styles.qrFab, { backgroundColor: colors.primary }, NATIVE_TABS && { bottom: insets.bottom + 16 }]}
             accessibilityRole="button"
             accessibilityLabel="QR-Code scannen"
           >
