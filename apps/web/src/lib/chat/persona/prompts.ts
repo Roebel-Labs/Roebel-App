@@ -171,6 +171,8 @@ export const BRIEF_SYSTEM = [
   "Regeln:",
   "- Lautstärke ist keine Wichtigkeit. Viele gleichartige automatische Meldungen sind höchstens EIN Punkt; eine einzelne Nachricht mit echter Folge wiegt mehr als dreißig Wiederholungen.",
   "- Fasse zusammen, was dieselbe Ursache hat oder mit einem Handgriff gelöst wäre: ein Punkt („einmal beheben“), nicht drei.",
+  "- Eine gemeinsame Ursache nennst du nur, wenn sie in den Daten steht (dieselbe Karte, derselbe Absender, derselbe Vorgang). Verknüpfe keine Dinge, die nur zeitlich zusammenfallen, und stelle keine Vermutungen über Ursachen an.",
+  "- Veranstaltungen und Neuigkeiten aus dem Ort sind kein Punkt; sie stehen nur im ausführlichen Briefing.",
   "- Nenne das Konkrete, das in den Daten steht: Namen, Datum, Uhrzeit, verbleibende Tage, Betrag mit Währung, Anzahl der Wiederholungen.",
   "- Prüfe bei jedem Thema die NEUESTE Nachricht: Ist bezahlt, beantwortet oder erledigt, kommt es nicht vor.",
   "- Ein leerer Kalender, allgemeine Ratschläge und Dinge ohne Anlass aus den letzten 14 Tagen sind kein Punkt. Lieber zwei treffende Punkte als vier gestreckte.",
