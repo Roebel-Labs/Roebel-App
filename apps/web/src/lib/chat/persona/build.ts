@@ -283,7 +283,14 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
     await store.upsertPage(wallet, {
       slug: "_briefing", kind: "core", title: "Tagesbriefing", summary: "", body: stripCitations(brief.doc ?? "").trim().slice(0, 6000),
       facts: brief.points.slice(0, 4).map((b) => {
-        const action = b.task ? titleByNumber.get(b.task) : undefined;
+        // The model's task number is sometimes just the point's own position: trust it only when the
+        // task is about the same matter, otherwise take the task that is.
+        // A point links to something to do now: the best matching task, a routine only when no task fits.
+        const about = (n: number) => { const t = kept.find((k) => k.n === n)?.t; return t ? titleOverlap(`${b.label} ${b.text}`, `${t.title} ${t.reason}`) : 0; };
+        const bestOf = (kind: "task" | "routine") => kept.filter((k) => k.t.kind === kind).map((k) => k.n).sort((x, y) => about(y) - about(x)).find((n) => about(n) >= 0.25);
+        const named = b.task && kept.find((k) => k.n === b.task)?.t.kind === "task" && about(b.task) >= 0.25 ? b.task : null;
+        const pick = named ?? bestOf("task") ?? bestOf("routine") ?? null;
+        const action = pick ? titleByNumber.get(pick) : undefined;
         return { label: b.label.trim().slice(0, 40), value: stripCitations(b.text).trim().slice(0, 400), ...(action ? { action } : {}) };
       }),
     });
@@ -301,7 +308,7 @@ async function stageSynthesize(wallet: string, cp: Checkpoint): Promise<PersonaS
       .filter(({ s }) => {
         const key = s.title.trim().toLowerCase();
         if (!key || seenTitles.has(key) || tombstones.has(`suggestion:${key}`) || tombstones.has(`suggestion:${s.title.trim()}`)) return false;
-        if (today.some((t) => t.kind === s.kind && titleOverlap(t.title, s.title) >= 0.6)) return false;
+        if (today.some((t) => t.kind === s.kind && titleOverlap(t.title, s.title) >= 0.5)) return false;
         seenTitles.add(key);
         return true;
       })

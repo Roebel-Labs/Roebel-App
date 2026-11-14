@@ -301,7 +301,9 @@ export function isUrgentNotice(subject: string, snippet = ""): boolean {
 
 const STOP = new Set(["eine", "einen", "einer", "eines", "dein", "deine", "deinen", "deiner", "über", "nach", "wegen", "sowie", "oder", "nicht", "noch", "jetzt", "heute", "bitte", "klären", "prüfen", "entwerfen", "vorbereiten", "erstellen", "with", "from", "your", "that", "this"]);
 const words = (s: string): Set<string> => new Set(
-  s.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w)),
+  s.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w))
+    // Crude stem: German inflects and compounds at the end ("Zahlung", "Zahlungen", "Zahlungsprobleme").
+    .map((w) => w.slice(0, 6)),
 );
 
 /** Share of the shorter title's content words that also appear in the other one (0…1). */

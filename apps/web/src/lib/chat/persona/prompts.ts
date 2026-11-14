@@ -152,7 +152,7 @@ export const briefSchema = z.object({
   points: z.array(z.object({
     label: z.string().describe("Zwei bis vier Wörter, die die Lage benennen, z. B. „Dringend, Frist in 2 Tagen“, „Seit gestern kaputt“, „Antwort offen“, „Heute um 14 Uhr“, „Gleiche Ursache“"),
     text: z.string().describe("Ein bis zwei Sätze in Du-Form: der konkrete Sachverhalt mit Anbieter oder Namen, Betrag, Datum, Anzahl der Wiederholungen und der Folge, wenn nichts geschieht. Ohne Belege, ohne Internetadressen."),
-    task: z.number().nullish().describe("Nummer der zugehörigen Aufgabe aus „tasks“ (1 = erste), sonst null"),
+    task: z.number().nullish().describe("Nummer der Aufgabe aus „tasks“, die GENAU diesen Sachverhalt angeht (1 = erste Aufgabe der Liste; mehrere Punkte dürfen auf dieselbe Aufgabe zeigen), sonst null"),
   })).describe("Höchstens 4, nach Dringlichkeit geordnet. Leer, wenn wirklich nichts ansteht."),
   doc: z.string().describe("Das ganze Tagesbriefing als Markdown in Du-Form, 150 bis 350 Wörter, auch zum Vorlesen geeignet (ganze Sätze, keine Tabellen, keine ausgeschriebenen Internetadressen, keine Belege). Aufbau: ein Eröffnungssatz mit Anrede, Wochentag und dem Wichtigsten des Tages; dann nur die Abschnitte, für die es Stoff gibt: ## Dringend (Fristen, Zahlungen, ablaufende Zugänge, mit Betrag und Datum), ## Kalender (Termine von heute und morgen), ## E-Mails (was seit gestern kam und eine Reaktion braucht, mit Namen), ## Offen bei dir (Zusagen der nächsten Tage), ## Dabei kann ich helfen (die Angebote aus tasks in je einem Satz), ## In <Ort> (zwei bis vier Veranstaltungen oder Neuigkeiten aus dem Abschnitt über den Ort, falls vorhanden). Verweise auf Wiki-Seiten als [Text](wiki:slug)."),
 });
