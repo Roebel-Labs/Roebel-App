@@ -1,3 +1,4 @@
+import { useLang } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { LiveRoomPanel, LiveRoomRuntime } from '../live-room/LiveRoomPanel';
 import { useShow } from '../state/store';
@@ -517,6 +518,9 @@ function Shell() {
 }
 
 export function App() {
+  // Re-renders the whole interface in place when the language changes (no reload: a reload would
+  // end a running broadcast).
+  useLang();
   return (
     <StudioProvider>
       <Shell />

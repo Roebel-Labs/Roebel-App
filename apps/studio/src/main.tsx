@@ -8,6 +8,7 @@ import { StoreProvider } from './state/store';
 import { App } from './ui/App';
 import { applyAccent, loadAccent } from './ui/shell/accent';
 import { initTheme } from './ui/shell/theme';
+import { applyLang } from './i18n';
 
 // A file dropped anywhere on the window must never navigate the page (the renderer would
 // unload and the MediaRecorder with it: dead stream). Drop zones that accept files call
@@ -26,6 +27,7 @@ document.addEventListener('drop', (e) => e.preventDefault());
 }
 
 // The user's appearance and primary colour before the first paint.
+applyLang();
 initTheme();
 applyAccent(loadAccent());
 

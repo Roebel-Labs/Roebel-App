@@ -1,3 +1,4 @@
+import { LANG_OPTIONS, setLang, t, useLang } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { ChatApiError, deleteProviderKey, fetchMe, saveProviderKey, type KeyProvider, type Me } from '../../workspace/api';
 import { emitCommand, onDesktopCommand } from '../../workspace/desktop';
@@ -96,6 +97,7 @@ function Appearance() {
     applyAccent(v);
     saveAccent(v);
   };
+  const lang = useLang();
   const [theme, setThemeState] = useState(currentTheme);
   useEffect(() => onThemeChange(setThemeState), []);
   return (
@@ -105,6 +107,15 @@ function Appearance() {
       <div className="tb-seg" role="radiogroup" aria-label="Darstellung">
         {THEME_OPTIONS.map((o) => (
           <button key={o.id} role="radio" aria-checked={theme === o.id} onClick={() => setTheme(o.id)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <h3>{t('Sprache')}</h3>
+      <p className="w-muted">{t('Sprache der Oberfläche. Wird auf diesem Gerät gespeichert.')}</p>
+      <div className="tb-seg" role="radiogroup" aria-label={t('Sprache')}>
+        {LANG_OPTIONS.map((o) => (
+          <button key={o.id} role="radio" aria-checked={lang === o.id} onClick={() => setLang(o.id)}>
             {o.label}
           </button>
         ))}

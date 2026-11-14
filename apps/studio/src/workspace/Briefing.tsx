@@ -1,5 +1,6 @@
 // Start block of the main conversation: greeting, the day's briefing and up to five suggestions.
 import { useEffect, useState } from 'react';
+import { locale, t } from '../i18n';
 import { Initial } from '../persona/common';
 import { hintWikiSlug } from '../persona/intent';
 import { MdInline } from '../persona/Md';
@@ -30,7 +31,7 @@ async function load(token: string): Promise<Data> {
   try {
     const b = await fetchBriefing(token);
     const doc = typeof b.doc === 'string' ? b.doc.trim() : '';
-    const full = doc ? { doc, title: b.title?.trim() || 'Tagesbriefing', audio: b.audio === true } : null;
+    const full = doc ? { doc, title: b.title?.trim() || t('Tagesbriefing'), audio: b.audio === true } : null;
     return { full, name: firstName(b.name), items: b.items ?? [], suggestions: (b.suggestions ?? []).slice(0, MAX_SUGGESTIONS) };
   } catch (e) {
     if (e instanceof ChatApiError && e.status === 401) throw e;
@@ -63,7 +64,7 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
       const r = await startSuggestion(token, s.id);
       setDone((d) => new Set(d).add(s.id));
       if (s.kind === 'task' && !r.routine) emitCommand({ kind: 'openThread', threadId: r.threadId, message: r.prompt || s.prompt });
-      else setNotice(`Routine eingerichtet: ${r.routine?.title || s.title}`);
+      else setNotice(t('Routine eingerichtet: {title}', { title: r.routine?.title || s.title }));
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -78,14 +79,14 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
 
   const suggestions = (data?.suggestions ?? []).filter((s) => !done.has(s.id));
   return (
-    <section className="ws-brief" aria-label="Tagesüberblick">
+    <section className="ws-brief" aria-label={t('Tagesüberblick')}>
       <BotAvatar bot={bot} size={32} radius={8} />
       <div className="ws-brief-body">
         <div className="ws-msg-meta">
           <strong className="ws-bot-name">{name ?? bot?.name ?? 'Mecky'}</strong>
-          <span className="w-muted">{now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className="w-muted">{now.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
-        <div className="ws-brief-date">{now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div className="ws-brief-date">{now.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         {data ? (
           <h1 className="ws-brief-title">
             {greeting(now.getHours())}
@@ -102,10 +103,10 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
         {data?.full && onOpen && (
           <div className="ws-brief-actions">
             <button className="w-btn" onClick={() => onOpen('audio', data.full!)}>
-              <IconHeadphones size={15} /> Briefing anhören
+              <IconHeadphones size={15} /> {t('Briefing anhören')}
             </button>
             <button className="w-btn" onClick={() => onOpen('text', data.full!)}>
-              <IconFile size={15} /> Ganzes Briefing lesen
+              <IconFile size={15} /> {t('Ganzes Briefing lesen')}
             </button>
           </div>
         )}
@@ -119,7 +120,7 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
                   <>
                     {' '}
                     <button className="ws-brief-link" disabled={busy === it.task.id} onClick={() => void start(it.task!)}>
-                      {it.task.kind === 'routine' ? 'Routine einrichten' : 'Jetzt angehen'}
+                      {it.task.kind === 'routine' ? t('Routine einrichten') : t('Jetzt angehen')}
                     </button>
                   </>
                 )}
@@ -135,7 +136,7 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
         {error && <div className="ws-error">{error}</div>}
         {suggestions.length > 0 && (
           <>
-            <h2 className="ws-brief-sub">Dabei kann ich dir heute helfen:</h2>
+            <h2 className="ws-brief-sub">{t('Dabei kann ich dir heute helfen:')}</h2>
             <ul className="ws-brief-sugs">
               {suggestions.map((s) => (
                 <li key={s.id}>
