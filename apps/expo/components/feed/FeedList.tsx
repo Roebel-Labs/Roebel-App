@@ -1,4 +1,5 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { hasPostVideo } from '@/lib/utils/post-media';
 import {
   View,
   StyleSheet,
@@ -304,7 +305,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         }
         if (item.item?.type === 'post' || item.item?.type === 'mecky') {
           const post = item.item.data as PostRecord;
-          if (post?.video_url) {
+          if (post && hasPostVideo(post)) {
             nextVideoIds.add(post.id);
           }
           // Impressions count the ORIGINAL on repost rows.

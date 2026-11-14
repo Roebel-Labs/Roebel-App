@@ -24,8 +24,8 @@ import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostLinkedMiniAppCard from '@/components/feed/PostLinkedMiniAppCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
-import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
-import PostImageGrid from '@/components/feed/PostImageGrid';
+import PostMedia from '@/components/feed/PostMedia';
+import { mediaToPostColumns } from '@/lib/utils/post-media';
 import ImageZoomModal from '@/components/ImageZoomModal';
 
 const GUIDELINES = [
@@ -76,8 +76,8 @@ export default function ReviewScreen() {
         feed_type: draft.feedType,
         post_type: draft.quotedPostId ? 'quote' : draft.postType,
         quoted_post_id: draft.quotedPostId || undefined,
-        media_urls: draft.images.length > 0 ? draft.images : undefined,
-        video_url: draft.videoUrl || undefined,
+        // Images + videos in order; first video also in video_url for old builds.
+        ...mediaToPostColumns(draft.mediaItems),
         linked_event_id: draft.linkedEventId || undefined,
         linked_marketplace_id: draft.linkedMarketplaceId || undefined,
         linked_mini_app_id: draft.linkedMiniAppId || undefined,
@@ -197,16 +197,14 @@ export default function ReviewScreen() {
 
           {draft.quotedPostId && <QuotedPostPreview post={draft.quotedPostData} />}
 
-          {draft.images.length > 0 && (
-            <PostImageGrid
-              imageUrls={draft.images}
-              onPress={(i) => setZoomImageUrl(draft.images[i])}
-            />
-          )}
-
-          {draft.videoUrl && (
-            <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay startUnmuted />
-          )}
+          <PostMedia
+            items={draft.mediaItems}
+            autoPlay
+            startUnmuted
+            onPressImage={setZoomImageUrl}
+            bleedLeft={REVIEW_PADDING_X}
+            bleedRight={REVIEW_PADDING_X}
+          />
 
           {draft.isPoll && (
             <View style={styles.previewPoll}>
@@ -272,6 +270,9 @@ export default function ReviewScreen() {
   );
 }
 
+// Preview card padding — the media slider bleeds through it to the card edge.
+const REVIEW_PADDING_X = 16;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -300,7 +301,8 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     borderRadius: 12,
-    padding: 16,
+    padding: REVIEW_PADDING_X,
+    overflow: 'hidden',
     borderWidth: 1,
     gap: 12,
   },

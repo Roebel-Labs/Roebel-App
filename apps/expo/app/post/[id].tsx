@@ -47,8 +47,8 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import CommentThread from '@/components/feed/CommentThread';
 import AvatarStack from '@/components/AvatarStack';
 import { Image } from 'expo-image';
-import PostImageGrid from '@/components/feed/PostImageGrid';
-import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
+import PostMedia from '@/components/feed/PostMedia';
+import { getPostMedia } from '@/lib/utils/post-media';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
 import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
@@ -609,7 +609,8 @@ export default function PostDetailScreen() {
     );
   }
 
-  const mediaUrls = post.media_urls?.filter(Boolean) || [];
+  const media = getPostMedia(post);
+  const mediaUrls = media.filter((m) => m.type === 'image').map((m) => m.url);
   // Display name of the post author (never a wallet) — the default
   // "Antwort an …" target in the full-screen composer.
   const postAuthorIsOrg = post.author?.account?.account_type === 'organisation';
@@ -669,13 +670,16 @@ export default function PostDetailScreen() {
         />
       )}
 
-      {mediaUrls.length > 0 && (
-        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
-      )}
-
-      {post.video_url && (
-        <PostVideoPlayer videoUrl={post.video_url} isVisible={isFocused} autoPlay startUnmuted />
-      )}
+      {/* Slider bleeds through the section's 16px padding to both edges. */}
+      <PostMedia
+        items={media}
+        isVisible={isFocused}
+        autoPlay
+        startUnmuted
+        onPressImage={setZoomImageUrl}
+        bleedLeft={16}
+        bleedRight={16}
+      />
 
       {post.sticker && (
         <Image

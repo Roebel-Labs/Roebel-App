@@ -1,29 +1,40 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { probeStreamConfigured, uploadVideoToStream } from '@/lib/stream-upload';
 import type { PostCategory, FeedType, PostType, StadtkasseSnapshot, PostRecord, LinkedMiniAppRef } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import type { LootboxReward } from '@/lib/supabase-rewards';
+import type { PostMediaItem } from '@/lib/utils/post-media';
 
-const MAX_IMAGES = 4;
+/** Images + videos per post, shown as a slider when mixed or > 4. */
+export const MAX_MEDIA = 10;
+const STREAM_MAX_SECONDS = 900;
+const LEGACY_MAX_SECONDS = 60;
+
+/** One slot of the draft's ordered media list; `url` is null while uploading. */
+export type DraftMedia = {
+  key: string;
+  type: 'image' | 'video';
+  url: string | null;
+  /** Upload fraction 0..1 for Stream videos, null when unknown. */
+  progress: number | null;
+};
 
 type LinkedEventData = Pick<EventRecord, 'id' | 'title' | 'date' | 'time' | 'location' | 'image_url' | 'category'>;
 type LinkedMarketplaceData = Pick<MarketplaceListingRecord, 'id' | 'title' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'neighborhood'>;
 
 type CreatePostState = {
   content: string;
-  images: string[];
-  videoUrl: string | null;
+  /** Ordered images + videos, including slots still uploading. */
+  media: DraftMedia[];
   category: PostCategory;
   feedType: FeedType;
   postType: PostType;
   isPoll: boolean;
   pollOptions: string[];
   pollType: 'single' | 'multi';
-  isUploading: boolean;
-  pendingUploads: number;
-  uploadProgress: number | null;
   linkedEventId: string | null;
   linkedEventData: LinkedEventData | null;
   linkedMarketplaceId: string | null;
@@ -41,10 +52,9 @@ type CreatePostActions = {
   setContent: (content: string) => void;
   setCategory: (category: PostCategory) => void;
   setFeedType: (feedType: FeedType) => void;
-  addImages: (walletAddress: string) => Promise<void>;
-  removeImage: (index: number) => void;
-  pickVideo: (walletAddress: string) => Promise<void>;
-  removeVideo: () => void;
+  /** Pick any mix of images and videos (multi-select). */
+  addMedia: (walletAddress: string, kinds?: ('images' | 'videos')[]) => Promise<void>;
+  removeMedia: (key: string) => void;
   setIsPoll: (isPoll: boolean) => void;
   setPollOptions: (options: string[]) => void;
   setPollType: (type: 'single' | 'multi') => void;
@@ -58,23 +68,27 @@ type CreatePostActions = {
   reset: () => void;
 };
 
-type CreatePostContextType = CreatePostState & CreatePostActions;
+type CreatePostDerived = {
+  /** Uploaded items in order — what the post will contain. */
+  mediaItems: PostMediaItem[];
+  /** Uploaded image URLs only (zoom modal). */
+  images: string[];
+  isUploading: boolean;
+};
+
+type CreatePostContextType = CreatePostState & CreatePostDerived & CreatePostActions;
 
 const CreatePostContext = createContext<CreatePostContextType | null>(null);
 
 const initialState: CreatePostState = {
   content: '',
-  images: [],
-  videoUrl: null,
+  media: [],
   category: 'generell',
   feedType: 'main',
   postType: 'user',
   isPoll: false,
   pollOptions: ['', ''],
   pollType: 'single',
-  isUploading: false,
-  pendingUploads: 0,
-  uploadProgress: null,
   linkedEventId: null,
   linkedEventData: null,
   linkedMarketplaceId: null,
@@ -102,80 +116,94 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     setState((prev) => ({ ...prev, feedType }));
   }, []);
 
-  const addImages = useCallback(async (walletAddress: string) => {
-    const remaining = MAX_IMAGES - state.images.length;
-    if (remaining <= 0) return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      allowsMultipleSelection: true,
-      selectionLimit: remaining,
-    });
-
-    if (result.canceled) return;
-
-    const assets = result.assets.slice(0, remaining);
+  const patchMedia = useCallback((key: string, patch: Partial<DraftMedia> | null) => {
     setState((prev) => ({
       ...prev,
-      isUploading: true,
-      pendingUploads: prev.pendingUploads + assets.length,
+      media:
+        patch === null
+          ? prev.media.filter((m) => m.key !== key)
+          : prev.media.map((m) => (m.key === key ? { ...m, ...patch } : m)),
     }));
+  }, []);
 
-    for (const asset of assets) {
-      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'posts', asset.mimeType || undefined);
-      setState((prev) => {
-        const nextImages = url ? [...prev.images, url].slice(0, MAX_IMAGES) : prev.images;
-        const nextPending = Math.max(0, prev.pendingUploads - 1);
-        return {
-          ...prev,
-          images: nextImages,
-          pendingUploads: nextPending,
-          isUploading: nextPending > 0,
-        };
+  const addMedia = useCallback(
+    async (walletAddress: string, kinds: ('images' | 'videos')[] = ['images', 'videos']) => {
+      const remaining = MAX_MEDIA - state.media.length;
+      if (remaining <= 0) return;
+
+      // Stream configured → long videos + direct-to-Cloudflare tus upload.
+      // Not configured → the legacy 60 s cap via Supabase Storage.
+      const useStream = kinds.includes('videos') ? await probeStreamConfigured() : false;
+      const maxSeconds = useStream ? STREAM_MAX_SECONDS : LEGACY_MAX_SECONDS;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: kinds,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
+        orderedSelection: true,
+        videoMaxDuration: maxSeconds,
       });
-    }
-  }, [state.images.length]);
+      if (result.canceled) return;
 
-  const removeImage = useCallback((index: number) => {
-    setState((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-  }, []);
+      // The library picker ignores videoMaxDuration for existing clips.
+      const tooLong = result.assets.filter(
+        (a) => a.type === 'video' && (a.duration ?? 0) > maxSeconds * 1000,
+      );
+      const assets = result.assets
+        .filter((a) => !tooLong.includes(a))
+        .slice(0, remaining);
+      if (tooLong.length > 0) {
+        const limit = maxSeconds >= 60 ? `${Math.round(maxSeconds / 60)} Minuten` : `${maxSeconds} Sekunden`;
+        Alert.alert('Video zu lang', `Videos dürfen höchstens ${limit} lang sein.`);
+      }
+      if (assets.length === 0) return;
 
-  const pickVideo = useCallback(async (walletAddress: string) => {
-    // Stream configured → 10-min cap + direct-to-Cloudflare tus upload.
-    // Not configured → exactly the legacy behavior (60s, Supabase Storage).
-    const useStream = await probeStreamConfigured();
+      const slots: DraftMedia[] = assets.map((a, i) => ({
+        key: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        type: a.type === 'video' ? 'video' : 'image',
+        url: null,
+        progress: a.type === 'video' && useStream ? 0 : null,
+      }));
+      setState((prev) => ({ ...prev, media: [...prev.media, ...slots].slice(0, MAX_MEDIA) }));
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
-      quality: 0.8,
-      videoMaxDuration: useStream ? 900 : 60,
-    });
+      let failed = 0;
+      // Uploads run side by side; each slot keeps its place in the order.
+      await Promise.all(
+        assets.map(async (asset, i) => {
+          const slot = slots[i];
+          let url: string | null = null;
+          if (slot.type === 'video') {
+            url = useStream
+              ? await uploadVideoToStream(asset.uri, walletAddress, (fraction) =>
+                  patchMedia(slot.key, { progress: fraction }),
+                )
+              : await uploadMediaFile(asset.uri, walletAddress, 'video', 'posts', asset.mimeType || undefined);
+          } else {
+            url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'posts', asset.mimeType || undefined);
+          }
+          if (url) {
+            patchMedia(slot.key, { url, progress: null });
+          } else {
+            failed++;
+            patchMedia(slot.key, null);
+          }
+        }),
+      );
+      if (failed > 0) {
+        Alert.alert(
+          'Upload fehlgeschlagen',
+          failed === 1
+            ? 'Eine Datei konnte nicht hochgeladen werden.'
+            : `${failed} Dateien konnten nicht hochgeladen werden.`,
+        );
+      }
+    },
+    [state.media.length, patchMedia],
+  );
 
-    if (result.canceled) return;
-
-    setState((prev) => ({ ...prev, isUploading: true, uploadProgress: useStream ? 0 : null }));
-
-    const asset = result.assets[0];
-    const url = useStream
-      ? await uploadVideoToStream(asset.uri, walletAddress, (fraction) =>
-          setState((prev) => ({ ...prev, uploadProgress: fraction })),
-        )
-      : await uploadMediaFile(asset.uri, walletAddress, 'video', 'posts', asset.mimeType || undefined);
-
-    setState((prev) => ({
-      ...prev,
-      videoUrl: url,
-      isUploading: false,
-      uploadProgress: null,
-    }));
-  }, []);
-
-  const removeVideo = useCallback(() => {
-    setState((prev) => ({ ...prev, videoUrl: null }));
+  const removeMedia = useCallback((key: string) => {
+    setState((prev) => ({ ...prev, media: prev.media.filter((m) => m.key !== key) }));
   }, []);
 
   const setIsPoll = useCallback((isPoll: boolean) => {
@@ -260,16 +288,25 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     setState(initialState);
   }, []);
 
+  const mediaItems = useMemo<PostMediaItem[]>(
+    () =>
+      state.media
+        .filter((m): m is DraftMedia & { url: string } => !!m.url)
+        .map((m) => ({ type: m.type, url: m.url })),
+    [state.media],
+  );
+
   const value = useMemo<CreatePostContextType>(
     () => ({
       ...state,
+      mediaItems,
+      images: mediaItems.filter((m) => m.type === 'image').map((m) => m.url),
+      isUploading: state.media.some((m) => !m.url),
       setContent,
       setCategory,
       setFeedType,
-      addImages,
-      removeImage,
-      pickVideo,
-      removeVideo,
+      addMedia,
+      removeMedia,
       setIsPoll,
       setPollOptions,
       setPollType,
@@ -284,13 +321,12 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     }),
     [
       state,
+      mediaItems,
       setContent,
       setCategory,
       setFeedType,
-      addImages,
-      removeImage,
-      pickVideo,
-      removeVideo,
+      addMedia,
+      removeMedia,
       setIsPoll,
       setPollOptions,
       setPollType,

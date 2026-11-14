@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -21,7 +20,7 @@ import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useRequireAuth } from '@/context/AuthGateContext';
-import { useCreatePost } from '@/context/CreatePostContext';
+import { useCreatePost, MAX_MEDIA } from '@/context/CreatePostContext';
 import { fetchPostById } from '@/lib/supabase-posts';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { PostCategory, FeedType } from '@/lib/types/feed';
@@ -32,7 +31,7 @@ import PostLinkedMiniAppCard from '@/components/feed/PostLinkedMiniAppCard';
 import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import AtMentionSheet from '@/components/feed/AtMentionSheet';
-import PostImageGrid from '@/components/feed/PostImageGrid';
+import PostMedia from '@/components/feed/PostMedia';
 import { getTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 import PostingGate from '@/components/feed/PostingGate';
@@ -48,7 +47,6 @@ import CommunityIcon from '@/assets/icons/community.svg';
 import EmojiIcon from '@/assets/icons/emoji.svg';
 import AtIcon from '@/assets/icons/at-sign.svg';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
-import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 
 const MAX_CONTENT_LENGTH = 500;
@@ -109,6 +107,9 @@ export default function CreateScreen() {
   const walletAddress = user?.wallet_address || '';
   const activeProfileImage = useActiveProfileImage();
   const draft = useCreatePost();
+  const mediaFull = draft.media.length >= MAX_MEDIA;
+  // Keys of uploaded slots, index-aligned with draft.mediaItems.
+  const uploadedMediaKeys = draft.media.filter((m) => !!m.url).map((m) => m.key);
   const requireAuth = useRequireAuth();
   // Citizens (on-chain NFT may outpace the DB flag) and org accounts (always
   // citizen-owned) bypass the tourist gate entirely.
@@ -244,7 +245,7 @@ export default function CreateScreen() {
   };
 
   const handleClose = () => {
-    if (draft.content.trim() || draft.images.length > 0 || draft.videoUrl || draft.stadtkasseSnapshot) {
+    if (draft.content.trim() || draft.media.length > 0 || draft.stadtkasseSnapshot) {
       Alert.alert('Verwerfen?', 'Dein Beitrag wird nicht gespeichert.', [
         { text: 'Abbrechen', style: 'cancel' },
         {
@@ -508,52 +509,48 @@ export default function CreateScreen() {
             </View>
           )}
 
-          {/* Image previews — feed-shaped grid + tap-to-zoom */}
-          {(draft.images.length > 0 || draft.pendingUploads > 0) && (
+          {/* Media preview — images + videos, slider once mixed or > 4.
+              The slider bleeds through the wrapper's 16px padding. */}
+          {draft.media.length > 0 && (
             <View style={styles.imagePreviewWrapper}>
-              <PostImageGrid
-                imageUrls={draft.images}
-                pendingCount={draft.pendingUploads}
-                onPress={(i) => setZoomImageUrl(draft.images[i])}
-                renderOverlay={(i) => (
-                  <Pressable
-                    onPress={() => draft.removeImage(i)}
-                    style={[styles.removeImageBtn, { backgroundColor: colors.error }]}
-                    hitSlop={8}
-                    accessibilityLabel="Bild entfernen"
-                  >
-                    <Ionicons name="close" size={14} color="#ffffff" />
-                  </Pressable>
-                )}
+              <PostMedia
+                items={draft.mediaItems}
+                pending={draft.media
+                  .filter((m) => !m.url)
+                  .map((m) => ({
+                    key: m.key,
+                    type: m.type,
+                    label:
+                      m.type !== 'video'
+                        ? undefined
+                        : m.progress == null
+                          ? 'Wird hochgeladen…'
+                          : m.progress >= 1
+                            ? 'Wird verarbeitet…'
+                            : `${Math.round(m.progress * 100)} %`,
+                  }))}
+                autoPlay
+                startUnmuted
+                onPressImage={setZoomImageUrl}
+                bleedLeft={16}
+                bleedRight={16}
+                renderOverlay={(i) => {
+                  const key = uploadedMediaKeys[i];
+                  if (!key) return null;
+                  return (
+                    <Pressable
+                      onPress={() => draft.removeMedia(key)}
+                      style={[styles.removeImageBtn, { backgroundColor: colors.error }]}
+                      hitSlop={8}
+                      accessibilityLabel={
+                        draft.mediaItems[i]?.type === 'video' ? 'Video entfernen' : 'Bild entfernen'
+                      }
+                    >
+                      <Ionicons name="close" size={14} color="#ffffff" />
+                    </Pressable>
+                  );
+                }}
               />
-            </View>
-          )}
-
-          {/* Video preview */}
-          {draft.videoUrl && (
-            <View style={styles.videoPreviewWrapper}>
-              <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay startUnmuted />
-              <Pressable
-                onPress={draft.removeVideo}
-                style={[styles.videoRemoveBtn, { backgroundColor: colors.error }]}
-                accessibilityLabel="Video entfernen"
-              >
-                <Ionicons name="close" size={16} color="#ffffff" />
-              </Pressable>
-            </View>
-          )}
-
-          {/* Upload indicator (video only — image uploads show inline skeletons) */}
-          {draft.isUploading && draft.pendingUploads === 0 && (
-            <View style={styles.uploadingRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>
-                {draft.uploadProgress == null
-                  ? 'Wird hochgeladen...'
-                  : draft.uploadProgress >= 1
-                    ? 'Video wird verarbeitet…'
-                    : `Wird hochgeladen… ${Math.round(draft.uploadProgress * 100)} %`}
-              </Text>
             </View>
           )}
 
@@ -613,34 +610,26 @@ export default function CreateScreen() {
           <View style={styles.toolbarLeft}>
             <Pressable
               style={styles.toolbarBtn}
-              onPress={() => draft.addImages(walletAddress)}
-              disabled={draft.images.length >= 4 || draft.isUploading || !!draft.videoUrl}
+              onPress={() => draft.addMedia(walletAddress, ['images'])}
+              disabled={mediaFull}
               accessibilityLabel="Bilder anhängen"
             >
               <ImageIcon
                 width={22}
                 height={22}
-                color={
-                  draft.images.length >= 4 || draft.videoUrl
-                    ? colors.disabled
-                    : colors.textSecondary
-                }
+                color={mediaFull ? colors.disabled : colors.textSecondary}
               />
             </Pressable>
             <Pressable
               style={styles.toolbarBtn}
-              onPress={() => draft.pickVideo(walletAddress)}
-              disabled={!!draft.videoUrl || draft.images.length > 0 || draft.isUploading}
-              accessibilityLabel="Video anhängen"
+              onPress={() => draft.addMedia(walletAddress, ['videos'])}
+              disabled={mediaFull}
+              accessibilityLabel="Videos anhängen"
             >
               <VideoIcon
                 width={22}
                 height={22}
-                color={
-                  draft.videoUrl || draft.images.length > 0
-                    ? colors.disabled
-                    : colors.textSecondary
-                }
+                color={mediaFull ? colors.disabled : colors.textSecondary}
               />
             </Pressable>
             <Pressable
@@ -861,37 +850,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   removeImageBtn: {
+    // Top-left: a video slide's mute button owns the top-right corner.
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 8,
+    left: 8,
     width: 24,
     height: 24,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  videoPreviewWrapper: {
-    position: 'relative',
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  videoRemoveBtn: {
-    position: 'absolute',
-    top: -6,
-    right: 10,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  uploadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginTop: 8,
   },
   stickerPreviewRow: {
     flexDirection: 'row',
@@ -910,10 +877,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  uploadingText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
   },
   categoryScroll: {
     maxHeight: 40,

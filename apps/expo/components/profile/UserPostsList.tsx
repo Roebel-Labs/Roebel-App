@@ -11,6 +11,12 @@ import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import RepostIcon from '@/assets/icons/repost.svg';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
+import { isVideoUrl } from '@/lib/utils/post-media';
+
+// Profile previews show images only — videos in a mixed post would render
+// as broken image tiles here.
+const profileImages = (urls: (string | null)[] | null | undefined): string[] =>
+  (urls ?? []).filter((u): u is string => !!u && !isVideoUrl(u));
 
 type Props = {
   walletAddress: string;
@@ -104,8 +110,8 @@ export default function UserPostsList({ walletAddress }: Props) {
                 {displayContent}
               </Text>
             ) : null}
-            {display.media_urls && display.media_urls.length > 0 && (
-              <PostImageGrid imageUrls={display.media_urls as string[]} />
+            {profileImages(display.media_urls).length > 0 && (
+              <PostImageGrid imageUrls={profileImages(display.media_urls)} />
             )}
             {display.linked_event && <PostLinkedEventCard event={display.linked_event} />}
             {display.post_type === 'quote' && display.quoted_post !== undefined && (

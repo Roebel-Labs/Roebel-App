@@ -25,6 +25,13 @@ type Props = {
    * the feed leaves it off so scrolling cards autoplay muted.
    */
   startUnmuted?: boolean;
+  /**
+   * Fill the parent box instead of sizing by the video's aspect ratio
+   * (carousel slides have a fixed size; the video letterboxes inside).
+   */
+  fill?: boolean;
+  /** Reports the video's real width/height ratio once the track is known. */
+  onAspectRatio?: (ratio: number) => void;
 };
 
 const DOUBLE_TAP_MS = 280;
@@ -42,6 +49,8 @@ function PostVideoPlayer({
   isVisible = true,
   autoPlay = true,
   startUnmuted = false,
+  fill = false,
+  onAspectRatio,
 }: Readonly<Props>) {
   const { colors } = useTheme();
   const videoViewRef = useRef<VideoView>(null);
@@ -88,6 +97,11 @@ function PostVideoPlayer({
     trackSize && trackSize.width > 0 && trackSize.height > 0
       ? trackSize.width / trackSize.height
       : 16 / 9;
+
+  const hasTrackSize = !!trackSize && trackSize.width > 0 && trackSize.height > 0;
+  useEffect(() => {
+    if (hasTrackSize) onAspectRatio?.(aspectRatio);
+  }, [hasTrackSize, aspectRatio, onAspectRatio]);
 
   const duration = player.duration || 0;
 
@@ -193,7 +207,7 @@ function PostVideoPlayer({
 
   return (
     <View
-      style={[styles.container, { aspectRatio }]}
+      style={[styles.container, fill ? styles.fill : { aspectRatio }]}
       onLayout={(e: LayoutChangeEvent) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       <VideoView
@@ -321,6 +335,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+  },
+  fill: {
+    width: '100%',
+    height: '100%',
   },
   video: {
     width: '100%',
