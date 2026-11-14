@@ -168,6 +168,15 @@ Compared with Town on the same mailbox again: Town greeted with three overdue in
 - The dossier says what is already connected, so "connect Gmail" is not suggested to someone who has.
 - **Studio 0.3.10** (branch, not OTA'd): briefing points show "Jetzt angehen" / "Routine einrichten".
 
+### 6a.5 Interface languages (2026-11-14)
+
+German is the default; English is the second language (Einstellungen → Darstellung → Sprache, stored per device under `ortis.lang`, switches in place without a reload so a broadcast keeps running). Code on `feat/ortis-studio-desktop` (`2e5dd310`), not OTA'd.
+
+- German stays in the code as the source text: `t('Speichern')`, placeholders `t('… {n}', { n })`. Words whose English depends on the place use `tx('stream', 'Ziele')` with key `stream|Ziele`. Dates via `locale()`.
+- English lives in `apps/studio/src/i18n/en/*.ts`, one file per area (1078 entries). `src/i18n/__tests__/coverage.test.ts` fails when a `t()` string has no English or a key is translated two ways.
+- Never translated: anything on air (canvas, templates), saved show data (source and channel names, destination presets, transition names), server texts (suggestions, wiki, briefing, errors), the help manual `docs/STUDIO_RUNBOOK.md`, prompts the user copies into another assistant.
+- A new language = a new folder of dictionaries plus one line in `LANG_OPTIONS` / `LOCALES`.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
