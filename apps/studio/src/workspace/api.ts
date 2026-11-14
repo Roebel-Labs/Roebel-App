@@ -413,7 +413,8 @@ export const confirmAgentEmailCode = (token: string, code: string) =>
 export interface Briefing {
   name: string | null;
   date: string | null;
-  items: { label: string; text: string }[];
+  /** `task`: the suggestion that tackles the point (absent on older servers, null when there is none). */
+  items: { label: string; text: string; task?: Suggestion | null }[];
   suggestions: Suggestion[];
   /** The full briefing as Markdown (wiki: links and normal links); null or absent when there is none. */
   doc: string | null;

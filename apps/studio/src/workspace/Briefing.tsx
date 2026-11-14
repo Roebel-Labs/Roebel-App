@@ -19,7 +19,7 @@ interface Data {
   /** The full briefing for the side panel; null when the server sent none. */
   full: BriefingDoc | null;
   name: string | null;
-  items: { label: string; text: string }[];
+  items: { label: string; text: string; task?: Suggestion | null }[];
   suggestions: Suggestion[];
 }
 
@@ -115,6 +115,14 @@ export function Briefing({ token, bot, name, onOpen, now = new Date() }: { token
               <li key={i}>
                 {it.label && <strong>{it.label.replace(/:\s*$/, '')}: </strong>}
                 <MdInline source={it.text} onWiki={openWiki} />
+                {it.task && !done.has(it.task.id) && (
+                  <>
+                    {' '}
+                    <button className="ws-brief-link" disabled={busy === it.task.id} onClick={() => void start(it.task!)}>
+                      {it.task.kind === 'routine' ? 'Routine einrichten' : 'Jetzt angehen'}
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

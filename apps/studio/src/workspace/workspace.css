@@ -1512,6 +1512,22 @@ html.mac-inset .rail {
   color: var(--w-link);
 }
 
+.ws-brief-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--w-link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ws-brief-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .ws-brief-sub {
   margin: 24px 0 8px;
   font: 600 15px/1.4 var(--font-head);
