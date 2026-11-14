@@ -3,6 +3,9 @@ import { Stack } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTheme } from '@/context/ThemeContext';
 import { NATIVE_TABS } from '@/lib/navigation/tabBar';
+import { TAB_BAR_ACCESSORY } from '@/lib/navigation/tabBarAccessory';
+import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
+import TabBarAccessoryPlayer from '@/components/audio/TabBarAccessoryPlayer';
 
 /**
  * The three main sections: Austausch (`/`), Erkunden (`/explore`), Profil
@@ -22,6 +25,7 @@ import { NATIVE_TABS } from '@/lib/navigation/tabBar';
  */
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { track } = useAudioPlayerControls();
 
   if (!NATIVE_TABS) {
     return (
@@ -56,6 +60,13 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} />
         <NativeTabs.Trigger.Label>Profil</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      {/* iOS 26+: "now playing" lives in the tab bar's accessory slot. Only
+          mounted while something plays, so the slot is gone otherwise. */}
+      {TAB_BAR_ACCESSORY && track ? (
+        <NativeTabs.BottomAccessory>
+          <TabBarAccessoryPlayer />
+        </NativeTabs.BottomAccessory>
+      ) : null}
     </NativeTabs>
   );
 }

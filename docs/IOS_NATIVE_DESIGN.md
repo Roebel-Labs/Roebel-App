@@ -76,27 +76,44 @@ Not yet done. In order of risk:
       Erkunden, Austausch and Profil open, no JS crash. Pushed screens and
       back were not reached (the emulator kept dying on this Mac).
 
-## Next slices (each ships as an update unless marked)
+## Slice 2 (this branch, second update)
 
-2. **Bottom accessory.** Move the audio mini player (and the live mini
-   player) into `NativeTabs.BottomAccessory`, the slot Apple Music uses.
-3. **Native headers.** Detail screens get `headerShown` + `Stack.Toolbar`
-   (glass back button, share/favourite/menu in one glass group, large titles
-   on list screens). Removes most of the ~250 hand-built back buttons. Start
-   with `event/[id]`, `post/[id]`, `settings`.
-4. **Native sheets.** Simple bottom sheets and `Modal`s move to
-   `presentation: 'formSheet'` with detents (glass on iOS 26 automatically).
-   Keep `@gorhom/bottom-sheet` only where drag behaviour is custom (map).
-5. **Menus and previews.** `Link.Preview` / `Link.Menu` on feed and event
-   cards; `@expo/ui` `ContextMenu` for the other long-press sheets (65
-   `onLongPress` handlers today).
-6. **Polish.** SF Symbols via `expo-symbols` for system-meaning icons, swipe
-   actions on list rows, `fullScreenGestureEnabled` (check carousels and maps
-   first), Icon Composer app icon with dark/tinted/clear variants (new build),
-   widgets and Live Activities with `expo-widgets` (new build).
-7. **SDK 58.** Stable `expo-router/native-tabs`, the prominent "create" tab,
-   iPad sidebar. Needed before iOS-27-SDK builds, which ignore
-   `UIDesignRequiresCompatibility`.
+- **Native navigation bar on pushed screens** (`lib/navigation/NativeHeader.tsx`):
+  Einstellungen, Darstellung, Folgen & Stummschalten, Bürgerumfragen, News,
+  Blog, Sternfahrten, Verkehr, Wildlife (with "Melden" in the bar). iOS draws
+  the bar (system back chevron, glass back button on iOS 26); Android keeps
+  the hand-drawn header row. Event and post detail keep their own hero header
+  on purpose: a system bar over the flyer image is a redesign, not a swap.
+- **Audio "now playing" in the tab bar's accessory slot** on iOS 26+
+  (`components/audio/TabBarAccessoryPlayer.tsx`), only while something plays.
+  Elsewhere the floating mini player stays. (Hören is not live yet, so this is
+  invisible until it is.)
+- **Long-press preview on event cards** (`components/EventPeekLink.tsx`): the
+  rail posters in Erkunden and the rows in Veranstaltungen. Touch and hold
+  shows the event page as a preview with "Teilen"; tap still opens it.
+
+Device checks for slice 2:
+
+- [ ] Einstellungen and the list screens: one bar only (no second hand-drawn
+      row), title centred, back chevron + edge swipe work, content starts
+      right below the bar.
+- [ ] Wildlife: "Melden" in the bar opens the report.
+- [ ] Erkunden rails and Veranstaltungen: tap opens the event once (not
+      twice); touch and hold shows preview + "Teilen"; tapping the preview
+      opens the event.
+
+## Not done, and why
+
+- **Native sheets** (formSheet): our sheets are components (`BottomDrawer`),
+  not routes; moving them to routes is a per-sheet refactor. Next candidate.
+- **System menus for the other long-press sheets**, SF Symbols for icons,
+  swipe actions, full-screen back swipe (check carousels first).
+- **New build needed:** Icon Composer app icon, widgets, Live Activities.
+- **SDK 58:** stable native tabs, prominent create tab, iPad sidebar.
+- **Open question:** the first device screenshot showed the classic tab bar,
+  not the glass pill. Either the phone is below iOS 26 or the 3.9.0 binary
+  was linked against an older iOS SDK; in the second case only a new build
+  with the Xcode 26 image set in `eas.json` brings Liquid Glass.
 
 ## Rules for later work
 

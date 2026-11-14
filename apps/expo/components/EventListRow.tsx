@@ -9,6 +9,7 @@ import { fontFamily } from '@/constants/theme';
 import { currency, formatEventRailDate, formatTime, formatLocation } from '@/lib/utils';
 import { CATEGORY_METADATA, EventCategory } from '@/lib/categories';
 import InterestButton from './InterestButton';
+import EventPeekLink, { EVENT_PEEK } from './EventPeekLink';
 import EventCancelledScrim from './EventCancelledScrim';
 
 /**
@@ -83,6 +84,100 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
   const place = formatLocation(event.location);
   const lineColor = isDark ? LINE_COLOR.dark : LINE_COLOR.light;
 
+  const label = `Details für ${event.title}${isCancelled ? ' (abgesagt)' : ''} öffnen`;
+  const body = (
+    <>
+      <View style={styles.cover}>
+        {event.image_url ? (
+          <Image
+            source={{ uri: event.image_url }}
+            style={[styles.coverImage, { backgroundColor: colors.cardPlaceholder }]}
+            contentFit="cover"
+            transition={150}
+            accessibilityIgnoresInvertColors
+          />
+        ) : (
+          <View style={[styles.coverImage, { backgroundColor: colors.cardPlaceholder }]} />
+        )}
+
+        {categoryMeta && (
+          <View style={[styles.badge, { backgroundColor: colors.background }]}>
+            <Image
+              source={categoryMeta.image}
+              style={styles.badgeIcon}
+              contentFit="contain"
+              transition={0}
+            />
+            <Text style={[styles.badgeLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+              {categoryMeta.label}
+            </Text>
+          </View>
+        )}
+
+        {isCancelled && <EventCancelledScrim radius={12} compact />}
+      </View>
+
+      <View style={styles.hostRow}>
+        {hostAvatar ? (
+          <Image
+            source={{ uri: hostAvatar }}
+            style={[styles.hostAvatar, { backgroundColor: colors.cardPlaceholder }]}
+            contentFit="cover"
+            transition={150}
+          />
+        ) : (
+          <View style={[styles.hostAvatar, { backgroundColor: colors.surfaceSecondary }]} />
+        )}
+        <Text style={[styles.hostName, { color: colors.textSecondary }]} numberOfLines={1}>
+          {hostName}
+        </Text>
+      </View>
+
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+          {event.title}
+        </Text>
+        {/* Fixed to one title line so a one-liner hugs its text and the
+            gap to the meta rows never depends on the heart's box. */}
+        <View style={styles.titleAction}>
+          <InterestButton eventId={event.id} iconOnly variant="feed" />
+        </View>
+      </View>
+
+      {startTime && (
+        <View style={styles.metaRow}>
+          <ClockIcon size={14} color={colors.textSecondary} />
+          <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {startTime} Uhr
+            {endTime ? (
+              <Text style={{ color: isDark ? END_TIME_ACCENT.dark : END_TIME_ACCENT.light }}>
+                {`  ·  bis ${endTime} Uhr`}
+              </Text>
+            ) : null}
+          </Text>
+        </View>
+      )}
+
+      {!!place && (
+        <View style={styles.metaRow}>
+          <LocationSmallIcon size={14} color={colors.textSecondary} />
+          <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {place}
+          </Text>
+        </View>
+      )}
+
+      {event.ticket_price != null && (
+        <View style={styles.metaRow}>
+          <TicketSmallIcon size={14} color={colors.textSecondary} />
+          <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {currency(event.ticket_price)}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
   return (
     <>
     <View style={styles.row}>
@@ -91,101 +186,20 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
       </View>
 
       <View style={styles.content}>
-        <Pressable
-          onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-          style={({ pressed }) => pressed && styles.pressed}
-          accessibilityRole="button"
-          accessibilityLabel={`Details für ${event.title}${isCancelled ? ' (abgesagt)' : ''} öffnen`}
-        >
-          <View style={styles.cover}>
-            {event.image_url ? (
-              <Image
-                source={{ uri: event.image_url }}
-                style={[styles.coverImage, { backgroundColor: colors.cardPlaceholder }]}
-                contentFit="cover"
-                transition={150}
-                accessibilityIgnoresInvertColors
-              />
-            ) : (
-              <View style={[styles.coverImage, { backgroundColor: colors.cardPlaceholder }]} />
-            )}
-
-            {categoryMeta && (
-              <View style={[styles.badge, { backgroundColor: colors.background }]}>
-                <Image
-                  source={categoryMeta.image}
-                  style={styles.badgeIcon}
-                  contentFit="contain"
-                  transition={0}
-                />
-                <Text style={[styles.badgeLabel, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {categoryMeta.label}
-                </Text>
-              </View>
-            )}
-
-            {isCancelled && <EventCancelledScrim radius={12} compact />}
-          </View>
-
-          <View style={styles.hostRow}>
-            {hostAvatar ? (
-              <Image
-                source={{ uri: hostAvatar }}
-                style={[styles.hostAvatar, { backgroundColor: colors.cardPlaceholder }]}
-                contentFit="cover"
-                transition={150}
-              />
-            ) : (
-              <View style={[styles.hostAvatar, { backgroundColor: colors.surfaceSecondary }]} />
-            )}
-            <Text style={[styles.hostName, { color: colors.textSecondary }]} numberOfLines={1}>
-              {hostName}
-            </Text>
-          </View>
-
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-              {event.title}
-            </Text>
-            {/* Fixed to one title line so a one-liner hugs its text and the
-                gap to the meta rows never depends on the heart's box. */}
-            <View style={styles.titleAction}>
-              <InterestButton eventId={event.id} iconOnly variant="feed" />
-            </View>
-          </View>
-
-          {startTime && (
-            <View style={styles.metaRow}>
-              <ClockIcon size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {startTime} Uhr
-                {endTime ? (
-                  <Text style={{ color: isDark ? END_TIME_ACCENT.dark : END_TIME_ACCENT.light }}>
-                    {`  ·  bis ${endTime} Uhr`}
-                  </Text>
-                ) : null}
-              </Text>
-            </View>
-          )}
-
-          {!!place && (
-            <View style={styles.metaRow}>
-              <LocationSmallIcon size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {place}
-              </Text>
-            </View>
-          )}
-
-          {event.ticket_price != null && (
-            <View style={styles.metaRow}>
-              <TicketSmallIcon size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {currency(event.ticket_price)}
-              </Text>
-            </View>
-          )}
-        </Pressable>
+        {EVENT_PEEK ? (
+          <EventPeekLink event={event} accessibilityLabel={label}>
+            {body}
+          </EventPeekLink>
+        ) : (
+          <Pressable
+            onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+            style={({ pressed }) => pressed && styles.pressed}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+          >
+            {body}
+          </Pressable>
+        )}
       </View>
     </View>
 

@@ -29,6 +29,9 @@ const NativeGlassView: ComponentType<GlassViewProps> | null = (() => {
 
 export const LiquidGlassView = NativeGlassView;
 
+/** The device runs iOS 26+ with the Liquid Glass APIs (and this binary has them). */
+export const LIQUID_GLASS_SUPPORTED = NativeGlassView != null;
+
 /**
  * True when our controls should render Liquid Glass right now: the device
  * supports it AND the user has not turned on "Reduce Transparency"

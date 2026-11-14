@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import EventInterestPeek from './EventInterestPeek';
 import EventCancelledScrim from './EventCancelledScrim';
+import EventPeekLink, { EVENT_PEEK } from './EventPeekLink';
 import { transformedImageUrl } from '@/lib/image-url';
 import LiveEventMedia, { isStreaming, useEventLiveShow } from '@/components/live/LiveEventMedia';
 
@@ -41,17 +42,9 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
   // aspect ratio so it scales up without cropping. Default to A4 until loaded.
   const [aspectRatio, setAspectRatio] = useState(POSTER_ASPECT_RATIO);
 
-  return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-      style={({ pressed }) => [
-        styles.card,
-        fullWidth && styles.cardFullWidth,
-        pressed && styles.cardPressed,
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Details für ${event.title} öffnen`}
-    >
+  const label = `Details für ${event.title} öffnen`;
+  const body = (
+    <>
       <View
         style={[
           styles.poster,
@@ -95,6 +88,29 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
         </Text>
         <EventInterestPeek eventId={event.id} style={styles.peek} />
       </View>
+    </>
+  );
+
+  if (EVENT_PEEK) {
+    return (
+      <EventPeekLink event={event} style={[styles.card, fullWidth && styles.cardFullWidth]} accessibilityLabel={label}>
+        {body}
+      </EventPeekLink>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+      style={({ pressed }) => [
+        styles.card,
+        fullWidth && styles.cardFullWidth,
+        pressed && styles.cardPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {body}
     </Pressable>
   );
 }

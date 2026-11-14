@@ -29,6 +29,7 @@ import {
   type TransitMode,
 } from '@/lib/supabase-transit';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 const MODE_FILTERS: { mode: TransitMode | 'all'; label: string }[] = [
   { mode: 'all', label: 'Alle' },
@@ -83,8 +84,9 @@ export default function TransitScreen() {
   const elliLine = lines.find((l) => l.mode === 'buergerbus');
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top'])}>
       <GlassProvider>
+      <NativeHeader title="Verkehr · Heute">
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -95,6 +97,7 @@ export default function TransitScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Verkehr · Heute</Text>
         <View style={{ width: 40 }} />
       </View>
+      </NativeHeader>
 
       {/* Mode filter chips */}
       <ScrollView

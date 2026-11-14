@@ -20,6 +20,7 @@ import { SUB_TYPE_EMOJI } from '@/lib/types';
 import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 export default function BlogFeedScreen() {
   const router = useRouter();
@@ -47,9 +48,10 @@ export default function BlogFeedScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top']}
+      edges={screenEdges(['top'])}
     >
       <GlassProvider>
+      <NativeHeader title="Blog">
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -60,6 +62,7 @@ export default function BlogFeedScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Blog</Text>
         <View style={styles.headerSpacer} />
       </View>
+      </NativeHeader>
 
             {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
       <GlassBackdrop style={{ flex: 1 }}>

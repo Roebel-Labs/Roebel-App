@@ -27,6 +27,7 @@ import {
   type TourRecord,
 } from '@/lib/supabase-tours';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 const HOURS_OPTIONS: { value: TourHoursBucket | 'all'; label: string }[] = [
   { value: 'all', label: 'Alle Zeiten' },
@@ -88,8 +89,9 @@ export default function ToursScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top'])}>
       <GlassProvider>
+      <NativeHeader title="Sternfahrten · Mecky-Touren">
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -102,6 +104,7 @@ export default function ToursScreen() {
         </Text>
         <View style={{ width: 40 }} />
       </View>
+      </NativeHeader>
 
       {/* Filter row 1 — hours */}
       <ScrollView

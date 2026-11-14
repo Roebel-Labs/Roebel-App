@@ -21,6 +21,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { THEME_OPTIONS } from '@/constants/theme-options';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
@@ -182,7 +183,8 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top', 'bottom', 'left', 'right'])}>
+      <NativeHeader title="Einstellungen">
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
@@ -190,6 +192,7 @@ export default function SettingsScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Einstellungen</Text>
         <View style={styles.headerSpacer} />
       </View>
+      </NativeHeader>
 
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
         <InstallAppCard />

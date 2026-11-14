@@ -52,6 +52,7 @@ import AudioSection, { AUDIO_SHOWS_QUERY_KEY } from '@/components/audio/AudioSec
 import SpecialMenuExploreSection from '@/components/explore/SpecialMenuExploreSection';
 import VacationRentalSection from '@/components/explore/VacationRentalSection';
 import MiniPlayer from '@/components/audio/MiniPlayer';
+import { TAB_BAR_ACCESSORY } from '@/lib/navigation/tabBarAccessory';
 import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
 import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
@@ -485,7 +486,7 @@ export default function ExploreScreen() {
         )}
 
         {/* Clearance for the now-overlaying glass BottomNavigation (+ mini player) */}
-        <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
+        <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack && !TAB_BAR_ACCESSORY ? 68 : 0) }} />
       </Animated.ScrollView>
       </GlassBackdrop>
 
@@ -500,10 +501,12 @@ export default function ExploreScreen() {
       />
 
       {/* Map FAB */}
-      {!editing && <MapFAB visible={fabVisible} bottomOffset={audioTrack ? 64 : 0} />}
+      {!editing && <MapFAB visible={fabVisible} bottomOffset={audioTrack && !TAB_BAR_ACCESSORY ? 64 : 0} />}
 
       {/* Now-playing bar, floating just above the glass nav */}
-      <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
+      {!TAB_BAR_ACCESSORY && (
+        <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
+      )}
 
       {/* Bottom Navigation — frosted glass overlaying the scroll content */}
       <View style={styles.navOverlay}>

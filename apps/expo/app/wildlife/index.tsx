@@ -29,6 +29,7 @@ import {
   type WildlifeSeasonalEvent,
 } from '@/lib/supabase-wildlife';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 type Tab = 'heute' | 'kalender';
 
@@ -95,8 +96,21 @@ export default function WildlifeScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top'])}>
       <GlassProvider>
+      <NativeHeader
+        title="Wildlife · Müritz"
+        headerRight={() => (
+          <Pressable
+            onPress={() => router.push('/wildlife/report' as any)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Tier melden"
+          >
+            <Text style={[styles.reportButtonText, { color: '#2B9348', fontSize: 16 }]}>Melden</Text>
+          </Pressable>
+        )}
+      >
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -114,6 +128,7 @@ export default function WildlifeScreen() {
           <Text style={styles.reportButtonText}>+ Melden</Text>
         </Pressable>
       </View>
+      </NativeHeader>
 
       {/* Tabs */}
       <View style={styles.tabRow}>

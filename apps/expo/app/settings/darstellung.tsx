@@ -29,6 +29,7 @@ import {
   useExploreLayout,
   type ExploreLayout,
 } from '@/lib/explore-layout';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 type Colors = ReturnType<typeof useTheme>['colors'];
 
@@ -102,7 +103,8 @@ export default function DarstellungScreen() {
   const pin = (slug: string) => update({ ...layout, order: [miniAppBlockId(slug), ...layout.order] });
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top'])}>
+      <NativeHeader title="Darstellung">
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Zurück">
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
@@ -110,6 +112,7 @@ export default function DarstellungScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Darstellung</Text>
         <View style={styles.headerSpacer} />
       </View>
+      </NativeHeader>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Section title="Erscheinungsbild" colors={colors}>

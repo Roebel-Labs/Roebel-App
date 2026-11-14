@@ -23,6 +23,7 @@ import {
   type FollowSuggestion,
 } from '@/lib/supabase-follows';
 import { fetchSuggestToNewUsers, setSuggestToNewUsers } from '@/lib/supabase-accounts';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 type Segment = 'following' | 'muted';
 type MutedRow = { id: string; name: string; avatar_url: string | null; wallet: string | null };
@@ -195,7 +196,8 @@ export default function FollowsSettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={screenEdges(['top'])}>
+      <NativeHeader title="Folgen & Stummschalten">
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
@@ -203,6 +205,7 @@ export default function FollowsSettingsScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Folgen & Stummschalten</Text>
         <View style={styles.headerSpacer} />
       </View>
+      </NativeHeader>
 
       {segment === 'following' ? (
         listed === null ? (

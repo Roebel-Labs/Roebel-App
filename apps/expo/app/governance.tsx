@@ -11,6 +11,7 @@ import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { goToTab } from '@/lib/navigation/tabBar';
+import { NativeHeader, screenEdges } from '@/lib/navigation/NativeHeader';
 
 export default function GovernanceScreen() {
   const router = useRouter();
@@ -34,10 +35,11 @@ export default function GovernanceScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top', 'left', 'right']}
+      edges={screenEdges(['top', 'left', 'right'])}
     >
       <GlassProvider>
       {/* Header */}
+      <NativeHeader title="Bürgerumfragen">
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
@@ -45,6 +47,7 @@ export default function GovernanceScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerumfragen</Text>
         <View style={{ width: 40 }} />
       </View>
+      </NativeHeader>
 
       {/* Content */}
             {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
