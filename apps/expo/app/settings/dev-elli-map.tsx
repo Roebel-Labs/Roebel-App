@@ -42,7 +42,7 @@ const NEXT_LEG_MIN = 11;
 
 // Model is built ~4.6 m long. Scale it so it keeps roughly the same size on
 // screen at every zoom (×2 per zoom step down), like a marker.
-const MODEL_PX_SCALE = 8;
+const MODEL_PX_SCALE = 4;
 const MODEL_SCALE = [
   'interpolate',
   ['exponential', 2],
@@ -161,10 +161,12 @@ export default function DevElliMapScreen() {
             sw: [Math.min(...lngs), Math.min(...lats)],
           },
           padding: {
-            paddingTop: insets.top + 140,
-            paddingBottom: sheetH + 40,
-            paddingLeft: 70,
-            paddingRight: 70,
+            // generous margins: the van model and the "Dein Halt" pill both
+            // extend well beyond their anchor points
+            paddingTop: insets.top + 170,
+            paddingBottom: sheetH + 120,
+            paddingLeft: 110,
+            paddingRight: 110,
           },
           pitch: 58,
           heading: -18,
