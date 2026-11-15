@@ -42,7 +42,7 @@ const NEXT_LEG_MIN = 11;
 
 // Model is built ~4.6 m long. Scale it so it keeps roughly the same size on
 // screen at every zoom (×2 per zoom step down), like a marker.
-const MODEL_PX_SCALE = 4;
+const MODEL_PX_SCALE = 3;
 const MODEL_SCALE = [
   'interpolate',
   ['exponential', 2],
