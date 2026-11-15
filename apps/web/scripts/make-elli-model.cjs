@@ -149,7 +149,7 @@ for (const x of [1.45, -1.45]) {
   }
 }
 
-// ---- GLB assembly (non-indexed, flat normals) ----
+// ---- GLB assembly (indexed, flat normals) ----
 const bins = [];
 let byteOffset = 0;
 const bufferViews = [];
@@ -157,9 +157,11 @@ const accessors = [];
 const primitives = [];
 const materials = [];
 
-function push(arr) {
-  const buf = Buffer.from(new Float32Array(arr).buffer);
-  bufferViews.push({ buffer: 0, byteOffset, byteLength: buf.length, target: 34962 });
+function push(typed, target) {
+  const raw = Buffer.from(typed.buffer, typed.byteOffset, typed.byteLength);
+  bufferViews.push({ buffer: 0, byteOffset, byteLength: raw.length, target });
+  // keep every view 4-byte aligned
+  const buf = Buffer.concat([raw, Buffer.alloc((4 - (raw.length % 4)) % 4)]);
   bins.push(buf);
   byteOffset += buf.length;
   return bufferViews.length - 1;
@@ -187,12 +189,18 @@ for (const [name, list] of Object.entries(tris)) {
     }
   }
   const count = pos.length / 3;
-  const pv = push(pos);
+  const pv = push(new Float32Array(pos), 34962);
   accessors.push({ bufferView: pv, componentType: 5126, count, type: 'VEC3', min, max });
   const pa = accessors.length - 1;
-  const nv = push(nor);
+  const nv = push(new Float32Array(nor), 34962);
   accessors.push({ bufferView: nv, componentType: 5126, count, type: 'VEC3' });
   const na = accessors.length - 1;
+  // Mapbox's native glTF loader dereferences the index accessor unconditionally
+  // (non-indexed primitives crash it with a null deref on Android), so always
+  // emit indices even though every vertex is unique (flat shading).
+  const iv = push(Uint16Array.from({ length: count }, (_, i) => i), 34963);
+  accessors.push({ bufferView: iv, componentType: 5123, count, type: 'SCALAR', min: [0], max: [count - 1] });
+  const ia = accessors.length - 1;
 
   const m = MATERIALS[name];
   const mat = {
@@ -205,7 +213,7 @@ for (const [name, list] of Object.entries(tris)) {
   };
   if (m.emissive) mat.emissiveFactor = srgb(m.emissive).slice(0, 3);
   materials.push(mat);
-  primitives.push({ attributes: { POSITION: pa, NORMAL: na }, material: materials.length - 1, mode: 4 });
+  primitives.push({ attributes: { POSITION: pa, NORMAL: na }, indices: ia, material: materials.length - 1, mode: 4 });
 }
 
 const bin = Buffer.concat(bins);
