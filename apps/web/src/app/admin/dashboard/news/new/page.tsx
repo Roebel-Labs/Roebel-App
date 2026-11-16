@@ -19,7 +19,7 @@ import { toast } from "sonner"
 import { createNewsArticle } from "@/app/actions/news"
 import { ArrowLeft, Save, Eye } from "lucide-react"
 
-const CATEGORIES = ["Stadtnachrichten", "Veranstaltungen", "Kultur", "Politik", "Wirtschaft", "Sport", "Boxen"]
+const CATEGORIES = ["Stadtnachrichten", "Veranstaltungen", "Kultur", "Politik", "Wirtschaft", "Sport", "Boxen", "App-Update"]
 
 export default function NewNewsPage() {
   const router = useRouter()

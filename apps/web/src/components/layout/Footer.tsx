@@ -86,6 +86,16 @@ export function Footer() {
                   Nachrichten
                 </Link>
               </li>
+              <li>
+                <Link href="/neu" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Was ist neu
+                </Link>
+              </li>
+              <li>
+                <Link href="/newsletter" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Newsletter
+                </Link>
+              </li>
             </ul>
           </div>
 

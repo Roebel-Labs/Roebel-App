@@ -10,6 +10,9 @@ import { DeepLinkRedirect } from "@/components/deep-link-redirect"
 import { hasSupabase, recordClient } from "@/lib/record"
 import { getNewsBySlug, RecordUnavailableError } from "@netizen-labs/record-client"
 import { MarkdownRenderer } from "@/components/proposals/MarkdownRenderer"
+import { ListenButton } from "@/components/news/listen-button"
+import { NewsletterSignupForm } from "@/app/newsletter/signup-form"
+import { APP_UPDATE_CATEGORY } from "@/lib/app-updates/commits"
 
 export const dynamic = "force-dynamic"
 
@@ -268,6 +271,10 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
             </div>
           </div>
 
+          <div className="mb-6 md:mb-8">
+            <ListenButton slug={slug} />
+          </div>
+
           {/* Cover Image */}
           {article.cover_image_url && (
             <div className="mb-6 md:mb-8 rounded-[10px] overflow-hidden aspect-video bg-muted">
@@ -285,6 +292,15 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
+          {/* Newsletter */}
+          <section className="mt-8 md:mt-12 rounded-2xl border border-border bg-muted/40 p-5">
+            <h2 className="text-base font-semibold text-foreground">Nichts mehr verpassen</h2>
+            <p className="mt-1 mb-4 text-sm text-muted-foreground">
+              Einmal pro Woche Neues aus Röbel und aus der App, direkt ins Postfach.
+            </p>
+            <NewsletterSignupForm />
+          </section>
+
           {/* Article Footer */}
           <div className="mt-8 md:mt-12 pt-6 md:pt-8 border-t border-border">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -298,9 +314,9 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
                   })}
                 </p>
               </div>
-              <Link href="/news">
+              <Link href={article.category === APP_UPDATE_CATEGORY ? "/neu" : "/news"}>
                 <Button variant="outline" className="text-sm md:text-base h-9 md:h-10">
-                  Weitere Artikel lesen
+                  {article.category === APP_UPDATE_CATEGORY ? "Alle Neuerungen" : "Weitere Artikel lesen"}
                 </Button>
               </Link>
             </div>

@@ -29,6 +29,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/app-update-draft",
+      "schedule": "0 5 * * 4"
+    },
+    {
       "path": "/api/cron/newsletter-draft",
       "schedule": "0 6 * * 5"
     },

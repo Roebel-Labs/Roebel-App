@@ -9,6 +9,9 @@ import { sanitizeNewsletterHtml } from "./sanitize"
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 
+/** An unsent AI draft older than this is rewritten by the next weekly run instead of blocking it. */
+const STALE_DRAFT_MS = 5 * 24 * 60 * 60 * 1000
+
 const newsletterSchema = z.object({
   subject: z.string().describe("Betreffzeile, max 60 Zeichen, neugierig machend, ohne Clickbait"),
   preheader: z.string().describe("Vorschautext, max 90 Zeichen, ergänzt den Betreff"),
@@ -39,7 +42,15 @@ function buildDataBlock(data: NewsletterSourceData): string {
     img_1x1: toSquare(n.cover_image_url),
   }))
   const events = data.events.map((e) => ({ ...e, url: `${BASE_URL}/events/${e.id}` }))
+  const appUpdates = data.appUpdates.map((u) => ({
+    title: u.title,
+    excerpt: u.excerpt,
+    url: `${BASE_URL}/news/${u.slug}`,
+  }))
   return `DATEN SEIT ${data.windowStart}:
+
+NEU IN DER RÖBEL APP (eigener kurzer Abschnitt "Neu in der App", jede mit fertiger url; alle Neuerungen: ${BASE_URL}/neu):
+${JSON.stringify(appUpdates, null, 2)}
 
 NEUIGKEITEN (jede mit fertiger url):
 ${JSON.stringify(news, null, 2)}
@@ -65,7 +76,8 @@ const HARD_RULES = `TONALITÄT: Warm, bürgernah, norddeutsch-locker (ein "Moin"
 HARTE REGELN:
 - Nutze AUSSCHLIESSLICH die bereitgestellten Daten. Erfinde nichts dazu — keine Termine, keine Zahlen, keine Namen, keine URLs.
 - Niemals Wallet-Adressen (0x…) erwähnen.
-- Niemals "CRC", "Circles" oder Krypto-Jargon — die Stadtwährung heißt ausschließlich "Röbel-Taler".
+- Niemals "CRC", "Circles" oder Krypto-Jargon. Die Münzen der Stadt heißen ausschließlich "Röbel Münzen" und werden nie als Währung oder Geld bezeichnet.
+- Gibt es Einträge unter "NEU IN DER RÖBEL APP", bekommen sie einen eigenen kurzen Abschnitt nach den Stadt-Neuigkeiten: zwei, drei Sätze je Eintrag, verlinkt, mit dem Hinweis, dass man sich den Beitrag dort auch vorlesen lassen kann.
 - Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>, <img>. Keine Überschriften im HTML (die kommen aus "heading").
 - Hat eine Neuigkeit ein Bild (Feld "img_1x1"), setze GENAU dieses Bild direkt vor ihre Erwähnung: <img src="IMG_1X1_URL">. Keine anderen Bildquellen, nichts an der URL ändern.
 - VERLINKE KONSEQUENT: Jede erwähnte Neuigkeit und jede erwähnte Veranstaltung bekommt ihren Link aus dem Datenfeld "url" (<a href="URL">Titel</a>). Erwähnst du Abstimmungen, verlinke die Übersichtsseite; erwähnst du Marktplatz-Angebote, verlinke deren Übersichtsseite.
@@ -90,6 +102,7 @@ function sectionsToHtml(sections: Array<{ heading: string; html: string }>): str
 function sourceCounts(data: NewsletterSourceData): Record<string, number> {
   return {
     news: data.news.length,
+    appUpdates: data.appUpdates.length,
     events: data.events.length,
     proposals: data.proposals.length,
     listings: data.listings.length,
@@ -122,9 +135,10 @@ export async function generateNewsletterDraft(opts?: {
   if (!opts?.force) {
     const { data: existingDraft, error: draftCheckError } = await supabase
       .from("newsletter_issues")
-      .select("id")
+      .select("id, created_at, updated_at")
       .eq("status", "draft")
       .eq("generated_by", "ai")
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
     if (draftCheckError) {
@@ -132,7 +146,23 @@ export async function generateNewsletterDraft(opts?: {
       return { created: false, reason: "Entwurfs-Prüfung fehlgeschlagen — bitte erneut versuchen." }
     }
     if (existingDraft) {
-      return { created: false, reason: "Es existiert bereits ein unversendeter KI-Entwurf." }
+      // A draft nobody sent used to block every later run: one forgotten draft and the
+      // newsletter went silent for months. A stale draft is rewritten with this week's data.
+      const age = Date.now() - new Date(existingDraft.updated_at ?? existingDraft.created_at).getTime()
+      if (age < STALE_DRAFT_MS) {
+        return { created: false, reason: "Es existiert bereits ein unversendeter KI-Entwurf." }
+      }
+      const refreshed = await regenerateIssueContent(existingDraft.id)
+      if (!refreshed.success) return { created: false, reason: refreshed.message }
+      if (opts?.notify) {
+        const { data: fresh } = await supabase
+          .from("newsletter_issues")
+          .select("subject")
+          .eq("id", existingDraft.id)
+          .maybeSingle()
+        await sendDraftReadyEmail(existingDraft.id, fresh?.subject ?? "Wochen-Newsletter")
+      }
+      return { created: true, issueId: existingDraft.id }
     }
   }
 

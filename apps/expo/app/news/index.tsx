@@ -10,6 +10,15 @@ import BottomNavigation from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
+import NewsletterSignupCard from '@/components/news/NewsletterSignupCard';
+import { APP_UPDATE_CATEGORY } from '@/lib/newsletter';
+
+type NewsFilter = 'all' | 'town' | 'app';
+const FILTERS: Array<{ key: NewsFilter; label: string }> = [
+  { key: 'all', label: 'Alle' },
+  { key: 'town', label: 'Aus Röbel' },
+  { key: 'app', label: 'Neu in der App' },
+];
 
 export default function NewsScreen() {
   const router = useRouter();
@@ -17,6 +26,13 @@ export default function NewsScreen() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<NewsFilter>('all');
+
+  const visibleArticles = articles.filter((article) => {
+    if (filter === 'all') return true;
+    const isAppUpdate = article.category === APP_UPDATE_CATEGORY;
+    return filter === 'app' ? isAppUpdate : !isAppUpdate;
+  });
 
   useEffect(() => {
     fetchArticles();
@@ -67,6 +83,8 @@ export default function NewsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -75,6 +93,28 @@ export default function NewsScreen() {
           />
         }
       >
+        <View style={styles.filterRow}>
+          {FILTERS.map((item) => {
+            const active = filter === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => setFilter(item.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[
+                  styles.filterChip,
+                  { backgroundColor: active ? colors.primary : colors.surfaceSecondary },
+                ]}
+              >
+                <Text style={[styles.filterText, { color: active ? colors.onPrimary : colors.textPrimary }]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {/* Loading State */}
         {loading && (
           <View style={styles.articlesSection}>
@@ -88,15 +128,18 @@ export default function NewsScreen() {
         {/* Articles List */}
         {!loading && (
           <View style={styles.articlesSection}>
-            {articles.length > 0 ? (
-              articles.map((article) => (
+            {visibleArticles.length > 0 ? (
+              visibleArticles.map((article) => (
                 <NewsCard key={article.id} article={article} horizontal />
               ))
             ) : (
               <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Keine Artikel verfügbar</Text>
+                <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+                  {filter === 'app' ? 'Der erste Beitrag erscheint in Kürze' : 'Keine Artikel verfügbar'}
+                </Text>
               </View>
             )}
+            <NewsletterSignupCard />
           </View>
         )}
       </ScrollView>
@@ -155,6 +198,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 120,
     paddingTop: 16,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  filterChip: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterText: {
+    fontSize: 14,
+    fontFamily: 'MonaSans-Medium',
   },
   articlesSection: {
     paddingHorizontal: 16,
