@@ -17,6 +17,7 @@ export function activityKindForType(type: string | null | undefined): ActivityKi
   switch (type) {
     case 'post_like':
     case 'comment_like':
+    case 'comment_tip':
       return 'like';
     case 'post_comment':
     case 'post_reply':

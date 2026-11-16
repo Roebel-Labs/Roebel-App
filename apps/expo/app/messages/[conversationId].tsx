@@ -107,6 +107,7 @@ export default function ChatScreen() {
     isSending,
     sendMessage,
     sendPayment,
+    canSendPayment,
     sendReaction,
     blockPeer,
     unblockPeer,
@@ -258,7 +259,17 @@ export default function ChatScreen() {
                 sendMessage(text, stickerRewardId);
               }}
               isSending={isSending}
-              onOpenPayment={xmtpActive ? () => setShowPaymentSheet(true) : undefined}
+              onOpenPayment={
+                canSendPayment
+                  ? () => {
+                      if (!myAccountId) {
+                        requireAuth(() => {});
+                        return;
+                      }
+                      setShowPaymentSheet(true);
+                    }
+                  : undefined
+              }
             />
           </View>
         )}

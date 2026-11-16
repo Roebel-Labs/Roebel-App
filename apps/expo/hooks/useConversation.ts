@@ -22,6 +22,7 @@ import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import {
   fetchMessages,
   sendMessage as sendMsg,
+  sendPaymentMessage as sendPaymentMsg,
   hydrateMessageSticker,
   safeDisplayName,
   type Message,
@@ -442,6 +443,12 @@ export function useConversation(conversationId: string) {
     [conversationId, myAccountId, rail, refreshXmtpThread, firePush]
   );
 
+  // Münzen can be sent between two personal accounts on either rail.
+  const canSendPayment =
+    myAccountType === 'personal' &&
+    peerAccount?.accountType === 'personal' &&
+    !!peerAccount.ownerWallet;
+
   /**
    * In-chat Röbel Münzen payment — OPTIMISTIC: the bubble appears after a
    * beat ("Wird gesendet…"), while the gasless transfer + transactionReference
@@ -451,10 +458,13 @@ export function useConversation(conversationId: string) {
   const sendPayment = useCallback(
     async (amountRaw: bigint, amountDecimal: number) => {
       const dm = dmRef.current;
-      if (rail !== 'xmtp' || !dm || !peerAccount?.ownerWallet || !xmtp) {
+      if (!canSendPayment || !peerAccount?.ownerWallet || !myAccountId) {
         throw new Error('Zahlungen sind in diesem Chat noch nicht verfügbar');
       }
       const peerWallet = peerAccount.ownerWallet;
+      // Receipt rail: XMTP transactionReference when the thread runs on XMTP,
+      // otherwise a direct_messages row with a `payment` receipt.
+      const viaXmtp = rail === 'xmtp' && !!dm && !!xmtp;
       const optimisticId = `pending-payment-${Date.now()}`;
       const optimistic: Message = {
         id: optimisticId,
@@ -463,7 +473,7 @@ export function useConversation(conversationId: string) {
         content: '',
         sticker_reward_id: null,
         created_at: new Date().toISOString(),
-        source: 'xmtp',
+        source: viaXmtp ? 'xmtp' : 'supabase',
         delivery: 'sending',
         payment: { txHash: '', networkId: 'eip155:100', amount: amountDecimal },
       };
@@ -474,7 +484,17 @@ export function useConversation(conversationId: string) {
         try {
           const txHash = await sendTaler(peerWallet, amountRaw);
           try {
-            await sendXmtpTransactionReference(dm, {
+            if (!viaXmtp) {
+              // Supabase rail: realtime delivers the row, the DB trigger pushes.
+              const row = await sendPaymentMsg(conversationId, myAccountId, {
+                txHash: txHash || '',
+                networkId: 'eip155:100',
+                amount: amountDecimal,
+              });
+              if (!row) throw new Error('payment receipt insert failed');
+              return;
+            }
+            await sendXmtpTransactionReference(dm!, {
               namespace: 'eip155',
               networkId: 'eip155:100',
               reference: txHash || '',
@@ -483,7 +503,7 @@ export function useConversation(conversationId: string) {
                 currency: 'Röbel Münzen',
                 amount: amountDecimal,
                 decimals: 18,
-                fromAddress: xmtp.wallet,
+                fromAddress: xmtp!.wallet,
                 toAddress: peerWallet,
               },
             });
@@ -507,6 +527,7 @@ export function useConversation(conversationId: string) {
     },
     [
       rail,
+      canSendPayment,
       peerAccount?.ownerWallet,
       xmtp,
       conversationId,
@@ -599,6 +620,7 @@ export function useConversation(conversationId: string) {
     isSending,
     sendMessage,
     sendPayment,
+    canSendPayment,
     sendReaction,
     blockPeer,
     unblockPeer,

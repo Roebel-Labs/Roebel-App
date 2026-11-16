@@ -137,6 +137,8 @@ export type PostCommentRecord = {
   likes_count: number;
   reply_count: number;
   edited_at: string | null;
+  /** Sum of Röbel Münzen tipped on this comment (DB-maintained). */
+  tips_total?: number | string | null;
   // Joined data
   author?: PostAuthor;
   sticker?: StickerRewardRef | null;

@@ -476,6 +476,38 @@ export async function sendMessage(
   return data as Message;
 }
 
+/**
+ * Röbel Münzen receipt on the Supabase rail. `content` is a readable fallback
+ * (inbox preview, push body, app versions without the `payment` column).
+ */
+export async function sendPaymentMessage(
+  conversationId: string,
+  senderAccountId: string,
+  payment: MessagePayment
+): Promise<Message | null> {
+  const amountLabel = payment.amount.toLocaleString('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const { data, error } = await supabase
+    .from('direct_messages' as any)
+    .insert({
+      conversation_id: conversationId,
+      sender_address: senderAccountId,
+      sender_account_id: senderAccountId,
+      content: `🪙 ${amountLabel} Röbel Münzen`,
+      payment,
+    } as any)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('sendPaymentMessage error:', error);
+    return null;
+  }
+  return data as Message;
+}
+
 export async function markConversationRead(
   conversationId: string,
   accountId: string

@@ -993,6 +993,27 @@ export async function toggleCommentLike(
 }
 
 /**
+ * Record a Röbel Münzen tip AFTER its on-chain transfer settled. A DB trigger
+ * adds it to post_comments.tips_total and notifies the comment author.
+ */
+export async function recordCommentTip(tip: {
+  commentId: string;
+  senderWallet: string;
+  recipientWallet: string;
+  amount: number;
+  txHash: string;
+}): Promise<void> {
+  const { error } = await (supabase.from('post_comment_tips' as any) as any).insert({
+    comment_id: tip.commentId,
+    sender_wallet: tip.senderWallet.toLowerCase(),
+    recipient_wallet: tip.recipientWallet.toLowerCase(),
+    amount: tip.amount,
+    tx_hash: tip.txHash,
+  });
+  if (error) throw error;
+}
+
+/**
  * Batch check which of the given comments the user has liked.
  */
 export async function getUserLikedCommentIds(

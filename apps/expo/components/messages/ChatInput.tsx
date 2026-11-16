@@ -25,7 +25,7 @@ const COIN = require('@/assets/illustration/gamification/single.png');
 type Props = {
   onSend: (text: string, stickerRewardId: string | null) => void;
   isSending: boolean;
-  /** When set, shows the Röbel-Münzen button (XMTP-rail chats only). */
+  /** When set, shows the Röbel-Münzen button next to the emoji button. */
   onOpenPayment?: () => void;
 };
 
@@ -85,6 +85,11 @@ export default function ChatInput({ onSend, isSending, onOpenPayment }: Props) {
         >
           <EmojiIcon width={24} height={24} color={t.icon} />
         </GlassCircleButton>
+        {onOpenPayment ? (
+          <GlassCircleButton accessibilityLabel="Röbel Münzen senden" onPress={onOpenPayment}>
+            <RNImage source={COIN} style={styles.coinButtonImage} resizeMode="contain" />
+          </GlassCircleButton>
+        ) : null}
         <View style={[styles.pill, { backgroundColor: t.surface }, haloShadow(t)]}>
           <TextInput
             style={[styles.input, { color: t.textPrimary }]}
@@ -117,15 +122,6 @@ export default function ChatInput({ onSend, isSending, onOpenPayment }: Props) {
               ) : (
                 <Feather name="arrow-up" size={21} color={t.primaryButtonText} />
               )}
-            </Pressable>
-          ) : onOpenPayment ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Röbel Münzen senden"
-              style={({ pressed }) => [styles.round, { opacity: pressed ? 0.7 : 1 }]}
-              onPress={onOpenPayment}
-            >
-              <RNImage source={COIN} style={styles.coinButtonImage} resizeMode="contain" />
             </Pressable>
           ) : null}
         </View>

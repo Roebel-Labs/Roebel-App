@@ -31,6 +31,7 @@ import {
   deleteComment,
   updateComment,
   toggleCommentLike,
+  recordCommentTip,
   getUserLikedPostIds,
   getUserRepostedPostIds,
   getPostLikers,
@@ -74,6 +75,8 @@ import { filterMutedComments } from '@/lib/inbox-visibility';
 import PostComposer from '@/components/feed/PostComposer';
 import ReportDrawer from '@/components/feed/ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
+import MuenzenSendSheet from '@/components/messages/MuenzenSendSheet';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -87,6 +90,9 @@ export default function PostDetailScreen() {
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
   const requireAuth = useRequireAuth();
+  const { send: sendTaler } = useRoebelTaler();
+  // Comment the viewer is about to thank with Röbel Münzen.
+  const [tipTarget, setTipTarget] = useState<PostCommentRecord | null>(null);
   // Pause the post video while another screen (profile, likes …) is on top.
   const isFocused = useIsFocused();
 
@@ -417,6 +423,32 @@ export default function PostDetailScreen() {
         likes_count: Math.max(0, (c.likes_count ?? 0) + (nowLiked ? -1 : 1)),
       }));
     }
+  };
+
+  const handleTipComment = (comment: PostCommentRecord) => {
+    requireAuth(() => setTipTarget(comment));
+  };
+
+  // Transfer first (gasless group-token transfer), then record the tip: the
+  // DB row drives the visible total and the author's push notification.
+  const handleSendTip = async (amountRaw: bigint, amountDecimal: number) => {
+    const comment = tipTarget;
+    if (!comment || !walletAddress) throw new Error('Nicht angemeldet');
+    const txHash = await sendTaler(comment.wallet_address, amountRaw);
+    updateCommentInState(comment.id, (c) => ({
+      ...c,
+      tips_total: (Number(c.tips_total ?? 0) || 0) + amountDecimal,
+    }));
+    recordCommentTip({
+      commentId: comment.id,
+      senderWallet: walletAddress,
+      recipientWallet: comment.wallet_address,
+      amount: amountDecimal,
+      txHash,
+    }).catch((err) => console.error('Tip sent but not recorded:', err));
+    showSnackbar({
+      message: `${amountDecimal.toLocaleString('de-DE', { maximumFractionDigits: 2 })} Röbel Münzen gesendet`,
+    });
   };
 
   const handleToggleReplies = async (comment: PostCommentRecord) => {
@@ -763,6 +795,7 @@ export default function PostDetailScreen() {
       onEdit={handleEditComment}
       onDelete={handleDeleteComment}
       onToggleLike={handleToggleCommentLike}
+      onTip={handleTipComment}
       meckyThinking={meckyThinking.has(item.id)}
     />
   );
@@ -883,6 +916,14 @@ export default function PostDetailScreen() {
         isFollowing={authorActions.isFollowing}
         onToggleFollow={authorActions.onToggleFollow}
         onMute={authorActions.onMute}
+      />
+
+      <MuenzenSendSheet
+        visible={!!tipTarget}
+        onClose={() => setTipTarget(null)}
+        title="Mit Röbel Münzen danken"
+        peerName={tipTarget?.author?.username || 'Unbekannt'}
+        onSend={handleSendTip}
       />
 
       <ReportDrawer
