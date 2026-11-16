@@ -39,12 +39,12 @@ const DEFAULT_BUDGET_MS = 55_000;
 
 export class KieImageError extends Error {}
 
-type KieRequest =
+export type KieRequest =
   | { action: "createTask"; payload: Record<string, unknown> }
   | { action: "recordInfo"; taskId: string };
 
 /** Direct kie.ai call (KIE_API_KEY) or forwarded via the kie-proxy edge function. */
-async function kieFetch(req: KieRequest): Promise<Response> {
+export async function kieFetch(req: KieRequest): Promise<Response> {
   const directKey = process.env.KIE_API_KEY;
   if (directKey) {
     if (req.action === "createTask") {

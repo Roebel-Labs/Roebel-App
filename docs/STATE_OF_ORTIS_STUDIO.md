@@ -177,6 +177,16 @@ German is the default; English is the second language (Einstellungen → Darstel
 - Never translated: anything on air (canvas, templates), saved show data (source and channel names, destination presets, transition names), server texts (suggestions, wiki, briefing, errors), the help manual `docs/STUDIO_RUNBOOK.md`, prompts the user copies into another assistant.
 - A new language = a new folder of dictionaries plus one line in `LANG_OPTIONS` / `LOCALES`.
 
+### 6a.6 Audio and video in the chat (2026-11-16)
+
+`apps/web/src/lib/chat/harness/packs/media.ts` + `lib/media/kie-media.ts`, on main. Four tools on the `images` pack key (a bot that may create images may create media): `generate_speech` (ElevenLabs multilingual v2), `generate_music` (Suno V6, two takes), `generate_video` (Seedance V1 Lite, 5 or 10 s, 720p, optionally from an image of the thread), `media_status`.
+
+- All run on kie.ai's unified job endpoint, so the `kie-proxy` edge function forwards them unchanged.
+- The turn waits (speech 60 s, music and video 170 s). A job that is not done returns a `jobId`; the model calls `media_status` later. Ownership is checked through the `chat_runs` row written at the start (`route = media-start:<kind>`, `error` = kie taskId).
+- Results are copied to the `images` bucket under `chat/agents/<threadId>/media/` (kie.ai deletes after 14 days) and shown as a `sources` link card, so no client change was needed. MP3s get an ID3 "AI generated" tag; **MP4s carry no in-file marking yet**.
+- Daily caps per tier in `MEDIA_DAILY_LIMITS` (free: 10 speech, 2 music, 1 video). Cost in `chat_runs.cost_micros` from kie's `creditsConsumed`, assuming 0.005 USD per credit.
+- **Not verified against the live API**: no real job was run. Not built: media in the Bibliothek listing, an inline player part, sound effects.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
