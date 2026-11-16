@@ -25,6 +25,7 @@ export function activityKindForType(type: string | null | undefined): ActivityKi
     case 'org_invite':
     case 'story_invite':
     case 'foerder_invite':
+    case 'event_request':
       return 'invite';
     default:
       return 'system';

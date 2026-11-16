@@ -191,6 +191,11 @@ export default function NotificationsInboxScreen() {
       if (profile?.username) router.push(`/user/${profile.username}` as any);
       return;
     }
+    if (notification.type === 'event_request') {
+      const requestId = (notification.metadata as { request_id?: string } | undefined)?.request_id;
+      if (requestId) router.push(`/chat/event-request/${requestId}` as any);
+      return;
+    }
     if (notification.type.startsWith('vorhaben_')) {
       const m = (notification.metadata ?? {}) as { screen?: string; proposal_id?: string; task_id?: string };
       if (m.screen === 'auszaehlung') router.push(`/auszaehlung/${m.proposal_id}` as any);

@@ -57,6 +57,14 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/event-requests",
+      "schedule": "10 * * * *"
+    },
+    {
+      "path": "/api/cron/event-sources",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/cron/vorhaben",
       "schedule": "*/5 * * * *"
     }

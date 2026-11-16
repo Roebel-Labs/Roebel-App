@@ -132,6 +132,12 @@ export function AdminSidebar() {
       badgeKey: "events",
     },
     {
+      name: "Anfragen",
+      href: "/admin/dashboard/events/anfragen",
+      icon: <Megaphone className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
       name: "Plakate",
       href: "/admin/dashboard/events/poster",
       icon: <Images className="h-5 w-5" />,

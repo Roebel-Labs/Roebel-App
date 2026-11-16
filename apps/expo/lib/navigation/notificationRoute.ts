@@ -38,6 +38,9 @@ export function routeForNotification(data: NotificationData): string | null {
       return str(data.threadId) && `/chat/${data.threadId}`;
     case 'vorhaben':
       return vorhabenRoute(data);
+    case 'event_request':
+      // An event found for an organisation the person manages: publish, change or decline.
+      return str(data.requestId) && `/chat/event-request/${data.requestId}`;
     case 'org_invite':
       return '/notifications';
     case 'sponsoring':
