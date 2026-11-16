@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { BotAvatarSpec, ChatBot } from '@/lib/chat/types';
 import { BotAvatar, BOT_COLOR_LIST, BOT_SHAPES } from './BotAvatar';
+import { characterById } from '@/lib/chat/characters';
 import { BlackPillButton } from './BlackPillButton';
 import { GlassCircleButton } from './GlassCircleButton';
 import { RoutinesSection } from './RoutinesSection';
@@ -158,50 +159,56 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
               accessibilityLabel="Name des Bots"
             />
 
-            <Text style={[styles.label, { color: t.textSecondary }]}>Form</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerRow}>
-              {BOT_SHAPES.map((shape) => {
-                const active = avatar?.shape === shape;
-                return (
-                  <Pressable
-                    key={shape}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Form ${shape}`}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setAvatar((a) => (a ? { ...a, shape } : a));
-                    }}
-                    style={[
-                      styles.shapeItem,
-                      { backgroundColor: active ? t.chipBackground : 'transparent', borderColor: active ? t.textPrimary : 'transparent' },
-                    ]}
-                  >
-                    <BotAvatar spec={{ shape, color: avatar?.color ?? bot.avatar.color, eyes: avatar?.eyes ?? bot.avatar.eyes }} size={38} />
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            {/* An illustrated character keeps its artwork: shape and colour only apply to shape avatars. */}
+            {characterById(bot.avatar.character) ? null : (
+              <>
+                <Text style={[styles.label, { color: t.textSecondary }]}>Form</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerRow}>
+                  {BOT_SHAPES.map((shape) => {
+                    const active = avatar?.shape === shape;
+                    return (
+                      <Pressable
+                        key={shape}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Form ${shape}`}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setAvatar((a) => (a ? { ...a, shape } : a));
+                        }}
+                        style={[
+                          styles.shapeItem,
+                          { backgroundColor: active ? t.chipBackground : 'transparent', borderColor: active ? t.textPrimary : 'transparent' },
+                        ]}
+                      >
+                        <BotAvatar spec={{ shape, color: avatar?.color ?? bot.avatar.color, eyes: avatar?.eyes ?? bot.avatar.eyes }} size={38} />
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
 
-            <Text style={[styles.label, { color: t.textSecondary }]}>Farbe</Text>
-            <View style={styles.swatches}>
-              {BOT_COLOR_LIST.map((color) => {
-                const active = avatar?.color === color;
-                return (
-                  <Pressable
-                    key={color}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Farbe ${color}`}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setAvatar((a) => (a ? { ...a, color } : a));
-                    }}
-                    style={[styles.swatchRing, { borderColor: active ? t.textPrimary : 'transparent' }]}
-                  >
-                    <View style={[styles.swatch, { backgroundColor: color }]} />
-                  </Pressable>
-                );
-              })}
-            </View>
+                <Text style={[styles.label, { color: t.textSecondary }]}>Farbe</Text>
+                <View style={styles.swatches}>
+                  {BOT_COLOR_LIST.map((color) => {
+                    const active = avatar?.color === color;
+                    return (
+                      <Pressable
+                        key={color}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Farbe ${color}`}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setAvatar((a) => (a ? { ...a, color } : a));
+                        }}
+                        style={[styles.swatchRing, { borderColor: active ? t.textPrimary : 'transparent' }]}
+                      >
+                        <View style={[styles.swatch, { backgroundColor: color }]} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+              </>
+            )}
 
             <Text style={[styles.label, { color: t.textSecondary }]}>Anweisungen</Text>
             <BottomSheetTextInput

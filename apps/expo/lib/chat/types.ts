@@ -91,6 +91,10 @@ export interface BotAvatarSpec {
   shape: BotShape;
   color: string;
   eyes: BotEyes;
+  /** Illustrated agent character (lib/chat/characters.ts); unknown ids fall back to the shape. */
+  character?: string;
+  /** Personality preset key of a character agent (the main assistant uses its profile's instead). */
+  personality?: string;
 }
 
 export interface ChatBot {

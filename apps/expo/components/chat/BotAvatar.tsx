@@ -1,7 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
 import Svg, { Circle, Ellipse, G, Line, Path, Polygon, Rect } from 'react-native-svg';
 import type { BotAvatarSpec, BotEyes, BotShape } from '@/lib/chat/types';
+import { characterArt, characterById } from '@/lib/chat/characters';
 import { useChatTokens } from './tokens';
 
 /** Palette sampled from the reference mascots. */
@@ -188,12 +190,32 @@ function BotAvatarImpl({ spec, size, online, hideEyes, style }: BotAvatarProps) 
   const t = useChatTokens();
   const dot = Math.max(8, Math.round(size * 0.26));
   const ring = size >= 36 ? 2.5 : 2;
+  // A character agent shows its illustration (remote, cached on disk). An unknown character id or a
+  // failed download falls back to the shape avatar.
+  const character = characterById(spec.character);
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const art = character && failedId !== character.id ? character : null;
   return (
     <View style={[{ width: size, height: size }, style]}>
-      <Svg width={size} height={size} viewBox="0 0 100 100">
-        <ShapeBody shape={spec.shape} color={spec.color} />
-        {hideEyes ? null : <EyeLines shape={spec.shape} eyes={spec.eyes} />}
-      </Svg>
+      {art ? (
+        <View style={[styles.art, { width: size, height: size, borderRadius: size / 2, backgroundColor: art.color }]}>
+          <Image
+            source={{ uri: characterArt(art.id).tile }}
+            style={{ width: size, height: size }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={art.id}
+            accessible={false}
+            onError={() => setFailedId(art.id)}
+          />
+        </View>
+      ) : (
+        <Svg width={size} height={size} viewBox="0 0 100 100">
+          <ShapeBody shape={spec.shape} color={spec.color} />
+          {/* The separate eyes layer draws nothing for a character, so a fallback keeps its own eyes. */}
+          {hideEyes && !character ? null : <EyeLines shape={spec.shape} eyes={spec.eyes} />}
+        </Svg>
+      )}
       {online ? (
         <View
           style={[
@@ -220,6 +242,8 @@ export default BotAvatar;
 
 /** Eyes-only layer at the same geometry as <BotAvatar>, for animating. */
 export function BotEyesLayer({ spec, size }: { spec: BotAvatarSpec; size: number }) {
+  // Illustrated characters have their eyes in the picture.
+  if (characterById(spec.character)) return null;
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <EyeLines shape={spec.shape} eyes={spec.eyes} />
@@ -229,4 +253,5 @@ export function BotEyesLayer({ spec, size }: { spec: BotAvatarSpec; size: number
 
 const styles = StyleSheet.create({
   dot: { position: 'absolute' },
+  art: { overflow: 'hidden' },
 });

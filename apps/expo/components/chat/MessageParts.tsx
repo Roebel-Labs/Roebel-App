@@ -8,6 +8,8 @@ import { FileCard } from './FileCard';
 import { IntegrationCard } from './IntegrationCard';
 import { CalendarEventCard } from './CalendarEventCard';
 import { SourcesLinks } from './SourcesLinks';
+import { MediaLinkRow } from './MediaLinkRow';
+import { splitSources } from '@/lib/chat/media-links';
 import { ApprovalCard, type ApprovalPart } from './ApprovalCard';
 import { TaskCard } from './TaskCard';
 import { GeneratedImageCard } from './GeneratedImageCard';
@@ -240,13 +242,30 @@ export function MessageParts({
             );
           case 'generated_image':
             return <GeneratedImageCard key={`${message.id}-img-${part.imageId}`} part={part} onPress={onImagePress} />;
-          case 'sources':
+          case 'sources': {
             if (!part.items.length) return null;
+            // Generated audio/video links become player rows; every other link stays an inline source.
+            const { media, links } = splitSources(part.items);
+            if (!media.length) {
+              return (
+                <MessageBubble key={key} role="bot" onLongPress={lp}>
+                  <SourcesLinks items={part.items} onLinkPress={onLinkPress} />
+                </MessageBubble>
+              );
+            }
             return (
-              <MessageBubble key={key} role="bot" onLongPress={lp}>
-                <SourcesLinks items={part.items} onLinkPress={onLinkPress} />
-              </MessageBubble>
+              <React.Fragment key={key}>
+                {media.map((link, mi) => (
+                  <MediaLinkRow key={`${key}-media-${mi}`} link={link} onOpen={onLinkPress} onLongPress={lp} />
+                ))}
+                {links.length ? (
+                  <MessageBubble role="bot" onLongPress={lp}>
+                    <SourcesLinks items={links} onLinkPress={onLinkPress} />
+                  </MessageBubble>
+                ) : null}
+              </React.Fragment>
             );
+          }
           default:
             return null;
         }

@@ -7,6 +7,18 @@ import { consumeSSEResponse, postSSE, type ChatStreamEvent } from './stream';
 import type { BotAvatarSpec, CalendarContextEvent, ChatBot, ChatMessage, ChatThread } from './types';
 import { inspirationQuery, type InspirationFeed } from './inspiration';
 import type { TaskSnapshot } from './reducer';
+import { normalizeAgentView, type AgentView } from './agents';
+import { normalizeLibrary, type Library } from './library';
+import {
+  normalizeBriefing,
+  normalizeStatus,
+  suggestionSections,
+  type Briefing,
+  type PersonaStatus,
+  type StartSuggestionResult,
+  type SuggestionSection,
+  type SuggestionsResponse,
+} from './persona';
 
 const JSON_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 90_000;
@@ -547,4 +559,107 @@ export async function lookupPairing(code: string): Promise<PairingLookup> {
 /** The signed-in user confirms the device with their chat session. */
 export async function approvePairing(account: SigningAccount, code: string): Promise<{ ok: boolean; deviceName: string }> {
   return request(account, 'POST', '/api/chat/pair/approve', { json: { code } });
+}
+
+// ---- agent characters and multiple agents (STATE_OF_ORTIS_STUDIO §6a.3) --------------------------
+
+function agentViewOrThrow(raw: Partial<AgentView> | null): AgentView {
+  const view = normalizeAgentView(raw);
+  if (!view) throw new ChatApiError('bad_response', 'Die Antwort des Servers war unvollständig.');
+  return view;
+}
+
+/** The main assistant's profile plus the roster (`agents[]`). */
+export async function fetchAgentView(account: SigningAccount): Promise<AgentView> {
+  return agentViewOrThrow(await request<Partial<AgentView> | null>(account, 'GET', '/api/chat/agent'));
+}
+
+export interface AgentProfilePatch {
+  /** null or an empty name restores the default name. */
+  name?: string | null;
+  personality?: string;
+  customInstructions?: string;
+  /** Makes this bot the main assistant; null goes back to the default assistant. */
+  botId?: string | null;
+}
+
+/** Changes the main assistant (name, personality, own instructions) or switches which agent is the main one. */
+export async function patchAgentProfile(account: SigningAccount, patch: AgentProfilePatch): Promise<AgentView> {
+  return agentViewOrThrow(await request<Partial<AgentView> | null>(account, 'PATCH', '/api/chat/agent', { json: patch }));
+}
+
+export interface CreateAgentInput {
+  character: string;
+  name?: string;
+  personality?: string;
+  main?: boolean;
+}
+
+/** Takes on an illustrated character as an own agent; `createdId` is the new bot. */
+export async function createCharacterAgent(
+  account: SigningAccount,
+  input: CreateAgentInput,
+): Promise<{ view: AgentView; createdId: string | null }> {
+  const res = await request<(Partial<AgentView> & { createdId?: string }) | null>(account, 'POST', '/api/chat/agent/agents', {
+    json: input,
+  });
+  return { view: agentViewOrThrow(res), createdId: typeof res?.createdId === 'string' ? res.createdId : null };
+}
+
+export interface AgentPatch {
+  name?: string;
+  character?: string;
+  personality?: string;
+}
+
+export async function patchCharacterAgent(account: SigningAccount, botId: string, patch: AgentPatch): Promise<AgentView> {
+  return agentViewOrThrow(
+    await request<Partial<AgentView> | null>(account, 'PATCH', `/api/chat/agent/agents/${enc(botId)}`, { json: patch }),
+  );
+}
+
+/** Removes an own agent; the server moves its threads and routines to the default assistant first. */
+export async function deleteCharacterAgent(account: SigningAccount, botId: string): Promise<AgentView> {
+  return agentViewOrThrow(await request<Partial<AgentView> | null>(account, 'DELETE', `/api/chat/agent/agents/${enc(botId)}`));
+}
+
+// ---- "Dein Tag": briefing and suggestions from the personal wiki (§6a, §6a.4) ---------------------
+
+export async function fetchBriefing(account: SigningAccount): Promise<Briefing> {
+  return normalizeBriefing(await request<Partial<Briefing> | null>(account, 'GET', '/api/chat/persona/briefing'));
+}
+
+export async function fetchSuggestions(
+  account: SigningAccount,
+): Promise<{ sections: SuggestionSection[]; status: PersonaStatus }> {
+  const res = await request<SuggestionsResponse | null>(account, 'GET', '/api/chat/persona/suggestions');
+  return { sections: suggestionSections(res), status: normalizeStatus(res?.status) };
+}
+
+/** A task gets a fresh thread (the client sends `prompt` as the first message); a routine is created right away. */
+export async function startSuggestion(account: SigningAccount, id: string): Promise<StartSuggestionResult> {
+  const res = await request<Partial<StartSuggestionResult> | null>(account, 'POST', `/api/chat/persona/suggestions/${enc(id)}`, {
+    json: { action: 'start' },
+  });
+  if (!res || typeof res.threadId !== 'string') throw new ChatApiError('bad_response', 'Die Antwort des Servers war unvollständig.');
+  return { threadId: res.threadId, prompt: res.prompt ?? '', routine: res.routine ?? null };
+}
+
+export function dismissSuggestion(account: SigningAccount, id: string): Promise<{ ok: boolean }> {
+  return request(account, 'POST', `/api/chat/persona/suggestions/${enc(id)}`, { json: { action: 'dismiss' } });
+}
+
+/** Starts the wiki build; a 409 (`busy`) means one is already running. */
+export async function buildPersona(account: SigningAccount, mode: 'full' | 'refresh' = 'full'): Promise<PersonaStatus> {
+  const res = await request<{ status?: Partial<PersonaStatus> } | null>(account, 'POST', '/api/chat/persona/build', {
+    json: { mode },
+    timeoutMs: 40_000,
+  });
+  return normalizeStatus(res?.status);
+}
+
+// ---- "Bibliothek": files and generated images across chats (§6a) ----------------------------------
+
+export async function fetchLibrary(account: SigningAccount): Promise<Library> {
+  return normalizeLibrary(await request<Partial<Library> | null>(account, 'GET', '/api/chat/library'));
 }

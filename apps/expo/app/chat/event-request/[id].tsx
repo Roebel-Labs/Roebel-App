@@ -222,7 +222,7 @@ export default function EventRequestScreen() {
                   Ohne Antwort innerhalb von zwei Tagen stellt das Röbel-Team die Veranstaltung unter seinem eigenen Konto ein.
                 </Text>
               )}
-              {message && phase !== 'error' && <Text style={[styles.note, { color: colors.error }]}>{message}</Text>}
+              {message && <Text style={[styles.note, { color: colors.error }]}>{message}</Text>}
             </>
           )}
         </ScrollView>

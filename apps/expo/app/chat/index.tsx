@@ -397,6 +397,11 @@ function ChatList({
                 anchor: e,
                 items: [
                   [
+                    { label: 'Meine Agenten', icon: 'people-outline', onPress: () => router.push('/chat/agents' as Href) },
+                    { label: 'Dein Tag', icon: 'sunny-outline', onPress: () => router.push('/chat/today' as Href) },
+                    { label: 'Bibliothek', icon: 'folder-open-outline', onPress: () => router.push('/chat/library' as Href) },
+                  ],
+                  [
                     { label: 'Gedächtnis', icon: 'bulb-outline', onPress: () => router.push('/chat/settings/memory' as Href) },
                     { label: 'Aktivität', icon: 'pulse-outline', onPress: () => router.push('/chat/settings/activity' as Href) },
                     { label: 'Verbindungen', icon: 'link-outline', onPress: () => router.push('/chat/settings/connections' as Href) },
@@ -437,7 +442,14 @@ function ChatList({
           paddingTop: 8,
           paddingBottom: insets.bottom + 24,
         }}
-        ListHeaderComponent={query.trim() ? null : <ForYouEntry />}
+        ListHeaderComponent={
+          query.trim() ? null : (
+            <>
+              <ChatShortcuts />
+              <ForYouEntry />
+            </>
+          )
+        }
         renderItem={({ item }) => (
           <Animated.View entering={FadeIn.duration(180)}>
             <ChatListRow
@@ -470,6 +482,10 @@ function ChatList({
             setSheetOpen(false);
             onNewBot();
           }}
+          onNewAgent={() => {
+            setSheetOpen(false);
+            router.push('/chat/agents/new' as Href);
+          }}
         />
       ) : null}
     </View>
@@ -481,11 +497,14 @@ function NewChatSheet({
   onClose,
   bots,
   onNewBot,
+  onNewAgent,
 }: {
   visible: boolean;
   onClose: () => void;
   bots: ChatBot[];
   onNewBot: () => void;
+  /** Opens the character picker (illustrated agents). */
+  onNewAgent: () => void;
 }) {
   const t = useChatTokens();
   const router = useRouter();
@@ -496,7 +515,7 @@ function NewChatSheet({
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const snapPoints = useMemo(
-    () => [Math.min(win.height * 0.8, 180 + bots.length * 64 + insets.bottom)],
+    () => [Math.min(win.height * 0.8, 244 + bots.length * 64 + insets.bottom)],
     [win.height, bots.length, insets.bottom]
   );
 
@@ -559,6 +578,21 @@ function NewChatSheet({
             </Text>
           </View>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onNewAgent}
+          style={({ pressed }) => [styles.pickRow, pressed ? { opacity: 0.6 } : null]}
+        >
+          <View style={[styles.newBotCircle, { backgroundColor: t.chipBackground }]}>
+            <Feather name="smile" size={21} color={t.icon} />
+          </View>
+          <View style={styles.pickBody}>
+            <Text style={[styles.pickName, { color: t.textPrimary }]}>Neuer Agent</Text>
+            <Text style={[styles.pickDesc, { color: t.textSecondary }]} numberOfLines={1}>
+              Wähle eine Figur mit eigenem Thema
+            </Text>
+          </View>
+        </Pressable>
         {bots.map((b) => {
           const on = selected.includes(b.id);
           return (
@@ -604,6 +638,39 @@ function NewChatSheet({
         />
       </View>
     </BottomSheet>
+  );
+}
+
+const SHORTCUTS: { label: string; icon: keyof typeof Feather.glyphMap; href: string }[] = [
+  { label: 'Agenten', icon: 'users', href: '/chat/agents' },
+  { label: 'Dein Tag', icon: 'sun', href: '/chat/today' },
+  { label: 'Bibliothek', icon: 'folder', href: '/chat/library' },
+];
+
+/** Entry points above the threads: the agent roster, the daily briefing and the library. */
+function ChatShortcuts() {
+  const t = useChatTokens();
+  const router = useRouter();
+  return (
+    <View style={styles.shortcuts}>
+      {SHORTCUTS.map((s) => (
+        <Pressable
+          key={s.href}
+          accessibilityRole="button"
+          accessibilityLabel={s.label}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            router.push(s.href as Href);
+          }}
+          style={({ pressed }) => [styles.shortcut, { backgroundColor: t.chipBackground, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Feather name={s.icon} size={16} color={t.textPrimary} />
+          <Text numberOfLines={1} style={[styles.shortcutText, { color: t.textPrimary }]}>
+            {s.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -750,6 +817,19 @@ const styles = StyleSheet.create({
     fontSize: 17,
     paddingVertical: 0,
   },
+  shortcuts: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10 },
+  shortcut: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+  },
+  shortcutText: { fontFamily: chatFont.medium, fontSize: 15, letterSpacing: -0.1, flexShrink: 1 },
   empty: { paddingTop: 80, paddingHorizontal: 40, alignItems: 'center' },
   emptyText: {
     fontFamily: chatFont.regular,
