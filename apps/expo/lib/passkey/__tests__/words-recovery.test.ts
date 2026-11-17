@@ -116,8 +116,8 @@ describe('findWalletsByWords', () => {
       isPasskeySafe: async () => true,
     };
     expect(await findWalletsByWords(POOL, chain)).toEqual([
-      { wallet: SAFE, wordGuardians: [POOL[0], POOL[1]], threshold: 2 },
-      { wallet: SAFE2, wordGuardians: [POOL[0]], threshold: 1 },
+      { wallet: SAFE, wordGuardians: [POOL[0], POOL[1]], threshold: 2, recoveryLegacy: null },
+      { wallet: SAFE2, wordGuardians: [POOL[0]], threshold: 1, recoveryLegacy: null },
     ]);
     expect(chain.guardianLogsFor).toHaveBeenCalledWith(POOL);
   });
@@ -143,8 +143,23 @@ describe('findWalletsByWords', () => {
       readThreshold: async () => 1n,
       isPasskeySafe: jest.fn(async (w: Address) => w === SAFE),
     };
-    expect(await findWalletsByWords(POOL, chain)).toEqual([{ wallet: SAFE, wordGuardians: [POOL[0]], threshold: 1 }]);
+    expect(await findWalletsByWords(POOL, chain)).toEqual([{ wallet: SAFE, wordGuardians: [POOL[0]], threshold: 1, recoveryLegacy: null }]);
     expect(chain.isPasskeySafe).toHaveBeenCalledWith(DECOY);
+  });
+
+  it('I5: a migrated account keeps its legacy link (the one legacy account the Safe administers)', async () => {
+    const LEGACY = addr(0x1e);
+    const chain = {
+      guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }],
+      readGuardians: async () => [POOL[0]],
+      readThreshold: async () => 1n,
+      isPasskeySafe: async () => true,
+      linkedLegacies: jest.fn(async () => [LEGACY]),
+    };
+    expect(await findWalletsByWords(POOL, chain)).toEqual([{ wallet: SAFE, wordGuardians: [POOL[0]], threshold: 1, recoveryLegacy: LEGACY }]);
+    expect(chain.linkedLegacies).toHaveBeenCalledWith(SAFE);
+    // a failed legacy lookup propagates (never a silent loss of the link)
+    await expect(findWalletsByWords(POOL, { ...chain, linkedLegacies: async () => Promise.reject(new Error('rpc down')) })).rejects.toThrow('rpc down');
   });
 
   it('has the German message for "no account"', () => {
@@ -317,6 +332,34 @@ describe('pending words restore (outlives the recovery state)', () => {
     await runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore: async () => ({ ...ok, rewrapped: false, retryable: true }) });
     expect(await loadPendingWordsRestore(st.storage, SAFE)).not.toBeNull();
     expect(await loadPendingVaultKey(st.vaultStorage, SAFE)).toBe(KEY);
+  });
+
+  it('L5: reopened after a finished restore (no marker, no vault key): reported as done, nothing runs', async () => {
+    const st = stores();
+    const restore = jest.fn();
+    const r = await runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore });
+    expect(r).toEqual({ restored: [], missing: [], rewrapped: true, retryable: false });
+    expect(wordsKeyRestoreMessage(r)).toBeNull();
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it('L6: a lost marker with the vault key still there is written again from the done state, then the restore runs', async () => {
+    const st = stores();
+    await savePendingVaultKey(st.vaultStorage, SAFE, KEY);
+    const restore = jest.fn(async () => ok);
+    const remark = jest.fn(() => markWordsRecoveryDone(done, st.storage));
+    expect(await runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore, remark })).toEqual(ok);
+    expect(remark).toHaveBeenCalledTimes(1);
+    expect(restore).toHaveBeenCalledWith(done, KEY);
+  });
+
+  it('L6: the marker is written before the pool (a failing pool save never costs the marker)', async () => {
+    const st = stores();
+    const order: string[] = [];
+    const storage = { ...st.storage, setItem: async (k: string, v: string) => { order.push(k); if (k === WORDS_POOL_KEY) throw new Error('disk'); await st.storage.setItem(k, v); } };
+    await markWordsRecoveryDone(done, storage);
+    expect(order).toEqual([pendingWordsRestoreKey(SAFE), WORDS_POOL_KEY]);
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).toEqual(done);
   });
 
   it('no vault key: a retry cannot help, so it clears the marker and throws the named error', async () => {

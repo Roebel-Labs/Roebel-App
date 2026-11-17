@@ -33,9 +33,15 @@ export type WordsLookupChain = {
    * Safes are offered.
    */
   isPasskeySafe: (wallet: Address) => Promise<boolean>;
+  /**
+   * Legacy accounts the Safe administers (recovery-lookup `findLinkedLegacies`): a migrated
+   * account keeps its legacy link through a words recovery, as through a guardian recovery.
+   */
+  linkedLegacies?: (wallet: Address) => Promise<Address[]>;
 };
 
-export type WordsWallet = { wallet: Address; wordGuardians: Address[]; threshold: number };
+/** `recoveryLegacy`: the one legacy account the Safe administers (null: none, or not unique). */
+export type WordsWallet = { wallet: Address; wordGuardians: Address[]; threshold: number; recoveryLegacy: Address | null };
 
 const inList = (list: readonly Address[], a: Address) => list.some((x) => isAddressEqual(x, a));
 
@@ -63,7 +69,9 @@ export async function findWalletsByWords(pool: readonly Address[], chain: WordsL
       const wordGuardians = wordGuardiansOf(pool, guardians);
       if (threshold <= 0n || BigInt(wordGuardians.length) < threshold) return null;
       if (!(await chain.isPasskeySafe(wallet))) return null;
-      return { wallet, wordGuardians, threshold: Number(threshold) };
+      // Errors propagate: a lost connection must not silently drop the legacy link.
+      const legacies = chain.linkedLegacies ? await chain.linkedLegacies(wallet) : [];
+      return { wallet, wordGuardians, threshold: Number(threshold), recoveryLegacy: legacies.length === 1 ? getAddress(legacies[0]) : null };
     }),
   );
   return checked.filter((c): c is WordsWallet => !!c);
@@ -253,7 +261,6 @@ export async function markWordsRecoveryDone(
   now: () => number = Date.now,
 ): Promise<void> {
   if (!s.credentialId || !s.x || !s.y || !s.signer || !s.wordsPool) return;
-  await saveWordsPool(storage, { addresses: s.wordsPool, confirmedAt: now() }).catch(() => undefined);
   const p: PendingWordsRestore = {
     wallet: getAddress(s.wallet),
     credentialId: s.credentialId,
@@ -262,14 +269,24 @@ export async function markWordsRecoveryDone(
     signer: getAddress(s.signer),
     wordsPool: s.wordsPool.map((a) => getAddress(a)),
   };
+  // The marker first: without it the keys are never offered again; the pool is a display aid.
   await storage.setItem(pendingWordsRestoreKey(p.wallet), JSON.stringify(p));
+  await saveWordsPool(storage, { addresses: s.wordsPool, confirmedAt: now() }).catch(() => undefined);
 }
+
+/** Nothing left to restore (an earlier run finished and cleared both): shown as success. */
+export const WORDS_RESTORE_ALREADY_DONE: WordsKeyRestore = { restored: [], missing: [], rewrapped: true, retryable: false };
 
 /**
  * Runs the pending key restore of `wallet` with its per-wallet vault key. Clears the marker and
  * the vault key slot once nothing is left to retry (done, or no backup / no PRF that a retry
  * could change). No vault key → clears too and throws WORDS_VAULT_KEY_MISSING (a retry cannot help).
  * A failed read throws and keeps everything for the next try.
+ *
+ * No marker: with no per-wallet vault key either, an earlier run already finished (reopening the
+ * screen) → `WORDS_RESTORE_ALREADY_DONE`. With the vault key still there, the marker write was
+ * lost (recovery-flow swallows a failed `wordsDone`): `remark` (the done screen passes the
+ * recovery state) writes it again, then the restore runs.
  */
 export async function runPendingWordsRestore(
   wallet: Address,
@@ -277,10 +294,18 @@ export async function runPendingWordsRestore(
     storage: KeyValueStorage & { removeItem?: (k: string) => Promise<void> };
     vault: VaultKeyStorage;
     restore: (p: PendingWordsRestore, vaultKey: Hex) => Promise<WordsKeyRestore>;
+    remark?: () => Promise<void>;
   },
 ): Promise<WordsKeyRestore> {
-  const p = await loadPendingWordsRestore(d.storage, wallet);
-  if (!p) throw new Error('no pending words restore');
+  let p = await loadPendingWordsRestore(d.storage, wallet);
+  if (!p) {
+    if (!(await loadPendingVaultKey(d.vault, wallet))) return WORDS_RESTORE_ALREADY_DONE;
+    if (d.remark) {
+      await d.remark();
+      p = await loadPendingWordsRestore(d.storage, wallet);
+    }
+    if (!p) throw new Error('Deine Schlüssel konnten nicht geladen werden. Bitte versuche es erneut.');
+  }
   const vaultKey = await loadPendingVaultKey(d.vault, wallet);
   if (!vaultKey) {
     await clearPendingWordsRestore(d.storage, d.vault, wallet).catch(() => undefined);

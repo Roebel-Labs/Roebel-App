@@ -224,6 +224,7 @@ export const wordsLookupChain: WordsLookupChain = {
   readGuardians: (w) => readGuardians(w),
   readThreshold: (w) => readThreshold(w),
   isPasskeySafe: (w) => lookupChain.isPasskeySafe(w),
+  linkedLegacies: (w) => findLinkedLegacies(w, lookupChain),
 };
 
 /** Deps for both recovery methods (the words path also reads guardians + nonce and keeps the vault key). */

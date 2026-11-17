@@ -36,7 +36,14 @@ import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
 import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
 import { resolveIdentity } from './signin';
-import { loadPendingWordsRestore, restoreKeysWithVaultKey, runPendingWordsRestore, type WordsKeyRestore } from './words-recovery';
+import {
+  loadPendingWordsRestore,
+  markWordsRecoveryDone,
+  restoreKeysWithVaultKey,
+  runPendingWordsRestore,
+  type WordsKeyRestore,
+} from './words-recovery';
+import type { RecoveryState } from './recovery-flow';
 import { loadWordsPool, saveWordsPool } from './words-guardians';
 import { loadWordsPending } from './words-setup';
 import { secureKeyValueStorage } from './migration-runtime';
@@ -233,10 +240,13 @@ export const isPasskeySafeDeployed = (safe: Address) => isSafeDeployed(safe);
  * with the vault key from the wallet's OWN slot. The session is the one sign-in opens for the
  * recovered Safe (same identity rule). Clears the marker once nothing is left to retry.
  * Throws (German) on a failed read, or with name WORDS_VAULT_KEY_MISSING when the vault key is gone.
+ * `done` = the finished recovery state (the restore screen): re-writes a lost marker.
  */
-export async function restorePendingWordsKeys(wallet: Address): Promise<WordsKeyRestore> {
+export async function restorePendingWordsKeys(wallet: Address, done?: RecoveryState): Promise<WordsKeyRestore> {
+  const storage = { ...secureKeyValueStorage, removeItem: (k: string) => SecureStore.deleteItemAsync(k) };
   return runPendingWordsRestore(wallet, {
-    storage: { ...secureKeyValueStorage, removeItem: (k: string) => SecureStore.deleteItemAsync(k) },
+    storage,
+    ...(done ? { remark: () => markWordsRecoveryDone(done, storage) } : {}),
     vault: wordsVaultKeyStorage,
     restore: async (p, vaultKey) => {
       // Lazily: sign-in wiring is not needed by any other key path.

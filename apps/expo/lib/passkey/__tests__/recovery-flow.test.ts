@@ -351,6 +351,15 @@ describe('startWordsRecovery', () => {
     expect(h.deps.readNonce).toHaveBeenCalledWith(WALLET);
   });
 
+  it('I5: a migrated account keeps its legacy link (recoveryLegacy persisted and used for the op)', async () => {
+    const h = wordsDeps();
+    const s = await startWordsRecovery({ wallet: WALLET, name: 'Erna', phrase: PHRASE, recoveryLegacy: LEGACY }, h.deps);
+    expect(s.step).toBe('waitingDelay');
+    expect(s.recoveryLegacy).toBe(LEGACY);
+    expect(JSON.parse(h.storage.map.get(RECOVERY_STORE_KEY)!).recoveryLegacy).toBe(LEGACY);
+    expect(h.sent[0].recoveryLegacy).toBe(LEGACY);
+  });
+
   it('saves the words vault key before the op and never persists the words', async () => {
     const h = wordsDeps();
     await start(h);

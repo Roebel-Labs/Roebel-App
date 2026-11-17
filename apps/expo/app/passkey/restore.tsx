@@ -140,7 +140,7 @@ export default function RestoreAccountScreen() {
   const startWords = useCallback(async (w: WordsWallet, name: string, phrase: string, kit: WordsKit) => {
     setBusy(true);
     try {
-      setState(await startWordsRecovery({ wallet: w.wallet, name, phrase, kit }, deps));
+      setState(await startWordsRecovery({ wallet: w.wallet, name, phrase, kit, recoveryLegacy: w.recoveryLegacy }, deps));
     } finally {
       setBusy(false);
     }
@@ -242,6 +242,7 @@ export default function RestoreAccountScreen() {
             {state.method === 'words' ? (
               <WordsKeyRestore
                 wallet={state.wallet}
+                done={state}
                 onContinue={async () => {
                   await clearRecoveryState(recoveryStorage).catch(() => undefined);
                   router.replace('/settings/passkey' as any);
@@ -419,9 +420,14 @@ function WordsRestore({
         setHint(NO_WORDS_ACCOUNT_MESSAGE);
         return;
       }
-      const people = await resolvePeopleNow(found.map((f) => f.wallet)).catch(() => new Map());
+      // A migrated account's profile sits under its legacy account.
+      const people = await resolvePeopleNow([
+        ...found.map((f) => f.wallet),
+        ...found.flatMap((f) => (f.recoveryLegacy ? [f.recoveryLegacy] : [])),
+      ]).catch(() => new Map());
       const named: WordsHit[] = found.map((f, i) => {
-        const p = people.get(f.wallet.toLowerCase());
+        const own = people.get(f.wallet.toLowerCase());
+        const p = own?.known ? own : f.recoveryLegacy ? people.get(f.recoveryLegacy.toLowerCase()) : own;
         return p?.known ? { ...f, name: p.name, passkeyName: p.name } : { ...f, name: `Konto ${i + 1}`, passkeyName: 'Röbel' };
       });
       secret.current = { phrase, kit };
@@ -480,7 +486,7 @@ function WordsRestore({
  * fingerprints). "Weiter" waits for the first attempt; skipping after a failure asks first. A
  * skipped restore stays pending (words-recovery marker) and is offered again in the settings.
  */
-function WordsKeyRestore({ wallet, onContinue }: { wallet: Address; onContinue: () => void }) {
+function WordsKeyRestore({ wallet, done, onContinue }: { wallet: Address; done: RecoveryState; onContinue: () => void }) {
   const { colors } = useTheme();
   const [phase, setPhase] = useState<'running' | 'done' | 'failed'>('running');
   const [message, setMessage] = useState<string | null>(null);
@@ -488,7 +494,7 @@ function WordsKeyRestore({ wallet, onContinue }: { wallet: Address; onContinue: 
   const attempt = useCallback(async () => {
     try {
       const rt = await import('@/lib/passkey/derived-keys-runtime');
-      const r = await rt.restorePendingWordsKeys(wallet);
+      const r = await rt.restorePendingWordsKeys(wallet, done);
       setMessage(wordsKeyRestoreMessage(r));
       setPhase('done');
     } catch (e) {
@@ -497,7 +503,7 @@ function WordsKeyRestore({ wallet, onContinue }: { wallet: Address; onContinue: 
       setMessage(missing ? WORDS_RESTORE_NO_VAULT_KEY_MESSAGE : friendlyError(e, 'Deine Schlüssel konnten nicht geladen werden. Bitte versuche es erneut.'));
       setPhase(missing ? 'done' : 'failed');
     }
-  }, [wallet]);
+  }, [wallet, done]);
 
   const started = useRef(false);
   useEffect(() => {
