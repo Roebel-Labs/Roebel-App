@@ -29,11 +29,13 @@ import WordsGrid from '@/components/passkey/WordsGrid';
 import WordsInput from '@/components/passkey/WordsInput';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import {
+  DELETE_OTHER_WORDS_MESSAGE,
   PHRASE_PROMPT,
   PhraseCancelledError,
   PhraseOverwriteError,
   PhraseUnavailableError,
   NO_BIOMETRICS_MESSAGE,
+  removeOwnPhrase,
 } from '@/lib/passkey/phrase-store';
 import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { pickConfirmPositions, validatePhrase, wordsFromSeed } from '@/lib/passkey/words';
@@ -247,17 +249,21 @@ export default function MyWordsScreen() {
     setBusy('delete');
     setNotice(null);
     try {
+      if (!owner) return;
       const store = await loadStore();
-      // The device unlock first (an unreadable item may go without it: it can never sign again).
+      // The device unlock first (an unreadable item may go without it: it can never sign again);
+      // words of another account are never deleted from here.
+      let result: 'removed' | 'otherAccount';
       try {
-        await store.read(PHRASE_PROMPT);
+        result = await removeOwnPhrase(store, owner);
       } catch (e) {
-        if (!(e instanceof PhraseUnavailableError)) {
-          if (!isCancel(e)) setNotice({ tone: 'error', text: FAILED_TEXT });
-          return;
-        }
+        if (!isCancel(e)) setNotice({ tone: 'error', text: FAILED_TEXT });
+        return;
       }
-      await store.remove();
+      if (result === 'otherAccount') {
+        setNotice({ tone: 'error', text: DELETE_OTHER_WORDS_MESSAGE });
+        return;
+      }
       forget();
       if (wallet) disconnect(wallet);
       router.replace('/' as any);

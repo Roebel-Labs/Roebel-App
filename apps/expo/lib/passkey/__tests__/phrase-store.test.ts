@@ -2,6 +2,7 @@ import { getAddress } from 'viem';
 import {
   createPhraseStore,
   NO_BIOMETRICS_MESSAGE,
+  removeOwnPhrase,
   PHRASE_PROMPT,
   PhraseCancelledError,
   PhraseOverwriteError,
@@ -250,5 +251,41 @@ describe('phrase store', () => {
     const s = fakeSecure({ canBio: false });
     await expect(createPhraseStore(s).write(JUNK)).rejects.toThrow(NO_BIOMETRICS_MESSAGE);
     expect(s.calls.filter((c) => c.op === 'set')).toHaveLength(0);
+  });
+
+  describe('removeOwnPhrase (M-2: "Wörter löschen" only removes this account\'s words)', () => {
+    it('the stored words derive the owner: one unlock, removed', async () => {
+      const s = fakeSecure();
+      const store = createPhraseStore(s);
+      await store.write(JUNK);
+      expect(await removeOwnPhrase(store, JUNK_OWNER)).toBe('removed');
+      expect(s.authenticatedReads).toBe(1);
+      expect(await store.has()).toBe(false);
+    });
+
+    it('another account\'s words: refused, nothing removed', async () => {
+      const s = fakeSecure();
+      const store = createPhraseStore(s);
+      await store.write(ABOUT);
+      expect(await removeOwnPhrase(store, JUNK_OWNER)).toBe('otherAccount');
+      expect(s.m.get(WORDS_PHRASE_KEY)).toBe(ABOUT);
+      expect(await store.has()).toBe(true);
+    });
+
+    it('unreadable words go (they can never sign again); a cancelled unlock removes nothing', async () => {
+      const gone = fakeSecure();
+      const goneStore = createPhraseStore(gone);
+      await goneStore.write(ABOUT);
+      gone.invalidate();
+      expect(await removeOwnPhrase(goneStore, JUNK_OWNER)).toBe('removed');
+      expect(await goneStore.has()).toBe(false);
+
+      const cancel = fakeSecure();
+      const cancelStore = createPhraseStore(cancel);
+      await cancelStore.write(JUNK);
+      cancel.readThrows = 'cancel';
+      await expect(removeOwnPhrase(cancelStore, JUNK_OWNER)).rejects.toBeInstanceOf(PhraseCancelledError);
+      expect(await cancelStore.has()).toBe(true);
+    });
   });
 });

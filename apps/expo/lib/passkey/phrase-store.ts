@@ -96,6 +96,31 @@ export type PhraseStore = {
   markConfirmed(): Promise<void>;
 };
 
+export const DELETE_OTHER_WORDS_MESSAGE =
+  'Die Wörter auf diesem Gerät gehören zu einem anderen Konto. Sie werden nicht gelöscht.';
+
+/**
+ * "Wörter von diesem Gerät löschen" for the account `owner` (final review M-2): the device unlock
+ * first, and only words that derive `owner` are removed. Words of ANOTHER account stay (they may be
+ * that account's only key): 'otherAccount', nothing removed. Unreadable words (invalidated, gone)
+ * can never sign again and go without the unlock. A cancelled prompt or any other read error is
+ * rethrown and nothing is removed.
+ */
+export async function removeOwnPhrase(
+  store: Pick<PhraseStore, 'read' | 'remove'>,
+  owner: Address,
+): Promise<'removed' | 'otherAccount'> {
+  try {
+    const phrase = await store.read(PHRASE_PROMPT);
+    const check = validatePhrase(phrase);
+    if (!check.ok || !isAddressEqual(wordAccount(check.phrase, 0).address, owner)) return 'otherAccount';
+  } catch (e) {
+    if (!(e instanceof PhraseUnavailableError)) throw e;
+  }
+  await store.remove();
+  return 'removed';
+}
+
 type StoreOptions = { requireAuthentication?: boolean; authenticationPrompt?: string; keychainAccessible?: number };
 
 /** The subset of expo-secure-store this module uses (the module namespace satisfies it). */
