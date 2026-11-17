@@ -96,7 +96,7 @@ export default function WelcomeNameScreen() {
             style={[styles.input, { color: colors.textPrimary }]}
             value={displayName}
             onChangeText={setDisplayName}
-            placeholder="z. B. Max Brych"
+            placeholder="Dein Name"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="words"
             autoCorrect={false}
