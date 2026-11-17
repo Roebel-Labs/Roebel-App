@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(r, { status: r.skipped === "registry_mismatch" ? 409 : 200 });
     }
     const swept = await sweepUndelivered(deps);
-    return NextResponse.json({ from: r.from.toString(), to: r.to.toString(), applied: r.applied, redelivered: swept.batches });
+    return NextResponse.json({ from: r.from.toString(), to: r.to.toString(), applied: r.applied, redelivered: swept.batches, recoveredMails: swept.recovered });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[cron/credentials-sync] failed", msg);

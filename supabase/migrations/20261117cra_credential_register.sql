@@ -89,6 +89,9 @@ CREATE TABLE IF NOT EXISTS public.credential_invitations (
   display_name     text,
   contact_email    text,
   email_sent_at    timestamptz,
+  -- Mail sends started (counted when a sender takes the row). After 3 the address is erased and the
+  -- invitation stays link-only, so the organiser can print a letter.
+  mail_attempts    integer NOT NULL DEFAULT 0,
   status           text NOT NULL DEFAULT 'prepared'
                    CHECK (status IN ('prepared', 'invited', 'accepted', 'declined', 'revoked')),
   claimed_onchain  boolean NOT NULL DEFAULT false,

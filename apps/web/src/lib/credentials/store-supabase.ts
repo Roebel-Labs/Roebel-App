@@ -160,6 +160,7 @@ const toInvitation = (r: Row): InvitationRow => ({
   displayName: r.display_name ?? null,
   contactEmail: r.contact_email ?? null,
   emailSentAt: r.email_sent_at ?? null,
+  mailAttempts: Number(r.mail_attempts ?? 0),
   status: r.status,
   claimedOnchain: r.claimed_onchain === true,
   invitedAt: r.invited_at ?? null,
@@ -170,7 +171,7 @@ const INVITATION_FIELDS: Record<keyof InvitationRow, string> = {
   id: "id", batchId: "batch_id", typeId: "type_id", leafKind: "leaf_kind", subject: "subject", validUntil: "valid_until",
   salt: "salt", leafHash: "leaf_hash", proof: "proof", claimKeyEnc: "claim_key_enc", tokenHash: "token_hash",
   tokenEnc: "token_enc", recipientWallet: "recipient_wallet", displayName: "display_name", contactEmail: "contact_email",
-  emailSentAt: "email_sent_at", status: "status", claimedOnchain: "claimed_onchain", invitedAt: "invited_at",
+  emailSentAt: "email_sent_at", mailAttempts: "mail_attempts", status: "status", claimedOnchain: "claimed_onchain", invitedAt: "invited_at",
   respondedAt: "responded_at", createdAt: "created_at",
 };
 
@@ -439,6 +440,20 @@ export class SupabaseCredentialStore implements CredentialStore {
       .limit(200);
     check("onchainBatchesWithPreparedInvitations", r);
     return ((r.data ?? []) as Row[]).map((b) => String(b.id));
+  }
+  async interruptedMailInvitations(beforeIso: string) {
+    const r = await this.db
+      .from(T.invitations)
+      .select("*")
+      .eq("leaf_kind", "claim_key")
+      .eq("status", "invited")
+      .not("contact_email", "is", null)
+      .is("email_sent_at", null)
+      .lt("invited_at", beforeIso)
+      .order("invited_at", { ascending: true })
+      .limit(200);
+    check("interruptedMailInvitations", r);
+    return ((r.data ?? []) as Row[]).map(toInvitation);
   }
   async invitationsForWallet(wallet: string) {
     return this.listInvitations({ recipientWallet: wallet });

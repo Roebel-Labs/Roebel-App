@@ -7,6 +7,12 @@
 // anything is sent, so the sync and a recovery sweep running together never send twice. A failed
 // mail hands the invitation back (invited → prepared, address kept) so the next sweep retries it.
 //
+// Every mail invitation reaches a terminal state: after MAX_MAIL_ATTEMPTS started sends, or right
+// away when no mailer is configured, it falls back to link-only (invited, address erased) so the
+// organiser can print a letter. A sender that died between the take and the send (or before the
+// erase) leaves an invited row with its address; `recoverInterruptedMails` hands it back after
+// INTERRUPTED_MAIL_AFTER_MS. At most MAX_MAILS_PER_RUN mails per run keep the cron in its time.
+//
 // Privacy: for an org whose members may not be public, push and mail name neither org nor type.
 // Never logs a token, an address or a wallet.
 // Relative imports only: loaded by `npx tsx --test`.
@@ -22,10 +28,22 @@ import type { Mailer, OutgoingMail } from "../passkey/email-mailer";
 export type DeliveryDeps = {
   store: CredentialStore;
   notify: Notifier;
-  /** null when no mail provider is configured: contacts with an address stay prepared until one is. */
+  /** null when no mail provider is configured: contacts with an address fall back to link-only. */
   mailer: Mailer | null;
   now: () => number;
+  /**
+   * Mails this run may still start, shared by every deliverInvitations call that gets the same
+   * object (one cron run). Without it each call gets its own MAX_MAILS_PER_RUN.
+   */
+  mailBudget?: { left: number };
 };
+
+/** Started sends before a mail invitation falls back to link-only. */
+export const MAX_MAIL_ATTEMPTS = 3;
+/** Mails per run (one cron run, or one call without a shared budget); the rest wait for the next run. */
+export const MAX_MAILS_PER_RUN = 50;
+/** A mail taken this long ago and neither sent nor erased counts as interrupted. */
+export const INTERRUPTED_MAIL_AFTER_MS = 10 * 60_000;
 
 export type LetterRow = { displayName: string; url: string };
 export type LetterContext = { orgName: string; typeName: string };
@@ -54,7 +72,12 @@ export function printableName(name: string | null | undefined): string {
   return clean || "Ohne Namen";
 }
 
-const noun = (type: TypeRow) => (type.kind === "badge" ? "Abzeichen" : "Ausweis");
+/** Article forms per noun: der Ausweis (masc.), das Abzeichen (neut.). */
+function words(type: TypeRow) {
+  return type.kind === "badge"
+    ? { noun: "Abzeichen", a: "ein Abzeichen", the: "das Abzeichen", it: "es" }
+    : { noun: "Ausweis", a: "einen Ausweis", the: "den Ausweis", it: "ihn" };
+}
 
 export const CLOSED_ORG_PUSH_BODY = "Du hast einen Ausweis erhalten. Öffne die App, um ihn anzusehen.";
 
@@ -65,26 +88,26 @@ export function invitePush(type: TypeRow, orgName: string | null, membersMayBePu
 }
 
 export function inviteMail(p: { to: string; type: TypeRow; orgName: string | null; membersMayBePublic: boolean; url: string }): OutgoingMail {
-  const what = noun(p.type);
+  const w = words(p.type);
   const open = p.membersMayBePublic;
   const intro = !open
-    ? `Du hast einen ${what} in der Röbel App erhalten.`
+    ? `Du hast ${w.a} in der Röbel App erhalten.`
     : p.orgName
-      ? `${p.orgName} hat dir einen ${what} ausgestellt: ${p.type.name}.`
-      : `Du hast einen ${what} erhalten: ${p.type.name}.`;
+      ? `${p.orgName} hat dir ${w.a} ausgestellt: ${p.type.name}.`
+      : `Du hast ${w.a} erhalten: ${p.type.name}.`;
   return {
     to: p.to,
     // A closed org's mail names neither org nor type, like its push.
-    subject: open ? `Dein ${what}: ${p.type.name}` : `Dein ${what}`,
+    subject: open ? `Dein ${w.noun}: ${p.type.name}` : `Dein ${w.noun}`,
     text: [
       "Hallo,",
       "",
       intro,
       "",
-      "So holst du ihn ab: Öffne diesen Link auf deinem Telefon.",
+      `So holst du ${w.it} ab: Öffne diesen Link auf deinem Telefon.`,
       p.url,
       "",
-      "Der Link ist persönlich. Wer ihn hat, kann den Ausweis abholen – bitte gib ihn nicht weiter.",
+      `Der Link ist persönlich. Wer ihn hat, kann ${w.the} abholen – bitte gib ihn nicht weiter.`,
       "",
       "Ist die Röbel App noch nicht installiert, führt dich der Link zum Herunterladen.",
       "",
@@ -99,21 +122,39 @@ async function sendOne(
   d: DeliveryDeps,
   i: InvitationRow,
   ctx: { type: TypeRow; orgName: string | null; open: boolean },
+  budget: { left: number },
 ): Promise<"pushed" | "mailed" | "linkOnly" | "pushFailed" | "skipped"> {
   const nowIso = new Date(d.now()).toISOString();
 
   if (i.leafKind === "claim_key" && i.contactEmail) {
-    if (!d.mailer) return "skipped"; // stays prepared until a mailer is configured
-    // Take it first: whoever wins the compare-and-set is the only one who mails.
-    if (!(await d.store.updateInvitation(i.id, { status: "invited", invitedAt: nowIso }, { statuses: ["prepared"] }))) return "skipped";
+    if (!d.mailer) {
+      // No provider: link-only right away, the address is not kept for a mail that never comes.
+      const taken = await d.store.updateInvitation(i.id, { status: "invited", invitedAt: nowIso, contactEmail: null }, { statuses: ["prepared"] });
+      if (taken) console.warn("[credentials/delivery] no mailer configured, link only", i.id);
+      return taken ? "linkOnly" : "skipped";
+    }
+    if (budget.left <= 0) return "skipped"; // stays prepared for the next run
+    // Take it first: whoever wins the compare-and-set is the only one who mails. The attempt is
+    // counted with the take, so a sender that dies here still uses one up.
+    const attempts = i.mailAttempts + 1;
+    if (!(await d.store.updateInvitation(i.id, { status: "invited", invitedAt: nowIso, mailAttempts: attempts }, { statuses: ["prepared"] }))) {
+      return "skipped";
+    }
+    budget.left--;
     try {
       if (!i.tokenEnc) throw new Error("claim-key invitation without a link token");
       const url = inviteUrl(openSecret(i.tokenEnc, `invitation:${i.id}:token`));
       await d.mailer.send(inviteMail({ to: i.contactEmail, type: ctx.type, orgName: ctx.orgName, membersMayBePublic: ctx.open, url }));
     } catch (err) {
-      // Hand it back with the address so the next sweep retries; never log the address.
+      // Never log the address.
+      console.error("[credentials/delivery] mail failed", i.id, attempts, err instanceof Error ? err.name : "error");
+      if (attempts >= MAX_MAIL_ATTEMPTS) {
+        // Terminal: link-only, the organiser can print a letter.
+        await d.store.updateInvitation(i.id, { contactEmail: null }, { statuses: ["invited"] });
+        return "linkOnly";
+      }
+      // Hand it back with the address so the next sweep retries.
       await d.store.updateInvitation(i.id, { status: "prepared", invitedAt: null }, { statuses: ["invited"] });
-      console.error("[credentials/delivery] mail failed", i.id, err instanceof Error ? err.name : "error");
       return "skipped";
     }
     await d.store.updateInvitation(i.id, { contactEmail: null, emailSentAt: nowIso });
@@ -143,16 +184,34 @@ export async function deliverInvitations(d: DeliveryDeps, batchRowId: string): P
   const type = await d.store.getType(batch.typeId);
   if (!type) return out;
   const account = type.accountId ? await d.store.getAccount(type.accountId) : null;
-  const ctx = { type, orgName: account?.name || null, open: account ? membersMayBePublic(account) : true };
+  // Privacy fails closed: a type without an org, or whose account row is gone, names nothing.
+  const ctx = { type, orgName: account?.name || null, open: account ? membersMayBePublic(account) : false };
+  const budget = d.mailBudget ?? { left: MAX_MAILS_PER_RUN };
 
   const pending = await d.store.listInvitations({ batchId: batch.id, statuses: ["prepared"] });
   for (const i of pending) {
-    const r = await sendOne(d, i, ctx);
+    const r = await sendOne(d, i, ctx, budget);
     if (r === "pushed") out.pushed++;
     else if (r === "mailed") out.mailed++;
     else if (r === "linkOnly") out.linkOnly++;
   }
   return out;
+}
+
+/**
+ * Recovery for mails whose sender died between the take and the send, or before the erase: rows
+ * taken more than INTERRUPTED_MAIL_AFTER_MS ago go back to prepared (the take already counted the
+ * attempt), or to link-only once their attempts are used up. Returns how many rows changed.
+ * Run by the sweep before it looks for batches with prepared invitations.
+ */
+export async function recoverInterruptedMails(store: CredentialStore, nowMs: number): Promise<number> {
+  const rows = await store.interruptedMailInvitations(new Date(nowMs - INTERRUPTED_MAIL_AFTER_MS).toISOString());
+  let changed = 0;
+  for (const i of rows) {
+    const patch = i.mailAttempts >= MAX_MAIL_ATTEMPTS ? { contactEmail: null } : { status: "prepared" as const, invitedAt: null };
+    if (await store.updateInvitation(i.id, patch, { statuses: ["invited"] })) changed++;
+  }
+  return changed;
 }
 
 /** The `letters` route action: a PDF with one page per open link of the batch. Owner or admin. */

@@ -5,7 +5,17 @@ import { orgIdFromUuid } from "@netizen-labs/protocol";
 import { credentialTypeId } from "@netizen-labs/credential-registry";
 import { keccak256, toHex, type Address, type Hex } from "viem";
 import { InMemoryCredentialStore, type InvitationRow, type NewInvitation, type TypeRow } from "../src/lib/credentials/store";
-import { deliverInvitations, invitePush, inviteMail, inviteUrl, prepareLetters, type DeliveryDeps } from "../src/lib/credentials/delivery";
+import {
+  deliverInvitations,
+  invitePush,
+  inviteMail,
+  inviteUrl,
+  MAX_MAIL_ATTEMPTS,
+  MAX_MAILS_PER_RUN,
+  prepareLetters,
+  recoverInterruptedMails,
+  type DeliveryDeps,
+} from "../src/lib/credentials/delivery";
 import { sealSecret } from "../src/lib/credentials/secrets";
 import type { Notifier } from "../src/lib/credentials/notify";
 import type { Caller } from "../src/lib/credentials/caller";
@@ -203,12 +213,135 @@ test("a failing mail keeps the invitation prepared with its address, and a later
   let row = await inv(w.store, b.invitations[0].id);
   assert.equal(row.status, "prepared");
   assert.equal(row.contactEmail, "erika@example.org");
+  assert.equal(row.mailAttempts, 1);
   w.failMail(false);
   assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
   row = await inv(w.store, b.invitations[0].id);
   assert.equal(row.status, "invited");
   assert.equal(row.contactEmail, null);
   assert.equal(w.mails.length, 1);
+});
+
+test(`after ${MAX_MAIL_ATTEMPTS} failed mails the invitation falls back to link-only: invited, address erased`, async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster", email: "kaputt@example.org" }]);
+  w.failMail(true);
+  for (let k = 1; k < MAX_MAIL_ATTEMPTS; k++) {
+    assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+    const row = await inv(w.store, b.invitations[0].id);
+    assert.equal(row.status, "prepared");
+    assert.equal(row.mailAttempts, k);
+  }
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 1 });
+  const row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "invited");
+  assert.equal(row.contactEmail, null);
+  assert.equal(row.emailSentAt, null);
+  assert.equal(row.mailAttempts, MAX_MAIL_ATTEMPTS);
+  // Terminal: nothing left to deliver, and the organiser can print a letter for it.
+  w.failMail(false);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+  assert.equal(w.mails.length, 0);
+  const caller: Caller = { ok: true, wallet: OWNER, via: "signature", action: "letters", payload: {} };
+  const letters = await prepareLetters(w.d, caller, { accountId: VEREIN, batchId: b.id }, async (rows) => Buffer.from(String(rows.length)));
+  assert.ok(letters.ok && letters.data.toString() === "1");
+});
+
+test("with no mailer configured, mail invitations fall back to link-only right away", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster", email: "erika@example.org" }, { wallet: ALICE }]);
+  const r = await deliverInvitations({ ...w.d, mailer: null }, b.id);
+  assert.deepEqual(r, { pushed: 1, mailed: 0, linkOnly: 1 });
+  const row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "invited");
+  assert.equal(row.contactEmail, null);
+  assert.equal(row.emailSentAt, null);
+  assert.equal(w.mails.length, 0);
+  assert.deepEqual(await w.store.onchainBatchesWithPreparedInvitations(), []);
+});
+
+test(`a run sends at most ${MAX_MAILS_PER_RUN} mails (shared budget); the rest stay prepared for the next run`, async () => {
+  const w = await world();
+  const people = Array.from({ length: MAX_MAILS_PER_RUN + 1 }, (_, k) => ({ name: `P${k}`, email: `p${k}@example.org` }));
+  const b = await w.batch(w.types.verein.typeId, people);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: MAX_MAILS_PER_RUN, linkOnly: 0 });
+  const left = await w.store.listInvitations({ batchId: b.id, statuses: ["prepared"] });
+  assert.equal(left.length, 1);
+  assert.equal(left[0].mailAttempts, 0);
+  assert.ok(left[0].contactEmail);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
+
+  // A budget shared across batches (one cron run) caps the total.
+  const w2 = await world();
+  const b1 = await w2.batch(w2.types.verein.typeId, [{ email: "a@example.org" }, { email: "b@example.org" }]);
+  const b2 = await w2.batch(w2.types.verein.typeId, [{ email: "c@example.org" }, { wallet: ALICE }]);
+  const shared = { ...w2.d, mailBudget: { left: 2 } };
+  assert.deepEqual(await deliverInvitations(shared, b1.id), { pushed: 0, mailed: 2, linkOnly: 0 });
+  assert.deepEqual(await deliverInvitations(shared, b2.id), { pushed: 1, mailed: 0, linkOnly: 0 });
+  assert.equal(w2.mails.length, 2);
+});
+
+test("an interrupted mail (taken but never sent or erased) is handed back after 10 minutes, counting the attempt", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [
+    { name: "Alt", email: "alt@example.org" },
+    { name: "Frisch", email: "frisch@example.org" },
+    { name: "Erschöpft", email: "x@example.org" },
+    { wallet: ALICE },
+  ]);
+  const old = new Date(T0 - 11 * 60_000).toISOString();
+  const recent = new Date(T0 - 5 * 60_000).toISOString();
+  // What a death between the take and the send leaves behind.
+  await w.store.updateInvitation(b.invitations[0].id, { status: "invited", invitedAt: old, mailAttempts: 1 });
+  await w.store.updateInvitation(b.invitations[1].id, { status: "invited", invitedAt: recent, mailAttempts: 1 });
+  await w.store.updateInvitation(b.invitations[2].id, { status: "invited", invitedAt: old, mailAttempts: MAX_MAIL_ATTEMPTS });
+  await w.store.updateInvitation(b.invitations[3].id, { status: "invited", invitedAt: old });
+
+  assert.equal(await recoverInterruptedMails(w.store, T0), 2);
+  const a = await inv(w.store, b.invitations[0].id);
+  assert.equal(a.status, "prepared");
+  assert.equal(a.invitedAt, null);
+  assert.equal(a.contactEmail, "alt@example.org");
+  assert.equal((await inv(w.store, b.invitations[1].id)).status, "invited");
+  const exhausted = await inv(w.store, b.invitations[2].id);
+  assert.equal(exhausted.status, "invited");
+  assert.equal(exhausted.contactEmail, null);
+  assert.equal((await inv(w.store, b.invitations[3].id)).status, "invited");
+
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
+  assert.deepEqual(w.mails.map((m) => m.to), ["alt@example.org"]);
+  assert.equal((await inv(w.store, b.invitations[0].id)).mailAttempts, 2);
+  // An hour later only "Frisch" is stale too; the mailed row (address erased) is never picked again.
+  assert.equal(await recoverInterruptedMails(w.store, T0 + 60 * 60_000), 1);
+  assert.equal((await inv(w.store, b.invitations[0].id)).status, "invited");
+  assert.equal((await inv(w.store, b.invitations[1].id)).status, "prepared");
+});
+
+test("badge mails use the right German; a type without an org or account row is treated as closed", async () => {
+  const w = await world();
+  const m = inviteMail({ to: "a@example.org", type: w.types.badge, orgName: "Heimatverein", membersMayBePublic: true, url: "https://www.roebel.app/invite/ausweis/x" });
+  assert.equal(m.subject, "Dein Abzeichen: Helfer 2026");
+  assert.ok(m.text.includes("ein Abzeichen"), m.text);
+  assert.ok(m.text.includes("So holst du es ab"), m.text);
+  assert.ok(!m.text.includes("einen Abzeichen"), m.text);
+  assert.ok(!m.text.includes("Ausweis"), m.text);
+  const closedBadge = inviteMail({ to: "a@example.org", type: w.types.badge, orgName: null, membersMayBePublic: false, url: "u" });
+  assert.ok(closedBadge.text.includes("ein Abzeichen") && !closedBadge.text.includes("einen Abzeichen"), closedBadge.text);
+  const ausweis = inviteMail({ to: "a@example.org", type: w.types.verein, orgName: "Heimatverein", membersMayBePublic: true, url: "u" });
+  assert.ok(ausweis.text.includes("einen Ausweis") && ausweis.text.includes("So holst du ihn ab") && ausweis.text.includes("den Ausweis"), ausweis.text);
+
+  const community = { ...w.types.verein, typeId: typeIdOf(VEREIN, "gemeinschaft"), accountId: null, name: "Geheimtyp" };
+  const orphan = { ...typeRow(typeIdOf(FRAKTION, "verwaist"), "8b3e4c90-2f5d-4e77-9c30-4d5e6f708192", "membership", "Geheimtyp") };
+  for (const t of [community, orphan]) {
+    await w.store.upsertType(t);
+    const before = { p: w.pushes.length, m: w.mails.length };
+    const b = await w.batch(t.typeId, [{ wallet: ALICE }, { email: "e@example.org" }]);
+    await deliverInvitations(w.d, b.id);
+    const push = w.pushes[before.p];
+    const mail = w.mails[before.m];
+    assert.equal(push.body, "Du hast einen Ausweis erhalten. Öffne die App, um ihn anzusehen.");
+    for (const text of [push.title, push.body, mail.subject, mail.text]) assert.ok(!text.includes("Geheimtyp"), text);
+  }
 });
 
 test("letters include only open claim-key invitations and one page each", async () => {

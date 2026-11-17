@@ -6,7 +6,7 @@ import { gnosis } from "viem/chains";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Deps } from "./actions";
 import { registryConfig } from "./config";
-import { deliverInvitations, type DeliveryDeps } from "./delivery";
+import { deliverInvitations, MAX_MAILS_PER_RUN, type DeliveryDeps } from "./delivery";
 import { createResendMailer } from "@/lib/passkey/email-mailer";
 import { sendNotificationNotifier } from "./notify";
 import { createNodeRegistryReader } from "./rights";
@@ -32,7 +32,14 @@ export function credentialSyncDeps(): SyncDeps | null {
   const store = supabaseCredentialStore(createAdminClient());
   const notify = sendNotificationNotifier();
   const resendKey = process.env.RESEND_API_KEY;
-  const delivery: DeliveryDeps = { store, notify, mailer: resendKey ? createResendMailer(resendKey) : null, now: () => Date.now() };
+  // One mail budget per deps object, i.e. per request: the cron's sync and sweep share it.
+  const delivery: DeliveryDeps = {
+    store,
+    notify,
+    mailer: resendKey ? createResendMailer(resendKey) : null,
+    now: () => Date.now(),
+    mailBudget: { left: MAX_MAILS_PER_RUN },
+  };
   return {
     store,
     registry: cfg.address,
@@ -54,6 +61,7 @@ export function credentialSyncDeps(): SyncDeps | null {
       console.log("[credentials/sync] delivered", batchRowId, r);
     },
     notify,
+    now: () => Date.now(),
   };
 }
 

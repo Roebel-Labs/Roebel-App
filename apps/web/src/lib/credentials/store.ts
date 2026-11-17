@@ -123,6 +123,8 @@ export type InvitationRow = {
   displayName: string | null;
   contactEmail: string | null;
   emailSentAt: string | null;
+  /** Mail sends started (counted when a sender takes the row); link-only after MAX_MAIL_ATTEMPTS. */
+  mailAttempts: number;
   status: InvitationStatus;
   claimedOnchain: boolean;
   invitedAt: string | null;
@@ -131,7 +133,7 @@ export type InvitationRow = {
 };
 
 /** What the batch builder hands to `insertBatchWithInvitations`. */
-export type NewInvitation = Omit<InvitationRow, "createdAt" | "status" | "claimedOnchain" | "invitedAt" | "respondedAt" | "emailSentAt" | "batchId"> &
+export type NewInvitation = Omit<InvitationRow, "createdAt" | "status" | "claimedOnchain" | "invitedAt" | "respondedAt" | "emailSentAt" | "mailAttempts" | "batchId"> &
   Partial<Pick<InvitationRow, "status">>;
 export type NewBatch = Omit<BatchRow, "createdAt" | "chainBatchId" | "status"> & Partial<Pick<BatchRow, "status">>;
 
@@ -215,6 +217,11 @@ export interface CredentialStore {
   findInvitationByTokenHash(tokenHash: string): Promise<InvitationRow | null>;
   /** Ids of `onchain` batches that still have `prepared` invitations (the delivery sweep), at most 200. */
   onchainBatchesWithPreparedInvitations(): Promise<string[]>;
+  /**
+   * Claim-key invitations taken for a mail that never finished: `invited`, address still set, no
+   * `emailSentAt`, `invitedAt` before `beforeIso`. At most 200.
+   */
+  interruptedMailInvitations(beforeIso: string): Promise<InvitationRow[]>;
   invitationsForWallet(wallet: string): Promise<InvitationRow[]>;
 
   // credential_delegates
@@ -413,6 +420,7 @@ export class InMemoryCredentialStore implements CredentialStore {
         invitedAt: null,
         respondedAt: null,
         emailSentAt: null,
+        mailAttempts: 0,
         createdAt,
       }));
     }
@@ -476,6 +484,14 @@ export class InMemoryCredentialStore implements CredentialStore {
   async onchainBatchesWithPreparedInvitations() {
     const pending = new Set([...this.invitations.values()].filter((i) => i.status === "prepared").map((i) => i.batchId));
     return [...this.batches.values()].filter((b) => b.status === "onchain" && pending.has(b.id)).map((b) => b.id).slice(0, 200);
+  }
+  async interruptedMailInvitations(beforeIso: string) {
+    const before = Date.parse(beforeIso);
+    return [...this.invitations.values()]
+      .filter((i) => i.leafKind === "claim_key" && i.status === "invited" && i.contactEmail !== null && i.emailSentAt === null)
+      .filter((i) => i.invitedAt !== null && Date.parse(i.invitedAt) < before)
+      .slice(0, 200)
+      .map(clone);
   }
   async invitationsForWallet(wallet: string) {
     return this.listInvitations({ recipientWallet: wallet });

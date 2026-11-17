@@ -313,7 +313,7 @@ test("sweepUndelivered redelivers onchain batches that still hold prepared invit
     invitation("33333333-3333-4333-8333-33333333333a", keccak256(toHex("leaf-c")), ALICE),
   ]);
   const r = await sweepUndelivered(w.d);
-  assert.deepEqual(r, { batches: 1 });
+  assert.deepEqual(r, { batches: 1, recovered: 0 });
   assert.deepEqual(w.delivered, [BATCH_ID]);
 });
 
@@ -327,7 +327,7 @@ test("concurrent sweeps with the real delivery send each invitation once", async
   assert.deepEqual(pushes, ["33333333-3333-4333-8333-333333333331"]);
   assert.equal((await w.store.getInvitation("33333333-3333-4333-8333-333333333332"))?.status, "invited");
   // Nothing left: the next sweep finds no batch.
-  assert.deepEqual(await sweepUndelivered(w.d), { batches: 0 });
+  assert.deepEqual(await sweepUndelivered(w.d), { batches: 0, recovered: 0 });
 });
 
 test("a sweep keeps going when one batch's delivery throws", async () => {
@@ -336,5 +336,19 @@ test("a sweep keeps going when one batch's delivery throws", async () => {
   w.d.deliver = async () => {
     throw new Error("boom");
   };
-  assert.deepEqual(await sweepUndelivered(w.d), { batches: 1 });
+  assert.deepEqual(await sweepUndelivered(w.d), { batches: 1, recovered: 0 });
+});
+
+test("the sweep hands interrupted mails back and redelivers them in the same run", async () => {
+  const w = await world();
+  await w.store.updateBatch(BATCH_ID, { status: "onchain", chainBatchId: "7" });
+  const MAIL_INV = "33333333-3333-4333-8333-333333333332";
+  // Account leaf already delivered; the claim-key leaf was taken for a mail 30 minutes ago and never sent.
+  await w.store.updateInvitation("33333333-3333-4333-8333-333333333331", { status: "invited", invitedAt: T0 });
+  await w.store.updateInvitation(MAIL_INV, { status: "invited", invitedAt: T0, contactEmail: "erika@example.org", mailAttempts: 1 });
+  w.d.now = () => Date.parse(T0) + 30 * 60_000;
+  const r = await sweepUndelivered(w.d);
+  assert.deepEqual(r, { batches: 1, recovered: 1 });
+  assert.deepEqual(w.delivered, [BATCH_ID]);
+  assert.equal((await w.store.getInvitation(MAIL_INV))?.status, "prepared");
 });

@@ -13,6 +13,7 @@ import { orgIdFromUuid } from "@netizen-labs/protocol";
 import type { RegisterLog } from "@netizen-labs/credential-registry";
 import type { ActionStatus, BatchRow, CredentialStore, Kind, Policy, TypeRow } from "./store";
 import type { Notifier } from "./notify";
+import { recoverInterruptedMails } from "./delivery";
 
 export type SyncDeps = {
   store: CredentialStore;
@@ -23,6 +24,8 @@ export type SyncDeps = {
   /** `deliverInvitations` bound to its deps: once per batch that reached the chain, and again by the sweep. */
   deliver(batchRowId: string): Promise<void>;
   notify: Notifier;
+  /** Clock for the sweep's interrupted-mail cutoff; defaults to Date.now. */
+  now?: () => number;
 };
 
 const DEFAULT_MAX_BLOCKS = 20_000n;
@@ -280,11 +283,18 @@ export async function syncRegister(
 }
 
 /**
- * Recovery: on-chain batches that still hold `prepared` invitations (delivery threw, or the
- * process died after the batch's compare-and-set) are handed to `deliver` again. Safe with
- * concurrent sweeps and syncs: deliverInvitations takes each invitation with a compare-and-set.
+ * Recovery: mails taken but never finished go back to prepared first (recoverInterruptedMails),
+ * then on-chain batches that still hold `prepared` invitations (delivery threw, or the process
+ * died after the batch's compare-and-set) are handed to `deliver` again. Safe with concurrent
+ * sweeps and syncs: deliverInvitations takes each invitation with a compare-and-set.
  */
-export async function sweepUndelivered(d: SyncDeps): Promise<{ batches: number }> {
+export async function sweepUndelivered(d: SyncDeps): Promise<{ batches: number; recovered: number }> {
+  let recovered = 0;
+  try {
+    recovered = await recoverInterruptedMails(d.store, (d.now ?? Date.now)());
+  } catch (err) {
+    console.error("[credentials/sync] mail recovery failed", err instanceof Error ? err.message : err);
+  }
   const ids = await d.store.onchainBatchesWithPreparedInvitations();
   for (const id of ids) {
     try {
@@ -293,5 +303,5 @@ export async function sweepUndelivered(d: SyncDeps): Promise<{ batches: number }
       console.error("[credentials/sync] redelivery failed", id, err instanceof Error ? err.message : err);
     }
   }
-  return { batches: ids.length };
+  return { batches: ids.length, recovered };
 }
