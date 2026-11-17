@@ -26,17 +26,29 @@ const styles = StyleSheet.create({
   note: { fontSize: 10, color: GREY, marginTop: 24, lineHeight: 1.4 },
 });
 
-export const LETTER_STEPS = ["1. Röbel App installieren.", "2. Diesen Code scannen.", "3. Ausweis annehmen."] as const;
+/** Letter text per noun: der Ausweis, das Abzeichen (badge types). */
+export function letterWords(badge: boolean) {
+  const w = badge ? { noun: "Abzeichen", plural: "Abzeichen", a: "ein Abzeichen", the: "das Abzeichen" } : { noun: "Ausweis", plural: "Ausweise", a: "einen Ausweis", the: "den Ausweis" };
+  return {
+    docTitle: w.plural,
+    lead: `Du hast ${w.a} erhalten.`,
+    steps: ["1. Röbel App installieren.", "2. Diesen Code scannen.", `3. ${w.noun} annehmen.`],
+    note: `Dieser Code ist persönlich. Wer ihn hat, kann ${w.the} abholen – bitte gib ihn nicht weiter.`,
+  };
+}
+
+export const LETTER_STEPS = letterWords(false).steps;
 
 export async function renderLetters(rows: LetterRow[], ctx: LetterContext): Promise<Buffer> {
   const qrs = await Promise.all(rows.map((r) => QRCode.toDataURL(r.url, { errorCorrectionLevel: "M", margin: 1, width: 600 })));
+  const w = letterWords(ctx.badge);
   const doc = (
-    <Document title={`Ausweise – ${ctx.typeName}`} author={ctx.orgName} creator="Röbel App" producer="Röbel App">
+    <Document title={`${w.docTitle} – ${ctx.typeName}`} author={ctx.orgName} creator="Röbel App" producer="Röbel App">
       {rows.map((r, i) => (
         <Page key={i} size="A4" style={styles.page}>
           <Text style={styles.brand}>Röbel App</Text>
           <Text style={styles.greeting}>{r.displayName}</Text>
-          <Text style={styles.lead}>Du hast einen Ausweis erhalten.</Text>
+          <Text style={styles.lead}>{w.lead}</Text>
           <View style={styles.card}>
             <Text style={styles.org}>{ctx.orgName}</Text>
             <Text style={styles.type}>{ctx.typeName}</Text>
@@ -45,12 +57,12 @@ export async function renderLetters(rows: LetterRow[], ctx: LetterContext): Prom
             <Text style={styles.url}>{r.url}</Text>
           </View>
           <Text style={styles.stepsTitle}>So geht es</Text>
-          {LETTER_STEPS.map((s) => (
+          {w.steps.map((s) => (
             <Text key={s} style={styles.step}>
               {s}
             </Text>
           ))}
-          <Text style={styles.note}>Dieser Code ist persönlich. Wer ihn hat, kann den Ausweis abholen – bitte gib ihn nicht weiter.</Text>
+          <Text style={styles.note}>{w.note}</Text>
         </Page>
       ))}
     </Document>

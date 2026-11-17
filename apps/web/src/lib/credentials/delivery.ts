@@ -46,7 +46,7 @@ export const MAX_MAILS_PER_RUN = 50;
 export const INTERRUPTED_MAIL_AFTER_MS = 10 * 60_000;
 
 export type LetterRow = { displayName: string; url: string };
-export type LetterContext = { orgName: string; typeName: string };
+export type LetterContext = { orgName: string; typeName: string; badge: boolean };
 export type RenderLetters = (rows: LetterRow[], ctx: LetterContext) => Promise<Buffer>;
 
 const fail = (status: number, code: string, message: string): Fail => ({ ok: false, status, code, message });
@@ -80,10 +80,14 @@ function words(type: TypeRow) {
 }
 
 export const CLOSED_ORG_PUSH_BODY = "Du hast einen Ausweis erhalten. Öffne die App, um ihn anzusehen.";
+export const CLOSED_ORG_BADGE_PUSH_BODY = "Du hast ein Abzeichen erhalten. Öffne die App, um es anzusehen.";
+
+export const LETTERS_PUSH_TITLE = "Einladungsbriefe heruntergeladen";
+export const LETTERS_PUSH_BODY = "Am Computer wurden Einladungsbriefe heruntergeladen. Warst du das nicht, melde dich beim Röbel-Team.";
 
 export function invitePush(type: TypeRow, orgName: string | null, membersMayBePublic: boolean): { title: string; body: string } {
   const title = type.kind === "badge" ? "Neues Abzeichen" : "Neuer Ausweis";
-  if (!membersMayBePublic) return { title, body: CLOSED_ORG_PUSH_BODY };
+  if (!membersMayBePublic) return { title, body: type.kind === "badge" ? CLOSED_ORG_BADGE_PUSH_BODY : CLOSED_ORG_PUSH_BODY };
   return { title, body: orgName ? `${orgName}: ${type.name}` : type.name };
 }
 
@@ -214,9 +218,13 @@ export async function recoverInterruptedMails(store: CredentialStore, nowMs: num
   return changed;
 }
 
-/** The `letters` route action: a PDF with one page per open link of the batch. Owner or admin. */
+/**
+ * The `letters` route action: a PDF with one page per open link of the batch. Owner or admin.
+ * Fetched through a pairing session (a desktop), the caller's own phone gets a neutral push naming
+ * neither org nor type, so a stolen desktop session cannot download personal links unnoticed.
+ */
 export async function prepareLetters(
-  d: { store: CredentialStore; now: () => number },
+  d: { store: CredentialStore; now: () => number; notify?: Notifier },
   c: Caller,
   p: { accountId: string; batchId: string },
   render: RenderLetters,
@@ -240,5 +248,19 @@ export async function prepareLetters(
   });
   if (open.length === 0) return fail(409, "NO_OPEN_LINKS", "In dieser Ausgabe gibt es keine offenen Links.");
   const rows = open.map((i) => ({ displayName: printableName(i.displayName), url: inviteUrl(openSecret(i.tokenEnc as string, `invitation:${i.id}:token`)) }));
-  return { ok: true, data: await render(rows, { orgName: o.name, typeName: type.name }) };
+  const pdf = await render(rows, { orgName: o.name, typeName: type.name, badge: type.kind === "badge" });
+  if (c.via === "chat_session" && d.notify) {
+    try {
+      await d.notify.push({
+        wallets: [c.wallet.toLowerCase()],
+        type: "credential_letters",
+        title: LETTERS_PUSH_TITLE,
+        body: LETTERS_PUSH_BODY,
+        data: { type: "credential_letters" },
+      });
+    } catch (err) {
+      console.error("[credentials/letters] notice push failed (non-fatal)", err instanceof Error ? err.name : typeof err);
+    }
+  }
+  return { ok: true, data: pdf };
 }

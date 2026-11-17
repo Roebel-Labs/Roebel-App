@@ -357,8 +357,8 @@ test("letters include only open claim-key invitations and one page each", async 
   await w.store.updateInvitation(b.invitations[3].id, { status: "accepted", recipientWallet: BOB });
   await w.store.updateInvitation(b.invitations[4].id, { status: "revoked" });
 
-  const calls: { rows: { displayName: string; url: string }[]; ctx: { orgName: string; typeName: string } }[] = [];
-  const render = async (rows: { displayName: string; url: string }[], ctx: { orgName: string; typeName: string }) => {
+  const calls: { rows: { displayName: string; url: string }[]; ctx: { orgName: string; typeName: string; badge: boolean } }[] = [];
+  const render = async (rows: { displayName: string; url: string }[], ctx: { orgName: string; typeName: string; badge: boolean }) => {
     calls.push({ rows, ctx });
     return Buffer.from("%PDF-test");
   };
@@ -368,7 +368,9 @@ test("letters include only open claim-key invitations and one page each", async 
   assert.ok(r.ok);
   assert.equal(r.data.toString(), "%PDF-test");
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].ctx, { orgName: "Heimatverein", typeName: "Mitglied" });
+  assert.deepEqual(calls[0].ctx, { orgName: "Heimatverein", typeName: "Mitglied", badge: false });
+  // An app caller gets no extra push.
+  assert.equal(w.pushes.filter((x) => (x.type as string) === "credential_letters").length, 0);
   assert.deepEqual(calls[0].rows, [
     { displayName: "Erika Muster", url: `https://www.roebel.app/invite/ausweis/${b.invitations[1].token}` },
     { displayName: "=HYPERLINK(1)", url: `https://www.roebel.app/invite/ausweis/${b.invitations[2].token}` },
@@ -389,7 +391,7 @@ test("renderLetters makes one A4 page per person", async () => {
       { displayName: "Erika Muster", url: "https://www.roebel.app/invite/ausweis/abc" },
       { displayName: "=SUMME(1)", url: "https://www.roebel.app/invite/ausweis/def" },
     ],
-    { orgName: "Heimatverein", typeName: "Mitglied" },
+    { orgName: "Heimatverein", typeName: "Mitglied", badge: false },
   );
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   const pages = pdf.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? [];
@@ -400,4 +402,43 @@ test("inviteUrl uses the www host", () => {
   assert.equal(inviteUrl("abc_-1"), "https://www.roebel.app/invite/ausweis/abc_-1");
   assert.equal(inviteUrl("abc", { NEXT_PUBLIC_SITE_URL: "https://roebel.app/" }), "https://www.roebel.app/invite/ausweis/abc");
   assert.equal(inviteUrl("abc", { NEXT_PUBLIC_SITE_URL: "https://staging.example.org" }), "https://staging.example.org/invite/ausweis/abc");
+});
+
+test("letters fetched through a pairing session send the caller a neutral push", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster" }]);
+  await deliverInvitations(w.d, b.id);
+  const before = w.pushes.length;
+  const session: Caller = { ok: true, wallet: OWNER, via: "chat_session", action: "letters", payload: {} };
+  const r = await prepareLetters(w.d, session, { accountId: VEREIN, batchId: b.id }, async () => Buffer.from("%PDF-test"));
+  assert.ok(r.ok);
+  const sent = w.pushes.slice(before);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].wallets, [OWNER]);
+  assert.equal(sent[0].title, "Einladungsbriefe heruntergeladen");
+  assert.equal(sent[0].body, "Am Computer wurden Einladungsbriefe heruntergeladen. Warst du das nicht, melde dich beim Röbel-Team.");
+  for (const t of [sent[0].title, sent[0].body, JSON.stringify(sent[0].data)]) {
+    assert.ok(!t.includes("Heimatverein") && !t.includes(w.types.verein.name), t);
+  }
+  // A refused call sends nothing.
+  const member: Caller = { ...session, wallet: MEMBER };
+  await prepareLetters(w.d, member, { accountId: VEREIN, batchId: b.id }, async () => Buffer.from("x"));
+  assert.equal(w.pushes.length, before + 1);
+});
+
+test("badge wording: closed-org push and letters say 'ein Abzeichen'", async () => {
+  const w = await world();
+  assert.deepEqual(invitePush(w.types.badge, "Heimatverein", false), {
+    title: "Neues Abzeichen",
+    body: "Du hast ein Abzeichen erhalten. Öffne die App, um es anzusehen.",
+  });
+  const { letterWords } = await import("../src/lib/credentials/letters");
+  const badge = letterWords(true);
+  assert.equal(badge.lead, "Du hast ein Abzeichen erhalten.");
+  assert.deepEqual(badge.steps, ["1. Röbel App installieren.", "2. Diesen Code scannen.", "3. Abzeichen annehmen."]);
+  assert.ok(badge.note.includes("das Abzeichen abholen"));
+  assert.ok(!JSON.stringify(badge).includes("Ausweis"));
+  const card = letterWords(false);
+  assert.equal(card.lead, "Du hast einen Ausweis erhalten.");
+  assert.ok(card.note.includes("den Ausweis abholen"));
 });
