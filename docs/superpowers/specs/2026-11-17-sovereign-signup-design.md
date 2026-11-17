@@ -1,6 +1,6 @@
 # Sovereign sign-up — design
 
-**Date:** 2026-11-17 · **Status:** draft, awaiting Max's approval
+**Date:** 2026-11-17 · **Status:** approved by Max 2026-11-17 with decision a) and the naming rule in section 6
 **Builds on:** [`2026-09-26-passkey-sovereign-accounts-design.md`](2026-09-26-passkey-sovereign-accounts-design.md),
 [`2026-09-26-ortis-identity-migration-design.md`](2026-09-26-ortis-identity-migration-design.md),
 [`../../PASSKEY_ACCOUNTS_STATE.md`](../../PASSKEY_ACCOUNTS_STATE.md), [`../../PASSKEY_SIGNIN_NOTES.md`](../../PASSKEY_SIGNIN_NOTES.md)
@@ -171,11 +171,11 @@ rule; the builder confirms each endpoint with a test rather than assuming.
 - Boot stays as designed: a flag flip never signs anyone out; a session of the new owner type restores without a
   prompt.
 - **Split the gate** *(my call)*: today one pair of flags opens every passkey surface at once (sign-up, the
-  migration screen for existing users, recovery links, "thirdweb trennen"). "Production for new sign-ups" means
+  migration screen for existing users, recovery links, "Unabhängig werden"). "Production for new sign-ups" means
   existing thirdweb users must not see migration or detach yet, so the gate is split into sign-up/sign-in,
   migration and detach before the production flag is flipped.
 - **Existing accounts that already moved to a passkey** *(my call)*: they can switch on the words too, but
-  word-derived guardians do not count as people for the irreversible "thirdweb trennen" check. That check keeps
+  word-derived guardians do not count as people for the irreversible "Unabhängig werden" step (today's "thirdweb trennen"). That check keeps
   requiring two human guardians until Max decides otherwise.
 
 ### 5.9 Staying logged in across updates (hard requirement, added 2026-11-17)
@@ -194,6 +194,14 @@ sign-in paths and is a release blocker for this project:
   project; this project must not ship before that fix is confirmed on a real update.
 
 ## 6. Constraints
+
+- **No vendor names in the app** (Max, 2026-11-17): users do not know what thirdweb is. Nothing user-facing says
+  "thirdweb". The existing step "thirdweb trennen" is renamed **"Unabhängig werden"** everywhere it is shown, with a
+  short explanation of what it means: after this step only you hold the key to your account, the sign-in provider
+  (Google, Apple or email) can no longer open it, and it cannot be undone. Same rule for every new screen: describe
+  what changes for the person, not which company is involved.
+- **Decision a) taken** (section 10): passkey default, 12 words and the words-only expert path ship by OTA; the
+  backup file follows with the next store build.
 
 - The app is live. thirdweb login keeps working untouched.
 - UI German, code and comments English. StyleSheet + `useTheme()`. Never show wallet addresses.
