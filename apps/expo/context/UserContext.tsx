@@ -15,7 +15,7 @@ import { logActivity } from '@/lib/supabase-activity';
 import { loadCachedUser, saveCachedUser } from '@/lib/user-cache';
 import { useWalletBoot } from '@/context/WalletBootContext';
 import { passkeySessionOf } from '@/lib/passkey/active';
-import { isWordsOwner } from '@/lib/passkey/session';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import type { UserRecord, UserTier } from '@/lib/types';
 
 const TIER_LABELS: Record<UserTier, string> = {
@@ -125,7 +125,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           // auth_provider on rows that have none, so a migrated account keeps its
           // original provider; a passkey-only account is created with 'passkey',
           // a 12-word (expert path) account with 'words'.
-          authProvider = isWordsOwner(passkeySessionOf<{ credentialId: string; safe: string; identity: string; ownerType?: string }>(account))
+          authProvider = isWordsOwner(passkeySessionOf<PasskeySession>(account))
             ? 'words'
             : 'passkey';
         }

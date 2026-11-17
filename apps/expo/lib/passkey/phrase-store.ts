@@ -12,7 +12,10 @@
  *     null) `read` throws PhraseUnavailableError: the person stays signed in and is asked for the
  *     words again; a cancelled prompt is PhraseCancelledError;
  *   - `write` and `remove` reset the confirmed flag (preflight E3), and `write` refuses to replace a
- *     phrase of ANOTHER account that was never confirmed (E4): it may be that account's only key.
+ *     phrase of ANOTHER account that was never confirmed (E4): it may be that account's only key —
+ *     unless it is unreadable anyway (`discardIfUnreadable`);
+ *   - `write` deletes the old item before adding the new one (iOS would otherwise update the item
+ *     under its old, possibly invalidated access control).
  *
  * Every native call is injected (`createPhraseStore(secure)`); pass the expo-secure-store module.
  */
@@ -64,6 +67,16 @@ export type PhraseStore = {
   /** The phrase, behind the device unlock showing `reason`. */
   read(reason: string): Promise<string>;
   remove(): Promise<void>;
+  /**
+   * Preflight E4 / M2 escape: the stored words of an unconfirmed account block `write` of other
+   * words. When the system invalidated them (biometrics changed) they can never be read again, so
+   * holding on to them protects nothing. Whether an item is still readable cannot be learned
+   * without the unlock (neither platform exposes it), so this tries ONE read: an invalidated item
+   * fails without a prompt and is removed (true); a readable one is left alone (false; the person
+   * saw one prompt); a cancel rethrows PhraseCancelledError. T7/T9 offer it after a
+   * PhraseOverwriteError ("Die Wörter auf diesem Gerät sind nicht mehr lesbar …").
+   */
+  discardIfUnreadable(): Promise<boolean>;
   isConfirmed(): Promise<boolean>;
   markConfirmed(): Promise<void>;
 };
@@ -110,6 +123,26 @@ export function createPhraseStore(secure: SecureStoreLike): PhraseStore {
 
   const isConfirmed = async () => (await secure.getItemAsync(WORDS_CONFIRMED_KEY, plain)) === '1';
 
+  const readPhrase = async (reason: string): Promise<string> => {
+    let phrase: string | null;
+    try {
+      phrase = await secure.getItemAsync(WORDS_PHRASE_KEY, protectedOpts(reason));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (CANCEL.test(msg)) throw new PhraseCancelledError();
+      if (GONE.test(msg)) throw new PhraseUnavailableError();
+      throw e;
+    }
+    if (!phrase) throw new PhraseUnavailableError();
+    return phrase;
+  };
+
+  const removeAll = async () => {
+    await secure.deleteItemAsync(WORDS_PHRASE_KEY, protectedOpts(PHRASE_PROMPT));
+    await secure.deleteItemAsync(WORDS_PHRASE_MARKER_KEY, plain);
+    await secure.deleteItemAsync(WORDS_CONFIRMED_KEY, plain);
+  };
+
   return {
     canProtect,
     has: async () => (await secure.getItemAsync(WORDS_PHRASE_MARKER_KEY, plain)) !== null,
@@ -121,29 +154,34 @@ export function createPhraseStore(secure: SecureStoreLike): PhraseStore {
       const owner = wordAccount(check.phrase, 0).address;
       const current = await storedOwner();
       if (current && !isAddressEqual(current, owner) && !(await isConfirmed())) throw new PhraseOverwriteError();
-      await secure.setItemAsync(WORDS_PHRASE_KEY, check.phrase, protectedOpts(PHRASE_PROMPT));
+      // Delete first (no prompt): on iOS a set on an existing item becomes SecItemUpdate under the
+      // OLD access control, which fails for an item invalidated by a Face ID change (exactly the
+      // re-entry path) and costs an extra prompt otherwise. E4 above guards what is deleted.
+      await secure.deleteItemAsync(WORDS_PHRASE_KEY, protectedOpts(PHRASE_PROMPT));
+      // Invariant (M1): whenever a phrase is stored, the marker names ITS owner. The marker is
+      // written while no phrase exists, so a failure at any step leaves at worst a marker without
+      // a phrase (read -> PhraseUnavailableError -> enter the words again), never a wrong owner.
       await secure.setItemAsync(WORDS_PHRASE_MARKER_KEY, owner, plain);
       await secure.deleteItemAsync(WORDS_CONFIRMED_KEY, plain);
+      await secure.setItemAsync(WORDS_PHRASE_KEY, check.phrase, protectedOpts(PHRASE_PROMPT));
     },
-    read: async (reason) => {
-      let phrase: string | null;
+    read: (reason) => readPhrase(reason),
+    remove: () => removeAll(),
+    discardIfUnreadable: async () => {
+      if (!(await storedOwner())) return false;
       try {
-        phrase = await secure.getItemAsync(WORDS_PHRASE_KEY, protectedOpts(reason));
+        await readPhrase(PHRASE_PROMPT);
+        return false;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (CANCEL.test(msg)) throw new PhraseCancelledError();
-        if (GONE.test(msg)) throw new PhraseUnavailableError();
-        throw e;
+        if (!(e instanceof PhraseUnavailableError)) throw e;
       }
-      if (!phrase) throw new PhraseUnavailableError();
-      return phrase;
-    },
-    remove: async () => {
-      await secure.deleteItemAsync(WORDS_PHRASE_KEY, protectedOpts(PHRASE_PROMPT));
-      await secure.deleteItemAsync(WORDS_PHRASE_MARKER_KEY, plain);
-      await secure.deleteItemAsync(WORDS_CONFIRMED_KEY, plain);
+      await removeAll();
+      return true;
     },
     isConfirmed,
+    // E3 invariant: the flag belongs to the phrase stored NOW. `write` and `remove` clear it, so
+    // call this only after the person proved they hold exactly the stored words (confirm step,
+    // sign-in or re-entry with the words typed in).
     markConfirmed: async () => {
       await secure.setItemAsync(WORDS_CONFIRMED_KEY, '1', plain);
     },

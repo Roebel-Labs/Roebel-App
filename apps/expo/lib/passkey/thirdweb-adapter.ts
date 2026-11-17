@@ -207,7 +207,7 @@ export async function signHashAsIdentityWithPrf(
   let sig = safeSignature;
   if (!(await deps.isSafeDeployed(session.safe))) {
     // Only the Safe created with this key can be deployed from it (a recovered Safe always has code).
-    if (!isAddressEqual(signer.counterfactual.predicted, session.safe)) throw new Error('passkey Safe is not deployed');
+    if (!isAddressEqual(signer.counterfactual.predicted, session.safe)) throw new Error('the account Safe is not deployed and is not the counterfactual Safe of its key');
     sig = serializeErc6492Signature({ address: SAFE_PROXY_FACTORY, data: signer.counterfactual.factoryData, signature: sig });
   }
   const signature = identityKind(session) === 'legacy' ? encodeOnBehalfSignature(session.safe, sig) : sig;

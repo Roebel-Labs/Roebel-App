@@ -27,6 +27,8 @@ function fakeSecure(
   o: { readThrows?: 'invalidated' | 'cancel' | 'other'; canBio?: boolean | 'throws' } = {},
 ) {
   const m = new Map<string, string>();
+  /** iOS: an invalidated item still EXISTS (SecItemAdd -> duplicate -> update under its dead access control fails). */
+  const stale = new Set<string>();
   const calls: { op: 'get' | 'set' | 'del'; key: string; options?: Opts }[] = [];
   const s = {
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
@@ -34,8 +36,14 @@ function fakeSecure(
     calls,
     authenticatedReads: 0,
     readThrows: o.readThrows,
-    /** Simulates the system invalidating the protected key (the item is gone, the marker stays). */
-    invalidate: () => void m.delete(WORDS_PHRASE_KEY),
+    stale,
+    /** Simulates the system invalidating the protected key: unreadable (null), still present, marker stays. */
+    invalidate: () => {
+      m.delete(WORDS_PHRASE_KEY);
+      stale.add(WORDS_PHRASE_KEY);
+    },
+    /** Fails the next set of `key` (e.g. a cancelled prompt on an Android write). */
+    failSetOf: null as string | null,
     getItemAsync: async (key: string, options?: Opts) => {
       calls.push({ op: 'get', key, options });
       if (options?.requireAuthentication) {
@@ -50,11 +58,16 @@ function fakeSecure(
     },
     setItemAsync: async (key: string, value: string, options?: Opts) => {
       calls.push({ op: 'set', key, options });
+      if (s.failSetOf === key) throw new Error('Could not Authenticate the user: User canceled the authentication');
+      if (stale.has(key)) {
+        throw new Error('Authentication failed. Provided passphrase/PIN is incorrect or there is no user authentication method configured for this device.');
+      }
       m.set(key, value);
     },
     deleteItemAsync: async (key: string, options?: Opts) => {
       calls.push({ op: 'del', key, options });
       m.delete(key);
+      stale.delete(key);
     },
     canUseBiometricAuthentication: () => {
       if (o.canBio === 'throws') throw new Error('native module missing');
@@ -113,6 +126,64 @@ describe('phrase store', () => {
     await expect(store.read(PHRASE_PROMPT)).rejects.toBeInstanceOf(PhraseUnavailableError);
     expect(await store.has()).toBe(true);
     expect(await store.storedOwner()).toBe(JUNK_OWNER);
+  });
+
+  it('re-entering the words after a biometric change succeeds: the dead item is deleted (no prompt) before the new one is added', async () => {
+    const s = fakeSecure();
+    const store = createPhraseStore(s);
+    await store.write(JUNK);
+    s.invalidate();
+    await expect(store.read(PHRASE_PROMPT)).rejects.toBeInstanceOf(PhraseUnavailableError);
+    s.calls.length = 0;
+    await store.write(JUNK); // the re-entry path (Review Focus 1)
+    expect(await store.read(PHRASE_PROMPT)).toBe(JUNK);
+    const phraseOps = s.calls.filter((c) => c.key === WORDS_PHRASE_KEY).map((c) => c.op);
+    expect(phraseOps.slice(0, 2)).toEqual(['del', 'set']);
+    expect(s.calls.find((c) => c.op === 'del' && c.key === WORDS_PHRASE_KEY)!.options).toMatchObject({
+      requireAuthentication: true,
+      keychainAccessible: s.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  });
+
+  it('a failed phrase write never leaves the marker naming another owner than a stored phrase (M1)', async () => {
+    const s = fakeSecure();
+    const store = createPhraseStore(s);
+    await store.write(JUNK);
+    await store.markConfirmed();
+    s.failSetOf = WORDS_PHRASE_KEY;
+    await expect(store.write(ABOUT)).rejects.toThrow();
+    // no phrase stored -> nothing can be signed with a mismatching owner; read asks for the words again
+    expect(s.m.has(WORDS_PHRASE_KEY)).toBe(false);
+    await expect(store.read(PHRASE_PROMPT)).rejects.toBeInstanceOf(PhraseUnavailableError);
+    const s2 = fakeSecure();
+    const store2 = createPhraseStore(s2);
+    await store2.write(JUNK);
+    await store2.markConfirmed();
+    s2.failSetOf = WORDS_PHRASE_MARKER_KEY;
+    await expect(store2.write(ABOUT)).rejects.toThrow();
+    expect(s2.m.get(WORDS_PHRASE_MARKER_KEY)).toBe(JUNK_OWNER);
+    expect(s2.m.has(WORDS_PHRASE_KEY)).toBe(false); // the old words were already deleted; the marker still names their owner
+  });
+
+  it('E4 escape (M2): unreadable unconfirmed words are discarded without a prompt; readable ones stay', async () => {
+    const s = fakeSecure();
+    const store = createPhraseStore(s);
+    await store.write(JUNK);
+    await expect(store.write(ABOUT)).rejects.toBeInstanceOf(PhraseOverwriteError);
+    expect(await store.discardIfUnreadable()).toBe(false); // still readable: one prompt, nothing removed
+    expect(s.m.get(WORDS_PHRASE_KEY)).toBe(JUNK);
+    s.invalidate();
+    expect(await store.discardIfUnreadable()).toBe(true);
+    expect(await store.has()).toBe(false);
+    await store.write(ABOUT);
+    expect(s.m.get(WORDS_PHRASE_KEY)).toBe(ABOUT);
+    expect(await createPhraseStore(fakeSecure()).discardIfUnreadable()).toBe(false);
+    const c = fakeSecure();
+    const cs = createPhraseStore(c);
+    await cs.write(JUNK);
+    c.readThrows = 'cancel';
+    await expect(cs.discardIfUnreadable()).rejects.toBeInstanceOf(PhraseCancelledError);
+    expect(c.m.get(WORDS_PHRASE_KEY)).toBe(JUNK);
   });
 
   it('no phrase at all is PhraseUnavailableError; other native errors pass through unchanged', async () => {
