@@ -37,7 +37,7 @@ import { indexOrigin } from "@/lib/miniapp/indexing";
 import { wellKnownUrlFor } from "@/lib/miniapp/safeFetch";
 import { checkRegisterLimits, REGISTER_LIMIT_MESSAGES } from "@/lib/miniapp/registerLimits";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
-import type { DeveloperRow, MiniAppRow } from "@/lib/miniapp/types";
+import type { MiniAppRow } from "@/lib/miniapp/types";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
