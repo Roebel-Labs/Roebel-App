@@ -28,7 +28,7 @@ export type AcceptOptions = { canPublic: boolean; canPrivate: boolean; reason: '
 /** `code: 'NOT_PUBLIC'`: the org keeps members private (now): offer private instead. */
 export type AcceptResult = { ok: true } | { ok: false; message: string; code?: 'NOT_PUBLIC' };
 
-type Send = (account: Account, calls: readonly { to: `0x${string}`; data: Hex }[]) => Promise<void>;
+type Send = (account: Account, calls: readonly { to: `0x${string}`; data: Hex }[]) => Promise<unknown>;
 
 export type AcceptDeps = {
   send: Send;

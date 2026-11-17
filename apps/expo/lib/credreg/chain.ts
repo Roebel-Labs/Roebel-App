@@ -44,6 +44,28 @@ export async function readHolding(typeId: Hex, account: Address): Promise<{ batc
   return { batchId: BigInt(h.batchId), leaf: h.leaf, validUntil: BigInt(h.validUntil ?? 0) };
 }
 
+/** The org a type belongs to (`getType`), null when the type does not exist. Throws on RPC failure. */
+export async function readTypeOrg(typeId: Hex): Promise<Hex | null> {
+  const t = await registryReader().getType(typeId);
+  return t ? t.orgId : null;
+}
+
+/** The type a batch issues (`getBatch`), null when the batch does not exist. Throws on RPC failure. */
+export async function readBatchType(batchId: bigint): Promise<Hex | null> {
+  try {
+    const b = (await publicClient().readContract({
+      address: REGISTRY,
+      abi: CREDENTIAL_REGISTRY_ABI,
+      functionName: 'getBatch',
+      args: [batchId],
+    })) as { typeId: Hex };
+    return b.typeId;
+  } catch (e) {
+    if (/UnknownBatch/.test(String((e as Error)?.message ?? e))) return null;
+    throw e;
+  }
+}
+
 /**
  * A false from the shared verifier can hide a network failure: viem's ERC-6492 path catches
  * CallExecutionError (which wraps HTTP and timeout errors) and answers false. So a false is only

@@ -10,7 +10,7 @@ import { sendOrgCalls } from '@/lib/org-safe/send';
 import { REGISTRY } from './chain';
 import { credentialsConfigured } from './gate';
 
-type Send = (account: Account, calls: readonly { to: `0x${string}`; data: Hex }[]) => Promise<void>;
+type Send = (account: Account, calls: readonly { to: `0x${string}`; data: Hex }[]) => Promise<unknown>;
 
 export type VisibilityResult = { ok: true } | { ok: false; message: string };
 
