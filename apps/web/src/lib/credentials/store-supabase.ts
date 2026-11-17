@@ -30,6 +30,7 @@ import {
   type SyncState,
   type TypeFilter,
   type TypeRow,
+  type UserRow,
 } from "./store";
 
 export const CREDENTIAL_TABLES = {
@@ -62,6 +63,12 @@ const toAccount = (r: Row): AccountRow => ({
   subType: r.sub_type ?? null,
   avatarUrl: r.avatar_url ?? null,
   membersPublicColumn: r.credentials_members_public ?? null,
+});
+
+const toUser = (r: Row): UserRow => ({
+  wallet: String(r.wallet_address).toLowerCase(),
+  displayName: r.display_name || r.username || "",
+  avatarUrl: r.profile_picture_url ?? null,
 });
 
 const toType = (r: Row): TypeRow => ({
@@ -226,6 +233,31 @@ export class SupabaseCredentialStore implements CredentialStore {
   }
   async setMembersPublic(accountId: string, value: boolean | null) {
     check("setMembersPublic", await this.db.from("accounts").update({ credentials_members_public: value }).eq("id", accountId));
+  }
+
+  // ── users ───────────────────────────────────────────────────────────────────
+  // Same query as the member invite screen (lib/supabase-member-management.ts searchUsersForInvite),
+  // with the service role and the LIKE wildcards in the query escaped.
+  async searchUsers(query: string, limit: number) {
+    const escaped = query.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const r = await this.db
+      .from("users")
+      .select("wallet_address, display_name, username, profile_picture_url")
+      .not("username", "is", null)
+      .ilike("username", `%${escaped}%`)
+      .limit(limit);
+    check("searchUsers", r);
+    return ((r.data ?? []) as Row[]).map(toUser);
+  }
+  async usersByWallets(wallets: readonly string[]) {
+    const out: UserRow[] = [];
+    const list = [...new Set(wallets.map((w) => w.toLowerCase()))];
+    for (let i = 0; i < list.length; i += 200) {
+      const r = await this.db.from("users").select("wallet_address, display_name, username, profile_picture_url").in("wallet_address", list.slice(i, i + 200));
+      check("usersByWallets", r);
+      out.push(...((r.data ?? []) as Row[]).filter((x) => x.display_name || x.username).map(toUser));
+    }
+    return out;
   }
 
   // ── types ───────────────────────────────────────────────────────────────────

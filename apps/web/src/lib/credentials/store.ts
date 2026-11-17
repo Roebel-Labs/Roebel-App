@@ -135,6 +135,9 @@ export type NewInvitation = Omit<InvitationRow, "createdAt" | "status" | "claime
   Partial<Pick<InvitationRow, "status">>;
 export type NewBatch = Omit<BatchRow, "createdAt" | "chainBatchId" | "status"> & Partial<Pick<BatchRow, "status">>;
 
+/** An app user (public.users) as the people search shows it. */
+export type UserRow = { wallet: string; displayName: string; avatarUrl: string | null };
+
 export type DelegateRow = { typeId: Hex; delegate: string; label: string | null; active: boolean };
 export type PresentationRow = { codeHash: string; payload: Record<string, unknown>; expiresAt: string };
 export type SyncState = { registry: string; lastBlock: bigint };
@@ -162,6 +165,11 @@ export interface CredentialStore {
   /** Every account_owners row of the org (all roles). */
   ownersOf(accountId: string): Promise<{ wallet: string; role: OwnerRole }[]>;
   setMembersPublic(accountId: string, value: boolean | null): Promise<void>;
+
+  // users (read): the member invite screen's name search, and names for account recipients
+  /** Users whose display name contains `query` (case-insensitive), at most `limit`. */
+  searchUsers(query: string, limit: number): Promise<UserRow[]>;
+  usersByWallets(wallets: readonly string[]): Promise<UserRow[]>;
 
   // credential_types
   getType(typeId: Hex): Promise<TypeRow | null>;
@@ -243,6 +251,7 @@ function normaliseInvitationPatch(patch: Partial<InvitationRow>): Partial<Invita
 export class InMemoryCredentialStore implements CredentialStore {
   readonly accounts = new Map<string, AccountRow>();
   readonly owners: { accountId: string; wallet: string; role: OwnerRole }[] = [];
+  readonly users: UserRow[] = [];
   readonly types = new Map<string, TypeRow>();
   readonly actions = new Map<string, ActionRow>();
   readonly batches = new Map<string, BatchRow>();
@@ -257,6 +266,9 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   seedOwner(accountId: string, wallet: string, role: OwnerRole): void {
     this.owners.push({ accountId, wallet: wallet.toLowerCase(), role });
+  }
+  seedUser(u: UserRow): void {
+    this.users.push({ ...u, wallet: u.wallet.toLowerCase() });
   }
 
   // ── accounts ────────────────────────────────────────────────────────────────
@@ -282,6 +294,16 @@ export class InMemoryCredentialStore implements CredentialStore {
   async setMembersPublic(accountId: string, value: boolean | null) {
     const a = this.accounts.get(accountId);
     if (a) a.membersPublicColumn = value;
+  }
+
+  // ── users ───────────────────────────────────────────────────────────────────
+  async searchUsers(query: string, limit: number) {
+    const q = query.toLowerCase();
+    return this.users.filter((u) => u.displayName.toLowerCase().includes(q)).slice(0, limit).map((u) => ({ ...u }));
+  }
+  async usersByWallets(wallets: readonly string[]) {
+    const set = new Set(wallets.map((w) => w.toLowerCase()));
+    return this.users.filter((u) => set.has(u.wallet)).map((u) => ({ ...u }));
   }
 
   // ── types ───────────────────────────────────────────────────────────────────

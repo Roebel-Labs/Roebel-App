@@ -16,12 +16,28 @@ import {
   viaOf,
   type Result,
 } from "@/lib/credentials/actions";
+import { prepareBatch, prepareRevocation, type RecipientInput } from "@/lib/credentials/batch";
+import { listPeople, parsePeopleCsv, searchPeople } from "@/lib/credentials/people";
 import { credentialDeps } from "@/lib/credentials/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ACTIONS: readonly CredentialAction[] = ["types_list", "type_prepare", "delegate_prepare", "members_public_prepare", "orgs_list", "actions_list"];
+const ACTIONS: readonly CredentialAction[] = [
+  "types_list",
+  "type_prepare",
+  "delegate_prepare",
+  "members_public_prepare",
+  "orgs_list",
+  "actions_list",
+  "people_list",
+  "people_search",
+  "batch_prepare",
+  "revoke_prepare",
+];
+
+/** Upper bound for a pasted list (2000 people fit comfortably). */
+const MAX_CSV_CHARS = 512 * 1024;
 
 function respond<T>(r: Result<T>) {
   return r.ok ? jsonOk(r.data) : jsonFail(r.status, r.code, r.message);
@@ -75,6 +91,36 @@ export async function POST(request: NextRequest) {
         );
       case "members_public_prepare":
         return respond(await prepareMembersPublicAction(d, c, { accountId: String(p.accountId ?? ""), membersPublic: p.membersPublic as boolean, via }));
+      case "people_list":
+        return respond(await listPeople(d, c, { accountId: String(p.accountId ?? ""), typeId: p.typeId as Hex }));
+      case "people_search":
+        return respond(await searchPeople(d, c, { accountId: String(p.accountId ?? ""), query: String(p.query ?? "") }));
+      case "batch_prepare": {
+        let recipients = p.recipients as RecipientInput[] | undefined;
+        if (typeof p.csv === "string") {
+          if (p.csv.length > MAX_CSV_CHARS) return jsonFail(400, "BAD_REQUEST", "Die Liste ist zu groß.");
+          // Validated (with row numbers) by prepareBatch.
+          recipients = [...(Array.isArray(recipients) ? recipients : []), ...(parsePeopleCsv(p.csv) as RecipientInput[])];
+        }
+        return respond(
+          await prepareBatch(d, c, {
+            accountId: String(p.accountId ?? ""),
+            typeId: p.typeId as Hex,
+            recipients,
+            fromMemberList: p.fromMemberList === true,
+            validUntil: p.validUntil as string | undefined,
+            source: p.source as "people" | "member_list" | "event" | undefined,
+          }),
+        );
+      }
+      case "revoke_prepare":
+        return respond(
+          await prepareRevocation(d, c, {
+            accountId: String(p.accountId ?? ""),
+            invitationIds: p.invitationIds as string[] | undefined,
+            batchId: p.batchId as string | undefined,
+          }),
+        );
       default:
         return jsonFail(400, "BAD_REQUEST", "unknown action");
     }
