@@ -6,6 +6,7 @@ import {
   findLinkedLegacies,
   findLinkedSafes,
   findRecoverableAccounts,
+  findSafesByOwner,
   resolveGuardianAddress,
   suggestDefaultGuardians,
   type AdminLog,
@@ -46,6 +47,8 @@ function fakeChain(p: {
     isAdmin: jest.fn(async (a: Address, s: Address) => isAdminSet.has(`${a}|${s}`.toLowerCase())),
     readGuardians: jest.fn(async (s: Address) => p.guardians?.[s] ?? []),
     hasCode: jest.fn(async (a: Address) => (p.code ?? []).includes(a)),
+    ownerLogsFor: jest.fn(async () => []),
+    readOwners: jest.fn(async () => []),
   };
 }
 
@@ -166,6 +169,44 @@ describe('suggestDefaultGuardians', () => {
   });
 });
 
+describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
+  const A = addr(0xa0);
+  const B = addr(0xb0);
+  const C = addr(0xc0);
+  const OWNER = addr(0x0e);
+  const OTHER = addr(0x0f);
+
+  it('findSafesByOwner keeps only emitters whose single owner is still that owner', async () => {
+    const chain = {
+      ownerLogsFor: async () => [
+        { emitter: A, blockNumber: 5n },
+        { emitter: B, blockNumber: 9n },
+        { emitter: B, blockNumber: 7n },
+      ],
+      readOwners: async (s: Address) => (s === B ? [OWNER] : [OTHER]),
+    };
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([B]);
+  });
+
+  it('newest first, de-duplicated; a co-owned Safe and an unreadable emitter are dropped', async () => {
+    const chain = {
+      ownerLogsFor: async () => [
+        { emitter: A, blockNumber: 5n },
+        { emitter: B, blockNumber: 9n },
+        { emitter: C, blockNumber: 7n },
+        { emitter: SAFE, blockNumber: 8n },
+        { emitter: A, blockNumber: 6n },
+      ],
+      readOwners: async (s: Address) => {
+        if (s === C) return [OWNER, OTHER];
+        if (s === SAFE) throw new Error('not a Safe');
+        return [OWNER];
+      },
+    };
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([B, A]);
+  });
+});
+
 describe('createLookupChain (view calls + chunked getLogs over a viem-like client)', () => {
   const req = (target: Address, type: number, status: number, att: bigint, cit: bigint, createdAt: bigint) =>
     [addr(9), target, type, status, 'ipfs://x', att, cit, createdAt] as const;
@@ -217,5 +258,32 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
     expect(calls[0].fromBlock).toBe(9_750n); // estimate 9_800 minus one window of margin
     expect(calls).toHaveLength(4); // one batch of 4 windows found both; the rest (up to the tip) skipped
     expect(client.getLogs.mock.calls[0][0].args).toEqual({ requestId: 7n });
+  });
+
+  it('ownerLogsFor scans AddedOwner(owner) from any emitter backward from the tip and stops at the first hit', async () => {
+    const OWNER = addr(0x0e);
+    const calls: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
+    const client = {
+      getBlockNumber: jest.fn(async () => 1_000n),
+      getBlock: jest.fn(),
+      getLogs: jest.fn(async (a: any) => {
+        calls.push({ fromBlock: a.fromBlock, toBlock: a.toBlock });
+        return a.fromBlock <= 520n && 520n <= a.toBlock
+          ? [{ address: SAFE.toLowerCase(), blockNumber: 520n, logIndex: 0, args: { owner: OWNER } }]
+          : [];
+      }),
+      getCode: jest.fn(),
+      readContract: jest.fn(async (a: any) => (a.functionName === 'getOwners' && a.address === SAFE ? [OWNER] : [])),
+    };
+    const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+    expect(await chain.ownerLogsFor(OWNER)).toEqual([{ emitter: SAFE, blockNumber: 520n }]);
+    const first = client.getLogs.mock.calls[0][0];
+    expect(first.address).toBeUndefined();
+    expect(first.args).toEqual({ owner: OWNER });
+    expect(first.event.name).toBe('AddedOwner');
+    expect(calls[0]).toEqual({ fromBlock: 951n, toBlock: 1_000n });
+    // backward windows, batches of 4: the hit at 520 is in the 10th window → 3 batches, then stop
+    expect(calls).toHaveLength(12);
+    expect(await chain.readOwners(SAFE)).toEqual([OWNER]);
   });
 });

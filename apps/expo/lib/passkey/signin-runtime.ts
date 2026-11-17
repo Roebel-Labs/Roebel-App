@@ -9,11 +9,12 @@ import { client, chain } from '@/constants/thirdweb';
 import { supabase } from '@/lib/supabase';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { CITIZEN_NFT_V2 } from './constants';
+import { readWebAuthnSigner } from './guardians';
 import { lookupChain } from './guardians-runtime';
 import { secureKeyValueStorage } from './migration-runtime';
 import { isV3Enabled, parseV3Config } from './migration-v3';
 import { randomBytes } from './random';
-import { findLinkedLegacies } from './recovery-lookup';
+import { findLinkedLegacies, findSafesByOwner } from './recovery-lookup';
 import { passkeyApiSession } from './api-session-runtime';
 import type { SessionSource } from './boot';
 import { clearPasskeySession, loadPasskeySession, PASSKEY_SESSION_KEY, type PasskeySession, type SessionStorage } from './session';
@@ -76,6 +77,8 @@ const keyChain: KeyChain = {
   },
   findLinkedLegacies: (safe) => findLinkedLegacies(safe, lookupChain),
   isKnownAccount,
+  getSigner: (x, y) => readWebAuthnSigner(x, y),
+  findSafesByOwner: (owner) => findSafesByOwner(owner, lookupChain),
 };
 
 export function createSignInDeps(): SignInDeps & { createPasskey: typeof createPasskey } {

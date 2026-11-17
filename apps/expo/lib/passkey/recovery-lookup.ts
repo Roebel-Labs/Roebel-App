@@ -44,6 +44,13 @@ export type LookupChain = {
   isAdmin: (account: Address, signer: Address) => Promise<boolean>;
   readGuardians: (safe: Address) => Promise<Address[]>;
   hasCode: (a: Address) => Promise<boolean>;
+  /**
+   * Safe `AddedOwner(owner)` events naming `owner`, from any emitter: scanned backward from the
+   * tip to PASSKEY_EPOCH_BLOCK, stopping at the first window batch with a hit.
+   */
+  ownerLogsFor: (owner: Address) => Promise<Array<{ emitter: Address; blockNumber: bigint }>>;
+  /** Safe.getOwners() right now. */
+  readOwners: (safe: Address) => Promise<Address[]>;
 };
 
 export type MintRequest = {
@@ -104,6 +111,33 @@ export async function findLinkedLegacies(safe: Address, chain: LookupChain): Pro
     'emitter',
   );
   const checks = await Promise.all(emitters.map(async (e) => ((await safely(chain.isAdmin(e, safe), false)) ? e : null)));
+  return checks.filter((c): c is Address => !!c);
+}
+
+/**
+ * The Safes whose owners are exactly `[owner]` right now, newest AddedOwner log first,
+ * de-duplicated. A recovery to a new passkey keeps the Safe's address but installs the per-key
+ * signer as its only owner, so this finds a recovered Safe from its new key. A stale log (the
+ * owner changed again) and an emitter whose owners cannot be read are dropped.
+ */
+export async function findSafesByOwner(
+  owner: Address,
+  chain: Pick<LookupChain, 'ownerLogsFor' | 'readOwners'>,
+): Promise<Address[]> {
+  const logs = [...(await chain.ownerLogsFor(owner))].sort((a, b) =>
+    a.blockNumber === b.blockNumber ? 0 : a.blockNumber > b.blockNumber ? -1 : 1,
+  );
+  const emitters: Address[] = [];
+  for (const l of logs) {
+    const e = getAddress(l.emitter);
+    if (!emitters.some((x) => isAddressEqual(x, e))) emitters.push(e);
+  }
+  const checks = await Promise.all(
+    emitters.map(async (e) => {
+      const owners = await safely(chain.readOwners(e), [] as Address[]);
+      return owners.length === 1 && isAddressEqual(owners[0], owner) ? e : null;
+    }),
+  );
   return checks.filter((c): c is Address => !!c);
 }
 
@@ -179,6 +213,10 @@ export const citizenMintedEvent = parseAbiItem(
 export const requestApprovedEvent = parseAbiItem(
   'event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)',
 );
+export const safeAddedOwnerEvent = parseAbiItem('event AddedOwner(address indexed owner)');
+const safeOwnersAbi = [
+  { type: 'function', name: 'getOwners', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address[]' }] },
+] as const;
 const citizenRequestAbi = [
   { type: 'function', name: 'requestCount', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
   {
@@ -253,6 +291,17 @@ export function createLookupChain(
     async hasCode(a) {
       const code = await client.getCode({ address: a });
       return !!code && code !== '0x';
+    },
+    async ownerLogsFor(owner) {
+      const logs = await scanLogs(
+        await windowsTo(passkeyFrom, true),
+        (w: BlockWindow) => client.getLogs({ event: safeAddedOwnerEvent, args: { owner }, ...w }),
+        { stop: (found) => found.length > 0 },
+      );
+      return logs.map((l) => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n }));
+    },
+    async readOwners(safe) {
+      return [...((await client.readContract({ address: safe, abi: safeOwnersAbi, functionName: 'getOwners' })) as readonly Address[])];
     },
     async findMintRequest(citizen) {
       const count = BigInt(await client.readContract({ address: citizenNft, abi: citizenRequestAbi, functionName: 'requestCount' }));
