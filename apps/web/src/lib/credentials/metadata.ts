@@ -5,7 +5,7 @@
 import { RESERVED_TYPE_IDS } from "@netizen-labs/credential-registry";
 import type { Hex } from "viem";
 import { publicBaseUrl } from "./config";
-import type { CredentialStore, Kind, TypeRow } from "./store";
+import type { ActionStatus, CredentialStore, Kind, TypeRow } from "./store";
 
 export type TypeMetadata = {
   name: string;
@@ -88,6 +88,37 @@ export function reservedMetadataUrls(): { citizen: string; attester: string; gue
     attester: metadataUrl(RESERVED_TYPE_IDS.attester),
     guest: metadataUrl(RESERVED_TYPE_IDS.guest),
   };
+}
+
+const LIVE_ACTION: readonly ActionStatus[] = ["awaiting_confirmation", "submitted", "done"];
+
+/**
+ * What the metadata route serves for a type id, or null (404).
+ *
+ * Drafts: the metadataURI goes on chain with createType, and wallets may fetch it right after the
+ * phone confirms, before the receipt or the 5-minute sync marks the row on chain. So a draft is
+ * served while a createType action for it is live (awaiting and not past its time, submitted, or
+ * done) and 404 otherwise (never prepared, cancelled, expired or failed), which keeps abandoned
+ * drafts unpublished without ever breaking an on-chain URI.
+ */
+export async function metadataFor(store: CredentialStore, typeId: Hex, nowMs = Date.now()): Promise<TypeMetadata | null> {
+  const reserved = reservedMetadataFor(typeId);
+  if (reserved) return reserved;
+  const type = await store.getType(typeId);
+  if (!type) return null;
+  if (type.chainStatus === "draft" && !(await hasLiveCreateAction(store, type, nowMs))) return null;
+  const org = type.accountId ? await store.getAccount(type.accountId) : null;
+  return typeMetadataJson(type, org ? { name: org.name } : null);
+}
+
+async function hasLiveCreateAction(store: CredentialStore, t: TypeRow, nowMs: number): Promise<boolean> {
+  if (!t.accountId) return false;
+  const actions = await store.listActions({ accountId: t.accountId, statuses: LIVE_ACTION });
+  return actions.some(
+    (a) =>
+      !(a.status === "awaiting_confirmation" && Date.parse(a.expiresAt) <= nowMs) &&
+      a.steps.some((s) => s.fn === "createType" && s.orgId.toLowerCase() === t.orgId.toLowerCase() && s.localId.toLowerCase() === t.localId.toLowerCase()),
+  );
 }
 
 export type DirectoryEntry = {
