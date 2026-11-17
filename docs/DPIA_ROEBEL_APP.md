@@ -91,7 +91,12 @@ Link-Token zusätzlich nur als SHA-256. Vorzeigecodes (`credential_presentations
 nach 300 s ab und sind einmalig. Push-Texte nennen bei Organisationen, deren Mitglieder
 nicht öffentlich sein dürfen, weder Organisation noch Typ. Kontolöschung leert in
 `credential_invitations` Name, E-Mail, Claim-Key, Token, Proof und Salt der Person (die Zeile
-bleibt für die Zählung der Organisation) und löscht noch unbestätigte `credential_actions`.
+bleibt für die Zählung der Organisation) bricht noch unbestätigte `credential_actions` samt vorbereiteten Batches ab und leert
+sie (`prepared_by` → `deleted`, `summary`/`steps` leer). Bewusst bleiben Wallet-bezogene
+Felder: `subject`/`recipient_wallet` bei Konto-Blättern (entsprechen ohnehin öffentlichen
+Chain-Daten, Zählung der Organisation), `confirmed_by`, `created_by` der Typen und
+Delegierten-Einträge der Organisation (Organisationsdaten, nicht Personendaten der
+gelöschten Person; reine Pseudonyme ohne Klarnamen).
 
 ### 2.4 KI-Systeme
 

@@ -269,7 +269,8 @@ serve(async (req: Request) => {
 
     // 3a. Credential register (plan credreg-2): erase the person from the
     //     invitation mirror. The row stays so the organisation's count is right.
-    //     `credential_actions` rows still awaiting confirmation are deleted.
+    //     `credential_actions` rows still awaiting confirmation are cancelled and
+    //     scrubbed in place (their prepared batches reference them).
     //     The migration may not be applied yet, so a missing table must not
     //     fail the deletion; log without PII.
     {
@@ -286,12 +287,47 @@ serve(async (req: Request) => {
         })
         .eq('recipient_wallet', claimedWallet);
       if (invErr) console.error('credential_invitations sweep failed:', invErr.code ?? 'unknown');
-      const { error: actErr } = await db
+      // Awaiting actions prepared by this wallet cannot be deleted: a prepared
+      // batch references them (FK without ON DELETE). Cancel the batches, scrub
+      // their invitations, then cancel and scrub the actions in place.
+      const { data: acts, error: actSelErr } = await db
         .from('credential_actions')
-        .delete()
+        .select('id')
         .eq('prepared_by', claimedWallet)
         .eq('status', 'awaiting_confirmation');
-      if (actErr) console.error('credential_actions sweep failed:', actErr.code ?? 'unknown');
+      if (actSelErr) {
+        console.error('credential_actions sweep failed:', actSelErr.code ?? 'unknown');
+      } else if ((acts ?? []).length > 0) {
+        const actIds = (acts ?? []).map((a) => a.id);
+        const { data: bats, error: batSelErr } = await db
+          .from('credential_batches')
+          .update({ status: 'cancelled' })
+          .in('action_id', actIds)
+          .eq('status', 'prepared')
+          .select('id');
+        if (batSelErr) console.error('credential_batches sweep failed:', batSelErr.code ?? 'unknown');
+        const batIds = (bats ?? []).map((b) => b.id);
+        if (batIds.length > 0) {
+          const { error: scrubErr } = await db
+            .from('credential_invitations')
+            .update({
+              display_name: null,
+              contact_email: null,
+              claim_key_enc: null,
+              token_enc: null,
+              token_hash: null,
+              proof: [],
+              salt: '',
+            })
+            .in('batch_id', batIds);
+          if (scrubErr) console.error('credential_invitations batch sweep failed:', scrubErr.code ?? 'unknown');
+        }
+        const { error: actErr } = await db
+          .from('credential_actions')
+          .update({ status: 'cancelled', prepared_by: 'deleted', summary: {}, steps: [] })
+          .in('id', actIds);
+        if (actErr) console.error('credential_actions sweep failed:', actErr.code ?? 'unknown');
+      }
     }
 
     // 3b. Detach instead of delete: content that legitimately outlives its
