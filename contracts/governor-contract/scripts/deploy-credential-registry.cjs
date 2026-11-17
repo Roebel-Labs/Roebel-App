@@ -70,17 +70,44 @@ async function main() {
   const orgs = new ethers.Contract(orgRegistry, ["function orgCount() view returns (uint256)"], provider);
   console.log(`orgs registered: ${await orgs.orgCount()}`);
   uris.forEach((u, i) => console.log(`${RESERVED[i][0]} URI:`.padEnd(16) + u));
+  // Read the artifact before the dry-run return, so a dry run also catches a missing compile.
+  const artPath = path.resolve(__dirname, "../artifacts/contracts/verification-system/CredentialRegistry.sol/CredentialRegistry.json");
+  if (!fs.existsSync(artPath)) throw new Error(`Artifact missing (${artPath}) — run: npx hardhat compile`);
+  const art = JSON.parse(fs.readFileSync(artPath, "utf8"));
+  if (!art.bytecode || art.bytecode === "0x") throw new Error("CredentialRegistry artifact has no bytecode");
+  console.log(`artifact:       CredentialRegistry (${(art.bytecode.length - 2) / 2} bytes init code)`);
   if (DRY) return console.log("dry run: nothing sent.");
-
-  const art = JSON.parse(
-    fs.readFileSync(
-      path.resolve(__dirname, "../artifacts/contracts/verification-system/CredentialRegistry.sol/CredentialRegistry.json"),
-      "utf8",
-    ),
-  );
   const c = await new ethers.ContractFactory(art.abi, art.bytecode, wallet).deploy(owner, citizenNft, attesterNft, orgRegistry, uris);
-  const rcpt = await c.deploymentTransaction().wait();
+  const dtx = c.deploymentTransaction();
+  // Printed before waiting, so a process that dies mid-wait still leaves the address on screen.
+  console.log(`sent:           tx ${dtx.hash}  → ${await c.getAddress()} (pending)`);
+  const rcpt = await dtx.wait();
+  if (!rcpt || rcpt.status !== 1) throw new Error(`deploy transaction failed (${dtx.hash})`);
   const address = await c.getAddress();
+  console.log(`deployed:       ${address}  tx ${rcpt.hash}  block ${rcpt.blockNumber}`);
+
+  // Write the record right away (verified: false), so a failed verification or a dead
+  // process can never lead a rerun to deploy a second registry.
+  const record = {
+    network: "gnosis",
+    chainId: 100,
+    deployedAt: new Date().toISOString(),
+    deployer: wallet.address,
+    credentialRegistry: address,
+    deployBlock: rcpt.blockNumber,
+    txHash: rcpt.hash,
+    owner,
+    citizenNFT: citizenNft,
+    attesterNFT: attesterNft,
+    orgRegistry,
+    reservedURIs: { citizen: uris[0], attester: uris[1], guest: uris[2] },
+    verified: false,
+    note: "Owner = Attester Safe (recognition, reserved metadata, COMMUNITY types, 2-day delayed source swap). Hand ownership to the Timelock together with OrgRegistry after bootstrap.",
+  };
+  const writeRecord = () => fs.writeFileSync(RECORD, JSON.stringify(record, null, 2) + "\n");
+  writeRecord();
+  console.log(`record:         ${RECORD} (verified: false)`);
+
   const reg = new ethers.Contract(address, art.abi, provider);
 
   // Post-deploy verification: owner, sources, reserved type ids and their URIs.
@@ -96,28 +123,9 @@ async function main() {
     if ((await reg.getType(id)).config.metadataURI !== uris[i]) throw new Error(`${name} URI mismatch after deploy`);
   }
 
-  fs.writeFileSync(
-    RECORD,
-    JSON.stringify(
-      {
-        network: "gnosis",
-        chainId: 100,
-        deployedAt: new Date().toISOString(),
-        deployer: wallet.address,
-        credentialRegistry: address,
-        deployBlock: rcpt.blockNumber,
-        txHash: rcpt.hash,
-        owner,
-        citizenNFT: citizenNft,
-        attesterNFT: attesterNft,
-        orgRegistry,
-        reservedURIs: { citizen: uris[0], attester: uris[1], guest: uris[2] },
-        note: "Owner = Attester Safe (recognition, reserved metadata, COMMUNITY types, 2-day delayed source swap). Hand ownership to the Timelock together with OrgRegistry after bootstrap.",
-      },
-      null,
-      2,
-    ) + "\n",
-  );
+  record.verified = true;
+  record.verifiedAt = new Date().toISOString();
+  writeRecord();
   console.log(`✓ CredentialRegistry ${address} (block ${rcpt.blockNumber})\nrecord: ${RECORD}`);
 }
 
