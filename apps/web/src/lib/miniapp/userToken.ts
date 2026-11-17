@@ -99,6 +99,7 @@ export async function verifyUserToken(
       return { ok: false, code: "malformed" };
     }
     if (e instanceof errors.JWSSignatureVerificationFailed) return { ok: false, code: "bad_signature" };
+    if (!(e instanceof errors.JOSEError)) console.error("[miniapp] token verification error:", e);
     return { ok: false, code: "malformed" };
   }
 }
@@ -116,19 +117,26 @@ export function tokenKeysFromEnv(env: Record<string, string | undefined> = proce
 
   let result: FromEnv | null = null;
   try {
-    const jwk = JSON.parse(raw) as PrivateJwk & { d?: string; crv?: string };
-    if (jwk.kty !== "EC" || jwk.crv !== "P-256" || typeof jwk.d !== "string") {
-      throw new Error("not a P-256 private JWK");
+    const j = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      j.kty !== "EC" || j.crv !== "P-256" ||
+      typeof j.x !== "string" || typeof j.y !== "string" || typeof j.d !== "string" ||
+      typeof j.kid !== "string" || j.kid === ""
+    ) {
+      throw new Error("not a P-256 private JWK with kid");
     }
-    const { d: _d, ...pub } = jwk;
+    // Explicit fields only: key_ops/use/alg/ext would make jose refuse the verify import.
+    const jwk: PrivateJwk = { kty: "EC", crv: "P-256", x: j.x, y: j.y, d: j.d, kid: j.kid };
+    const pub: JWK = { kty: "EC", crv: "P-256", x: j.x, y: j.y, kid: j.kid };
     let signer: Promise<TokenIssuer> | undefined;
-    let verifyKey: ReturnType<typeof importJWK> | undefined;
+    let verifyKey: Promise<unknown> | undefined;
     result = {
       issuer: {
         issuer: iss,
-        sign: async (claims) => (await (signer ??= localTokenIssuer({ issuer: iss, privateJwk: jwk }))).sign(claims),
+        sign: async (claims) => (await (signer ??= localTokenIssuer({ issuer: iss, privateJwk: jwk }).catch((e) => { signer = undefined; throw e; }))).sign(claims),
       },
-      keys: (async () => await (verifyKey ??= importJWK(pub as JWK, "ES256"))) as TokenKeyResolver,
+      keys: (async () =>
+        await (verifyKey ??= importJWK(pub, "ES256").catch((e) => { verifyKey = undefined; throw e; }))) as TokenKeyResolver,
       issuers: [iss],
     };
   } catch (e) {

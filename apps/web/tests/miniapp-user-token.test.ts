@@ -8,6 +8,7 @@ import {
   tokenKeysFromEnv,
   verifyUserToken,
   type TokenIssuer,
+  type TokenKeyResolver,
 } from "../src/lib/miniapp/userToken";
 
 const ISS = "https://www.roebel.app";
@@ -16,7 +17,7 @@ const APP = "11111111-2222-3333-4444-555555555555";
 const claims = { aud: "miniapp:demo", sub: W, addr: W, app: APP, iat: 1000, exp: 1600, jti: "j1", v: 1 as const };
 
 let issuer: TokenIssuer;
-let keys: Awaited<ReturnType<typeof tokenKeysFromEnv>> extends infer T ? NonNullable<T>["keys"] : never;
+let keys: TokenKeyResolver;
 let privateJwk: Record<string, unknown>;
 let otherPrivate: CryptoKey;
 
@@ -85,12 +86,12 @@ test("a JWT without typ miniapp+jwt is refused", async () => {
     .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: "k1" })
     .setIssuer(ISS).setAudience("miniapp:demo").setSubject(W).setIssuedAt(1000).setExpirationTime(1600)
     .sign(await (await import("jose")).importJWK(privateJwk as never, "ES256"));
-  assert.equal((await verify(t)).ok, false);
+  assert.deepEqual(await verify(t), { ok: false, code: "malformed" });
 });
 
 test("a token with the wrong version is refused", async () => {
   const t = await issuer.sign({ ...claims, v: 2 as never });
-  assert.equal((await verify(t)).ok, false);
+  assert.deepEqual(await verify(t), { ok: false, code: "malformed" });
 });
 
 test("garbage is malformed", async () => {
@@ -98,8 +99,34 @@ test("garbage is malformed", async () => {
 });
 
 test("tokenKeysFromEnv is null without the key or with a bad one", () => {
-  assert.equal(tokenKeysFromEnv({}), null);
-  assert.equal(tokenKeysFromEnv({ MINIAPP_TOKEN_PRIVATE_JWK: "{nope" }), null);
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(tokenKeysFromEnv({}), null);
+    assert.equal(tokenKeysFromEnv({ MINIAPP_TOKEN_PRIVATE_JWK: "{nope" }), null);
+  } finally {
+    console.error = orig;
+  }
+});
+
+test("tokenKeysFromEnv is null for a JWK without kid", () => {
+  const { kid: _k, ...noKid } = privateJwk;
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(tokenKeysFromEnv({ MINIAPP_TOKEN_PRIVATE_JWK: JSON.stringify(noKid) }), null);
+  } finally {
+    console.error = orig;
+  }
+});
+
+test("a JWK carrying key_ops, use and alg still signs and verifies", async () => {
+  const jwk = { ...privateJwk, key_ops: ["sign"], use: "sig", alg: "ES256", ext: true };
+  const r = tokenKeysFromEnv({ MINIAPP_TOKEN_PRIVATE_JWK: JSON.stringify(jwk) });
+  assert.ok(r);
+  const t = await r.issuer.sign(claims);
+  const v = await verifyUserToken(t, { keys: r.keys, issuers: r.issuers, audience: "miniapp:demo", nowSec: 1001 });
+  assert.equal(v.ok, true);
 });
 
 test("tokenKeysFromEnv defaults the issuer", () => {
