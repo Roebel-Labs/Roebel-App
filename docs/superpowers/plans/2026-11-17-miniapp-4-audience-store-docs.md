@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-17-miniapp-identity-wallet-design.md` (sections 5.6, 5.7, 5.4 last bullet, 6). Credentials: `docs/superpowers/specs/2026-11-17-credential-register-design.md` (section 8).
 
-**Plan series:** 1 hardening → 2 identity and credentials → 3 wallet → 4 audience, store and docs (this). Requires plans 1 to 3 merged: manifest version "2" and `manifestStoreFields`, `isCredentialRef` / `refMatches`, `MINIAPP_SCOPE` and `verifySignedRequest` usage, `MiniApp.manifestVersion`, `packages/miniapp-verify`, everything the docs describe.
+**Plan series:** 1 hardening → 2 identity and credentials → 3 wallet → 4 audience, store and docs (this). Requires plans 1 to 3 merged: manifest version "2" and `manifestStoreFields`, `isCredentialRef` / `credentialMatches`, `MINIAPP_SCOPE` and `verifySignedRequest` usage, `MiniApp.manifestVersion`, `packages/miniapp-verify`, everything the docs describe.
 
 ## Open questions for the owner
 
@@ -48,7 +48,7 @@ Tasks are written against the recommended default.
 
 **Files:**
 - Modify: `packages/miniapp-sdk/src/types.ts` (`MiniAppManifest`), `apps/web/src/lib/miniapp/manifest.ts`, `apps/web/src/lib/miniapp/types.ts`
-- Create: `supabase/migrations/20261117c_mini_app_audience_org.sql`
+- Create: `supabase/migrations/20261117mc_mini_app_audience_org.sql`
 - Modify: `apps/expo/lib/miniapps.ts`
 - Test: `apps/web/tests/miniapp-manifest-audience.test.ts`, extend `apps/expo/lib/__tests__/miniapps-map.test.ts`
 
@@ -64,8 +64,8 @@ Tasks are written against the recommended default.
 
 ```ts
 test("an audience is normalised", () => {
-  const m = validateManifest({ ...v2, audience: { mode: "required", anyOf: ["citizen", "org:12:*"] }, org: "3F2504E0-4F89-41D3-9A0C-0305E82C3301" });
-  assert.deepEqual(m.audience, { mode: "required", anyOf: ["citizen", "org:12:*"] });
+  const m = validateManifest({ ...v2, audience: { mode: "required", anyOf: ["citizen", "org:3f2504e0-4f89-41d3-9a0c-0305e82c3301"] }, org: "3F2504E0-4F89-41D3-9A0C-0305E82C3301" });
+  assert.deepEqual(m.audience, { mode: "required", anyOf: ["citizen", "org:3f2504e0-4f89-41d3-9a0c-0305e82c3301"] });
   assert.equal(m.org, "3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 });
 test("mode must be required or recommended", …);
@@ -132,18 +132,28 @@ test("the list never contains a wallet", …);
 
 **Interfaces:**
 - Produces:
-  - `interface HeldCredential { type: string; name: string; validUntil: number | null }`
-  - `interface DeviceCredentialSource { held(): Promise<HeldCredential[]> }`
-  - `builtinDeviceSource(p: { signedIn: boolean; isCitizen: boolean; isAttester: boolean }): DeviceCredentialSource` — signed out → `[]`; citizen → `citizen` (and `attester` when set); otherwise `guest`. Names `Bürger:in`, `Bescheiniger:in`, `Gast`.
-  - `useHeldCredentialRefs(): { refs: string[]; ready: boolean }` — from `useUser()` (`isCitizen`) and the attester flag the profile screen already uses for `credentialKindsFor` (`grep -rn "credentialKindsFor(" apps/expo` shows where it comes from).
-- **What this file expects from the credential register** (planned under `2026-11-17-credreg-`): the node route that answers "which credentials does the signed-in user hold", called with the app's existing session, returning for each one: type reference (or org id and local id), kind, name, image, valid-until, recognised, and whether it is public. The private ones are included, which is why this stays on the device. When that route exists, `useHeldCredentialRefs` merges its answer (cached in memory and refreshed on focus) with the built-ins; no other file in this plan changes.
+  - `interface MatchCredential { type: string; org?: string }` — the shape `credentialMatches` (SDK) takes: a built-in name or `type:<typeId>`, plus the org's account id. Named so it does not collide with the register's own `HeldCredential` (`apps/expo/lib/credreg/held.ts`).
+  - `builtinMatchCredentials(p: { signedIn: boolean; isCitizen: boolean; isAttester: boolean }): MatchCredential[]` — signed out → `[]`; citizen → `citizen` (and `attester` when set); otherwise `guest`.
+  - `registerMatchCredentials(held: readonly { typeId: string; validUntil: number | null }[], directory: readonly { typeId: string; orgAccountId: string | null }[], nowSec: number): MatchCredential[]` — one entry per held, unexpired register credential, public **and** private, `org` from the directory; type ids in `RESERVED_TYPE_IDS` are skipped (the built-ins stand for them).
+  - `useMatchCredentials(): { held: MatchCredential[]; ready: boolean }` — built-ins from `useUser()` (`isCitizen`) and the attester flag the profile screen already passes to `credentialKindsFor` (`grep -rn "credentialKindsFor(" apps/expo`). When the register is on, merged with the register's answer (below); when it is off, built-ins only and `ready` as soon as the user is loaded.
+- **Register plug-in (only once `docs/superpowers/plans/2026-11-17-credreg-3-expo.md` Tasks 1 and 2 are merged; re-check names in the merged code):**
+  - `useCredentialsGate()` (`apps/expo/lib/credreg/gate.ts`) — `true` turns the register path on.
+  - `useHeld()` (`apps/expo/lib/credreg/held.ts`) — `held: HeldCredential[]` with `typeId`, `visibility: 'public' | 'private'`, `validUntil`. It already includes private holdings (accepted invitations), from the device's own signed request and cache; nothing about them is sent anywhere by this file.
+  - The public type directory `GET /api/credentials/types` (`docs/superpowers/plans/2026-11-17-credreg-2-backend.md` Task 3), which `loadPublicHeld` in `held.ts` already fetches and caches; reuse that fetch (export it from `held.ts` if it is not exported) for `orgAccountId`. It is unsigned and the same for everyone, so fetching it says nothing about the person.
+  - `RESERVED_TYPE_IDS` from `@netizen-labs/credential-registry`.
+  - The org switch "Mitglieder dürfen öffentlich sichtbar sein" needs no handling here: a membership of an org with the switch off is a private holding, and private holdings are matched on the device exactly like public ones.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-it('a signed-out person holds nothing', async () => expect(await builtinDeviceSource({ signedIn: false, isCitizen: false, isAttester: false }).held()).toEqual([]));
-it('a guest holds guest only', …);                              // types ['guest']
-it('a citizen holds citizen, an attester both', …);             // ['citizen'] / ['citizen','attester']
+it('a signed-out person matches nothing', () => expect(builtinMatchCredentials({ signedIn: false, isCitizen: false, isAttester: false })).toEqual([]));
+it('a guest matches guest only', …);                                       // [{ type: 'guest' }]
+it('a citizen matches citizen, an attester both', …);
+it('register holdings carry their org, private ones included', () => {
+  expect(registerMatchCredentials([{ typeId: X, validUntil: null }, { typeId: Y, validUntil: null }], [{ typeId: X, orgAccountId: ORG }, { typeId: Y, orgAccountId: null }], NOW))
+    .toEqual([{ type: 'type:' + X, org: ORG }, { type: 'type:' + Y }]);
+});
+it('expired holdings and reserved type ids are skipped', …);
 ```
 
 - [ ] **Step 2: Run to verify it fails.** → FAIL.
@@ -160,10 +170,10 @@ it('a citizen holds citizen, an attester both', …);             // ['citizen']
 - Test: `apps/expo/lib/__tests__/miniapp-audience.test.ts`
 
 **Interfaces:**
-- Consumes: `refMatches` (SDK), `MiniApp.audience` / `orgAccountId` / `orgName` (Task 1).
+- Consumes: `credentialMatches` (SDK), `MatchCredential` (Task 3), `MiniApp.audience` / `orgAccountId` / `orgName` (Task 1).
 - Produces:
   - `type AudienceState = 'open' | 'match' | 'locked'`
-  - `audienceState(app: Pick<MiniApp, 'audience'>, held: readonly string[]): AudienceState` — no audience → `open`; some `anyOf` pattern matches a held reference → `match`; no match: `locked` when `required`, `open` when `recommended`.
+  - `audienceState(app: Pick<MiniApp, 'audience'>, held: readonly MatchCredential[]): AudienceState` — no audience → `open`; some `anyOf` pattern matches some held credential (`credentialMatches`) → `match`; no match: `locked` when `required`, `open` when `recommended`.
   - `isForYou(app, held, myOrgIds: readonly string[]): boolean` — `audienceState === 'match'`, or the app's confirmed org is one of mine.
   - `forYou(apps, held, myOrgIds): MiniApp[]` (order kept), `myOrgApps(apps, myOrgIds): MiniApp[]`.
   - `lockInfo(app: Pick<MiniApp, 'audience' | 'orgAccountId' | 'orgName'>): { text: string; cta?: { label: string; href: string } }` from the first entry of `anyOf`: `citizen` → `Für Bürger:innen.` + `{ label: 'Bürger:in werden', href: '/citizen-verification' }`; `attester` → `Für Bescheiniger:innen.`; `guest` → `Für Gäste.`; an org reference → `Für Mitglieder von ${orgName}.` + `{ label: 'Mitglied werden', href: '/account/${orgAccountId}' }` when the app has a confirmed org, else `Für Mitglieder.` without a link.
@@ -172,9 +182,10 @@ it('a citizen holds citizen, an attester both', …);             // ['citizen']
 
 ```ts
 it('no audience is open', () => expect(audienceState({ audience: null }, [])).toBe('open'));
-it('a required audience locks who does not match', () => expect(audienceState({ audience: { mode: 'required', anyOf: ['citizen'] } }, ['guest'])).toBe('locked'));
-it('a recommended audience never locks', () => expect(audienceState({ audience: { mode: 'recommended', anyOf: ['citizen'] } }, ['guest'])).toBe('open'));
-it('a wildcard matches a held org type', () => expect(audienceState({ audience: { mode: 'required', anyOf: ['org:12:*'] } }, ['org:12:mitglied'])).toBe('match'));
+it('a required audience locks who does not match', () => expect(audienceState({ audience: { mode: 'required', anyOf: ['citizen'] } }, [{ type: 'guest' }])).toBe('locked'));
+it('a recommended audience never locks', () => expect(audienceState({ audience: { mode: 'recommended', anyOf: ['citizen'] } }, [{ type: 'guest' }])).toBe('open'));
+it('an org pattern matches a held type of that org', () => expect(audienceState({ audience: { mode: 'required', anyOf: ['org:' + ORG] } }, [{ type: T, org: ORG }])).toBe('match'));
+it('and not a type of another org', () => expect(audienceState({ audience: { mode: 'required', anyOf: ['org:' + ORG] } }, [{ type: T, org: OTHER }])).toBe('locked'));
 it('nothing is for you when you hold nothing and belong nowhere', () => expect(forYou(apps, [], [])).toEqual([]));      // Review Focus 1
 it('an app of my org is for me even without an audience', …);
 it('an app whose org did not confirm is not', …);               // orgAccountId null                                    // Review Focus 3
@@ -200,7 +211,7 @@ it('citizens-only points to becoming a citizen', …);
 - Test: `apps/expo/lib/__tests__/miniapp-open.test.ts`, `apps/expo/components/miniapp/__tests__/MiniAppLockNote.test.tsx`, `apps/expo/app/__tests__/mini-apps-store.test.tsx`
 
 **Interfaces:**
-- Consumes: Tasks 3 and 4; `useAccounts()` from `context/AccountContext.tsx` (`ownedAccounts` = the accounts this person belongs to; confirm in that file which roles it includes and use all of them).
+- Consumes: Tasks 3 and 4 (`useMatchCredentials`); `useAccounts()` from `context/AccountContext.tsx` (`ownedAccounts` = the accounts this person belongs to; confirm in that file which roles it includes and use all of them).
 - Produces:
   - `openDecision(app, held, ready: boolean): 'open' | 'locked' | 'wait'` — `wait` until the credentials are ready for an app with a required audience; apps without one are `open` at once.
   - `MiniAppLockNote` props `{ app: MiniApp }` — lock icon, `lockInfo(app).text`, and the link when there is one.
@@ -218,8 +229,8 @@ it('citizens-only points to becoming a citizen', …);
 it('an app without an audience opens at once', () => expect(openDecision(plain, [], false)).toBe('open'));
 it('a required app waits for the credentials, then locks or opens', () => {
   expect(openDecision(citizensOnly, [], false)).toBe('wait');
-  expect(openDecision(citizensOnly, ['guest'], true)).toBe('locked');          // Review Focus 2
-  expect(openDecision(citizensOnly, ['citizen'], true)).toBe('open');
+  expect(openDecision(citizensOnly, [{ type: 'guest' }], true)).toBe('locked');          // Review Focus 2
+  expect(openDecision(citizensOnly, [{ type: 'citizen' }], true)).toBe('open');
 });
 // MiniAppLockNote.test.tsx
 it('shows the reason and the way in', …);                       // text 'Für Bürger:innen.' and a pressable 'Bürger:in werden'
@@ -269,15 +280,15 @@ it('a failed request returns null and does not throw', …);
 
 **Files:**
 - Create: `apps/expo/lib/miniapp-suggestions.ts`, `apps/expo/components/explore/MiniAppSuggestionCard.tsx`
-- Modify: the Erkunden screen that renders the layout blocks (find it with `grep -rn "PinnedMiniAppBlock" apps/expo/app apps/expo/components`)
+- Modify: the Erkunden screen that renders the layout blocks (find it with `grep -rn "PinnedMiniAppBlock" apps/expo/app apps/expo/components`); `apps/expo/lib/credreg/accept.ts` (one call, only if merged)
 - Test: `apps/expo/lib/__tests__/miniapp-suggestions.test.ts`, `apps/expo/components/explore/__tests__/MiniAppSuggestionCard.test.tsx`
 
 **Interfaces:**
 - Consumes: `isForYou`, `audienceState` (Task 4); `miniAppBlockId`, `useExploreLayout().save` (`lib/explore-layout.ts`); `useInstalledMiniApps`.
 - Produces:
   - `SUGGESTED_KEY = 'miniapps.suggested.v1'` (AsyncStorage, a JSON array of slugs that were shown), `QUEUE_KEY = 'miniapps.suggestQueue.v1'` (org account ids).
-  - `pickSuggestion(p: { apps: MiniApp[]; held: readonly string[]; myOrgIds: readonly string[]; pinned: readonly string[]; alreadySuggested: readonly string[]; queuedOrgIds: readonly string[] }): MiniApp | null` — candidates are apps that are for me, not locked, not pinned and not suggested before; an app of a queued org comes first, then manifest order; `null` when none.
-  - `markSuggested(slug: string): Promise<void>`; `queueMiniAppSuggestion(orgAccountId: string): Promise<void>` — the hook the credential register's accept screen calls after a credential of that org was accepted ("accepting a credential can suggest the org's mini app once"). Nothing in this repo calls it yet.
+  - `pickSuggestion(p: { apps: MiniApp[]; held: readonly MatchCredential[]; myOrgIds: readonly string[]; pinned: readonly string[]; alreadySuggested: readonly string[]; queuedOrgIds: readonly string[] }): MiniApp | null` — candidates are apps that are for me, not locked, not pinned and not suggested before; an app of a queued org comes first, then manifest order; `null` when none.
+  - `markSuggested(slug: string): Promise<void>`; `queueMiniAppSuggestion(orgAccountId: string): Promise<void>` — the hook for "accepting a credential can suggest the org's mini app once". Call it from `acceptInvitation` in `apps/expo/lib/credreg/accept.ts` (`docs/superpowers/plans/2026-11-17-credreg-3-expo.md` Task 4) after an accept that returned `{ ok: true }`, with `inv.org.accountId`, for both the public and the private choice; when that file is not merged yet, leave the call out and note it in the commit message.
   - `MiniAppSuggestionCard` props `{ app: MiniApp; onAccept(): void; onDismiss(): void }` — text `Passt zu dir: ${app.name}. Auf deine Startseite legen?`, buttons `Übernehmen` and `Nicht jetzt` (same pattern as `components/mecky/LayoutProposalCard.tsx`).
 - Behaviour: at most one card, below the first block. `Übernehmen` → `save({ ...layout, order: [...layout.order, miniAppBlockId(app.slug)] })` and `markSuggested`; `Nicht jetzt` → `markSuggested` only. The suggestion is marked as soon as either button is tapped, not when it is merely shown.
 
@@ -386,7 +397,7 @@ test("the README states the real handshake time", () => {
 - What each chapter must contain (facts from plans 1 to 4; write no code that is not runnable):
   - **identity** — manifest version "2" `identity` (the JSON shape with a full example), the consent sheet and what a declined item means, the per-app pseudonym, `context.user` for version 1 versus 2, withdrawal, the review rule.
   - **verify** — `sdk.auth.getToken()` → send to your server → `verifyUserToken(token, { issuer: "https://id.roebel.app", slug })` from `@netizen-labs/miniapp-verify`; the claim list; the 10-minute lifetime; passing the token to Röbel's routes as `Authorization: Bearer`; `sdk.auth.signIn()` + `verifySignIn` as the alternative that does not depend on our issuer, and why a plain signature check is not enough for these accounts.
-  - **credentials** — reference syntax (`citizen`, `attester`, `guest`, `org:<orgId>:<localId>`, `org:<orgId>:*`), `list` / `has` / `request` / `onChange`, private credentials, the mock config, reading public credentials from the chain with `holdsCredential` and the exported ABIs.
+  - **credentials** — reference syntax (`citizen`, `attester`, `guest`, `type:<typeId>`, `org:<org account id>`) and where a developer finds a type id (the public type directory `GET /api/credentials/types`) and an org's account id (its page address `/account/<id>`), `list` / `has` / `request` / `onChange`, private credentials, the mock config, reading public credentials from the chain with `holdsCredential` and the exported ABIs.
   - **wallet** — the provider's method list (reads with their limits, signing methods, `wallet_sendCalls` with capabilities), Gnosis only and error 4902, the numeric error codes, what the confirm sheet shows, `roebel.pay`, the events and `handlesBack`.
   - **gasless** — manifest `contracts` (shape, limits, forbidden contracts), review and the gas budget, what happens on an independent account versus the old sign-in, the three budget errors and their texts.
   - **issuer** — the recipe for a mini app that issues badges ("10 Trainings absolviert"): the org appoints the mini app server's key as a delegate for one credential type, the server issues with it. State plainly that this needs the credential register and is not available before it ships; no bridge method is involved.
@@ -451,7 +462,7 @@ test("a token the verifier rejects is 401", …);
 
 ## Owner gates
 
-1. Apply `supabase/migrations/20261117c_mini_app_audience_org.sql` through the Supabase MCP (confirm the project ref first).
+1. Apply `supabase/migrations/20261117mc_mini_app_audience_org.sql` through the Supabase MCP (confirm the project ref first).
 2. Before moving the CDN alias: check which live apps load the unpinned file, for example `select slug from mini_apps a join mini_app_versions v on v.mini_app_id = a.id where a.status = 'live' and v.html like '%/sdk/miniapp-sdk.mjs%'`, and ask the external developers. Decide Open question 1.
 3. Release the SDK: `pnpm --filter @netizen-labs/miniapp-sdk release` (builds, syncs the CDN copy, checks, publishes to npm), then deploy web so the CDN serves the same build. Publish `@netizen-labs/miniapp-verify` if plan 2's gate has not done it.
 4. Deploy the template (it needs the published verify package or the workspace build).
@@ -460,5 +471,5 @@ test("a token the verifier rejects is 401", …);
 ## Self-review (done while writing)
 
 - Spec 5.6: `audience` and org binding (1, 2, 6), "Für dich" / "Meine Vereine" / locked apps (4, 5), on-device matching (3, 4), Erkunden suggestions and the credential-accept hook (7). Spec 5.7: SDK 0.4.0 to npm and CDN in one step (8), docs corrected (9) and extended incl. agent docs and the MCP (10), template (11); the capability list and SDK tests came with plans 1 and 2. Spec 5.4 last bullet (mini apps as issuers) → the `issuer` chapter in Task 10.
-- The register is reached only through `apps/expo/lib/miniapp-credentials.ts` (Task 3) on the device and `apps/web/src/lib/miniapp/credentialSource.ts` (plan 2) on the node.
-- Names checked across tasks: `MiniAppAudience`, `audienceState`, `isForYou`, `forYou`, `myOrgApps`, `lockInfo`, `openDecision`, `nextBinding`, `OrgBinding`, `bindingActions`, `pickSuggestion`, `queueMiniAppSuggestion`, `checkRelease`.
+- The register is reached only through `apps/expo/lib/miniapp-credentials.ts` (Task 3: `useCredentialsGate`, `useHeld`, the type directory, `RESERVED_TYPE_IDS`) on the device and `apps/web/src/lib/miniapp/credentialSource.ts` (plan 2 Task 14) on the node. Private holdings, including memberships of orgs whose switch "Mitglieder dürfen öffentlich sichtbar sein" is off, are matched only on the device.
+- Names checked across tasks: `MiniAppAudience`, `MatchCredential`, `useMatchCredentials`, `audienceState`, `isForYou`, `forYou`, `myOrgApps`, `lockInfo`, `openDecision`, `nextBinding`, `OrgBinding`, `bindingActions`, `pickSuggestion`, `queueMiniAppSuggestion`, `checkRelease`.
