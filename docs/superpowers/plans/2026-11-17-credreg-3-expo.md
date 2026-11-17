@@ -27,7 +27,7 @@
 1. **Where Guest is claimed.** Spec 5.1: "in the same sponsored operation as its first on-chain action". *Default: three places a non-citizen account sends something: the citizenship request, collecting Röbel Münzen, and publicly accepting an Ausweis. If adding the Guest call makes the operation fail, the app retries once without it, so Guest can never block the real action.*
 2. **Citizens and the Gastkarte.** *Default: unchanged from today: a citizen does not see the Gastkarte, even if the account holds the Guest token.*
 3. **Badges of other people.** *Default: a person's public profile shows their public badges and cards; private ones are never sent to another device.*
-4. **Attester switch for private-only.** The contract lets any attester switch an org to private-only. *Default: no screen for it in this plan; an attester can do it from the admin tools later.*
+4. **Attester switch.** The contract lets any attester close an org ("Mitglieder dürfen öffentlich sichtbar sein" off) for protection; only the org or the contract owner opens it again. *Default: no attester screen in this plan; an attester can do it from the admin tools later.*
 
 ## Global Constraints
 
@@ -68,7 +68,7 @@
 - Produces (`gate.ts`): `credentialsConfigured(): boolean`; `credentialsAllowed(p: { flag: boolean; productionFlag: boolean; channel: string | null | undefined; dev: boolean }): boolean` (same truth table as `orgSafesAllowed`); `isCredentialsAllowed(): Promise<boolean>`; `useCredentialsGate(): boolean | null` (null while loading).
 - Produces (`chain.ts`): `registryReader()` (a `createCredentialRegistryReader` over a viem public client on `EXPO_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com'`, as in `lib/org-safe/chain.ts`); `REGISTRY: Address`; `fetchTypeMetadata(uri: string): Promise<{ name: string; description: string; image: string | null; properties: { kind: string; organisation: string | null; recognised: boolean; benefits: string[] } } | null>` (10 s timeout with `AbortController`; RN fetch never times out on its own).
 - Produces (`types.ts`): `InvitationView`, `Presentation`, `ActionView`, `PersonRow` — the response shapes of plan 2 Tasks 4, 5 and 8, copied field for field.
-- Produces (`api.ts`): `credApi<T>(account: SigningAccount, route: 'org' | 'actions' | 'me', action: CredentialAction, payload: Record<string, unknown>): Promise<ApiResult<T>>` built on the existing signed-request sender in `lib/signed-request.ts` (same queueing, same passkey-session shortcut), plus one typed wrapper per action used in this plan: `fetchMine`, `redeemInvitation`, `respondInvitation`, `fetchHoldings`, `createPresentation`, `resolvePresentation`, `fetchTypes`, `fetchPeople`, `searchPeople`, `prepareBatch`, `prepareRevocation`, `prepareDelegate`, `fetchActions`, `fetchAction`, `reportSubmitted`, `cancelAction`.
+- Produces (`api.ts`): `credApi<T>(account: SigningAccount, route: 'org' | 'actions' | 'me', action: CredentialAction, payload: Record<string, unknown>): Promise<ApiResult<T>>` built on the existing signed-request sender in `lib/signed-request.ts` (same queueing, same passkey-session shortcut), plus one typed wrapper per action used in this plan: `fetchMine`, `redeemInvitation`, `respondInvitation`, `fetchHoldings`, `createPresentation`, `resolvePresentation`, `fetchTypes`, `fetchPeople`, `searchPeople`, `prepareBatch`, `prepareRevocation`, `prepareDelegate`, `prepareMembersPublic`, `fetchOrgs`, `fetchActions`, `fetchAction`, `reportSubmitted`, `cancelAction`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -166,7 +166,7 @@ it('after clearHeld a new loadHeld restores private entries from the server (rei
 - Produces: `BadgeGrid` props `{ badges: RegisterCard[]; onPress(card): void }` — three columns, square tiles with image (default: a neutral ribbon tile), title under it, section heading "Abzeichen"; renders nothing for an empty list.
 - Produces: `CredentialDetailSheet` props `{ card: RegisterCard | null; onClose(): void; onShow(card): void; onMakePublic(card): void; onMakePrivate(card): void }` — title, org, valid until ("Gültig bis 31.12.2027" / "Unbefristet"), benefits from the type metadata, and the actions "Vorzeigen", "Öffentlich zeigen" (private and allowed) or "Privat machen" (public). For built-in cards the existing explainer opens instead (`openExplainer`).
 
-Rules: when `useCredentialsGate()` is not `true`, `profile.tsx` passes `buildProfile({ isCitizen, isAttester, held: [], nowSec })` and renders no `BadgeGrid`, and `useHeld` is not mounted. "Privat machen" explains before sending: "Dein Ausweis wird aus dem öffentlichen Register genommen. Der bisherige Eintrag bleibt in dessen Verlauf sichtbar. Dein Nachweis bleibt gültig." and then sends `renounceCall`. "Öffentlich zeigen" runs the claim of Task 4.
+Rules: when `useCredentialsGate()` is not `true`, `profile.tsx` passes `buildProfile({ isCitizen, isAttester, held: [], nowSec })` and renders no `BadgeGrid`, and `useHeld` is not mounted. The person can switch either way at any time (spec 5.3). "Privat machen" explains before sending, in one sheet with one button "Privat machen": "Dein Ausweis wird aus dem öffentlichen Register genommen. Dein Nachweis bleibt gültig und du kannst ihn weiter vorzeigen. Wichtig: Dass du ihn öffentlich gezeigt hast, bleibt im Verlauf des Registers dauerhaft sichtbar und kann nicht gelöscht werden." and then sends `renounceCall`. "Öffentlich zeigen" runs `makePublic` of Task 4; when the org does not allow public members it is replaced by the line "Diese Organisation zeigt ihre Mitglieder nicht öffentlich." A push of type `credential_visibility` (plan 2 Task 6) opens this sheet for its type.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -213,7 +213,7 @@ export async function makePublic(account: Account, held: HeldCredential, deps?):
   - Option 1 **"Öffentlich zeigen"** — "Dein Ausweis steht im öffentlichen Register von Röbel. Jede:r kann nachsehen, dass dein Konto ihn trägt. Das lässt sich später beenden, bleibt aber im Verlauf des Registers sichtbar."
   - Option 2 **"Privat behalten"** — "Nur du hast den Nachweis. Du kannst ihn vorzeigen, wenn du möchtest. Niemand kann nachschlagen, dass du ihn hast."
   - `office`: one button **"Amt annehmen"** with "Ein Amt ist öffentlich. Mit dem Annehmen steht es im Register von Röbel."
-  - `private_only`: one button **"Annehmen"** with "Diese Mitgliedschaft bleibt privat. Sie erscheint nicht im öffentlichen Register."
+  - `private_only`: one button **"Annehmen"** with "Diese Organisation zeigt ihre Mitglieder nicht öffentlich. Deine Mitgliedschaft bleibt privat und erscheint nicht im Register. Öffnet die Organisation das später, kannst du sie in deinem Profil öffentlich machen."
   - Text link under the buttons: "Ablehnen".
   - One primary button per screen: for `free` the choice is two selectable rows and a single "Weiter" button; nothing is preselected for roles and memberships, "Öffentlich zeigen" is preselected for badges.
 - `invite/ausweis/[token].tsx`: signed out → the existing login drawer (as `app/invite/[token].tsx` does), then `redeemInvitation(token)` and `router.replace('/credentials/accept/<id>')`; `ALREADY_REDEEMED` → "Dieser Ausweis wurde bereits abgeholt."; unknown → "Dieser Link ist nicht gültig."
@@ -222,7 +222,8 @@ export async function makePublic(account: Account, held: HeldCredential, deps?):
 
 ```ts
 it('a recognised role can only be accepted publicly', …);
-it('a membership of a private-only org can only be accepted privately', …);
+it('a membership of an org whose members may not be public can only be accepted privately', …);
+it('makePublic sends one claim; makePrivate sends one renounce and nothing else', …);
 it('a free invitation offers both', …);
 it('public sends exactly one claim call for the app\'s registry address, then reports accept', …);
 it('private sends no transaction and reports accept', …);
@@ -231,7 +232,7 @@ it('claim-key invitations pass the server signature; account invitations pass 0x
 it('roebel://invite/ausweis/abc and https://www.roebel.app/invite/ausweis/abc both reach /invite/ausweis/abc', …);
 ```
 
-- [ ] **Step 2: Run** — Expected: FAIL. **Step 3: Implement** logic and the three screens. **Step 4: Run** — Expected: PASS (8).
+- [ ] **Step 2: Run** — Expected: FAIL. **Step 3: Implement** logic and the three screens. **Step 4: Run** — Expected: PASS (9).
 - [ ] **Step 5: Lint and commit** — `feat(expo): accept an Ausweis with the public/private choice`.
 
 ---
@@ -286,12 +287,12 @@ it('the scanner recognises roebel-ausweis:<code>', …);
 
 **Files:**
 - Create: `apps/expo/lib/credreg/org.ts`
-- Create: `apps/expo/app/org/credentials/index.tsx`, `issue.tsx`, `approve/[id].tsx`, `delegates.tsx`
+- Create: `apps/expo/app/org/credentials/index.tsx`, `issue.tsx`, `approve/[id].tsx`, `delegates.tsx` (plan 3b Task 6 later wraps these into the "Mitglieder & Ausweise" area of the org profile and adds filters, renewal and templates; keep the screens self-contained so that is a re-arrangement, not a rewrite)
 - Modify: `apps/expo/app/org/dashboard.tsx` (tile "Ausweise", shown when the gate is open and the active role is owner or admin)
 - Test: `apps/expo/lib/credreg/__tests__/org.test.ts`
 
 **Interfaces:**
-- Consumes: `RegisterStep`, `parseSteps`, `encodeSteps` (plan 2 Task 2); `fetchAction`, `reportSubmitted`, `prepareBatch`, `prepareRevocation`, `prepareDelegate`, `fetchTypes`, `fetchPeople`, `fetchActions`.
+- Consumes: `RegisterStep`, `parseSteps`, `encodeSteps` (plan 2 Task 2); `fetchAction`, `reportSubmitted`, `prepareBatch`, `prepareRevocation`, `prepareDelegate`, `prepareMembersPublic`, `fetchTypes`, `fetchPeople`, `fetchActions`.
 - Produces (`org.ts`):
 
 ```ts
@@ -300,11 +301,11 @@ export function checkSummary(steps: readonly RegisterStep[], summary: ActionSumm
 export async function confirmAction(account: Account, action: ActionView, deps?): Promise<{ ok: true } | { ok: false; message: string }>;
 ```
 
-  `describeSteps` (German, built from the steps only): `createType` → "Ausweis-Typ anlegen: <name>"; `updateType` → "Ausweis-Typ ändern: <name>"; `retireType` → "Ausweis-Typ dauerhaft stilllegen: <name>"; `setDelegate` true/false → "Ein Konto zum Ausstellen berechtigen: <name>" / "Berechtigung zum Ausstellen entziehen: <name>"; `setOrgPrivateOnly` → "Mitgliedschaften dieser Organisation dauerhaft privat halten"; `addBatch` → "<count> Ausweise ausstellen: <name>" (badge types: "<count> Abzeichen vergeben: <name>"); `revokeLeaves` → "<n> Ausweise widerrufen"; `revokeBatch` → "Eine ganze Ausstellung widerrufen". An unknown type name is "Unbekannter Typ".
+  `describeSteps` (German, built from the steps only): `createType` → "Ausweis-Typ anlegen: <name>"; `updateType` → "Ausweis-Typ ändern: <name>"; `retireType` → "Ausweis-Typ dauerhaft stilllegen: <name>"; `setDelegate` true/false → "Ein Konto zum Ausstellen berechtigen: <name>" / "Berechtigung zum Ausstellen entziehen: <name>"; `setOrgPrivateOnly` with `privateOnly: true` → "Mitglieder nur noch privat zulassen", with `false` → "Mitglieder dürfen öffentlich sichtbar sein"; `addBatch` → "<count> Ausweise ausstellen: <name>" (badge types: "<count> Abzeichen vergeben: <name>"); `revokeLeaves` → "<n> Ausweise widerrufen"; `revokeBatch` → "Eine ganze Ausstellung widerrufen". An unknown type name is "Unbekannter Typ".
   `checkSummary`: the sum of `addBatch.count` must equal `summary.counts.app + summary.counts.link` when counts are given; otherwise `{ ok: false }`.
   `confirmAction`: `parseSteps(action.steps)` (throws → refuse), `checkSummary`, `registryReader().canIssue`/`canManage` for the caller (false → message "Dein Konto ist für diese Organisation noch nicht im Register berechtigt. Gleiche zuerst die Rollen ab: Organisation → Einstellungen → Onchain-Organisation."), `encodeSteps(steps, REGISTRY)`, `sendOrgCalls(account, calls)`, then `reportSubmitted(actionId, txHash)`. `sendOrgCalls` returns nothing today: change it to return the transaction hash (`Promise<Hex | null>`) and keep its two existing callers working.
 - Screens:
-  - `index.tsx`: "Wartet auf deine Bestätigung" (open actions), the org's types with counts ("12 angenommen · 3 offen"), per type a people list with the states of plan 2 `listPeople`, row actions "Widerrufen" (confirm dialog, then `prepareRevocation` → approve screen) and "Erneut einladen" is not offered (renewal happens through a new batch).
+  - `index.tsx`: "Wartet auf deine Bestätigung" (open actions), the org switch **"Mitglieder dürfen öffentlich sichtbar sein"** (state from `fetchOrgs().membersMayBePublic`; Fraktion and Stadt show it off until opened; turning it on or off prepares `prepareMembersPublic` and goes to the approve screen; help text: "Aus: Mitgliedschaften können nur privat gehalten werden. Ämter bleiben immer öffentlich."), the org's types with counts ("12 angenommen · 3 offen"), per type a people list with the states of plan 2 `listPeople`, row actions "Widerrufen" (confirm dialog, then `prepareRevocation` → approve screen) and "Erneut einladen" is not offered (renewal happens through a new batch).
   - `issue.tsx`: pick a type, search a person by name (`searchPeople`), optional "Gültig bis", one button "Ausweis ausstellen" → `prepareBatch` with one recipient → `approve/<id>`.
   - `approve/[id].tsx`: the lines of `describeSteps`, the org name, "Vorbereitet am Computer" / "Vorbereitet in der App", one primary button **"Bestätigen"** and a text link "Verwerfen" (`cancelAction`). After success: "Erledigt. Die Einladungen werden jetzt verschickt."
   - `delegates.tsx`: explains "Ein Türscanner-Konto darf für diesen Ausweis-Typ ausstellen und widerrufen, sonst nichts."; pick a type and a member of the org; lists current delegates by display name with "Entziehen".
@@ -405,6 +406,6 @@ it('an org whose only difference is members is in sync', …);            // isI
 
 ## Self-review notes
 
-- Spec 5.6: Profil (Tasks 2, 3), Annehmen (Task 4), Vorzeigen (Task 5), org side (Task 6), other people's profiles (Task 3). Spec 5.3: the choice, offices public, private-only orgs, badges default public (Task 4). Spec 5.2: Task 8. Spec 5.1 Guest: Task 7. Spec 5.9: flags, no native modules (Task 1).
+- Spec 5.6: Profil (Tasks 2, 3), Annehmen (Task 4), Vorzeigen (Task 5), org side (Task 6), other people's profiles (Task 3). Spec 5.3: the choice, offices public, badges default public (Task 4), switching any time with the chain-history warning (Task 3), the org switch "Mitglieder dürfen öffentlich sichtbar sein" (Task 6). Level-2 private proofs (zero knowledge): plan 6. Spec 5.2: Task 8. Spec 5.1 Guest: Task 7. Spec 5.9: flags, no native modules (Task 1).
 - `app/stamp-scan.tsx` is not touched (spec 5.5).
 - Event badges for attendees arrive through the same accept screen; the organiser side is plan 4.

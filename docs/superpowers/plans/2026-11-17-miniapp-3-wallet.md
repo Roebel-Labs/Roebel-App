@@ -105,7 +105,7 @@ test('mock: switching to another chain is refused with 4902, to 0x64 succeeds', 
 **Files:**
 - Create: `apps/web/src/lib/miniapp/contracts.ts`
 - Modify: `apps/web/src/lib/miniapp/manifest.ts` (`validateManifest`, `manifestStoreFields`), `apps/web/src/lib/miniapp/types.ts` (`MiniAppRow`)
-- Create: `supabase/migrations/20261117b_mini_app_contracts_gas.sql`
+- Create: `supabase/migrations/20261117mb_mini_app_contracts_gas.sql`
 - Modify: `apps/expo/lib/miniapps.ts` (`MiniApp.contracts: DeclaredContract[]`, select + map, same missing-column fallback as plan 2 Task 4)
 - Test: `apps/web/tests/miniapp-manifest-contracts.test.ts`, extend `apps/expo/lib/__tests__/miniapps-map.test.ts`
 
@@ -497,7 +497,7 @@ test("every call of wallet_sendCalls gets a line", …);          // three calls
 
 ## Owner gates
 
-1. Apply `supabase/migrations/20261117b_mini_app_contracts_gas.sql` through the Supabase MCP (confirm the project ref first).
+1. Apply `supabase/migrations/20261117mb_mini_app_contracts_gas.sql` through the Supabase MCP (confirm the project ref first).
 2. Web env: optional `MINIAPP_GAS_PER_PERSON_DAILY_WEI`, `MINIAPP_GAS_GLOBAL_DAILY_WEI`. The mini-app budget uses the shared store only when `PASSKEY_SPONSOR_BUDGET_STORE=supabase` is set (it is an existing production gate of the sovereign sign-up project); with the in-memory store the limits are per server instance.
 3. Paymaster funding covers mini-app gas too: at the default global cap that is up to 0.05 xDAI per day on top of the citizens' budget.
 4. Per app, at review: check the declared contracts and functions in the admin page, then grant a gas budget.
