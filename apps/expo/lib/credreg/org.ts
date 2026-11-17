@@ -313,15 +313,20 @@ async function mayDoAll(steps: readonly RegisterStep[], who: Address, d: Confirm
 }
 
 // ── "possibly sent" lock ─────────────────────────────────────────────────────
-// An action whose operation may be on its way (send outcome unknown) is never sent again: not in
-// this session (memory) and not after a restart (AsyncStorage `credreg:sent-lock:v1:<actionId>`,
-// value { at, until }). A lock lasts until the action's own expiresAt, at most 7 days, and is
-// cleared once the server reports the action as no longer awaiting (done, cancelled, failed,
-// expired). Fail closed: when the storage cannot be read and a lock write was attempted in this
-// session, the action counts as locked; otherwise (nothing locked this session) it does not.
+// An action whose operation may be on its way (send outcome unknown) or is known to be on its way
+// but not yet reported is never sent again: not in this session (memory) and not after a restart
+// (AsyncStorage `credreg:sent-lock:v1:<actionId>`, value { at, until, txHash? }). `txHash` is set
+// when the send succeeded but reporting it failed: the screen then only offers "Erneut melden"
+// with that hash. Values without `txHash` (older app versions) still lock. A lock lasts until the
+// action's own expiresAt, at most 7 days, and is cleared once the server reports the action as no
+// longer awaiting (done, cancelled, failed, expired). Fail closed: when the storage cannot be read
+// and a lock write was attempted in this session, the action counts as locked; otherwise
+// (nothing locked this session) it does not.
 const SENT_LOCK_PREFIX = 'credreg:sent-lock:v1:';
 const SENT_LOCK_MAX_MS = 7 * 24 * 60 * 60 * 1000;
-const possiblySent = new Set<string>();
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
+/** Locked action id → the sent transaction hash, or null when the hash is unknown. */
+const possiblySent = new Map<string, Hex | null>();
 let lockWrittenThisSession = false;
 
 export function sentLockKey(actionId: string): string {
@@ -333,42 +338,53 @@ export function isPossiblySent(actionId: string): boolean {
   return possiblySent.has(actionId);
 }
 
-/** Locks an action in memory and on the device. Never throws. */
-export async function markPossiblySent(actionId: string, expiresAt: string, nowMs: number): Promise<void> {
-  possiblySent.add(actionId);
+/**
+ * Locks an action in memory and on the device; `txHash` when the operation is known to be out
+ * (only the report failed). Never throws.
+ */
+export async function markPossiblySent(actionId: string, expiresAt: string, nowMs: number, txHash?: Hex): Promise<void> {
+  const hash = txHash && TX_HASH.test(txHash) ? txHash : (possiblySent.get(actionId) ?? null);
+  possiblySent.set(actionId, hash);
   lockWrittenThisSession = true;
   const exp = Date.parse(expiresAt);
   const until = Math.min(Number.isFinite(exp) ? exp : nowMs + SENT_LOCK_MAX_MS, nowMs + SENT_LOCK_MAX_MS);
   try {
-    await AsyncStorage.setItem(sentLockKey(actionId), JSON.stringify({ at: nowMs, until }));
+    await AsyncStorage.setItem(sentLockKey(actionId), JSON.stringify(hash ? { at: nowMs, until, txHash: hash } : { at: nowMs, until }));
   } catch {
     // memory still locks this session; a later read failure fails closed (lockWrittenThisSession)
   }
 }
 
-/** Is the action locked (this session or a stored, unexpired lock)? Never throws. */
-export async function hasSentLock(actionId: string, nowMs: number): Promise<boolean> {
-  if (possiblySent.has(actionId)) return true;
+/** The lock of an action (this session or a stored, unexpired one) and its hash if known. Never throws. */
+export async function readSentLock(actionId: string, nowMs: number): Promise<{ locked: boolean; txHash: Hex | null }> {
+  if (possiblySent.has(actionId)) return { locked: true, txHash: possiblySent.get(actionId) ?? null };
   let raw: string | null;
   try {
     raw = await AsyncStorage.getItem(sentLockKey(actionId));
   } catch {
-    return lockWrittenThisSession;
+    return { locked: lockWrittenThisSession, txHash: null };
   }
-  if (!raw) return false;
+  if (!raw) return { locked: false, txHash: null };
   let until = 0;
+  let txHash: Hex | null = null;
   try {
-    const v = JSON.parse(raw) as { until?: unknown };
+    const v = JSON.parse(raw) as { until?: unknown; txHash?: unknown };
     until = typeof v?.until === 'number' ? v.until : 0;
+    txHash = typeof v?.txHash === 'string' && TX_HASH.test(v.txHash) ? (v.txHash as Hex) : null;
   } catch {
     until = 0;
   }
   if (until > nowMs) {
-    possiblySent.add(actionId);
-    return true;
+    possiblySent.set(actionId, txHash);
+    return { locked: true, txHash };
   }
   await clearSentLock(actionId);
-  return false;
+  return { locked: false, txHash: null };
+}
+
+/** Is the action locked (this session or a stored, unexpired lock)? Never throws. */
+export async function hasSentLock(actionId: string, nowMs: number): Promise<boolean> {
+  return (await readSentLock(actionId, nowMs)).locked;
 }
 
 /** The server no longer awaits the action: its lock has done its job. Never throws. */
@@ -441,8 +457,11 @@ export async function confirmAction(account: Account, action: PhoneAction, deps?
     return { ok: false, message: CHAIN_UNAVAILABLE };
   }
 
-  // Checked right before sending: a lock from this session or from before a restart.
-  if (await hasSentLock(action.id, d.nowMs())) return { ok: false, message: NO_RECEIPT, locked: true };
+  // Checked right before sending: a lock from this session or from before a restart. With a
+  // stored hash the operation is out: only reporting it again is offered.
+  const lock = await readSentLock(action.id, d.nowMs());
+  if (lock.locked && lock.txHash) return { ok: false, message: REPORT_PENDING, sent: { txHash: lock.txHash } };
+  if (lock.locked) return { ok: false, message: NO_RECEIPT, locked: true };
 
   let sent: { txHash: Hex; confirmed: boolean } | null;
   try {
@@ -460,8 +479,11 @@ export async function confirmAction(account: Account, action: PhoneAction, deps?
     await markPossiblySent(action.id, action.expiresAt, d.nowMs());
     return { ok: false, message: NO_RECEIPT, locked: true };
   }
-  // Out on the chain: from here on only the report may be repeated, never the send.
-  return reportSent(d.apiAccount ?? account, action.id, sent.txHash, d.report);
+  // Out on the chain: from here on only the report may be repeated, never the send. A failed report
+  // locks the action with its hash on the device, so a restart offers "Erneut melden", not a resend.
+  const reported = await reportSent(d.apiAccount ?? account, action.id, sent.txHash, d.report);
+  if (!reported.ok) await markPossiblySent(action.id, action.expiresAt, d.nowMs(), sent.txHash);
+  return reported;
 }
 
 // ── context for the approve screen ───────────────────────────────────────────
@@ -505,7 +527,7 @@ export function reviewAction(
   action: PhoneAction,
   t: TypeNames,
   nowMs: number = Date.now(),
-  opts: { accounts?: (address: string) => string | null; expectedDelegate?: string | null; locked?: boolean } = {},
+  opts: { accounts?: (address: string) => string | null; expectedDelegate?: string | null; locked?: boolean; sentTxHash?: Hex | null } = {},
 ): { lines: string[]; counts: { app: number; link: number } | null; problem: string | null; hasBatch: boolean } {
   let steps: RegisterStep[];
   try {
@@ -525,6 +547,7 @@ export function reviewAction(
   else if (action.status === 'expired' || (Number.isFinite(Date.parse(action.expiresAt)) && Date.parse(action.expiresAt) <= nowMs)) {
     problem = SUBMITTED_COPY.ACTION_EXPIRED;
   } else if (action.status !== 'awaiting_confirmation') problem = SUBMITTED_COPY.ACTION_NOT_PENDING;
+  else if (opts.sentTxHash || possiblySent.get(action.id)) problem = REPORT_PENDING;
   else if (opts.locked || possiblySent.has(action.id)) problem = NO_RECEIPT;
   return { lines, counts, problem, hasBatch };
 }

@@ -23,9 +23,9 @@ import {
   delegateAccounts,
   expectedDelegateFor,
   clearSentLock,
-  hasSentLock,
   isPossiblySent,
   preparedLabel,
+  readSentLock,
   reportSent,
   resolveActionOrg,
   reviewAction,
@@ -52,6 +52,8 @@ type Loaded =
       loadedAt: number;
       /** A stored "possibly sent" lock (survives restarts). */
       sentLock: boolean;
+      /** The hash stored with the lock: the operation is out, only "Erneut melden" is offered. */
+      sentTxHash: Hex | null;
     };
 
 const CHAIN_UNAVAILABLE = 'Das Register ist gerade nicht erreichbar. Bitte versuche es gleich noch einmal.';
@@ -116,7 +118,8 @@ export default function ApproveActionScreen() {
       if (cancelled) return;
       // Not awaiting any more: the server has settled it, so a stored lock is cleared.
       let sentLock = false;
-      if (res.data.status === 'awaiting_confirmation') sentLock = await hasSentLock(res.data.id, Date.now());
+      let sentTxHash: Hex | null = null;
+      if (res.data.status === 'awaiting_confirmation') ({ locked: sentLock, txHash: sentTxHash } = await readSentLock(res.data.id, Date.now()));
       else await clearSentLock(res.data.id);
       if (cancelled) return;
       const accountNames: Record<string, string> = {};
@@ -132,6 +135,7 @@ export default function ApproveActionScreen() {
         accountNames,
         loadedAt: Date.now(),
         sentLock,
+        sentTxHash,
       });
     })();
     return () => {
@@ -199,12 +203,15 @@ export default function ApproveActionScreen() {
   }
 
   const action = current.action;
+  // A hash from this screen or stored with the lock before a restart: report again, never send.
+  const sentHash = sent ?? current.sentTxHash;
   const accountNames = current.accountNames;
   const expectedDelegate = expectedDelegateFor(action.id);
   const reviewed = reviewAction(action, typeNamesFrom(current.types), current.loadedAt, {
     accounts: (address) => accountNames[address.toLowerCase()] ?? null,
     expectedDelegate,
     locked: current.sentLock || locked,
+    sentTxHash: sentHash,
   });
   const orgProblem = !current.org.ok && current.org.reason ? current.org.reason : null;
   const review = { ...reviewed, problem: reviewed.problem ?? orgProblem };
@@ -251,12 +258,12 @@ export default function ApproveActionScreen() {
   };
 
   const reportAgain = async () => {
-    if (inFlight.current || busy || !account || !sent) return;
+    if (inFlight.current || busy || !account || !sentHash) return;
     inFlight.current = true;
     setBusy('report');
     setError(null);
     try {
-      const r = await reportSent(account, action.id, sent);
+      const r = await reportSent(account, action.id, sentHash);
       if (r.ok) setDone(r.status);
       else setError(r.message);
     } finally {
@@ -281,7 +288,7 @@ export default function ApproveActionScreen() {
   };
 
   const prepared = preparedLabel(current.via);
-  const canConfirm = review.problem === null && !sent && !locked;
+  const canConfirm = review.problem === null && !sentHash && !locked && !current.sentLock;
 
   return (
     <CredentialScreenFrame title={title}>
@@ -307,7 +314,7 @@ export default function ApproveActionScreen() {
         {error ? <Text style={[styles.problem, { color: colors.error }]}>{error}</Text> : null}
 
         <View style={styles.actions}>
-          {sent ? (
+          {sentHash ? (
             <Pressable
               onPress={reportAgain}
               disabled={busy !== null}
@@ -329,7 +336,7 @@ export default function ApproveActionScreen() {
               {busy === 'confirm' ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[frameStyles.primaryText, { color: colors.onPrimary }]}>Bestätigen</Text>}
             </Pressable>
           ) : null}
-          {!sent && !locked && action.status === 'awaiting_confirmation' && !isPossiblySent(action.id) && !current.sentLock ? (
+          {!sentHash && !locked && action.status === 'awaiting_confirmation' && !isPossiblySent(action.id) && !current.sentLock ? (
             <Pressable onPress={discard} disabled={busy !== null} style={styles.discard} accessibilityRole="button" accessibilityLabel="Verwerfen">
               {busy === 'cancel' ? (
                 <ActivityIndicator color={colors.textSecondary} />

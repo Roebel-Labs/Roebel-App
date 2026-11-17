@@ -18,6 +18,7 @@ import {
   __resetPossiblySent,
   germanDateToIso,
   hasSentLock,
+  readSentLock,
   isPossiblySent,
   sentLockKey,
   resolveActionOrg,
@@ -500,13 +501,53 @@ describe('the possibly-sent lock survives a restart', () => {
 
   it('fails closed on a read failure only when a lock was written in this session', async () => {
     const a = action();
-    const spy = jest.spyOn(AsyncStorage, 'getItem').mockRejectedValue(new Error('storage broken'));
+    // Swap the function instead of spyOn: getItem is already a jest.fn in the storage mock, and
+    // mockRestore on it would drop its implementation for every later test.
+    const original = AsyncStorage.getItem;
+    (AsyncStorage as any).getItem = jest.fn(async () => Promise.reject(new Error('storage broken')));
     try {
       expect(await hasSentLock(a.id, Date.now())).toBe(false);
       await confirmAction(account, action({ id: '22222222-2222-4222-8222-222222222222' }), deps({ send: jest.fn(async () => Promise.reject(timeout())) }));
       expect(await hasSentLock(a.id, Date.now())).toBe(true);
     } finally {
-      spy.mockRestore();
+      (AsyncStorage as any).getItem = original;
     }
+  });
+});
+
+describe('a sent operation whose report failed survives a restart', () => {
+  it('stores the hash with the lock: after a restart no second send, only "Erneut melden" with the stored hash', async () => {
+    const a = action();
+    const failingReport = jest.fn(async () => ({ ok: false as const, code: 'NETWORK_ERROR', message: 'x' }));
+    const first = await confirmAction(account, a, deps({ report: failingReport }));
+    expect(first.ok === false && first.sent).toEqual({ txHash: TX });
+    const stored = JSON.parse((await AsyncStorage.getItem(sentLockKey(a.id))) as string);
+    expect(stored.txHash).toBe(TX);
+
+    __resetPossiblySent(); // app restart: fresh memory, same storage
+    const send = jest.fn(async () => ({ txHash: TX, confirmed: true }));
+    const report = jest.fn(async () => ({ ok: true as const, data: { status: 'done' as const } }));
+    const r = await confirmAction(account, a, deps({ send, report }));
+    expect(send).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.sent).toEqual({ txHash: TX });
+      expect(r.message).toMatch(/Erneut melden/);
+    }
+    expect(await readSentLock(a.id, Date.now())).toEqual({ locked: true, txHash: TX });
+    const review = reviewAction(a, typeNamesFrom([]), Date.now(), { locked: true, sentTxHash: TX });
+    expect(review.problem).toMatch(/Erneut melden/);
+  });
+
+  it('a stored lock without a hash (older format) still locks and has no hash', async () => {
+    const a = action();
+    await AsyncStorage.setItem(sentLockKey(a.id), JSON.stringify({ at: Date.now(), until: Date.now() + 60_000 }));
+    expect(await readSentLock(a.id, Date.now())).toEqual({ locked: true, txHash: null });
+  });
+
+  it('a malformed stored hash is ignored (lock kept, no hash)', async () => {
+    const a = action();
+    await AsyncStorage.setItem(sentLockKey(a.id), JSON.stringify({ at: Date.now(), until: Date.now() + 60_000, txHash: 'nope' }));
+    expect(await readSentLock(a.id, Date.now())).toEqual({ locked: true, txHash: null });
   });
 });
