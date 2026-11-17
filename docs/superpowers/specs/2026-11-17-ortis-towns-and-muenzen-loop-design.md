@@ -45,7 +45,7 @@ votes or influence; a town locked into Ortis hosting; wording that frames Münze
 |---|---|---|---|
 | On chain | CitizenNFT + AttesterNFT, Governor + Timelock (+ MACI), OrgRegistry, CredentialRegistry, Münzen group, pool Safe | the town (Attester Safe first, Timelock later) | none |
 | Backend node | database, mini-app index, sponsoring, push, identity service | the town's data | Ortis (hosted) or the town (sovereign), same software, switchable without any account changing |
-| App | Ortis app with a town switch; Röbel keeps its own app as town #1 | Ortis | Ortis |
+| App | the Röbel app is renamed and rebranded to **Ortis** (Max, 2026-11-17) and gets a town switch; Röbel is town #1 inside it | Ortis | Ortis |
 
 ### 5.2 Growing a town from its citizens (replaces the staffed setup, Max 2026-11-17)
 
@@ -114,4 +114,4 @@ non-Röbel town goes live.
 1. Can a Circles v2 group route a share of each conversion to a treasury? (Verify against the deployed group/mint
    policy contracts before planning that part.)
 2. Ortis hosting as a paid service: pricing and contract are outside this design.
-3. Does the Ortis app replace the Röbel app eventually, or do both stay?
+3. ~~Ortis app vs Röbel app~~ Decided: the Röbel app becomes Ortis. The rebrand keeps the same store listing, bundle id, signing key and login storage so nobody is logged out (feedback rule "never log out on new builds"); "Röbel Münzen" stays the name of Röbel's Münzen inside Ortis.
