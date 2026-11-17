@@ -36,6 +36,8 @@ export interface MiniApp {
   createdAt: string;
   /** Resolved developer/author display name, if the join returns one. */
   authorName: string | null;
+  /** Developer preview (settings → dev mini app): permissions are simulated. */
+  preview?: boolean;
 }
 
 /** Raw shape of a `mini_apps` row (only the columns we select). */

@@ -68,8 +68,8 @@ D) **MCP server** — ${DOCS_BASE_URL}/api/mcp (Streamable HTTP)
    Tools: get_started, get_docs, validate_html, list_my_apps, get_app,
    publish_html_app, submit_external_app, update_app_manifest, get_app_analytics.
    Auth: \`Authorization: Bearer nz_<api-key>\` — create keys at
-   ${DOCS_BASE_URL}/dashboard/mini-apps/api. (Fallback during rollout: your
-   wallet address as the bearer token.)
+   ${DOCS_BASE_URL}/dashboard/mini-apps/api.
+   The MCP accepts only \`nz_\` API keys; a wallet address is refused.
    Claude Code: \`claude mcp add --transport http netizen ${DOCS_BASE_URL}/api/mcp --header "Authorization: Bearer nz_KEY"\`
 
 ## Mock mode (SDK v0.2) — develop anywhere
@@ -88,6 +88,24 @@ Every submission lands as status "pending" in the admin review queue; admins
 test it in a live playground and set it "live". Reward budgets start at 0 and
 are granted by admins — grantReward on an unreviewed app rejects
 "budget_exceeded". Analytics arrive automatically via sdk.track + host events.`;
+
+const USER_TOKEN = `## User token
+
+\`sdk.auth.getToken()\` returns \`{ token }\` or \`null\`. Handle \`null\`: the host
+returns it when the person has not signed in, or when getting a token would
+need a fingerprint prompt the host avoids on reads. Do not retry in a loop.
+
+- The token is an ES256 JWT (\`typ\` \`miniapp+jwt\`), valid for 10 minutes and for
+  this app only (audience \`miniapp:<slug>\`). A token from another app is refused.
+- A server that calls ${DOCS_BASE_URL}/api/mini-apps/rewards,
+  /api/mini-apps/data (user scope), /api/mini-apps/notifications or
+  /api/mini-apps/muenzen-balance must send it as
+  \`Authorization: Bearer <token>\`. Your front end forwards the token to your
+  server. \`muenzen-balance\` also takes an \`app\` query parameter (id or slug).
+- A wallet address alone will stop working. While tokens are optional a bare
+  wallet is still accepted and each such call is logged; once tokens are
+  required it is refused with 401. A bad or expired token is always 401.
+- Verifying the token on your own server arrives with SDK 0.4.0.`;
 
 const SINGLE_FILE_GUIDE = `## Single-file HTML apps (path B) — exact requirements
 
@@ -125,7 +143,7 @@ export type DocsSection = "sdk" | "design" | "screens" | "copy" | "publish" | "a
 export function getDocsSection(section: DocsSection): string {
   switch (section) {
     case "sdk":
-      return SDK_REFERENCE;
+      return `${SDK_REFERENCE}\n\n${USER_TOKEN}`;
     case "design":
       return DESIGN_SYSTEM;
     case "screens":
@@ -140,7 +158,7 @@ export function getDocsSection(section: DocsSection): string {
 }
 
 export function buildLlmsFullTxt(): string {
-  return [INTRO, SDK_REFERENCE, SCREEN_RULES, DESIGN_SYSTEM, COPY_RULES, SINGLE_FILE_GUIDE, PUBLISH_API].join(
+  return [INTRO, SDK_REFERENCE, USER_TOKEN, SCREEN_RULES, DESIGN_SYSTEM, COPY_RULES, SINGLE_FILE_GUIDE, PUBLISH_API].join(
     "\n\n---\n\n",
   );
 }

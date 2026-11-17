@@ -43,15 +43,7 @@ import {
 } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
-import type { MiniAppPermission } from '@netizen-labs/miniapp-sdk';
-
-const PERMISSION_LABELS: Record<MiniAppPermission, string> = {
-  wallet: 'Wallet & Signaturen',
-  rewards: 'Röbel-Münzen-Belohnungen',
-  notifications: 'Benachrichtigungen',
-  circles: 'Röbel-Münzen-Guthaben',
-  share: 'Teilen',
-};
+import { PERMISSION_LABELS } from '@/lib/miniapp-permissions';
 
 /** Dark stage behind the sheet — same chrome as the MiniAppHost. */
 const CHROME_BG = '#0F1013';

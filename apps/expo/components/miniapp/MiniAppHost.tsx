@@ -47,6 +47,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fontFamily } from '@/constants/theme';
+import { previewBannerText } from '@/lib/miniapp-permissions';
 import { CloseIcon, ShareIcon } from '@/components/miniapp/hostIcons';
 import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 
@@ -59,6 +60,8 @@ import type {
 
 import type { MiniApp } from '@/lib/miniapps';
 import { trackMiniAppEvent, newMiniAppSessionId } from '@/lib/miniapps';
+import { bridgeGuardScript, createBridgeGuard } from '@/lib/miniapp-bridge-guard';
+import { getRandomBytes } from 'expo-crypto';
 import { markMiniAppInstalled } from '@/lib/miniapp-installs';
 import {
   getNotificationDecision,
@@ -89,6 +92,12 @@ import {
   hasMiniAppApi,
   miniAppApiBase,
 } from '@/lib/miniapp-api';
+import {
+  createMiniAppTokenCache,
+  requestMiniAppUserToken,
+  resolveMiniAppUserToken,
+} from '@/lib/miniapp-token';
+import { canSignSilently } from '@/lib/passkey/api-session-runtime';
 
 const HEARTBEAT_MS = 25_000;
 /** Failsafe: reveal the WebView if the app never calls actions.ready(). */
@@ -194,6 +203,32 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [app.homeUrl]);
   const sourceUrl = useFallback && fallbackUrl ? fallbackUrl : app.homeUrl;
+
+  // Bridge guard: a fresh nonce per WebView mount (keyed like the WebView by
+  // openCount) and only the loaded URL's origin may talk to the bridge. Drops
+  // messages from sub-frames (ads, embeds) and from a top frame that
+  // navigated to another origin.
+  const bridgeNonce = useMemo(
+    () => Array.from(getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join(''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- new nonce per open
+    [openCount],
+  );
+  const bridgeGuard = useMemo(() => {
+    let origin: string | null = null;
+    try {
+      origin = new URL(sourceUrl).origin;
+    } catch {
+      origin = null;
+    }
+    return createBridgeGuard({
+      nonce: bridgeNonce,
+      allowedOrigins: () => (origin ? [origin] : []),
+    });
+  }, [bridgeNonce, sourceUrl]);
+  const bridgeGuardJs = useMemo(() => bridgeGuardScript(bridgeNonce), [bridgeNonce]);
+  // The guard whose first accepted message was already checked for the
+  // envelope (bridge_envelope_missing is tracked once per open).
+  const envelopeCheckedForRef = useRef<ReturnType<typeof createBridgeGuard> | null>(null);
 
   const handleLoadError = useCallback(
     (e: { nativeEvent: { description?: string; code?: number } }) => {
@@ -433,9 +468,55 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     setConfirmBusy(false);
   }, [confirm]);
 
+  // --- mini-app user token ---------------------------------------------------
+  // Fetched lazily by the handlers that need it (never on open, so opening an app never
+  // prompts). One cache per host, cleared when the account changes. Failures resolve to null
+  // and back off 60 s; the call then goes out wallet-only, as before.
+  // The cache is created on first use (inside a handler, never during render) and reads the
+  // current account through a ref updated after each render.
+  const tokenAccountRef = useRef(account);
+  const tokenCacheRef = useRef<ReturnType<typeof createMiniAppTokenCache> | null>(null);
+  useEffect(() => {
+    tokenAccountRef.current = account;
+  }, [account]);
+  useEffect(() => {
+    tokenCacheRef.current?.clear();
+  }, [walletLc]);
+  // `silent`: reads an app may fire on load (balance, user data, auth.getToken) never prompt:
+  // a cached token, else a thirdweb signature (silent) or a passkey session's EXISTING API
+  // session token; otherwise they go out wallet-only. Writes may ask once (then back off 60 s).
+  const getUserToken = useCallback(async (opts?: { silent?: boolean }): Promise<string | null> => {
+    if (tokenCacheRef.current == null) {
+      tokenCacheRef.current = createMiniAppTokenCache({
+        request: async (appRef, ctx) => {
+          const acc = tokenAccountRef.current;
+          return acc ? requestMiniAppUserToken(acc, appRef, ctx) : null;
+        },
+      });
+    }
+    return resolveMiniAppUserToken({
+      appId: app.id,
+      wallet: walletLc,
+      hasApi: hasMiniAppApi(),
+      silent: !!opts?.silent,
+      cache: tokenCacheRef.current,
+      canSignSilently: () => canSignSilently(tokenAccountRef.current),
+    });
+  }, [app.id, walletLc]);
+
   // --- host handlers --------------------------------------------------------
   const handlers = useMemo<HostHandlers>(() => {
     const apiId = { miniAppId: app.id, slug: app.slug, wallet: walletLc };
+    // A 401 on a call carrying the token drops it from the cache (the next call fetches a new
+    // one); the failed call itself is not retried without the token.
+    const onTokenRejected = (token: string) => {
+      if (walletLc) tokenCacheRef.current?.invalidate(app.id, walletLc, token);
+    };
+    const userApiId = async (opts?: { silent?: boolean }) => ({
+      ...apiId,
+      token: await getUserToken(opts),
+      onTokenRejected,
+    });
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: () => setSplashVisible(false),
@@ -480,7 +561,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
 
       getMuenzenBalance: async () => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiGetMuenzenBalance(apiId);
+        return apiGetMuenzenBalance(await userApiId({ silent: true }));
       },
       grantReward: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
@@ -496,7 +577,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           replayKey: c.replayKey + 1,
         }));
         try {
-          const res = await apiGrantReward(apiId, p);
+          const res = await apiGrantReward(await userApiId(), p);
           if (res.granted) {
             track('reward_granted', { amount: p.amount, reason: p.reason });
             const granted = Number(res.amount ?? p.amount ?? 1) || 1;
@@ -514,7 +595,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       notificationsSend: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiSendNotification(apiId, p);
+        return apiSendNotification(await userApiId(), p);
       },
 
       // v0.3 mini-app datastore ("Mini-CMS"): app content + per-user state.
@@ -528,16 +609,21 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       dataUserGet: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiDataUserGet(apiId, p.key);
+        return apiDataUserGet(await userApiId({ silent: true }), p.key);
       },
       dataUserSet: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiDataUserSet(apiId, p.key, p.value);
+        return apiDataUserSet(await userApiId(), p.key, p.value);
+      },
+
+      authGetToken: async () => {
+        const t = await getUserToken({ silent: true });
+        return t ? { token: t } : null;
       },
 
       track: ({ event, props }) => track(event, props),
     };
-  }, [app.id, app.slug, walletLc, onClose, buildContext, account, walletRequest, track]);
+  }, [app.id, app.slug, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken]);
 
   // --- construct/refresh the bridge ----------------------------------------
   useEffect(() => {
@@ -566,11 +652,20 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [account?.address, visible]);
 
-  const onMessage = useCallback((e: WebViewMessageEvent) => {
-    const bridge = bridgeRef.current;
-    if (bridge) bridge.handleMessage(e.nativeEvent.data);
-    else earlyMessagesRef.current.push(e.nativeEvent.data);
-  }, []);
+  const onMessage = useCallback(
+    (e: WebViewMessageEvent) => {
+      const raw = bridgeGuard.accept({ data: e.nativeEvent.data, url: e.nativeEvent.url });
+      if (raw === null) return;
+      if (envelopeCheckedForRef.current !== bridgeGuard) {
+        envelopeCheckedForRef.current = bridgeGuard;
+        if (!bridgeGuard.envelopeSeen()) track('bridge_envelope_missing');
+      }
+      const bridge = bridgeRef.current;
+      if (bridge) bridge.handleMessage(raw);
+      else earlyMessagesRef.current.push(raw);
+    },
+    [bridgeGuard, track],
+  );
 
   const handleClose = useCallback(() => {
     onClose();
@@ -629,6 +724,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           </Pressable>
         </View>
 
+        {app.preview ? (
+          <Text style={styles.previewBanner}>{previewBannerText(app.permissions)}</Text>
+        ) : null}
+
         {/* WebView sheet — rounded top corners on the dark stage */}
         <View style={[styles.webWrap, { backgroundColor: colors.background }]}>
           <WebView
@@ -636,6 +735,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             ref={webViewRef}
             source={{ uri: sourceUrl }}
             onMessage={onMessage}
+            // Top frame only (ForMainFrameOnly defaults to true): tags every
+            // top-frame message with this open's nonce.
+            injectedJavaScriptBeforeContentLoaded={bridgeGuardJs}
             onError={handleLoadError}
             originWhitelist={['*']}
             javaScriptEnabled
@@ -759,6 +861,14 @@ const SHEET_RADIUS = 24;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: CHROME_BG },
+  previewBanner: {
+    color: CHROME_TEXT,
+    opacity: 0.7,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
   header: {
     height: 56,
     flexDirection: 'row',

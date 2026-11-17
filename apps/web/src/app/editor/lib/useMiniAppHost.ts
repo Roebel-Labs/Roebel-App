@@ -129,6 +129,7 @@ export function useMiniAppHost(
           if (!account?.address) return { balance: "48", decimals: 18, symbol: "RÖ" as const };
           const res = await fetch(
             `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}`,
+            { headers: { "x-roebel-host": "web" } },
           );
           if (!res.ok) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
           return (await res.json()) as { balance: string; decimals: number; symbol: "RÖ" };

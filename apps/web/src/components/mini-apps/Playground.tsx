@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createWebMiniAppHost, type WebMiniAppHost } from "@/lib/miniapp-host";
+import { fetchUserTokenWithAccount, invalidateUserToken } from "@/lib/miniapp/clientToken";
 import type { MiniAppRow } from "@/lib/miniapp/types";
 import type { MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
 
@@ -87,6 +88,11 @@ export function Playground({ app, html }: { app: MiniAppRow; html?: string | nul
       },
       confirmSign: async (req) =>
         window.confirm(`Mini App möchte signieren:\n${req.method}\n\nAls Prüfer:in bestätigen?`),
+      // User-scoped calls carry a mini-app user token for the reviewer's wallet.
+      getUserToken: async () => (account ? fetchUserTokenWithAccount(account, app.id) : null),
+      onUserTokenRejected: (token) => {
+        if (account) invalidateUserToken(account.address, app.id, token);
+      },
     });
     hostRef.current = host;
 

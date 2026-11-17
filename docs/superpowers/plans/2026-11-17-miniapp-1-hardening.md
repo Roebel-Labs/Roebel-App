@@ -496,6 +496,11 @@ Not agent steps. In this order:
 4. Tell external developers (the PSV boxing app) that their server must forward `sdk.auth.getToken()`.
 5. Watch `mini_app_events` for `legacy_wallet_call`. One release later, when it is quiet or explained, set `MINIAPP_REQUIRE_USER_TOKEN=1`.
 
+Note on gate 5 (added after the final review):
+
+- Balance calls without an app (`/api/mini-apps/muenzen-balance?wallet=…` with no `app`/`miniAppId`/`slug`, which is how external SDK 0.3.0 servers call it) cannot write a `mini_app_events` row. They appear only in the server logs, as `[mini-apps] bare wallet call` with `appId: null`. Check the web deploy's logs as well as the table.
+- Legacy calls record the calling host as `props.host` (`expo` or `web`, from the `x-roebel-host` header). Passkey accounts without an API session make wallet-only reads by design (reads never prompt), so `legacy_wallet_call` rows with `props.host = expo` will keep coming and the log will not go fully quiet. Before setting `MINIAPP_REQUIRE_USER_TOKEN=1`, those reads need a token path that does not prompt (plan 2), or the switch must wait.
+
 ## Follow-ups this plan does not do
 
 - Builder routes and `POST /api/mini-apps/api-keys` trusting `x-wallet-address` (Open question 2).
