@@ -6,6 +6,7 @@ import {
   SAFE_PROXY_RUNTIME_CODE,
   SOCIAL_RECOVERY_MODULE,
 } from '../constants';
+import { reverted, shapeClient } from '../__testutils__/lookup-client';
 import { blockWindows, scanLogs } from '../log-scan';
 import {
   createLookupChain,
@@ -272,59 +273,6 @@ describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
   });
 });
 
-/** The shape of a viem read revert: ContractFunctionExecutionError caused by ContractFunctionRevertedError. */
-function reverted(): Error {
-  return Object.assign(new Error('The contract function "getOwners" reverted.'), {
-    name: 'ContractFunctionExecutionError',
-    cause: Object.assign(new Error('execution reverted'), { name: 'ContractFunctionRevertedError' }),
-  });
-}
-
-/**
- * A viem-like client over a tiny fake chain: `safes` look like app passkey Safes (proxy runtime,
- * singleton, fallback handler, the two modules); `contracts` have other code; `owners` per address;
- * `logs` = AddedOwner hits (emitter, block).
- */
-function shapeClient(p: {
-  tip: bigint;
-  safes: Address[];
-  contracts?: Address[];
-  owners: Record<string, Address[]>;
-  logs: Array<{ emitter: Address; block: bigint }>;
-  modules?: Address[];
-}) {
-  const word = (a: Address): Hex => pad(a, { size: 32 });
-  const isSafe = (a: Address) => p.safes.includes(a);
-  return {
-    getBlockNumber: jest.fn(async () => p.tip),
-    getBlock: jest.fn(),
-    getLogs: jest.fn(async (a: any) =>
-      p.logs
-        .filter((l) => l.block >= a.fromBlock && l.block <= a.toBlock)
-        .map((l, i) => ({ address: l.emitter, blockNumber: l.block, logIndex: i, args: { owner: a.args.owner } })),
-    ),
-    getCode: jest.fn(async ({ address }: { address: Address }) =>
-      isSafe(address) ? SAFE_PROXY_RUNTIME_CODE : (p.contracts ?? []).includes(address) ? ('0x6080604052' as Hex) : undefined,
-    ),
-    getStorageAt: jest.fn(async ({ address, slot }: { address: Address; slot: Hex }) => {
-      if (!isSafe(address)) return '0x' as Hex;
-      if (BigInt(slot) === 0n) return word(SAFE_L2_SINGLETON);
-      if (slot === SAFE_FALLBACK_HANDLER_SLOT) return word(SAFE_4337_MODULE);
-      return '0x' as Hex;
-    }),
-    readContract: jest.fn(async (a: any) => {
-      if (a.functionName === 'getOwners') {
-        if (!p.owners[a.address]) throw reverted();
-        return p.owners[a.address];
-      }
-      if (a.functionName === 'getModulesPaginated') {
-        return [p.modules ?? [SOCIAL_RECOVERY_MODULE, SAFE_4337_MODULE], addr(1)];
-      }
-      throw new Error(`unexpected ${a.functionName}`);
-    }),
-  };
-}
-
 describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is attacker-writable)', () => {
   const OWNER = addr(0x0e);
   const REAL = addr(0x5e);
@@ -348,7 +296,7 @@ describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is atta
     expect(client.getLogs.mock.calls.some(([a]: any) => a.fromBlock <= 300n && 300n <= a.toBlock)).toBe(true);
   });
 
-  it('a fake in the same batch is ignored and does not make it ambiguous', async () => {
+  it('a fake near the real log is ignored and does not make it ambiguous', async () => {
     const client = shapeClient({
       tip: 1_000n,
       safes: [REAL],
@@ -361,7 +309,20 @@ describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is atta
     });
     const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
     expect(await findSafesByOwner(OWNER, chain)).toEqual([REAL]);
-    expect(client.getLogs).toHaveBeenCalledTimes(4); // one batch, then stop
+  });
+
+  it('a valid attacker-built Safe with a much newer log does not stop the scan: both are returned, newest first', async () => {
+    const client = shapeClient({
+      tip: 1_000n,
+      safes: [REAL, FAKE_SAFE],
+      owners: { [REAL]: [OWNER], [FAKE_SAFE]: [OWNER] },
+      logs: [
+        { emitter: FAKE_SAFE, block: 990n }, // newest batch
+        { emitter: REAL, block: 100n }, // > one batch (4 x 50 blocks) older
+      ],
+    });
+    const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([FAKE_SAFE, REAL]);
   });
 
   it('isPasskeySafe: proxy runtime + SafeL2 singleton + 4337 fallback handler + exactly the two modules', async () => {
@@ -445,7 +406,7 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
     expect(client.getLogs.mock.calls[0][0].args).toEqual({ requestId: 7n });
   });
 
-  it('ownerLogsFor scans AddedOwner(owner) from any emitter backward from the tip and stops at the first hit', async () => {
+  it('ownerLogsFor scans AddedOwner(owner) from any emitter over the whole range, never stopping at the first hit', async () => {
     const OWNER = addr(0x0e);
     const calls: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
     const client = {
@@ -468,8 +429,9 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
     expect(first.args).toEqual({ owner: OWNER });
     expect(first.event.name).toBe('AddedOwner');
     expect(calls[0]).toEqual({ fromBlock: 951n, toBlock: 1_000n });
-    // backward windows, batches of 4: the hit at 520 is in the 10th window → 3 batches, then stop
-    expect(calls).toHaveLength(12);
+    // backward windows from the tip down to the epoch block: all 21 windows of [0, 1000]
+    expect(calls).toHaveLength(21);
+    expect(calls[calls.length - 1]).toEqual({ fromBlock: 0n, toBlock: 0n });
     expect(await chain.readOwners(SAFE)).toEqual([OWNER]);
   });
 });

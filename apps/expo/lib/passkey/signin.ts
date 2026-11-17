@@ -119,7 +119,7 @@ async function hasHistory(safe: Address, chain: KeyChain): Promise<boolean> {
  * Candidate keys whose per-key signer owns a Safe (a Safe recovered to this passkey keeps its
  * address, so the key no longer derives it). A signer without code never ran `createSigner` →
  * no log scan. Several valid Safes for one signer → the single one with history wins, else it
- * is ambiguous. A failed read stops the sign-in: falling through could pick the throwaway
+ * is ambiguous (history is forgeable: a known residual, see recovery-lookup `findSafesByOwner`). A failed read stops the sign-in: falling through could pick the throwaway
  * SharedSigner Safe the recovery phone deployed for the same key (wrong account).
  */
 async function recoveredSafeKeys(keys: P256Point[], chain: KeyChain): Promise<ResolvedKey[]> {

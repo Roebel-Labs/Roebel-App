@@ -52,14 +52,10 @@ export type LookupChain = {
   readGuardians: (safe: Address) => Promise<Address[]>;
   hasCode: (a: Address) => Promise<boolean>;
   /**
-   * Safe `AddedOwner(owner)` events naming `owner`, from any emitter: scanned backward from the
-   * tip to PASSKEY_EPOCH_BLOCK, stopping after the first window batch for which `stop(logsSoFar)`
-   * holds (default: any hit).
+   * Every Safe `AddedOwner(owner)` event naming `owner`, from any emitter, over the full range
+   * PASSKEY_EPOCH_BLOCK → tip (no early stop: a newer log must never hide an older one).
    */
-  ownerLogsFor: (
-    owner: Address,
-    stop?: (logsSoFar: OwnerLog[]) => boolean | Promise<boolean>,
-  ) => Promise<OwnerLog[]>;
+  ownerLogsFor: (owner: Address) => Promise<OwnerLog[]>;
   /** Safe.getOwners() right now. */
   readOwners: (safe: Address) => Promise<Address[]>;
   /**
@@ -155,44 +151,42 @@ async function unlessReverted<T>(p: Promise<T>, fallback: T): Promise<T> {
 }
 
 /**
- * The app passkey Safes whose owners are exactly `[owner]` right now, newest AddedOwner log
+ * Every app passkey Safe whose owners are exactly `[owner]` right now, newest AddedOwner log
  * first, de-duplicated. A recovery to a new passkey keeps the Safe's address but installs the
  * per-key signer as its only owner, so this finds a recovered Safe from its new key.
  *
  * AddedOwner is matched by topic only, so anyone can emit one naming a public signer address.
- * Every emitter is therefore shape-checked (`isPasskeySafe`) and owner-checked, and the backward
- * scan stops only once a log yields a Safe that passes, so a newer junk log cannot hide the real
- * one. A stale log (owner changed again) or a reverting emitter is dropped; a transport error
- * throws (the caller must not fall back to another Safe on a flaky RPC).
+ * The scan therefore covers the full range back to PASSKEY_EPOCH_BLOCK (~120 windows; callers
+ * run it only when the signer contract exists) and every emitter is shape-checked
+ * (`isPasskeySafe`) and owner-checked; nothing stops at the first hit, so a newer log cannot
+ * hide the real Safe. A stale log (owner changed again) or a reverting emitter is dropped; a
+ * transport error throws (the caller must not fall back to another Safe on a flaky RPC).
+ *
+ * Known residual: an attacker can build a fully valid passkey-shaped Safe (factory proxy,
+ * SafeL2, both modules, 4337 fallback), add the signer and remove itself, so it passes here.
+ * Sign-in then prefers the Safe with history (legacy link or users row), and that signal is
+ * forgeable too (the attacker's own thirdweb account can make its Safe an admin) → at worst
+ * an ambiguity error, never a silent pick between two Safes that both look known.
  */
 export async function findSafesByOwner(
   owner: Address,
   chain: Pick<LookupChain, 'ownerLogsFor' | 'readOwners' | 'isPasskeySafe'>,
 ): Promise<Address[]> {
-  const verdicts = new Map<string, Promise<boolean>>();
-  const passes = (emitter: Address): Promise<boolean> => {
-    const key = emitter.toLowerCase();
-    let v = verdicts.get(key);
-    if (!v) {
-      v = (async () => {
-        if (!(await unlessReverted(chain.isPasskeySafe(emitter), false))) return false;
-        const owners = await unlessReverted(chain.readOwners(emitter), [] as Address[]);
-        return owners.length === 1 && isAddressEqual(owners[0], owner);
-      })();
-      verdicts.set(key, v);
-    }
-    return v;
-  };
-  const logs = await chain.ownerLogsFor(owner, async (found) =>
-    (await Promise.all(found.map((l) => passes(getAddress(l.emitter))))).some(Boolean),
+  const logs = [...(await chain.ownerLogsFor(owner))].sort((a, b) =>
+    a.blockNumber === b.blockNumber ? 0 : a.blockNumber > b.blockNumber ? -1 : 1,
   );
-  const sorted = [...logs].sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber > b.blockNumber ? -1 : 1));
   const emitters: Address[] = [];
-  for (const l of sorted) {
+  for (const l of logs) {
     const e = getAddress(l.emitter);
     if (!emitters.some((x) => isAddressEqual(x, e))) emitters.push(e);
   }
-  const checks = await Promise.all(emitters.map(async (e) => ((await passes(e)) ? e : null)));
+  const checks = await Promise.all(
+    emitters.map(async (e) => {
+      if (!(await unlessReverted(chain.isPasskeySafe(e), false))) return null;
+      const owners = await unlessReverted(chain.readOwners(e), [] as Address[]);
+      return owners.length === 1 && isAddressEqual(owners[0], owner) ? e : null;
+    }),
+  );
   return checks.filter((c): c is Address => !!c);
 }
 
@@ -364,14 +358,11 @@ export function createLookupChain(
       const code = await client.getCode({ address: a });
       return !!code && code !== '0x';
     },
-    async ownerLogsFor(owner, stop) {
-      const toOwnerLog = (l: RawLog): OwnerLog => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n });
-      const logs = await scanLogs(
-        await windowsTo(passkeyFrom, true),
-        (w: BlockWindow) => client.getLogs({ event: safeAddedOwnerEvent, args: { owner }, ...w }),
-        { stop: (found) => (stop ? stop(found.map(toOwnerLog)) : found.length > 0) },
+    async ownerLogsFor(owner) {
+      const logs = await scanLogs(await windowsTo(passkeyFrom, true), (w: BlockWindow) =>
+        client.getLogs({ event: safeAddedOwnerEvent, args: { owner }, ...w }),
       );
-      return logs.map(toOwnerLog);
+      return logs.map((l) => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n }));
     },
     async readOwners(safe) {
       return [...((await client.readContract({ address: safe, abi: safeOwnersAbi, functionName: 'getOwners' })) as readonly Address[])];

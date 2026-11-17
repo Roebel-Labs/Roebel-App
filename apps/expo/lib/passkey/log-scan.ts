@@ -48,13 +48,12 @@ export function blockWindows(from: bigint, to: bigint, range: bigint = LOG_BLOCK
 /**
  * Fetches every window (at most `concurrency` in flight) and returns all logs in window order.
  * `stop` is checked after each batch: when it returns true for the logs gathered so far, the
- * remaining windows are skipped (used by the backward "newest match wins" scans). It may be async
- * (a stop that validates the logs it saw with chain reads).
+ * remaining windows are skipped (used by the backward "newest match wins" scans).
  */
 export async function scanLogs<T>(
   windows: BlockWindow[],
   fetchWindow: (w: BlockWindow) => Promise<T[]>,
-  opts: { concurrency?: number; stop?: (logsSoFar: T[]) => boolean | Promise<boolean> } = {},
+  opts: { concurrency?: number; stop?: (logsSoFar: T[]) => boolean } = {},
 ): Promise<T[]> {
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const out: T[] = [];
@@ -62,7 +61,7 @@ export async function scanLogs<T>(
     const batch = windows.slice(i, i + concurrency);
     const results = await Promise.all(batch.map((w) => fetchWindow(w)));
     for (const r of results) out.push(...r);
-    if (await opts.stop?.(out)) break;
+    if (opts.stop?.(out)) break;
   }
   return out;
 }
