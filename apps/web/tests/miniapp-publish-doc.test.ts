@@ -20,3 +20,11 @@ test("publish.md contains every step an agent needs", () => {
   }
   assert.ok(md.length < 8000, "keep the recipe short");
 });
+
+test("publish.md mentions the user token", () => {
+  const md = buildPublishMd("https://www.roebel.app");
+  assert.match(md, /## User token/);
+  assert.match(md, /sdk\.auth\.getToken\(\)/);
+  assert.match(md, /Authorization: Bearer/);
+  assert.ok(md.length < 8000, "keep the recipe short");
+});

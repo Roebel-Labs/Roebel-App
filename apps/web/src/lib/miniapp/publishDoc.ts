@@ -30,6 +30,14 @@ Plain HTML:
 \`\`\`
 Full SDK reference: ${base}/mini-apps/llms-full.txt
 
+## User token
+\`sdk.auth.getToken()\` returns \`{ token }\` or \`null\` (handle \`null\`). The token
+is valid for 10 minutes and for this app only. A server that calls
+${base}/api/mini-apps/rewards, /data (user scope), /notifications or
+/muenzen-balance must send it as \`Authorization: Bearer <token>\`. A wallet
+address alone will stop working. Verifying the token on your own server arrives
+with SDK 0.4.0.
+
 ## 2. Allow embedding
 The app runs inside an iframe/WebView. Do not send \`X-Frame-Options: DENY|SAMEORIGIN\`,
 and if you set a CSP, use \`frame-ancestors *\`.
@@ -81,6 +89,6 @@ Fix every error from \`validate\` before registering, and tell the builder about
 ## Updating later
 Change the manifest, deploy, and call \`register\` again (or wait for the daily re-index).
 Changes to a live app go live after review; the current version stays visible until then.
-MCP alternative: tool \`register_app_url\` on ${base}/api/mcp.
+MCP alternative: tool \`register_app_url\` on ${base}/api/mcp (only \`nz_\` API keys are accepted).
 `;
 }
