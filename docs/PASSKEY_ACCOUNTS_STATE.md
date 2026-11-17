@@ -334,9 +334,15 @@ stores them (E4 applies); they are shown and confirmed (no skip) before the guar
 is the new address 0 (guardian link and confirm screen unchanged). After the guardians confirmed, this phone's
 fresh expert Safe (`predictEcdsaSafeAddress(newOwner)`) sends ONE op `[executeRecovery(wallet, [newOwner], 1)]`
 (no createSigner; deploys it), then after the 3-day wait `[finalizeRecovery(wallet)]` — fork-proven in
-`EcdsaSafe.t.sol::test_freshExpertSafeRecoversExpertAccount`. `done` saves a words record AND session for the OLD
-wallet address (`safe = identity = wallet`, `owner = newOwner`). "Abbrechen und neu beginnen" before the words were
-confirmed deletes them (the guardians never saw their address).
+`EcdsaSafe.t.sol::test_freshExpertSafeRecoversExpertAccount`. `done` saves a words record for the OLD wallet address
+(`safe = identity = wallet`, `owner = newOwner`); the session is switched only on the person's tap ("Konto
+zurückholen" or "Weiter"), never in the background when another device finalized. "Abbrechen und neu beginnen"
+before the words were confirmed deletes them (the guardians never saw their address). The state (signer, fresh
+Safe) is persisted BEFORE the words are written, so a kill never leaves words nobody points to; cleanup after a
+failed write only removes the NEW words. If the new words are later unreadable (biometrics changed), replaced by
+other words or gone, every step asks for the written-down words again (`reenterRecoveryWords`: only words whose
+address 0 is this recovery's owner, E4 applies) and goes on. An active 12-word session of another account on this
+phone is warned about before the new words replace its words.
 - Comes back: the account (same address: citizenship, Münzen, profile, guardians) and its signatures.
 - Does NOT come back: the voting key, Nostr key and commitment salt wrapped under the OLD words (open question 4,
   accepted; the screen says „Abstimmungs- und Nachrichtenschlüssel, die mit den alten Wörtern gesichert waren,

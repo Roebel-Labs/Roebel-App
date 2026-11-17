@@ -10,7 +10,9 @@
  * An EXPERT account (its owner is a plain key: no contract code, or a 7702 designator — E9) is
  * recovered to NEW 12 words instead of a passkey (words surface open): the words are shown and
  * confirmed (no skip) before the guardians' code appears; keys wrapped under the old words do not
- * come back (said under the code); `done` opens the account with the new words.
+ * come back (said under the code); `done` opens the account with the new words ("Weiter" only: a
+ * recovery finalized elsewhere never switches the session in the background). New words that are
+ * lost, replaced or unreadable in any later step are typed again from paper (`reenterRecoveryWords`).
  * All logic is in lib/passkey/recovery-flow.ts; the state is persisted, so leaving is safe.
  */
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
@@ -44,18 +46,23 @@ import {
   type WordsWallet,
 } from '@/lib/passkey/words-recovery';
 import {
+  WORDS_LOST_MESSAGES,
   abandonRecovery,
   clearRecoveryState,
+  expertRecoveryWarning,
   executeRecoveryStep,
   finalizeRecoveryStep,
   formatRemaining,
   loadRecoveryState,
+  openRecoveredWordsSession,
   pollRecovery,
   recoveryWordsStatus,
+  reenterRecoveryWords,
   resumeRecovery,
   startRecovery,
   startWordsRecovery,
   type RecoveryState,
+  type WordsLost,
 } from '@/lib/passkey/recovery-flow';
 import { findRecoverableAccounts, type RecoveryCandidate } from '@/lib/passkey/recovery-lookup';
 import {
@@ -75,6 +82,18 @@ type OwnerKind = 'passkey' | 'ecdsa';
 type Found = { name: string; candidates: RecoveryCandidate[]; kind: OwnerKind };
 
 /** Open question 4 (plan 3): what a recovery to new words does not bring back. */
+type WordsStatus = 'confirmed' | 'unconfirmed' | 'replaced' | 'missing';
+const REPLACE_WORDS_TEXT = 'Die Wörter, die gerade auf diesem Gerät liegen, werden ersetzt.';
+
+/** Resolves true when the person confirms `text` (Alert with "Abbrechen" / `go`). */
+const confirmAlert = (title: string, text: string, go: string) =>
+  new Promise<boolean>((resolve) =>
+    Alert.alert(title, text, [
+      { text: 'Abbrechen', style: 'cancel', onPress: () => resolve(false) },
+      { text: go, onPress: () => resolve(true) },
+    ]),
+  );
+
 const OLD_KEYS_NOTE = 'Abstimmungs- und Nachrichtenschlüssel, die mit den alten Wörtern gesichert waren, kommen nicht zurück.';
 
 export default function RestoreAccountScreen() {
@@ -93,7 +112,10 @@ export default function RestoreAccountScreen() {
   const [wordsAllowed, setWordsAllowed] = useState(false);
   // Expert recovery: the new words, held only here and only right after `startRecovery`.
   const [newPhrase, setNewPhrase] = useState<string | null>(null);
-  const [wordsStatus, setWordsStatus] = useState<'confirmed' | 'unconfirmed' | 'missing' | null>(null);
+  const [wordsStatus, setWordsStatus] = useState<WordsStatus | null>(null);
+  // Start problems (outside the persisted state): a failed start, or E4 (offer the discard, M2).
+  const [startNotice, setStartNotice] = useState<string | null>(null);
+  const [startOverwrite, setStartOverwrite] = useState(false);
 
   useEffect(() => {
     if (!allowed) return;
@@ -158,24 +180,32 @@ export default function RestoreAccountScreen() {
     setWordsStatus(null);
   }, []);
 
-  // Expert recovery: are the new words on this phone confirmed (else show them first)?
-  const expertWaiting = state?.ownerKind === 'ecdsa' && state.step === 'waitingForGuardians';
-  const expertSigner = expertWaiting ? state?.signer : undefined;
+  // Expert recovery: where do the new words stand on this phone (in every step until done)?
+  const expertActive =
+    state?.ownerKind === 'ecdsa' && ['waitingForGuardians', 'executing', 'waitingDelay', 'finalizing'].includes(state.step);
+  const expertWaiting = expertActive && state?.step === 'waitingForGuardians';
+  const expertKey = expertActive ? `${state?.step}:${state?.signer}` : null;
   useEffect(() => {
-    if (!expertWaiting || !stateRef.current) return;
+    if (!expertKey || !stateRef.current) return;
     let cancelled = false;
+    // A failed read is not "lost": the steps' own ops will tell (wordsLost).
     recoveryWordsStatus(stateRef.current, phraseStore)
-      .catch(() => 'missing' as const)
+      .catch(() => null)
       .then((st) => !cancelled && setWordsStatus(st));
     return () => {
       cancelled = true;
     };
-  }, [expertWaiting, expertSigner]);
+  }, [expertKey]);
+  const wordsLost: WordsLost | null = !expertActive
+    ? null
+    : (state?.wordsLost ?? (wordsStatus === 'missing' || wordsStatus === 'replaced' ? wordsStatus : null));
 
   const openRecovered = useCallback(async () => {
+    const s = stateRef.current;
+    // M3: the session is switched only now, on the person's tap.
+    const session = s ? await openRecoveredWordsSession(s, deps).catch(() => null) : null;
     await clearRecoveryState(recoveryStorage).catch(() => undefined);
     const rt = await import('@/lib/passkey/signin-runtime');
-    const session = await rt.loadStoredPasskeySession().catch(() => null);
     if (router.canDismiss()) router.dismissAll();
     router.replace('/' as any);
     if (!session) return;
@@ -208,6 +238,7 @@ export default function RestoreAccountScreen() {
     <SafeAreaView style={[passkeyStyles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Konto wiederherstellen" />
       <ScrollView contentContainerStyle={passkeyStyles.content} keyboardShouldPersistTaps="handled">
+        {picking && startOverwrite ? <DiscardUnreadableWords onDone={() => setStartOverwrite(false)} /> : null}
         {picking && chosen === null ? (
           <ChooseMethod onChoose={setMethod} />
         ) : picking && chosen === 'words' ? (
@@ -219,32 +250,46 @@ export default function RestoreAccountScreen() {
           />
         ) : picking ? (
           <FindAccount
-            notice={state?.message ?? null}
+            notice={startNotice ?? state?.message ?? null}
             wordsAllowed={wordsAllowed}
             onChosen={async (name, c, ownerKind) => {
               setBusy(true);
+              setStartNotice(null);
+              setStartOverwrite(false);
               try {
+                if (ownerKind === 'ecdsa') {
+                  // M1: a 12-word session of another account on this phone loses its words here.
+                  const rt = await import('@/lib/passkey/signin-runtime');
+                  const warning = expertRecoveryWarning(await rt.loadStoredPasskeySession().catch(() => null));
+                  if (warning && !(await confirmAlert('Andere Wörter ersetzen?', warning, 'Fortfahren'))) return;
+                }
                 const r = await startRecovery({ wallet: c.wallet, name, recoveryLegacy: c.recoveryLegacy, ownerKind }, deps);
                 setNewPhrase(r.phrase ?? null);
                 setWordsStatus(r.phrase ? 'unconfirmed' : null);
+                setStartOverwrite(!!r.overwrite);
                 setState(r.state);
+              } catch (e) {
+                setStartNotice(friendlyError(e, 'Das hat nicht geklappt. Bitte versuche es erneut.'));
               } finally {
                 setBusy(false);
               }
             }}
             busy={busy}
           />
+        ) : expertActive && wordsLost ? (
+          <ReenterWords
+            state={state}
+            lost={wordsLost}
+            canStartOver={state.step === 'waitingForGuardians'}
+            onRestored={(next) => {
+              setWordsStatus('confirmed');
+              setState(next);
+            }}
+            onStartOver={startOver}
+          />
         ) : expertWaiting && wordsStatus !== 'confirmed' ? (
           wordsStatus === null ? (
             <ActivityIndicator color={colors.primary} />
-          ) : wordsStatus === 'missing' ? (
-            <>
-              <Notice
-                tone="warning"
-                text="Die neuen Wörter für diese Wiederherstellung sind nicht mehr auf diesem Handy. Beginne bitte neu."
-              />
-              <BigButton label="Neu beginnen" onPress={startOver} />
-            </>
           ) : (
             <NewWords
               phrase={newPhrase}
@@ -432,6 +477,99 @@ function HelperConfirm({ wallet, signer, onConfirmed }: { wallet: Address; signe
         )
       ) : null}
     </Card>
+  );
+}
+
+/** M2: E4 refused because unconfirmed words of another account are stored; drop them only if unreadable (one tap). */
+function DiscardUnreadableWords({ onDone }: { onDone: () => void }) {
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'info'; text: string } | null>(null);
+  const discard = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const removed = await phraseStore.discardIfUnreadable();
+      setNotice(
+        removed
+          ? { tone: 'success', text: 'Die nicht mehr lesbaren Wörter sind entfernt. Versuche es noch einmal.' }
+          : {
+              tone: 'info',
+              text: 'Die gespeicherten Wörter sind lesbar und bleiben auf diesem Gerät. Öffne zuerst das gespeicherte Konto und bestätige die Wörter.',
+            },
+      );
+      if (removed) onDone();
+    } catch {
+      // A dismissed prompt changes nothing.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
+        Wenn sich Fingerabdruck oder Gesicht geändert haben, kann dein Handy diese Wörter nicht mehr lesen. Dann kannst du sie entfernen.
+      </Text>
+      <BigButton label="Nicht mehr lesbare Wörter entfernen" kind="secondary" busy={busy} onPress={discard} />
+      {notice ? <Notice tone={notice.tone} text={notice.text} /> : null}
+    </Card>
+  );
+}
+
+/**
+ * Expert recovery: the new words on this phone are unreadable, replaced or gone. The written-down
+ * words are typed again (only this recovery's words are accepted), stored, and the step goes on.
+ * Before the confirmation there are no words on paper, so "Neu beginnen" is offered as well.
+ */
+function ReenterWords({
+  state,
+  lost,
+  canStartOver,
+  onRestored,
+  onStartOver,
+}: {
+  state: RecoveryState;
+  lost: WordsLost;
+  canStartOver: boolean;
+  onRestored: (s: RecoveryState) => void;
+  onStartOver: () => void;
+}) {
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [overwrite, setOverwrite] = useState(false);
+
+  const enter = async (phrase: string) => {
+    if (busy) return;
+    if (lost === 'replaced' && !(await confirmAlert('Wörter ersetzen?', REPLACE_WORDS_TEXT, 'Ersetzen'))) return;
+    setBusy(true);
+    setNotice(null);
+    setOverwrite(false);
+    try {
+      const r = await reenterRecoveryWords(state, phrase, deps);
+      if (r.ok) onRestored(r.state);
+      else {
+        setNotice(r.message);
+        setOverwrite(!!r.overwrite);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Deine 12 Wörter</Text>
+      <Notice tone="warning" text={WORDS_LOST_MESSAGES[lost]} />
+      <WordsInput onValid={enter} busy={busy} />
+      {notice ? <Notice tone="warning" text={notice} /> : null}
+      {overwrite ? <DiscardUnreadableWords onDone={() => setOverwrite(false)} /> : null}
+      {canStartOver ? (
+        <Pressable onPress={onStartOver} accessibilityRole="button" style={styles.textButton}>
+          <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Abbrechen und neu beginnen</Text>
+        </Pressable>
+      ) : null}
+    </>
   );
 }
 

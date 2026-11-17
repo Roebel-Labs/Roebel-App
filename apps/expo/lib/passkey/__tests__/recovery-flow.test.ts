@@ -14,9 +14,15 @@ import {
   formatRemaining,
   isForeignRecoveryPending,
   loadRecoveryState,
+  REPLACE_OTHER_WORDS_WARNING,
+  WORDS_LOST_MESSAGES,
+  WORDS_NOT_THIS_RECOVERY_MESSAGE,
+  expertRecoveryWarning,
+  openRecoveredWordsSession,
   ownerKindForCode,
   pollRecovery,
   recoveryWordsStatus,
+  reenterRecoveryWords,
   resumeRecovery,
   startRecovery,
   startWordsRecovery,
@@ -496,27 +502,39 @@ describe('startWordsRecovery', () => {
 });
 
 
-describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words', () => {
-  const NEW_OWNER = deriveWordAddresses(LEGAL, 1)[0];
-  const NEW_SAFE = predictEcdsaSafeAddress(NEW_OWNER);
-  const OP_HASH = `0x${'11'.repeat(32)}` as Hex;
+// ---------------------------------------------------------------------------
+// Expert accounts (ownerKind 'ecdsa'): guardians recover them to NEW 12 words
+// ---------------------------------------------------------------------------
 
-  /** Deps whose sendUserOp also signs (so the device unlock + the words' key really run). */
-  function expertDeps(over: Partial<RecoveryDeps> = {}) {
-    const h = makeDeps({ random: () => hex('7f'.repeat(16)), ...over });
-    const sigs: Hex[] = [];
-    h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
-      sigs.push(await a.signer.signOpHash(OP_HASH));
-      h.sent.push(a);
-      return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
-    });
-    return { ...h, sigs };
-  }
+const NEW_OWNER = deriveWordAddresses(LEGAL, 1)[0];
+const NEW_SAFE = predictEcdsaSafeAddress(NEW_OWNER);
+const OP_HASH = `0x${'11'.repeat(32)}` as Hex;
+const PHRASE_KEY = 'words_phrase_v1';
+const MARKER_KEY = 'words_phrase_present_v1';
 
-  const startExpert = (h: ReturnType<typeof expertDeps>) =>
-    startRecovery({ wallet: WALLET, name: 'Anna', ownerKind: 'ecdsa' }, h.deps);
+/** Deps whose sendUserOp also signs (so the device unlock + the words' key really run). */
+function expertDeps(over: Partial<RecoveryDeps> = {}) {
+  const h = makeDeps({ random: () => hex('7f'.repeat(16)), ...over });
+  const sigs: Hex[] = [];
+  h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
+    sigs.push(await a.signer.signOpHash(OP_HASH));
+    h.sent.push(a);
+    return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
+  });
+  return { ...h, sigs };
+}
 
-  it('start generates and stores a new phrase, no passkey; the state holds no word', async () => {
+const startExpert = (h: ReturnType<typeof expertDeps>) => startRecovery({ wallet: WALLET, name: 'Anna', ownerKind: 'ecdsa' }, h.deps);
+
+/** A started expert recovery whose words were confirmed (the code was shown). */
+async function confirmedExpert(h: ReturnType<typeof expertDeps>): Promise<RecoveryState> {
+  const { state } = await startExpert(h);
+  await h.deps.phrase.markConfirmed();
+  return state;
+}
+
+describe('expert recovery: start', () => {
+  it('generates and stores a new phrase, no passkey; the state holds no word', async () => {
     const h = expertDeps();
     const { state, phrase } = await startExpert(h);
     expect(phrase).toBe(LEGAL);
@@ -527,20 +545,20 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     expect(await loadRecoveryState(h.storage)).toEqual(state);
     const persisted = h.storage.map.get(RECOVERY_STORE_KEY)!;
     for (const w of LEGAL.split(' ')) expect(persisted).not.toContain(w);
-    // Stored behind the device unlock, not yet confirmed.
     expect(await h.deps.phrase.storedOwner()).toBe(NEW_OWNER);
     expect(await h.deps.phrase.read('x')).toBe(LEGAL);
     expect(await h.deps.phrase.isConfirmed()).toBe(false);
     expect(await recoveryWordsStatus(state, h.deps.phrase)).toBe('unconfirmed');
   });
 
-  it("E4: the unconfirmed words of another account on this phone are never replaced", async () => {
+  it('E4: the unconfirmed words of another account are never replaced; the screen may offer the discard', async () => {
     const h = expertDeps();
     await h.deps.phrase.write(JUNK);
-    const { state, phrase } = await startExpert(h);
-    expect(phrase).toBeUndefined();
-    expect(state.step).toBe('idle');
-    expect(state.message).toBe(PHRASE_OVERWRITE_MESSAGE);
+    const r = await startExpert(h);
+    expect(r.phrase).toBeUndefined();
+    expect(r.overwrite).toBe(true);
+    expect(r.state.step).toBe('idle');
+    expect(r.state.message).toBe(PHRASE_OVERWRITE_MESSAGE);
     expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
     expect(await h.deps.phrase.read('x')).toBe(JUNK);
   });
@@ -555,9 +573,74 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
   });
 
+  it("fix 2: a store failure before the write touched anything never removes ANOTHER account's words", async () => {
+    // JUNK confirmed (may be overwritten); the marker read fails once at each of two points.
+    for (const failAt of [1, 2]) {
+      const h = expertDeps();
+      await h.deps.phrase.write(JUNK);
+      await h.deps.phrase.markConfirmed();
+      const get = h.secure.secure.getItemAsync;
+      const real = get.getMockImplementation()!;
+      let markerReads = 0;
+      get.mockImplementation(async (k: string, o?: { requireAuthentication?: boolean }) => {
+        if (k === MARKER_KEY && ++markerReads === failAt) throw new Error('keystore busy');
+        return real(k, o);
+      });
+      const r = await startExpert(h);
+      expect(r.phrase).toBeUndefined();
+      expect(r.state.step).toBe('error');
+      expect(h.secure.m.get(PHRASE_KEY)).toBe(JUNK);
+      expect(h.secure.m.get(MARKER_KEY)).toBe(deriveWordAddresses(JUNK, 1)[0]);
+      expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+    }
+  });
+
+  it('fix 3: the state is persisted BEFORE the words are written (a kill never orphans words)', async () => {
+    const h = expertDeps();
+    const write = h.deps.phrase.write;
+    let stateAtWrite: RecoveryState | null = null;
+    h.deps.phrase = { ...h.deps.phrase, write: jest.fn(async (p: string) => {
+      stateAtWrite = await loadRecoveryState(h.storage);
+      return write(p);
+    }) };
+    await startExpert(h);
+    expect(stateAtWrite).toMatchObject({ signer: NEW_OWNER, newSafe: NEW_SAFE, ownerKind: 'ecdsa' });
+    // Killed right there: a state without words → 'missing' (the screen offers "Neu beginnen").
+    const empty = memSecure();
+    expect(await recoveryWordsStatus(stateAtWrite!, empty.store)).toBe('missing');
+  });
+
+  it('fix 3: a failed persist writes no words; a failed write clears the state again', async () => {
+    const h = expertDeps();
+    h.storage.setItem.mockImplementationOnce(async () => Promise.reject(new Error('disk full')));
+    const r = await startExpert(h);
+    expect(r.state.step).toBe('error');
+    expect(r.phrase).toBeUndefined();
+    expect(await h.deps.phrase.has()).toBe(false);
+
+    const w = expertDeps();
+    w.secure.secure.setItemAsync.mockImplementation(async (k: string, v: string) => {
+      if (k === PHRASE_KEY) throw new Error('User canceled the authentication');
+      w.secure.m.set(k, v);
+    });
+    const c = await startExpert(w);
+    expect(c.state.step).toBe('idle');
+    expect(c.state.message).toMatch(/Abgebrochen/);
+    expect(w.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+    expect(await w.deps.phrase.has()).toBe(false); // the half-written NEW marker is gone
+  });
+
+  it('M1: an active 12-word session of another account is warned about; a passkey session is not', () => {
+    expect(expertRecoveryWarning({ ownerType: 'ecdsa' })).toBe(REPLACE_OTHER_WORDS_WARNING);
+    expect(expertRecoveryWarning({ ownerType: 'webauthnSigner' })).toBeNull();
+    expect(expertRecoveryWarning(null)).toBeNull();
+  });
+});
+
+describe('expert recovery: ops and done', () => {
   it('the execute op is ONE call from the fresh expert Safe, signed by the new words', async () => {
     const h = expertDeps();
-    const { state } = await startExpert(h);
+    const state = await confirmedExpert(h);
     const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
     expect(h.deps.sendUserOp).toHaveBeenCalledTimes(1);
     const args = (h.deps.sendUserOp as jest.Mock).mock.calls[0][0] as SafeUserOpArgs;
@@ -567,7 +650,6 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     expect(args.sender).toBeUndefined();
     expect(args.deployed).toBe(false);
     expect(args.legacy).toBeUndefined();
-    // The userOp signature = validity window ++ the new words' key 0 over the op hash.
     const sig = h.sigs[0];
     expect(await recoverAddress({ hash: OP_HASH, signature: `0x${sig.slice(2 + 24)}` })).toBe(NEW_OWNER);
     expect(s.step).toBe('waitingDelay');
@@ -575,7 +657,7 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
 
   it('a dismissed device unlock during execute keeps executing (retry possible)', async () => {
     const h = expertDeps();
-    const { state } = await startExpert(h);
+    const state = await confirmedExpert(h);
     h.secure.secure.getItemAsync.mockImplementation(async (k: string, opts?: { requireAuthentication?: boolean }) => {
       if (opts?.requireAuthentication) throw new Error('User canceled the authentication');
       return h.secure.m.get(k) ?? null;
@@ -583,27 +665,12 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
     expect(s.step).toBe('executing');
     expect(s.message).toMatch(/Abgebrochen/);
+    expect(s.wordsLost).toBeUndefined();
   });
 
-  it('new words made unreadable (biometrics changed): says so, stays executing, no app-wide re-entry route', async () => {
+  it('finalize (tapped) saves a words record AND session on the OLD Safe address', async () => {
     const h = expertDeps();
-    const { state } = await startExpert(h);
-    h.secure.m.delete('words_phrase_v1'); // the system invalidated the protected item: it reads back as null
-    const heard = jest.fn();
-    const off = onPhraseUnavailable(heard);
-    try {
-      const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
-      expect(s.step).toBe('executing');
-      expect(s.message).toMatch(/gesperrt/);
-      expect(heard).not.toHaveBeenCalled();
-    } finally {
-      off();
-    }
-  });
-
-  it('finalize saves a words record AND session on the OLD Safe address', async () => {
-    const h = expertDeps();
-    const { state } = await startExpert(h);
+    const state = await confirmedExpert(h);
     const f = await finalizeRecoveryStep({ ...state, step: 'finalizing', executeAfter: NOW - 1 }, h.deps);
     expect(f.step).toBe('done');
     const args = (h.deps.sendUserOp as jest.Mock).mock.calls[0][0] as SafeUserOpArgs;
@@ -620,18 +687,24 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
       y: WORDS_KEY_PLACEHOLDER,
     });
     expect(await loadMigrationRecord(h.storage)).toMatchObject({ safe: WALLET, owner: NEW_OWNER, ownerType: 'ecdsa', status: 'done' });
-    expect(h.storage.map.has(MIGRATION_STORE_KEY)).toBe(true);
   });
 
-  it('someone else finalized: the poll ends in done with the words session', async () => {
+  it('M3: finalized elsewhere (poll) → done, record saved, the active session untouched until "Weiter"', async () => {
     const h = expertDeps();
-    const { state } = await startExpert(h);
+    const state = await confirmedExpert(h);
+    const ACTIVE = JSON.stringify({ other: 'session' });
+    h.sessionStorage.map.set(PASSKEY_SESSION_KEY, ACTIVE);
     h.setOwners([NEW_OWNER]);
     const p = await pollRecovery({ ...state, step: 'waitingDelay', executeAfter: NOW - 1 }, h.deps);
     expect(p.step).toBe('done');
     expect(h.deps.sendUserOp).not.toHaveBeenCalled();
+    expect((await loadMigrationRecord(h.storage))?.owner).toBe(NEW_OWNER);
+    expect(h.sessionStorage.map.get(PASSKEY_SESSION_KEY)).toBe(ACTIVE);
+
+    const opened = await openRecoveredWordsSession(p, h.deps);
+    expect(opened).toMatchObject({ safe: WALLET, identity: WALLET, owner: NEW_OWNER, ownerType: 'ecdsa' });
     expect((await loadPasskeySession(h.sessionStorage))?.owner).toBe(NEW_OWNER);
-    expect(h.sessionStorage.map.has(PASSKEY_SESSION_KEY)).toBe(true);
+    expect(await openRecoveredWordsSession({ ...p, step: 'waitingDelay' }, h.deps)).toBeNull();
   });
 
   it('resume after an error goes back to waiting (no passkey needed)', async () => {
@@ -648,7 +721,6 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     expect(await h.deps.phrase.has()).toBe(false);
     expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
 
-    // A new attempt is not blocked (E4) and, once confirmed, its words survive "neu beginnen".
     const again = await startExpert(h);
     expect(again.phrase).toBe(LEGAL);
     await h.deps.phrase.markConfirmed();
@@ -656,18 +728,86 @@ describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words
     await abandonRecovery(again.state, h.deps);
     expect(await h.deps.phrase.storedOwner()).toBe(NEW_OWNER);
   });
+});
 
-  it('words replaced by another account are reported as missing; a passkey recovery is always confirmed', async () => {
+describe('expert recovery: lost or replaced words → the written-down words are typed again', () => {
+  it('unreadable words (biometrics changed) during execute: wordsLost unreadable, no app-wide re-entry route', async () => {
     const h = expertDeps();
-    const { state } = await startExpert(h);
-    await h.deps.phrase.markConfirmed();
+    const state = await confirmedExpert(h);
+    h.secure.m.delete(PHRASE_KEY); // the system invalidated the protected item: it reads back as null
+    const heard = jest.fn();
+    const off = onPhraseUnavailable(heard);
+    try {
+      const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
+      expect(s.step).toBe('executing');
+      expect(s.wordsLost).toBe('unreadable');
+      expect(s.message).toBe(WORDS_LOST_MESSAGES.unreadable);
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it('words replaced by another account before finalize: wordsLost replaced with its own explanation', async () => {
+    const h = expertDeps();
+    const state = await confirmedExpert(h);
     await h.deps.phrase.write(JUNK);
-    expect(await recoveryWordsStatus(state, h.deps.phrase)).toBe('missing');
+    const f = await finalizeRecoveryStep({ ...state, step: 'finalizing', executeAfter: NOW - 1 }, h.deps);
+    expect(f.step).toBe('finalizing');
+    expect(f.wordsLost).toBe('replaced');
+    expect(f.message).toBe(WORDS_LOST_MESSAGES.replaced);
+    expect(f.message).not.toMatch(/nicht geklappt/);
+    expect(h.sent).toHaveLength(0);
+    expect(await recoveryWordsStatus({ ...state, step: 'waitingDelay' }, h.deps.phrase)).toBe('replaced');
+  });
+
+  it('words gone entirely during the delay: status missing; any step reports it', async () => {
+    const h = expertDeps();
+    const state = await confirmedExpert(h);
+    await h.deps.phrase.remove();
+    expect(await recoveryWordsStatus({ ...state, step: 'waitingDelay' }, h.deps.phrase)).toBe('missing');
+    const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
+    expect(s.wordsLost).toBe('missing');
+    expect(s.message).toBe(WORDS_LOST_MESSAGES.missing);
+  });
+
+  it("typing the words back: other words are refused; this recovery's words are stored, confirmed, and the op goes through", async () => {
+    const h = expertDeps();
+    const state = await confirmedExpert(h);
+    await h.deps.phrase.write(JUNK); // replaced (JUNK unconfirmed now)
+    await h.deps.phrase.markConfirmed(); // …but confirmed, so it may be replaced by the typed words
+    const lost = await finalizeRecoveryStep({ ...state, step: 'finalizing', executeAfter: NOW - 1 }, h.deps);
+
+    expect(await reenterRecoveryWords(lost, JUNK, h.deps)).toEqual({ ok: false, message: WORDS_NOT_THIS_RECOVERY_MESSAGE });
+    expect((await reenterRecoveryWords(lost, LEGAL.replace('yellow', 'wave'), h.deps)).ok).toBe(false);
+
+    const r = await reenterRecoveryWords(lost, LEGAL, h.deps);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.wordsLost).toBeUndefined();
+    expect(r.state.message).toBeUndefined();
+    expect(await h.deps.phrase.storedOwner()).toBe(NEW_OWNER);
+    expect(await h.deps.phrase.isConfirmed()).toBe(true);
+    const f = await finalizeRecoveryStep(r.state, h.deps);
+    expect(f.step).toBe('done');
+  });
+
+  it("typing the words back never replaces another account's UNCONFIRMED words (E4 → discard offer)", async () => {
+    const h = expertDeps();
+    const state = await confirmedExpert(h);
+    await h.deps.phrase.write(JUNK); // unconfirmed
+    expect(await reenterRecoveryWords(state, LEGAL, h.deps)).toEqual({ ok: false, message: PHRASE_OVERWRITE_MESSAGE, overwrite: true });
+    expect(await h.deps.phrase.read('x')).toBe(JUNK);
+  });
+
+  it('a passkey recovery never reports lost words', async () => {
     const g = makeDeps();
     expect(await recoveryWordsStatus(await waiting(g), g.deps.phrase)).toBe('confirmed');
   });
+});
 
-  it('ownerKindForCode: no code or a 7702 designator = expert owner (E9); other code = passkey', () => {
+describe('ownerKindForCode (E9)', () => {
+  it('no code or a 7702 designator = expert owner; other code = passkey', () => {
     expect(ownerKindForCode(undefined)).toBe('ecdsa');
     expect(ownerKindForCode('0x')).toBe('ecdsa');
     expect(ownerKindForCode(`0xef0100${'ab'.repeat(20)}` as Hex)).toBe('ecdsa');

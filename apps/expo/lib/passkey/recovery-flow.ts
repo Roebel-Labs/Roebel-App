@@ -55,11 +55,11 @@ import {
   type PhraseStore,
 } from './phrase-store';
 import { predictSafeAddress } from './safe-address';
-import { savePasskeySession, WORDS_KEY_PLACEHOLDER, type SessionStorage } from './session';
+import { randomBytes } from './random';
+import { isWordsOwner, savePasskeySession, WORDS_KEY_PLACEHOLDER, type PasskeySession, type SessionStorage } from './session';
 import { ecdsaOpSigner, passkeyOpSigner, type SafeOpSigner, type SafeUserOpArgs } from './userop';
 import type { PasskeyAssertion, PasskeyCredential } from './webauthn';
-import { generateAndStorePhrase } from './words-account';
-import { phraseErrorMessage, validatePhrase, wordsFromSeed, type WordsKit } from './words';
+import { generatePhrase, phraseErrorMessage, validatePhrase, wordsFromSeed, type WordsKit } from './words';
 import { NO_WORDS_ACCOUNT_MESSAGE, signWordApprovalsWithKit, wordGuardiansOf } from './words-recovery';
 
 export const RECOVERY_STORE_KEY = 'passkey_recovery_v1';
@@ -107,10 +107,42 @@ export type RecoveryState = {
    * an expert account a new 12-word key ('ecdsa'; `signer` = its address 0, no credential).
    */
   ownerKind?: 'passkey' | 'ecdsa';
+  /**
+   * Expert recovery, set by a failed op (never persisted on its own): the new words on this phone
+   * are unreadable, replaced by other words, or gone. The screen asks for the written-down words.
+   */
+  wordsLost?: WordsLost;
 };
 
-/** `startRecovery`'s result: `phrase` = the new 12 words of an expert recovery, returned ONCE. */
-export type RecoveryStart = { state: RecoveryState; phrase?: string };
+export type WordsLost = 'unreadable' | 'replaced' | 'missing';
+
+/**
+ * `startRecovery`'s result: `phrase` = the new 12 words of an expert recovery, returned ONCE;
+ * `overwrite` = E4 refused (the screen may offer `phrase.discardIfUnreadable()` on a tap).
+ */
+export type RecoveryStart = { state: RecoveryState; phrase?: string; overwrite?: true };
+
+/** M1: an active 12-word session of another account loses its words on this phone. */
+export const REPLACE_OTHER_WORDS_WARNING = 'Die Wörter deines anderen Kontos auf diesem Gerät werden ersetzt.';
+export const WORDS_LOST_MESSAGES: Record<WordsLost, string> = {
+  unreadable:
+    'Dein Handy hat die neuen Wörter gesperrt, weil sich Fingerabdruck oder Gesicht geändert haben. Gib die 12 Wörter ein, die du aufgeschrieben hast, dann geht es weiter.',
+  replaced:
+    'Auf diesem Handy liegen inzwischen andere 12 Wörter. Gib die Wörter dieser Wiederherstellung ein, die du aufgeschrieben hast, dann geht es weiter.',
+  missing:
+    'Die neuen Wörter sind nicht mehr auf diesem Handy. Gib die 12 Wörter ein, die du aufgeschrieben hast, dann geht es weiter.',
+};
+export const WORDS_NOT_THIS_RECOVERY_MESSAGE =
+  'Diese Wörter gehören nicht zu dieser Wiederherstellung. Gib die Wörter ein, die du dir hier aufgeschrieben hast.';
+const STORE_FAILED_MESSAGE = 'Die Wörter konnten nicht sicher gespeichert werden. Bitte versuche es erneut.';
+
+/** Thrown by the expert op signer when the stored words are not this recovery's. */
+class WordsMismatchError extends Error {
+  constructor() {
+    super("the 12 words on this device are not this recovery's");
+    this.name = 'WordsMismatchError';
+  }
+}
 
 export type RecoveryStorage = KeyValueStorage & { removeItem?: (key: string) => Promise<void> };
 
@@ -150,11 +182,24 @@ const isEcdsa = (s: Pick<RecoveryState, 'ownerKind'>) => s.ownerKind === 'ecdsa'
 /** The state holds the new owner's key material (a passkey, or for an expert recovery its signer). */
 const hasRecoveryKey = (s: RecoveryState) => (isEcdsa(s) ? !!s.signer && !!s.newSafe : !!s.credentialId && !!s.x && !!s.y);
 const detailOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
-/** A failed op's message: the new words became unreadable (biometrics changed), or a generic retry. */
-const opFailedMessage = (e: unknown) =>
-  errName(e) === 'PhraseUnavailableError'
-    ? 'Dein Handy hat die neuen Wörter gesperrt, weil sich Fingerabdruck oder Gesicht geändert haben. Bitte wende dich an den Support.'
-    : 'Das hat nicht geklappt. Bitte versuche es erneut.';
+/**
+ * A failed op (not cancelled, not landed): lost words of an expert recovery → `wordsLost` + the
+ * German reason (the screen asks for the written-down words); anything else → a generic retry.
+ */
+async function opFailure(s: RecoveryState, e: unknown, deps: RecoveryDeps): Promise<RecoveryState> {
+  const base = { ...s, detail: detailOf(e) };
+  if (isEcdsa(s) && (errName(e) === 'PhraseUnavailableError' || errName(e) === 'WordsMismatchError')) {
+    const stored = await deps.phrase.storedOwner().catch(() => null);
+    const lost: WordsLost =
+      errName(e) === 'WordsMismatchError' || (stored && s.signer && !isAddressEqual(stored, s.signer))
+        ? 'replaced'
+        : stored
+          ? 'unreadable'
+          : 'missing';
+    return { ...base, wordsLost: lost, message: WORDS_LOST_MESSAGES[lost] };
+  }
+  return { ...base, message: 'Das hat nicht geklappt. Bitte versuche es erneut.' };
+}
 const ownsOnly = (owners: readonly Address[], signer: Address) => owners.length === 1 && isAddressEqual(owners[0], signer);
 
 export async function loadRecoveryState(storage: RecoveryStorage): Promise<RecoveryState | null> {
@@ -197,7 +242,7 @@ function opBase(s: RecoveryState, deps: RecoveryDeps): Pick<SafeUserOpArgs, 'sig
     // trigger the app-wide "enter your words again" route (phrase-events); the step says it here.
     signer = ecdsaOpSigner(owner, async (digest) => {
       const account = wordsFromSeed(await deps.phrase.read(PHRASE_PROMPT)).account(0);
-      if (!isAddressEqual(account.address, owner)) throw new Error('the 12 words on this device are not this recovery\'s');
+      if (!isAddressEqual(account.address, owner)) throw new WordsMismatchError();
       return account.sign({ hash: digest });
     });
   } else {
@@ -269,46 +314,97 @@ export async function startRecovery(
   return { state: await persist(deps, { ...signed.state, step: 'waitingForGuardians' }) };
 }
 
+/** Drops a half-written marker of `owner`'s words; never words of anyone else (best effort). */
+async function removeIfOwn(phrase: PhraseStore, owner: Address): Promise<void> {
+  const stored = await phrase.storedOwner().catch(() => null);
+  if (stored && isAddressEqual(stored, owner)) await phrase.remove().catch(() => undefined);
+}
+
+/**
+ * Order (fix round 1): words generated in memory → E4 checked → the state (signer, newSafe)
+ * persisted → the words written. A kill in between leaves a state without words ('missing' →
+ * "Neu beginnen") or a state with unconfirmed words (shown again behind the unlock), never words
+ * nobody points to. A failed write clears the state again; cleanup only ever removes the NEW words.
+ */
 async function startExpertRecovery(base: RecoveryState, deps: RecoveryDeps): Promise<RecoveryStart> {
   const failed = (message: string, step: RecoveryStep = 'idle', e?: unknown): RecoveryStart => ({
     state: { ...base, step, message, ...(e !== undefined ? { detail: detailOf(e) } : {}) },
   });
-  let created: { phrase: string; owner: Address };
+  const phrase = generatePhrase(deps.random ?? randomBytes);
+  const signer = getAddress(wordsFromSeed(phrase).account(0).address);
+  const overwrite = (): RecoveryStart => ({ ...failed(PHRASE_OVERWRITE_MESSAGE), overwrite: true });
   try {
     if (!(await deps.phrase.canProtect())) return failed(NO_BIOMETRICS_MESSAGE, 'error');
-    created = await generateAndStorePhrase(deps.phrase, deps.random);
+    const stored = await deps.phrase.storedOwner();
+    if (stored && !isAddressEqual(stored, signer) && !(await deps.phrase.isConfirmed())) return overwrite();
   } catch (e) {
-    if (e instanceof PhraseOverwriteError) return failed(PHRASE_OVERWRITE_MESSAGE);
-    if (e instanceof Error && e.message === NO_BIOMETRICS_MESSAGE) return failed(NO_BIOMETRICS_MESSAGE, 'error');
-    // A mid-write failure may leave the NEW words' marker without words: drop it (as words-account).
-    await deps.phrase.remove().catch(() => undefined);
-    if (isCancelled(e) || /cancel/i.test(detailOf(e))) return failed('Abgebrochen. Du kannst es jederzeit erneut versuchen.');
-    return failed('Die Wörter konnten nicht sicher gespeichert werden. Bitte versuche es erneut.', 'error', e);
+    return failed(STORE_FAILED_MESSAGE, 'error', e);
   }
-  const signer = getAddress(created.owner);
-  const state = await persist(deps, {
-    ...base,
-    step: 'waitingForGuardians',
-    signer,
-    newSafe: predictEcdsaSafeAddress(signer),
-  });
-  return { state, phrase: created.phrase };
+  let state: RecoveryState;
+  try {
+    state = await persist(deps, { ...base, step: 'waitingForGuardians', signer, newSafe: predictEcdsaSafeAddress(signer) });
+  } catch (e) {
+    return failed('Auf diesem Handy konnte nichts gespeichert werden. Bitte versuche es erneut.', 'error', e);
+  }
+  try {
+    await deps.phrase.write(phrase);
+  } catch (e) {
+    await clearRecoveryState(deps.storage).catch(() => undefined);
+    if (e instanceof PhraseOverwriteError) return overwrite();
+    if (e instanceof Error && e.message === NO_BIOMETRICS_MESSAGE) return failed(NO_BIOMETRICS_MESSAGE, 'error');
+    // A mid-write failure may leave the NEW words' marker without words; a failure before the store
+    // touched anything leaves the previous words, which must survive.
+    await removeIfOwn(deps.phrase, signer);
+    if (isCancelled(e) || /cancel/i.test(detailOf(e))) return failed('Abgebrochen. Du kannst es jederzeit erneut versuchen.');
+    return failed(STORE_FAILED_MESSAGE, 'error', e);
+  }
+  return { state, phrase };
 }
 
 /**
  * Where an expert recovery's new words stand on this phone: 'confirmed' (the guardians may see
  * the code), 'unconfirmed' (show and confirm them first; the app may have been closed in between),
- * 'missing' (the stored words are not this recovery's: it cannot finish on this phone).
- * A passkey recovery is always 'confirmed'.
+ * 'replaced' (other words are stored now), 'missing' (no words stored). For the last two the
+ * person types the written-down words (`reenterRecoveryWords`); before the confirmation there are
+ * none on paper, so the screen also offers "Neu beginnen". A passkey recovery is always 'confirmed'.
  */
 export async function recoveryWordsStatus(
   s: RecoveryState,
   phrase: Pick<PhraseStore, 'storedOwner' | 'isConfirmed'>,
-): Promise<'confirmed' | 'unconfirmed' | 'missing'> {
+): Promise<'confirmed' | 'unconfirmed' | 'replaced' | 'missing'> {
   if (!isEcdsa(s)) return 'confirmed';
   const stored = await phrase.storedOwner();
-  if (!stored || !s.signer || !isAddressEqual(stored, s.signer)) return 'missing';
+  if (!stored) return 'missing';
+  if (!s.signer || !isAddressEqual(stored, s.signer)) return 'replaced';
   return (await phrase.isConfirmed()) ? 'confirmed' : 'unconfirmed';
+}
+
+export type ReenterResult = { ok: true; state: RecoveryState } | { ok: false; message: string; overwrite?: true };
+
+/**
+ * The written-down words of an expert recovery, typed again (lost, replaced or unreadable on this
+ * phone): only words whose address 0 IS this recovery's signer are accepted; they are stored
+ * behind the device unlock (E4 applies) and marked confirmed (the person typed them). The caller
+ * then retries the step. Nothing is logged; the input is dropped when this returns.
+ */
+export async function reenterRecoveryWords(s: RecoveryState, input: string, deps: Pick<RecoveryDeps, 'phrase'>): Promise<ReenterResult> {
+  if (!isEcdsa(s) || !s.signer) return { ok: false, message: 'Das hat nicht geklappt. Bitte versuche es erneut.' };
+  const check = validatePhrase(input);
+  if (!check.ok) return { ok: false, message: phraseErrorMessage(check) };
+  const owner = wordsFromSeed(check.phrase).account(0).address;
+  if (!isAddressEqual(owner, s.signer)) return { ok: false, message: WORDS_NOT_THIS_RECOVERY_MESSAGE };
+  try {
+    if (!(await deps.phrase.canProtect())) return { ok: false, message: NO_BIOMETRICS_MESSAGE };
+    await deps.phrase.write(check.phrase);
+  } catch (e) {
+    if (e instanceof PhraseOverwriteError) return { ok: false, message: PHRASE_OVERWRITE_MESSAGE, overwrite: true };
+    if (e instanceof Error && e.message === NO_BIOMETRICS_MESSAGE) return { ok: false, message: NO_BIOMETRICS_MESSAGE };
+    await removeIfOwn(deps.phrase, owner);
+    if (isCancelled(e) || /cancel/i.test(detailOf(e))) return { ok: false, message: 'Abgebrochen. Du kannst es jederzeit erneut versuchen.' };
+    return { ok: false, message: STORE_FAILED_MESSAGE };
+  }
+  await deps.phrase.markConfirmed().catch(() => undefined);
+  return { ok: true, state: { ...s, wordsLost: undefined, message: undefined, detail: undefined } };
 }
 
 /**
@@ -318,7 +414,7 @@ export async function recoveryWordsStatus(
  * (E4). Confirmed words stay (a guardian may already have approved them).
  */
 export async function abandonRecovery(s: RecoveryState | null, deps: Pick<RecoveryDeps, 'storage' | 'phrase'>): Promise<void> {
-  if (s && (await recoveryWordsStatus(s, deps.phrase).catch(() => 'missing')) === 'unconfirmed') {
+  if (s && (await recoveryWordsStatus(s, deps.phrase).catch(() => 'missing' as const)) === 'unconfirmed') {
     await deps.phrase.remove().catch(() => undefined);
   }
   await clearRecoveryState(deps.storage);
@@ -488,7 +584,8 @@ export async function pollRecovery(s: RecoveryState, deps: RecoveryDeps): Promis
       const req = await deps.readRequest(s.wallet);
       if (req.executeAfter === 0n || !ownsOnly(req.newOwners, signer)) {
         const owners = await deps.readOwners(s.wallet);
-        if (ownsOnly(owners, signer)) return completeRecovery(s, deps);
+        // Finalized elsewhere (a poll): never switch the session in the background (M3).
+        if (ownsOnly(owners, signer)) return completeRecovery(s, deps, false);
         return persist(deps, {
           ...s,
           step: 'cancelled',
@@ -526,11 +623,11 @@ export async function executeRecoveryStep(s: RecoveryState, deps: RecoveryDeps):
     if (req && req.executeAfter > 0n && ownsOnly(req.newOwners, s.signer)) {
       return persist(deps, { ...s, step: 'waitingDelay', executeAfter: Number(req.executeAfter), message: undefined });
     }
-    return { ...s, message: opFailedMessage(e), detail: detailOf(e) };
+    return opFailure(s, e, deps);
   }
   const req = await deps.readRequest(s.wallet).catch(() => null);
   const executeAfter = req && req.executeAfter > 0n ? Number(req.executeAfter) : undefined;
-  return persist(deps, { ...s, step: 'waitingDelay', executeAfter, message: undefined, detail: undefined });
+  return persist(deps, { ...s, step: 'waitingDelay', executeAfter, message: undefined, detail: undefined, wordsLost: undefined });
 }
 
 /** Step 5: finalizeRecovery once the delay is over, then the device operates the recovered Safe. */
@@ -542,20 +639,38 @@ export async function finalizeRecoveryStep(s: RecoveryState, deps: RecoveryDeps)
   } catch (e) {
     if (isCancelled(e)) return { ...s, message: 'Abgebrochen. Tippe erneut, wenn du bereit bist.' };
     const owners = await deps.readOwners(s.wallet).catch(() => [] as Address[]);
-    if (ownsOnly(owners, s.signer)) return completeRecovery(s, deps);
-    return { ...s, message: opFailedMessage(e), detail: detailOf(e) };
+    if (ownsOnly(owners, s.signer)) return completeRecovery(s, deps, true);
+    return opFailure(s, e, deps);
   }
-  return completeRecovery(s, deps);
+  // The person tapped "Konto zurückholen": the recovered account becomes this phone's session.
+  return completeRecovery(s, deps, true);
 }
 
-async function completeRecovery(s: RecoveryState, deps: RecoveryDeps): Promise<RecoveryState> {
+/** The words session of a recovered expert account: the OLD wallet, owned by the new words (identity = wallet). */
+function recoveredWordsSession(s: RecoveryState): PasskeySession {
+  return {
+    credentialId: '',
+    x: WORDS_KEY_PLACEHOLDER,
+    y: WORDS_KEY_PLACEHOLDER,
+    safe: s.wallet,
+    identity: s.wallet,
+    ownerType: 'ecdsa',
+    owner: s.signer!,
+  };
+}
+
+/**
+ * `openSession`: the person is on this screen and tapped (finalize) — save the words session too.
+ * A poll that learns the recovery was finalized elsewhere passes false: an active session on this
+ * phone is never replaced in the background; "Weiter" (`openRecoveredWordsSession`) does it (M3).
+ */
+async function completeRecovery(s: RecoveryState, deps: RecoveryDeps, openSession: boolean): Promise<RecoveryState> {
   if (!s.signer || !hasRecoveryKey(s)) return s;
   if (isEcdsa(s)) {
-    // The OLD wallet address stays the account; the new words own it. No legacy account: identity = wallet.
-    const key = { credentialId: '', x: WORDS_KEY_PLACEHOLDER, y: WORDS_KEY_PLACEHOLDER, safe: s.wallet, owner: s.signer };
-    await saveRecoveredRecord(deps.storage, { ...key, ownerType: 'ecdsa' });
-    await savePasskeySession(deps.sessionStorage, { ...key, identity: s.wallet, ownerType: 'ecdsa' });
-    return persist(deps, { ...s, step: 'done', message: undefined, detail: undefined });
+    const session = recoveredWordsSession(s);
+    await saveRecoveredRecord(deps.storage, { ...session, ownerType: 'ecdsa' });
+    if (openSession) await savePasskeySession(deps.sessionStorage, session);
+    return persist(deps, { ...s, step: 'done', message: undefined, detail: undefined, wordsLost: undefined });
   }
   await saveRecoveredRecord(deps.storage, {
     credentialId: s.credentialId!,
@@ -567,6 +682,25 @@ async function completeRecovery(s: RecoveryState, deps: RecoveryDeps): Promise<R
   });
   if (s.method === 'words' && deps.wordsDone) await deps.wordsDone(s).catch(() => undefined);
   return persist(deps, { ...s, step: 'done', message: undefined, detail: undefined });
+}
+
+/**
+ * "Weiter" after an expert recovery: saves (again) the words session of the recovered account and
+ * returns it for activation. Null for anything but a finished expert recovery.
+ */
+export async function openRecoveredWordsSession(
+  s: RecoveryState,
+  deps: Pick<RecoveryDeps, 'sessionStorage'>,
+): Promise<PasskeySession | null> {
+  if (!isEcdsa(s) || s.step !== 'done' || !s.signer) return null;
+  const session = recoveredWordsSession(s);
+  await savePasskeySession(deps.sessionStorage, session);
+  return session;
+}
+
+/** M1: the warning before an expert recovery when a 12-word session (another account) is active here. */
+export function expertRecoveryWarning(active: Pick<PasskeySession, 'ownerType'> | null | undefined): string | null {
+  return isWordsOwner(active) ? REPLACE_OTHER_WORDS_WARNING : null;
 }
 
 /** "Noch 2 Tage, 14 Stunden" (minutes only in the last hour). */
