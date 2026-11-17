@@ -22,6 +22,8 @@ import {
   confirmAction,
   delegateAccounts,
   expectedDelegateFor,
+  clearSentLock,
+  hasSentLock,
   isPossiblySent,
   preparedLabel,
   reportSent,
@@ -48,6 +50,8 @@ type Loaded =
       /** Lowercase account → display name, for setDelegate steps. */
       accountNames: Record<string, string>;
       loadedAt: number;
+      /** A stored "possibly sent" lock (survives restarts). */
+      sentLock: boolean;
     };
 
 const CHAIN_UNAVAILABLE = 'Das Register ist gerade nicht erreichbar. Bitte versuche es gleich noch einmal.';
@@ -110,6 +114,11 @@ export default function ApproveActionScreen() {
         nameAccounts(delegateAccounts(steps)),
       ]);
       if (cancelled) return;
+      // Not awaiting any more: the server has settled it, so a stored lock is cleared.
+      let sentLock = false;
+      if (res.data.status === 'awaiting_confirmation') sentLock = await hasSentLock(res.data.id, Date.now());
+      else await clearSentLock(res.data.id);
+      if (cancelled) return;
       const accountNames: Record<string, string> = {};
       for (const n of named) if (n.displayName !== 'Konto ohne Namen') accountNames[n.address.toLowerCase()] = n.displayName;
       setLoaded({
@@ -122,6 +131,7 @@ export default function ApproveActionScreen() {
         org: org.ok ? { ok: true, name: org.name } : org,
         accountNames,
         loadedAt: Date.now(),
+        sentLock,
       });
     })();
     return () => {
@@ -194,6 +204,7 @@ export default function ApproveActionScreen() {
   const reviewed = reviewAction(action, typeNamesFrom(current.types), current.loadedAt, {
     accounts: (address) => accountNames[address.toLowerCase()] ?? null,
     expectedDelegate,
+    locked: current.sentLock || locked,
   });
   const orgProblem = !current.org.ok && current.org.reason ? current.org.reason : null;
   const review = { ...reviewed, problem: reviewed.problem ?? orgProblem };
@@ -318,7 +329,7 @@ export default function ApproveActionScreen() {
               {busy === 'confirm' ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[frameStyles.primaryText, { color: colors.onPrimary }]}>Bestätigen</Text>}
             </Pressable>
           ) : null}
-          {!sent && !locked && action.status === 'awaiting_confirmation' && !isPossiblySent(action.id) ? (
+          {!sent && !locked && action.status === 'awaiting_confirmation' && !isPossiblySent(action.id) && !current.sentLock ? (
             <Pressable onPress={discard} disabled={busy !== null} style={styles.discard} accessibilityRole="button" accessibilityLabel="Verwerfen">
               {busy === 'cancel' ? (
                 <ActivityIndicator color={colors.textSecondary} />

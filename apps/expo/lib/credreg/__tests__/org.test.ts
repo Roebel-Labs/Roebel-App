@@ -5,6 +5,7 @@ jest.mock('@/constants/gnosis', () => ({ credentialRegistryGnosisAddress: '0x' +
 jest.mock('@/lib/org-safe/send', () => ({ sendOrgCalls: jest.fn() }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { credentialTypeId, encodeSteps, type RegisterStep } from '@netizen-labs/credential-registry';
 import type { Hex } from 'viem';
 import type { PhoneAction } from '../types';
@@ -16,7 +17,9 @@ import {
   describeSteps,
   __resetPossiblySent,
   germanDateToIso,
+  hasSentLock,
   isPossiblySent,
+  sentLockKey,
   resolveActionOrg,
   reviewAction,
   safeServerText,
@@ -74,7 +77,10 @@ function deps(over: Partial<ConfirmDeps> = {}): ConfirmDeps {
   };
 }
 
-beforeEach(() => __resetPossiblySent());
+beforeEach(async () => {
+  __resetPossiblySent();
+  await AsyncStorage.clear();
+});
 
 describe('describeSteps', () => {
   it('describeSteps names every step kind in German from the steps alone', () => {
@@ -445,6 +451,62 @@ describe('confirmAction: possibly sent without a hash', () => {
         expect(r.message).not.toMatch(HEX_ADDRESS);
       }
       expect(isPossiblySent(a.id)).toBe(false);
+    }
+  });
+});
+
+describe('the possibly-sent lock survives a restart', () => {
+  const timeout = () => new Error('Timeout waiting for userOp to be mined on chain 100 with UserOp hash: 0x' + 'ab'.repeat(32));
+
+  it('after a restart (fresh memory, same storage) the action is still locked: no send, no Bestätigen', async () => {
+    const a = action();
+    await confirmAction(account, a, deps({ send: jest.fn(async () => Promise.reject(timeout())) }));
+    expect(await AsyncStorage.getItem(sentLockKey(a.id))).not.toBeNull();
+
+    __resetPossiblySent(); // app restart
+    expect(isPossiblySent(a.id)).toBe(false);
+    const send = jest.fn(async () => ({ txHash: TX, confirmed: true }));
+    const r = await confirmAction(account, a, deps({ send }));
+    expect(r.ok === false && r.locked).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+    expect(await hasSentLock(a.id, Date.now())).toBe(true);
+    expect(reviewAction(a, typeNamesFrom([]), Date.now(), { locked: true }).problem).toMatch(/Übersicht/);
+  });
+
+  it('an expired lock no longer blocks and is removed', async () => {
+    const a = action();
+    await AsyncStorage.setItem(sentLockKey(a.id), JSON.stringify({ at: Date.now() - 20_000, until: Date.now() - 1_000 }));
+    const send = jest.fn(async () => ({ txHash: TX, confirmed: true }));
+    const r = await confirmAction(account, a, deps({ send }));
+    expect(r.ok).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await AsyncStorage.getItem(sentLockKey(a.id))).toBeNull();
+  });
+
+  it('a lock lasts until the action expires, at most 7 days', async () => {
+    const now = Date.now();
+    const a = action({ expiresAt: new Date(now + 30 * 24 * 3600 * 1000).toISOString() });
+    await confirmAction(account, a, deps({ send: jest.fn(async () => Promise.reject(timeout())), nowMs: () => now }));
+    const stored = JSON.parse((await AsyncStorage.getItem(sentLockKey(a.id))) as string);
+    expect(stored.until).toBe(now + 7 * 24 * 3600 * 1000);
+  });
+
+  it('is cleared once the server reports the action as no longer awaiting', async () => {
+    const a = action();
+    await AsyncStorage.setItem(sentLockKey(a.id), JSON.stringify({ at: Date.now(), until: Date.now() + 60_000 }));
+    await confirmAction(account, action({ status: 'done' }), deps());
+    expect(await AsyncStorage.getItem(sentLockKey(a.id))).toBeNull();
+  });
+
+  it('fails closed on a read failure only when a lock was written in this session', async () => {
+    const a = action();
+    const spy = jest.spyOn(AsyncStorage, 'getItem').mockRejectedValue(new Error('storage broken'));
+    try {
+      expect(await hasSentLock(a.id, Date.now())).toBe(false);
+      await confirmAction(account, action({ id: '22222222-2222-4222-8222-222222222222' }), deps({ send: jest.fn(async () => Promise.reject(timeout())) }));
+      expect(await hasSentLock(a.id, Date.now())).toBe(true);
+    } finally {
+      spy.mockRestore();
     }
   });
 });
