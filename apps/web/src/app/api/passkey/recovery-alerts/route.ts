@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { passkeyEmailEnabled, passkeyEmailStore, passkeyMailer } from "@/lib/passkey/email-runtime";
 import { createGnosisRecoveryLogReader, runRecoveryAlerts } from "@/lib/passkey/recovery-alerts";
+import { createSupabaseAlertPush } from "@/lib/passkey/alert-push";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * PREVIEW-ONLY recovery alert sender (Vercel-cron style, CRON_SECRET bearer like the other crons).
- * Scans the Candide SocialRecoveryModule for RecoveryExecuted since the stored cursor and emails
- * each recovered wallet's verified warning address. Idempotent per (wallet, recovery nonce).
+ * Scans the Candide SocialRecoveryModule for RecoveryExecuted since the stored cursor and alerts
+ * each recovered wallet: email to its verified warning address (PASSKEY_EMAIL_ENABLED=1) and push
+ * to its registered devices (PASSKEY_PUSH_ALERTS_ENABLED=1). Idempotent per (wallet, recovery
+ * nonce, channel).
  *
  * Scheduled in vercel.json (every 10 minutes). Vercel runs crons on the PRODUCTION deployment only:
- * preview deployments never call this route on a schedule. It stays a no-op (503) until
- * PASSKEY_EMAIL_ENABLED=1 and PASSKEY_EMAIL_STORE=supabase are set (the cursor and the sent-alert
+ * preview deployments never call this route on a schedule. It stays a no-op (503) until one of
+ * the two channel flags and PASSKEY_EMAIL_STORE=supabase are set (the cursor and the sent-alert
  * claims must survive between runs; the in-memory store is refused).
  */
 export const runtime = "nodejs";
@@ -21,7 +25,9 @@ export async function GET(request: Request) {
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!passkeyEmailEnabled()) return NextResponse.json({ error: "disabled" }, { status: 503 });
+  const emailOn = passkeyEmailEnabled();
+  const pushOn = process.env.PASSKEY_PUSH_ALERTS_ENABLED === "1";
+  if (!emailOn && !pushOn) return NextResponse.json({ error: "disabled" }, { status: 503 });
   if (process.env.PASSKEY_EMAIL_STORE !== "supabase") {
     return NextResponse.json({ error: "store_not_persistent" }, { status: 503 });
   }
@@ -29,7 +35,8 @@ export async function GET(request: Request) {
     const result = await runRecoveryAlerts({
       reader: createGnosisRecoveryLogReader(),
       store: passkeyEmailStore(),
-      mailer: passkeyMailer(),
+      mailer: emailOn ? passkeyMailer() : undefined,
+      push: pushOn ? createSupabaseAlertPush(createAdminClient()) : undefined,
       nowSec: () => Math.floor(Date.now() / 1000),
     });
     return NextResponse.json({ ok: result.failed === 0, ...result }, { status: result.failed === 0 ? 200 : 502 });
