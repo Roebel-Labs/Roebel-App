@@ -185,5 +185,61 @@ test("generated ABI matches the compiled artifact", (t) => {
   assert.deepEqual(norm(CREDENTIAL_REGISTRY_ABI), norm(compiled));
   const events = (compiled as Array<{ type: string; name: string }>).filter((e) => e.type === "event").map((e) => e.name);
   for (const name of REGISTER_EVENTS) assert.ok(events.includes(name), `missing event ${name}`);
-  assert.equal(REGISTER_EVENTS.length, 17);
+  assert.equal(REGISTER_EVENTS.length, 18);
+  assert.ok((REGISTER_EVENTS as readonly string[]).includes("TypeRebound"));
+  assert.ok(!(REGISTER_EVENTS as readonly string[]).includes("URI"));
+});
+
+const REG1 = ("0x" + "a1".repeat(20)) as Address;
+const REG2 = ("0x" + "a2".repeat(20)) as Address;
+const ID = ("0x" + "e1".repeat(20)) as Address;
+const sources = (orgRegistry: Address) => log("SourcesApplied", { citizenNFT: ID, attesterNFT: ID, orgRegistry });
+
+test("SourcesApplied sets the current registry; TypeCreated binds org types to it, COMMUNITY to null", () => {
+  const COMM = ("0x" + "cd".repeat(32)) as Hex;
+  const s = replayRegisterEvents([
+    sources(REG1),
+    log("TypeCreated", { typeId: COMM, orgId: "0x" + "00".repeat(32), localId: COMM, kind: 1, policy: 1, orgGeneration: 0n }),
+    ...created(),
+  ]);
+  assert.equal(s.orgRegistry, REG1.toLowerCase());
+  assert.equal(s.types.get(TYPE)!.orgRegistry, REG1.toLowerCase());
+  assert.equal(s.types.get(COMM)!.orgRegistry, null);
+  assert.equal(replayRegisterEvents([]).orgRegistry, null);
+});
+
+test("after a registry swap a holding is not live until TypeRebound; TypeRebound updates registry and generation", () => {
+  const base = [sources(REG1), ...created(), batch(), claimed(ALICE, LEAF_A)];
+  const before = replayRegisterEvents(base);
+  assert.equal(isHoldingLive(before, before.holdings.get(key(ALICE))!, ctx), true);
+
+  const swapped = replayRegisterEvents([...base, sources(REG2)]);
+  assert.equal(swapped.orgRegistry, REG2.toLowerCase());
+  assert.equal(swapped.types.get(TYPE)!.orgRegistry, REG1.toLowerCase());
+  assert.equal(isHoldingLive(swapped, swapped.holdings.get(key(ALICE))!, ctx), false);
+
+  const rebound = replayRegisterEvents([
+    ...base,
+    sources(REG2),
+    log("TypeRebound", { typeId: TYPE, orgRegistry: REG2, orgGeneration: 0n }),
+  ]);
+  const t = rebound.types.get(TYPE)!;
+  assert.equal(t.orgRegistry, REG2.toLowerCase());
+  assert.equal(t.orgGeneration, 0n);
+  const seen: Array<[Hex, bigint]> = [];
+  assert.equal(
+    isHoldingLive(rebound, rebound.holdings.get(key(ALICE))!, { nowSec: 1n, orgAlive: (o, g) => (seen.push([o, g]), true) }),
+    true,
+  );
+  assert.deepEqual(seen, [[ORG, 0n]]);
+});
+
+test("COMMUNITY holdings stay live across a registry swap", () => {
+  const s = replayRegisterEvents([
+    sources(REG1),
+    log("TypeCreated", { typeId: TYPE, orgId: "0x" + "00".repeat(32), localId: TYPE, kind: 1, policy: 1, orgGeneration: 0n }),
+    log("SelfClaimed", { typeId: TYPE, account: ALICE, validUntil: 0n }),
+    sources(REG2),
+  ]);
+  assert.equal(isHoldingLive(s, s.holdings.get(key(ALICE))!, ctx), true);
 });

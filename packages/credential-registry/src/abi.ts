@@ -272,6 +272,16 @@ export const CREDENTIAL_REGISTRY_ABI = [
   {
     "inputs": [
       {
+        "name": "typeId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "NotRebindable",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "name": "owner",
         "type": "address"
       }
@@ -855,6 +865,28 @@ export const CREDENTIAL_REGISTRY_ABI = [
       }
     ],
     "name": "TypeCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "typeId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "name": "orgRegistry",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "orgGeneration",
+        "type": "uint64"
+      }
+    ],
+    "name": "TypeRebound",
     "type": "event"
   },
   {
@@ -1818,6 +1850,18 @@ export const CREDENTIAL_REGISTRY_ABI = [
         "type": "bytes32"
       }
     ],
+    "name": "rebindType",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "name": "typeId",
+        "type": "bytes32"
+      }
+    ],
     "name": "renounce",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -2078,6 +2122,23 @@ export const CREDENTIAL_REGISTRY_ABI = [
       {
         "name": "typeId",
         "type": "bytes32"
+      }
+    ],
+    "name": "typeRegistryOf",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "name": "typeId",
+        "type": "bytes32"
       },
       {
         "components": [
@@ -2134,12 +2195,13 @@ export const CREDENTIAL_REGISTRY_ABI = [
   }
 ] as const;
 
-/** The sixteen contract events plus ERC-1155 TransferSingle (mint/burn). */
+/** The seventeen contract events plus ERC-1155 TransferSingle (mint/burn). */
 export const REGISTER_EVENTS = [
   "TypeCreated",
   "TypeConfigured",
   "TypeRetired",
   "TypeRecognised",
+  "TypeRebound",
   "DelegateSet",
   "OrgPrivateOnlySet",
   "BatchAdded",

@@ -32,6 +32,8 @@ export interface TypeEntry {
   kind: TypeKind;
   policy: TypePolicy;
   orgGeneration: bigint;
+  /** The OrgRegistry the type is bound to (lowercase); null for COMMUNITY types. */
+  orgRegistry: Address | null;
   recognised: boolean;
   retired: boolean;
   config: TypeConfigEntry;
@@ -65,12 +67,15 @@ export interface RegisterState {
   /** Key `${typeId}:${account}`, lowercase. */
   holdings: Map<string, HoldingEntry>;
   privateOnlyOrgs: Set<Hex>;
+  /** The current OrgRegistry (lowercase) from the last SourcesApplied; null before any. */
+  orgRegistry: Address | null;
 }
 
 const KINDS: TypeKind[] = ["role", "membership", "badge"];
 const POLICIES: TypePolicy[] = ["issuerBatch", "selfClaim", "external"];
 
 const lc = <T extends string>(v: unknown) => String(v).toLowerCase() as T;
+const isCommunity = (orgId: Hex) => /^0x0+$/.test(orgId);
 export const holdingKey = (typeId: Hex, account: Address) => `${lc(typeId)}:${lc(account)}`;
 
 export function toTypeConfig(raw: Record<string, unknown>): TypeConfigEntry {
@@ -88,19 +93,28 @@ export function replayRegisterEvents(logs: readonly RegisterLog[]): RegisterStat
   const ordered = [...logs].sort((a, b) =>
     a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : a.blockNumber < b.blockNumber ? -1 : 1,
   );
-  const state: RegisterState = { types: new Map(), batches: new Map(), holdings: new Map(), privateOnlyOrgs: new Set() };
+  const state: RegisterState = {
+    types: new Map(),
+    batches: new Map(),
+    holdings: new Map(),
+    privateOnlyOrgs: new Set(),
+    orgRegistry: null,
+  };
 
   for (const { eventName, args: a, blockNumber } of ordered) {
     switch (eventName) {
       case "TypeCreated": {
         const typeId = lc<Hex>(a.typeId);
+        const orgId = lc<Hex>(a.orgId);
         state.types.set(typeId, {
           typeId,
-          orgId: lc<Hex>(a.orgId),
+          orgId,
           localId: lc<Hex>(a.localId),
           kind: KINDS[Number(a.kind)],
           policy: POLICIES[Number(a.policy)],
           orgGeneration: BigInt(a.orgGeneration as bigint),
+          // createType binds an org type to the registry current at that moment.
+          orgRegistry: isCommunity(orgId) ? null : state.orgRegistry,
           recognised: false,
           retired: false,
           config: { metadataURI: "", defaultValidity: 0n, claimStart: 0n, claimEnd: 0n, supplyCap: 0, publicClaim: false },
@@ -118,6 +132,17 @@ export function replayRegisterEvents(logs: readonly RegisterLog[]): RegisterStat
         if (t) t.retired = true;
         break;
       }
+      case "TypeRebound": {
+        const t = state.types.get(lc<Hex>(a.typeId));
+        if (t) {
+          t.orgRegistry = lc<Address>(a.orgRegistry);
+          t.orgGeneration = BigInt(a.orgGeneration as bigint);
+        }
+        break;
+      }
+      case "SourcesApplied":
+        state.orgRegistry = lc<Address>(a.orgRegistry);
+        break;
       case "TypeRecognised": {
         const t = state.types.get(lc<Hex>(a.typeId));
         if (t) t.recognised = Boolean(a.recognised);
@@ -195,7 +220,7 @@ export function replayRegisterEvents(logs: readonly RegisterLog[]): RegisterStat
         state.holdings.delete(holdingKey(lc<Hex>(a.typeId), lc<Address>(a.account)));
         break;
       default:
-        // TransferSingle, SourcesProposed/Applied/Cancelled: no register state.
+        // TransferSingle, SourcesProposed/Cancelled: no register state.
         break;
     }
   }
@@ -204,7 +229,8 @@ export function replayRegisterEvents(logs: readonly RegisterLog[]): RegisterStat
 
 /**
  * Mirrors `CredentialRegistry.holds` for non-external types: type exists, not
- * retired, org alive at the type's generation, holding not expired, and (for a
+ * retired, (org type) bound to the current OrgRegistry and the org alive there
+ * at the type's generation, holding not expired, and (for a
  * batch holding) neither the batch nor the leaf revoked. `orgPrivateOnly` is
  * not part of `holds`; it only limits new claims.
  */
@@ -215,8 +241,11 @@ export function isHoldingLive(
 ): boolean {
   const t = state.types.get(lc<Hex>(h.typeId));
   if (!t || t.retired) return false;
-  const community = /^0x0+$/.test(t.orgId);
-  if (!community && !ctx.orgAlive(t.orgId, t.orgGeneration)) return false;
+  if (!isCommunity(t.orgId)) {
+    // After an OrgRegistry swap a type counts again only once rebound (TypeRebound).
+    if (t.orgRegistry !== state.orgRegistry) return false;
+    if (!ctx.orgAlive(t.orgId, t.orgGeneration)) return false;
+  }
   if (h.validUntil !== 0n && ctx.nowSec > h.validUntil) return false;
   if (h.batchId === 0n) return true;
   const b = state.batches.get(h.batchId);

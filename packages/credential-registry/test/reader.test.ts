@@ -54,13 +54,23 @@ test("reader.getType maps the struct and returns null for an unknown type", asyn
     orgId: T1, localId: T2, orgGeneration: 3n, createdAt: 1n, kind: 2, policy: 1, recognised: true, retired: false, supply: 4,
     config: { metadataURI: "u", defaultValidity: 9n, claimStart: 0n, claimEnd: 0n, supplyCap: 0, publicClaim: true },
   };
-  const ok = createCredentialRegistryReader({ client: fake({ readContract: () => struct }).client, address: ADDR });
+  const REG = ("0x" + "Ab".repeat(20)) as Address;
+  const ok = createCredentialRegistryReader({
+    client: fake({ readContract: (a) => (a.functionName === "typeRegistryOf" ? REG : struct) }).client,
+    address: ADDR,
+  });
   const t = (await ok.getType(T1))!;
+  assert.equal(t.orgRegistry, REG.toLowerCase());
   assert.equal(t.kind, "badge");
   assert.equal(t.policy, "selfClaim");
   assert.equal(t.orgGeneration, 3n);
   assert.equal(t.config.defaultValidity, 9n);
   assert.equal(t.delegates.size, 0);
+  const community = createCredentialRegistryReader({
+    client: fake({ readContract: (a) => (a.functionName === "typeRegistryOf" ? "0x" + "00".repeat(20) : struct) }).client,
+    address: ADDR,
+  });
+  assert.equal((await community.getType(T1))!.orgRegistry, null);
   const missing = createCredentialRegistryReader({
     client: fake({ readContract: () => { throw new Error("UnknownType"); } }).client,
     address: ADDR,

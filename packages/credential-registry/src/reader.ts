@@ -21,7 +21,8 @@ export interface CredentialRegistryReader {
   holds(typeId: Hex, account: Address): Promise<boolean>;
   /** One multicall, results in input order. */
   holdsMany(typeIds: readonly Hex[], account: Address): Promise<boolean[]>;
-  /** null when the type does not exist. `delegates` is empty: read them from the replay. */
+  /** null when the type does not exist. `delegates` is empty: read them from the replay.
+   *  `orgRegistry` is read from `typeRegistryOf` (null for COMMUNITY types). */
   getType(typeId: Hex): Promise<TypeEntry | null>;
   checkLeaf(
     batchId: bigint,
@@ -69,6 +70,7 @@ export function createCredentialRegistryReader({
         if (/UnknownType/.test(String((e as Error)?.message ?? e))) return null;
         throw e;
       }
+      const reg = await read<Address>("typeRegistryOf", [typeId]);
       return {
         typeId,
         orgId: t.orgId,
@@ -76,6 +78,7 @@ export function createCredentialRegistryReader({
         kind: KINDS[Number(t.kind)],
         policy: POLICIES[Number(t.policy)],
         orgGeneration: BigInt(t.orgGeneration),
+        orgRegistry: reg.toLowerCase() === ZERO ? null : (reg.toLowerCase() as Address),
         recognised: Boolean(t.recognised),
         retired: Boolean(t.retired),
         config: toTypeConfig(t.config),
