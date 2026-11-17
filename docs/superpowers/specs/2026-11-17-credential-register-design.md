@@ -122,13 +122,24 @@ project.
 ### 5.3 Public or private is the holder's decision
 
 - When someone receives a credential the app asks once: **"Öffentlich zeigen"** or **"Privat behalten"**, with one
-  sentence each on what it means. Public can be made private later (renounce on chain, keep the proof); private can
-  be made public any time.
+  sentence each on what it means. The person can switch either way at any time in their profile (Max, 2026-11-17).
+  Public → private renounces the on-chain token and keeps the proof; the app must say plainly that the earlier
+  public record stays visible in the chain's history and cannot be erased. Private → public is a claim.
 - Types of kind `Role` that the community has recognised (offices) are public by nature: accepting the office means
   accepting it on the register.
-- For orgs whose membership says something sensitive about a person *(my call: sub-types `fraktion` and `stadt`
-  today, plus a per-org switch the org or an attester can set)*, ordinary membership types cannot be claimed
-  publicly at all. Offices of those orgs still can.
+- **The org decides whether its members may be public at all** (Max, 2026-11-17: "Bürger für Röbel" publishes its
+  members, parties may not want to). Per org a switch "Mitglieder dürfen öffentlich sichtbar sein": on = each
+  member chooses public or private; off = membership can only be held privately. Orgs of sub-type `fraktion` and
+  `stadt` start with it **off** and their admins can switch it on; all other orgs start with it on. Offices
+  (recognised roles) of any org are always public. An attester can switch an org to off (protection), the org can
+  switch it back on.
+- **Private proof, two levels.** (1) *Vorzeigen* (this project): the holder shows a proof to someone they choose;
+  that person learns who the holder is and that the credential is valid, nobody else learns anything, nothing can
+  be looked up. This is selective disclosure, not zero knowledge. (2) *Zero-knowledge proof* (follow-up plan
+  `credreg-6-zk`, not written yet): each credential type also has an anonymous group (Semaphore-style; the repo has
+  Semaphore and MACI experience); the holder proves "I am a member of X" without revealing which member, e.g. to a
+  mini app or for an anonymous vote among members. Open points for that plan: proving time on older phones, and
+  who maintains the group roots.
 - Badges default to public but ask the same question.
 
 ### 5.4 Issuing in bulk (the 70-member case)
@@ -222,9 +233,9 @@ and a node route that answers "which of these types does the signed-in user hold
 
 ## 9. Decisions that are Max's
 
-1. **Public or private per person** (5.3), with party-like orgs private-only for ordinary members. Alternative:
-   everything public, as "public register" literally says. I recommend the choice; it still lets every office and
-   every willing member be public.
+1. ~~Public or private per person, party-like orgs private-only~~ **Decided by Max 2026-11-17:** each person
+   switches public/private any time; each org decides whether its members may be public (Fraktion/Stadt start
+   private, can open up); zero-knowledge membership proofs as a follow-up plan.
 2. **Guest as a self-claimed token** (5.1). It makes "all roles are SBTs" true at no extra prompt, and puts a public
    count of guests on chain. Alternative: Guest stays "holds nothing".
 3. **Citizen and Attester are shown through the register, not re-minted** (5.1).

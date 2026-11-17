@@ -12,6 +12,16 @@
 
 **Depends on:** plans 1 and 2 on the branch this one is based on; for the device pass, the test-environment registry and the server env of plan 2.
 
+
+> **Owner decision update 2026-11-17 (overrides item 1 below and every "private-only" rule in this plan):**
+> each person can switch a credential between public and private at any time (public → private = renounce, and
+> the app says the earlier public record stays in the chain history). The private-only switch belongs to the
+> **org**: "Mitglieder dürfen öffentlich sichtbar sein". `fraktion` and `stadt` orgs start with it off and **the
+> org's authority can turn it off and on**; an attester can only turn it off; the contract owner can do both.
+> Offices stay always public. Zero-knowledge membership proofs are a later plan (`credreg-6-zk`); keep the leaf
+> format and type ids so a Semaphore-style group per type can be added without a redeploy of this contract if
+> possible, and say in your final report whether it is.
+
 ## Open questions for the owner
 
 1. **Where Guest is claimed.** Spec 5.1: "in the same sponsored operation as its first on-chain action". *Default: three places a non-citizen account sends something: the citizenship request, collecting Röbel Münzen, and publicly accepting an Ausweis. If adding the Guest call makes the operation fail, the app retries once without it, so Guest can never block the real action.*

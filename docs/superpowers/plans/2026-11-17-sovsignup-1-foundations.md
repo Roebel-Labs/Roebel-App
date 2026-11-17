@@ -18,7 +18,7 @@ Tasks are written against the recommended default. Change the default and the na
 
 1. **Guest budget numbers.** The onboarding budget is 0.002 xDAI per Safe per UTC day (`DEFAULT_ONBOARDING_DAILY_WEI`). The budget reserves the EntryPoint prefund (all gas limits × `maxFeePerGas`). A guest's first op deploys the Safe: at the 1.5 gwei bundler floor an op with about 0.9M total gas limit reserves about 0.00135 xDAI, so 0.002 covers roughly one op per day. A guest now needs several (sign-up request, guardians, joining Röbel Münzen, daily collect). *Default: the code constant stays; the plan adds `PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI` (code default 0.02 xDAI) and lists env values under Owner gates (suggested: onboarding 0.006, guest global 0.03, overall global raised to match expected sign-ups). These are estimates, not measurements; Task 5 Step 6 prints real prefunds for you.*
 2. **Guests sending Röbel Münzen.** Spec 5.6 names collecting and the profile sync. Sending (`safeTransferFrom`) stays citizen-only. *Default: not sponsored for guests.*
-3. **The confirm word on "Unabhängig werden".** Today the person types `TRENNEN`. *Default: `UNABHÄNGIG`, compared case-insensitively, `UNABHAENGIG` accepted too.*
+3. ~~The confirm word~~ **Decided by Max 2026-11-17: no typed word.** The step is confirmed by the explanation screen, the green checklist, the final button and the fingerprint prompt the step needs anyway. Today's `TRENNEN` field is removed.
 4. **Server index for owner → Safe.** Spec 5.2 allows one. *Default: none; a chain scan of Safe `AddedOwner` logs, run only when the per-key signer contract exists. Revisit when the scan passes about 300 windows (about 6 months of blocks).*
 
 ## Global Constraints
@@ -491,7 +491,7 @@ it('someone who already moved keeps their screen with migration closed', () => {
 
 **Interfaces:**
 - Produces: the copy test. It parses every `.ts` / `.tsx` under `apps/expo/{app,components,context,hooks,lib,constants}` (skipping `__tests__`, `__mocks__`, `__testutils__`) with the TypeScript compiler API (`ts.createSourceFile`) and collects (a) every `JsxText` node and (b) every string literal, no-substitution template and template part whose trimmed text contains whitespace, except those inside an import/export declaration or inside the arguments of a `console.*` call. It fails, listing `file:line: text`, when one of them matches `/thirdweb/i`. Baseline today: exactly two hits, `app/settings/reveal-key.tsx:144` and `lib/passkey/detach.ts:192`.
-- Produces: `DETACH_CONFIRM_WORD = 'UNABHÄNGIG'`; `isDetachConfirmed(input: string): boolean` (trim, upper-case, accepts `UNABHÄNGIG` and `UNABHAENGIG`).
+- Removes: the typed confirm word (`TRENNEN` field and its check) from `passkey-detach.tsx` and `detach.ts`. The final button is enabled exactly when the checklist is complete; tapping it shows the explanation once more in a confirm dialog ("Endgültig unabhängig werden" / "Abbrechen"), then the fingerprint prompt.
 - Copy (exact):
   - Row and screen title: `Unabhängig werden`
   - `DETACH_EXPLANATION`: `Nach diesem Schritt hältst nur noch du den Schlüssel zu deinem Konto. Dein Anmelde-Anbieter (Google, Apple oder E-Mail) kann es dann nicht mehr öffnen. Das kann man nicht rückgängig machen.`
@@ -502,7 +502,7 @@ it('someone who already moved keeps their screen with migration closed', () => {
   - Welcome, secondary button: `Mit Google, Apple oder E-Mail anmelden`, with a line under it in `colors.textSecondary`: `Bequem, aber dein Schlüssel liegt bei einem Anbieter.`
   - Login drawer subtitle stays; the "Sie" form there is existing copy and is not touched.
 
-- [ ] **Step 1: Write the copy test and the detach test** (`isDetachConfirmed('unabhängig ')` true, `'UNABHAENGIG'` true, `'TRENNEN'` false).
+- [ ] **Step 1: Write the copy test and the detach test** (the detach flow no longer takes or checks a typed word; the button is disabled while any checklist item is open and enabled when all are done).
 - [ ] **Step 2: Run** both — Expected: the copy test FAILS listing exactly the two baseline lines; the detach test FAILS.
 - [ ] **Step 3: Apply the copy above**; `passkey-detach.tsx` uses `isDetachConfirmed`.
 - [ ] **Step 4: Run** both tests — Expected: PASS.

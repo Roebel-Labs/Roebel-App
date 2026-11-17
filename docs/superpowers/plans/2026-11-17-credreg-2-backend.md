@@ -12,6 +12,16 @@
 
 **Depends on:** plan 1 merged or this branch based on `feat/credreg-1-contract`. The owner decisions repeated at the top of plan 1 apply here.
 
+
+> **Owner decision update 2026-11-17 (overrides item 1 below and every "private-only" rule in this plan):**
+> each person can switch a credential between public and private at any time (public → private = renounce, and
+> the app says the earlier public record stays in the chain history). The private-only switch belongs to the
+> **org**: "Mitglieder dürfen öffentlich sichtbar sein". `fraktion` and `stadt` orgs start with it off and **the
+> org's authority can turn it off and on**; an attester can only turn it off; the contract owner can do both.
+> Offices stay always public. Zero-knowledge membership proofs are a later plan (`credreg-6-zk`); keep the leaf
+> format and type ids so a Semaphore-style group per type can be added without a redeploy of this contract if
+> possible, and say in your final report whether it is.
+
 ## Open questions for the owner
 
 1. **Where type metadata lives.** Spec 7 says "follow what OrgRegistry metadata does", but the app registers orgs with an empty metadata URI, so there is nothing to follow. *Default: the node serves ERC-1155 metadata JSON at `https://www.roebel.app/api/credentials/types/<typeId>/metadata`, and that URL is what goes on chain. Name and image can then be corrected without a transaction; the price is that card art depends on the node (holding and validity never do). Alternative: upload to Irys through the existing `/api/irys/upload` and store the permanent URL.*

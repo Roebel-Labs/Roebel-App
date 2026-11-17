@@ -12,6 +12,16 @@
 
 **Plan series:** 1 contract (this) → 2 backend → 3 Expo → 4 dashboard and badges → 5 Studio. Plans 2 to 5 consume the names fixed here; changing an interface below means changing them.
 
+
+> **Owner decision update 2026-11-17 (overrides item 1 below and every "private-only" rule in this plan):**
+> each person can switch a credential between public and private at any time (public → private = renounce, and
+> the app says the earlier public record stays in the chain history). The private-only switch belongs to the
+> **org**: "Mitglieder dürfen öffentlich sichtbar sein". `fraktion` and `stadt` orgs start with it off and **the
+> org's authority can turn it off and on**; an attester can only turn it off; the contract owner can do both.
+> Offices stay always public. Zero-knowledge membership proofs are a later plan (`credreg-6-zk`); keep the leaf
+> format and type ids so a Semaphore-style group per type can be added without a redeploy of this contract if
+> possible, and say in your final report whether it is.
+
 ## Owner decisions assumed
 
 These are the five items of spec section 9, treated as decided. **If the owner overrules one, stop and re-plan the named tasks.**
@@ -28,7 +38,7 @@ Tasks are written against the default. Each is a contract decision that cannot b
 
 1. **Safe owners may act directly.** Spec 5.1 names "the org's Safe, or an account with the `Admin` role". An org's owners are the Safe's owners and hold no `Admin` role (`apps/expo/lib/org-safe/ops.ts` `planSync` clears it), so by the letter an owner would have to wrap every call in a Safe transaction, and an owner of a Safe with threshold 2 could not issue at all while an admin could. *Default: authority = the Safe itself, or `OrgRegistry.isOrgOwner`, or `Role.Admin`. This gives an owner nothing an admin does not already have.*
 2. **OrgRegistry is a settable pointer too.** The spec asks for settable NFT pointers because OrgRegistry's immutable `attesters` forces its redeploy at the v3 cutover. That same redeploy would orphan this contract. *Default: all three sources (CitizenNFT, AttesterNFT, OrgRegistry) change together through propose → wait `SOURCES_DELAY` = 2 days → apply.* Caveat written into the NatSpec: a type remembers the org generation it was created under, so a new OrgRegistry must carry the same generation numbers or the org's types go dark.
-3. **Who may switch an org to private-only, and back.** *Default: on by the org's authority or by any attester; off only by the contract owner.* The app sets it for `fraktion` and `stadt` orgs (plan 2).
+3. **Who may switch an org to private-only, and back.** *Decided (see update note): on and off by the org's authority; on only by an attester; both by the contract owner.* The app sets it for `fraktion` and `stadt` orgs (plan 2).
 4. **Guest stays after citizenship.** A guest who becomes a citizen keeps the Guest token unless they renounce it. *Default: keep; the app hides the Gastkarte for citizens as today.*
 5. **Recognised flag on the reserved types.** *Default: not set at deploy; the owner sets it per type.*
 
