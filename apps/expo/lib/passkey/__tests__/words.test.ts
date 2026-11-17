@@ -56,6 +56,8 @@ describe('recovery words primitives', () => {
 
   it('normalizes NFKD, case and spacing', () => {
     expect(normalizePhrase('  A  b\n c ')).toBe('a b c');
+    // Fullwidth letters only become plain ASCII through NFKD (a plain lowercase would keep them).
+    expect(normalizePhrase('ａｂａｎｄｏｎ  ＡＢＯＵＴ')).toBe('abandon about');
   });
 
   it('derives the standard Ethereum addresses', () => {
