@@ -12,10 +12,13 @@
  *
  * Tiers:
  *  - `citizen`: the identity must hold a CitizenNFT (checked by the policy).
- *  - `onboarding`: allowed for a NON-citizen passkey Safe (a brand-new user),
- *    under a tighter per-identity budget. Only CitizenNFTv2.createAttestationRequest
- *    (asking the attesters to verify you). Circles registerHuman is citizen-tier:
- *    Röbel only invites citizens, and the Hub itself requires an inviter's trust.
+ *  - `onboarding`: allowed for a NON-citizen passkey Safe (a guest), under the
+ *    guest budget. Exactly: CitizenNFTv2.createAttestationRequest (asking the
+ *    attesters to verify you), Hub.registerHuman and Hub.personalMint (joining
+ *    Röbel Münzen; the Hub itself requires an inviter's trust for registerHuman),
+ *    NameRegistry.updateMetadataDigest (the profile sync). groupMint, trust,
+ *    safeTransferFrom and everything else stay citizen-tier: a guest moves no
+ *    Münzen and extends no trust.
  *
  * Addresses: packages/blockchain/src/index.ts (CONTRACTS) + apps/expo/constants/gnosis.ts
  * (Hub, group, NameRegistry). Selectors checked against deployed bytecode on
@@ -204,14 +207,14 @@ export function classifyEverydayCall(to: Hex, value: bigint, data: Hex, identity
     if (!d) return no("Circles Hub function not allowlisted");
     switch (d.functionName) {
       case "personalMint":
-        return yes("Hub.personalMint");
+        return yes("Hub.personalMint", "onboarding");
       case "groupMint":
         if (!isAddressEqual(d.args[0], C.roebelGroup)) return no("groupMint only into the Röbel group");
         return yes("Hub.groupMint");
       case "trust":
         return yes("Hub.trust");
       case "registerHuman":
-        return yes("Hub.registerHuman");
+        return yes("Hub.registerHuman", "onboarding");
       case "safeTransferFrom": {
         const [from, , id] = d.args;
         if (!isAddressEqual(from, identity)) return no("safeTransferFrom must spend the identity's own balance");
@@ -224,7 +227,7 @@ export function classifyEverydayCall(to: Hex, value: bigint, data: Hex, identity
   if (isAddressEqual(to, C.circlesNameRegistry)) {
     const d = decode(() => decodeFunctionData({ abi: nameRegistryAbi, data }));
     if (!d) return no("Circles NameRegistry function not allowlisted");
-    return yes("NameRegistry.updateMetadataDigest");
+    return yes("NameRegistry.updateMetadataDigest", "onboarding");
   }
 
   if (isAddressEqual(to, C.citizenNft)) {

@@ -246,7 +246,7 @@ test("Safe identity (citizen): direct allowlisted calls, single and batched", as
   await rejected(op(outer(C.circlesHub, send(LEGACY))), /own balance/, chain, NO_LEGACY);
 });
 
-test("Safe identity (non-citizen): only createAttestationRequest, onboarding tier", async () => {
+test("Safe identity (non-citizen guest): citizenship request + joining Röbel Münzen, onboarding tier", async () => {
   await ok(op(outer(C.citizenNft, askCitizen)), fakeChain(), NO_LEGACY, SAFE, "onboarding");
   // A brand-new Safe: deploy + ask in one op.
   const fresh = { x: `0x${"aa".repeat(32)}` as Hex, y: `0x${"bb".repeat(32)}` as Hex };
@@ -256,13 +256,17 @@ test("Safe identity (non-citizen): only createAttestationRequest, onboarding tie
     { ...fresh, nowSeconds: NOW },
     fakeChain(),
   );
-  assert.ok(r.ok && r.mode === "everyday" && r.tier === "onboarding", JSON.stringify(r));
-  for (const data of [personalMint, trust, registerHuman]) {
-    await rejected(op(outer(C.circlesHub, data)), /citizen/, fakeChain(), NO_LEGACY);
+  assert.ok(r.ok && r.mode === "everyday" && r.tier === "onboarding" && r.guest === true, JSON.stringify(r));
+  // Joining Röbel Münzen is guest-allowed; trust and MACI sign-up stay citizen-only.
+  for (const data of [personalMint, registerHuman]) {
+    await ok(op(outer(C.circlesHub, data)), fakeChain(), NO_LEGACY, SAFE, "onboarding");
   }
+  await rejected(op(outer(C.circlesHub, trust)), /citizen/, fakeChain(), NO_LEGACY);
   await rejected(op(outer(C.maci, signUp)), /citizen/, fakeChain(), NO_LEGACY);
+  // Onboarding calls batched together stay a guest op.
+  await ok(op(viaMultiSend([{ to: C.citizenNft, data: askCitizen }, { to: C.circlesHub, data: personalMint }])), fakeChain(), NO_LEGACY, SAFE, "onboarding");
   // Onboarding + citizen action in one op = needs citizenship.
-  await rejected(op(viaMultiSend([{ to: C.citizenNft, data: askCitizen }, { to: C.circlesHub, data: personalMint }])), /citizen/, fakeChain(), NO_LEGACY);
+  await rejected(op(viaMultiSend([{ to: C.citizenNft, data: askCitizen }, { to: C.circlesHub, data: trust }])), /citizen/, fakeChain(), NO_LEGACY);
 });
 
 test("Safe identity: sender must be the genuine passkey Safe for (x, y)", async () => {

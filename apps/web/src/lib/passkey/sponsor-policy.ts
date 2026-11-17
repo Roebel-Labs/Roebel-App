@@ -16,17 +16,25 @@
  *     AccountFactory.createAccount(admin, 0x) where factory.getAddress(admin, 0x)
  *     == legacy. The sender is bound to it by `isAdmin(legacy, sender)` or a
  *     verified handover earlier in the batch. Budget key = legacy.
- *  B. identity = the sender Safe itself (no `legacy`, citizen(sender), e.g.
- *     after a v3 `moveTo`). Only Candide guardian management. Budget key = sender.
+ *  B. identity = the sender Safe itself (no `legacy`). Only Candide guardian
+ *     management (a confirmRecovery may ride along). Budget key = sender.
+ *     - citizen(sender) (e.g. after a v3 `moveTo`): { mode "safe" }.
+ *     - GUEST (a genuine passkey Safe without citizenship): the same calls,
+ *       { mode "safe", guest: true } -> guest budget. checkSender always runs.
  *  D. everyday (see everyday-allowlist.ts): the op is ONLY allowlisted Röbel
  *     citizen actions (value 0). Identity = `legacy` (calls wrapped in
  *     legacy.execute / executeBatch, the sender an admin, legacy a citizen) or
- *     the sender Safe itself (direct calls; a citizen, or a NON-citizen Safe
- *     whose calls are all onboarding-tier = CitizenNFTv2.createAttestationRequest,
- *     result tier "onboarding" -> tighter budget). A Poll.publishMessage target
- *     must equal MACI.polls(ctx.pollId). Budget key = the identity. Everyday
- *     calls may also ride along with mode A / B shapes (the mode then stays
- *     "legacy" / "safe").
+ *     the sender Safe itself (direct calls). A citizen Safe may make any
+ *     allowlisted call. A GUEST Safe only onboarding-tier calls
+ *     (CitizenNFTv2.createAttestationRequest, Hub.registerHuman, Hub.personalMint,
+ *     NameRegistry.updateMetadataDigest), optionally with its own guardian
+ *     management in the same op (the sign-up batch), never with a thirdweb shape
+ *     (handover, createAccount, moveTo, legacy.execute / executeBatch) ->
+ *     { tier "onboarding", guest: true }. One citizen-only call in a guest op
+ *     refuses the whole op. A Poll.publishMessage target must equal
+ *     MACI.polls(ctx.pollId). Budget key = the identity. Everyday calls may also
+ *     ride along with mode A / B shapes (the mode then stays "legacy" / "safe";
+ *     for a guest it is "everyday").
  *  E. detach ("thirdweb trennen", body names `legacy`): the op is EXACTLY ONE
  *     call legacy.setPermissionsForSigner(req{isAdmin: 2}, sig) removing an
  *     admin that is NOT the sender. Only when: the sender is a genuine passkey
@@ -70,7 +78,8 @@
  *     AccountFactory.createAccount(admin, 0x) as call #0; SRM guardian
  *     management (addGuardianWithThreshold, revokeGuardianWithThreshold,
  *     changeThreshold, cancelRecovery) and confirmRecovery.
- *  B: SRM guardian management and confirmRecovery.
+ *  B: SRM guardian management and confirmRecovery (a guest: confirmRecovery
+ *     only together with guardian management).
  *  C: SRM.multiConfirmRecovery / executeRecovery with newOwners ==
  *     [getSigner(x, y)] and threshold 1 (the recovery hands the wallet to the
  *     SUBMITTER's key); SRM.finalizeRecovery when the pending request's owners
@@ -78,12 +87,14 @@
  *     sender is a guardian of the wallet; SafeWebAuthnSignerFactory.createSigner
  *     for exactly (x, y, verifiers). All calls name the same wallet != sender.
  *  An op that is only confirmRecovery calls is mode A with `legacy`, else B if
- *  the sender is a citizen, else C. Identity-only and recovery-only calls never
+ *  the sender is a citizen, else C (budget = the wallet). Identity-only and recovery-only calls never
  *  mix. Any thirdweb-selector call to an address other than `legacy` is
  *  rejected: one legacy account per op.
  *
- * Registration of brand-new users (no citizenship yet) is NOT sponsored: they
- * need attesters first.
+ * Guests (no citizenship yet) are sponsored only for mode B guardian
+ * management and the onboarding tier of mode D: no value transfers, no
+ * arbitrary targets, no Münzen moved, no trust given. Citizenship itself still
+ * needs the attesters.
  *
  * Structural checks run first and never touch the chain. Any chain read
  * failure throws `ChainReadError`; callers must fail closed (never sponsor).
@@ -197,7 +208,15 @@ export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach"
 export const DETACH_MIN_GUARDIANS = 2n;
 export const DETACH_MIN_THRESHOLD = 2n;
 export type PolicyResult =
-  | { ok: true; mode: SponsorMode; budgetKey: Hex; /** everyday mode only; "onboarding" = non-citizen Safe, tighter budget */ tier?: EverydayTier }
+  | {
+      ok: true;
+      mode: SponsorMode;
+      budgetKey: Hex;
+      /** everyday mode only; "onboarding" = only guest-allowed calls */
+      tier?: EverydayTier;
+      /** Set whenever the budget identity is a non-citizen passkey Safe (a guest): guest budget applies. */
+      guest?: true;
+    }
   | { ok: false; reason: string };
 
 export interface SignerPermissionRequest {
@@ -347,6 +366,11 @@ interface ScanState {
   onboardingOnly: boolean;
   /** Any mode A / B shape present (handover, createAccount, moveTo, SRM). */
   migration: boolean;
+  /** A thirdweb-account shape present: handover, createAccount, moveTo, or any
+   * legacy.execute / executeBatch. Never part of a guest op. */
+  legacyShapes: boolean;
+  /** SRM guardian management present (add / revoke guardian, changeThreshold, cancelRecovery). */
+  guardianManagement: boolean;
   /** Poll.publishMessage targets (verified against MACI.polls(ctx.pollId)). */
   polls: Hex[];
   /** org-Safe execTransaction targets (a Safe L2 1.4.1 proxy, or created earlier in this batch). */
@@ -413,6 +437,7 @@ function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanSta
     const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
     if (perm?.functionName === "setPermissionsForSigner") {
       st.migration = true;
+      st.legacyShapes = true;
       return checkPermissionRequest(perm.args[0], st.sender);
     }
     const move = tryDecode(() => decodeFunctionData({ abi: v3Abi, data }));
@@ -422,6 +447,7 @@ function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanSta
       if (!isAddressEqual(move.args[0], st.sender)) return deny("moveTo must move the identity to the sender Safe");
       if (value !== 0n) return deny("moveTo value must be 0");
       st.migration = true;
+      st.legacyShapes = true;
       return PASS;
     }
     if (isAddressEqual(target, ADDRESSES.socialRecoveryModule)) {
@@ -452,6 +478,7 @@ function checkSrmCall(data: Hex, st: ScanState): Check {
     case "cancelRecovery":
       st.identityOnly = true;
       st.srm = true;
+      st.guardianManagement = true;
       return PASS;
     case "confirmRecovery": {
       const [wallet, newOwners, threshold] = d.args;
@@ -517,6 +544,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
     st.createAccountAdmin = d.args[0];
     st.identityOnly = true;
     st.migration = true;
+    st.legacyShapes = true;
     return PASS;
   }
 
@@ -533,6 +561,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
     return deny("thirdweb account call must target the request's legacy account");
   }
   st.identityOnly = true;
+  st.legacyShapes = true;
 
   if (d.functionName === "setPermissionsForSigner") {
     st.migration = true;
@@ -864,10 +893,14 @@ async function evaluateSafeEveryday(
   if (!sender.ok) return sender;
   const citizen = await isCitizen(op.sender, ctx.v3 ?? {}, chain);
   if (!citizen) {
-    if (st.migration || !st.onboardingOnly) {
+    // Guest: only onboarding-tier everyday calls plus (optionally) guardian management.
+    if (st.legacyShapes || !st.onboardingOnly) {
       return deny("this action requires a citizen identity (the sender Safe holds no CitizenNFT)");
     }
-    return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "onboarding" };
+    if (st.confirms && !st.guardianManagement) {
+      return deny("a guest op may carry confirmRecovery only together with guardian management");
+    }
+    return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "onboarding", guest: true };
   }
   const polls = await checkPolls(st, ctx, chain);
   if (!polls.ok) return polls;
@@ -989,6 +1022,8 @@ export async function evaluateSponsorPolicy(
     directEveryday: false,
     onboardingOnly: true,
     migration: false,
+    legacyShapes: false,
+    guardianManagement: false,
     polls: [],
     orgSafes: [],
     createdSafes: [],
@@ -1016,6 +1051,12 @@ export async function evaluateSponsorPolicy(
     return { ok: true, mode: "safe", budgetKey: op.sender };
   }
   if (!st.identityOnly && st.confirms) return evaluateRecoveryMode(op, ctx, st, chain);
+  // Guest (non-citizen Safe): its own guardian management, a confirmRecovery may ride along.
+  if (st.guardianManagement && !st.legacyShapes && !st.everyday) {
+    const sender = await checkSender(op, ctx, chain);
+    if (!sender.ok) return sender;
+    return { ok: true, mode: "safe", budgetKey: op.sender, guest: true };
+  }
   return deny("sender holds no CitizenNFT and the request names no legacy account");
 }
 
