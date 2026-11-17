@@ -50,7 +50,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { hasCitizenNFT, chainResolved } = useVerificationContext();
   const consent = useConsent();
-  const { autoConnectFinished } = useWalletBoot();
+  const { autoConnectFinished, restoreFailed } = useWalletBoot();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +89,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       // Auto-connect finished with no account → genuine logout (covers all
       // useDisconnect sites). Clear both in-memory and persisted state.
       setUser(null);
-      void saveCachedUser(null);
+      // A failed restore is not a logout: the login is still on the device and
+      // WalletBootProvider keeps retrying, so the cached record must survive.
+      if (!restoreFailed) void saveCachedUser(null);
       onboardingTriggeredFor.current = null;
       return;
     }
@@ -171,7 +173,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     syncUser();
-  }, [account?.address, wallet, router, autoConnectFinished]);
+  }, [account?.address, wallet, router, autoConnectFinished, restoreFailed]);
 
   // Identify user in Sentry on login (consent-aware via setSentryUser);
   // reset on logout. PostHog identify is handled by <PostHogTelemetry />,
