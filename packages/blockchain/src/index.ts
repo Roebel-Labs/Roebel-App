@@ -17,6 +17,9 @@ export const CONTRACTS = {
   // Safes. Owner = Attester Safe (bands + one-time migrationRegister only).
   orgRegistry: "0x320b4ea2f4E31b81245e684D08AF593DE05E9919",
 
+  // CredentialRegistry — NOT DEPLOYED to production yet (owner gate, docs/superpowers/plans/2026-11-17-credreg-1-contract.md). Empty = feature off.
+  credentialRegistry: "",
+
   // Legacy public-vote governance (read-only — old proposals still resolve here)
   legacyAttesterGovernor: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
@@ -105,3 +108,7 @@ export type MaciVoteOption = (typeof MACI_VOTE_OPTIONS)[keyof typeof MACI_VOTE_O
 
 // Gnosis chain ID
 export const CHAIN_ID = 100;
+
+// CredentialRegistry deploy block (0 = not deployed). The ABI is exported from
+// @netizen-labs/credential-registry, not from this package.
+export const CREDENTIAL_REGISTRY_DEPLOY_BLOCK = 0;
