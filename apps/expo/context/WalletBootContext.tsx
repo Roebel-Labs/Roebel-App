@@ -5,7 +5,8 @@ import Constants from 'expo-constants';
 import { useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
 import { client } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
-import { bootWallets, lazySessionSource, retrySource, type SessionSource } from '@/lib/passkey/boot';
+import { backgroundRestore, bootWallets, type SessionSource } from '@/lib/passkey/boot';
+import { passkeyBootSource } from '@/lib/passkey/boot-source';
 import { passkeyChannelAllowed } from '@/lib/passkey/gate';
 import { bufferError } from '@/lib/sentry-init';
 import {
@@ -141,20 +142,27 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
       }
       backgroundBusy = true;
       try {
-        const source = failedSource;
-        const result = source
-          ? await retrySource(source, { sleep, isCancelled: () => cancelled })
-          : await restoreWithRetry({
+        // A source whose session turned out corrupt or gone is dropped here and thirdweb is
+        // restored in the same tick (lib/passkey/boot.ts backgroundRestore).
+        const { owner, result, failedSource: next } = await backgroundRestore({
+          failedSource,
+          restoreThirdweb: () =>
+            restoreWithRetry({
               attempt: attemptThirdweb,
               hasStoredSession,
               delaysMs: [],
               sleep,
               isCancelled: () => cancelled,
-            });
-        if (cancelled || result.outcome === 'failed' || result.outcome === 'cancelled') return;
+            }),
+          sleep,
+          isCancelled: () => cancelled,
+        });
+        if (cancelled) return;
+        failedSource = next;
+        if (result.outcome === 'failed' || result.outcome === 'cancelled') return;
         stopBackground();
         setRestoreFailed(false);
-        if (result.outcome === 'restored') recordRestore(result, 'restored-late', source ? source.owner : 'thirdweb');
+        if (result.outcome === 'restored') recordRestore(result, 'restored-late', owner);
       } finally {
         backgroundBusy = false;
       }
@@ -188,16 +196,11 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
 
     (async () => {
       try {
-        // Sovereign session first (preview channels only; production builds no sources and reads
-        // no storage), else the thirdweb path above. See lib/passkey/boot.ts.
-        const sources: SessionSource[] = passkeyChannelAllowed()
-          ? [
-              // Lazy: a failing import lands inside bootWallets (retry -> failed), never as a logout.
-              lazySessionSource('passkey', async () =>
-                (await import('@/lib/passkey/signin-runtime')).passkeySessionSource(setActiveWallet),
-              ) as SessionSource,
-            ]
-          : [];
+        // Sovereign session first (only where passkeyChannelAllowed(); elsewhere no sources and no
+        // storage read), else the thirdweb path above. See lib/passkey/boot.ts. The presence check
+        // is a direct SecureStore read; only load/connect import the sign-in runtime, so a failing
+        // import can only affect someone who really holds a passkey session.
+        const sources: SessionSource[] = passkeyChannelAllowed() ? [passkeyBootSource(setActiveWallet)] : [];
         const { owner, result } = await bootWallets({
           channelAllowed: () => passkeyChannelAllowed(),
           sources,

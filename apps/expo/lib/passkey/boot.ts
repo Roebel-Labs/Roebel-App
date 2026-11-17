@@ -6,10 +6,15 @@
  *   2. a restore that keeps failing is a FAILURE, not a logout: thirdweb is NOT tried, so a dormant
  *      thirdweb login can never come up as a different account.
  *   3. only a corrupt session (retrying cannot help) or no stored session falls through to the
- *      existing thirdweb path.
+ *      existing thirdweb path. The background retry after a failed boot does the same: a source
+ *      whose session turns out corrupt or gone is dropped and thirdweb is restored
+ *      (backgroundRestore).
  *
- * On the production channel step 1 returns before reading any storage, so production boots
- * exactly as before. This module never reads, writes or deletes a thirdweb key.
+ * The passkey source's `hasStored` is a direct SecureStore read (boot-source.ts), outside the lazy
+ * import of the sign-in runtime: a failing import cannot touch someone without a passkey session.
+ *
+ * A channel that is not allowed (a production binary < 3.8.0) skips step 1 before reading any
+ * storage, so it boots exactly as before. This module never reads, writes or deletes a thirdweb key.
  */
 import { restoreWithRetry, type RestoreResult } from '../wallet-restore';
 
@@ -40,11 +45,20 @@ export type BootDeps = {
 
 export type BootResult = { owner: 'passkey' | 'words' | 'thirdweb'; result: RestoreResult };
 
-/** Wraps a lazily loaded source: a failing import surfaces as a storage-style error inside the boot (retry -> failed), never as a logout. */
-export function lazySessionSource<S>(owner: SessionSource['owner'], loader: () => Promise<SessionSource<S>>): SessionSource<S> {
+/**
+ * Wraps a lazily loaded source. `hasStored` is a direct, light storage read that never touches the
+ * loader: a failing import must only ever affect people who really hold a session (for them it
+ * surfaces inside the boot as a storage-style error, retry -> failed, never a logout). Everyone
+ * else (no session key) goes straight to the thirdweb path.
+ */
+export function lazySessionSource<S>(
+  owner: SessionSource['owner'],
+  hasStored: () => Promise<boolean>,
+  loader: () => Promise<SessionSource<S>>,
+): SessionSource<S> {
   return {
     owner,
-    hasStored: async () => (await loader()).hasStored(),
+    hasStored,
     load: async () => (await loader()).load(),
     connect: async (session) => (await loader()).connect(session),
   };
@@ -72,9 +86,32 @@ async function restoreSource(
   return { result, corrupt };
 }
 
-/** One attempt, for the background timer after a failed boot restore. */
-export async function retrySource(source: SessionSource, deps: Pick<BootDeps, 'sleep' | 'isCancelled'>): Promise<RestoreResult> {
-  return (await restoreSource(source, deps, [])).result;
+export type BackgroundRestore = BootResult & {
+  /** The source the NEXT background attempt must retry; null = the thirdweb path. */
+  failedSource: SessionSource | null;
+};
+
+/**
+ * One background attempt after a failed boot. With a failed sovereign source: one attempt at that
+ * source; when it turns out corrupt or gone (the session key was removed or became unreadable,
+ * retrying cannot help) the source is dropped and the thirdweb restore runs in the same tick, so
+ * the timer never keeps retrying a session that no longer exists. Without one: the thirdweb restore.
+ */
+export async function backgroundRestore(p: {
+  failedSource: SessionSource | null;
+  restoreThirdweb: () => Promise<RestoreResult>;
+  sleep: (ms: number) => Promise<void>;
+  isCancelled?: () => boolean;
+}): Promise<BackgroundRestore> {
+  const source = p.failedSource;
+  if (source) {
+    const { result, corrupt } = await restoreSource(source, p, []);
+    if (result.outcome !== 'failed' || !corrupt) return { owner: source.owner, result, failedSource: source };
+    if (p.isCancelled?.()) {
+      return { owner: 'thirdweb', result: { outcome: 'cancelled', attempts: 0, errors: [], hadStoredSession: false }, failedSource: null };
+    }
+  }
+  return { owner: 'thirdweb', result: await p.restoreThirdweb(), failedSource: null };
 }
 
 export async function bootWallets(deps: BootDeps): Promise<BootResult> {

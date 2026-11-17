@@ -4,7 +4,7 @@ jest.mock('@/lib/supabase-app-settings', () => ({ fetchPasskeyFlags: jest.fn(asy
 
 import { getAddress, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
-import { bootWallets, lazySessionSource, retrySource, type BootDeps, type SessionSource } from '../boot';
+import { backgroundRestore, bootWallets, lazySessionSource, type BootDeps, type SessionSource } from '../boot';
 import { passkeyChannelAllowed } from '../gate';
 import { PASSKEY_SESSION_KEY, clearPasskeySession, loadPasskeySession, parsePasskeySession, savePasskeySession, type PasskeySession } from '../session';
 import { passkeyWalletOptions, WRONG_CHAIN_MESSAGE } from '../thirdweb-adapter';
@@ -135,21 +135,71 @@ describe('bootWallets', () => {
     expect(d.restoreThirdweb).not.toHaveBeenCalled();
   });
 
-  it('a failing lazy import of the session module is a failure, not a logout', async () => {
+  it('a failing lazy import with a stored session is a failure, not a logout', async () => {
     const restoreThirdweb = jest.fn(async () => ({ outcome: 'restored', attempts: 1, errors: [], hadStoredSession: true }) as const);
     const loader = jest.fn(async () => { throw new Error('native module missing'); });
-    const { d } = deps({ restoreThirdweb, sources: [lazySessionSource('passkey', loader) as SessionSource] });
+    const { d } = deps({ restoreThirdweb, sources: [lazySessionSource('passkey', async () => true, loader) as SessionSource] });
     const r = await bootWallets(d);
     expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'failed', attempts: 4 } });
     expect(restoreThirdweb).not.toHaveBeenCalled();
   });
 
-  it('retrySource makes exactly one attempt', async () => {
+  it('a failing lazy import WITHOUT a stored session never touches the loader: thirdweb is restored', async () => {
+    const restoreThirdweb = jest.fn(async () => ({ outcome: 'restored', attempts: 1, errors: [], hadStoredSession: true }) as const);
+    const loader = jest.fn(async () => { throw new Error('native module missing'); });
+    const { d } = deps({ restoreThirdweb, sources: [lazySessionSource('passkey', async () => false, loader) as SessionSource] });
+    expect(await bootWallets(d)).toMatchObject({ owner: 'thirdweb', result: { outcome: 'restored' } });
+    expect(loader).not.toHaveBeenCalled();
+  });
+});
+
+describe('backgroundRestore', () => {
+  const RESTORED = { outcome: 'restored', attempts: 1, errors: [], hadStoredSession: true } as const;
+
+  it('a failed source that is still unreachable stays the source after ONE attempt; thirdweb is not tried', async () => {
     const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
     const { d, connect } = deps({ storage, connect: jest.fn(async () => { throw new Error('down'); }) });
-    const r = await retrySource(d.sources[0], { sleep: async () => undefined });
-    expect(r).toMatchObject({ outcome: 'failed', attempts: 1 });
+    const restoreThirdweb = jest.fn(async () => RESTORED);
+    const r = await backgroundRestore({ failedSource: d.sources[0], restoreThirdweb, sleep: async () => undefined });
+    expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'failed', attempts: 1 }, failedSource: d.sources[0] });
     expect(connect).toHaveBeenCalledTimes(1);
+    expect(restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('a failed source whose session is now gone is dropped and thirdweb is restored', async () => {
+    const storage = spyStorage(); // the session key was removed after the failed boot
+    const { d } = deps({ storage });
+    const restoreThirdweb = jest.fn(async () => RESTORED);
+    const r = await backgroundRestore({ failedSource: d.sources[0], restoreThirdweb, sleep: async () => undefined });
+    expect(r).toEqual({ owner: 'thirdweb', result: RESTORED, failedSource: null });
+    expect(restoreThirdweb).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed source whose session turned corrupt is dropped and thirdweb is restored', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: '{"broken":true}' });
+    const { d, connect } = deps({ storage });
+    const restoreThirdweb = jest.fn(async () => RESTORED);
+    const r = await backgroundRestore({ failedSource: d.sources[0], restoreThirdweb, sleep: async () => undefined });
+    expect(r).toMatchObject({ owner: 'thirdweb', result: { outcome: 'restored' }, failedSource: null });
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('a failed source that now connects is restored as that source', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
+    const { d } = deps({ storage });
+    const restoreThirdweb = jest.fn(async () => RESTORED);
+    const r = await backgroundRestore({ failedSource: d.sources[0], restoreThirdweb, sleep: async () => undefined });
+    expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'restored' } });
+    expect(restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('without a failed source it is the thirdweb retry', async () => {
+    const restoreThirdweb = jest.fn(async () => RESTORED);
+    expect(await backgroundRestore({ failedSource: null, restoreThirdweb, sleep: async () => undefined })).toEqual({
+      owner: 'thirdweb',
+      result: RESTORED,
+      failedSource: null,
+    });
   });
 });
 
