@@ -119,6 +119,44 @@ describe('loadHeld', () => {
     expect(held.find((h) => h.typeId === tid(2))).toMatchObject({ visibility: 'private', invitationId: 'b' });
   });
 
+  it('of a re-issued type the valid invitation with the latest validUntil wins, forever beats a date', async () => {
+    const past = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    const soon = new Date(Date.now() + 10 * 86_400_000).toISOString();
+    const later = new Date(Date.now() + 100 * 86_400_000).toISOString();
+    const run = async (data: InvitationView[]) =>
+      loadHeld(account, deps({ fetchMine: jest.fn(async () => ({ ok: true as const, data })) }).d);
+    // oldest first, as `mine` sends them
+    let held = await run([inv('old', tid(1), { validUntil: past }), inv('new', tid(1), { validUntil: soon })]);
+    expect(held.map((h) => h.invitationId)).toEqual(['new']);
+    held = await run([inv('a', tid(1), { validUntil: later }), inv('b', tid(1), { validUntil: soon })]);
+    expect(held.map((h) => h.invitationId)).toEqual(['a']);
+    held = await run([inv('a', tid(1), { validUntil: later }), inv('b', tid(1), { validUntil: null })]);
+    expect(held.map((h) => h.invitationId)).toEqual(['b']);
+    held = await run([inv('a', tid(1), { validUntil: soon }), inv('b', tid(1), { validUntil: soon })]);
+    expect(held.map((h) => h.invitationId)).toEqual(['b']);
+  });
+
+  it('an expired entry keeps the visibility known from the cache', async () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    await loadHeld(account, deps().d); // tid(1) public in cache
+    const expired = deps({ fetchMine: jest.fn(async () => ({ ok: true as const, data: [inv('a', tid(1), { validUntil: past })] })) });
+    // chain says not held (expired) — still public, as it was
+    expired.holdsMany.mockImplementation(async (ids: readonly Hex[]) => ids.map(() => false));
+    const [h] = await loadHeld(account, expired.d);
+    expect(h.visibility).toBe('public');
+  });
+
+  it('the cache never stores proofs or claim signatures, and ignores malformed entries', async () => {
+    await loadHeld(account, deps().d);
+    const raw = JSON.parse((await AsyncStorage.getItem(heldCacheKey(ADDR)))!);
+    expect(raw.every((h: any) => h.claim === null)).toBe(true);
+    await AsyncStorage.setItem(heldCacheKey(ADDR), JSON.stringify([...raw, { typeId: 'nope' }, null, { ...raw[0], visibility: 'x' }]));
+    const offline = deps({ fetchMine: jest.fn(async () => ({ ok: false as const, code: 'NETWORK_ERROR', message: 'x' })) });
+    const cached = await loadHeld(account, offline.d);
+    expect(cached.map((h) => h.typeId)).toEqual([tid(1), tid(2)]);
+    expect(cached.every((h) => h.claim === null)).toBe(true);
+  });
+
   it('with no registry configured nothing is fetched and nothing is read on chain', async () => {
     const reader = jest.fn();
     const { d, fetchMine } = deps({ configured: () => false, reader });

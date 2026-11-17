@@ -49,9 +49,14 @@ function builtinCard(kind: CredentialKind): RegisterCard {
   };
 }
 
+/** Expired now? Screens use this (or RegisterCard.state) to hide make-private / renounce. */
+export function isExpired(h: Pick<HeldCredential, 'validUntil'>, nowSec: number): boolean {
+  return h.validUntil !== null && h.validUntil < nowSec;
+}
+
 function registerCard(h: HeldCredential, nowSec: number): RegisterCard | null {
   if (RESERVED.has(h.typeId.toLowerCase())) return null;
-  const expired = h.validUntil !== null && h.validUntil < nowSec;
+  const expired = isExpired(h, nowSec);
   if (expired && nowSec - (h.validUntil as number) > EXPIRED_GRACE_SEC) return null;
   const card: RegisterCard = {
     key: h.typeId,

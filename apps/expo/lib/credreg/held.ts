@@ -50,11 +50,38 @@ function isoToSec(iso: string | null): number | null {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
+const KINDS = new Set(['role', 'membership', 'badge']);
+const strOrNull = (v: unknown) => v === null || typeof v === 'string';
+
+/** Only well-formed entries come back; anything else in storage is ignored. */
+function cacheEntry(v: unknown): HeldCredential | null {
+  if (!v || typeof v !== 'object') return null;
+  const e = v as Record<string, unknown>;
+  if (typeof e.typeId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(e.typeId)) return null;
+  if (!KINDS.has(e.kind as string) || typeof e.title !== 'string') return null;
+  if (!strOrNull(e.orgName) || !strOrNull(e.imageUrl) || !strOrNull(e.invitationId)) return null;
+  if (e.visibility !== 'public' && e.visibility !== 'private') return null;
+  if (!(e.validUntil === null || (typeof e.validUntil === 'number' && Number.isFinite(e.validUntil)))) return null;
+  return {
+    typeId: e.typeId as Hex,
+    kind: e.kind as CredentialKind,
+    title: e.title,
+    orgName: e.orgName as string | null,
+    imageUrl: e.imageUrl as string | null,
+    recognised: e.recognised === true,
+    visibility: e.visibility,
+    validUntil: e.validUntil as number | null,
+    invitationId: e.invitationId as string | null,
+    claim: null, // never stored: proofs and claim signatures come only from the server
+  };
+}
+
 async function readCache(address: string): Promise<HeldCredential[] | null> {
   try {
     const raw = await AsyncStorage.getItem(heldCacheKey(address));
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-    return Array.isArray(parsed) ? (parsed as HeldCredential[]) : null;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map(cacheEntry).filter((h): h is HeldCredential => h !== null);
   } catch {
     return null;
   }
@@ -62,10 +89,27 @@ async function readCache(address: string): Promise<HeldCredential[] | null> {
 
 async function writeCache(address: string, held: HeldCredential[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(heldCacheKey(address), JSON.stringify(held));
+    await AsyncStorage.setItem(heldCacheKey(address), JSON.stringify(held.map((h) => ({ ...h, claim: null }))));
   } catch {
     // cache is best effort
   }
+}
+
+/** validUntil in seconds; null = forever. */
+const untilOf = (i: InvitationView) => isoToSec(i.validUntil);
+
+/**
+ * Of several accepted invitations for one type (an org re-issued it), the one to show: a valid one
+ * before an expired one, then the latest validUntil (forever wins), then the newest (later in `mine`).
+ */
+function better(a: { inv: InvitationView; index: number }, b: { inv: InvitationView; index: number }, nowSec: number): boolean {
+  const ua = untilOf(a.inv);
+  const ub = untilOf(b.inv);
+  const va = ua === null || ua >= nowSec;
+  const vb = ub === null || ub >= nowSec;
+  if (va !== vb) return va;
+  if (ua !== ub) return ua === null ? true : ub === null ? false : ua > ub;
+  return a.index > b.index;
 }
 
 export type HolderState = { held: HeldCredential[]; pending: InvitationView[]; fromCache: boolean };
@@ -92,31 +136,39 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
   } catch {
     onChain = null;
   }
-  const cachedVisibility = onChain
-    ? null
-    : new Map(((await readCache(account.address)) ?? []).map((h) => [h.typeId.toLowerCase(), h.visibility]));
+  const cachedVisibility = new Map(((await readCache(account.address)) ?? []).map((h) => [h.typeId.toLowerCase(), h.visibility]));
+  const nowSec = Math.floor(Date.now() / 1000);
 
-  // One entry per type: the first accepted invitation in the server's order.
-  const seen = new Set<string>();
-  const held: HeldCredential[] = [];
-  for (const i of accepted) {
-    const key = i.type.typeId.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const visibility = onChain ? (onChain.get(key) ? 'public' : 'private') : cachedVisibility?.get(key) ?? 'private';
-    held.push({
-      typeId: i.type.typeId,
-      kind: i.type.kind,
-      title: i.type.name,
-      orgName: i.org?.name ?? null,
-      imageUrl: i.type.imageUrl,
-      recognised: i.type.recognised,
-      visibility,
-      validUntil: isoToSec(i.validUntil),
-      invitationId: i.id,
-      claim: i.claim,
+  // One entry per type; the list keeps the server order of the chosen invitations (badges rely on it).
+  const chosen = new Map<string, { inv: InvitationView; index: number }>();
+  accepted.forEach((inv, index) => {
+    const key = inv.type.typeId.toLowerCase();
+    const cur = chosen.get(key);
+    if (!cur || better({ inv, index }, cur, nowSec)) chosen.set(key, { inv, index });
+  });
+  const held: HeldCredential[] = [...chosen.values()]
+    .sort((a, b) => a.index - b.index)
+    .map(({ inv: i }) => {
+      const key = i.type.typeId.toLowerCase();
+      const validUntil = untilOf(i);
+      const expired = validUntil !== null && validUntil < nowSec;
+      // The chain's `holds` is false once expired, so it cannot tell public from private then:
+      // keep what was known before (cache), else private.
+      const visibility: HeldCredential['visibility'] =
+        onChain && !expired ? (onChain.get(key) ? 'public' : 'private') : cachedVisibility.get(key) ?? 'private';
+      return {
+        typeId: i.type.typeId,
+        kind: i.type.kind,
+        title: i.type.name,
+        orgName: i.org?.name ?? null,
+        imageUrl: i.type.imageUrl,
+        recognised: i.type.recognised,
+        visibility,
+        validUntil,
+        invitationId: i.id,
+        claim: i.claim,
+      };
     });
-  }
   if (onChain) await writeCache(account.address, held);
   return { held, pending, fromCache: false };
 }
@@ -207,6 +259,8 @@ export async function loadPublicHeld(
       imageUrl: t.imageUrl ?? null,
       recognised: t.recognised === true,
       visibility: 'public' as const,
+      // Chain `holds` is expiry-aware: whatever it reports as held is valid now. The exact date is
+      // in the leaf only, which another person's device never sees.
       validUntil: null,
       invitationId: null,
       claim: null,

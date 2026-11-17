@@ -1,7 +1,7 @@
 import { RESERVED_TYPE_IDS } from '@netizen-labs/credential-registry';
 import type { Hex } from 'viem';
 import type { HeldCredential } from '../held';
-import { buildProfile, publicProfile, EXPIRED_GRACE_SEC } from '../model';
+import { buildProfile, isExpired, publicProfile, EXPIRED_GRACE_SEC } from '../model';
 
 const NOW = 1_800_000_000;
 const DAY = 86_400;
@@ -91,6 +91,8 @@ describe('buildProfile', () => {
     const later = buildProfile({ ...input, nowSec: until + 31 * DAY });
     expect(later.cards.map((c) => c.key)).toEqual(['builtin:citizen']);
     expect(EXPIRED_GRACE_SEC).toBe(30 * DAY);
+    expect(isExpired({ validUntil: until }, NOW)).toBe(true);
+    expect(isExpired({ validUntil: null }, NOW)).toBe(false);
   });
 
   it('a future validUntil is valid', () => {
