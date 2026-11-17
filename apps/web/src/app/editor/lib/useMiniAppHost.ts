@@ -127,6 +127,8 @@ export function useMiniAppHost(
         },
         getMuenzenBalance: async () => {
           if (!account?.address) return { balance: "48", decimals: 18, symbol: "RÖ" as const };
+          // `app=preview` deliberately resolves to no app: the route takes its legacy
+          // wallet path, which works only while MINIAPP_REQUIRE_USER_TOKEN is off.
           const res = await fetch(
             `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}&app=preview`,
           );
