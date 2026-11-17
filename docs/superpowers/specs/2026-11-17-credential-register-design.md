@@ -184,6 +184,35 @@ project.
   door-scanner delegate.
 - Other people's profiles show only their public credentials.
 
+### 5.6b Mobile experience for stamps, badges and memberships (Max, 2026-11-17)
+
+Max wants the app side to feel finished, not like a register viewer. Concretely:
+
+- **Receiving a stamp/badge by QR.** At an event the organiser shows (or prints) the event's badge QR. Scanning it
+  with the app's scanner (or the phone camera via the universal link) opens a **full-screen success moment**: the
+  badge art drops in and stamps onto a card with a short animation and haptic, the event name and date, "Abzeichen
+  erhalten" plus the Röbel Münzen for attending when those apply, then two actions: "Ansehen" (opens it in the
+  profile collection) and "Teilen" (feed post). Error states with the same care: already collected, event not
+  running yet / over, not eligible, offline (queued, collected when back online). One fingerprint at most, and
+  none for a guest's first stamp if the account is not deployed yet (the claim rides the first sponsored op later;
+  the screen still celebrates immediately and marks it "wird eingetragen").
+- **Profile collection.** A "Abzeichen" section: a grid of collected badges (newest first, grouped by year), each
+  opening a detail sheet (art, event, org, date, public/private switch, "Vorzeigen"). Memberships and roles appear
+  as cards above it. Empty state explains how to collect the first one.
+- **Event page.** For organisers: "Abzeichen für Teilnehmende" toggle when creating or editing an event (name, art
+  defaulting to the poster, optional limit), then on the event page a "Abzeichen-QR zeigen" full-screen QR for the
+  door/stage, live count of collected badges, and "Abzeichen vergeben" for ticket check-ins. For attendees: the
+  badge shown on the event page ("Das bekommst du, wenn du dabei bist" before, "Gesammelt" after).
+- **Org profile, management side** (admins/owners): a "Mitglieder & Ausweise" area with the member list and each
+  person's credential status (eingeladen / angenommen / abgelaufen / widerrufen, never public/private of a member
+  unless public), filters, issue to one person, revoke, renew for a new year, approve a batch prepared on the
+  dashboard, create a credential type from a template, the org switch "Mitglieder dürfen öffentlich sichtbar
+  sein", and door-scanner delegates. Larger lists link to the dashboard.
+- **Org profile, public side:** offices (Vorstand etc.) and, if the org allows it, members who chose public; the
+  org's badges ("Abzeichen dieser Organisation") and its mini app if bound.
+- **Visual language:** soulbound credentials look like cards/stamps, not tokens; never the words NFT, Token, Wallet
+  or chain in the UI; no wallet addresses. Animations respect "reduce motion".
+
 ### 5.7 Node backend
 
 - Mirror tables for types, batches and invitations (with the salts and claim keys that make the proofs; locked
