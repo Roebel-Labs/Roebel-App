@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { useIsCitizen } from '@/hooks/useIsCitizen';
@@ -12,7 +12,10 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
-import { credentialKindsFor, type CredentialKind } from '@/lib/credentials';
+import type { CredentialKind } from '@/lib/credentials';
+import type { RegisterCard } from '@/lib/credreg/model';
+import { makePrivate } from '@/lib/credreg/visibility';
+import { useProfileCredentials } from '@/hooks/useProfileCredentials';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
@@ -28,6 +31,8 @@ import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
+import BadgeGrid from '@/components/profile/BadgeGrid';
+import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
 import MuenzenButton from '@/components/profile/MuenzenButton';
@@ -73,6 +78,26 @@ export default function ProfileScreen() {
   const userBusiness = businesses.find((b) => b.status === 'published') || businesses[0] || null;
 
   const mint = useDailyMint({ isCitizen });
+  // Closed gate: exactly today's built-in cards, no credential request (useHeld is not mounted).
+  const creds = useProfileCredentials({ isCitizen, isAttester: !!hasAttesterNFT });
+  const [detailCard, setDetailCard] = useState<RegisterCard | null>(null);
+  const [cardBusy, setCardBusy] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+
+  // A `credential_visibility` push opens the detail sheet of its type (once per push), as soon as
+  // that card is loaded.
+  const { credential: credentialParam } = useLocalSearchParams<{ credential?: string }>();
+  const [handledCredentialParam, setHandledCredentialParam] = useState<string | null>(null);
+  const pushedCard =
+    creds.open && typeof credentialParam === 'string' && handledCredentialParam !== credentialParam
+      ? ([...creds.profile.cards, ...creds.profile.badges].find(
+          (c) => c.source === 'register' && c.key.toLowerCase() === credentialParam.toLowerCase(),
+        ) ?? null)
+      : null;
+  const shownCard = detailCard ?? pushedCard;
+  const dismissPushedCard = () => {
+    if (typeof credentialParam === 'string') setHandledCredentialParam(credentialParam);
+  };
   const members = useOrgMemberPreview(isOrg ? activeAccount?.id : undefined);
 
   useEffect(() => {
@@ -104,9 +129,41 @@ export default function ProfileScreen() {
   const profileHref = user?.username
     ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
     : ('/edit-profile' as const);
-  const credentialKinds = credentialKindsFor({ isCitizen, isAttester: !!hasAttesterNFT });
   const openExplainer = (kind: CredentialKind) =>
     router.push({ pathname: '/citizen-verification', params: { card: kind } } as any);
+  const openCard = (card: RegisterCard) => {
+    if (card.source === 'builtin') {
+      if (card.builtin) openExplainer(card.builtin);
+      return;
+    }
+    setCardError(null);
+    setDetailCard(card);
+  };
+  const closeCard = () => {
+    if (cardBusy) return;
+    dismissPushedCard();
+    setDetailCard(null);
+    setCardError(null);
+  };
+  const showCard = (card: RegisterCard) => {
+    dismissPushedCard();
+    setDetailCard(null);
+    router.push({ pathname: '/credentials/show/[key]', params: { key: card.key } } as any);
+  };
+  const makeCardPrivate = async (card: RegisterCard) => {
+    if (!account || cardBusy) return;
+    setCardBusy(true);
+    setCardError(null);
+    const result = await makePrivate(account, card);
+    setCardBusy(false);
+    if (!result.ok) {
+      setCardError(result.message);
+      return;
+    }
+    dismissPushedCard();
+    setDetailCard(null);
+    await creds.refresh();
+  };
 
   const muenzenSlot =
     mint.state === 'hidden' ? null : (
@@ -179,7 +236,8 @@ export default function ProfileScreen() {
               </ProfileSheet>
             ) : (
               <>
-                <CredentialCardStack kinds={credentialKinds} onPress={openExplainer} />
+                {creds.loader}
+                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
                 <ProfileSheet>
                   <IdentityRow
                     name={displayName}
@@ -189,6 +247,7 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
+                  {creds.open && <BadgeGrid badges={creds.profile.badges} onPress={openCard} />}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (
@@ -229,6 +288,16 @@ export default function ProfileScreen() {
 
         {/* Closes itself once the login lands (no effect needed). */}
         <LoginDrawer visible={showLoginDrawer && !isConnected} onClose={() => setShowLoginDrawer(false)} />
+        {creds.open && (
+          <CredentialDetailSheet
+            card={shownCard}
+            onClose={closeCard}
+            onShow={showCard}
+            onMakePrivate={makeCardPrivate}
+            busy={cardBusy}
+            error={cardError}
+          />
+        )}
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />
         <AccountSwitchSheet
           visible={showAccountSheet}

@@ -28,6 +28,10 @@ export type HeldCredential = {
   validUntil: number | null; // unix seconds
   invitationId: string | null;
   claim: InvitationView['claim'] | null;
+  /** From the type: what the credential unlocks. Absent = unknown. */
+  benefits?: string[];
+  /** The org lets members show this type publicly. Absent = unknown (treated as allowed). */
+  publicAllowed?: boolean;
 };
 
 type Reader = Pick<CredentialRegistryReader, 'holdsMany'>;
@@ -72,6 +76,8 @@ function cacheEntry(v: unknown): HeldCredential | null {
     visibility: e.visibility,
     validUntil: e.validUntil as number | null,
     invitationId: e.invitationId as string | null,
+    ...(Array.isArray(e.benefits) ? { benefits: e.benefits.filter((b): b is string => typeof b === 'string') } : {}),
+    ...(typeof e.publicAllowed === 'boolean' ? { publicAllowed: e.publicAllowed } : {}),
     claim: null, // never stored: proofs and claim signatures come only from the server
   };
 }
@@ -167,6 +173,8 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
         validUntil,
         invitationId: i.id,
         claim: i.claim,
+        benefits: Array.isArray(i.type.benefits) ? i.type.benefits : [],
+        publicAllowed: i.type.publicClaimAllowed !== false,
       };
     });
   if (onChain) await writeCache(account.address, held);

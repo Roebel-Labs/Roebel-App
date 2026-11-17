@@ -32,6 +32,7 @@ import UserPostsList from '@/components/profile/UserPostsList';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import UserEventsList from '@/components/profile/UserEventsList';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
+import PublicCredentials from '@/components/profile/PublicCredentials';
 import { fetchPersonalListingsByWallet } from '@/lib/supabase-marketplace';
 import type { UserRecord, MarketplaceListingRecord } from '@/lib/types';
 
@@ -295,6 +296,9 @@ export default function PublicUserProfileScreen() {
               ))}
             </View>
           )}
+
+          {/* Public cards and badges from the credential register (nothing while the gate is closed). */}
+          <PublicCredentials address={profile.wallet_address} />
         </View>
 
         {/* ── Zu verkaufen row (personal listings only; account_id IS NULL) ── */}

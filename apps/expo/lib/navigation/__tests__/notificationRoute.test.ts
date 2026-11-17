@@ -23,6 +23,12 @@ describe('routeForNotification', () => {
     expect(routeForNotification({ type: 'vorhaben', proposalId: 'p1', screen: 'aufgabe', taskId: 'k1' })).toBe('/aufgabe/k1');
   });
 
+  it('opens the profile detail sheet for a credential visibility push', () => {
+    const typeId = '0x' + 'ab'.repeat(32);
+    expect(routeForNotification({ type: 'credential_visibility', typeId })).toBe(`/profile?credential=${typeId}`);
+    expect(routeForNotification({ type: 'credential_visibility', typeId: 'nope' })).toBe('/profile');
+  });
+
   it('returns null without a target', () => {
     expect(routeForNotification(null)).toBeNull();
     expect(routeForNotification({ type: 'post' })).toBeNull();

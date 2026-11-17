@@ -47,6 +47,11 @@ export function routeForNotification(data: NotificationData): string | null {
       return str(data.slug) && `/org/sponsoring/${data.slug}`;
     case 'reward':
       return '/rewards';
+    case 'credential_visibility': {
+      // An org stopped showing its members: the profile opens the detail sheet of that type.
+      const typeId = str(data.typeId);
+      return typeId && /^0x[0-9a-fA-F]{64}$/.test(typeId) ? `/profile?credential=${typeId}` : '/profile';
+    }
     case 'org':
       // Weekly follower digest for org owners/admins.
       return str(data.accountId) && `/account/${data.accountId}`;

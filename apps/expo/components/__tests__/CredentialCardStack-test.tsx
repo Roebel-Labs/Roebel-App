@@ -13,6 +13,9 @@ jest.mock('@/components/PressableScale', () => {
 });
 
 import CredentialCardStack, { stackHeight } from '../profile/CredentialCardStack';
+import { buildProfile } from '@/lib/credreg/model';
+
+const cardsFor = (isCitizen: boolean, isAttester: boolean) => buildProfile({ isCitizen, isAttester, held: [], nowSec: 0 }).cards;
 
 function labelsOf(tree: renderer.ReactTestRenderer): string[] {
   return tree.root
@@ -24,7 +27,7 @@ describe('CredentialCardStack', () => {
   it('renders one card for a citizen', () => {
     let tree!: renderer.ReactTestRenderer;
     act(() => {
-      tree = renderer.create(<CredentialCardStack kinds={['citizen']} onPress={() => {}} />);
+      tree = renderer.create(<CredentialCardStack cards={cardsFor(true, false)} onPress={() => {}} />);
     });
     expect(labelsOf(tree)).toEqual(['Bürgerausweis']);
   });
@@ -33,7 +36,7 @@ describe('CredentialCardStack', () => {
     const onPress = jest.fn();
     let tree!: renderer.ReactTestRenderer;
     act(() => {
-      tree = renderer.create(<CredentialCardStack kinds={['citizen', 'attester']} onPress={onPress} />);
+      tree = renderer.create(<CredentialCardStack cards={cardsFor(true, true)} onPress={onPress} />);
     });
     expect(labelsOf(tree)).toEqual(['Bürgerausweis', 'Bescheiniger-Ausweis']);
     // The mocked Pressable's composite node carries onPress; its host View does not.
@@ -41,7 +44,7 @@ describe('CredentialCardStack', () => {
     act(() => {
       zone.props.onPress();
     });
-    expect(onPress).toHaveBeenCalledWith('attester');
+    expect(onPress).toHaveBeenCalledWith(expect.objectContaining({ builtin: 'attester' }));
   });
 
   it('grows by one peek step per extra card', () => {

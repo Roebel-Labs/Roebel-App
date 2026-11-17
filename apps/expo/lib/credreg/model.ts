@@ -21,6 +21,9 @@ export type RegisterCard = {
   validUntil: number | null; // unix seconds
   state: 'valid' | 'expired';
   invitationId?: string;
+  benefits?: string[];
+  /** false = the org shows its members only privately. */
+  publicAllowed?: boolean;
 };
 
 export type Profile = { cards: RegisterCard[]; badges: RegisterCard[] };
@@ -72,6 +75,8 @@ function registerCard(h: HeldCredential, nowSec: number): RegisterCard | null {
     state: expired ? 'expired' : 'valid',
   };
   if (h.invitationId) card.invitationId = h.invitationId;
+  if (h.benefits) card.benefits = h.benefits;
+  if (typeof h.publicAllowed === 'boolean') card.publicAllowed = h.publicAllowed;
   return card;
 }
 
