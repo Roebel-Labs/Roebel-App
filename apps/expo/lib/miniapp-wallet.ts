@@ -13,6 +13,7 @@
  */
 import type { Account } from 'thirdweb/wallets';
 import { prepareTransaction, sendTransaction } from 'thirdweb';
+import { classifyWalletMethod } from '@netizen-labs/miniapp-sdk/host';
 import { client } from '@/constants/thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
@@ -39,18 +40,12 @@ function unsupported(method: string): BridgeErrorLike {
   return { code: 'unsupported', message: `Methode "${method}" wird nicht unterstützt.` };
 }
 
-/** Methods that require the native confirm sheet before execution. */
-const SIGNING_METHODS = new Set([
-  'eth_sendTransaction',
-  'personal_sign',
-  'eth_sign',
-  'eth_signTypedData',
-  'eth_signTypedData_v3',
-  'eth_signTypedData_v4',
-]);
-
+/**
+ * Methods that require the native confirm sheet before execution. The shared SDK rule
+ * decides (nothing else may); anything it does not know is refused by `handleReadOnly`.
+ */
 export function isSigningMethod(method: string): boolean {
-  return SIGNING_METHODS.has(method);
+  return classifyWalletMethod(method) === 'sign';
 }
 
 // --- shortening / formatting -----------------------------------------------
