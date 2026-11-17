@@ -20,7 +20,7 @@ import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { useCreateCitizenRequest, REQUEST_STAGE_LABEL, DEFAULT_CITIZEN_REASON } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { WAY_BACK_OFFLINE_MESSAGE, WAY_BACK_REASON } from '@/lib/passkey/way-back';
+import { checkWayBack, WAY_BACK_OFFLINE_MESSAGE, WAY_BACK_REASON } from '@/lib/passkey/way-back';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -148,7 +148,6 @@ export default function WelcomeConsentScreen() {
         try {
           // An independent account needs a way back first; the data stays as a draft. The screen
           // is replaced right after this, so the reason goes out as a snackbar, not a sheet.
-          const { checkWayBack } = await import('@/lib/passkey/way-back-runtime');
           const way = await checkWayBack(account);
           if (way.ok !== true) {
             await saveCitizenDraft(citizenDataAtSubmit);

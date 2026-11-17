@@ -18,7 +18,7 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import WayBackSheet from '@/components/passkey/WayBackSheet';
-import { WAY_BACK_OFFLINE_MESSAGE } from '@/lib/passkey/way-back';
+import { checkWayBack, WAY_BACK_OFFLINE_MESSAGE } from '@/lib/passkey/way-back';
 import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { InformationCircleIcon } from '@/components/Icons';
 const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
@@ -81,7 +81,6 @@ export default function RequestCitizenScreen() {
 
     try {
       // An independent account needs a way back before it becomes a citizen (provider logins pass).
-      const { checkWayBack } = await import('@/lib/passkey/way-back-runtime');
       const way = await checkWayBack(account);
       if (way.ok === null) {
         setErrorDrawer({ visible: true, message: WAY_BACK_OFFLINE_MESSAGE });

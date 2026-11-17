@@ -2,6 +2,9 @@
  * The way-back rule: before a person becomes a citizen, an independent account needs a way back
  * (a lost phone must not take the Bürgerkarte with it). Pure rule + one reader; the chain and
  * SecureStore reads are injected (`readWayBack` deps), so this file has no native imports.
+ * `checkWayBack` is what the citizenship screens call: a provider login (no passkey session, or
+ * a passkey session on a legacy identity) is answered right here, and only a passkey session on
+ * an independent identity loads way-back-runtime (chain + native passkey modules).
  *
  * Applies as soon as sign-up is open; it is NOT behind the `words` surface. Plan 3 feeds
  * `phraseConfirmed` (expert account) and plan 4 `backupFileExported`.
@@ -70,4 +73,28 @@ export async function readWayBack(account: unknown, deps: WayBackDeps): Promise<
   } catch {
     return { kind: 'passkey', ok: null };
   }
+}
+
+export type WayBackRuntime = WayBackDeps & { wordsSurfaceOpen: () => Promise<boolean> };
+export type WayBackCheck = { ok: boolean | null; kind: AccountKind; option: { label: string; route: string } };
+
+const loadWayBackRuntime = (): Promise<WayBackRuntime> => import('./way-back-runtime').then((m) => m.wayBackRuntime);
+
+/**
+ * `ok: true` = go on, `false` = show the sheet (with `option` as the primary button), `null` =
+ * a read failed (never "has a way back"). Provider logins never load the runtime.
+ */
+export async function checkWayBack(account: unknown, loadRuntime: () => Promise<WayBackRuntime> = loadWayBackRuntime): Promise<WayBackCheck> {
+  const session = passkeySessionOf<PasskeySession>(account);
+  if (!session || identityKind(session) === 'legacy') return { ok: true, kind: 'provider', option: fastestWayBack('provider', false) };
+  let rt: WayBackRuntime;
+  try {
+    rt = await loadRuntime();
+  } catch {
+    return { ok: null, kind: 'passkey', option: fastestWayBack('passkey', false) };
+  }
+  const r = await readWayBack(account, rt);
+  // Only look at the gate when the sheet can show up.
+  const wordsOpen = r.ok === false ? await rt.wordsSurfaceOpen().catch(() => false) : false;
+  return { ok: r.ok, kind: r.kind, option: fastestWayBack(r.kind, wordsOpen) };
 }

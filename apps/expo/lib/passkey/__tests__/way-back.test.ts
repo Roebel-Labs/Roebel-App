@@ -1,5 +1,9 @@
 import { PASSKEY_SESSION_PROP } from '../active';
-import { fastestWayBack, hasWayBack, readWayBack, WAY_BACK_REASON, type WayBackDeps } from '../way-back';
+import { checkWayBack, fastestWayBack, hasWayBack, readWayBack, WAY_BACK_REASON, type WayBackDeps, type WayBackRuntime } from '../way-back';
+
+jest.mock('../way-back-runtime', () => {
+  throw new Error('a provider login must never load the way-back runtime');
+});
 
 const SAFE = '0x1111111111111111111111111111111111111111';
 const LEGACY = '0x2222222222222222222222222222222222222222';
@@ -70,6 +74,46 @@ describe('readWayBack', () => {
   it('a failed pool read does not hide a real person', async () => {
     const r = await readWayBack(passkeyAccount, { readState: async () => ({ guardians: [PERSON as `0x${string}`], threshold: 1 }), loadPool: async () => { throw new Error('store'); } });
     expect(r).toEqual({ kind: 'passkey', ok: true });
+  });
+});
+
+describe('checkWayBack (I3: provider logins never load the runtime)', () => {
+  const runtime = (guardians: string[], wordsOpen = true): WayBackRuntime => ({
+    ...deps(guardians),
+    wordsSurfaceOpen: jest.fn(async () => wordsOpen),
+  });
+
+  it('a thirdweb account: ok without loading the runtime', async () => {
+    const load = jest.fn(async () => runtime([]));
+    expect(await checkWayBack({ address: LEGACY }, load)).toMatchObject({ ok: true, kind: 'provider' });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('a passkey session on a legacy identity: ok without loading the runtime', async () => {
+    const load = jest.fn(async () => runtime([]));
+    expect(await checkWayBack(accountOf(LEGACY), load)).toMatchObject({ ok: true, kind: 'provider' });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('the default loader is never touched for a provider login (the runtime module throws when loaded)', async () => {
+    expect(await checkWayBack(undefined)).toMatchObject({ ok: true, kind: 'provider' });
+  });
+
+  it('an independent passkey account loads the runtime: no guardians → the sheet with the fastest option', async () => {
+    const rt = runtime([]);
+    const r = await checkWayBack(passkeyAccount, async () => rt);
+    expect(r).toEqual({ ok: false, kind: 'passkey', option: { label: 'Wiederherstellungswörter einrichten', route: '/settings/recovery-words' } });
+    expect(rt.wordsSurfaceOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('one person: ok, the gate is not even asked', async () => {
+    const rt = runtime([PERSON]);
+    expect((await checkWayBack(passkeyAccount, async () => rt)).ok).toBe(true);
+    expect(rt.wordsSurfaceOpen).not.toHaveBeenCalled();
+  });
+
+  it('a runtime that cannot load is "unknown", never "ok"', async () => {
+    expect((await checkWayBack(passkeyAccount, async () => { throw new Error('native'); })).ok).toBeNull();
   });
 });
 
