@@ -4,7 +4,7 @@ jest.mock('@/lib/supabase-app-settings', () => ({ fetchPasskeyFlags: jest.fn(asy
 
 import { getAddress, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
-import { bootWallets, type BootDeps } from '../boot';
+import { bootWallets, retrySource, type BootDeps, type SessionSource } from '../boot';
 import { passkeyChannelAllowed } from '../gate';
 import { PASSKEY_SESSION_KEY, clearPasskeySession, loadPasskeySession, parsePasskeySession, savePasskeySession, type PasskeySession } from '../session';
 import { passkeyWalletOptions, WRONG_CHAIN_MESSAGE } from '../thirdweb-adapter';
@@ -33,61 +33,114 @@ function spyStorage(initial: Record<string, string> = {}) {
   };
 }
 
-function deps(over: Partial<BootDeps> & { storage?: ReturnType<typeof spyStorage> } = {}) {
+const NO_SESSION = { outcome: 'no-session', attempts: 1, errors: [], hadStoredSession: false } as const;
+
+function deps(
+  over: Partial<BootDeps> & {
+    storage?: ReturnType<typeof spyStorage>;
+    connect?: jest.Mock;
+    hasStored?: () => Promise<boolean>;
+    load?: () => Promise<PasskeySession | null>;
+  } = {},
+) {
   const storage = over.storage ?? spyStorage();
+  const connect = over.connect ?? jest.fn(async () => undefined);
+  const source: SessionSource<PasskeySession> = {
+    owner: 'passkey',
+    hasStored: over.hasStored ?? (async () => (await storage.getItem(PASSKEY_SESSION_KEY)) !== null),
+    load: over.load ?? (() => loadPasskeySession(storage)),
+    connect,
+  };
   const d: BootDeps = {
     channelAllowed: () => true,
-    loadSession: () => loadPasskeySession(storage),
-    connectPasskey: jest.fn(async () => undefined),
-    autoConnectThirdweb: jest.fn(async () => undefined),
+    sources: [source as SessionSource],
+    restoreThirdweb: jest.fn(async () => ({ ...NO_SESSION, errors: [] as string[] })),
+    delaysMs: [1, 1, 1],
+    sleep: async () => undefined,
     ...over,
   };
-  return { d, storage };
+  return { d, storage, connect };
 }
 
 describe('bootWallets', () => {
   it('a stored passkey session connects the adapter and never runs the thirdweb path', async () => {
     const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
-    const { d } = deps({ storage });
-    expect(await bootWallets(d)).toBe('passkey');
-    expect(d.connectPasskey).toHaveBeenCalledWith(SESSION);
-    expect(d.autoConnectThirdweb).not.toHaveBeenCalled();
-    expect(storage.touched).toEqual([`get:${PASSKEY_SESSION_KEY}`]);
+    const { d, connect } = deps({ storage });
+    expect(await bootWallets(d)).toMatchObject({ owner: 'passkey', result: { outcome: 'restored', attempts: 1 } });
+    expect(connect).toHaveBeenCalledWith(SESSION);
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
+    expect(new Set(storage.touched)).toEqual(new Set([`get:${PASSKEY_SESSION_KEY}`]));
   });
 
-  it('no session → the thirdweb autoConnect path, unchanged', async () => {
-    const { d, storage } = deps();
-    expect(await bootWallets(d)).toBe('thirdweb');
-    expect(d.connectPasskey).not.toHaveBeenCalled();
-    expect(d.autoConnectThirdweb).toHaveBeenCalledTimes(1);
-    expect(storage.touched).toEqual([`get:${PASSKEY_SESSION_KEY}`]);
+  it('no session -> the thirdweb restore, unchanged', async () => {
+    const { d, storage, connect } = deps();
+    expect((await bootWallets(d)).owner).toBe('thirdweb');
+    expect(connect).not.toHaveBeenCalled();
+    expect(d.restoreThirdweb).toHaveBeenCalledTimes(1);
+    expect(new Set(storage.touched)).toEqual(new Set([`get:${PASSKEY_SESSION_KEY}`]));
   });
 
   it('production channel: reads no storage at all and goes straight to thirdweb', async () => {
     const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
-    const { d } = deps({ storage, channelAllowed: () => false });
-    expect(await bootWallets(d)).toBe('thirdweb');
+    const { d, connect } = deps({ storage, channelAllowed: () => false });
+    expect((await bootWallets(d)).owner).toBe('thirdweb');
     expect(storage.touched).toEqual([]);
-    expect(d.connectPasskey).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
   });
 
-  it('a broken session never strands the person: falls back to thirdweb', async () => {
+  it('stored session, connect keeps failing -> failed for passkey, thirdweb is never tried', async () => {
     const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
-    const { d } = deps({ storage, connectPasskey: jest.fn(async () => Promise.reject(new Error('x'))) });
-    expect(await bootWallets(d)).toBe('thirdweb');
-    expect(d.autoConnectThirdweb).toHaveBeenCalledTimes(1);
+    const { d } = deps({ storage, connect: jest.fn(async () => { throw new Error('rpc down'); }) });
+    const r = await bootWallets(d);
+    expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'failed', hadStoredSession: true, attempts: 4 } });
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
   });
 
-  it('a corrupt session value is ignored', async () => {
-    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: '{"credentialId":"c"}' });
+  it('storage throws while reading the session -> failed, not logged out', async () => {
+    const { d } = deps({ hasStored: async () => { throw new Error('keychain locked'); }, load: async () => { throw new Error('keychain locked'); } });
+    expect((await bootWallets(d)).result.outcome).toBe('failed');
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('a storage error behind a dormant thirdweb login never comes up as the thirdweb account', async () => {
+    const restoreThirdweb = jest.fn(async () => ({ outcome: 'restored', attempts: 1, errors: [], hadStoredSession: true }) as const);
+    const { d } = deps({
+      restoreThirdweb,
+      hasStored: async () => { throw new Error('keychain locked'); },
+      load: async () => { throw new Error('keychain locked'); },
+    });
+    const r = await bootWallets(d);
+    expect(r.owner).toBe('passkey');
+    expect(r.result.outcome).toBe('failed');
+    expect(restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('a corrupt session falls through to thirdweb after ONE attempt', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: '{"broken":true}' });
     const { d } = deps({ storage });
-    expect(await bootWallets(d)).toBe('thirdweb');
+    expect((await bootWallets(d)).owner).toBe('thirdweb');
+    expect(d.restoreThirdweb).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second attempt that succeeds restores the passkey session', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
+    let n = 0;
+    const { d } = deps({ storage, connect: jest.fn(async () => { if (n++ === 0) throw new Error('once'); }) });
+    expect(await bootWallets(d)).toMatchObject({ owner: 'passkey', result: { outcome: 'restored', attempts: 2 } });
   });
 
   it('a cancelled boot (unmounted provider) stops before thirdweb', async () => {
     const { d } = deps({ isCancelled: () => true });
-    expect(await bootWallets(d)).toBe('cancelled');
-    expect(d.autoConnectThirdweb).not.toHaveBeenCalled();
+    expect((await bootWallets(d)).result.outcome).toBe('cancelled');
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('retrySource makes exactly one attempt', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
+    const { d, connect } = deps({ storage, connect: jest.fn(async () => { throw new Error('down'); }) });
+    const r = await retrySource(d.sources[0], { sleep: async () => undefined });
+    expect(r).toMatchObject({ outcome: 'failed', attempts: 1 });
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 });
 

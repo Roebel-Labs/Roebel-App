@@ -34,6 +34,8 @@ export type RestoreDeps = {
   delaysMs: readonly number[];
   sleep: (ms: number) => Promise<void>;
   isCancelled?: () => boolean;
+  /** A fatal error ends the attempts at once with outcome 'failed' (retrying cannot help). */
+  isFatal?: (e: unknown) => boolean;
 };
 
 /** First-boot retries: about 12 s in total, short enough to stay inside the "reconnecting" state. */
@@ -61,6 +63,7 @@ export async function restoreWithRetry(deps: RestoreDeps): Promise<RestoreResult
       errors.push('no account restored');
     } catch (e) {
       errors.push(errorMessage(e));
+      if (deps.isFatal?.(e)) return { outcome: 'failed', attempts, errors, hadStoredSession: true };
     }
     if (deps.isCancelled?.()) return { outcome: 'cancelled', attempts, errors, hadStoredSession: stored ?? false };
 
@@ -85,6 +88,8 @@ export const RESTORE_REPORTS_MAX = 10;
 export type RestoreReport = Omit<RestoreResult, 'outcome'> & {
   outcome: RestoreOutcome | 'restored-late';
   at: string;
+  /** Which login the restore was about. */
+  owner?: 'thirdweb' | 'passkey' | 'words';
   appVersion?: string;
   platform?: string;
   /** expo-updates: id of the running update and whether the embedded (store) bundle is running. */

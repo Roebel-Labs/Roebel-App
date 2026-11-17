@@ -2,6 +2,15 @@ import { appendRestoreReport, restoreWithRetry, RESTORE_REPORTS_KEY, RESTORE_REP
 
 const noSleep = async () => undefined;
 
+describe('restoreWithRetry isFatal', () => {
+  it('a fatal error stops retrying and is a failure, not a logout', async () => {
+    const attempt = jest.fn(async () => { throw new Error('corrupt'); });
+    const r = await restoreWithRetry({ attempt, hasStoredSession: async () => true, delaysMs: [1, 1, 1], sleep: async () => undefined, isFatal: () => true });
+    expect(r.outcome).toBe('failed');
+    expect(attempt).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('restoreWithRetry', () => {
   it('reports "restored" on the first successful attempt without checking storage', async () => {
     const hasStoredSession = jest.fn(async () => true);
