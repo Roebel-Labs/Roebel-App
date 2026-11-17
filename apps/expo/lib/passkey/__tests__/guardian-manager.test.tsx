@@ -94,10 +94,10 @@ const RECORD = {
 
 type Manager = ReturnType<typeof useGuardianManager>;
 
-async function mount(): Promise<{ current: () => Manager }> {
+async function mount(record: unknown = RECORD): Promise<{ current: () => Manager }> {
   let latest!: Manager;
   function Probe() {
-    latest = useGuardianManager(RECORD);
+    latest = useGuardianManager(record as never);
     return null;
   }
   await act(async () => {
@@ -237,6 +237,24 @@ describe('useGuardianManager', () => {
       // it is the same currentWordsPool call with the real gate (wordsPoolView is tested directly in words-setup-runtime.test.ts).
       expect(mockPath).toEqual({ runtime: 0, fallbackGate: 1 });
     });
+  });
+
+  it('I-1: a words (12-word) account with the words surface open: no "nicht geladen" row, changes go through', async () => {
+    mockSurfaceOpen = true;
+    wordsSeenHere();
+    mockChain.guardians = [P1, W0];
+    mockChain.threshold = 1;
+    mockNames.set(P1.toLowerCase(), 'Erna');
+    const WORDS_RECORD = { ...(RECORD as object), credentialId: '', ownerType: 'ecdsa' };
+    const m = await mount(WORDS_RECORD);
+    expect(m.current().wordsUnloaded).toBe(false);
+    expect(m.current().peopleGuardians).toEqual([P1, W0]);
+    expect(mockPath).toEqual({ runtime: 0, fallbackGate: 0 });
+    await act(async () => {
+      await m.current().addGuardian(P2, 'Kurt');
+    });
+    expect(mockSent).toEqual([expected([P1, W0, P2], managerThreshold.add(1, 3))]);
+    expect(m.current().notice?.text).not.toBe(WORDS_NOT_LOADED_MESSAGE);
   });
 
   it('pool unknown but every guardian is a named person: changes go through', async () => {

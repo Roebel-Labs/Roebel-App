@@ -13,7 +13,8 @@
  * the words screen loaded the pool (planning without it would keep old words as "people").
  * That refusal applies only while the 'words' surface is open, so the words screen (the only way
  * out) is reachable (ruling N2, in `currentWordsPool`); with it closed every guardian is a person,
- * as before the words existed.
+ * as before the words existed. A words (12-word) account has no recovery-words pool at all: its
+ * guardians are all people, never held back (final review I-1).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
@@ -27,7 +28,9 @@ import {
   isValidThreshold,
   pendingSuggestions,
 } from '@/lib/passkey/guardian-plan';
+import { passkeySessionOf } from '@/lib/passkey/active';
 import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import { planGuardianSet, splitGuardians, type WordsPool } from '@/lib/passkey/words-guardians';
 import { currentWordsPool, WORDS_NOT_LOADED_MESSAGE, type WordsPoolView } from '@/lib/passkey/words-setup';
@@ -87,12 +90,15 @@ export function useGuardianManager(record: MigrationRecord | null) {
     setLoading(true);
     try {
       const [state, identity] = await Promise.all([readGuardianState(record.safe), readIdentityMode(record).catch(() => null)]);
-      const view: WordsPoolView = await import('@/lib/passkey/words-setup-runtime')
-        .then((rt) => rt.wordsPoolView(state.guardians, account))
-        // Runtime not loadable: the local view under the same N2 rule (the words gate).
-        .catch(() =>
-          currentWordsPool(state.guardians, { storage: secureKeyValueStorage, wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words') }),
-        );
+      // A words (12-word) account has no recovery-words pool: every guardian is a person.
+      const view: WordsPoolView = isWordsOwner(passkeySessionOf<PasskeySession>(account) ?? record)
+        ? { pool: null, state: 'none' }
+        : await import('@/lib/passkey/words-setup-runtime')
+            .then((rt) => rt.wordsPoolView(state.guardians, account, record))
+            // Runtime not loadable: the local view under the same N2 rule (the words gate).
+            .catch(() =>
+              currentWordsPool(state.guardians, { storage: secureKeyValueStorage, wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words') }),
+            );
       const wordsPool = view.pool;
       // Word guardians are never resolved or shown as people.
       const peopleOnChain = splitGuardians(state.guardians, wordsPool).people;

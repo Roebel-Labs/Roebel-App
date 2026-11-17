@@ -16,7 +16,7 @@ import { readGuardianState, readIdentityMode, recoveryStorage, sendOwnSafeOp } f
 import type { KeyBackupSlot } from './key-backup';
 import type { MigrationRecord } from './migration';
 import { unwrapSecret, wrapSecret } from './prf-vault';
-import type { PasskeySession } from './session';
+import { isWordsOwner, type PasskeySession } from './session';
 import { getPrfSecret, signWithPasskey } from './webauthn';
 import { currentWordsPool, type WordsPoolView, type WordsSetupDeps } from './words-setup';
 
@@ -41,8 +41,15 @@ export function createWordsReadDeps(
 /**
  * The guardian list's words pool for the active account, without a prompt (words-setup.ts
  * `currentWordsPool`). Without a passkey session on this phone: the local pool only.
+ * A words (12-word) account has no recovery-words pool (its owner IS the words): none, so its
+ * guardians are never held back as "nicht geladen" behind a words screen it cannot use.
  */
-export async function wordsPoolView(guardians: readonly Address[], account: unknown): Promise<WordsPoolView> {
+export async function wordsPoolView(
+  guardians: readonly Address[],
+  account: unknown,
+  record?: Pick<MigrationRecord, 'ownerType'> | null,
+): Promise<WordsPoolView> {
+  if (isWordsOwner(passkeySessionOf<PasskeySession>(account) ?? record)) return { pool: null, state: 'none' };
   const session = await actingPasskeySession(
     passkeySessionOf<PasskeySession>(account),
     (account as { address?: Address } | null | undefined)?.address,

@@ -72,6 +72,17 @@ describe('wordsPoolView', () => {
     expect(await wordsPoolView([P1], account)).toEqual({ pool: null, state: 'none' });
   });
 
+  it('I-1: a words (12-word) session or record has no words pool: none, without gate or backup read', async () => {
+    mockGate.open = true;
+    const wordsAccount = { address: SAFE, [PASSKEY_SESSION_PROP]: { credentialId: '', safe: SAFE, identity: SAFE, ownerType: 'ecdsa' } };
+    expect(await wordsPoolView([P1], wordsAccount)).toEqual({ pool: null, state: 'none' });
+    expect(await wordsPoolView([P1], undefined, { ownerType: 'ecdsa' })).toEqual({ pool: null, state: 'none' });
+    expect(mockGate.calls).toBe(0);
+    expect(mockRemote.readWithoutPrompt).not.toHaveBeenCalled();
+    // A passkey record under the same open gate still asks.
+    expect(await wordsPoolView([P1], account, { ownerType: 'webauthnSigner' })).toEqual({ pool: null, state: 'unknown' });
+  });
+
   it('words gate open, key backup disabled: none', async () => {
     mockGate.open = true;
     mockRemote.readWithoutPrompt.mockResolvedValue({ status: 'disabled' });
