@@ -17,7 +17,7 @@ import {
   type KeyChain,
   type SignInDeps,
 } from '../signin';
-import { shapeClient } from '../__testutils__/lookup-client';
+import { internalRpcError, shapeClient } from '../__testutils__/lookup-client';
 import { assertionFor, mem, newTestPasskey, type TestPasskey } from '../__testutils__/signin-helpers';
 
 const LEGACY = getAddress('0xc49dE63CcfeE46C6C5c3E393293f66779799Fb28');
@@ -190,6 +190,27 @@ describe('resolveCredentialKey (credential → key → Safe)', () => {
     };
     const key = await resolveCredentialKey(disc(`0x${'0c'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() });
     expect(key).toEqual({ x: pk.x, y: pk.y, safe: RECOVERED, owner: SIGNER, ownerType: 'webauthnSigner' });
+  });
+
+  it('a transient -32603 (viem reports it as a revert) on the real Safe stops the sign-in, no fallback', async () => {
+    for (const failRead of [{ getModulesPaginated: internalRpcError() }, { getOwners: internalRpcError('getOwners') }]) {
+      const client = shapeClient({
+        tip: 100n,
+        safes: [RECOVERED],
+        owners: { [RECOVERED]: [SIGNER] },
+        logs: [{ emitter: RECOVERED, block: 60n }],
+        failRead,
+      });
+      const lookup = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+      const chain: KeyChain = {
+        ...knownChain({ hasCode: [safeOf(pk), SIGNER, RECOVERED] }),
+        getSigner: signerOfPk,
+        findSafesByOwner: (o) => findSafesByOwner(o, lookup),
+      };
+      await expect(resolveCredentialKey(disc(`0x${'0e'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+        PasskeySignInError,
+      );
+    }
   });
 
   it('two valid Safes, neither (or both) with history → ambiguous, never a silent pick', async () => {

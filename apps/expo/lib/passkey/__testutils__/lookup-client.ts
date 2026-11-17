@@ -22,6 +22,19 @@ export function reverted(): Error {
 }
 
 /**
+ * A transient -32603 as viem 2.x reports it from a contract read: getContractError wraps an
+ * InternalRpcError that carries a message as ContractFunctionRevertedError
+ * (utils/errors/getContractError.ts), inside ContractFunctionExecutionError.
+ */
+export function internalRpcError(fn = 'getModulesPaginated'): Error {
+  const rpc = Object.assign(new Error('An internal error was received.'), { name: 'InternalRpcError', code: -32603 });
+  return Object.assign(new Error(`The contract function "${fn}" reverted with the following reason:\nInternal error`), {
+    name: 'ContractFunctionExecutionError',
+    cause: Object.assign(new Error('Internal error'), { name: 'ContractFunctionRevertedError', cause: rpc }),
+  });
+}
+
+/**
  * A viem-like client over a tiny fake chain: `safes` look like app passkey Safes (proxy runtime,
  * singleton, fallback handler, the two modules); `contracts` have other code; `owners` per address;
  * `logs` = AddedOwner hits (emitter, block).
@@ -33,6 +46,8 @@ export function shapeClient(p: {
   owners: Record<string, Address[]>;
   logs: Array<{ emitter: Address; block: bigint }>;
   modules?: Address[];
+  /** Errors thrown by these reads (any address). */
+  failRead?: Partial<Record<'getOwners' | 'getModulesPaginated', Error>>;
 }) {
   const word = (a: Address): Hex => pad(a, { size: 32 });
   const isSafe = (a: Address) => p.safes.includes(a);
@@ -54,6 +69,8 @@ export function shapeClient(p: {
       return '0x' as Hex;
     }),
     readContract: jest.fn(async (a: any) => {
+      const fail = p.failRead?.[a.functionName as 'getOwners' | 'getModulesPaginated'];
+      if (fail) throw fail;
       if (a.functionName === 'getOwners') {
         if (!p.owners[a.address]) throw reverted();
         return p.owners[a.address];

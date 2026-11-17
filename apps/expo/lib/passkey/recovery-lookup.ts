@@ -61,7 +61,8 @@ export type LookupChain = {
   /**
    * `a` has the shape of an app passkey Safe: canonical SafeProxy 1.4.1 runtime, singleton =
    * SafeL2 1.4.1, fallback handler = Safe4337Module, modules exactly {Safe4337Module,
-   * SocialRecoveryModule}. A transport error throws.
+   * SocialRecoveryModule}. Only a code / storage mismatch returns false; every thrown error
+   * (also a viem "revert" on getModulesPaginated, which may be a transient -32603) propagates.
    */
   isPasskeySafe: (a: Address) => Promise<boolean>;
 };
@@ -129,26 +130,8 @@ export async function findLinkedLegacies(safe: Address, chain: LookupChain): Pro
   return checks.filter((c): c is Address => !!c);
 }
 
-/** viem error names that mean "this contract answered, and it is not a Safe" (revert / no data). */
-const NOT_A_SAFE_ERRORS = new Set(['ContractFunctionRevertedError', 'ContractFunctionZeroDataError']);
-
-/** True when `e` (or an error in its cause chain) is a contract revert / empty return, not a transport failure. */
-export function isContractRevert(e: unknown): boolean {
-  for (let cur: unknown = e, depth = 0; cur && depth < 10; cur = (cur as { cause?: unknown }).cause, depth++) {
-    if (NOT_A_SAFE_ERRORS.has((cur as { name?: string }).name ?? '')) return true;
-  }
-  return false;
-}
-
-/** A revert means "not a Safe" → `fallback`; any other error (transport, timeout) is rethrown. */
-async function unlessReverted<T>(p: Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await p;
-  } catch (e) {
-    if (isContractRevert(e)) return fallback;
-    throw e;
-  }
-}
+/** Emitters shape-checked in parallel at most (a flood of fake logs must not rate-limit sign-in). */
+const OWNER_CHECK_CONCURRENCY = 4;
 
 /**
  * Every app passkey Safe whose owners are exactly `[owner]` right now, newest AddedOwner log
@@ -159,8 +142,13 @@ async function unlessReverted<T>(p: Promise<T>, fallback: T): Promise<T> {
  * The scan therefore covers the full range back to PASSKEY_EPOCH_BLOCK (~120 windows; callers
  * run it only when the signer contract exists) and every emitter is shape-checked
  * (`isPasskeySafe`) and owner-checked; nothing stops at the first hit, so a newer log cannot
- * hide the real Safe. A stale log (owner changed again) or a reverting emitter is dropped; a
- * transport error throws (the caller must not fall back to another Safe on a flaky RPC).
+ * hide the real Safe. A stale log (owner changed again) is dropped.
+ *
+ * Errors: only the getCode / getStorageAt stage of `isPasskeySafe` may say "not a Safe" (a
+ * mismatch, never a thrown error). Every thrown error propagates, including what viem reports
+ * as a revert: viem maps a transient -32603 InternalRpcError to ContractFunctionRevertedError,
+ * and a genuine proxy at the SafeL2 singleton cannot revert on getModulesPaginated / getOwners.
+ * Swallowing it would drop the real Safe and let sign-in fall back to the throwaway Safe.
  *
  * Known residual: an attacker can build a fully valid passkey-shaped Safe (factory proxy,
  * SafeL2, both modules, 4337 fallback), add the signer and remove itself, so it passes here.
@@ -180,14 +168,17 @@ export async function findSafesByOwner(
     const e = getAddress(l.emitter);
     if (!emitters.some((x) => isAddressEqual(x, e))) emitters.push(e);
   }
-  const checks = await Promise.all(
-    emitters.map(async (e) => {
-      if (!(await unlessReverted(chain.isPasskeySafe(e), false))) return null;
-      const owners = await unlessReverted(chain.readOwners(e), [] as Address[]);
-      return owners.length === 1 && isAddressEqual(owners[0], owner) ? e : null;
-    }),
-  );
-  return checks.filter((c): c is Address => !!c);
+  const check = async (e: Address): Promise<Address | null> => {
+    if (!(await chain.isPasskeySafe(e))) return null;
+    const owners = await chain.readOwners(e);
+    return owners.length === 1 && isAddressEqual(owners[0], owner) ? e : null;
+  };
+  const out: Address[] = [];
+  for (let i = 0; i < emitters.length; i += OWNER_CHECK_CONCURRENCY) {
+    const batch = await Promise.all(emitters.slice(i, i + OWNER_CHECK_CONCURRENCY).map(check));
+    for (const c of batch) if (c) out.push(c);
+  }
+  return out;
 }
 
 export type RecoveryCandidate = {

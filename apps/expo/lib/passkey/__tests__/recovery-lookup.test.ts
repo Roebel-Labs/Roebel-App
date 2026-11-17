@@ -6,7 +6,7 @@ import {
   SAFE_PROXY_RUNTIME_CODE,
   SOCIAL_RECOVERY_MODULE,
 } from '../constants';
-import { reverted, shapeClient } from '../__testutils__/lookup-client';
+import { internalRpcError, reverted, shapeClient } from '../__testutils__/lookup-client';
 import { blockWindows, scanLogs } from '../log-scan';
 import {
   createLookupChain,
@@ -15,7 +15,6 @@ import {
   findLinkedSafes,
   findRecoverableAccounts,
   findSafesByOwner,
-  isContractRevert,
   resolveGuardianAddress,
   suggestDefaultGuardians,
   type AdminLog,
@@ -199,20 +198,15 @@ describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
     expect(await findSafesByOwner(OWNER, chain)).toEqual([B]);
   });
 
-  it('newest first, de-duplicated; a co-owned Safe and a reverting emitter are dropped', async () => {
+  it('newest first, de-duplicated; a co-owned Safe is dropped', async () => {
     const chain = {
       ownerLogsFor: async () => [
         { emitter: A, blockNumber: 5n },
         { emitter: B, blockNumber: 9n },
         { emitter: C, blockNumber: 7n },
-        { emitter: SAFE, blockNumber: 8n },
         { emitter: A, blockNumber: 6n },
       ],
-      readOwners: async (s: Address) => {
-        if (s === C) return [OWNER, OTHER];
-        if (s === SAFE) throw reverted();
-        return [OWNER];
-      },
+      readOwners: async (s: Address) => (s === C ? [OWNER, OTHER] : [OWNER]),
       isPasskeySafe: async () => true,
     };
     expect(await findSafesByOwner(OWNER, chain)).toEqual([B, A]);
@@ -243,33 +237,46 @@ describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
     await expect(findSafesByOwner(OWNER, chain)).rejects.toThrow('timeout');
   });
 
-  it('a transport error on the shape check is rethrown; a revert there means "not a Safe"', async () => {
+  it('any error from the shape check or the owner read propagates, a viem "revert" included', async () => {
     const logs = async () => [{ emitter: B, blockNumber: 7n }];
-    await expect(
-      findSafesByOwner(OWNER, {
-        ownerLogsFor: logs,
-        readOwners: async () => [OWNER],
-        isPasskeySafe: async () => {
-          throw new Error('fetch failed');
-        },
-      }),
-    ).rejects.toThrow('fetch failed');
-    expect(
-      await findSafesByOwner(OWNER, {
-        ownerLogsFor: logs,
-        readOwners: async () => [OWNER],
-        isPasskeySafe: async () => {
-          throw reverted();
-        },
-      }),
-    ).toEqual([]);
+    for (const e of [new Error('fetch failed'), reverted()]) {
+      await expect(
+        findSafesByOwner(OWNER, {
+          ownerLogsFor: logs,
+          readOwners: async () => [OWNER],
+          isPasskeySafe: async () => {
+            throw e;
+          },
+        }),
+      ).rejects.toBe(e);
+      await expect(
+        findSafesByOwner(OWNER, {
+          ownerLogsFor: logs,
+          readOwners: async () => {
+            throw e;
+          },
+          isPasskeySafe: async () => true,
+        }),
+      ).rejects.toBe(e);
+    }
   });
 
-  it('isContractRevert recognises viem revert / zero-data errors anywhere in the cause chain', () => {
-    expect(isContractRevert(reverted())).toBe(true);
-    expect(isContractRevert(Object.assign(new Error('x'), { name: 'ContractFunctionZeroDataError' }))).toBe(true);
-    expect(isContractRevert(new Error('HTTP request failed'))).toBe(false);
-    expect(isContractRevert(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe(false);
+  it('checks at most 4 emitters at a time', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const emitters = Array.from({ length: 10 }, (_, i) => addr(0x100 + i));
+    const chain = {
+      ownerLogsFor: async () => emitters.map((emitter, i) => ({ emitter, blockNumber: BigInt(i) })),
+      readOwners: async () => [OTHER],
+      isPasskeySafe: async () => {
+        peak = Math.max(peak, ++inFlight);
+        await new Promise((r) => setTimeout(r, 1));
+        inFlight--;
+        return true;
+      },
+    };
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([]);
+    expect(peak).toBe(4);
   });
 });
 
@@ -342,6 +349,29 @@ describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is atta
     const otherSingleton = shapeClient({ tip: 0n, safes: [FAKE_SAFE], owners: {}, logs: [] });
     otherSingleton.getStorageAt.mockImplementation(async () => pad(addr(0x51), { size: 32 }));
     expect(await createLookupChain(otherSingleton as any, { readGuardians: async () => [] }).isPasskeySafe(FAKE_SAFE)).toBe(false);
+  });
+
+  it('a -32603 (viem: ContractFunctionRevertedError) on a shape-valid Safe propagates instead of dropping it', async () => {
+    for (const failRead of [{ getModulesPaginated: internalRpcError() }, { getOwners: internalRpcError('getOwners') }]) {
+      const client = shapeClient({
+        tip: 100n,
+        safes: [REAL],
+        owners: { [REAL]: [OWNER] },
+        logs: [{ emitter: REAL, block: 50n }],
+        failRead,
+      });
+      const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+      await expect(findSafesByOwner(OWNER, chain)).rejects.toThrow('Internal error');
+    }
+  });
+
+  it('a getCode / getStorageAt error propagates; only a mismatch means "not a Safe"', async () => {
+    const client = shapeClient({ tip: 0n, safes: [REAL], owners: {}, logs: [] });
+    client.getCode.mockRejectedValueOnce(new Error('HTTP request failed'));
+    const chain = createLookupChain(client as any, { readGuardians: async () => [] });
+    await expect(chain.isPasskeySafe(REAL)).rejects.toThrow('HTTP request failed');
+    client.getStorageAt.mockRejectedValueOnce(new Error('timeout'));
+    await expect(chain.isPasskeySafe(REAL)).rejects.toThrow('timeout');
   });
 
   it('SAFE_PROXY_RUNTIME_CODE is the 171-byte SafeProxy 1.4.1 runtime', () => {
