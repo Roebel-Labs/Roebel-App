@@ -44,21 +44,42 @@ export async function readHolding(typeId: Hex, account: Address): Promise<{ batc
   return { batchId: BigInt(h.batchId), leaf: h.leaf, validUntil: BigInt(h.validUntil ?? 0) };
 }
 
-let signatureVerifier: VerifyAccountSignature | null = null;
+/**
+ * A false from the shared verifier can hide a network failure: viem's ERC-6492 path catches
+ * CallExecutionError (which wraps HTTP and timeout errors) and answers false. So a false is only
+ * believed when the RPC answers a probe; otherwise this throws and the checker shows "Nicht geprüft".
+ */
+export function withRpcProbe(
+  verify: (address: string, message: string, signature: string) => Promise<boolean>,
+  probe: () => Promise<unknown>,
+): (address: string, message: string, signature: string) => Promise<boolean> {
+  return async (address, message, signature) => {
+    if (await verify(address, message, signature)) return true;
+    try {
+      await probe();
+    } catch {
+      throw new Error('signature check unavailable');
+    }
+    return false;
+  };
+}
+
+let signatureVerifier: ((address: string, message: string, signature: string) => Promise<boolean>) | null = null;
 
 /**
  * "Did this account sign this message?" on Gnosis, with the server's one rule
  * (./account-signature-core: EOA, ERC-1271, ERC-6492, passkey-Safe envelope, thirdweb domain).
- * Throws on RPC failure.
+ * Throws on RPC failure, also when the failure surfaced inside viem as a plain false.
  */
 export function verifyAccountMessage(address: string, message: string, signature: string): Promise<boolean> {
-  signatureVerifier =
-    signatureVerifier ??
-    makeAccountSignatureVerifier({
+  if (!signatureVerifier) {
+    const core: VerifyAccountSignature = makeAccountSignatureVerifier({
       client: publicClient() as unknown as AccountSignatureClient,
       utils: { hashMessage, hashTypedData: hashTypedData as never, recoverTypedDataAddress: recoverTypedDataAddress as never },
     });
-  return signatureVerifier({ address, message, signature });
+    signatureVerifier = withRpcProbe((a, m, s) => core({ address: a, message: m, signature: s }), () => publicClient().getBlockNumber());
+  }
+  return signatureVerifier(address, message, signature);
 }
 
 export type TypeMetadata = {

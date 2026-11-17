@@ -1,6 +1,6 @@
 jest.mock('@/constants/gnosis', () => ({ credentialRegistryGnosisAddress: '0x' + '22'.repeat(20), credentialRegistryDeployBlock: 0 }));
 
-import { fetchTypeMetadata, METADATA_TIMEOUT_MS, registryReader, REGISTRY } from '../chain';
+import { fetchTypeMetadata, METADATA_TIMEOUT_MS, registryReader, REGISTRY, withRpcProbe } from '../chain';
 
 describe('credreg chain', () => {
   afterEach(() => {
@@ -41,5 +41,14 @@ describe('credreg chain', () => {
     (global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => ({ description: 'no name' }) }));
     expect(await fetchTypeMetadata('https://x.example/m.json')).toBeNull();
     expect(await fetchTypeMetadata('file:///etc/passwd')).toBeNull();
+  });
+
+  it('a false signature check is only believed when the RPC answers a probe', async () => {
+    const no = jest.fn(async () => false);
+    await expect(withRpcProbe(no, async () => { throw new Error('timeout'); })('0xa', 'm', '0x1')).rejects.toThrow();
+    expect(await withRpcProbe(no, async () => 123n)('0xa', 'm', '0x1')).toBe(false);
+    const probe = jest.fn(async () => 1n);
+    expect(await withRpcProbe(async () => true, probe)('0xa', 'm', '0x1')).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
   });
 });
