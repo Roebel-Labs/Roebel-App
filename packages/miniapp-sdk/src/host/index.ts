@@ -236,3 +236,10 @@ function parse(data: unknown): BridgeMessage | null {
   if (data && typeof data === 'object') return data as BridgeMessage;
   return null;
 }
+
+export {
+  classifyWalletMethod,
+  WALLET_READ_METHODS,
+  WALLET_SIGN_METHODS,
+  type WalletMethodClass,
+} from './wallet-methods';
