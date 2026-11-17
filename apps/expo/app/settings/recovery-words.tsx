@@ -6,7 +6,8 @@
  * (the same flow with replace) and "Wörter entfernen".
  *
  * The phrase lives only in this screen's state: gone on unmount, cleared after saving and as soon as
- * the app leaves the foreground (the flow then starts over). No copy button, no clipboard.
+ * the app goes to the background (the flow then starts over); while 'inactive' (app switcher) a
+ * blank cover hides them. No copy button, no clipboard.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -50,6 +51,8 @@ export default function RecoveryWordsScreen() {
   // AppState listener see it without re-subscribing.
   const [phrase, setPhrase] = useState<string | null>(null);
   const held = useRef(false);
+  // iOS takes the app-switcher snapshot while 'inactive': the words are covered then.
+  const [covered, setCovered] = useState(false);
 
   const forget = useCallback(() => {
     held.current = false;
@@ -95,6 +98,7 @@ export default function RecoveryWordsScreen() {
   // The words never outlive the screen, and never sit in memory while the app is in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      setCovered(state === 'inactive');
       // 'background' only: the passkey sheet makes iOS report 'inactive' while we save.
       if (state !== 'background' || !held.current) return;
       forget();
@@ -177,7 +181,7 @@ export default function RecoveryWordsScreen() {
     try {
       const deps = await mode(ctx);
       const { retryWordsBackup } = await import('@/lib/passkey/words-setup');
-      const r = await retryWordsBackup(deps);
+      const r = await retryWordsBackup({ safe: ctx.record.safe }, deps);
       if (r.status === 'error') setNotice({ tone: 'error', text: r.message });
       else setNotice({ tone: 'success', text: 'Gesichert.' });
       await refresh(ctx);
@@ -261,6 +265,9 @@ export default function RecoveryWordsScreen() {
         )}
         {notice ? <Notice tone={notice.tone} text={notice.text} /> : null}
       </ScrollView>
+      {covered && (step === 'show' || step === 'confirm') ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} pointerEvents="none" />
+      ) : null}
     </SafeAreaView>
   );
 }

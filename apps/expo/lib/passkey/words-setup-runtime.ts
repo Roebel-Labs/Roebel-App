@@ -24,7 +24,9 @@ export function createWordsSetupDeps(record: MigrationRecord, session: PasskeySe
   let prf: Hex | null | undefined;
   const capture = async (credentialId: string, challenge: Hex) => {
     const a = await signWithPasskey(credentialId, challenge);
-    if (a.prf) prf = a.prf;
+    // The same passkey always answers the same way: no PRF here = no PRF on this authenticator
+    // (null, so the words backup writes the off marker instead of asking again).
+    prf = a.prf ?? null;
     return a;
   };
   return {

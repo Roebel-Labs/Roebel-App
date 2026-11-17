@@ -81,6 +81,11 @@ export type RemoteWrite = 'stored' | 'exists' | 'disabled';
 
 export type RemoteBackup = {
   read: () => Promise<RemoteRead>;
+  /**
+   * A read that never prompts: with a cached session token, else null (the caller decides whether
+   * a signed read is worth a fingerprint). Optional: fakes and older callers may leave it out.
+   */
+  readWithoutPrompt?: () => Promise<RemoteRead | null>;
   write: (blobs: KeyBackupBlobs, replace?: boolean) => Promise<RemoteWrite>;
 };
 
@@ -154,6 +159,17 @@ async function postWithToken(
   return null;
 }
 
+function parseRead(r: { status: number; ok: boolean; json: any }, prf?: Hex): RemoteRead {
+  if (isDisabled(r)) return { status: 'disabled' };
+  if (!r.ok || !r.json || typeof r.json.blobs !== 'object' || r.json.blobs === null) {
+    throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
+  }
+  const blobs: KeyBackupBlobs = {};
+  for (const s of KEY_BACKUP_BLOB_KEYS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
+  const withPrf = prf ? { prf } : {};
+  return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
+}
+
 /** Transport errors and unexpected answers THROW (German): callers must never treat them as "no backup". */
 export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
   const now = () => (d.nowSec ?? (() => Math.floor(Date.now() / 1000)))();
@@ -168,14 +184,12 @@ export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
         prf = signed.prf;
         r = await post(d, '/api/passkey/key-backup/get', { identity: d.identity, proof: { timestamp, signature: signed.signature } });
       }
-      if (isDisabled(r)) return { status: 'disabled' };
-      if (!r.ok || !r.json || typeof r.json.blobs !== 'object' || r.json.blobs === null) {
-        throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
-      }
-      const blobs: KeyBackupBlobs = {};
-      for (const s of KEY_BACKUP_BLOB_KEYS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
-      const withPrf = prf ? { prf } : {};
-      return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
+      return parseRead(r, prf);
+    },
+    async readWithoutPrompt() {
+      if (!d.apiUrl) return { status: 'disabled' };
+      const r = await postWithToken(d, () => d.session!.peek(), '/api/passkey/key-backup/get', { identity: d.identity });
+      return r ? parseRead(r) : null;
     },
     async write(blobs, replace = false) {
       if (!d.apiUrl) return 'disabled';

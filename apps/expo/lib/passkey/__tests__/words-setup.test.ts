@@ -39,6 +39,9 @@ function deps(o: {
   server?: KeyBackupBlobs;
   readPrf?: Hex;
   writeResult?: 'stored' | 'exists' | 'throw';
+  /** A cached session token: `readWithoutPrompt` answers (without a PRF). */
+  token?: boolean;
+  getPrfThrows?: boolean;
 }) {
   const kv = new Map<string, string>();
   const vault = new Map<string, string>();
@@ -60,6 +63,13 @@ function deps(o: {
       const p = o.readPrf ? { prf: o.readPrf } : {};
       return Object.keys(server).length ? { status: 'found', blobs: { ...server }, ...p } : { status: 'none', ...p };
     }),
+    ...(o.token
+      ? {
+          readWithoutPrompt: jest.fn(async (): Promise<RemoteRead> =>
+            Object.keys(server).length ? { status: 'found', blobs: { ...server } } : { status: 'none' },
+          ),
+        }
+      : {}),
     write: jest.fn(async (b: KeyBackupBlobs, replace?: boolean) => {
       written.push(b);
       replaces.push(replace);
@@ -70,7 +80,10 @@ function deps(o: {
     }),
   };
   const sendOp = jest.fn(o.sendOp ?? (async () => '0xabc' as Hex));
-  const getPrf = jest.fn(async () => (o.prf === undefined ? PRF : o.prf));
+  const getPrf = jest.fn(async () => {
+    if (o.getPrfThrows) throw new Error('cancelled');
+    return o.prf === undefined ? PRF : o.prf;
+  });
   const d: WordsSetupDeps = {
     storage,
     vaultStorage,
@@ -127,7 +140,42 @@ describe('enableRecoveryWords', () => {
     expect((await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps)).status).toBe('error');
     expect(await loadWordsPool(d.storage)).toBeNull();
     expect(await loadVaultKey(d.vaultStorage)).toBeNull();
+    expect(await loadWordsPending(d.storage)).toBeNull();
     expect(d.written).toHaveLength(0);
+  });
+
+  it('a failed op restores what this device had before (old pool, vault key, pending)', async () => {
+    const d = await setup({ state: { guardians: [OLD[0]], threshold: 1 }, pool: { addresses: OLD, confirmedAt: 1 }, vaultKey: wordsVaultKey(ABOUT), sendOp: async () => { throw new Error('x'); } });
+    expect((await enableRecoveryWords({ safe: SAFE, phrase: JUNK, replace: true }, d.deps)).status).toBe('error');
+    expect((await loadWordsPool(d.storage))!.addresses).toEqual(OLD);
+    expect(await loadVaultKey(d.vaultStorage)).toBe(wordsVaultKey(ABOUT));
+    expect(await loadWordsPending(d.storage)).toBeNull();
+  });
+
+  it('pool, vault key and pending "on" are saved BEFORE the op (a crash after it loses nothing)', async () => {
+    let seen: unknown[] = [];
+    const d = await setup({ state: { guardians: [], threshold: 0 } });
+    d.sendOp.mockImplementation(async () => {
+      seen = [(await loadWordsPool(d.storage))?.addresses, await loadVaultKey(d.vaultStorage), await loadWordsPending(d.storage)];
+      return '0xabc' as Hex;
+    });
+    await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps);
+    expect(seen).toEqual([NEW, wordsVaultKey(JUNK), 'on']);
+  });
+
+  it('an op that reports an error but landed counts as done (no error screen after success)', async () => {
+    const state = { guardians: [] as Address[], threshold: 0 };
+    const d = await setup({ state });
+    d.deps.readState = jest.fn().mockResolvedValueOnce({ guardians: [], threshold: 0 }).mockResolvedValue({ guardians: [NEW[0]], threshold: 1 });
+    d.sendOp.mockRejectedValue(new Error('receipt timeout'));
+    expect(await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps)).toMatchObject({ status: 'done' });
+    expect((await loadWordsPool(d.storage))!.addresses).toEqual(NEW);
+  });
+
+  it('a storage error after the op still reports done', async () => {
+    const d = await setup({ state: { guardians: [], threshold: 0 } });
+    d.storage.removeItem = async () => { throw new Error('disk'); };
+    expect((await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps)).status).toBe('done');
   });
 
   it('replace revokes the old word guardians and adds the new ones in the same op', async () => {
@@ -184,12 +232,32 @@ describe('enableRecoveryWords', () => {
     expect(d.sendOp).not.toHaveBeenCalled();
   });
 
-  it('no PRF on this authenticator: _w copies are still written, wvk is skipped', async () => {
-    const d = await setup({ state: { guardians: [], threshold: 0 }, prf: null, secrets: [{ slot: 'maci', secret: utf8Encode('m') }] });
-    const r = await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps);
+  it('no PRF on this authenticator (replace): the off marker replaces the OLD wvk in the same write; nothing pending (a retry cannot help)', async () => {
+    const oldWvk = await wrapVaultKey(PRF, wordsVaultKey(ABOUT), wrapSecret, OLD);
+    const d = await setup({
+      state: { guardians: [OLD[0]], threshold: 1 },
+      pool: { addresses: OLD, confirmedAt: 1 },
+      prf: null,
+      server: { wvk: oldWvk },
+      secrets: [{ slot: 'maci', secret: utf8Encode('m') }],
+    });
+    const r = await enableRecoveryWords({ safe: SAFE, phrase: JUNK, replace: true }, d.deps);
     expect(r).toMatchObject({ status: 'done', copies: { stored: ['maci'], failed: [] }, wvkStored: false });
-    expect(Object.keys(d.written[0])).toEqual(['maci_w']);
+    expect(Object.keys(d.written[0])).toEqual(['maci_w', 'wvk']);
     expect(d.replaces).toEqual([true]);
+    expect(d.server.wvk).toBe(WORDS_OFF_BLOB);
+    expect(await loadWordsPending(d.storage)).toBeNull();
+    // no phone can follow the old words any more
+    expect(await resolveVaultKey({ storage: d.vaultStorage, wvkBlob: d.server.wvk, prf: PRF, unwrap: unwrapSecret })).toBeNull();
+  });
+
+  it('a failed PRF prompt (replace): the off marker still replaces the old wvk, and it stays pending "on" for a retry', async () => {
+    const oldWvk = await wrapVaultKey(PRF, wordsVaultKey(ABOUT), wrapSecret, OLD);
+    const d = await setup({ state: { guardians: [OLD[0]], threshold: 1 }, pool: { addresses: OLD, confirmedAt: 1 }, getPrfThrows: true, server: { wvk: oldWvk } });
+    const r = await enableRecoveryWords({ safe: SAFE, phrase: JUNK, replace: true }, d.deps);
+    expect(r).toMatchObject({ status: 'done', wvkStored: false });
+    expect(d.server.wvk).toBe(WORDS_OFF_BLOB);
+    expect(await loadWordsPending(d.storage)).toBe('on');
   });
 
   it('a failed backup write: the account is protected, copies reported failed, and marked pending for a retry', async () => {
@@ -208,6 +276,23 @@ describe('enableRecoveryWords', () => {
     expect(d.sendOp.mock.calls[0][0]).toEqual([encodeAddGuardian(NEW[0], 1), encodeRevokeGuardian(P1, OLD[0], 1)]);
     expect(d.getPrf).not.toHaveBeenCalled();
     expect(await unwrapWordsVault(PRF, d.server.wvk!, unwrapSecret)).toEqual({ vaultKey: wordsVaultKey(JUNK), addresses: NEW });
+  });
+
+  it('a cached session token: the old pool is read without a proof (no signed read); the unwrap PRF is reused for the new wvk', async () => {
+    const oldWvk = await wrapVaultKey(PRF, wordsVaultKey(ABOUT), wrapSecret, OLD);
+    const d = await setup({ state: { guardians: [P1, OLD[0]], threshold: 1 }, server: { wvk: oldWvk }, token: true });
+    expect(await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps)).toMatchObject({ status: 'done' });
+    expect(d.remote.read).not.toHaveBeenCalled();
+    expect(d.remote.readWithoutPrompt).toHaveBeenCalledTimes(1);
+    expect(d.getPrf).toHaveBeenCalledTimes(1);
+    expect(d.sendOp.mock.calls[0][0]).toEqual([encodeAddGuardian(NEW[0], 1), encodeRevokeGuardian(P1, OLD[0], 1)]);
+  });
+
+  it('a cached token and no words on the server: no proof and no PRF before the op', async () => {
+    const d = await setup({ state: { guardians: [P1], threshold: 1 }, token: true });
+    await enableRecoveryWords({ safe: SAFE, phrase: JUNK }, d.deps);
+    expect(d.remote.read).not.toHaveBeenCalled();
+    expect(d.getPrf).toHaveBeenCalledTimes(1); // only for the new wvk, after the op
   });
 
   it('the local pool is used as is: no backup read before the op', async () => {
@@ -264,7 +349,7 @@ describe('disableRecoveryWords', () => {
     expect(await loadWordsPending(d.storage)).toBe('off');
     const ok = await setup({ state: { guardians: [], threshold: 1 } });
     await ok.storage.setItem(WORDS_PENDING_KEY, 'off');
-    expect(await retryWordsBackup(ok.deps)).toEqual({ status: 'done' });
+    expect(await retryWordsBackup({ safe: SAFE }, ok.deps)).toEqual({ status: 'done' });
     expect(ok.written).toEqual([{ maci_w: WORDS_OFF_BLOB, nostr_w: WORDS_OFF_BLOB, salt_w: WORDS_OFF_BLOB, wvk: WORDS_OFF_BLOB }]);
     expect(await loadWordsPending(ok.storage)).toBeNull();
   });
@@ -292,7 +377,7 @@ describe('retryWordsBackup / readWordsStatus', () => {
       secrets: [{ slot: 'nostr', secret: utf8Encode('n') }],
     });
     await d.storage.setItem(WORDS_PENDING_KEY, 'on');
-    expect(await retryWordsBackup(d.deps)).toEqual({ status: 'done' });
+    expect(await retryWordsBackup({ safe: SAFE }, d.deps)).toEqual({ status: 'done' });
     expect(Object.keys(d.written[0])).toEqual(['nostr_w', 'wvk']);
     expect(d.replaces).toEqual([true]);
     expect(await unwrapWordsVault(PRF, d.written[0].wvk!, unwrapSecret)).toEqual({ vaultKey: wordsVaultKey(JUNK), addresses: NEW });
@@ -300,10 +385,46 @@ describe('retryWordsBackup / readWordsStatus', () => {
   });
 
   it('a retry that fails again keeps it pending', async () => {
-    const d = await setup({ state: { guardians: [], threshold: 1 }, pool: { addresses: NEW, confirmedAt: 1 }, vaultKey: wordsVaultKey(JUNK), writeResult: 'exists' });
+    const d = await setup({ state: { guardians: [NEW[0]], threshold: 1 }, pool: { addresses: NEW, confirmedAt: 1 }, vaultKey: wordsVaultKey(JUNK), writeResult: 'exists' });
     await d.storage.setItem(WORDS_PENDING_KEY, 'on');
-    expect((await retryWordsBackup(d.deps)).status).toBe('error');
+    expect((await retryWordsBackup({ safe: SAFE }, d.deps)).status).toBe('error');
     expect(await loadWordsPending(d.storage)).toBe('on');
+  });
+
+  it('stale "on" (the words were replaced elsewhere: no local word address is a guardian): nothing written, local words dropped', async () => {
+    const d = await setup({ state: { guardians: [OLD[0]], threshold: 1 }, pool: { addresses: NEW, confirmedAt: 1 }, vaultKey: wordsVaultKey(JUNK) });
+    await d.storage.setItem(WORDS_PENDING_KEY, 'on');
+    expect(await retryWordsBackup({ safe: SAFE }, d.deps)).toEqual({ status: 'done' });
+    expect(d.written).toHaveLength(0);
+    expect(await loadWordsPending(d.storage)).toBeNull();
+    expect(await loadWordsPool(d.storage)).toBeNull();
+    expect(await loadVaultKey(d.vaultStorage)).toBeNull();
+  });
+
+  it('stale "off" (words re-enabled elsewhere: the server wvk is another vault key): no marker written, pending dropped', async () => {
+    const pool = { addresses: NEW, confirmedAt: 1 };
+    const failing = await setup({ state: { guardians: [NEW[0]], threshold: 1 }, pool, vaultKey: wordsVaultKey(JUNK), writeResult: 'throw' });
+    await disableRecoveryWords({ safe: SAFE }, failing.deps);
+    const raw = await failing.storage.getItem(WORDS_PENDING_KEY);
+    expect(raw).toMatch(/^off:[0-9a-f]{64}$/);
+    const newer = await wrapVaultKey(PRF, wordsVaultKey(ABOUT), wrapSecret, OLD);
+    const d = await setup({ state: { guardians: [OLD[0]], threshold: 1 }, server: { wvk: newer }, readPrf: PRF });
+    await d.storage.setItem(WORDS_PENDING_KEY, raw!);
+    expect(await retryWordsBackup({ safe: SAFE }, d.deps)).toEqual({ status: 'done' });
+    expect(d.written).toHaveLength(0);
+    expect(d.server.wvk).toBe(newer);
+    expect(await loadWordsPending(d.storage)).toBeNull();
+  });
+
+  it('"off" whose server wvk still unwraps to the switched-off key: the marker is written', async () => {
+    const pool = { addresses: NEW, confirmedAt: 1 };
+    const failing = await setup({ state: { guardians: [NEW[0]], threshold: 1 }, pool, vaultKey: wordsVaultKey(JUNK), writeResult: 'throw' });
+    await disableRecoveryWords({ safe: SAFE }, failing.deps);
+    const same = await wrapVaultKey(PRF, wordsVaultKey(JUNK), wrapSecret, NEW);
+    const d = await setup({ state: { guardians: [], threshold: 1 }, server: { wvk: same }, readPrf: PRF });
+    await d.storage.setItem(WORDS_PENDING_KEY, (await failing.storage.getItem(WORDS_PENDING_KEY))!);
+    expect(await retryWordsBackup({ safe: SAFE }, d.deps)).toEqual({ status: 'done' });
+    expect(d.server.wvk).toBe(WORDS_OFF_BLOB);
   });
 
   it('status: on only when a word address of the local pool is a guardian on chain', async () => {

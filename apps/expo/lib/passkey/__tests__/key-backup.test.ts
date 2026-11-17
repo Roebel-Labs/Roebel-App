@@ -82,6 +82,28 @@ describe('key backup client', () => {
     await expect(client(() => 'throw').c.read()).rejects.toThrow(KEY_BACKUP_UNAVAILABLE_MESSAGE);
   });
 
+  it('readWithoutPrompt: a cached token reads without signing; no token → null, nothing signed or sent', async () => {
+    const sign = jest.fn();
+    const sent: { headers: Record<string, string>; body: any }[] = [];
+    const mk = (token: { token: string; deviceId: string } | null) =>
+      createKeyBackupClient({
+        apiUrl: 'https://api.test',
+        identity: ID,
+        sign,
+        session: { peek: async () => token, get: async () => token, invalidate: async () => undefined },
+        fetch: async (_url, init) => {
+          sent.push({ headers: init.headers, body: JSON.parse(init.body) });
+          return { ok: true, status: 200, json: async () => ({ blobs: { wvk: 'pkv1:w' } }) };
+        },
+      });
+    await expect(mk({ token: 'pst1.t', deviceId: 'd' }).readWithoutPrompt!()).resolves.toEqual({ status: 'found', blobs: { wvk: 'pkv1:w' } });
+    expect(sent[0].headers.Authorization).toBe('Bearer pst1.t');
+    expect(sent[0].body).toEqual({ identity: ID });
+    await expect(mk(null).readWithoutPrompt!()).resolves.toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
   it('no API url configured = disabled without signing', async () => {
     const sign = jest.fn();
     const c = createKeyBackupClient({ apiUrl: '', identity: ID, sign });
