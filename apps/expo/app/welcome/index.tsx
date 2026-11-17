@@ -91,8 +91,11 @@ export default function WelcomeIntroScreen() {
                 style={[styles.secondaryButton, { borderColor: colors.primary }]}
                 accessibilityRole="button"
               >
-                <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Mit E-Mail, Google oder Apple anmelden</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Mit Google, Apple oder E-Mail anmelden</Text>
               </Pressable>
+              <Text style={[styles.secondaryHint, { color: colors.textSecondary }]}>
+                Bequem, aber dein Schlüssel liegt bei einem Anbieter.
+              </Text>
 
               <Pressable onPress={leave} style={styles.textButton} accessibilityRole="button">
                 <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Erst mal umsehen</Text>
@@ -201,6 +204,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  secondaryHint: { fontSize: 13, textAlign: 'center', marginTop: -4 },
   secondaryButtonText: {
     fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,

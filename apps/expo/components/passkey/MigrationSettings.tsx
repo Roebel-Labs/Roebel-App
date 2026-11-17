@@ -192,7 +192,7 @@ export default function MigrationSettings({ initialRecord, canStart, canDetach }
           onPress={() => router.push('/settings/passkey-detach' as any)}
           accessibilityRole="button"
         >
-          <Text style={[styles.body, { color: colors.textPrimary }]}>Google/E-Mail-Anmeldung trennen</Text>
+          <Text style={[styles.body, { color: colors.textPrimary }]}>Unabhängig werden</Text>
           <Text style={[styles.bodySmall, { color: colors.textSecondary }]}>
             Endgültig. Erst möglich, wenn alle Punkte der Checkliste erfüllt sind.
           </Text>

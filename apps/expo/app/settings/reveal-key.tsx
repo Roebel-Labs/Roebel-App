@@ -141,7 +141,7 @@ export default function RevealKeyScreen() {
         <Section title="PRIVATEN SCHLÜSSEL EXPORTIEREN" colors={colors}>
           <View style={styles.exportContent}>
             <Text style={[styles.exportLead, { color: colors.textPrimary }]}>
-              Der Export erfolgt über die offizielle Thirdweb-Oberfläche im Browser.
+              Der Export erfolgt über die offizielle Seite deines Anmelde-Anbieters im Browser.
             </Text>
             <View style={styles.steps}>
               <Step
