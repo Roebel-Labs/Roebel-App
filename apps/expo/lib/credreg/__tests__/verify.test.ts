@@ -1,0 +1,118 @@
+import { leafHash, recoverClaimSigner, signClaim, type Leaf } from '@netizen-labs/credential-registry';
+import { privateKeyToAccount } from 'viem/accounts';
+import type { Address, Hex } from 'viem';
+import type { Presentation } from '../types';
+import { verifyPresentation } from '../verify';
+
+const REG = ('0x' + '11'.repeat(20)) as Address;
+const ME = ('0x' + 'ab'.repeat(20)) as Address;
+const OTHER = ('0x' + 'cd'.repeat(20)) as Address;
+const tid = (n: number) => ('0x' + n.toString(16).padStart(64, '0')) as Hex;
+const TYPE = tid(7);
+const CLAIM_KEY = ('0x' + '42'.repeat(32)) as Hex;
+const CLAIM_ADDR = privateKeyToAccount(CLAIM_KEY).address.toLowerCase() as Address;
+
+function pres(over: Partial<Presentation> = {}): Presentation {
+  return { v: 1, typeId: TYPE, account: ME, issuedAtSec: 1_000, nonce: 'abcdefgh1234', accountSignature: '0x1234', ...over };
+}
+
+function accountLeafPart(subject: Address = ME, typeId: Hex = TYPE): NonNullable<Presentation['private']> {
+  return { batchId: '3', leaf: { kind: 'account', typeId, subject, validUntil: '2000000000', salt: tid(99) }, proof: [tid(1)], claimSignature: null };
+}
+
+async function claimKeyPart(account: Address = ME): Promise<NonNullable<Presentation['private']>> {
+  const leaf: Leaf = { kind: 'claimKey', typeId: TYPE, subject: CLAIM_ADDR, validUntil: 0n, salt: tid(98) };
+  const sig = await signClaim(CLAIM_KEY, { chainId: 100, registry: REG, batchId: 4n, leaf: leafHash(leaf), account });
+  return { batchId: '4', leaf: { kind: 'claimKey', typeId: TYPE, subject: CLAIM_ADDR, validUntil: '0', salt: tid(98) }, proof: [], claimSignature: sig };
+}
+
+function deps(over: { holds?: boolean; status?: string; boundTo?: Address | null; type?: unknown } = {}) {
+  const reader = {
+    holds: jest.fn(async () => over.holds ?? false),
+    checkLeaf: jest.fn(async () => ({ status: over.status ?? 'valid', boundTo: over.boundTo ?? null })),
+    getType: jest.fn(async () =>
+      over.type === undefined
+        ? { typeId: TYPE, kind: 'role', recognised: true, config: { metadataURI: 'https://www.roebel.app/meta/7' } }
+        : over.type,
+    ),
+  };
+  const metadata = jest.fn(async () => ({
+    name: 'Bürgermeister',
+    description: '',
+    image: null,
+    properties: { kind: 'role', organisation: 'Stadt Röbel', recognised: true, benefits: [] },
+  }));
+  return { reader: reader as any, recoverClaimSigner, metadata: metadata as any, registry: REG, _r: reader, _m: metadata };
+}
+
+const run = (p: Presentation, d: ReturnType<typeof deps>, extra: { signatureValid?: boolean; ageSeconds?: number } = {}) =>
+  verifyPresentation({ presentation: p, signatureValid: extra.signatureValid ?? true, ageSeconds: extra.ageSeconds ?? 10 }, d);
+
+describe('verifyPresentation', () => {
+  it('public: holds true → valid; false → invalid', async () => {
+    const yes = deps({ holds: true });
+    expect(await run(pres(), yes)).toEqual({ result: 'valid', title: 'Bürgermeister', orgName: 'Stadt Röbel', recognised: true, validUntil: null });
+    expect(yes._r.holds).toHaveBeenCalledWith(TYPE, ME);
+    expect(yes._r.checkLeaf).not.toHaveBeenCalled();
+    expect((await run(pres(), deps({ holds: false }))).result).toBe('invalid');
+  });
+
+  it('private account leaf: valid only when the leaf subject is the presenting account', async () => {
+    const ok = await run(pres({ private: accountLeafPart() }), deps());
+    expect(ok).toMatchObject({ result: 'valid', validUntil: 2_000_000_000 });
+    expect((await run(pres({ private: accountLeafPart(OTHER) }), deps())).result).toBe('invalid');
+  });
+
+  it('private claim-key leaf: valid when bound to the account, or unbound with a signature recovering to the subject', async () => {
+    const part = await claimKeyPart();
+    expect((await run(pres({ private: { ...part, claimSignature: null } }), deps({ boundTo: ME }))).result).toBe('valid');
+    expect((await run(pres({ private: part }), deps({ boundTo: null }))).result).toBe('valid');
+    // unbound, signature made for another account → does not recover to the subject for ME
+    const forOther = await claimKeyPart(OTHER);
+    expect((await run(pres({ private: forOther }), deps({ boundTo: null }))).result).toBe('invalid');
+    // unbound, no signature
+    expect((await run(pres({ private: { ...part, claimSignature: null } }), deps({ boundTo: null }))).result).toBe('invalid');
+  });
+
+  it('a claim-key leaf bound to another account is invalid', async () => {
+    const part = await claimKeyPart();
+    expect((await run(pres({ private: part }), deps({ boundTo: OTHER }))).result).toBe('invalid');
+  });
+
+  it('checkLeaf expired → expired, revoked → revoked, inactive → invalid', async () => {
+    const p = pres({ private: accountLeafPart() });
+    expect(await run(p, deps({ status: 'expired' }))).toEqual({ result: 'expired', title: 'Bürgermeister', orgName: 'Stadt Röbel' });
+    expect((await run(p, deps({ status: 'revoked' }))).result).toBe('revoked');
+    expect((await run(p, deps({ status: 'inactive' }))).result).toBe('invalid');
+    expect((await run(p, deps({ status: 'invalid' }))).result).toBe('invalid');
+  });
+
+  it('older than 300 s or a bad account signature → invalid without any chain read', async () => {
+    for (const extra of [{ ageSeconds: 301 }, { signatureValid: false }]) {
+      const d = deps({ holds: true });
+      expect(await run(pres(), d, extra)).toEqual({ result: 'invalid', title: null, orgName: null });
+      expect(d._r.holds).not.toHaveBeenCalled();
+      expect(d._r.checkLeaf).not.toHaveBeenCalled();
+      expect(d._r.getType).not.toHaveBeenCalled();
+      expect(d._m).not.toHaveBeenCalled();
+    }
+    expect((await run(pres(), deps({ holds: true }), { ageSeconds: 300 })).result).toBe('valid');
+  });
+
+  it('a presentation whose leaf is for another type than it claims → invalid', async () => {
+    const d = deps();
+    expect((await run(pres({ private: accountLeafPart(ME, tid(8)) }), d)).result).toBe('invalid');
+    expect(d._r.checkLeaf).not.toHaveBeenCalled();
+  });
+
+  it('title and org come from chain metadata, not from the presentation', async () => {
+    const d = deps({ holds: true });
+    const p = { ...pres(), title: 'Gefälscht', orgName: 'Fake e.V.' } as unknown as Presentation;
+    const r = await run(p, d);
+    expect(r).toMatchObject({ title: 'Bürgermeister', orgName: 'Stadt Röbel' });
+    expect(d._r.getType).toHaveBeenCalledWith(TYPE);
+    expect(d._m).toHaveBeenCalledWith('https://www.roebel.app/meta/7');
+    // unknown type on chain → invalid
+    expect((await run(pres(), deps({ holds: true, type: null }))).result).toBe('invalid');
+  });
+});
