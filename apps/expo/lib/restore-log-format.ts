@@ -24,12 +24,20 @@ const OUTCOME_LABELS: Record<RestoreReport['outcome'], string> = {
   cancelled: 'abgebrochen',
 };
 
-/** Removes URL query strings and anything hex-shaped of address length or longer (addresses, keys). */
+/**
+ * Removes anything that could identify the account or unlock it: tokens (JWT, Bearer), URL query
+ * strings, addresses and keys (full, truncated with an ellipsis, split into groups, any case) and
+ * runs of 12+ short lowercase words (a possible recovery phrase). Errs on removing.
+ */
 function scrub(message: string): string {
   return message
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '…')
+    .replace(/Bearer\s+\S+/gi, 'Bearer …')
     .replace(/\?[^\s]*/g, '')
-    .replace(/0x[0-9a-fA-F]{40,}/g, '0x…')
-    .replace(/\b[0-9a-fA-F]{40,}\b/g, '…');
+    .replace(/0x[0-9a-f]{4,}(?:…|\.{2,3})[0-9a-f]{0,}/gi, '0x…')
+    .replace(/0x[0-9a-f]{8,}(?:[\s:-]+[0-9a-f]{4,})*/gi, '0x…')
+    .replace(/[0-9a-f]{40,}/gi, '…')
+    .replace(/\b(?:[a-z]{3,8}\s+){11,}[a-z]{3,8}\b/g, '…');
 }
 
 function formatDate(at: unknown): string {

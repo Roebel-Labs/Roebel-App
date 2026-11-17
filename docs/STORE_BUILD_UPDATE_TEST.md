@@ -1,8 +1,8 @@
 # Store-build update test (spec 5.9)
 
 An app update — store build or OTA — never ends a session. This test proves it on a real
-update before a store build ships. Run it **before every store release**, on each sign-in path,
-on Android with the store signing key.
+update before a store build ships. Run it **before every store release**, on **both platforms**
+(Android and iOS), on each sign-in path, on Android with the store signing key.
 
 Spec: [`docs/superpowers/specs/2026-11-17-sovereign-signup-design.md`](superpowers/specs/2026-11-17-sovereign-signup-design.md) §5.9.
 
@@ -18,15 +18,22 @@ after a store update on the first start) is fixed and confirmed on a real update
    - iOS: the previous TestFlight build.
 2. **Create or log in to one account per path**: Google/Apple/email, passkey, 12 words. Use each
    once (one sponsored action or one signed request).
-3. **Install the new build over it** (never uninstall). Open the app online: still logged in on
-   all three, without a prompt.
+3. **Install the new build over it as a store update** (never uninstall). The new build comes
+   from the same store channel as the previous one — the Play internal track on Android,
+   TestFlight on iOS — and is installed through that channel as an update, never sideloaded
+   (no `adb install`, no APK/IPA from EAS, no development build). Open the app online: still
+   logged in on all three, without a prompt.
 4. **Repeat step 3 from a cold start in airplane mode**: still logged in, cached profile shown;
    back online the session works.
-5. **Open Settings → Anmelde-Protokoll** (the last row at the bottom of Settings): no
-   `fehlgeschlagen` entry. Any entry is copied into the release notes with its reason.
+5. **Open Settings → Anmelde-Protokoll** (the last row at the bottom of Settings). Read only the
+   entries dated after the update was installed (earlier entries belong to the old build). None
+   of them may be `fehlgeschlagen`; a `später wiederhergestellt` entry also counts as a failure
+   and is investigated before release (the first restore did not succeed, the user saw a
+   logged-out or loading state). Any entry is copied into the release notes with its reason.
 6. **Passkey and 12 words**: one action after the update (the fingerprint or device unlock
    appears once and the action succeeds).
-7. **Record** date, versions (from → to), devices and result in the table below.
+7. **Record** date, versions (from → to), devices and result in the table below: one row per
+   platform per sign-in path (six rows per release).
 
 **A build that fails any step does not ship.**
 
@@ -56,6 +63,11 @@ query strings removed). The screen makes no network call and has no share button
 
 ## Results
 
-| Date | From → to | Device(s) | Google/Apple/E-Mail | Passkey | 12 Wörter | Airplane mode | Result |
-|---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| Date | Platform | From → to | Device | Sign-in path | Online (step 3) | Airplane mode (step 4) | Protokoll (step 5) | Action (step 6) | Result |
+|---|---|---|---|---|---|---|---|---|---|
+| | Android | | | Google/Apple/E-Mail | | | | – | |
+| | Android | | | Passkey | | | | | |
+| | Android | | | 12 Wörter | | | | | |
+| | iOS | | | Google/Apple/E-Mail | | | | – | |
+| | iOS | | | Passkey | | | | | |
+| | iOS | | | 12 Wörter | | | | | |

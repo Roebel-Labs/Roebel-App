@@ -58,6 +58,50 @@ describe('formatRestoreReport', () => {
     expect(errs[1]).toContain('failed');
   });
 
+  describe('scrubs secrets and identifiers from errors', () => {
+    const out = (e: string) => formatRestoreReport({ ...base, errors: [e] }).lines.join('\n');
+    const ADDR = '59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5';
+
+    it('removes an address with an upper-case 0X prefix', () => {
+      const s = out(`bad 0X${ADDR} end`);
+      expect(s).not.toMatch(/[0-9a-f]{20,}/i);
+      expect(s).toContain('end');
+    });
+    it('removes a bare address without a word boundary', () => {
+      expect(out(`id_${ADDR}x`)).not.toMatch(/[0-9a-f]{20,}/i);
+    });
+    it('removes a truncated address', () => {
+      const s = out('owner 0x59aA26f4 not found');
+      expect(s).not.toContain('59aA26f4');
+      expect(s).toContain('not found');
+      expect(out('owner 0x59aA…5dE5 not found')).not.toMatch(/59aA|5dE5/);
+    });
+    it('removes a split address', () => {
+      const s = out('owner 0x59aA26f4 99D7C2B3 EC2c8524 Ed06F54f c4E85dE5 not found');
+      expect(s).not.toMatch(/59aA26f4|99D7C2B3|EC2c8524|Ed06F54f|c4E85dE5/);
+      expect(s).toContain('not found');
+    });
+    it('removes a JWT', () => {
+      const s = out('auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl rejected');
+      expect(s).not.toContain('eyJ');
+      expect(s).not.toContain('c2lnbmF0dXJl');
+      expect(s).toContain('rejected');
+    });
+    it('removes a Bearer token', () => {
+      const s = out('header Bearer abc.def-123_SECRET failed');
+      expect(s).not.toContain('SECRET');
+      expect(s).toContain('failed');
+    });
+    it('removes a 12-word phrase but keeps short error text', () => {
+      const phrase = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
+      const s = out(`invalid ${phrase} given`);
+      expect(s).not.toContain('abandon');
+      expect(s).not.toContain('accident');
+      expect(out('no account restored')).toContain('no account restored');
+      expect(out('Netzwerkfehler beim Laden der Sitzung')).toContain('Netzwerkfehler beim Laden der Sitzung');
+    });
+  });
+
   it('survives a malformed stored entry', () => {
     const f = formatRestoreReport({ outcome: 'failed' } as unknown as RestoreReport);
     expect(f.title).toContain('fehlgeschlagen');
