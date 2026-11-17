@@ -19,9 +19,11 @@ import {
   signInWithWords,
   WORDS_ALREADY_STORED_MESSAGE,
   WORDS_ARE_RECOVERY_WORDS_MESSAGE,
+  WORDS_FAILED_MESSAGE,
   WORDS_MIGRATION_PENDING_MESSAGE,
   WORDS_NOT_STORED_MESSAGE,
   WORDS_RECOVERY_ROUTE,
+  WORDS_SAVE_FAILED_MESSAGE,
   WORDS_SEVERAL_ACCOUNTS_MESSAGE,
   WORDS_UNREADABLE_MESSAGE,
   type WordsAccountDeps,
@@ -87,6 +89,7 @@ function deps(
     random?: (n: number) => Uint8Array;
     findSafesByOwner?: (owner: Address) => Promise<Address[]>;
     findWalletsByWords?: (pool: readonly Address[]) => Promise<WordsWallet[]>;
+    hasHistory?: (safe: Address) => Promise<boolean>;
   } = {},
 ) {
   const secure = fakeSecure(o.canProtect ?? true);
@@ -107,6 +110,7 @@ function deps(
     migrationStorage,
     findSafesByOwner,
     findWalletsByWords,
+    hasHistory: o.hasHistory,
     random: o.random,
     secure,
     dump: () => Object.fromEntries([...sessionStorage.m, ...migrationStorage.m]),
@@ -183,6 +187,13 @@ describe('createWordsAccount', () => {
     expect(await createWordsAccount(d)).toMatchObject({ status: 'signedIn', phrase: LEGAL });
   });
 
+  it('a failed record/session write still returns the stored words so the person sees them', async () => {
+    const d = deps({ random: () => hex('7f'.repeat(16)) });
+    d.migrationStorage.setItem = async () => { throw new Error('disk'); };
+    expect(await createWordsAccount(d)).toEqual({ status: 'error', message: WORDS_SAVE_FAILED_MESSAGE, phrase: LEGAL });
+    expect(await d.phrase.read('x')).toBe(LEGAL);
+  });
+
   it('never replaces the record of an unfinished passkey migration', async () => {
     const d = deps({ random: () => hex('7f'.repeat(16)) });
     const pending = { credentialId: 'cred', x: `0x${'11'.repeat(32)}`, y: `0x${'22'.repeat(32)}`, safe: OTHER, ownerType: 'webauthnSigner', owner: OTHER, legacy: RECOVERED, status: 'passkeyCreated' };
@@ -223,9 +234,26 @@ describe('signInWithWords', () => {
     expect(r).toMatchObject({ status: 'signedIn', session: { safe: RECOVERED, identity: RECOVERED, owner: deriveWordAddresses(JUNK, 1)[0] } });
   });
 
-  it('a recovered Safe also wins over a recovery-words hit (the words own it)', async () => {
-    const r = await signInWithWords(JUNK, deps({ findSafesByOwner: async () => [RECOVERED], findWalletsByWords: async () => [wallet(OTHER)] }));
-    expect(r).toMatchObject({ status: 'signedIn', session: { safe: RECOVERED } });
+  it('E5: owned Safe AND recovery-words hit → support, never a silent pick (a decoy on the public pool address)', async () => {
+    const d = deps({ findSafesByOwner: async () => [RECOVERED], findWalletsByWords: async () => [wallet(OTHER)] });
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'error', message: WORDS_SEVERAL_ACCOUNTS_MESSAGE });
+    expect(await d.phrase.has()).toBe(false);
+    expect(d.dump()).toEqual({});
+  });
+
+  it('several owned Safes: the single one with history wins (as on the passkey path)', async () => {
+    const d = deps({ findSafesByOwner: async () => [RECOVERED, OTHER], hasHistory: async (s) => s === RECOVERED });
+    expect(await signInWithWords(JUNK, d)).toMatchObject({ status: 'signedIn', session: { safe: RECOVERED } });
+  });
+
+  it('several owned Safes with history on both → support', async () => {
+    const d = deps({ findSafesByOwner: async () => [RECOVERED, OTHER], hasHistory: async () => true });
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'error', message: WORDS_SEVERAL_ACCOUNTS_MESSAGE });
+  });
+
+  it('a failed history read is a connection error', async () => {
+    const d = deps({ findSafesByOwner: async () => [RECOVERED, OTHER], hasHistory: async () => { throw new Error('rpc'); } });
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'error', message: 'Keine Verbindung. Bitte versuche es erneut.' });
   });
 
   it('several Safes owned by the words → support, nothing stored', async () => {
@@ -288,6 +316,25 @@ describe('signInWithWords', () => {
     d.secure.failNextProtectedSet = true;
     expect(await signInWithWords(JUNK, d)).toEqual({ status: 'cancelled' });
     expect(d.dump()).toEqual({});
+  });
+
+  it('a cancelled write after confirmed words of A leaves no dangling marker: A can be entered again', async () => {
+    const d = deps();
+    await d.phrase.write(LEGAL);
+    await d.phrase.markConfirmed();
+    d.secure.failNextProtectedSet = true;
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'cancelled' });
+    expect(await d.phrase.storedOwner()).toBeNull();
+    await expect(d.phrase.write(LEGAL)).resolves.toBeUndefined();
+    expect(await signInWithWords(LEGAL, d)).toMatchObject({ status: 'signedIn', session: { owner: deriveWordAddresses(LEGAL, 1)[0] } });
+  });
+
+  it('a throwing store read becomes an error result, never a throw', async () => {
+    const d = deps();
+    d.secure.getItemAsync = async () => { throw new Error('keystore'); };
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'error', message: WORDS_FAILED_MESSAGE });
+    expect(await createWordsAccount(d)).toEqual({ status: 'error', message: WORDS_FAILED_MESSAGE });
+    expect(await openStoredWordsAccount(d)).toEqual({ status: 'error', message: WORDS_FAILED_MESSAGE });
   });
 
   it('refused on a phone without biometrics', async () => {

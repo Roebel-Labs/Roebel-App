@@ -56,7 +56,7 @@ export const identityChain: IdentityChain = {
 };
 
 /** A users row with this wallet exists (anon read of one column, 10 s deadline). */
-async function isKnownAccount(a: Address): Promise<boolean> {
+export async function isKnownAccount(a: Address): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
