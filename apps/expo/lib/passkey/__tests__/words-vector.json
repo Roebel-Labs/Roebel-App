@@ -1,0 +1,6 @@
+{
+  "phrase": "test test test test test test test test test test test junk",
+  "ikmPath": "m/44'/60'/0'/1/0",
+  "salt": "id.ortis.app/words-vault/v1",
+  "vaultKey": "0x3e4404514fdb6eb813ca80fb27528108d335cf413250d8f97d4d1035547a999a"
+}
