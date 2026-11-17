@@ -241,6 +241,11 @@ async function publicDirectory(): Promise<DirectoryEntry[] | null> {
 /**
  * Public credentials of another account: the public type directory names the types, one
  * `holdsMany` on chain decides. The server is never asked about the other person.
+ *
+ * Trust split: only *holding* is checked on chain. `title`, `orgName`, `imageUrl` and
+ * `recognised` come from the server's public directory and are taken as it sends them.
+ * TODO(credreg): check them against the chain with `getType` (org, `recognised`, metadata) before
+ * showing them, so a wrong directory entry cannot label a held type with another name or badge.
  */
 export async function loadPublicHeld(
   address: Address,
