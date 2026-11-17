@@ -24,6 +24,7 @@
     "@irys/web-upload-ethereum": "^0.0.16",
     "@irys/web-upload-ethereum-ethers-v6": "^0.0.16",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@netizen-labs/credential-registry": "workspace:*",
     "@netizen-labs/miniapp-sdk": "workspace:*",
     "@netizen-labs/nostr": "workspace:*",
     "@netizen-labs/protocol": "workspace:*",
