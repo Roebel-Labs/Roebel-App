@@ -7,13 +7,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { concatHex, keccak256, stringToHex, type Hex } from "viem";
 import vector from "./passkey-safe-vector.json";
+import ecdsaVector from "./ecdsa-safe-vector.json";
 import {
   FALLBACK_HANDLER_SLOT,
   SAFE_PROXY_CREATION_CODE,
   PASSKEY_SAFE,
   SAFE_PROXY_RUNTIME_CODE,
   WEBAUTHN_VERIFIERS,
+  buildEcdsaSafeSetup,
   buildSafeSetup,
+  ecdsaSafeFactoryData,
+  predictEcdsaSafeAddress,
   predictSafeAddress,
   safeFactoryData,
 } from "../safe-address";
@@ -47,4 +51,27 @@ test("proxy runtime code is the runtime embedded in SafeProxyFactory 1.4.1 proxy
   assert.equal(SAFE_PROXY_RUNTIME_CODE.length, 2 + 171 * 2);
   assert.ok(SAFE_PROXY_CREATION_CODE.includes(SAFE_PROXY_RUNTIME_CODE.slice(2)));
   assert.ok(SAFE_PROXY_RUNTIME_CODE.startsWith("0x608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e"));
+});
+
+// ---- expert path (ECDSA-owner Safe), pinned by the fork vector shared with the Expo app ----
+
+const ecdsaOwner = ecdsaVector.owner as Hex;
+
+test("ECDSA Safe.setup initializer is byte-identical to the fork vector", () => {
+  const { initializer, saltNonce } = buildEcdsaSafeSetup(ecdsaOwner);
+  assert.equal(initializer, ecdsaVector.setupData);
+  assert.equal(saltNonce, BigInt(ecdsaVector.saltNonce));
+  // Owner casing does not change the bytes.
+  assert.equal(buildEcdsaSafeSetup(ecdsaOwner.toLowerCase() as Hex).initializer, ecdsaVector.setupData);
+});
+
+test("predicts the golden ECDSA Safe address", () => {
+  assert.equal(predictEcdsaSafeAddress(ecdsaOwner), ecdsaVector.safeAddress);
+});
+
+test("factory ++ ecdsaSafeFactoryData is the golden ECDSA initCode (and the vector op's initCode)", () => {
+  const initCode = concatHex([PASSKEY_SAFE.proxyFactory, ecdsaSafeFactoryData(ecdsaOwner)]).toLowerCase();
+  assert.equal(initCode, ecdsaVector.initCode);
+  assert.equal(initCode, ecdsaVector.userOp.initCode);
+  assert.equal(ecdsaVector.userOp.sender, ecdsaVector.safeAddress);
 });

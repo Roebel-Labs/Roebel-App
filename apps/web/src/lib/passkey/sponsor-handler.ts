@@ -4,7 +4,8 @@
  * wires the real Gnosis reader and the in-memory budget in.
  *
  * Request:  { chainId: 100,
- *             x, y,       // passkey P-256 public key, 0x + 32 bytes each
+ *             x, y,       // passkey P-256 public key, 0x + 32 bytes each, OR
+ *             ecdsaOwner, // the expert-path Safe's single ECDSA owner (never both, never neither -> 400)
  *             legacy?,    // the citizen's legacy thirdweb account (the ONE account the op may drive);
  *                         // omitted when the sender Safe itself is the citizen, or for recovery ops
  *             recoveryLegacy?, // recovery ops: the legacy account the recovered wallet administers
@@ -149,7 +150,7 @@ export async function handleSponsorRequest(
   } catch {
     return badRequest();
   }
-  const { userOp: op, x, y, legacy, recoveryLegacy, pollId } = parsed;
+  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId } = parsed;
   if (parsed.chainId !== CHAIN_ID) return notSponsorable("chainId must be 100");
 
   let budgetKey: Hex;
@@ -157,7 +158,7 @@ export async function handleSponsorRequest(
   try {
     const verdict = await evaluateSponsorPolicy(
       op,
-      { x, y, legacy, recoveryLegacy, pollId, nowSeconds: Math.floor(Date.now() / 1000), v3: v3ConfigFromEnv() },
+      { x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, nowSeconds: Math.floor(Date.now() / 1000), v3: v3ConfigFromEnv() },
       deps.chain,
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
