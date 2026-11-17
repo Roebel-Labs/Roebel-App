@@ -266,7 +266,7 @@ export default function RecoveryWordsScreen() {
         ) : step === 'intro' ? (
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Wiederherstellungswörter</Text>
-            {body('12 Wörter, mit denen du dein Konto auf einem neuen Handy zurückholst. Ohne Apple, ohne Google, ohne Vertrauenspersonen und ohne uns.')}
+            {body('12 Wörter, mit denen du dein Konto auf einem neuen Handy zurückholst. Ohne Apple, ohne Google und ohne Vertrauenspersonen.')}
             {body('Wer die Wörter hat, kann dein Konto nach 3 Tagen übernehmen. In dieser Zeit wirst du gewarnt und kannst es abbrechen.')}
             {pendingNotice}
             {unknown ? (

@@ -94,7 +94,7 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
 
       <Text style={[styles.lede, { color: colors.textPrimary }]}>{wordsSession ? 'Dein Konto mit 12 Wörtern' : 'Dein unabhängiges Konto'}</Text>
       <Text style={[styles.subLede, { color: colors.textSecondary }]}>
-        Nur du hast den Schlüssel. Richte einen Weg zurück ein, falls du dein Handy verlierst.
+        Wir können dein Konto nicht bewegen. Richte einen Weg zurück ein, falls du dein Handy verlierst.
       </Text>
 
       <Text style={[passkeyStyles.sectionHeading, { color: colors.textSecondary }]}>WIEDERHERSTELLUNG</Text>
