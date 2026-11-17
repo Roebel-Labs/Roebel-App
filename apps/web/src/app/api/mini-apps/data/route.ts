@@ -20,7 +20,7 @@ import { getApp } from "@/lib/miniapp/data";
 import { deleteData, getData, listData, setData } from "@/lib/miniapp/dataStore";
 import { requireAppAccess } from "@/lib/miniapp/images/access";
 import { getParam, jsonError } from "@/lib/miniapp/http";
-import { resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
+import { HOST_HEADER, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "@/lib/miniapp/types";
 
 export const runtime = "nodejs";
@@ -38,7 +38,13 @@ async function userWallet(
   claimedWallet: string | null | undefined,
 ): Promise<string> {
   const user = await resolveRuntimeUser(
-    { authorization: request.headers.get("authorization"), app, claimedWallet, route: "data" },
+    {
+      authorization: request.headers.get("authorization"),
+      app,
+      claimedWallet,
+      route: "data",
+      host: request.headers.get(HOST_HEADER),
+    },
     runtimeAuthDeps(),
   );
   return user.wallet;

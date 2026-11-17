@@ -28,6 +28,7 @@ import type {
   WalletAccount,
 } from "@netizen-labs/miniapp-sdk";
 import { gateWalletRequest } from "./walletGate";
+import { createUserFetch } from "./userFetch";
 
 export interface WebHostApp {
   id: string;
@@ -74,6 +75,12 @@ export interface WebMiniAppHostOptions {
    * Omitted / null → the calls go out without a token, as before.
    */
   getUserToken?: () => Promise<string | null>;
+  /**
+   * Called with the token after a user-scoped call carrying it got a 401, so the token
+   * cache can drop it (e.g. `invalidateUserToken` from lib/miniapp/clientToken). The call
+   * is not retried without the token.
+   */
+  onUserTokenRejected?: (token: string) => void;
 }
 
 export interface WebMiniAppHost {
@@ -116,15 +123,12 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     confirmSign,
     overrides,
     getUserToken,
+    onUserTokenRejected,
   } = opts;
   const targetOrigin = originOf(app.homeUrl);
 
-  /** `Authorization` header for user-scoped calls; empty when there is no token. */
-  const userAuthHeaders = async (): Promise<Record<string, string>> => {
-    if (!getUserToken) return {};
-    const token = await getUserToken().catch(() => null);
-    return token ? { authorization: `Bearer ${token}` } : {};
-  };
+  /** User-scoped calls: `x-roebel-host: web`, the user token when there is one, 401 → drop it. */
+  const userFetch = createUserFetch({ getUserToken, onUserTokenRejected });
 
   const post = (message: BridgeMessage) => {
     // The iframe may not be same-origin; postMessage with the app's origin.
@@ -181,9 +185,8 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
 
     getMuenzenBalance: async () => {
       if (!account?.address) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
-      const res = await fetch(
+      const res = await userFetch(
         `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}&app=${encodeURIComponent(app.id)}`,
-        { headers: await userAuthHeaders() },
       );
       if (!res.ok) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
       return (await res.json()) as { balance: string; decimals: number; symbol: "RÖ" };
@@ -192,9 +195,9 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     grantReward: async (p: GrantRewardParams) => {
       const recipient = account?.address;
       if (!recipient) unsupported("Keine Wallet für die Belohnung verbunden.");
-      const res = await fetch("/api/mini-apps/rewards", {
+      const res = await userFetch("/api/mini-apps/rewards", {
         method: "POST",
-        headers: { "content-type": "application/json", ...(await userAuthHeaders()) },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           appId: app.id,
           amount: p.amount,
@@ -288,18 +291,18 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     },
     dataUserGet: async (p: { key: string }) => {
       if (!account?.address) unsupported("Keine Wallet verbunden.");
-      const res = await fetch(
+      const res = await userFetch(
         `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=user&wallet=${account.address}&key=${encodeURIComponent(p.key)}`,
-        { cache: "no-store", headers: await userAuthHeaders() },
+        { cache: "no-store" },
       );
       if (!res.ok) unsupported("Speicher ist für diese App nicht verfügbar.");
       return (await res.json()) as { value: unknown; exists: boolean };
     },
     dataUserSet: async (p: { key: string; value: unknown }) => {
       if (!account?.address) unsupported("Keine Wallet verbunden.");
-      const res = await fetch("/api/mini-apps/data", {
+      const res = await userFetch("/api/mini-apps/data", {
         method: "POST",
-        headers: { "content-type": "application/json", ...(await userAuthHeaders()) },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           app: app.id,
           scope: "user",

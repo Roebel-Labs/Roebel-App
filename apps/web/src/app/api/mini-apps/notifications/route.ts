@@ -15,7 +15,7 @@ import { getParam, jsonError, resolveDeveloperReadonly } from "@/lib/miniapp/htt
 import { requireAppAccess } from "@/lib/miniapp/images/access";
 import { isAuthenticated } from "@/lib/auth/session";
 import { MiniAppError, type MiniAppRow } from "@/lib/miniapp/types";
-import { resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
+import { HOST_HEADER, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
 
 export const runtime = "nodejs";
 
@@ -143,6 +143,7 @@ export async function POST(req: Request) {
         app,
         claimedWallet: typeof body.wallet === "string" ? body.wallet : null,
         route: "notifications",
+        host: req.headers.get(HOST_HEADER),
       },
       runtimeAuthDeps(),
     );

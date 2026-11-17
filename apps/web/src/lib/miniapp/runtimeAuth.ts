@@ -26,7 +26,19 @@ export type RuntimeUser = { wallet: string; via: "token" | "legacy" };
 export interface RuntimeAuthDeps {
   verify(token: string, audience: string): Promise<VerifyTokenResult>;
   requireToken: boolean;
-  onLegacy?(info: { appId: string; route: string }): void;
+  onLegacy?(info: LegacyCallInfo): void;
+}
+
+/** A legacy (wallet-only) call; `host` is the caller's `x-roebel-host` header when well-formed. */
+export type LegacyCallInfo = { appId: string; route: string; host?: string };
+
+/** Header the Röbel hosts send on user-scoped calls ("expo", "web"). */
+export const HOST_HEADER = "x-roebel-host";
+const HOST_RE = /^[a-z0-9-]{1,20}$/;
+
+/** The calling host's name from the `x-roebel-host` header, or undefined if absent/malformed. */
+export function hostLabel(value: string | null | undefined): string | undefined {
+  return typeof value === "string" && HOST_RE.test(value) ? value : undefined;
 }
 
 const WALLET_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -61,6 +73,8 @@ export async function resolveRuntimeUser(
     app: { id: string; slug: string };
     claimedWallet: string | null | undefined;
     route: RuntimeRoute;
+    /** Raw `x-roebel-host` header; only recorded on the legacy path. */
+    host?: string | null;
   },
   deps: RuntimeAuthDeps,
 ): Promise<RuntimeUser> {
@@ -82,7 +96,8 @@ export async function resolveRuntimeUser(
     throw new MiniAppError("unauthorized", "Keine gültige Wallet — bitte anmelden.");
   }
   try {
-    deps.onLegacy?.({ appId: p.app.id, route: p.route });
+    const host = hostLabel(p.host);
+    deps.onLegacy?.({ appId: p.app.id, route: p.route, ...(host ? { host } : {}) });
   } catch {
     // Logging must never fail the request.
   }
@@ -99,11 +114,12 @@ export function runtimeAuthDeps(): RuntimeAuthDeps {
       if (!k) return { ok: false, code: "bad_signature" };
       return verifyUserToken(token, { keys: k.keys, issuers: k.issuers, audience });
     },
-    onLegacy({ appId, route }) {
-      console.warn("[mini-apps] bare wallet call", { appId, route });
+    onLegacy({ appId, route, host }) {
+      const props = { route, ...(host ? { host } : {}) };
+      console.warn("[mini-apps] bare wallet call", { appId, ...props });
       void import("./data")
         .then(({ ingestEvent }) =>
-          ingestEvent({ miniAppId: appId, sessionId: "server", event: "legacy_wallet_call", props: { route } }),
+          ingestEvent({ miniAppId: appId, sessionId: "server", event: "legacy_wallet_call", props }),
         )
         .catch((e) => console.error("[mini-apps] legacy_wallet_call log failed:", (e as Error)?.message ?? e));
     },

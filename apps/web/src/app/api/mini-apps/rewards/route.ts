@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { grantReward } from "@/lib/miniapp";
 import { getApp } from "@/lib/miniapp/data";
-import { resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
+import { HOST_HEADER, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "@/lib/miniapp/types";
 import { requireAdmin, jsonError, getParam } from "@/lib/miniapp/http";
 
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
         app,
         claimedWallet: typeof body.wallet === "string" ? body.wallet : null,
         route: "rewards",
+        host: req.headers.get(HOST_HEADER),
       },
       runtimeAuthDeps(),
     );

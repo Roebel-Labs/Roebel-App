@@ -12,8 +12,10 @@ import { getMuenzenBalance } from "@/lib/miniapp";
 import { getApp } from "@/lib/miniapp/data";
 import { jsonError, getParam } from "@/lib/miniapp/http";
 import {
+  HOST_HEADER,
   MISSING_TOKEN_MESSAGE,
   bearerToken,
+  hostLabel,
   resolveRuntimeUser,
   runtimeAuthDeps,
 } from "@/lib/miniapp/runtimeAuth";
@@ -30,6 +32,7 @@ export async function GET(req: Request) {
     const hasToken = bearerToken(authorization) !== null;
     const claimedWallet = getParam(req, "wallet") || "";
     const deps = runtimeAuthDeps();
+    const hostHeader = req.headers.get(HOST_HEADER);
 
     const appRef = getParam(req, "app") || getParam(req, "miniAppId") || getParam(req, "slug");
     const app = appRef ? await getApp(appRef) : null;
@@ -39,6 +42,14 @@ export async function GET(req: Request) {
       if (deps.requireToken) throw new MiniAppError("unauthorized", MISSING_TOKEN_MESSAGE);
       // Legacy behaviour (switch off, no app): trust the wallet param.
       if (!WALLET_RE.test(claimedWallet)) return NextResponse.json(EMPTY);
+      // No app → no legacy_wallet_call event (it needs an app); the server log is the only
+      // trace for owner gate 5 (external SDK 0.3.0 servers call with `?wallet=` only).
+      const host = hostLabel(hostHeader);
+      console.warn("[mini-apps] bare wallet call", {
+        route: "muenzen-balance",
+        appId: null,
+        ...(host ? { host } : {}),
+      });
       return NextResponse.json(await getMuenzenBalance(claimedWallet));
     }
 
@@ -48,7 +59,7 @@ export async function GET(req: Request) {
     }
 
     const user = await resolveRuntimeUser(
-      { authorization, app, claimedWallet, route: "muenzen-balance" },
+      { authorization, app, claimedWallet, route: "muenzen-balance", host: hostHeader },
       deps,
     );
     return NextResponse.json(await getMuenzenBalance(user.wallet));

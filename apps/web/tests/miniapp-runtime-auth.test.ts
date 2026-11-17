@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { exportJWK, generateKeyPair } from "jose";
 import { localTokenIssuer, tokenKeysFromEnv, verifyUserToken, type TokenIssuer, type TokenKeyResolver } from "../src/lib/miniapp/userToken";
-import { resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
+import { hostLabel, resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "../src/lib/miniapp/types";
 
 const ISS = "https://www.roebel.app";
@@ -41,7 +41,7 @@ before(async () => {
   tok = await mint();
 });
 
-type LegacyCall = { appId: string; route: string };
+type LegacyCall = { appId: string; route: string; host?: string };
 
 function deps(over: Partial<RuntimeAuthDeps> & { legacy?: LegacyCall[] } = {}): RuntimeAuthDeps {
   const { legacy, ...rest } = over;
@@ -103,6 +103,29 @@ test("no token, switch off: the claimed wallet is used and logged", async () => 
   const u = await resolveRuntimeUser({ authorization: null, app, claimedWallet: WALLET, route: "muenzen-balance" }, deps({ legacy }));
   assert.deepEqual(u, { wallet: WALLET, via: "legacy" });
   assert.deepEqual(legacy, [{ appId: APP_ID, route: "muenzen-balance" }]);
+});
+
+test("no token, switch off: a well-formed x-roebel-host is recorded as host", async () => {
+  const legacy: LegacyCall[] = [];
+  await resolveRuntimeUser({ authorization: null, app, claimedWallet: WALLET, route: "data", host: "expo" }, deps({ legacy }));
+  assert.deepEqual(legacy, [{ appId: APP_ID, route: "data", host: "expo" }]);
+});
+
+test("no token, switch off: a malformed x-roebel-host is omitted", async () => {
+  const legacy: LegacyCall[] = [];
+  for (const host of ["Expo", "a".repeat(21), "web host", "", null]) {
+    await resolveRuntimeUser({ authorization: null, app, claimedWallet: WALLET, route: "data", host }, deps({ legacy }));
+  }
+  assert.deepEqual(legacy, Array(5).fill({ appId: APP_ID, route: "data" }));
+});
+
+test("hostLabel accepts only [a-z0-9-]{1,20}", () => {
+  assert.equal(hostLabel("expo"), "expo");
+  assert.equal(hostLabel("web-2"), "web-2");
+  assert.equal(hostLabel("a".repeat(20)), "a".repeat(20));
+  assert.equal(hostLabel("a".repeat(21)), undefined);
+  assert.equal(hostLabel("EXPO"), undefined);
+  assert.equal(hostLabel(null), undefined);
 });
 
 test("no token, switch off: a mixed-case claimed wallet is lowercased", async () => {
