@@ -145,7 +145,7 @@ export async function createPresentation(d: PresentationDeps, c: Caller, p: Pres
  * The private part is not covered by showMessage, so the server vouches for it here: the leaf must
  * belong to the presenter (account leaf: subject = presenter; claim-key leaf: a claim signature of
  * the one-time key for the presenter), the proof must lead to the mirrored root of an on-chain batch
- * of that type, and the mirror must not know the leaf as revoked or expired.
+ * of that type, its invitation must be accepted, and the mirror must not know the leaf as revoked or expired.
  */
 async function checkPrivatePart(d: PresentationDeps, q: NonNullable<Presentation["private"]>, account: Address, nowMs: number): Promise<Fail | null> {
   const leaf = { kind: q.leaf.kind, typeId: q.leaf.typeId, subject: q.leaf.subject, validUntil: BigInt(q.leaf.validUntil), salt: q.leaf.salt };
@@ -170,6 +170,8 @@ async function checkPrivatePart(d: PresentationDeps, q: NonNullable<Presentation
   const [row] = await d.store.listInvitations({ batchId: batch.id, leafHash: hash });
   if (!row) return PROOF_INVALID;
   if (row.status === "revoked") return PROOF_NOT_LIVE;
+  // Only an accepted invitation is a credential: a declined (or still open) one cannot be presented.
+  if (row.status !== "accepted") return PROOF_INVALID;
   if (q.leaf.validUntil !== "0" && Number(q.leaf.validUntil) < Math.floor(nowMs / 1000)) return PROOF_NOT_LIVE;
   return null;
 }

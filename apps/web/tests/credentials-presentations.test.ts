@@ -144,7 +144,7 @@ async function privateWorld() {
     (Object.keys(leaves) as (keyof typeof leaves)[]).map((k, i) => ({
       id: `55555555-5555-4555-8555-00000000010${i}`, typeId: TYPE, leafKind: leaves[k].kind === "account" ? "account" : "claim_key",
       subject: leaves[k].subject, validUntil: "0", salt: leaves[k].salt, leafHash: hashes[k], proof: tree.proofOf(hashes[k]),
-      claimKeyEnc: null, tokenHash: null, tokenEnc: null, recipientWallet: null, displayName: null, contactEmail: null, status: "invited" as const,
+      claimKeyEnc: null, tokenHash: null, tokenEnc: null, recipientWallet: null, displayName: null, contactEmail: null, status: "accepted" as const,
     })),
   );
   await w.store.updateBatch(batchId, { status: "onchain", chainBatchId: "9" });
@@ -204,4 +204,15 @@ test("purgeExpiredPresentations deletes only rows whose time ran out", async () 
   await store.putPresentation({ codeHash: "live", payload: {}, expiresAt: new Date(now + 60_000).toISOString() });
   assert.equal(await store.purgeExpiredPresentations(now), 1);
   assert.deepEqual([...store.presentations.keys()], ["live"]);
+});
+
+test("a private part whose invitation is not accepted (declined or still open) is refused", async () => {
+  const w = await privateWorld();
+  for (const status of ["declined", "invited"] as const) {
+    await w.store.updateInvitations({ batchId: w.batchId, leafHash: w.hashes.mine }, { status });
+    const r = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: await w.part("mine") });
+    assert.equal(r.ok, false, status);
+    if (!r.ok) assert.equal(r.code, "PROOF_INVALID");
+  }
+  assert.equal(w.store.presentations.size, 0);
 });
