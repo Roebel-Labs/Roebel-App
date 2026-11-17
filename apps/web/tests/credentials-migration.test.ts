@@ -47,3 +47,8 @@ test("ends with the commented reset block", () => {
 test("unique live root", () => {
   assert.match(sql, /unique index[^;]+credential_batches\s*\(root\)\s*where status <> 'cancelled'/i);
 });
+
+test("actions carry the prepare block and a transaction settles one action", () => {
+  assert.match(sql, /prepared_block\s+bigint/i);
+  assert.match(sql, /unique index[^;]+credential_actions\s*\(tx_hash\)\s*where tx_hash is not null/i);
+});

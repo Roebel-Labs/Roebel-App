@@ -23,12 +23,13 @@ export function credentialDeps(): Deps | null {
     async receipt(tx: Hex) {
       try {
         const r = await client.getTransactionReceipt({ hash: tx });
-        return { status: r.status, logs: r.logs.map((l) => ({ address: l.address, topics: l.topics, data: l.data, blockNumber: l.blockNumber, logIndex: l.logIndex })) };
+        return { status: r.status, blockNumber: r.blockNumber, logs: r.logs.map((l) => ({ address: l.address, topics: l.topics, data: l.data, blockNumber: l.blockNumber, logIndex: l.logIndex })) };
       } catch (e) {
         if (e instanceof TransactionReceiptNotFoundError) return null;
         throw e;
       }
     },
+    head: () => client.getBlockNumber(),
     notify: sendNotificationNotifier(),
     now: () => Date.now(),
     registry: cfg.address,

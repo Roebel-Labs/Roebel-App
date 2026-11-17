@@ -110,13 +110,14 @@ const toAction = (r: Row): ActionRow => ({
   confirmedBy: r.confirmed_by ?? null,
   txHash: r.tx_hash ?? null,
   error: r.error ?? null,
+  preparedBlock: dec(r.prepared_block),
   createdAt: r.created_at,
   expiresAt: r.expires_at,
 });
 const ACTION_FIELDS: Record<keyof ActionRow, string> = {
   id: "id", accountId: "account_id", steps: "steps", summary: "summary", status: "status", preparedBy: "prepared_by",
   preparedVia: "prepared_via", confirmedBy: "confirmed_by", txHash: "tx_hash", error: "error",
-  createdAt: "created_at", expiresAt: "expires_at",
+  preparedBlock: "prepared_block", createdAt: "created_at", expiresAt: "expires_at",
 };
 
 const toBatch = (r: Row): BatchRow => ({
@@ -260,6 +261,11 @@ export class SupabaseCredentialStore implements CredentialStore {
   async getAction(id: string) {
     const r = await this.db.from(T.actions).select("*").eq("id", id).maybeSingle();
     check("getAction", r);
+    return r.data ? toAction(r.data as Row) : null;
+  }
+  async getActionByTxHash(txHash: string) {
+    const r = await this.db.from(T.actions).select("*").eq("tx_hash", txHash.toLowerCase()).maybeSingle();
+    check("getActionByTxHash", r);
     return r.data ? toAction(r.data as Row) : null;
   }
   async updateAction(id: string, patch: Partial<Omit<ActionRow, "id">>, ifStatus?: readonly ActionStatus[]) {

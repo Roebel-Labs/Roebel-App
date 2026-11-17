@@ -38,7 +38,9 @@ export type Deps = {
   store: CredentialStore;
   reader: NodeRegistryReader;
   /** null while the transaction is not mined (or unknown to the RPC). */
-  receipt: (tx: Hex) => Promise<{ status: "success" | "reverted"; logs: ReceiptLog[] } | null>;
+  receipt: (tx: Hex) => Promise<{ status: "success" | "reverted"; blockNumber: bigint; logs: ReceiptLog[] } | null>;
+  /** Current chain head; recorded at prepare time so an older receipt cannot settle the action. */
+  head: () => Promise<bigint>;
   notify: Notifier;
   now: () => number;
   registry: Address;
@@ -104,6 +106,8 @@ const NO_CHAIN_AUTHORITY = fail(
 const ACTION_EXPIRED = fail(409, "ACTION_EXPIRED", "Diese Bestätigung ist abgelaufen. Bitte bereite die Aktion neu vor.");
 const ACTION_NOT_PENDING = fail(409, "ACTION_NOT_PENDING", "Diese Aktion wartet nicht mehr auf eine Bestätigung.");
 
+export const NEUTRAL_PUSH_TITLE = "Eine Aktion wartet auf deine Bestätigung";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BYTES32 = /^0x[0-9a-fA-F]{64}$/;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -158,6 +162,7 @@ export async function prepareAction(
   const steps = parseSteps(JSON.parse(JSON.stringify(p.steps)));
   if (steps.length === 0) throw new Error("prepareAction: no steps");
   const id = randomUUID();
+  const preparedBlock = (await d.head()).toString();
   const now = d.now();
   const expiresAt = new Date(now + ACTION_TTL_MS).toISOString();
   const wallet = p.wallet.toLowerCase();
@@ -172,14 +177,18 @@ export async function prepareAction(
     confirmedBy: null,
     txHash: null,
     error: null,
+    preparedBlock,
     createdAt: new Date(now).toISOString(),
     expiresAt,
   });
   for (const batchId of p.batchIds ?? []) await d.store.updateBatch(batchId, { actionId: id });
+  // For an org whose members may not be public the push (lock screen) names neither org nor type;
+  // the full summary is shown in the app after sign-in.
+  const title = p.org && !membersMayBePublic(p.org) ? NEUTRAL_PUSH_TITLE : p.summary.title;
   await d.notify.push({
     wallets: [wallet],
     type: "credential_action",
-    title: p.summary.title,
+    title,
     body: "Tippe, um in der App zu bestätigen.",
     data: { type: "credential_action", actionId: id },
   });
@@ -559,24 +568,72 @@ export function registerLogsFromReceipt(registry: Address, logs: readonly Receip
   return out;
 }
 
-/** App only. Stores the hash and settles the action from the receipt when it is there. */
+const TX_IN_USE = fail(409, "TX_IN_USE", "Diese Transaktion gehört schon zu einer anderen Aktion.");
+const TX_CONFLICT = fail(409, "TX_CONFLICT", "Für diese Aktion wurde schon eine andere Transaktion gemeldet.");
+const TX_MISMATCH = fail(409, "TX_MISMATCH", "Die Transaktion passt nicht zu dieser Aktion.");
+
+/**
+ * Matches the steps against the receipt. A revokeLeaves step whose leaves were all revoked already
+ * emits nothing; when the chain says every one of its leaves is revoked, the step counts as done.
+ */
+async function confirmSteps(d: Deps, steps: readonly RegisterStep[], logs: readonly ReceiptLog[]): Promise<"ok" | "recheck" | "mismatch"> {
+  let rest = [...steps];
+  for (;;) {
+    const r = stepsConfirmedBy(rest, d.registry, logs);
+    if (r.ok) return "ok";
+    const step = rest[r.missing];
+    if (step?.fn !== "revokeLeaves") return "mismatch";
+    const revoked = await Promise.all(step.leaves.map((l) => d.reader.leafRevoked(BigInt(step.batchId), l)));
+    if (!revoked.every(Boolean)) return "recheck";
+    rest = rest.filter((_, i) => i !== r.missing);
+  }
+}
+
+/** Current state after a lost compare-and-set. */
+async function settledState(d: Deps, id: string): Promise<Result<{ status: "done" | "submitted" }>> {
+  const now = await d.store.getAction(id);
+  if (now?.status === "done") return ok({ status: "done" });
+  if (now?.status === "submitted") return ok({ status: "submitted" });
+  return ACTION_NOT_PENDING;
+}
+
+/**
+ * App only. Stores the hash and settles the action from the receipt when it is there.
+ * A hash is accepted only while the action awaits confirmation, or again when it equals the stored
+ * hash. One hash settles one action. The receipt must come from a block after the action was
+ * prepared, and its register logs must confirm the steps in order.
+ * Task 6: the sync may move a `submitted` or `failed` action to `done` when its steps are confirmed on chain.
+ */
 export async function recordSubmitted(d: Deps, c: Caller, p: { actionId: string; txHash: Hex }): Promise<Result<{ status: "done" | "submitted" }>> {
   if (c.via === "chat_session") return fail(403, "APP_ONLY", "Das geht nur in der Röbel App.");
   if (typeof p.txHash !== "string" || !BYTES32.test(p.txHash)) return bad("txHash fehlt.");
   const txHash = p.txHash.toLowerCase() as Hex;
   const found = await actionFor(d, c, p.actionId);
   if (isFail(found)) return found;
-  let a = await expireIfDue(d, found.action);
-  if (a.status === "done") return ok({ status: "done" });
+  const a = await expireIfDue(d, found.action);
+  if (a.status === "done") return a.txHash === txHash ? ok({ status: "done" }) : TX_CONFLICT;
   if (a.status === "expired") return ACTION_EXPIRED;
-  if (a.status !== "awaiting_confirmation" && a.status !== "submitted") return ACTION_NOT_PENDING;
-
-  const marked = await d.store.updateAction(a.id, { status: "submitted", txHash, confirmedBy: c.wallet.toLowerCase(), error: null }, ["awaiting_confirmation", "submitted"]);
-  if (!marked) {
-    const now = await d.store.getAction(a.id);
-    return now?.status === "done" ? ok({ status: "done" }) : ACTION_NOT_PENDING;
+  if (a.status === "submitted") {
+    if (a.txHash !== txHash) return TX_CONFLICT;
+  } else if (a.status === "awaiting_confirmation") {
+    const holder = await d.store.getActionByTxHash(txHash);
+    if (holder && holder.id !== a.id) return TX_IN_USE;
+    let marked: boolean;
+    try {
+      marked = await d.store.updateAction(a.id, { status: "submitted", txHash, confirmedBy: c.wallet.toLowerCase(), error: null }, ["awaiting_confirmation"]);
+    } catch (err) {
+      if ((err as { code?: string })?.code === "23505") return TX_IN_USE;
+      throw err;
+    }
+    if (!marked) {
+      const now = await d.store.getAction(a.id);
+      if (!now || now.txHash !== txHash) return now?.status === "submitted" || now?.status === "done" ? TX_CONFLICT : ACTION_NOT_PENDING;
+      if (now.status === "done") return ok({ status: "done" });
+      if (now.status !== "submitted") return ACTION_NOT_PENDING;
+    }
+  } else {
+    return ACTION_NOT_PENDING;
   }
-  a = { ...a, status: "submitted", txHash };
 
   let receipt: Awaited<ReturnType<Deps["receipt"]>>;
   try {
@@ -587,23 +644,25 @@ export async function recordSubmitted(d: Deps, c: Caller, p: { actionId: string;
   }
   if (!receipt) return ok({ status: "submitted" });
 
-  if (receipt.status === "reverted") {
-    await d.store.updateAction(a.id, { status: "failed", error: "transaction reverted" }, ["submitted"]);
-    return fail(422, "TX_REVERTED", "Die Transaktion wurde abgelehnt. Es wurde nichts geändert.");
-  }
+  const failWith = async (error: string, f: Fail): Promise<Result<{ status: "done" | "submitted" }>> => {
+    if (await d.store.updateAction(a.id, { status: "failed", error }, ["submitted"])) return f;
+    return settledState(d, a.id);
+  };
 
-  const confirmed = stepsConfirmedBy(a.steps, d.registry, receipt.logs);
-  if (!confirmed.ok) {
-    // A revokeLeaves step whose leaves were all revoked already emits nothing: re-check and re-prepare.
-    const recheck = a.steps[confirmed.missing]?.fn === "revokeLeaves";
-    await d.store.updateAction(a.id, { status: "failed", error: `${recheck ? "recheck needed" : "receipt does not confirm"} step ${confirmed.missing}` }, ["submitted"]);
-    return recheck
-      ? fail(409, "RECHECK_NEEDED", "Einige Ausweise waren schon widerrufen. Bitte prüfe die Liste und bereite den Widerruf neu vor.")
-      : fail(409, "TX_MISMATCH", "Die Transaktion passt nicht zu dieser Aktion.");
+  if (a.preparedBlock !== null && receipt.blockNumber <= BigInt(a.preparedBlock)) {
+    return failWith("receipt predates the action", TX_MISMATCH);
   }
+  if (receipt.status === "reverted") {
+    return failWith("transaction reverted", fail(422, "TX_REVERTED", "Die Transaktion wurde abgelehnt. Es wurde nichts geändert."));
+  }
+  const confirmed = await confirmSteps(d, a.steps, receipt.logs);
+  if (confirmed === "recheck") {
+    return failWith("recheck needed", fail(409, "RECHECK_NEEDED", "Einige Ausweise waren schon widerrufen. Bitte prüfe die Liste und bereite den Widerruf neu vor."));
+  }
+  if (confirmed === "mismatch") return failWith("receipt does not confirm the steps", TX_MISMATCH);
 
   await d.applyConfirmed(a.id, registerLogsFromReceipt(d.registry, receipt.logs));
-  await d.store.updateAction(a.id, { status: "done", error: null }, ["submitted"]);
+  if (!(await d.store.updateAction(a.id, { status: "done", error: null }, ["submitted", "done"]))) return settledState(d, a.id);
   return ok({ status: "done" });
 }
 

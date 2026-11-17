@@ -46,9 +46,15 @@ CREATE TABLE IF NOT EXISTS public.credential_actions (
   confirmed_by  text,
   tx_hash       text,
   error         text,
+  -- Chain head when the action was prepared: a receipt from this block or earlier cannot be its transaction.
+  prepared_block bigint,
   created_at    timestamptz NOT NULL DEFAULT now(),
   expires_at    timestamptz NOT NULL
 );
+
+-- One transaction settles at most one action.
+CREATE UNIQUE INDEX IF NOT EXISTS credential_actions_tx_hash_idx
+  ON public.credential_actions (tx_hash) WHERE tx_hash IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.credential_batches (
   id             uuid PRIMARY KEY,

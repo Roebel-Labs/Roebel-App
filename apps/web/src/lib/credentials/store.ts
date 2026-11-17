@@ -79,6 +79,8 @@ export type ActionRow = {
   confirmedBy: string | null;
   txHash: string | null;
   error: string | null;
+  /** Decimal chain head at prepare time; a receipt must come from a later block. */
+  preparedBlock: string | null;
   createdAt: string;
   expiresAt: string;
 };
@@ -170,6 +172,8 @@ export interface CredentialStore {
   // credential_actions
   insertAction(row: ActionRow): Promise<void>;
   getAction(id: string): Promise<ActionRow | null>;
+  /** The action that already holds this transaction hash (unique), or null. */
+  getActionByTxHash(txHash: string): Promise<ActionRow | null>;
   /** With `ifStatus`, applies only while the action is in one of those states. */
   updateAction(id: string, patch: Partial<Omit<ActionRow, "id">>, ifStatus?: readonly ActionStatus[]): Promise<boolean>;
   listActions(filter: { accountId?: string; statuses?: readonly ActionStatus[] }): Promise<ActionRow[]>;
@@ -314,10 +318,19 @@ export class InMemoryCredentialStore implements CredentialStore {
     const a = this.actions.get(id);
     return a ? clone(a) : null;
   }
+  async getActionByTxHash(txHash: string) {
+    const a = [...this.actions.values()].find((x) => x.txHash !== null && x.txHash === txHash.toLowerCase());
+    return a ? clone(a) : null;
+  }
   async updateAction(id: string, patch: Partial<Omit<ActionRow, "id">>, ifStatus?: readonly ActionStatus[]) {
     const a = this.actions.get(id);
     if (!a || (ifStatus && !ifStatus.includes(a.status))) return false;
-    Object.assign(a, clone(patch));
+    const p = { ...patch };
+    if (typeof p.txHash === "string") {
+      p.txHash = p.txHash.toLowerCase();
+      if ([...this.actions.values()].some((x) => x.id !== id && x.txHash === p.txHash)) throw new CredentialStoreError("updateAction", "23505");
+    }
+    Object.assign(a, clone(p));
     return true;
   }
   async listActions(filter: { accountId?: string; statuses?: readonly ActionStatus[] }) {

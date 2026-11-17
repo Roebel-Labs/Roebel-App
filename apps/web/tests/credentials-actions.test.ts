@@ -12,6 +12,7 @@ import {
   prepareMembersPublicAction,
   prepareTypeAction,
   recordSubmitted,
+  NEUTRAL_PUSH_TITLE,
   type Deps,
 } from "../src/lib/credentials/actions";
 import type { Caller } from "../src/lib/credentials/caller";
@@ -46,19 +47,23 @@ function world(opts: Opts = {}) {
   const registered = new Set((opts.registered ?? [VEREIN, FRAKTION, OTHER]).map((u) => orgIdFromUuid(u).toLowerCase()));
   const managers = new Set((opts.managers ?? [OWNER, ADMIN, OTHER_ADMIN]).map((w) => w.toLowerCase()));
   const privateOnly = new Set((opts.privateOnly ?? []).map((u) => orgIdFromUuid(u).toLowerCase()));
+  const revokedLeaves = new Set<string>();
   const reader = {
     isOrgRegistered: async (orgId: Hex) => registered.has(orgId.toLowerCase()),
     canManage: async (orgId: Hex, a: Address) => registered.has(orgId.toLowerCase()) && managers.has(a.toLowerCase()),
     orgPrivateOnly: async (orgId: Hex) => privateOnly.has(orgId.toLowerCase()),
+    leafRevoked: async (batchId: bigint, leaf: Hex) => revokedLeaves.has(`${batchId}:${leaf.toLowerCase()}`),
   };
   const pushes: Parameters<Notifier["push"]>[0][] = [];
-  const receipts = new Map<string, { status: "success" | "reverted"; logs: ChainLog[] }>();
+  const receipts = new Map<string, { status: "success" | "reverted"; blockNumber: bigint; logs: ChainLog[] }>();
+  let head = 100n;
   const applied: { actionId: string; logs: readonly RegisterLog[] }[] = [];
   let now = T0;
   const d: Deps = {
     store,
     reader: reader as never,
     receipt: async (tx) => receipts.get(tx.toLowerCase()) ?? null,
+    head: async () => head,
     notify: { push: async (p) => void pushes.push(p) },
     now: () => now,
     registry: REGISTRY,
@@ -66,7 +71,9 @@ function world(opts: Opts = {}) {
       applied.push({ actionId, logs });
     },
   };
-  return { d, store, pushes, receipts, applied, advance: (ms: number) => (now += ms) };
+  const receipt = (tx: Hex, status: "success" | "reverted", logs: ChainLog[], blockNumber = head + 1n) =>
+    receipts.set(tx.toLowerCase(), { status, blockNumber, logs });
+  return { d, store, pushes, receipts, receipt, applied, revokedLeaves, advance: (ms: number) => (now += ms), mine: (n: bigint) => (head += n) };
 }
 
 function caller(wallet: string, action: Caller["action"], via: Caller["via"] = "chat_session"): Caller {
@@ -270,7 +277,7 @@ test("an expired action is returned as expired and cannot be submitted", async (
   assert.equal(got.status, "expired");
   assert.equal((await w.store.getAction(actionId))!.status, "expired");
   const tx = `0x${"99".repeat(32)}` as Hex;
-  w.receipts.set(tx, { status: "success", logs: [batchAddedLog(typeId, ROOT, 7n)] });
+  w.receipt(tx, "success", [batchAddedLog(typeId, ROOT, 7n)]);
   const r = await recordSubmitted(w.d, caller(OWNER, "action_submitted", "signature"), { actionId, txHash: tx });
   assert.equal(r.ok, false);
   if (!r.ok) {
@@ -287,7 +294,7 @@ test("recordSubmitted: reverted receipt → failed; missing receipt → submitte
 
   const a = await batchAction(w, typeId);
   const txA = `0x${"01".repeat(32)}` as Hex;
-  w.receipts.set(txA, { status: "reverted", logs: [] });
+  w.receipt(txA, "reverted", []);
   const ra = await recordSubmitted(w.d, c, { actionId: a.actionId, txHash: txA });
   assert.equal(ra.ok, false);
   const rowA = (await w.store.getAction(a.actionId))!;
@@ -307,7 +314,7 @@ test("recordSubmitted: reverted receipt → failed; missing receipt → submitte
   assert.equal(w.applied.length, 0);
 
   // The receipt shows up; reporting again finishes it.
-  w.receipts.set(txB, { status: "success", logs: [batchAddedLog(typeId, ROOT2, 9n)] });
+  w.receipt(txB, "success", [batchAddedLog(typeId, ROOT2, 9n)]);
   assert.deepEqual(must(await recordSubmitted(w.d, c, { actionId: b.actionId, txHash: txB })), { status: "done" });
   assert.equal((await w.store.getAction(b.actionId))!.status, "done");
   assert.equal(w.applied.length, 1);
@@ -325,7 +332,7 @@ test("recordSubmitted refuses a receipt whose BatchAdded root differs from the s
   const typeId = await onchainType(w.store, VEREIN);
   const { actionId } = await batchAction(w, typeId);
   const tx = `0x${"03".repeat(32)}` as Hex;
-  w.receipts.set(tx, { status: "success", logs: [batchAddedLog(typeId, ROOT2, 4n)] });
+  w.receipt(tx, "success", [batchAddedLog(typeId, ROOT2, 4n)]);
   const r = await recordSubmitted(w.d, caller(OWNER, "action_submitted", "signature"), { actionId, txHash: tx });
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.code, "TX_MISMATCH");
@@ -347,4 +354,79 @@ test("cancelAction works only while awaiting confirmation", async () => {
     assert.equal(r.status, 409);
     assert.equal(r.code, "ACTION_NOT_PENDING");
   }
+});
+
+test("a receipt from a block before the action was prepared does not settle it", async () => {
+  const w = world();
+  const typeId = await onchainType(w.store, VEREIN);
+  const { actionId } = await batchAction(w, typeId);
+  assert.equal((await w.store.getAction(actionId))!.preparedBlock, "100");
+  const tx = `0x${"04".repeat(32)}` as Hex;
+  w.receipt(tx, "success", [batchAddedLog(typeId, ROOT, 5n)], 100n);
+  const r = await recordSubmitted(w.d, caller(OWNER, "action_submitted", "signature"), { actionId, txHash: tx });
+  assert.ok(!r.ok && r.code === "TX_MISMATCH");
+  assert.equal((await w.store.getAction(actionId))!.status, "failed");
+  assert.equal(w.applied.length, 0);
+});
+
+test("one transaction hash settles one action; another hash on a submitted action is a conflict", async () => {
+  const w = world();
+  const c = caller(OWNER, "action_submitted", "signature");
+  const org = { accountId: VEREIN, orgId: orgIdFromUuid(VEREIN) as Hex, name: "Heimatverein", subType: "verein", membersPublicColumn: null, role: "owner" as const };
+  const mk = () => prepareAction(w.d, { org, wallet: OWNER, via: "dashboard", steps: [{ fn: "setOrgPrivateOnly", orgId: org.orgId, privateOnly: true }], summary: { title: "x", lines: [], orgName: null } });
+  const a = await mk();
+  const b = await mk();
+  const tx1 = `0x${"05".repeat(32)}` as Hex;
+  const tx2 = `0x${"06".repeat(32)}` as Hex;
+  assert.deepEqual(must(await recordSubmitted(w.d, c, { actionId: a.actionId, txHash: tx1 })), { status: "submitted" });
+  const reuse = await recordSubmitted(w.d, c, { actionId: b.actionId, txHash: tx1 });
+  assert.ok(!reuse.ok && reuse.code === "TX_IN_USE");
+  assert.equal((await w.store.getAction(b.actionId))!.status, "awaiting_confirmation");
+  const other = await recordSubmitted(w.d, c, { actionId: a.actionId, txHash: tx2 });
+  assert.ok(!other.ok && other.code === "TX_CONFLICT");
+  assert.equal((await w.store.getAction(a.actionId))!.txHash, tx1);
+  // The same hash again is fine (a retry), and settles once the receipt exists.
+  const OPS = encodeEventTopics({ abi: CREDENTIAL_REGISTRY_ABI, eventName: "OrgPrivateOnlySet", args: { orgId: org.orgId, by: OWNER as Address } } as never) as Hex[];
+  w.receipt(tx1, "success", [{ address: REGISTRY, topics: OPS, data: encodeAbiParameters([{ type: "bool" }], [true]) }]);
+  assert.deepEqual(must(await recordSubmitted(w.d, c, { actionId: a.actionId, txHash: tx1 })), { status: "done" });
+  // A done action's receipt cannot settle a second, identical action either.
+  const again = await recordSubmitted(w.d, c, { actionId: b.actionId, txHash: tx1 });
+  assert.ok(!again.ok && again.code === "TX_IN_USE");
+});
+
+test("the push for an org whose members are not public names neither org nor type", async () => {
+  const w = world();
+  const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: FRAKTION, op: "create", template: "mitglied" }));
+  assert.equal(w.pushes.length, 1);
+  assert.equal(w.pushes[0].title, NEUTRAL_PUSH_TITLE);
+  const text = JSON.stringify(w.pushes[0]);
+  assert.ok(!text.includes("Fraktion") && !text.includes("Mitglied"));
+  // The in-app view keeps the full summary.
+  assert.match(String((await w.store.getAction(r.actionId))!.summary.title), /Mitglied/);
+  // An open org's push keeps the title.
+  must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "create", template: "mitglied" }));
+  assert.match(w.pushes[1].title, /Mitglied/);
+});
+
+test("revokeLeaves without events: done when the chain shows every leaf revoked, recheck otherwise", async () => {
+  const w = world();
+  const c = caller(OWNER, "action_submitted", "signature");
+  const org = { accountId: VEREIN, orgId: orgIdFromUuid(VEREIN) as Hex, name: "Heimatverein", subType: "verein", membersPublicColumn: null, role: "owner" as const };
+  const L1 = `0x${"0a".repeat(32)}` as Hex;
+  const L2 = `0x${"0b".repeat(32)}` as Hex;
+  const mk = () => prepareAction(w.d, { org, wallet: OWNER, via: "dashboard", steps: [{ fn: "revokeLeaves", batchId: "7", leaves: [L1, L2] }], summary: { title: "x", lines: [], orgName: null } });
+
+  w.revokedLeaves.add(`7:${L1}`);
+  const a = await mk();
+  const txA = `0x${"07".repeat(32)}` as Hex;
+  w.receipt(txA, "success", []);
+  const ra = await recordSubmitted(w.d, c, { actionId: a.actionId, txHash: txA });
+  assert.ok(!ra.ok && ra.code === "RECHECK_NEEDED");
+  assert.equal((await w.store.getAction(a.actionId))!.status, "failed");
+
+  w.revokedLeaves.add(`7:${L2}`);
+  const b = await mk();
+  const txB = `0x${"08".repeat(32)}` as Hex;
+  w.receipt(txB, "success", []);
+  assert.deepEqual(must(await recordSubmitted(w.d, c, { actionId: b.actionId, txHash: txB })), { status: "done" });
 });

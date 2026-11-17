@@ -68,7 +68,7 @@ export async function chainReadiness(
 
 /** The package reader plus the two node-side reads it lacks. */
 export type NodeRegistryReader = CredentialRegistryReader &
-  ChainReadinessReader & { orgPrivateOnly(orgId: Hex): Promise<boolean> };
+  ChainReadinessReader & { orgPrivateOnly(orgId: Hex): Promise<boolean>; leafRevoked(batchId: bigint, leaf: Hex): Promise<boolean> };
 
 const ORG_SOURCE_ABI = parseAbi(["function isRegistered(bytes32 orgId) view returns (bool)"]);
 
@@ -79,6 +79,7 @@ export function createNodeRegistryReader({ client, address }: { client: PublicCl
   return {
     ...base,
     orgPrivateOnly: (orgId) => readRegistry<boolean>("orgPrivateOnly", [orgId]),
+    leafRevoked: (batchId, leaf) => readRegistry<boolean>("leafRevoked", [batchId, leaf]),
     async isOrgRegistered(orgId) {
       // Mirrors the contract's _orgInfo: the register's current OrgRegistry decides. RPC errors
       // propagate: "unreachable" must not read as "not registered".
