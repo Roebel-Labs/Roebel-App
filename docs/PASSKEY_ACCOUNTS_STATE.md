@@ -145,6 +145,70 @@ A passkey user MAY add an email. It is used ONLY for recovery alerts ("Jemand st
   smart-account transaction (sponsorGas → thirdweb's paymaster; our passkey sponsor route is not involved). Then the
   existing poll → executeRecovery → 3 days → finalize. Refused while a thirdweb session is the active wallet.
 
+## Sovereign sign-up foundations (2026-11-17)
+
+Plan 1 of the sovereign sign-up project (branch `feat/sovsignup-1-foundations`, not merged, not deployed; spec
+[`superpowers/specs/2026-11-17-sovereign-signup-design.md`](superpowers/specs/2026-11-17-sovereign-signup-design.md)).
+A person without a thirdweb login (a **guest**: a passkey Safe that is not a citizen) can now be sponsored far
+enough to get guardians, request citizenship and join Röbel Münzen.
+
+**Per-surface gate** (`apps/expo/lib/passkey/gate.ts`). Kill switch `passkey_accounts_enabled` closes everything.
+Preview and dev open every surface. Production needs runtime >= 3.8.0, the `signup` production flag, and for any
+other surface that surface's own flag:
+
+| Surface | `app_settings` production key |
+|---|---|
+| `signup` | `passkey_accounts_enabled_production` |
+| `migration` | `passkey_migration_enabled_production` |
+| `detach` | `passkey_detach_enabled_production` |
+| `words` | `passkey_words_enabled_production` |
+
+At launch set only `passkey_accounts_enabled`, then `passkey_accounts_enabled_production`. Leave the other three unset.
+
+**Guest tier (sponsor).** A non-citizen Safe is sponsored for: `CitizenNFTv2.createAttestationRequest`, guardian
+management (add/revoke guardian, threshold, cancel recovery), `Hub.registerHuman`, `Hub.personalMint`,
+`NameRegistry.updateMetadataDigest`, and recovery of a guest Safe that has at least one guardian (the Safe must pass
+the shape check, including the SocialRecoveryModule). Not sponsored for guests: `groupMint`, `trust`, `send`, legacy
+shapes (handover, `moveTo`, calls to a legacy account). A Safe is a guest only if it is not a citizen identity.
+
+**Budgets.**
+- `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI`: per guest Safe per UTC day, default 0.002 xDAI.
+- `PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI`: all guests together per UTC day (shared row `'guests'`), default 0.02 xDAI.
+  It must stay **below** `PASSKEY_SPONSOR_GLOBAL_DAILY_WEI`. Guests also count against the global total, so a guest cap
+  at or above it would let guests use up the budget citizens need.
+- Measured prefunds (Task 5, EntryPoint prefund per op): deploy + guardian + citizenship request = 0.00234 xDAI at
+  1.5 gwei, 0.00468 at 3 gwei (an upper bound for verification gas only); `personalMint` on a deployed Safe = 0.00159 /
+  0.00318. **The default onboarding cap of 0.002 xDAI therefore does not fit a guest's first op even at 1.5 gwei.**
+  The owner must set `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (suggested 0.006 xDAI) before opening sign-up.
+- Migrations (not applied): `20261117a_passkey_sponsor_guest_cap.sql` (`passkey_sponsor_reserve_v2`),
+  `20261117b_passkey_rate_limits.sql` (shared warning-email rate limit, `PASSKEY_RATE_LIMIT_STORE=supabase`, RPC
+  `passkey_rate_take`; only a sha256 of the lowercased Safe/address is stored).
+
+**Owner to Safe lookup** (`apps/expo/lib/passkey/recovery-lookup.ts`, `findSafesByOwner`). A recovered Safe's owner
+changes, so a new phone finds the Safe from the new signer: it scans `AddedOwner(owner)` logs over the full range back
+to `PASSKEY_EPOCH_BLOCK`, shape-checks every candidate (proxy runtime, SafeL2 singleton, Safe4337Module fallback,
+exactly the 4337 + SocialRecovery modules), prefers the candidate with history and otherwise fails with an ambiguity
+error. An RPC error during the lookup fails sign-in with a "try again" message; it never falls back to another
+account. Known residuals: the history signal can be forged (worst case is a lockout, never a wrong account), and the
+scan grows by about 52 windows per month, so an index or a pinned block will be needed eventually.
+
+**Boot rule** (`apps/expo/lib/passkey/boot.ts`). `bootWallets` takes ordered `SessionSource`s. A source that is stored
+but fails to restore (corrupt record, storage error, lazy import failure) is a **failed** boot: the app shows
+"restore failed" and retries in the background. It never falls through to thirdweb and never logs the person out.
+Production below runtime 3.8.0 builds no passkey source and boots exactly as before.
+
+**Other.** The recovery-alert cron (`/api/passkey/recovery-alerts`, every 10 minutes, `CRON_SECRET` bearer) is now in
+`apps/web/vercel.json`. The warning-email limiter is shared when `PASSKEY_RATE_LIMIT_STORE=supabase`; if the store is
+down, `start` answers 503 `store_unavailable` and sends nothing. The consent processor list still names the provider
+on purpose (DSGVO). A Safe can join Circles (fork proof `contracts/passkey-accounts/test/SafeCircles.t.sol`).
+
+**Owner gates** (Max): merge after review; apply the six sponsor/key/email/session/guest-cap/rate-limit migrations in
+order via the Supabase MCP; Vercel production env (dedicated production paymaster, `PASSKEY_SPONSOR_*` budgets incl. the
+onboarding cap above, `PASSKEY_SPONSOR_BUDGET_STORE=supabase`, `PASSKEY_RATE_LIMIT_STORE=supabase`, email/session/key
+backup flags, `CRON_SECRET`); deploy `ortis-id`; redeploy the four edge functions; privacy text for the optional
+warning email; EAS preview update and a device pass; do not go to production before the logout-after-update fix is
+confirmed on a real store update; then set the flags in the order above.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.

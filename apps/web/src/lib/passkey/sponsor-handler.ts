@@ -29,9 +29,14 @@
  *   PASSKEY_CITIZEN_NFT_V3     optional; CitizenNFTv3 (citizen check + moveTo target). Unset = v3 off
  *   PASSKEY_ATTESTER_NFT_V3    optional; AttesterNFTv3 (moveTo target). Unset = attester moveTo off
  *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per guest (NON-citizen) account per UTC day
- *                              (every guest result), default 0.002 xDAI; never above the per-identity cap
+ *                              (every guest result), default 0.002 xDAI; never above the per-identity cap.
+ *                              The default does NOT fit a guest's first op (deploy + guardian + request
+ *                              measured 0.00234 xDAI at 1.5 gwei): the owner must set it (suggested
+ *                              0.006 xDAI) before opening sign-up
  *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI optional; ALL guest (non-citizen) Safes together per
- *                              UTC day, default 0.02 xDAI
+ *                              UTC day, default 0.02 xDAI. MUST stay below the overall global cap:
+ *                              guests also count against the global total, so a guest cap at or above
+ *                              it would let guests use up the budget citizens need
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
