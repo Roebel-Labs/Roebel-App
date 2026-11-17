@@ -13,6 +13,8 @@ import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
 import { useSettingsKind } from '@/components/passkey/useSettingsKind';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 import * as Updates from 'expo-updates';
 import BottomDrawer from '@/components/BottomDrawer';
@@ -125,6 +127,8 @@ export default function SettingsScreen() {
   // Passkey settings row: which screen (if any) applies to this device (lib/passkey/settings-kind.ts).
   const { kind: passkeyKind } = useSettingsKind();
   const showPasskey = passkeyKind === 'sovereign' || passkeyKind === 'migration';
+  // A 12-word account has no passkey: the row is named after what it holds (preflight E8).
+  const wordsSession = isWordsOwner(passkeySessionOf<PasskeySession>(activeAccount));
 
   const canRequestAttester = hasCitizenNFT && !hasAttesterNFT;
   const currentRoleLabel =
@@ -288,7 +292,7 @@ export default function SettingsScreen() {
             >
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
-                  Passkey & Wiederherstellung
+                  {wordsSession ? 'Konto & Wiederherstellung' : 'Passkey & Wiederherstellung'}
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
                   {passkeyKind === 'sovereign'

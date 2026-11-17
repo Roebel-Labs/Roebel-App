@@ -44,6 +44,24 @@ describe('existing passkey account', () => {
     // A cleared state ('' via the removeItem fallback) is no recovery.
     expect(await hasExistingPasskeyAccount('account-or-recovery', reader({ [RECOVERY_STATE_KEY]: '' }))).toBe(false);
   });
+  it('a 12-word account (session and record under the same keys) is an existing account', async () => {
+    const owner = '0x5555555555555555555555555555555555555555';
+    const safe = '0x9999999999999999999999999999999999999999';
+    const zero = `0x${'0'.repeat(64)}`;
+    const session = JSON.stringify({ credentialId: '', x: zero, y: zero, safe, identity: safe, ownerType: 'ecdsa', owner });
+    const record = JSON.stringify({ credentialId: '', x: zero, y: zero, safe, ownerType: 'ecdsa', owner, status: 'done', txHash: null });
+    expect(await hasExistingPasskeyAccount('account', reader({ [PASSKEY_SESSION_KEY]: session }))).toBe(true);
+    expect(await hasExistingPasskeyAccount('account', reader({ [MIGRATION_RECORD_KEY]: record }))).toBe(true);
+    // The words surface flag is not asked once the account exists (my-words, the Settings row).
+    const surfaceAllowed = jest.fn(async () => false);
+    const allowed = await isRecoverySurfaceAllowed('words', 'account', {
+      channelAllowed: () => true,
+      hasExisting: (scope) => hasExistingPasskeyAccount(scope, reader({ [PASSKEY_SESSION_KEY]: session })),
+      surfaceAllowed,
+    });
+    expect(allowed).toBe(true);
+    expect(surfaceAllowed).not.toHaveBeenCalled();
+  });
   it('one failing read does not hide the other key', async () => {
     expect(await hasExistingPasskeyAccount('account', reader({ [MIGRATION_RECORD_KEY]: DONE }, [PASSKEY_SESSION_KEY]))).toBe(true);
     expect(await hasExistingPasskeyAccount('account', reader({}, [PASSKEY_SESSION_KEY, MIGRATION_RECORD_KEY]))).toBe(false);

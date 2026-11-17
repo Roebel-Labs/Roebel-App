@@ -65,6 +65,12 @@ export type LookupChain = {
    * (also a viem "revert" on getModulesPaginated, which may be a transient -32603) propagates.
    */
   isPasskeySafe: (a: Address) => Promise<boolean>;
+  /**
+   * SocialRecoveryModule `GuardianAdded(wallet, guardian)` logs whose guardian is any of
+   * `guardians`, from PASSKEY_EPOCH_BLOCK (the recovery words' pool → candidate wallets; the
+   * caller re-checks the current guardians, a log can be stale).
+   */
+  guardianLogsFor: (guardians: readonly Address[]) => Promise<Array<{ wallet: Address; guardian: Address }>>;
 };
 
 export type OwnerLog = { emitter: Address; blockNumber: bigint };
@@ -254,6 +260,8 @@ export const requestApprovedEvent = parseAbiItem(
   'event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)',
 );
 export const safeAddedOwnerEvent = parseAbiItem('event AddedOwner(address indexed owner)');
+/** The real SocialRecoveryModule event (fork-proven: 2 args; the threshold has its own ChangedThreshold). */
+export const guardianAddedEvent = parseAbiItem('event GuardianAdded(address indexed wallet, address indexed guardian)');
 const safeOwnersAbi = [
   { type: 'function', name: 'getOwners', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address[]' }] },
   {
@@ -354,6 +362,13 @@ export function createLookupChain(
         client.getLogs({ event: safeAddedOwnerEvent, args: { owner }, ...w }),
       );
       return logs.map((l) => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n }));
+    },
+    async guardianLogsFor(guardians) {
+      if (guardians.length === 0) return [];
+      const logs = await scanLogs(await windowsTo(passkeyFrom), (w: BlockWindow) =>
+        client.getLogs({ address: SOCIAL_RECOVERY_MODULE, event: guardianAddedEvent, args: { guardian: [...guardians] }, ...w }),
+      );
+      return logs.map((l) => ({ wallet: getAddress(l.args.wallet as Address), guardian: getAddress(l.args.guardian as Address) }));
     },
     async readOwners(safe) {
       return [...((await client.readContract({ address: safe, abi: safeOwnersAbi, functionName: 'getOwners' })) as readonly Address[])];

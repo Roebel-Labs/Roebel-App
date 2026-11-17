@@ -17,6 +17,8 @@ import { loadCitizenDraft, clearCitizenDraft } from '@/lib/onboarding-storage';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
+import WayBackSheet from '@/components/passkey/WayBackSheet';
+import { checkWayBack, WAY_BACK_OFFLINE_MESSAGE } from '@/lib/passkey/way-back';
 import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { InformationCircleIcon } from '@/components/Icons';
 const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
@@ -39,6 +41,7 @@ export default function RequestCitizenScreen() {
   const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
+  const [wayBack, setWayBack] = useState<{ label: string; route: string } | null>(null);
 
   // Prefill from the onboarding draft (saved when the auto-submit at the end of
   // the welcome wizard failed) so the user never types their data twice.
@@ -77,6 +80,16 @@ export default function RequestCitizenScreen() {
     }
 
     try {
+      // An independent account needs a way back before it becomes a citizen (provider logins pass).
+      const way = await checkWayBack(account);
+      if (way.ok === null) {
+        setErrorDrawer({ visible: true, message: WAY_BACK_OFFLINE_MESSAGE });
+        return;
+      }
+      if (way.ok === false) {
+        setWayBack(way.option);
+        return;
+      }
       const result = await createRequest(
         { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
         DEFAULT_CITIZEN_REASON
@@ -295,6 +308,7 @@ export default function RequestCitizenScreen() {
         </Pressable>
       </View>
 
+      <WayBackSheet visible={wayBack !== null} option={wayBack ?? { label: '', route: '/settings/passkey' }} onClose={() => setWayBack(null)} />
       <ErrorDrawer
         visible={errorDrawer.visible}
         message={errorDrawer.message}

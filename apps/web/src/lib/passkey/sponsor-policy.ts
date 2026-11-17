@@ -62,7 +62,11 @@
  *
  * All modes:
  *  1. Fees / gas within CAPS (maxFeePerGas <= 3 gwei, priority <= maxFee).
- *  2. The sender is a genuine passkey Safe for (x, y):
+ *  2. The sender is a genuine sovereign Safe for the request's proof. The body
+ *     names EXACTLY ONE proof: the passkey key (x, y) or the expert path's
+ *     ECDSA owner `ecdsaOwner` (the account key of the 12 words); both or
+ *     neither is a bad request. A proof never passes for the other kind of Safe.
+ *     Passkey (x, y):
  *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
  *       safeFactoryData(x, y) byte-for-byte, sender == predictSafeAddress(x, y);
  *     - deployed: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1, fallback
@@ -70,6 +74,18 @@
  *       getOwners() == [owner] where
  *       owner is the SharedSigner configured with (x, y) for this Safe or
  *       SafeWebAuthnSignerFactory.getSigner(x, y, verifiers) (recovered Safe).
+ *     ECDSA owner (expert path; never the zero address or the Safe sentinel 0x1):
+ *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
+ *       ecdsaSafeFactoryData(ecdsaOwner) byte-for-byte, sender ==
+ *       predictEcdsaSafeAddress(ecdsaOwner);
+ *     - deployed: the same shape (checkDeployedSafeShape) AND getOwners() ==
+ *       [ecdsaOwner];
+ *     - both: the owner's code is empty or an EIP-7702 designator (0xef0100 ++
+ *       20 bytes) - a plain key, never a contract that could sign via EIP-1271.
+ *     With `ecdsaOwner`: no `legacy` (an expert-path Safe never drives a
+ *     thirdweb account), no SafeWebAuthnSignerFactory.createSigner, and in
+ *     mode C the "submitter's own signer" is `ecdsaOwner` itself. Modes B, D
+ *     and the guest results are the same as for a passkey Safe.
  *  3. callData = Safe4337Module.executeUserOp[WithErrorString], value 0, one
  *     CALL or a DELEGATECALL into MultiSendCallOnly 1.4.1 whose inner txs are
  *     CALLs with value 0.
@@ -136,6 +152,8 @@ import {
   PASSKEY_SAFE,
   SAFE_PROXY_RUNTIME_CODE,
   WEBAUTHN_VERIFIERS,
+  ecdsaSafeFactoryData,
+  predictEcdsaSafeAddress,
   predictSafeAddress,
   safeFactoryData,
 } from "./safe-address";
@@ -196,10 +214,15 @@ export interface V3Config {
   attesterNft?: Hex;
 }
 
-/** Who the op claims to be: passkey key (32-byte hex each) + optional identity hints. */
+/**
+ * Who the op claims to be: EXACTLY ONE of the passkey key (x and y, 32-byte hex each) or the
+ * expert path's ECDSA owner (`ecdsaOwner`), plus optional identity hints. Anything else is refused.
+ */
 export interface SponsorContext {
-  x: Hex;
-  y: Hex;
+  x?: Hex;
+  y?: Hex;
+  /** Expert path: the single plain-key owner of the sender Safe (the account key of the 12 words). */
+  ecdsaOwner?: Hex;
   /** The ONE legacy thirdweb account the op may drive (mode A). */
   legacy?: Hex;
   /** Recovery (mode C): the legacy account the recovered wallet is admin of, if the wallet itself holds no CitizenNFT. */
@@ -340,8 +363,10 @@ function tryDecode<T>(fn: () => T): T | null {
 /** Facts collected by the structural pass, verified against the chain afterwards. */
 interface ScanState {
   sender: Hex;
+  /** The passkey key; both 0n for an expert-path (ECDSA) proof, which `ecdsa` marks. */
   x: bigint;
   y: bigint;
+  ecdsa: boolean;
   legacy?: Hex;
   v3: V3Config;
   nowSeconds: number;
@@ -536,6 +561,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
   if (isAddressEqual(to, ADDRESSES.signerFactory)) {
     const d = tryDecode(() => decodeFunctionData({ abi: signerFactoryAbi, data }));
     if (!d) return deny("SafeWebAuthnSignerFactory function not allowlisted");
+    if (st.ecdsa) return deny("an expert-path Safe cannot create a passkey signer");
     const [x, y, verifiers] = d.args;
     if (x !== st.x || y !== st.y || verifiers !== WEBAUTHN_VERIFIERS) {
       return deny("createSigner must be for the request's own passkey (x, y)");
@@ -663,13 +689,52 @@ function checkCallData(callData: Hex, st: ScanState): Check {
   return PASS;
 }
 
-/** Deploy ops: the factory call must be EXACTLY the passkey Safe for (x, y). */
-function checkFactory(op: SponsorUserOp, ctx: SponsorContext): Check {
+/** The sender proof the request names: the passkey key or the expert path's ECDSA owner. */
+type SenderProof = { kind: "passkey"; x: Hex; y: Hex } | { kind: "ecdsa"; owner: Hex };
+
+const PROOF_QUANTITY = /^0x[0-9a-fA-F]{1,64}$/;
+/** Safe's owner-list sentinel; never a real owner. */
+const SAFE_SENTINEL_OWNER: Hex = "0x0000000000000000000000000000000000000001";
+
+/** Exactly one of (x and y) or `ecdsaOwner`; null for both, neither, half a key or a malformed value. */
+function senderProof(ctx: SponsorContext): SenderProof | null {
+  const hasKey = ctx.x !== undefined || ctx.y !== undefined;
+  if (ctx.ecdsaOwner !== undefined) {
+    if (hasKey) return null;
+    const owner = ctx.ecdsaOwner;
+    if (typeof owner !== "string" || !isAddress(owner, { strict: false })) return null;
+    if (BigInt(owner) === 0n || isAddressEqual(owner, SAFE_SENTINEL_OWNER)) return null;
+    return { kind: "ecdsa", owner };
+  }
+  if (typeof ctx.x !== "string" || typeof ctx.y !== "string") return null;
+  if (!PROOF_QUANTITY.test(ctx.x) || !PROOF_QUANTITY.test(ctx.y)) return null;
+  return { kind: "passkey", x: ctx.x, y: ctx.y };
+}
+
+/** For callers past the top of evaluateSponsorPolicy, which already refused an invalid proof. */
+function proofOf(ctx: SponsorContext): SenderProof {
+  const p = senderProof(ctx);
+  if (!p) throw new Error("sponsor context without a valid sender proof");
+  return p;
+}
+
+/** Deploy ops: the factory call must be EXACTLY the sovereign Safe for the request's proof. */
+function checkFactory(op: SponsorUserOp, proof: SenderProof): Check {
   const hasFactoryData = op.factoryData !== undefined && size(op.factoryData) > 0;
   if (!op.factory) return hasFactoryData ? deny("factoryData without factory") : PASS;
   if (!isAddressEqual(op.factory, ADDRESSES.safeProxyFactory)) return deny("factory is not SafeProxyFactory 1.4.1");
-  const key = { x: ctx.x, y: ctx.y };
-  if ((op.factoryData ?? "0x").toLowerCase() !== safeFactoryData(key).toLowerCase()) {
+  const factoryData = (op.factoryData ?? "0x").toLowerCase();
+  if (proof.kind === "ecdsa") {
+    if (factoryData !== ecdsaSafeFactoryData(proof.owner).toLowerCase()) {
+      return deny("factoryData is not the expert Safe deployment for ecdsaOwner");
+    }
+    if (!isAddressEqual(op.sender, predictEcdsaSafeAddress(proof.owner))) {
+      return deny("sender is not the predicted expert Safe for ecdsaOwner");
+    }
+    return PASS;
+  }
+  const key = { x: proof.x, y: proof.y };
+  if (factoryData !== safeFactoryData(key).toLowerCase()) {
     return deny("factoryData is not the passkey Safe deployment for (x, y)");
   }
   if (!isAddressEqual(op.sender, predictSafeAddress(key))) return deny("sender is not the predicted passkey Safe for (x, y)");
@@ -743,13 +808,31 @@ export async function checkDeployedSafeShape(safe: Hex, chain: ChainReader): Pro
   return shape.ok ? PASS : shape;
 }
 
+/** EIP-7702 delegation designator: 0xef0100 ++ 20-byte delegate (23 bytes). */
+const EIP7702_DESIGNATOR = /^0xef0100[0-9a-fA-F]{40}$/;
+
+/** The expert owner is a plain key: no code, or only an EIP-7702 designator (still ECDSA-signing). */
+async function checkEcdsaOwnerIsKey(owner: Hex, chain: ChainReader): Promise<Check> {
+  const code = await read(() => chain.getCode(owner));
+  if (hasNoCode(code) || EIP7702_DESIGNATOR.test(code as string)) return PASS;
+  return deny("ecdsaOwner is a contract, not a plain key");
+}
+
+/** Deployed expert Safe: the sovereign shape AND getOwners() == [ecdsaOwner], a plain key. */
+async function checkDeployedEcdsaSafe(sender: Hex, owner: Hex, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(sender, chain);
+  if (!shape.ok) return shape;
+  if (!isAddressEqual(shape.owner, owner)) return deny("sender owner is not ecdsaOwner");
+  return checkEcdsaOwnerIsKey(owner, chain);
+}
+
 /** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
-async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+async function checkDeployedPasskeySafe(sender: Hex, key: { x: Hex; y: Hex }, chain: ChainReader): Promise<Check> {
   const shape = await deployedSafeShape(sender, chain);
   if (!shape.ok) return shape;
   const owner = shape.owner;
-  const x = BigInt(ctx.x);
-  const y = BigInt(ctx.y);
+  const x = BigInt(key.x);
+  const y = BigInt(key.y);
 
   if (isAddressEqual(owner, PASSKEY_SAFE.sharedSigner)) {
     const cfg = await read(() => chain.getSharedSignerConfiguration(sender));
@@ -768,8 +851,13 @@ async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain:
 }
 
 async function checkSender(op: SponsorUserOp, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+  const proof = proofOf(ctx);
+  if (proof.kind === "ecdsa") {
+    // Deploy ops were proven structurally (checkFactory); the owner must still be a plain key.
+    return op.factory ? checkEcdsaOwnerIsKey(proof.owner, chain) : checkDeployedEcdsaSafe(op.sender, proof.owner, chain);
+  }
   // Deploy ops were proven structurally (checkFactory).
-  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, ctx, chain);
+  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, proof, chain);
 }
 
 /** A handover for a legacy account deployed in THIS op: its only admin is the
@@ -977,16 +1065,30 @@ async function evaluateRecoveryMode(
   if (guardians <= 0n) return deny("the wallet being recovered has no guardians");
 
   if (st.ownerBound || st.finalize) {
-    const signer = await read(() => chain.getWebAuthnSigner(BigInt(ctx.x), BigInt(ctx.y), WEBAUTHN_VERIFIERS));
+    // The submitter's own signer: the expert path's ECDSA owner itself, or the WebAuthn signer
+    // contract for (x, y) - read only on the passkey branch.
+    const proof = proofOf(ctx);
+    const signer =
+      proof.kind === "ecdsa"
+        ? proof.owner
+        : await read(() => chain.getWebAuthnSigner(BigInt(proof.x), BigInt(proof.y), WEBAUTHN_VERIFIERS));
     if (st.ownerBound && !recoveryOwnersAre(op.callData, wallet, signer)) {
-      return deny("recovery must hand the wallet to the submitter's own passkey signer");
+      return deny(
+        proof.kind === "ecdsa"
+          ? "recovery must hand the wallet to the submitter's own key (ecdsaOwner)"
+          : "recovery must hand the wallet to the submitter's own passkey signer",
+      );
     }
     if (st.finalize) {
       const rq = await read(() => chain.getRecoveryRequest(wallet));
       if (rq.executeAfter === 0n) return deny("the wallet has no pending recovery");
       if (rq.executeAfter > BigInt(ctx.nowSeconds)) return deny("the recovery period is still pending");
       if (rq.newOwners.length !== 1 || !isAddressEqual(rq.newOwners[0], signer)) {
-        return deny("the pending recovery does not hand the wallet to the submitter's passkey signer");
+        return deny(
+          proof.kind === "ecdsa"
+            ? "the pending recovery does not hand the wallet to the submitter's own key (ecdsaOwner)"
+            : "the pending recovery does not hand the wallet to the submitter's passkey signer",
+        );
       }
     }
   }
@@ -1035,12 +1137,16 @@ export async function evaluateSponsorPolicy(
   // ---- structural: zero chain reads ----
   const gas = checkGas(op);
   if (!gas.ok) return gas;
-  const factory = checkFactory(op, ctx);
+  const proof = senderProof(ctx);
+  if (!proof) return deny("the request must name exactly one sender proof: (x, y) or ecdsaOwner");
+  if (proof.kind === "ecdsa" && ctx.legacy) return deny("an expert-path Safe cannot drive a legacy account");
+  const factory = checkFactory(op, proof);
   if (!factory.ok) return factory;
   const st: ScanState = {
     sender: op.sender,
-    x: BigInt(ctx.x),
-    y: BigInt(ctx.y),
+    x: proof.kind === "passkey" ? BigInt(proof.x) : 0n,
+    y: proof.kind === "passkey" ? BigInt(proof.y) : 0n,
+    ecdsa: proof.kind === "ecdsa",
     legacy: ctx.legacy,
     v3: ctx.v3 ?? {},
     nowSeconds: ctx.nowSeconds,
@@ -1160,23 +1266,33 @@ function word32(obj: Record<string, unknown>, key: string): Hex {
   return v as Hex;
 }
 
-/** The full request body: { chainId, userOp, x, y, legacy?, recoveryLegacy?, pollId? }. Throws on malformed input. */
+/**
+ * The full request body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?, pollId? }.
+ * Exactly one sender proof: the passkey key (both x and y) or the expert path's `ecdsaOwner`.
+ * Throws on malformed input, on both proofs and on neither (the route answers 400).
+ */
 export function parseSponsorRequest(input: unknown): {
   chainId: unknown;
   userOp: SponsorUserOp;
-  x: Hex;
-  y: Hex;
+  x?: Hex;
+  y?: Hex;
+  ecdsaOwner?: Hex;
   legacy?: Hex;
   recoveryLegacy?: Hex;
   pollId?: bigint;
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
+  const present = (key: string) => o[key] !== undefined && o[key] !== null;
+  const hasKey = present("x") || present("y");
+  const hasOwner = present("ecdsaOwner");
+  if (hasKey && hasOwner) throw new Error("name either (x, y) or ecdsaOwner, not both");
+  if (!hasKey && !hasOwner) throw new Error("a sender proof is required: (x, y) or ecdsaOwner");
+  const proof = hasOwner ? { ecdsaOwner: address(o, "ecdsaOwner") } : { x: word32(o, "x"), y: word32(o, "y") };
   return {
     chainId: o.chainId,
     userOp: parseSponsorUserOp(o.userOp),
-    x: word32(o, "x"),
-    y: word32(o, "y"),
+    ...proof,
     legacy: optionalAddress(o, "legacy"),
     recoveryLegacy: optionalAddress(o, "recoveryLegacy"),
     pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),

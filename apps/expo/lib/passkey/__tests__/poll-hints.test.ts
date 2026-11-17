@@ -115,8 +115,8 @@ describe('adapter → sponsor body carries pollId', () => {
     const op = { sender: SAFE, nonce: 0n, callData: '0x', callGasLimit: 0n, verificationGasLimit: 0n, preVerificationGas: 0n,
       maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, paymaster: SAFE, paymasterVerificationGasLimit: 0n,
       paymasterPostOpGasLimit: 0n, paymasterData: '0x', signature: '0x' } as unknown as UnpackedUserOp;
-    expect(sponsorRequestBody(op, { x, y, pollId: 255n }).pollId).toBe('0xff');
-    expect(sponsorRequestBody(op, { x, y, pollId: 0n }).pollId).toBe('0x0');
-    expect('pollId' in sponsorRequestBody(op, { x, y })).toBe(false);
+    expect(sponsorRequestBody(op, { proof: { x, y }, pollId: 255n }).pollId).toBe('0xff');
+    expect(sponsorRequestBody(op, { proof: { x, y }, pollId: 0n }).pollId).toBe('0x0');
+    expect('pollId' in sponsorRequestBody(op, { proof: { x, y } })).toBe(false);
   });
 });

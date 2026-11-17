@@ -5,19 +5,27 @@
  *
  * `RecoveryBanner` is used on the passkey screen (re-checked on focus). `RecordRecoveryWatch` is
  * the root-layout variant, loaded by PasskeyRecoveryWatch only after its gate opened
- * (lib/passkey/existing-account.ts), and rendered only when a connected local migration record exists.
+ * (lib/passkey/existing-account.ts): the banner when a connected local migration record exists,
+ * and the replaced-session notice when the active passkey session's owner was removed from its
+ * Safe (a recovery finished on another device). Only a confirmed `replaced` ends the session;
+ * a failed read never does (lib/passkey/session-health.ts).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { AppState, Modal, StyleSheet, Text, View } from 'react-native';
+import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { encodeCancelRecovery, type RecoveryRequest } from '@/lib/passkey/guardians';
+import { encodeCancelRecovery, readRecoveryRequest, type RecoveryRequest } from '@/lib/passkey/guardians';
+import { isPasskeyWallet, passkeySessionOf } from '@/lib/passkey/active';
+import type { PasskeySession } from '@/lib/passkey/session';
+import { confirmedSessionOwnerState, createOwnerSeenStore } from '@/lib/passkey/session-health';
+import { isSafeDeployed } from '@/lib/passkey/userop';
 import { loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import { formatRemaining, isForeignRecoveryPending } from '@/lib/passkey/recovery-flow';
-import { readIdentityMode, readRecoveryRequestSafe, sendOwnSafeOp } from '@/lib/passkey/guardians-runtime';
+import { readIdentityMode, readRecoveryRequestSafe, readSafeOwners, sendOwnSafeOp } from '@/lib/passkey/guardians-runtime';
 import { BigButton, friendlyError } from './PasskeyUi';
 
 type Phase = 'hidden' | 'pending' | 'cancelling' | 'cancelled';
@@ -115,13 +123,13 @@ function BannerCore({
       style={[styles.box, { backgroundColor: colors.error }, floating && [styles.floating, { top: insets.top + 8 }]]}
       accessibilityRole="alert"
     >
-      <Text style={styles.title}>Jemand stellt gerade dein Konto wieder her.</Text>
+      <Text style={styles.title}>Jemand stellt dein Konto wieder her</Text>
       <Text style={styles.body}>
         Warst du das nicht? Dann brich es jetzt ab. {remaining > 0 ? `${formatRemaining(remaining)} Zeit.` : ''}
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <BigButton
-        label="Jetzt abbrechen"
+        label="Das war ich nicht – abbrechen"
         onPress={onCancel}
         busy={phase === 'cancelling'}
         kind="secondary"
@@ -131,9 +139,83 @@ function BannerCore({
   );
 }
 
+const sessionHealthDeps = {
+  isDeployed: (safe: PasskeySession['safe']) => isSafeDeployed(safe),
+  readOwners: readSafeOwners,
+  readRequest: (safe: PasskeySession['safe']) => readRecoveryRequest(safe),
+  seen: createOwnerSeenStore(secureKeyValueStorage),
+  wait: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+};
+
+/**
+ * Blocking notice when the active passkey session's owner is no longer an owner of its Safe.
+ * Checked on mount, on every session change and whenever the app comes to the foreground. A
+ * single read never shows it: the session must have been seen as an owner before, and a second
+ * read ~45 s later must agree (confirmedSessionOwnerState), so a lagging RPC node cannot sign
+ * anyone out.
+ * "Verstanden" disconnects the passkey wallet: the existing logout path, which deletes only
+ * `passkey_session_v1` (signin-runtime.ts createPasskeyWallet).
+ */
+function ReplacedSessionNotice() {
+  const { colors } = useTheme();
+  const wallet = useActiveWallet();
+  const account = useActiveAccount();
+  const { disconnect } = useDisconnect();
+  const session = isPasskeyWallet(wallet) ? passkeySessionOf<PasskeySession>(account) : null;
+  const safe = session?.safe ?? null;
+  const owner = session?.owner ?? null;
+  const key = safe && owner ? `${safe}:${owner}` : null;
+  // The session (safe:owner) confirmed as replaced; a different session never shows the notice.
+  const [replacedKey, setReplacedKey] = useState<string | null>(null);
+  const currentKey = useRef<string | null>(null);
+  const checking = useRef<string | null>(null); // the key whose check is running
+
+  useEffect(() => {
+    currentKey.current = key;
+    if (!safe || !owner || !key) return;
+    const check = () => {
+      if (checking.current === key) return;
+      checking.current = key;
+      confirmedSessionOwnerState({ safe, owner }, sessionHealthDeps)
+        .then((state) => {
+          // Only a confirmed replacement of THIS session counts; 'unknown' never logs anyone out.
+          if (state === 'replaced' && currentKey.current === key) setReplacedKey(key);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (checking.current === key) checking.current = null;
+        });
+    };
+    check();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') check();
+    });
+    return () => sub.remove();
+  }, [safe, owner, key]);
+
+  const onUnderstood = useCallback(() => {
+    setReplacedKey(null);
+    if (wallet && isPasskeyWallet(wallet)) disconnect(wallet);
+  }, [wallet, disconnect]);
+
+  if (!key || replacedKey !== key) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={() => undefined}>
+      <View style={styles.backdrop}>
+        <View style={[styles.notice, { backgroundColor: colors.surface }]} accessibilityRole="alert">
+          <Text style={[styles.noticeText, { color: colors.textPrimary }]}>
+            Dieses Konto wurde auf einem anderen Gerät wiederhergestellt. Auf diesem Gerät bist du jetzt abgemeldet.
+          </Text>
+          <BigButton label="Verstanden" onPress={onUnderstood} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /**
  * Loaded by PasskeyRecoveryWatch only after its gate opened: renders the floating banner
- * when this device holds a connected passkey record.
+ * when this device holds a connected passkey record, and the replaced-session notice.
  */
 export function RecordRecoveryWatch() {
   const [record, setRecord] = useState<MigrationRecord | null>(null);
@@ -151,8 +233,12 @@ export function RecordRecoveryWatch() {
       cancelled = true;
     };
   }, []);
-  if (!record) return null;
-  return <BannerCore record={record} floating />;
+  return (
+    <>
+      {record ? <BannerCore record={record} floating /> : null}
+      <ReplacedSessionNotice />
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -162,4 +248,7 @@ const styles = StyleSheet.create({
   body: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22, color: '#fff' },
   error: { fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 20, color: '#fff' },
   button: { backgroundColor: '#fff', borderColor: '#fff' },
+  backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' },
+  notice: { borderRadius: 16, padding: 20, gap: 16 },
+  noticeText: { fontFamily: fontFamily.semiBold, fontSize: 18, lineHeight: 25 },
 });

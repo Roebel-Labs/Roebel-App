@@ -5,8 +5,10 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
-const mockGate = jest.fn(async () => false);
-jest.mock('@/lib/passkey/gate', () => ({ isPasskeySurfaceAllowed: () => mockGate() }));
+const mockGate = jest.fn(async (_surface?: string) => false);
+jest.mock('@/lib/passkey/gate', () => ({ isPasskeySurfaceAllowed: (surface: string) => mockGate(surface) }));
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('thirdweb/react', () => {
   const { Text } = require('react-native');
   return {
@@ -94,6 +96,31 @@ describe('PasskeySignInOption on the first-launch welcome screen', () => {
     expect(t).toContain('Mit Passkey anmelden');
     expect(onAvailability).toHaveBeenCalledWith(true);
   });
+
+  it('words surface open: "Mit 12 Wörtern anmelden" sits under "Mit Passkey anmelden" and opens the words sign-in', async () => {
+    mockGate.mockImplementation(async () => true);
+    const onNavigate = jest.fn();
+    const r = await renderOption({ initiallyOpen: true, onNavigate });
+    const t = texts(r);
+    expect(t).toContain('Mit 12 Wörtern anmelden');
+    expect(t.indexOf('Mit 12 Wörtern anmelden')).toBeGreaterThan(t.indexOf('Mit Passkey anmelden'));
+    const { Text } = require('react-native');
+    let node: TestRenderer.ReactTestInstance | null = r.root.findAllByType(Text).find((x) => x.props.children === 'Mit 12 Wörtern anmelden')!;
+    while (node && typeof node.props.onPress !== 'function') node = node.parent;
+    await act(async () => node!.props.onPress());
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/passkey/words-signin');
+  });
+
+  it('words surface closed: no words entry, the two passkey buttons are unchanged', async () => {
+    mockGate.mockImplementation(async (surface?: string) => surface !== 'words');
+    const t = texts(await renderOption({ initiallyOpen: true }));
+    expect(t.some((s) => s.includes('12 Wörtern'))).toBe(false);
+    expect(t).toContain('Mit Passkey anmelden');
+    expect(t).toContain('Neues unabhängiges Konto erstellen');
+    expect(t.filter((s) => s === 'Mit Passkey anmelden' || s === 'Neues unabhängiges Konto erstellen')).toHaveLength(2);
+  });
+
   // The sign-up/sign-in run path lazy-loads the native passkey modules with import(), which this
   // jest setup cannot execute (no --experimental-vm-modules); the deferral itself is covered by
   // lib/__tests__/onboarding-deferral.test.ts.

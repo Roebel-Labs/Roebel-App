@@ -73,6 +73,16 @@ export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
   w.sharedConfig.set(safe.toLowerCase(), { x: BigInt(key.x), y: BigInt(key.y), verifiers: WEBAUTHN_VERIFIERS });
 }
 
+/** A deployed expert-path Safe: same proxy / singleton / handler / modules, owned by the ECDSA key `owner`. */
+export function makeEcdsaSafe(w: FakeWorld, safe: Hex, owner: Hex) {
+  w.codes.set(safe.toLowerCase(), SAFE_PROXY_RUNTIME_CODE);
+  w.storage.set(k(safe, word("0x00")), word(PASSKEY_SAFE.singletonL2));
+  w.storage.set(k(safe, FALLBACK_HANDLER_SLOT), word(PASSKEY_SAFE.safe4337Module));
+  w.modules.add(k(safe, PASSKEY_SAFE.safe4337Module));
+  w.modules.add(k(safe, PASSKEY_SAFE.socialRecoveryModule));
+  w.owners.set(safe.toLowerCase(), [owner]);
+}
+
 export function defaultWorld(): FakeWorld {
   const w: FakeWorld = {
     codes: new Map([

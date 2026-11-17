@@ -6,7 +6,19 @@ import { getAddress, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
 import { backgroundRestore, bootWallets, lazySessionSource, type BootDeps, type SessionSource } from '../boot';
 import { passkeyChannelAllowed } from '../gate';
-import { PASSKEY_SESSION_KEY, clearPasskeySession, loadPasskeySession, parsePasskeySession, savePasskeySession, type PasskeySession } from '../session';
+import {
+  PASSKEY_SESSION_KEY,
+  WORDS_KEY_PLACEHOLDER,
+  clearPasskeySession,
+  isWordsOwner,
+  loadPasskeySession,
+  parsePasskeySession,
+  savePasskeySession,
+  sessionOwner,
+  type PasskeySession,
+} from '../session';
+import { WORDS_PHRASE_KEY, WORDS_PHRASE_MARKER_KEY } from '../phrase-store';
+import ecdsaVector from './ecdsa-safe-vector.json';
 import { passkeyWalletOptions, WRONG_CHAIN_MESSAGE } from '../thirdweb-adapter';
 import { mem } from '../__testutils__/signin-helpers';
 
@@ -150,6 +162,79 @@ describe('bootWallets', () => {
     const { d } = deps({ restoreThirdweb, sources: [lazySessionSource('passkey', async () => false, loader) as SessionSource] });
     expect(await bootWallets(d)).toMatchObject({ owner: 'thirdweb', result: { outcome: 'restored' } });
     expect(loader).not.toHaveBeenCalled();
+  });
+});
+
+describe('words (ecdsa) sessions at boot', () => {
+  const WORDS_SESSION: PasskeySession = {
+    credentialId: '',
+    x: WORDS_KEY_PLACEHOLDER,
+    y: WORDS_KEY_PLACEHOLDER,
+    safe: getAddress(ecdsaVector.safeAddress),
+    identity: getAddress(ecdsaVector.safeAddress),
+    ownerType: 'ecdsa',
+    owner: getAddress(ecdsaVector.owner),
+  };
+  /** The same shape signin-runtime's passkeySessionSource has, behind the lazy loader of boot-source. */
+  const lazySource = (storage: ReturnType<typeof spyStorage>, connect: jest.Mock) =>
+    lazySessionSource<PasskeySession>(
+      'passkey',
+      async () => (await storage.getItem(PASSKEY_SESSION_KEY)) !== null,
+      async () => ({
+        owner: 'passkey',
+        ownerOf: sessionOwner,
+        hasStored: async () => (await storage.getItem(PASSKEY_SESSION_KEY)) !== null,
+        load: () => loadPasskeySession(storage),
+        connect,
+      }),
+    );
+
+  it('a stored words session restores without reading the phrase', async () => {
+    const storage = spyStorage({
+      [PASSKEY_SESSION_KEY]: JSON.stringify(WORDS_SESSION),
+      [WORDS_PHRASE_KEY]: ecdsaVector.phrase,
+      [WORDS_PHRASE_MARKER_KEY]: WORDS_SESSION.owner,
+    });
+    const connect = jest.fn(async () => undefined);
+    const { d } = deps({ storage, sources: [lazySource(storage, connect) as SessionSource] });
+    expect(await bootWallets(d)).toMatchObject({ owner: 'words', result: { outcome: 'restored', attempts: 1 } });
+    expect(connect).toHaveBeenCalledWith(WORDS_SESSION);
+    expect(new Set(storage.touched)).toEqual(new Set([`get:${PASSKEY_SESSION_KEY}`]));
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('a passkey session through the same source still reports passkey', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(SESSION) });
+    const { d } = deps({ storage, sources: [lazySource(storage, jest.fn(async () => undefined)) as SessionSource] });
+    expect((await bootWallets(d)).owner).toBe('passkey');
+  });
+
+  it('a words session whose connect keeps failing stays a failure of the passkey source (the background retry finds it again), never a logout', async () => {
+    const storage = spyStorage({ [PASSKEY_SESSION_KEY]: JSON.stringify(WORDS_SESSION) });
+    const connect = jest.fn(async () => {
+      throw new Error('rpc down');
+    });
+    const source = lazySource(storage, connect) as SessionSource;
+    const { d } = deps({ storage, sources: [source] });
+    const r = await bootWallets(d);
+    expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'failed' } });
+    expect(d.sources.find((x) => x.owner === r.owner)).toBe(source);
+    expect(d.restoreThirdweb).not.toHaveBeenCalled();
+    expect(storage.m.has(PASSKEY_SESSION_KEY)).toBe(true);
+    connect.mockImplementation(async () => undefined);
+    const bg = await backgroundRestore({ failedSource: source, restoreThirdweb: d.restoreThirdweb, sleep: async () => undefined });
+    expect(bg).toMatchObject({ owner: 'words', result: { outcome: 'restored' } });
+  });
+
+  it('the words session parser accepts exactly the placeholder key and an empty credential', () => {
+    expect(parsePasskeySession(JSON.stringify(WORDS_SESSION))).toEqual(WORDS_SESSION);
+    expect(isWordsOwner(WORDS_SESSION)).toBe(true);
+    expect(isWordsOwner(SESSION)).toBe(false);
+    expect(parsePasskeySession(JSON.stringify({ ...WORDS_SESSION, credentialId: 'cred' }))).toBeNull();
+    expect(parsePasskeySession(JSON.stringify({ ...WORDS_SESSION, x: `0x${'11'.repeat(32)}` }))).toBeNull();
+    expect(parsePasskeySession(JSON.stringify({ ...WORDS_SESSION, owner: undefined }))).toBeNull();
+    // the passkey rules are unchanged: a passkey session needs a credential
+    expect(parsePasskeySession(JSON.stringify({ ...SESSION, credentialId: '' }))).toBeNull();
   });
 });
 

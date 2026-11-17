@@ -7,6 +7,31 @@
  *  - the PRF is evaluated at most once per slot (sequential AND concurrent), and never once the
  *    key is persisted locally.
  */
+// Runtime wiring for the 12-word (ecdsa) case at the end of this file.
+const mockStore = new Map<string, string>();
+const mockPhrase = { read: jest.fn(async (_reason: string) => '') };
+jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+jest.mock('@/lib/storage/secureStorage', () => ({
+  getItemAsync: async (k: string) => mockStore.get(k) ?? null,
+  setItemAsync: async (k: string, v: string) => void mockStore.set(k, v),
+  deleteItemAsync: async (k: string) => void mockStore.delete(k),
+}));
+jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('../phrase-store-runtime', () => ({ phraseStore: mockPhrase }));
+jest.mock('../api-session-runtime', () => ({
+  passkeyApiSession: { peek: async () => null, get: async () => null, invalidate: async () => undefined },
+}));
+jest.mock('../recovery-lookup', () => ({ ...jest.requireActual('../recovery-lookup'), findLinkedLegacies: async () => [] }));
+jest.mock('../userop', () => ({ ...jest.requireActual('../userop'), isSafeDeployed: async () => true }));
+jest.mock('../webauthn', () => ({
+  ...jest.requireActual('../webauthn'),
+  signWithPasskey: jest.fn(async () => {
+    throw new Error('the passkey must never be asked for a words session');
+  }),
+  getPrfSecret: jest.fn(async () => {
+    throw new Error('the passkey PRF must never be asked for a words session');
+  }),
+}));
 import vector from './session-message-vector.json';
 import {
   PASSKEY_API_SESSION_KEY,
@@ -320,5 +345,64 @@ describe('PRF at most once per slot', () => {
     expect(r.source).toBe('local');
     expect(getPrf).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe('12-word account: one device unlock per key-backup read', () => {
+  it('expert account: reading the key backup and unwrapping costs ONE device unlock', async () => {
+    const { getAddress } = require('viem') as typeof import('viem');
+    const { PASSKEY_SESSION_PROP } = require('../active') as typeof import('../active');
+    const { SLOT_LABEL } = require('../derived-keys') as typeof import('../derived-keys');
+    const { wrapSecret } = require('../prf-vault') as typeof import('../prf-vault');
+    const { WORDS_KEY_PLACEHOLDER } = require('../session') as typeof import('../session');
+    const { PHRASE_PROMPT } = require('../phrase-store') as typeof import('../phrase-store');
+    const { wordsVaultKey } = require('../words') as typeof import('../words');
+    const { wordsKeyServer } = require('../__testutils__/words-key-server') as typeof import('../__testutils__/words-key-server');
+    const { resolveSecretForAccount } = require('../derived-keys-runtime') as typeof import('../derived-keys-runtime');
+    const webauthn = require('../webauthn') as { signWithPasskey: jest.Mock; getPrfSecret: jest.Mock };
+    const ev = require('./ecdsa-safe-vector.json') as { phrase: string; owner: string; safeAddress: string };
+    const SAFE = getAddress(ev.safeAddress);
+    const session = {
+      credentialId: '',
+      x: WORDS_KEY_PLACEHOLDER,
+      y: WORDS_KEY_PLACEHOLDER,
+      safe: SAFE,
+      identity: SAFE,
+      ownerType: 'ecdsa' as const,
+      owner: getAddress(ev.owner),
+    };
+    const secret = new TextEncoder().encode('nostr-secret-32-bytes-0123456789');
+    const server = wordsKeyServer({
+      safe: SAFE,
+      owner: session.owner,
+      blobs: { nostr: await wrapSecret(wordsVaultKey(ev.phrase), SLOT_LABEL.nostr, secret) },
+    });
+    const realFetch = global.fetch;
+    global.fetch = server.fetch as unknown as typeof fetch;
+    mockPhrase.read.mockReset().mockImplementation(async () => ev.phrase);
+    try {
+      let held: Uint8Array | null = null;
+      const local = { load: async () => held, save: async (s: Uint8Array) => void (held = s) };
+      const account = { address: SAFE, [PASSKEY_SESSION_PROP]: session };
+      // Two screens ask at once: still one resolution.
+      const [a, b] = await Promise.all([
+        resolveSecretForAccount(account, 'nostr', local),
+        resolveSecretForAccount(account, 'nostr', local),
+      ]);
+      expect(a.source).toBe('backup');
+      expect(a.secret).toEqual(secret);
+      expect(b).toBe(a);
+      expect(mockPhrase.read).toHaveBeenCalledTimes(1); // remote.read() + unwrap share the read
+      expect(mockPhrase.read).toHaveBeenCalledWith(PHRASE_PROMPT);
+      expect(server.proofs).toBe(1);
+      expect(server.writes).toHaveLength(0);
+      expect(webauthn.signWithPasskey).not.toHaveBeenCalled();
+      expect(webauthn.getPrfSecret).not.toHaveBeenCalled();
+      // Persisted: the next call needs no unlock at all.
+      expect((await resolveSecretForAccount(account, 'nostr', local)).source).toBe('local');
+      expect(mockPhrase.read).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 });

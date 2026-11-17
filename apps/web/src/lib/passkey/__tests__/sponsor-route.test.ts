@@ -27,7 +27,8 @@ import {
   type SponsorBudget,
 } from "../sponsor-budget";
 import { hashStableFields, requiredPrefund, voucherTypedData } from "../voucher";
-import { safeFactoryData, PASSKEY_SAFE } from "../safe-address";
+import { ecdsaSafeFactoryData, safeFactoryData, PASSKEY_SAFE } from "../safe-address";
+import ecdsaVector from "./ecdsa-safe-vector.json";
 import {
   GOOD_SIG,
   GUARDIAN,
@@ -38,6 +39,7 @@ import {
   V3_CITIZEN,
   brokenChain,
   fakeChain,
+  makeEcdsaSafe,
   makePasskeySafe,
   signerKey,
 } from "./fake-chain";
@@ -599,4 +601,42 @@ test("prints the prefund of typical guest ops", async () => {
         `(b) personalMint ${pb} wei = ${xdai(pb)} xDAI`,
     );
   }
+});
+
+// ---- expert path: the body names `ecdsaOwner` instead of (x, y) ----
+
+const ECDSA_OWNER = ecdsaVector.owner as Hex;
+const ESAFE = ecdsaVector.safeAddress as Hex;
+const ecdsaBody = (uo: object, over: object = {}) => ({ chainId: 100, userOp: uo, ecdsaOwner: ECDSA_OWNER, ...over });
+
+test("expert path: the first op of a words account is sponsored as a guest, keyed to its Safe", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const uo = userOp(addGuardianCall, { sender: ESAFE, factory: PASSKEY_SAFE.proxyFactory, factoryData: ecdsaSafeFactoryData(ECDSA_OWNER) });
+  const res = await POST(req(ecdsaBody(uo)));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls.map((c) => c.key), [ESAFE.toLowerCase()]);
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("expert path: a deployed words Safe passes; the passkey Safe under the words proof does not", async () => {
+  enable();
+  chain = fakeChain((w) => makeEcdsaSafe(w, ESAFE, ECDSA_OWNER));
+  assert.equal((await POST(req(ecdsaBody(userOp(addGuardianCall, { sender: ESAFE }))))).status, 200);
+  // The words proof for the passkey Safe, and the passkey proof for the words Safe.
+  assert.equal((await POST(req(ecdsaBody(userOp(addGuardianCall))))).status, 403);
+  assert.equal((await POST(req(body(userOp(addGuardianCall, { sender: ESAFE }), { legacy: undefined })))).status, 403);
+});
+
+test("expert path: both proofs or a malformed owner are a bad request; legacy with ecdsaOwner is refused", async () => {
+  enable();
+  chain = fakeChain((w) => makeEcdsaSafe(w, ESAFE, ECDSA_OWNER));
+  const uo = userOp(addGuardianCall, { sender: ESAFE });
+  assert.equal((await POST(req(ecdsaBody(uo, { x: KEY.x, y: KEY.y })))).status, 400);
+  assert.equal((await POST(req(ecdsaBody(uo, { x: KEY.x })))).status, 400);
+  assert.equal((await POST(req(ecdsaBody(uo, { ecdsaOwner: "0x12" })))).status, 400);
+  const res = await POST(req(ecdsaBody(uo, { legacy: LEGACY })));
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).reason, /an expert-path Safe cannot drive a legacy account/);
 });

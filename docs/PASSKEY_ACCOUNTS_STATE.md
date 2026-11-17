@@ -224,11 +224,130 @@ down, `start` answers 503 `store_unavailable` and sends nothing. The consent pro
 on purpose (DSGVO). A Safe can join Circles (fork proof `contracts/passkey-accounts/test/SafeCircles.t.sol`).
 
 **Owner gates** (Max): merge after review; apply the six sponsor/key/email/session/guest-cap/rate-limit migrations in
-order via the Supabase MCP; Vercel production env (dedicated production paymaster, `PASSKEY_SPONSOR_*` budgets incl. the
+order via the Supabase MCP; for the recovery words also apply `20261117c_passkey_key_backup_words_slots.sql` **before
+opening the `words` surface** (without it the server refuses the `_w` / `wvk` slots, so no words copy is stored) and
+`20261117d_passkey_alert_channels.sql` **before deploying the web code** (without it every recovery alert, email
+included, fails to claim); Vercel production env (dedicated production paymaster, `PASSKEY_SPONSOR_*` budgets incl. the
 onboarding cap above, `PASSKEY_SPONSOR_BUDGET_STORE=supabase`, `PASSKEY_RATE_LIMIT_STORE=supabase`, email/session/key
 backup flags, `CRON_SECRET`); deploy `ortis-id`; redeploy the four edge functions; privacy text for the optional
 warning email; EAS preview update and a device pass; do not go to production before the logout-after-update fix is
 confirmed on a real store update; then set the flags in the order above.
+
+## Wiederherstellungswörter (2026-11-17)
+
+Plan 2 of the sovereign sign-up project (branch `feat/sovsignup-2-recovery-words`, behind the `words` surface, except
+the way-back rule below). Twelve BIP-39 words (English list) are a second recovery route next to people. They are a
+recovery key, not an instant key: using them starts the same 3-day wait as guardian recovery and the owner can cancel.
+
+**Pool rule.** The words become **5 guardian addresses** (the "pool"), derived at `m/44'/60'/0'/0/i`, i = 0..4. The
+app keeps the 5 public addresses (SecureStore `passkey_words_pool_v1`; it is also saved on a restoring phone and
+carried to a second phone inside the `wvk` blob) and forgets the words after setup. Only the **first t** pool
+addresses are on chain as guardians, where t = the recovery threshold, so the words alone reach the threshold and
+nobody else is needed. `splitGuardians(onChain, pool)` separates people from word addresses; the UI shows the words
+as ONE entry, never as several people and never as addresses. Adding a person or changing the threshold changes the
+number of word guardians in the same op (`planGuardianSet`); the limit is 5 (the person count may not push the
+threshold above it). Anyone can confirm a recovery with the words in any wallet tool: sign the recovery approval with
+the key at `m/44'/60'/0'/0/i` of the phrase.
+
+**Vault key recipe** (so a third party can decrypt the `_w` blobs from the phrase alone):
+1. `ikm` = private key at `m/44'/60'/0'/1/0` of the phrase (change index 1).
+2. `vaultKey` = HKDF-SHA256(ikm, salt = utf8 `id.ortis.app/words-vault/v1`, info = empty, 32 bytes).
+3. Each secret blob is `pkv1:` + base64url(iv(12) ++ AES-256-GCM(key, iv, secret, aad = utf8(label)) ++ tag(16))
+   (`prf-vault.ts`), where `key` = HKDF-SHA256(ikm = `vaultKey`, salt = utf8(label), info = utf8
+   `id.ortis.app/passkey-vault/v1`, 32 bytes). The vault key plays the role of the passkey PRF output.
+   Labels: `roebel/maci-keypair/v1` (maci), `roebel/nostr-secret/v1` (nostr), `roebel/commitment-salt/v1` (salt).
+4. `wvk` is the vault key itself wrapped under the passkey PRF with label `roebel/words-vault-key/v1`; plaintext =
+   32 key bytes, optionally followed by the 5 pool addresses (20 bytes each). "Words off" is written as
+   `pkv1:words-off-000...0` into `wvk` and every `_w` slot (the backup API has no delete). A setup whose passkey
+   has no PRF writes `pkv1:words-nowvk-000...0` into `wvk` instead ("words on, vault key not readable here"): other
+   phones read it like off for the vault key, and a phone without the pool refuses to change the words around it.
+
+**Which pool is current.** A phone's own pool counts only while at least one of its addresses is a guardian on
+chain; otherwise the server's `wvk` decides. The guardian list reads it without a prompt (session token); a phone
+that cannot tell whether unnamed guardians are words shows one entry "Wiederherstellungswörter (nicht geladen)" and
+refuses guardian changes until "Angaben laden" on the words screen (one fingerprint) has loaded the pool.
+
+**Derivation paths.** Guardian/approval keys `m/44'/60'/0'/0/i`; vault key source `m/44'/60'/0'/1/0`. The seed runs
+once per call (pbkdf2-sha512, 2048 rounds) through `wordsFromSeed`.
+
+**Alert channels.** The recovery-alert cron claims each alert per (wallet, recovery nonce, channel): `email` (needs a
+verified warning email) and `push` (`PASSKEY_PUSH_ALERTS_ENABLED=1`; devices from `push_tokens` by the Safe address).
+A cancelled recovery moves the nonce, so a second attempt alerts again. A push counts as sent when any device accepted
+it; a push that keeps failing is given up after 3 runs per nonce (the email still goes out). Migration
+`20261117d_passkey_alert_channels.sql` (not applied) adds the `channel` column and makes it part of the key: **the
+code always writes `channel`, so EMAIL alerts fail too (every claim errors) until 20261117d is applied** — apply it
+before (or together with) deploying this branch's web code. The in-app banner is unchanged.
+
+**Way-back rule** (`apps/expo/lib/passkey/way-back.ts`; applies as soon as sign-up is open, NOT behind the `words`
+surface). Before the citizenship request (`app/verification/request-citizen/form.tsx` and the auto-request in
+`app/welcome/consent.tsx`) an independent account needs a way back: `passkey` = at least 1 person OR the words
+(`wordsOn`); Google/Apple/email logins and a passkey session on a legacy identity are exempt (`provider`); the
+`words` kind (expert account, plan 3) needs a confirmed phrase, an exported backup file (plan 4) or 1 person. No way
+back = `WayBackSheet` (fastest option primary: words when the surface is open, else "Vertrauensperson hinzufügen"),
+no request. A failed chain read = "Keine Verbindung. Bitte versuche es erneut." and no request (unknown is never
+"ok"). In the welcome wizard the screen is replaced afterwards, so it saves the draft and shows the reason as a
+snackbar instead of the sheet.
+
+## Expert path: 12 words as the main key (2026-11-17)
+
+Plan 3 of the sovereign sign-up project (branch `feat/sovsignup-3-expert-path`, everything behind the `words`
+surface; a flag flip never logs a words session out). An independent account whose ONLY key is 12 BIP-39 words
+(English list) — no passkey, no cloud keychain. Not to be confused with the Wiederherstellungswörter above (those
+are guardians of a passkey account; these are the owner).
+
+**Setup (fork-proven, `contracts/passkey-accounts/test/EcdsaSafe.t.sol`, vector `ecdsa-safe-vector.json`).** The
+account key is the private key at `m/44'/60'/0'/0/0` of the phrase (works in any wallet tool). The Safe is a SafeL2
+1.4.1 proxy, `createProxyWithNonce(SafeL2, setup, 0)` with `setup(owners = [account key], threshold 1, to =
+SafeModuleSetup, data = enableModules([Safe4337Module, SocialRecoveryModule]), fallbackHandler = Safe4337Module)`,
+same modules and factory as the passkey Safe, only the owner differs. Every signature is a plain 65-byte ECDSA
+signature (v 27/28) by that key. Address: `predictEcdsaSafeAddress(owner)` (Expo `ecdsa-safe.ts`, web
+`safe-address.ts`, both pinned by the vector). Counterfactual until its first op, which deploys it.
+
+**Owner type.** Record (`passkey_migration_v1`) and session (`passkey_session_v1`) carry `ownerType: 'ecdsa'`,
+`owner` = the account key's address, `credentialId: ''` and `x = y = WORDS_KEY_PLACEHOLDER` (32 zero bytes). An
+expert account has no legacy thirdweb account: identity = the Safe. `users.auth_provider = 'words'`.
+
+**Where the phrase lives.** Only in SecureStore on this device (`phrase-store.ts`): `words_phrase_v1`, written with
+`requireAuthentication` (Face ID / fingerprint on every read) and `WHEN_UNLOCKED_THIS_DEVICE_ONLY` (never in iCloud
+Keychain, a backup or another device). Never sent, never logged. An unprotected marker
+`words_phrase_present_v1` holds only the public address 0 (so checks and app start never prompt), and
+`words_phrase_confirmed_v1` says the person proved they wrote the words down (reset on every write / remove). A
+biometric change invalidates the item: the person stays signed in and is asked for the words again
+(`/settings/my-words?reenter=1`). The unconfirmed words of another account are never overwritten (E4).
+
+**Sponsor proof.** The request body carries `ecdsaOwner` instead of `x, y` (exactly one of the two). Deploy op:
+`factoryData` must be the expert Safe deployment for `ecdsaOwner` byte-for-byte and `sender ==
+predictEcdsaSafeAddress(ecdsaOwner)`. Deployed: the sovereign shape AND `getOwners() == [ecdsaOwner]`. Both: the
+owner has no code or only an EIP-7702 designator (`0xef0100` ++ 20 bytes) — any other code is refused. No `legacy`
+with `ecdsaOwner`; `createSigner` is refused; in recovery mode the new owner must be `ecdsaOwner` itself. Same
+strictness as the passkey Safe (`apps/web/src/lib/passkey/sponsor-policy.ts`).
+
+**Device-unlock rule.** Every signature (userOp, ERC-1271 message, key backup) reads the phrase once behind the
+device unlock (`Bestätige, dass du es bist`) — one prompt per action, never more than the passkey path. Showing the
+words and changing recovery settings always need the unlock. Restoring the session at app start never prompts and
+never reads the phrase.
+
+**Guardian recovery of an expert account ends in a NEW phrase** (`recovery-flow.ts`, `ownerKind: 'ecdsa'`).
+`restore.tsx` reads the wallet's owner: no code or a 7702 designator = expert account (E9; with the `words` surface
+closed it is recovered to a passkey instead, which the sponsor also allows). The phone generates new 12 words and
+stores them (E4 applies); they are shown and confirmed (no skip) before the guardians' code appears, whose `signer`
+is the new address 0 (guardian link and confirm screen unchanged). After the guardians confirmed, this phone's
+fresh expert Safe (`predictEcdsaSafeAddress(newOwner)`) sends ONE op `[executeRecovery(wallet, [newOwner], 1)]`
+(no createSigner; deploys it), then after the 3-day wait `[finalizeRecovery(wallet)]` — fork-proven in
+`EcdsaSafe.t.sol::test_freshExpertSafeRecoversExpertAccount`. `done` saves a words record for the OLD wallet address
+(`safe = identity = wallet`, `owner = newOwner`); the session is switched only on the person's tap ("Konto
+zurückholen" or "Weiter"), never in the background when another device finalized. "Abbrechen und neu beginnen"
+before the words were confirmed deletes them (the guardians never saw their address). The state (signer, fresh
+Safe) is persisted BEFORE the words are written, so a kill never leaves words nobody points to; cleanup after a
+failed write only removes the NEW words. If the new words are later unreadable (biometrics changed), replaced by
+other words or gone, every step asks for the written-down words again (`reenterRecoveryWords`: only words whose
+address 0 is this recovery's owner, E4 applies) and goes on. An active 12-word session of another account on this
+phone is warned about before the new words replace its words.
+- Comes back: the account (same address: citizenship, Münzen, profile, guardians) and its signatures.
+- Does NOT come back: the voting key, Nostr key and commitment salt wrapped under the OLD words (open question 4,
+  accepted; the screen says „Abstimmungs- und Nachrichtenschlüssel, die mit den alten Wörtern gesichert waren,
+  kommen nicht zurück."). The old words stop working the moment `finalizeRecovery` lands.
+- Signing in with the new words on another phone finds the OLD Safe (`findSafesByOwner`), not the fresh one.
 
 ## Measured / verified facts
 

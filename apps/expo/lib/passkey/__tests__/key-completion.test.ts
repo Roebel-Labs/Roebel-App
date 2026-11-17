@@ -172,7 +172,7 @@ describe('checklist "Schlüssel gesichert"', () => {
 
 describe('describeCompletion', () => {
   const { describeCompletion } = require('../key-completion');
-  const report = { saved: [], conflicts: [], missing: [], status: 'done' };
+  const report = { saved: [], conflicts: [], missing: [], status: 'done', wordsCopies: { stored: [], failed: [] } };
   it('German lines per outcome', () => {
     expect(describeCompletion({ status: 'disabled' }).tone).toBe('info');
     const needs = describeCompletion({ status: 'needsThirdweb', required: ['maci', 'nostr'], missing: ['maci'], backedUp: ['nostr'], report });
@@ -182,5 +182,28 @@ describe('describeCompletion', () => {
     expect(done.tone).toBe('success');
     const conflict = describeCompletion({ status: 'done', required: ['maci'], backedUp: ['maci'], derived: [], complete: true, report: { ...report, conflicts: ['maci'] } });
     expect(conflict.tone).toBe('error');
+  });
+});
+
+describe('describeWordsBackup (12-word account, Settings "Schlüssel sichern")', () => {
+  const { describeWordsBackup } = require('../key-completion');
+  const base = { saved: [], conflicts: [], missing: [], status: 'done', wordsCopies: { stored: [], failed: [] } };
+
+  it('names what was saved, never the passkey', () => {
+    const r = describeWordsBackup({ ...base, saved: ['maci', 'nostr'] });
+    expect(r).toEqual({ tone: 'success', text: 'Gesichert: Abstimmungsschlüssel, Nostr-Schlüssel. Entsperren kann sie nur, wer deine 12 Wörter hat.' });
+    expect(r.text).not.toMatch(/Passkey/);
+  });
+  it('a different server copy is an error and stays untouched', () => {
+    expect(describeWordsBackup({ ...base, saved: ['nostr'], conflicts: ['maci'] }).tone).toBe('error');
+  });
+  it('nothing on this device yet', () => {
+    expect(describeWordsBackup({ ...base, missing: ['maci', 'nostr', 'salt'] })).toEqual({
+      tone: 'info',
+      text: 'Auf diesem Gerät gibt es noch keine Schlüssel zum Sichern.',
+    });
+  });
+  it('backup switched off', () => {
+    expect(describeWordsBackup({ ...base, status: 'disabled' }).text).toBe('Die Schlüssel-Sicherung ist noch nicht freigeschaltet.');
   });
 });

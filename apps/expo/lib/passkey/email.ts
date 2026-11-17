@@ -11,6 +11,11 @@
  * same recipe as guardian approvals, fork-proven in GuardianErc1271.t.sol). The server checks it
  * with viem verifyMessage on Gnosis. The Safe must be deployed (every migrated Safe is).
  *
+ * A 12-word account (expert path, `ownerType: 'ecdsa'`) proves itself the same way through its
+ * session signer (session-signer.ts): the words' account key, read behind ONE device unlock,
+ * signs safeMessageHash(safe, hashMessage(text)) and the Safe's ECDSA owner signature is the
+ * ERC-1271 proof. The passkey is never asked.
+ *
  * The text is shared BYTE-EXACT with apps/web/src/lib/passkey/email-proof.ts, pinned by
  * __tests__/email-proof-vector.json in both apps. Change both or neither.
  *
@@ -20,6 +25,10 @@
 import { hashMessage, type Address, type Hex } from 'viem';
 import { PASSKEY_API_URL, SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import { safeMessageHash } from './guardians';
+import type { SafeOwnerType } from './migration';
+import { PhraseCancelledError, PhraseMismatchError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
+import { isWordsOwner, WORDS_KEY_PLACEHOLDER } from './session';
+import { sessionSignerFor } from './session-signer';
 import { safeSignatureFromAssertion } from './userop';
 import { PasskeyCancelledError, signWithPasskey, type PasskeyAssertion } from './webauthn';
 
@@ -57,7 +66,8 @@ export function emailProofChallenge(safe: Address, message: string): Hex {
   return safeMessageHash(safe, hashMessage(message));
 }
 
-export type EmailSigner = { credentialId: string; safe: Address; owner?: Address };
+/** The Safe that signs (from the migration record); `ownerType: 'ecdsa'` = a 12-word account. */
+export type EmailSigner = { credentialId: string; safe: Address; owner?: Address; ownerType?: SafeOwnerType };
 
 export type EmailDeps = {
   fetch?: (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{
@@ -67,6 +77,8 @@ export type EmailDeps = {
   }>;
   apiUrl?: string;
   sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
+  /** The device's phrase store: required for a 12-word account (phrase-store-runtime in the app). */
+  phrase?: Pick<PhraseStore, 'read'>;
   nowSec?: () => number;
   timeoutMs?: number;
 };
@@ -74,6 +86,25 @@ export type EmailDeps = {
 /** Safe contract signature (one owner) over the proof text. */
 export async function signEmailProof(signer: EmailSigner, message: string, deps: EmailDeps = {}): Promise<Hex> {
   const challenge = emailProofChallenge(signer.safe, message);
+  if (isWordsOwner(signer)) {
+    if (!signer.owner) throw new Error('a 12-word account needs its owner');
+    if (!deps.phrase) throw new Error('a 12-word account needs the phrase store');
+    const session = {
+      credentialId: '',
+      x: WORDS_KEY_PLACEHOLDER,
+      y: WORDS_KEY_PLACEHOLDER,
+      safe: signer.safe,
+      identity: signer.safe,
+      ownerType: 'ecdsa' as const,
+      owner: signer.owner,
+    };
+    const words = sessionSignerFor(session, {
+      signPasskey: () => Promise.reject(new Error('a 12-word account never asks for a passkey')),
+      getPrf: async () => null,
+      phrase: deps.phrase,
+    });
+    return (await words.signDigest(challenge)).safeSignature;
+  }
   const assertion = await (deps.sign ?? signWithPasskey)(signer.credentialId, challenge);
   return safeSignatureFromAssertion(assertion, challenge, signer.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER);
 }
@@ -106,15 +137,22 @@ const MESSAGES: Record<string, string> = {
   store_unavailable: 'Der Dienst ist gerade nicht erreichbar. Bitte versuche es später erneut.',
   network: 'Keine Verbindung. Bitte versuche es erneut.',
   cancelled: 'Abgebrochen.',
+  words_unavailable: 'Deine 12 Wörter sind auf diesem Gerät nicht mehr lesbar. Bitte gib sie noch einmal ein.',
+};
+/** A 12-word account has no passkey: the codes whose passkey wording would be wrong for it. */
+const WORDS_MESSAGES: Record<string, string> = {
+  bad_proof: 'Die Bestätigung hat nicht geklappt. Bitte versuche es erneut.',
+  safe_not_deployed: 'Dein Konto ist noch nicht vollständig eingerichtet. Bitte versuche es später erneut.',
 };
 const GENERIC = 'Etwas ist schiefgelaufen. Bitte versuche es erneut.';
 
-export function emailErrorMessage(code: string): string {
-  return MESSAGES[code] ?? GENERIC;
+/** `owner: 'words'` = the signer is a 12-word account (neutral wording, never "Passkey"). */
+export function emailErrorMessage(code: string, owner?: 'words'): string {
+  return (owner === 'words' ? WORDS_MESSAGES[code] : undefined) ?? MESSAGES[code] ?? GENERIC;
 }
 
 /** RN fetch never times out on its own: every call gets an AbortController deadline. */
-async function call(path: string, body: unknown, deps: EmailDeps): Promise<any> {
+async function call(path: string, body: unknown, deps: EmailDeps, owner?: 'words'): Promise<any> {
   const base = deps.apiUrl ?? PASSKEY_API_URL;
   if (!base) throw new PasskeyEmailError('disabled', emailErrorMessage('disabled'));
   const f = deps.fetch ?? (fetch as unknown as NonNullable<EmailDeps['fetch']>);
@@ -136,7 +174,7 @@ async function call(path: string, body: unknown, deps: EmailDeps): Promise<any> 
   const json = await res.json().catch(() => null);
   if (!res.ok) {
     const code = typeof json?.error === 'string' ? json.error : `http_${res.status}`;
-    throw new PasskeyEmailError(code, emailErrorMessage(code));
+    throw new PasskeyEmailError(code, emailErrorMessage(code, owner));
   }
   return json;
 }
@@ -145,14 +183,20 @@ async function signOrCancel(signer: EmailSigner, message: string, deps: EmailDep
   try {
     return await signEmailProof(signer, message, deps);
   } catch (e) {
-    if (e instanceof PasskeyCancelledError) throw new PasskeyEmailError('cancelled', emailErrorMessage('cancelled'));
+    if (e instanceof PasskeyCancelledError || e instanceof PhraseCancelledError) {
+      throw new PasskeyEmailError('cancelled', emailErrorMessage('cancelled'));
+    }
+    if (e instanceof PhraseMismatchError) throw new PasskeyEmailError('words_unavailable', e.message);
+    if (e instanceof PhraseUnavailableError) throw new PasskeyEmailError('words_unavailable', emailErrorMessage('words_unavailable'));
     throw e;
   }
 }
 
+const ownerOf = (signer: EmailSigner): 'words' | undefined => (isWordsOwner(signer) ? 'words' : undefined);
+
 const nowSec = (deps: EmailDeps) => (deps.nowSec ? deps.nowSec() : Math.floor(Date.now() / 1000));
 
-/** Signs the add-proof with the passkey and asks the server to mail a 6-digit code. */
+/** Signs the add-proof (passkey, or the 12 words after the device unlock) and asks the server to mail a 6-digit code. */
 export async function requestEmailCode(
   signer: EmailSigner,
   rawEmail: string,
@@ -162,7 +206,7 @@ export async function requestEmailCode(
   if (!email) throw new PasskeyEmailError('invalid_email', emailErrorMessage('invalid_email'));
   const timestamp = nowSec(deps);
   const signature = await signOrCancel(signer, buildEmailProofMessage({ action: 'add', safe: signer.safe, email, timestamp }), deps);
-  const res = await call('/api/passkey/email/start', { safe: signer.safe, email, proof: { timestamp, signature } }, deps);
+  const res = await call('/api/passkey/email/start', { safe: signer.safe, email, proof: { timestamp, signature } }, deps, ownerOf(signer));
   return { email, expiresAt: Number(res?.expiresAt) || timestamp + 600 };
 }
 
@@ -175,7 +219,7 @@ export async function confirmEmailCode(safe: Address, rawCode: string, deps: Ema
 export async function removeWarningEmail(signer: EmailSigner, deps: EmailDeps = {}): Promise<void> {
   const timestamp = nowSec(deps);
   const signature = await signOrCancel(signer, buildEmailProofMessage({ action: 'remove', safe: signer.safe, timestamp }), deps);
-  await call('/api/passkey/email/remove', { safe: signer.safe, proof: { timestamp, signature } }, deps);
+  await call('/api/passkey/email/remove', { safe: signer.safe, proof: { timestamp, signature } }, deps, ownerOf(signer));
 }
 
 // ---------------------------------------------------------------------------

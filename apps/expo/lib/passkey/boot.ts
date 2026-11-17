@@ -26,7 +26,13 @@ export class SessionCorruptError extends Error {
 }
 
 export type SessionSource<S = unknown> = {
+  /** The source's kind: what a failure or a background retry is reported and found again by. */
   owner: 'passkey' | 'words';
+  /**
+   * The kind of a RESTORED session (restore report only), when one source holds several kinds:
+   * the passkey session key also carries words sessions (`ownerType: 'ecdsa'`). Default `owner`.
+   */
+  ownerOf?: (session: S) => 'passkey' | 'words';
   /** Raw presence of the session key. */
   hasStored: () => Promise<boolean>;
   /** null when the key is present but unparsable; may throw on a storage error. */
@@ -56,11 +62,15 @@ export function lazySessionSource<S>(
   hasStored: () => Promise<boolean>,
   loader: () => Promise<SessionSource<S>>,
 ): SessionSource<S> {
+  let loaded: SessionSource<S> | null = null;
+  const get = async () => (loaded = await loader());
   return {
     owner,
     hasStored,
-    load: async () => (await loader()).load(),
-    connect: async (session) => (await loader()).connect(session),
+    // `load` always runs before a session exists, so the loaded source answers.
+    ownerOf: (session) => loaded?.ownerOf?.(session) ?? owner,
+    load: async () => (await get()).load(),
+    connect: async (session) => (await get()).connect(session),
   };
 }
 
@@ -68,13 +78,15 @@ async function restoreSource(
   source: SessionSource,
   deps: Pick<BootDeps, 'sleep' | 'isCancelled'>,
   delaysMs: readonly number[],
-): Promise<{ result: RestoreResult; corrupt: boolean }> {
+): Promise<{ result: RestoreResult; corrupt: boolean; owner: SessionSource['owner'] }> {
   let corrupt = false;
+  let owner = source.owner;
   const result = await restoreWithRetry({
     attempt: async () => {
       const session = await source.load();
       if (session === null) throw new SessionCorruptError();
       await source.connect(session);
+      owner = source.ownerOf?.(session) ?? source.owner;
       return true;
     },
     hasStoredSession: async () => true,
@@ -83,7 +95,8 @@ async function restoreSource(
     isCancelled: deps.isCancelled,
     isFatal: (e) => (e instanceof SessionCorruptError ? (corrupt = true) : false),
   });
-  return { result, corrupt };
+  // Only a restored session reports its own kind; a failure stays the source's (the retry finds it by that).
+  return { result, corrupt, owner: result.outcome === 'restored' ? owner : source.owner };
 }
 
 export type BackgroundRestore = BootResult & {
@@ -105,8 +118,8 @@ export async function backgroundRestore(p: {
 }): Promise<BackgroundRestore> {
   const source = p.failedSource;
   if (source) {
-    const { result, corrupt } = await restoreSource(source, p, []);
-    if (result.outcome !== 'failed' || !corrupt) return { owner: source.owner, result, failedSource: source };
+    const { result, corrupt, owner } = await restoreSource(source, p, []);
+    if (result.outcome !== 'failed' || !corrupt) return { owner, result, failedSource: source };
     if (p.isCancelled?.()) {
       return { owner: 'thirdweb', result: { outcome: 'cancelled', attempts: 0, errors: [], hadStoredSession: false }, failedSource: null };
     }
@@ -125,8 +138,8 @@ export async function bootWallets(deps: BootDeps): Promise<BootResult> {
       }
       if (deps.isCancelled?.()) return { owner: source.owner, result: { outcome: 'cancelled', attempts: 0, errors: [], hadStoredSession: true } };
       if (!stored) continue;
-      const { result, corrupt } = await restoreSource(source, deps, deps.delaysMs);
-      if (result.outcome === 'restored' || result.outcome === 'cancelled') return { owner: source.owner, result };
+      const { result, corrupt, owner } = await restoreSource(source, deps, deps.delaysMs);
+      if (result.outcome === 'restored' || result.outcome === 'cancelled') return { owner, result };
       if (result.outcome === 'failed' && corrupt) break; // unreadable session: thirdweb path
       return { owner: source.owner, result };
     }

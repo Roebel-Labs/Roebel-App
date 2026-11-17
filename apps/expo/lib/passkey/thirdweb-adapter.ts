@@ -9,7 +9,11 @@
  *     CitizenNFT, Circles/Münzen and every wallet-keyed row stay attached;
  *   - passkey-only person, or after the v3 `moveTo`: the Safe itself.
  *
- * sendTransaction(tx) — one sponsored ERC-4337 userOp from the Safe (`sendPasskeyUserOp`):
+ * A words session (expert path, `ownerType: 'ecdsa'`) runs the same code: the session signer
+ * (session-signer.ts, `deps.signerFor`) signs with the 12 words' key after the device unlock
+ * instead of a passkey assertion; the Safe and its ERC-1271 / ERC-6492 layout are the same.
+ *
+ * sendTransaction(tx) — one sponsored ERC-4337 userOp from the Safe (`sendSafeUserOp`):
  *   - identity = legacy: the Safe calls `legacy.execute(to, value, data)` (thirdweb Account,
  *     contract admins may call it directly) and the sponsor body names `legacy`;
  *   - identity = Safe: the Safe calls `to` directly.
@@ -51,10 +55,10 @@ import { PASSKEY_CHAIN_ID, SAFE_PROXY_FACTORY } from './constants';
 import { safeMessageHash } from './guardians';
 import { markSponsoredOpSucceeded } from './detach';
 import { pollIdForTxs } from './poll-hints';
-import { predictSafeAddress, safeFactoryData } from './safe-address';
 import { PASSKEY_SESSION_PROP } from './active';
-import { identityKind, type PasskeySession } from './session';
-import { safeSignatureFromAssertion, type PasskeyUserOpArgs, type SponsoredCall } from './userop';
+import { identityKind, isWordsOwner, type PasskeySession } from './session';
+import { sessionSignerFor, type SessionSigner } from './session-signer';
+import type { SafeUserOpArgs, SponsoredCall } from './userop';
 import type { PasskeyAssertion } from './webauthn';
 
 export const WRONG_CHAIN_MESSAGE = 'Dein unabhängiges Konto funktioniert nur auf der Gnosis Chain.';
@@ -157,10 +161,25 @@ export type AdapterDeps = {
   /** WebAuthn assertion over a 32-byte challenge (default: signWithPasskey — the biometric prompt). */
   sign: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
   isSafeDeployed: (safe: Address) => Promise<boolean>;
-  sendUserOp: (args: PasskeyUserOpArgs) => Promise<{ userOpHash: Hex; txHash: Hex }>;
+  sendUserOp: (args: SafeUserOpArgs) => Promise<{ userOpHash: Hex; txHash: Hex }>;
   /** MACI pollId for a Poll address (default: the hints the vote path records, poll-hints.ts). */
   pollIdFor?: (poll: string) => bigint | undefined;
+  /**
+   * The signer for a session (passkey or 12 words). Default: built from `sign`, passkey only — a
+   * words session without it is refused (it never reaches the passkey).
+   */
+  signerFor?: (session: PasskeySession) => SessionSigner;
 };
+
+function signerOf(session: PasskeySession, deps: AdapterDeps): SessionSigner {
+  if (deps.signerFor) return deps.signerFor(session);
+  if (isWordsOwner(session)) throw new Error('a 12-word session needs its signer');
+  return sessionSignerFor(session, {
+    signPasskey: deps.sign,
+    getPrf: async () => null,
+    phrase: { read: async () => Promise.reject(new Error('this adapter has no 12-word signer')) },
+  });
+}
 
 /**
  * The Safe's ERC-1271 signature over `hash` (the digest a verifier passes to isValidSignature),
@@ -172,25 +191,27 @@ export async function signHashAsIdentity(session: PasskeySession, hash: Hex, dep
 }
 
 /**
- * `signHashAsIdentity` plus the passkey PRF output of the SAME assertion (when the authenticator
- * returns one): the key backup signs its request and unwraps the blobs with one fingerprint.
+ * `signHashAsIdentity` plus the vault key the SAME prompt yields (property name `prf` kept for its
+ * callers; it means "vault key"): the passkey PRF output of the same assertion, or, for a words
+ * session, the key derived from the same phrase read. The key backup signs its request and
+ * unwraps the blobs with one prompt.
  */
 export async function signHashAsIdentityWithPrf(
   session: PasskeySession,
   hash: Hex,
   deps: AdapterDeps,
 ): Promise<{ signature: Hex; prf?: Hex }> {
+  const signer = signerOf(session, deps);
   const challenge = safeMessageHash(session.safe, hash);
-  const assertion = await deps.sign(session.credentialId, challenge);
-  let sig = safeSignatureFromAssertion(assertion, challenge, session.owner);
+  const { safeSignature, vaultKey } = await signer.signDigest(challenge);
+  let sig = safeSignature;
   if (!(await deps.isSafeDeployed(session.safe))) {
-    const key = { x: session.x, y: session.y };
     // Only the Safe created with this key can be deployed from it (a recovered Safe always has code).
-    if (!isAddressEqual(predictSafeAddress(key), session.safe)) throw new Error('passkey Safe is not deployed');
-    sig = serializeErc6492Signature({ address: SAFE_PROXY_FACTORY, data: safeFactoryData(key), signature: sig });
+    if (!isAddressEqual(signer.counterfactual.predicted, session.safe)) throw new Error('the account Safe is not deployed and is not the counterfactual Safe of its key');
+    sig = serializeErc6492Signature({ address: SAFE_PROXY_FACTORY, data: signer.counterfactual.factoryData, signature: sig });
   }
   const signature = identityKind(session) === 'legacy' ? encodeOnBehalfSignature(session.safe, sig) : sig;
-  return assertion.prf ? { signature, prf: assertion.prf } : { signature };
+  return vaultKey ? { signature, prf: vaultKey } : { signature };
 }
 
 // ---------------------------------------------------------------------------
@@ -212,17 +233,15 @@ export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps)
     const { calls, legacy } = buildAdapterCalls(session, txs);
     // Poll.publishMessage needs the MACI pollId in the sponsor body (everyday mode).
     const pollId = deps.pollIdFor ? pollIdForTxs(txs, deps.pollIdFor) : pollIdForTxs(txs);
+    const signer = signerOf(session, deps);
     const deployed = await deps.isSafeDeployed(session.safe);
     const { txHash } = await deps.sendUserOp({
-      credentialId: session.credentialId,
-      x: session.x,
-      y: session.y,
+      signer: signer.opSigner,
       ...(legacy ? { legacy } : {}),
       ...(pollId !== undefined ? { pollId } : {}),
       calls,
       deployed,
       sender: session.safe,
-      owner: session.owner,
     });
     markSponsoredOpSucceeded(); // "thirdweb trennen" checklist item (4)
     return { transactionHash: txHash };

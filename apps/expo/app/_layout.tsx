@@ -57,6 +57,7 @@ import { AppUpdateGate } from '@/components/AppUpdateGate';
 import AnimatedSplash from '@/components/AnimatedSplash';
 import { bootState } from '@/lib/navigation/bootPathname';
 import PasskeyRecoveryWatch from '@/components/passkey/PasskeyRecoveryWatch';
+import PhraseReentryWatch from '@/components/passkey/PhraseReentryWatch';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -332,6 +333,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/recovery-words" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
           {/* Live room: black video on top, the rest follows the app theme; slides up. A card push, not a modal, so the
@@ -354,6 +356,8 @@ function ThemedLayout() {
       </View>
       {/* Preview-only: gate checked first, renders nothing in production. */}
       <PasskeyRecoveryWatch />
+      {/* Words sessions only: the 12 words were invalidated -> ask for them again (never a logout). */}
+      <PhraseReentryWatch />
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}

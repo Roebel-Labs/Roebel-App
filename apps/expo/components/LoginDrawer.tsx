@@ -30,7 +30,7 @@ export default function LoginDrawer({ visible, onClose, hidePasskey = false }: P
         </Text>
 
         {/* Passkey "Unabhängiges Konto" — renders nothing unless the preview gate is open */}
-        {!hidePasskey && <PasskeySignInOption onSignedIn={onClose} />}
+        {!hidePasskey && <PasskeySignInOption onSignedIn={onClose} onNavigate={onClose} />}
 
         {/* Thirdweb Connect Embed */}
         <View style={styles.connectContainer}>

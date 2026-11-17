@@ -17,11 +17,13 @@ import { randomBytes } from './random';
 import { findLinkedLegacies, findSafesByOwner } from './recovery-lookup';
 import { passkeyApiSession } from './api-session-runtime';
 import type { SessionSource } from './boot';
-import { clearPasskeySession, loadPasskeySession, PASSKEY_SESSION_KEY, type PasskeySession, type SessionStorage } from './session';
+import { clearPasskeySession, loadPasskeySession, PASSKEY_SESSION_KEY, sessionOwner, type PasskeySession, type SessionStorage } from './session';
 import { randomChallengeFrom, type IdentityChain, type KeyChain, type SignInDeps } from './signin';
 import { passkeyWalletOptions, type AdapterDeps } from './thirdweb-adapter';
-import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp } from './userop';
-import { createPasskey, getDiscoverableAssertion, signWithPasskey } from './webauthn';
+import { phraseStore } from './phrase-store-runtime';
+import { sessionSignerFor } from './session-signer';
+import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendSafeUserOp } from './userop';
+import { createPasskey, getDiscoverableAssertion, getPrfSecret, signWithPasskey } from './webauthn';
 
 const gnosisClient = createPublicClient({ transport: http(DEFAULT_GNOSIS_RPC_URL, { timeout: 15_000, retryCount: 1 }) });
 
@@ -54,7 +56,7 @@ export const identityChain: IdentityChain = {
 };
 
 /** A users row with this wallet exists (anon read of one column, 10 s deadline). */
-async function isKnownAccount(a: Address): Promise<boolean> {
+export async function isKnownAccount(a: Address): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -97,7 +99,9 @@ export function createSignInDeps(): SignInDeps & { createPasskey: typeof createP
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
   isSafeDeployed: (safe) => isSafeDeployed(safe),
-  sendUserOp: (args) => sendPasskeyUserOp(args),
+  sendUserOp: (args) => sendSafeUserOp(args),
+  // Passkey sessions sign with the passkey; words sessions with the 12 words behind the device unlock.
+  signerFor: (session) => sessionSignerFor(session, { signPasskey: signWithPasskey, getPrf: getPrfSecret, phrase: phraseStore }),
 };
 
 /**
@@ -128,13 +132,18 @@ export async function activatePasskeySession(
 
 export const loadStoredPasskeySession = () => loadPasskeySession(secureSessionStorage);
 
-/** Boot source for the stored passkey session; reads through the same storage for presence and load. */
+/**
+ * Boot source for the stored passkey session; reads through the same storage for presence and load.
+ * The same key carries words sessions: `ownerOf` reports them as 'words' (restore report only).
+ * Restoring either kind reads only the session key — never the phrase, never a prompt.
+ */
 export function passkeySessionSource(
   setActiveWallet: (w: Wallet) => Promise<void>,
   storage: SessionStorage = secureSessionStorage,
 ): SessionSource<PasskeySession> {
   return {
     owner: 'passkey',
+    ownerOf: sessionOwner,
     hasStored: async () => (await storage.getItem(PASSKEY_SESSION_KEY)) !== null,
     load: () => loadPasskeySession(storage),
     connect: (session) => activatePasskeySession(session, setActiveWallet),
