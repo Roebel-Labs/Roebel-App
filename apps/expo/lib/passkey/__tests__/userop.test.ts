@@ -16,7 +16,7 @@ import {
   type UnpackedUserOp,
 } from '../userop';
 import { NETIZEN_VERIFYING_PAYMASTER, SAFE_PROXY_FACTORY } from '../constants';
-import { safeFactoryData } from '../safe-address';
+import { predictSafeAddress, safeFactoryData } from '../safe-address';
 import vector from './passkey-safe-vector.json';
 
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
@@ -539,10 +539,193 @@ describe('userop — post-recovery signature vector', () => {
   });
 
   it('sponsorRequestBody carries legacy / recoveryLegacy only when set', () => {
-    const b = sponsorRequestBody(recoveredOp(), { x: key.x, y: key.y });
+    const b = sponsorRequestBody(recoveredOp(), { proof: { x: key.x, y: key.y } });
     expect(Object.keys(b).sort()).toEqual(['chainId', 'userOp', 'x', 'y']);
-    const r = sponsorRequestBody(recoveredOp(), { x: key.x, y: key.y, recoveryLegacy: recoveredWallet });
+    const r = sponsorRequestBody(recoveredOp(), { proof: { x: key.x, y: key.y }, recoveryLegacy: recoveredWallet });
     expect(r.recoveryLegacy).toBe(recoveredWallet);
     expect((r.userOp as any).signature).toBeUndefined();
+  });
+});
+
+// ---- signer-neutral sender: the expert-path (ECDSA-owner) Safe (plan 3 Task 2) ----
+
+import { getAddress, type Address } from 'viem';
+import ev from './ecdsa-safe-vector.json';
+import { ecdsaSafeFactoryData } from '../ecdsa-safe';
+import { ecdsaOpSigner, passkeyOpSigner, sendSafeUserOp, type SafeOpSigner, type SafeUserOpArgs } from '../userop';
+import { validatePhrase, wordsFromSeed } from '../words';
+
+const ecdsaVector = { ...ev, owner: ev.owner as Address };
+const eu = ev.userOp;
+const ECDSA_CALL = { to: '0x000000000000000000000000000000000000dEaD' as Address, data: '0x' as Hex, value: 1n };
+
+/** The fork vector's op in unpacked (v0.7 RPC) form, with the 372-byte stub paymaster. */
+function vectorOp(v: typeof ecdsaVector): UnpackedUserOp {
+  const ag = v.userOp.accountGasLimits as Hex;
+  const fees = v.userOp.gasFees as Hex;
+  const pm = splitPaymasterAndData(v.userOp.paymasterAndData as Hex);
+  return {
+    sender: getAddress(v.userOp.sender),
+    nonce: BigInt(v.userOp.nonce),
+    factory: SAFE_PROXY_FACTORY,
+    factoryData: ecdsaSafeFactoryData(v.owner),
+    callData: v.userOp.callData as Hex,
+    verificationGasLimit: BigInt(`0x${ag.slice(2, 34)}`),
+    callGasLimit: BigInt(`0x${ag.slice(34)}`),
+    preVerificationGas: BigInt(v.userOp.preVerificationGas),
+    maxPriorityFeePerGas: BigInt(`0x${fees.slice(2, 34)}`),
+    maxFeePerGas: BigInt(`0x${fees.slice(34)}`),
+    ...pm,
+    signature: '0x',
+  };
+}
+
+/**
+ * The fake network of the sendPasskeyUserOp tests, answering with the ECDSA vector's gas, fees and
+ * stub voucher (so the op hash is the vector's). Returns the request bodies and the sent op.
+ */
+async function runWithFakeNetwork(args: Omit<SafeUserOpArgs, 'calls'> & { calls: SafeUserOpArgs['calls'] }) {
+  const op = vectorOp(ecdsaVector);
+  const calls: { method: string; body: any }[] = [];
+  const fetchMock = jest.fn(async (url: string, init: any) => {
+    const body = JSON.parse(init.body);
+    calls.push({ method: body.method ?? 'sponsor', body });
+    const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
+    if (url.endsWith('/api/passkey/sponsor')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          paymasterAndData: eu.paymasterAndData,
+          paymasterVerificationGasLimit: numberToHex(op.paymasterVerificationGasLimit!),
+          paymasterPostOpGasLimit: numberToHex(op.paymasterPostOpGasLimit!),
+          validUntil: 1,
+        }),
+      };
+    }
+    switch (body.method) {
+      case 'eth_call':
+        return ok(numberToHex(op.nonce, { size: 32 }));
+      case 'pimlico_getUserOperationGasPrice':
+        return ok({ fast: { maxFeePerGas: numberToHex(op.maxFeePerGas), maxPriorityFeePerGas: numberToHex(op.maxPriorityFeePerGas) } });
+      case 'eth_estimateUserOperationGas':
+        return ok({
+          callGasLimit: numberToHex(op.callGasLimit),
+          verificationGasLimit: numberToHex(op.verificationGasLimit),
+          preVerificationGas: numberToHex(op.preVerificationGas),
+          paymasterVerificationGasLimit: numberToHex(op.paymasterVerificationGasLimit!),
+          paymasterPostOpGasLimit: numberToHex(op.paymasterPostOpGasLimit!),
+        });
+      case 'eth_sendUserOperation':
+        return ok(`0x${'ee'.repeat(32)}`);
+      case 'eth_getUserOperationReceipt':
+        return ok({ success: true, receipt: { transactionHash: `0x${'dd'.repeat(32)}` } });
+      default:
+        throw new Error(`unexpected ${body.method}`);
+    }
+  });
+  const result = await sendSafeUserOp(args, {
+    fetch: fetchMock as any,
+    paymaster: NETIZEN_VERIFYING_PAYMASTER,
+    apiUrl: 'https://preview.example',
+    bundlerUrl: 'https://preview.example/api/bundler',
+    rpcUrl: 'https://rpc.example',
+    pollIntervalMs: 1,
+  });
+  const body = (m: string) => calls.find((c) => c.method === m)?.body;
+  return {
+    result,
+    bodies: { estimate: body('eth_estimateUserOperationGas')?.params[0], sponsor: body('sponsor') },
+    sent: body('eth_sendUserOperation')?.params[0],
+  };
+}
+
+describe('ECDSA signer (expert path) vs the fork vector', () => {
+  it('ECDSA signer: the op hash and the userOp signature match the fork vector', async () => {
+    const check = validatePhrase(ecdsaVector.phrase);
+    if (!check.ok) throw new Error('vector phrase invalid');
+    const account = wordsFromSeed(check.phrase).account(0);
+    expect(account.address).toBe(getAddress(ecdsaVector.owner));
+    const signer = ecdsaOpSigner(ecdsaVector.owner, (digest) => account.sign({ hash: digest }));
+    expect(safeOpHash(vectorOp(ecdsaVector), 0, 0)).toBe(eu.safeOpHash);
+    expect(await signer.signOpHash(eu.safeOpHash as Hex)).toBe(eu.userOpSignature);
+    // The raw digest is signed (no message prefix): the owner signature is the vector's.
+    expect(await account.sign({ hash: eu.safeOpHash as Hex })).toBe(eu.ownerSignature);
+  });
+
+  it('ecdsaOpSigner: predicted Safe, factoryData, proof and a 65-byte 0xff dummy', () => {
+    const s = ecdsaOpSigner(ecdsaVector.owner, async () => eu.ownerSignature as Hex);
+    expect(s.predicted).toBe(getAddress(ecdsaVector.safeAddress));
+    expect(s.factoryData).toBe(ecdsaSafeFactoryData(ecdsaVector.owner));
+    expect(s.proof).toEqual({ ecdsaOwner: getAddress(ecdsaVector.owner) });
+    expect(s.dummySignature).toBe(encodeUserOpSignature(0, 0, `0x${'ff'.repeat(65)}`));
+    expect(size(s.dummySignature)).toBe(size(eu.userOpSignature as Hex));
+  });
+
+  it('ecdsaOpSigner refuses a signature that is not 65 bytes', async () => {
+    const s = ecdsaOpSigner(ecdsaVector.owner, async () => `0x${'ab'.repeat(64)}` as Hex);
+    await expect(s.signOpHash(eu.safeOpHash as Hex)).rejects.toThrow(/65 bytes/);
+  });
+
+  it('sendSafeUserOp with an ECDSA signer: deploy op carries the ECDSA factoryData and the body names ecdsaOwner, no x/y', async () => {
+    const digests: Hex[] = [];
+    const signer = ecdsaOpSigner(ecdsaVector.owner, async (d) => {
+      digests.push(d);
+      return eu.ownerSignature as Hex;
+    });
+    const { result, bodies, sent } = await runWithFakeNetwork({ signer, deployed: false, calls: [ECDSA_CALL] });
+    expect(result).toEqual({ userOpHash: `0x${'ee'.repeat(32)}`, txHash: `0x${'dd'.repeat(32)}` });
+    expect(bodies.sponsor.ecdsaOwner).toBe(ecdsaVector.owner);
+    expect(bodies.sponsor.x).toBeUndefined();
+    expect(bodies.sponsor.y).toBeUndefined();
+    expect('x' in bodies.sponsor).toBe(false);
+    expect(bodies.sponsor.userOp.factoryData).toBe(ecdsaSafeFactoryData(ecdsaVector.owner));
+    expect(bodies.estimate.signature).toBe(signer.dummySignature);
+    expect(sent.factoryData).toBe(ecdsaSafeFactoryData(ecdsaVector.owner));
+    expect(sent.sender).toBe(getAddress(ecdsaVector.safeAddress));
+    expect(sent.callData).toBe(eu.callData);
+    // The whole op equals the vector's: same hash signed, same signature sent.
+    expect(digests).toEqual([eu.safeOpHash]);
+    expect(sent.signature).toBe(eu.userOpSignature);
+  });
+
+  it('sendSafeUserOp refuses to deploy a sender that is not the signer\'s own Safe', async () => {
+    const signer = ecdsaOpSigner(ecdsaVector.owner, async () => eu.ownerSignature as Hex);
+    await expect(
+      sendSafeUserOp(
+        { signer, deployed: false, sender: rv.newSafe as Hex, calls: [ECDSA_CALL] },
+        { apiUrl: 'https://a', fetch: jest.fn() as any, paymaster: NETIZEN_VERIFYING_PAYMASTER },
+      ),
+    ).rejects.toThrow(/deployed by its first userOp/);
+  });
+
+  it('the passkey wrapper still produces the old sponsor body (x, y, legacy; no ecdsaOwner)', async () => {
+    const { sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n } });
+    expect(sponsor.x).toBe(key.x);
+    expect(sponsor.y).toBe(key.y);
+    expect(sponsor.legacy).toBe(vector.handover.legacyAccount);
+    expect('ecdsaOwner' in sponsor).toBe(false);
+    expect(Object.keys(sponsor).sort()).toEqual(['chainId', 'legacy', 'userOp', 'x', 'y']);
+  });
+
+  it('passkeyOpSigner carries the passkey proof, Safe, factoryData and owner-specific dummy', async () => {
+    const sign = jest.fn(async () => ({ authenticatorData: w.authenticatorData as Hex, clientDataJSON, r: BigInt(w.r), s: BigInt(w.s) }));
+    const s: SafeOpSigner = passkeyOpSigner({ credentialId: 'cred', x: key.x, y: key.y }, sign);
+    expect(s.proof).toEqual({ x: key.x, y: key.y });
+    expect(s.predicted).toBe(predictSafeAddress(key));
+    expect(s.factoryData).toBe(safeFactoryData(key));
+    expect(s.dummySignature).toBe(dummyUserOpSignature());
+    expect(await s.signOpHash(u.safeOpHash as Hex)).toBe(w.userOpSignature);
+    expect(sign).toHaveBeenCalledWith('cred', u.safeOpHash);
+    const recovered = passkeyOpSigner({ credentialId: 'new', x: rv.newX as Hex, y: rv.newY as Hex, owner: newSigner }, sign);
+    expect(recovered.dummySignature).toBe(dummyUserOpSignature(newSigner));
+  });
+
+  it('sponsorRequestBody names x, y for a passkey proof and ecdsaOwner for an ECDSA proof, never both', () => {
+    const p = sponsorRequestBody(recoveredOp(), { proof: { x: key.x, y: key.y } });
+    expect(Object.keys(p).sort()).toEqual(['chainId', 'userOp', 'x', 'y']);
+    const e = sponsorRequestBody(recoveredOp(), { proof: { ecdsaOwner: ecdsaVector.owner }, pollId: 7n });
+    expect(Object.keys(e).sort()).toEqual(['chainId', 'ecdsaOwner', 'pollId', 'userOp']);
+    expect(e.ecdsaOwner).toBe(getAddress(ecdsaVector.owner));
   });
 });

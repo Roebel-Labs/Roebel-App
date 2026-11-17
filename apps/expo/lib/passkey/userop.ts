@@ -1,10 +1,12 @@
 /**
- * Sponsored ERC-4337 v0.7 userOps from the passkey Safe (Safe4337Module v0.3.0).
+ * Sponsored ERC-4337 v0.7 userOps from a Safe (Safe4337Module v0.3.0): the passkey Safe or the
+ * expert path's ECDSA-owner Safe. Who signs is a `SafeOpSigner` (`passkeyOpSigner`,
+ * `ecdsaOpSigner`); `sendSafeUserOp` is signer-neutral, `sendPasskeyUserOp` its passkey wrapper.
  *
  * Sequence (plan Review Focus 5 — any re-estimate after sponsoring invalidates the voucher):
  *   build unsigned op → eth_estimateUserOperationGas with a 372-byte stub paymasterAndData and a
- *   realistic dummy WebAuthn signature → POST /api/passkey/sponsor → rebuild with the echoed
- *   paymaster gas limits VERBATIM → Safe4337Module op hash → passkey signature →
+ *   realistic dummy signature (the signer's) → POST /api/passkey/sponsor → rebuild with the echoed
+ *   paymaster gas limits VERBATIM → Safe4337Module op hash → the signer's signature →
  *   eth_sendUserOperation → poll eth_getUserOperationReceipt.
  *
  * All byte layouts are pinned by contracts/passkey-accounts/test/fixtures/passkey-safe-vector.json.
@@ -45,6 +47,7 @@ import {
 } from './constants';
 import { base64UrlEncode } from './encoding';
 import { encodeExecuteUserOp } from './legacy-handover';
+import { ecdsaSafeFactoryData, predictEcdsaSafeAddress } from './ecdsa-safe';
 import { encodeMultiSendTx, predictSafeAddress, safeFactoryData } from './safe-address';
 import { signWithPasskey, type PasskeyAssertion } from './webauthn';
 
@@ -327,6 +330,7 @@ export type UserOpDeps = {
   fetch?: FetchLike;
   /** Paymaster the sponsor route signs for (default EXPO_PUBLIC_PASSKEY_PAYMASTER_ADDRESS). */
   paymaster?: Address | '';
+  /** Passkey assertion for `sendPasskeyUserOp` (default the native passkey); unused by other signers. */
   sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
   apiUrl?: string;
   bundlerUrl?: string;
@@ -416,18 +420,18 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
 }
 
 /**
- * POST /api/passkey/sponsor body: { chainId, userOp, x, y, legacy?, recoveryLegacy?, pollId? }. Optional
- * identity hints are omitted (not null) when unset.
+ * POST /api/passkey/sponsor body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?,
+ * pollId? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
+ * owner, never both. Optional identity hints are omitted (not null) when unset.
  */
 export function sponsorRequestBody(
   op: UnpackedUserOp,
-  args: Pick<PasskeyUserOpArgs, 'x' | 'y' | 'legacy' | 'recoveryLegacy' | 'pollId'>,
+  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId'> & { proof: SafeOpProof },
 ): Record<string, unknown> {
   return {
     chainId: PASSKEY_CHAIN_ID,
     userOp: toSponsorUserOp(op),
-    x: args.x,
-    y: args.y,
+    ...('ecdsaOwner' in args.proof ? { ecdsaOwner: getAddress(args.proof.ecdsaOwner) } : { x: args.proof.x, y: args.proof.y }),
     ...(args.legacy ? { legacy: args.legacy } : {}),
     ...(args.recoveryLegacy ? { recoveryLegacy: args.recoveryLegacy } : {}),
     // 0x hex quantity, as the server's parseSponsorRequest expects.
@@ -550,12 +554,94 @@ export type PasskeyUserOpArgs = {
   owner?: Address;
 };
 
+/** What the sponsor checks the op's sender against: the passkey key, or the expert path's ECDSA owner. */
+export type SafeOpProof = { x: Hex; y: Hex } | { ecdsaOwner: Address };
+
+/**
+ * Everything about a userOp that depends on who signs it. `signOpHash` returns the COMPLETE userOp
+ * signature (validAfter ++ validUntil ++ Safe signature) over the Safe4337Module op hash.
+ */
+export type SafeOpSigner = {
+  proof: SafeOpProof;
+  /** The counterfactual Safe this signer deploys with its first op. */
+  predicted: Address;
+  /** factoryData of that first op (`factory` = SAFE_PROXY_FACTORY). */
+  factoryData: Hex;
+  /** Same layout and size as a real signature, for gas estimation. */
+  dummySignature: Hex;
+  signOpHash: (hash: Hex) => Promise<Hex>;
+};
+
+/**
+ * The passkey Safe's signer. `owner` = the Safe owner the passkey signs through (default
+ * SharedSigner; the per-key signer after a recovery).
+ */
+export function passkeyOpSigner(
+  p: { credentialId: string; x: Hex; y: Hex; owner?: Address },
+  sign: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>,
+): SafeOpSigner {
+  const key = { x: p.x, y: p.y };
+  const owner = p.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER;
+  return {
+    proof: key,
+    predicted: predictSafeAddress(key),
+    factoryData: safeFactoryData(key),
+    dummySignature: dummyUserOpSignature(owner),
+    signOpHash: async (hash) => userOpSignatureFromAssertion(await sign(p.credentialId, hash), hash, owner),
+  };
+}
+
+/**
+ * The expert path's signer: the Safe has ONE plain ECDSA owner (the words' account key).
+ * `signDigest` signs the raw 32-byte digest (no message prefix) and returns r ++ s ++ v (65 bytes,
+ * v = 27/28): exactly the Safe's ECDSA owner signature, so it goes after the validity window as is.
+ */
+export function ecdsaOpSigner(owner: Address, signDigest: (digest: Hex) => Promise<Hex>): SafeOpSigner {
+  const ecdsaOwner = getAddress(owner);
+  return {
+    proof: { ecdsaOwner },
+    predicted: predictEcdsaSafeAddress(ecdsaOwner),
+    factoryData: ecdsaSafeFactoryData(ecdsaOwner),
+    dummySignature: encodeUserOpSignature(0, 0, `0x${'ff'.repeat(65)}`),
+    signOpHash: async (hash) => {
+      const sig = await signDigest(hash);
+      if (size(sig) !== 65) throw new Error('an ECDSA owner signature must be 65 bytes');
+      return encodeUserOpSignature(0, 0, sig);
+    },
+  };
+}
+
+export type SafeUserOpArgs = {
+  signer: SafeOpSigner;
+  calls: SponsoredCall[];
+  deployed: boolean;
+  /** The Safe sending the op (default `signer.predicted`; a recovered Safe keeps its old address). */
+  sender?: Address;
+  /** See PasskeyUserOpArgs. */
+  legacy?: Address;
+  recoveryLegacy?: Address;
+  pollId?: bigint;
+};
+
+/** `sendSafeUserOp` with a passkey signer (`deps.sign`, default the native passkey). */
 export async function sendPasskeyUserOp(
   args: PasskeyUserOpArgs,
   deps: UserOpDeps = {},
 ): Promise<{ userOpHash: Hex; txHash: Hex }> {
+  const { credentialId, x, y, owner, ...rest } = args;
+  return sendSafeUserOp({ ...rest, signer: passkeyOpSigner({ credentialId, x, y, owner }, deps.sign ?? signWithPasskey) }, deps);
+}
+
+/**
+ * One sponsored userOp from a Safe, whoever signs it (passkey or ECDSA owner):
+ * nonce + fees → estimate with the stub voucher and the signer's dummy → sponsor → verbatim
+ * paymaster limits → the signer signs the op hash → send → receipt.
+ */
+export async function sendSafeUserOp(
+  args: SafeUserOpArgs,
+  deps: UserOpDeps = {},
+): Promise<{ userOpHash: Hex; txHash: Hex }> {
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
-  const sign = deps.sign ?? signWithPasskey;
   const apiUrl = deps.apiUrl ?? PASSKEY_API_URL;
   if (!apiUrl) throw new Error('EXPO_PUBLIC_PASSKEY_API_URL is not configured');
   const paymaster = (deps.paymaster ?? PASSKEY_PAYMASTER) as Address | '';
@@ -564,13 +650,11 @@ export async function sendPasskeyUserOp(
   const rpcUrl = deps.rpcUrl ?? DEFAULT_GNOSIS_RPC_URL;
   const timeout = deps.requestTimeoutMs ?? 20_000;
 
-  const key = { x: args.x, y: args.y };
-  const predicted = predictSafeAddress(key);
-  const sender = args.sender ?? predicted;
-  if (!args.deployed && getAddress(sender) !== getAddress(predicted)) {
-    throw new Error('only the passkey Safe for (x, y) can be deployed by its first userOp');
+  const { signer } = args;
+  const sender = args.sender ?? signer.predicted;
+  if (!args.deployed && getAddress(sender) !== getAddress(signer.predicted)) {
+    throw new Error("only the signer's own counterfactual Safe can be deployed by its first userOp");
   }
-  const owner = args.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER;
   const callData = buildCallData(args.calls);
 
   // 1. nonce + fees (fees are fixed here, before estimation and sponsoring)
@@ -588,7 +672,7 @@ export async function sendPasskeyUserOp(
   let op: UnpackedUserOp = {
     sender,
     nonce,
-    ...(args.deployed ? {} : { factory: SAFE_PROXY_FACTORY, factoryData: safeFactoryData(key) }),
+    ...(args.deployed ? {} : { factory: SAFE_PROXY_FACTORY, factoryData: signer.factoryData }),
     callData,
     callGasLimit: 0n,
     verificationGasLimit: 0n,
@@ -599,7 +683,7 @@ export async function sendPasskeyUserOp(
     paymasterVerificationGasLimit: PM_VERIFICATION_GAS_FLOOR,
     paymasterPostOpGasLimit: PM_POST_OP_GAS_FLOOR,
     paymasterData: `0x${'00'.repeat(PAYMASTER_DATA_LENGTH)}`,
-    signature: dummyUserOpSignature(owner),
+    signature: signer.dummySignature,
   };
   const est = await rpc<Record<string, Hex | undefined>>(
     fetchImpl,
@@ -626,15 +710,14 @@ export async function sendPasskeyUserOp(
   const reply = (await postJson(
     fetchImpl,
     `${apiUrl}/api/passkey/sponsor`,
-    sponsorRequestBody(op, args),
+    sponsorRequestBody(op, { ...args, proof: signer.proof }),
     timeout,
   )) as SponsorResponse;
   op = applySponsorship(op, reply);
 
-  // 4. sign the Safe op hash with the passkey
+  // 4. the signer signs the Safe op hash
   const hash = safeOpHash(op, 0, 0);
-  const assertion = await sign(args.credentialId, hash);
-  op = { ...op, signature: userOpSignatureFromAssertion(assertion, hash, owner) };
+  op = { ...op, signature: await signer.signOpHash(hash) };
 
   // 5. submit + wait for the receipt
   const userOpHash = await rpc<Hex>(fetchImpl, bundlerUrl, 'eth_sendUserOperation', [toRpcUserOp(op), ENTRY_POINT_V07], timeout);
