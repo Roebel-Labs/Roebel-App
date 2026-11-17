@@ -179,7 +179,8 @@ export default function NotificationsInboxScreen() {
         break;
       case 'credential_invite':
       case 'credential_action':
-      case 'credential_letters': {
+      case 'credential_letters':
+      case 'credential_visibility': {
         // Same mapping as a push tap (ids validated there).
         const route = routeForNotification(data);
         if (route) router.push(route as any);
