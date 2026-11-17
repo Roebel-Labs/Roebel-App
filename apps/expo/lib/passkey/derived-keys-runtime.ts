@@ -2,6 +2,14 @@
  * Real-world wiring for derived-keys.ts: the passkey session behind the active account, the
  * server key backup, SecureStore, PRF, and a random generator per slot.
  *
+ * Whoever owns the Safe, ONE session signer (session-signer.ts) is built per call and does all
+ * of it: it signs the key-backup proofs and yields the vault key the blobs are wrapped under.
+ *   - passkey session: the vault key is the passkey PRF (as before);
+ *   - 12-word session (expert path, `ownerType: 'ecdsa'`): the vault key is derived from the
+ *     phrase (`wordsFromSeed(phrase).vaultKey()`), read behind the device unlock. So the three
+ *     blobs of an expert account (MACI / Nostr / salt) open with the words alone on a new phone
+ *     (spec 5.5), and a proof + unwrap cost ONE unlock, like one fingerprint on the passkey path.
+ *
  * Import this module DYNAMICALLY and only when `passkeySessionOf(account)` is non-null: it pulls
  * in react-native-passkey (native). thirdweb sessions never load it and keep their derivation
  * paths byte-for-byte.
@@ -30,7 +38,9 @@ import { createKeyBackupClient, KEY_BACKUP_SLOTS, type KeyBackupSlot, type Remot
 import { unwrapSecret, wrapSecret } from './prf-vault';
 import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
-import { identityKind, type PasskeySession } from './session';
+import { identityKind, isWordsOwner, type PasskeySession } from './session';
+import { phraseStore } from './phrase-store-runtime';
+import { sessionSignerFor, type SessionSigner } from './session-signer';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
 import { isSafeDeployed, sendSafeUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
@@ -48,10 +58,16 @@ import { loadWordsPool, saveWordsPool } from './words-guardians';
 import { loadWordsPending } from './words-setup';
 import { secureKeyValueStorage } from './migration-runtime';
 
+/** The signer of the session's Safe owner: the passkey, or the 12 words behind the device unlock. */
+export function signerForSession(session: PasskeySession): SessionSigner {
+  return sessionSignerFor(session, { signPasskey: signWithPasskey, getPrf: getPrfSecret, phrase: phraseStore });
+}
+
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
   isSafeDeployed: (safe) => isSafeDeployed(safe),
   sendUserOp: (args) => sendSafeUserOp(args),
+  signerFor: signerForSession,
 };
 
 const storage = {
@@ -86,19 +102,25 @@ export function requirePasskeySession(account: unknown): PasskeySession {
   return s;
 }
 
-export function keyBackupFor(session: PasskeySession): RemoteBackup {
+/**
+ * The key backup of the session's identity. Every proof is signed by `signer` (default: built from
+ * the session) and returns its vault key as `prf` (the name the backup code uses; it means "the
+ * vault key": passkey PRF, or the phrase's vault key for a 12-word session).
+ */
+export function keyBackupFor(session: PasskeySession, signer: SessionSigner = signerForSession(session)): RemoteBackup {
+  const deps: AdapterDeps = { ...adapterDeps, signerFor: () => signer };
   // The identity as a message signer (the adapter's signMessage) for the API session token.
-  const signer = {
+  const messageSigner = {
     address: session.identity,
-    signMessage: ({ message }: { message: string }) => signHashAsIdentity(session, hashMessage(message), adapterDeps),
+    signMessage: ({ message }: { message: string }) => signHashAsIdentity(session, hashMessage(message), deps),
   };
   return createKeyBackupClient({
     apiUrl: PASSKEY_API_URL,
     identity: session.identity,
-    sign: (message) => signHashAsIdentityWithPrf(session, hashMessage(message), adapterDeps),
+    sign: (message) => signHashAsIdentityWithPrf(session, hashMessage(message), deps),
     session: {
       peek: () => passkeyApiSession.peek(session.identity),
-      get: () => passkeyApiSession.get(signer),
+      get: () => passkeyApiSession.get(messageSigner),
       invalidate: (token) => passkeyApiSession.invalidate(token),
     },
   });
@@ -125,6 +147,28 @@ export const resolveWordsVaultKey: NonNullable<ResolveDeps['wordsVaultKey']> = a
     return null;
   }
 };
+
+/**
+ * The key-backup deps one call needs, all from ONE signer: the vault key (`getPrf`), the backup,
+ * and the recovery-words copy hook.
+ *
+ * A 12-word session gets no `wordsVaultKey` hook: its primary blobs are already wrapped under the
+ * words' vault key, so a `_w` copy would only duplicate them, and the hook's `wvk` (the passkey
+ * account's recovery words, plan 2) does not exist for it (without one, resolveVaultKey would
+ * only clear this device's copy of another account's vault key).
+ */
+export function keyDepsForSession(session: PasskeySession): {
+  getPrf: () => Promise<Hex | null>;
+  remote: RemoteBackup;
+  wordsVaultKey?: typeof resolveWordsVaultKey;
+} {
+  const signer = signerForSession(session);
+  return {
+    getPrf: () => signer.vaultKey(),
+    remote: keyBackupFor(session, signer),
+    ...(isWordsOwner(session) ? {} : { wordsVaultKey: resolveWordsVaultKey }),
+  };
+}
 
 /** Migrated person: the identity is a legacy account, or the Safe administers one (v3 moveTo). */
 export async function hasLegacyHistory(session: PasskeySession): Promise<boolean> {
@@ -158,13 +202,11 @@ function resolveOnce(
     loadLocal: local.load,
     saveLocal: local.save,
     storage,
-    getPrf: () => getPrfSecret(session.credentialId),
-    remote: keyBackupFor(session),
+    ...keyDepsForSession(session),
     hasLegacyHistory: () => hasLegacyHistory(session),
     generate: SLOT_GENERATORS[slot],
     wrap: wrapSecret,
     unwrap: unwrapSecret,
-    wordsVaultKey: resolveWordsVaultKey,
   });
 }
 
@@ -194,18 +236,16 @@ export function deviceSecretSources(identity: string) {
 }
 
 /**
- * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the passkey session's
- * identity (at most two fingerprints; the words copies ride in the same write). Never overwrites a
+ * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the session's
+ * identity (at most two fingerprints / device unlocks; the words copies ride in the same write). Never overwrites a
  * different server copy.
  */
 export async function backupKeysForSession(session: PasskeySession): Promise<BackupReport> {
   return backupDeviceSecrets(deviceSecretSources(session.identity), {
     storage,
-    getPrf: () => getPrfSecret(session.credentialId),
-    remote: keyBackupFor(session),
+    ...keyDepsForSession(session),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
-    wordsVaultKey: resolveWordsVaultKey,
   });
 }
 

@@ -11,6 +11,11 @@
  * same recipe as guardian approvals, fork-proven in GuardianErc1271.t.sol). The server checks it
  * with viem verifyMessage on Gnosis. The Safe must be deployed (every migrated Safe is).
  *
+ * A 12-word account (expert path, `ownerType: 'ecdsa'`) proves itself the same way through its
+ * session signer (session-signer.ts): the words' account key, read behind ONE device unlock,
+ * signs safeMessageHash(safe, hashMessage(text)) and the Safe's ECDSA owner signature is the
+ * ERC-1271 proof. The passkey is never asked.
+ *
  * The text is shared BYTE-EXACT with apps/web/src/lib/passkey/email-proof.ts, pinned by
  * __tests__/email-proof-vector.json in both apps. Change both or neither.
  *
@@ -20,6 +25,10 @@
 import { hashMessage, type Address, type Hex } from 'viem';
 import { PASSKEY_API_URL, SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import { safeMessageHash } from './guardians';
+import type { SafeOwnerType } from './migration';
+import { PhraseCancelledError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
+import { isWordsOwner, WORDS_KEY_PLACEHOLDER } from './session';
+import { sessionSignerFor } from './session-signer';
 import { safeSignatureFromAssertion } from './userop';
 import { PasskeyCancelledError, signWithPasskey, type PasskeyAssertion } from './webauthn';
 
@@ -57,7 +66,8 @@ export function emailProofChallenge(safe: Address, message: string): Hex {
   return safeMessageHash(safe, hashMessage(message));
 }
 
-export type EmailSigner = { credentialId: string; safe: Address; owner?: Address };
+/** The Safe that signs (from the migration record); `ownerType: 'ecdsa'` = a 12-word account. */
+export type EmailSigner = { credentialId: string; safe: Address; owner?: Address; ownerType?: SafeOwnerType };
 
 export type EmailDeps = {
   fetch?: (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{
@@ -67,6 +77,8 @@ export type EmailDeps = {
   }>;
   apiUrl?: string;
   sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
+  /** The device's phrase store: required for a 12-word account (phrase-store-runtime in the app). */
+  phrase?: Pick<PhraseStore, 'read'>;
   nowSec?: () => number;
   timeoutMs?: number;
 };
@@ -74,6 +86,25 @@ export type EmailDeps = {
 /** Safe contract signature (one owner) over the proof text. */
 export async function signEmailProof(signer: EmailSigner, message: string, deps: EmailDeps = {}): Promise<Hex> {
   const challenge = emailProofChallenge(signer.safe, message);
+  if (isWordsOwner(signer)) {
+    if (!signer.owner) throw new Error('a 12-word account needs its owner');
+    if (!deps.phrase) throw new Error('a 12-word account needs the phrase store');
+    const session = {
+      credentialId: '',
+      x: WORDS_KEY_PLACEHOLDER,
+      y: WORDS_KEY_PLACEHOLDER,
+      safe: signer.safe,
+      identity: signer.safe,
+      ownerType: 'ecdsa' as const,
+      owner: signer.owner,
+    };
+    const words = sessionSignerFor(session, {
+      signPasskey: () => Promise.reject(new Error('a 12-word account never asks for a passkey')),
+      getPrf: async () => null,
+      phrase: deps.phrase,
+    });
+    return (await words.signDigest(challenge)).safeSignature;
+  }
   const assertion = await (deps.sign ?? signWithPasskey)(signer.credentialId, challenge);
   return safeSignatureFromAssertion(assertion, challenge, signer.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER);
 }
@@ -106,6 +137,7 @@ const MESSAGES: Record<string, string> = {
   store_unavailable: 'Der Dienst ist gerade nicht erreichbar. Bitte versuche es später erneut.',
   network: 'Keine Verbindung. Bitte versuche es erneut.',
   cancelled: 'Abgebrochen.',
+  words_unavailable: 'Deine 12 Wörter sind auf diesem Gerät nicht mehr lesbar. Bitte gib sie noch einmal ein.',
 };
 const GENERIC = 'Etwas ist schiefgelaufen. Bitte versuche es erneut.';
 
@@ -145,14 +177,17 @@ async function signOrCancel(signer: EmailSigner, message: string, deps: EmailDep
   try {
     return await signEmailProof(signer, message, deps);
   } catch (e) {
-    if (e instanceof PasskeyCancelledError) throw new PasskeyEmailError('cancelled', emailErrorMessage('cancelled'));
+    if (e instanceof PasskeyCancelledError || e instanceof PhraseCancelledError) {
+      throw new PasskeyEmailError('cancelled', emailErrorMessage('cancelled'));
+    }
+    if (e instanceof PhraseUnavailableError) throw new PasskeyEmailError('words_unavailable', emailErrorMessage('words_unavailable'));
     throw e;
   }
 }
 
 const nowSec = (deps: EmailDeps) => (deps.nowSec ? deps.nowSec() : Math.floor(Date.now() / 1000));
 
-/** Signs the add-proof with the passkey and asks the server to mail a 6-digit code. */
+/** Signs the add-proof (passkey, or the 12 words after the device unlock) and asks the server to mail a 6-digit code. */
 export async function requestEmailCode(
   signer: EmailSigner,
   rawEmail: string,

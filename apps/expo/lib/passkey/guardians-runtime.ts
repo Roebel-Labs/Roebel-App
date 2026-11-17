@@ -22,8 +22,20 @@ import { secureKeyValueStorage } from './migration-runtime';
 import { resolvePeople, withLabel, type Person, type ProfileRow } from './people';
 import type { RecoveryStorage, WordsRecoveryDeps } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
-import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall, type UserOpDeps } from './userop';
-import { createPasskey } from './webauthn';
+import { phraseStore } from './phrase-store-runtime';
+import { isWordsOwner } from './session';
+import { sessionSignerFor } from './session-signer';
+import {
+  DEFAULT_GNOSIS_RPC_URL,
+  isSafeDeployed,
+  passkeyOpSigner,
+  sendPasskeyUserOp,
+  sendSafeUserOp,
+  type SafeOpSigner,
+  type SponsoredCall,
+  type UserOpDeps,
+} from './userop';
+import { createPasskey, signWithPasskey, type PasskeyAssertion } from './webauthn';
 import { markWordsRecoveryDone, savePendingVaultKey, type WordsLookupChain } from './words-recovery';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
@@ -179,7 +191,26 @@ export async function readIdentityMode(record: MigrationRecord): Promise<Identit
 // Sponsored ops
 // ---------------------------------------------------------------------------
 
-/** One fingerprint-signed op from this device's own Safe (guardian management / cancel). */
+/**
+ * The op signer of this device's Safe owner: the passkey (`sign`, default the native prompt), or
+ * for a 12-word record (expert path) the words' account key behind ONE device unlock per op.
+ */
+export function opSignerForRecord(
+  record: MigrationRecord,
+  sign: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion> = signWithPasskey,
+): SafeOpSigner {
+  if (isWordsOwner(record)) {
+    const session = { ...record, identity: record.safe };
+    return sessionSignerFor(session, {
+      signPasskey: () => Promise.reject(new Error('a 12-word account never asks for a passkey')),
+      getPrf: async () => null,
+      phrase: phraseStore,
+    }).opSigner;
+  }
+  return passkeyOpSigner({ credentialId: record.credentialId, x: record.x, y: record.y, owner: record.owner }, sign);
+}
+
+/** One op from this device's own Safe (guardian management / cancel): one fingerprint or device unlock. */
 export async function sendOwnSafeOp(
   record: MigrationRecord,
   mode: IdentityMode,
@@ -187,16 +218,16 @@ export async function sendOwnSafeOp(
   userOpDeps?: UserOpDeps,
 ): Promise<Hex> {
   const deployed = await isSafeDeployed(record.safe);
-  const { txHash } = await sendPasskeyUserOp({
-    credentialId: record.credentialId,
-    x: record.x,
-    y: record.y,
-    calls,
-    deployed,
-    sender: record.safe,
-    owner: record.owner,
-    ...(mode.mode === 'legacy' ? { legacy: mode.legacy } : {}),
-  }, userOpDeps);
+  const { txHash } = await sendSafeUserOp(
+    {
+      signer: opSignerForRecord(record, userOpDeps?.sign),
+      calls,
+      deployed,
+      sender: record.safe,
+      ...(mode.mode === 'legacy' ? { legacy: mode.legacy } : {}),
+    },
+    userOpDeps,
+  );
   return txHash;
 }
 
@@ -254,7 +285,7 @@ export const sameAddress = (a: Address | null | undefined, b: Address | null | u
   !!a && !!b && isAddressEqual(a, b);
 
 /**
- * The guardian's on-chain confirmation (one fingerprint). My Safe may be counterfactual: the op
+ * The guardian's on-chain confirmation (one fingerprint, or one device unlock for a 12-word account). My Safe may be counterfactual: the op
  * deploys it. A legacy-account guardian confirms through `legacy.execute` (sponsor mode "legacy").
  */
 export async function sendGuardianConfirm(
@@ -262,14 +293,11 @@ export async function sendGuardianConfirm(
   plan: Extract<GuardianConfirmPlan, { kind: 'safe' | 'legacy' }>,
 ): Promise<Hex> {
   const deployed = await isSafeDeployed(record.safe);
-  const { txHash } = await sendPasskeyUserOp({
-    credentialId: record.credentialId,
-    x: record.x,
-    y: record.y,
+  const { txHash } = await sendSafeUserOp({
+    signer: opSignerForRecord(record),
     calls: plan.calls,
     deployed,
     sender: record.safe,
-    owner: record.owner,
     ...(plan.kind === 'legacy' ? { legacy: plan.legacy } : plan.recoveryLegacy ? { recoveryLegacy: plan.recoveryLegacy } : {}),
   });
   return txHash;

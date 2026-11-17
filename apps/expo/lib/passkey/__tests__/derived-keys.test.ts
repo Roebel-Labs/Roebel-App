@@ -1,4 +1,30 @@
-import type { Hex } from 'viem';
+/** Runtime wiring under a 12-word (ecdsa) session: see the "expert account" describe at the end. */
+const mockStore = new Map<string, string>();
+const mockPhrase = { read: jest.fn(async (_reason: string) => '') };
+jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+jest.mock('@/lib/storage/secureStorage', () => ({
+  getItemAsync: async (k: string) => mockStore.get(k) ?? null,
+  setItemAsync: async (k: string, v: string) => void mockStore.set(k, v),
+  deleteItemAsync: async (k: string) => void mockStore.delete(k),
+}));
+jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('../phrase-store-runtime', () => ({ phraseStore: mockPhrase }));
+jest.mock('../api-session-runtime', () => ({
+  passkeyApiSession: { peek: async () => null, get: async () => null, invalidate: async () => undefined },
+}));
+jest.mock('../recovery-lookup', () => ({ ...jest.requireActual('../recovery-lookup'), findLinkedLegacies: async () => [] }));
+jest.mock('../userop', () => ({ ...jest.requireActual('../userop'), isSafeDeployed: async () => true }));
+jest.mock('../webauthn', () => ({
+  ...jest.requireActual('../webauthn'),
+  signWithPasskey: jest.fn(async () => {
+    throw new Error('the passkey must never be asked for a words session');
+  }),
+  getPrfSecret: jest.fn(async () => {
+    throw new Error('the passkey PRF must never be asked for a words session');
+  }),
+}));
+
+import { getAddress, type Hex } from 'viem';
 import {
   backupDeviceSecrets,
   BACKUP_RACE_MESSAGE,
@@ -475,5 +501,78 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
     const report = await backupDeviceSecrets([{ slot: 'maci', loadLocal: async () => bytes('M') }], deps({ remote }).d);
     expect(report.status).toBe('disabled');
     expect(remote.write).not.toHaveBeenCalled();
+  });
+});
+
+describe('expert account (12 words): the key backup runs on the phrase vault key', () => {
+  // Loaded after the mocks above (the runtime pulls in native wiring).
+  const runtime = () => require('../derived-keys-runtime') as typeof import('../derived-keys-runtime');
+  const { PASSKEY_SESSION_PROP } = require('../active') as typeof import('../active');
+  const { WORDS_KEY_PLACEHOLDER } = require('../session') as typeof import('../session');
+  const { wordsVaultKey } = require('../words') as typeof import('../words');
+  const { wordsKeyServer } = require('../__testutils__/words-key-server') as typeof import('../__testutils__/words-key-server');
+  const ev = require('./ecdsa-safe-vector.json') as { phrase: string; owner: string; safeAddress: string };
+  const JUNK = ev.phrase;
+  const ABOUT = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  const SAFE = getAddress(ev.safeAddress);
+  const session = {
+    credentialId: '',
+    x: WORDS_KEY_PLACEHOLDER,
+    y: WORDS_KEY_PLACEHOLDER,
+    safe: SAFE,
+    identity: SAFE,
+    ownerType: 'ecdsa' as const,
+    owner: getAddress(ev.owner),
+  };
+  const account = { address: SAFE, [PASSKEY_SESSION_PROP]: session };
+  const realFetch = global.fetch;
+
+  beforeEach(() => {
+    mockStore.clear();
+    mockPhrase.read.mockReset().mockImplementation(async () => JUNK);
+  });
+  afterAll(() => {
+    global.fetch = realFetch;
+  });
+
+  function localSlot() {
+    let held: Uint8Array | null = null;
+    return { load: async () => held, save: async (s: Uint8Array) => void (held = s), held: () => held };
+  }
+
+  it('expert account: a generated key is wrapped under the phrase vault key and opens again from the words alone', async () => {
+    const server = wordsKeyServer({ safe: SAFE, owner: session.owner });
+    global.fetch = server.fetch as unknown as typeof fetch;
+    const local = localSlot();
+    const r = await runtime().resolveSecretForAccount(account, 'nostr', local);
+    expect(r.source).toBe('generated');
+    expect(r.backedUp).toBe(true);
+    // Every proof the server accepted was the Safe owner's (the words' key 0) ERC-1271 signature.
+    expect(server.proofs).toBe(2); // read + write: the same two prompts a passkey costs
+    const blob = server.blobs.nostr!;
+    expect(blob).toBeDefined();
+    // No `_w` copy and no `wvk`: the primary blob already IS under the words.
+    expect(Object.keys(server.blobs)).toEqual(['nostr']);
+    expect(await unwrapSecret(wordsVaultKey(JUNK), SLOT_LABEL.nostr, blob)).toEqual(r.secret);
+    await expect(unwrapSecret(wordsVaultKey(ABOUT), SLOT_LABEL.nostr, blob)).rejects.toThrow();
+
+    // A new phone: nothing on the device, only the words (typed in again) and the server copy.
+    mockStore.clear();
+    const fresh = localSlot();
+    const again = await runtime().resolveSecretForAccount(account, 'nostr', fresh);
+    expect(again.source).toBe('backup');
+    expect(again.secret).toEqual(r.secret);
+    expect(fresh.held()).toEqual(r.secret);
+  });
+
+  it('expert account: "Schlüssel sichern" wraps under the phrase vault key in one write', async () => {
+    const server = wordsKeyServer({ safe: SAFE, owner: session.owner });
+    global.fetch = server.fetch as unknown as typeof fetch;
+    mockStore.set('roebel.maci.keypair.v1', '{"privKey":"maci"}');
+    const report = await runtime().backupKeysForSession(session);
+    expect(report.saved).toEqual(['maci']);
+    expect(server.writes).toHaveLength(1);
+    expect(text(await unwrapSecret(wordsVaultKey(JUNK), SLOT_LABEL.maci, server.blobs.maci!))).toBe('{"privKey":"maci"}');
+    expect(mockPhrase.read.mock.calls.length).toBeLessThanOrEqual(2);
   });
 });

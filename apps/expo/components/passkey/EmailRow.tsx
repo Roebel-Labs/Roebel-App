@@ -1,7 +1,8 @@
 /**
  * "E-Mail für Warnungen (optional)": add / verify-code / remove the warning email of this device's
- * passkey Safe. Self-contained (loads the migration record itself) so the settings screen only
- * mounts it. Renders nothing until the passkey Safe is set up.
+ * passkey Safe or 12-word (expert) Safe. Self-contained (loads the migration record itself) so the
+ * settings screen only mounts it. Renders nothing until the Safe is set up. A 12-word account
+ * signs the proof with its words after the device unlock (lib/passkey/email.ts).
  *
  * The email is only for warnings (a recovery of the account, opted-in notices). It is never a
  * sign-in and never a key. See lib/passkey/email.ts.
@@ -13,6 +14,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
+import { phraseStore } from '@/lib/passkey/phrase-store-runtime';
+import { isWordsOwner } from '@/lib/passkey/session';
 import {
   PasskeyEmailError,
   confirmEmailCode,
@@ -77,11 +80,13 @@ export default function EmailRow() {
   }, []);
 
   if (!record || !state) return null;
-  const signer = { credentialId: record.credentialId, safe: record.safe, owner: record.owner };
+  const signer = { credentialId: record.credentialId, safe: record.safe, owner: record.owner, ownerType: record.ownerType };
+  const words = isWordsOwner(record);
+  const signDeps = { phrase: phraseStore };
 
   const onSendCode = () =>
     run(async () => {
-      const { email, expiresAt } = await requestEmailCode(signer, emailInput);
+      const { email, expiresAt } = await requestEmailCode(signer, emailInput, signDeps);
       await persist({ ...state, pending: { email, expiresAt } });
       setCodeInput('');
       setMode('enterCode');
@@ -99,7 +104,7 @@ export default function EmailRow() {
 
   const onRemove = () =>
     run(async () => {
-      await removeWarningEmail(signer);
+      await removeWarningEmail(signer, signDeps);
       await persist({ safe: state.safe, verified: null, pending: null });
       setMode('view');
       setInfo('Die E-Mail-Adresse ist entfernt.');
@@ -172,7 +177,9 @@ export default function EmailRow() {
             editable={!busy}
           />
           <Text style={[styles.hint, { color: colors.textTertiary }]}>
-            Zum Bestätigen fragt dich dein Gerät nach deinem Passkey.
+            {words
+              ? 'Zum Bestätigen entsperrst du dein Gerät.'
+              : 'Zum Bestätigen fragt dich dein Gerät nach deinem Passkey.'}
           </Text>
           <View style={styles.row}>
             <Pressable
