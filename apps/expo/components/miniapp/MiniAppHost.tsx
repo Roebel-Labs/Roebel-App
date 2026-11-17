@@ -59,6 +59,8 @@ import type {
 
 import type { MiniApp } from '@/lib/miniapps';
 import { trackMiniAppEvent, newMiniAppSessionId } from '@/lib/miniapps';
+import { bridgeGuardScript, createBridgeGuard } from '@/lib/miniapp-bridge-guard';
+import { getRandomBytes } from 'expo-crypto';
 import { markMiniAppInstalled } from '@/lib/miniapp-installs';
 import {
   getNotificationDecision,
@@ -200,6 +202,32 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [app.homeUrl]);
   const sourceUrl = useFallback && fallbackUrl ? fallbackUrl : app.homeUrl;
+
+  // Bridge guard: a fresh nonce per WebView mount (keyed like the WebView by
+  // openCount) and only the loaded URL's origin may talk to the bridge. Drops
+  // messages from sub-frames (ads, embeds) and from a top frame that
+  // navigated to another origin.
+  const bridgeNonce = useMemo(
+    () => Array.from(getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join(''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- new nonce per open
+    [openCount],
+  );
+  const bridgeGuard = useMemo(() => {
+    let origin: string | null = null;
+    try {
+      origin = new URL(sourceUrl).origin;
+    } catch {
+      origin = null;
+    }
+    return createBridgeGuard({
+      nonce: bridgeNonce,
+      allowedOrigins: () => (origin ? [origin] : []),
+    });
+  }, [bridgeNonce, sourceUrl]);
+  const bridgeGuardJs = useMemo(() => bridgeGuardScript(bridgeNonce), [bridgeNonce]);
+  // The guard whose first accepted message was already checked for the
+  // envelope (bridge_envelope_missing is tracked once per open).
+  const envelopeCheckedForRef = useRef<ReturnType<typeof createBridgeGuard> | null>(null);
 
   const handleLoadError = useCallback(
     (e: { nativeEvent: { description?: string; code?: number } }) => {
@@ -614,11 +642,20 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [account?.address, visible]);
 
-  const onMessage = useCallback((e: WebViewMessageEvent) => {
-    const bridge = bridgeRef.current;
-    if (bridge) bridge.handleMessage(e.nativeEvent.data);
-    else earlyMessagesRef.current.push(e.nativeEvent.data);
-  }, []);
+  const onMessage = useCallback(
+    (e: WebViewMessageEvent) => {
+      const raw = bridgeGuard.accept({ data: e.nativeEvent.data, url: e.nativeEvent.url });
+      if (raw === null) return;
+      if (envelopeCheckedForRef.current !== bridgeGuard) {
+        envelopeCheckedForRef.current = bridgeGuard;
+        if (!bridgeGuard.envelopeSeen()) track('bridge_envelope_missing');
+      }
+      const bridge = bridgeRef.current;
+      if (bridge) bridge.handleMessage(raw);
+      else earlyMessagesRef.current.push(raw);
+    },
+    [bridgeGuard, track],
+  );
 
   const handleClose = useCallback(() => {
     onClose();
@@ -684,6 +721,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             ref={webViewRef}
             source={{ uri: sourceUrl }}
             onMessage={onMessage}
+            // Top frame only (ForMainFrameOnly defaults to true): tags every
+            // top-frame message with this open's nonce.
+            injectedJavaScriptBeforeContentLoaded={bridgeGuardJs}
             onError={handleLoadError}
             originWhitelist={['*']}
             javaScriptEnabled
