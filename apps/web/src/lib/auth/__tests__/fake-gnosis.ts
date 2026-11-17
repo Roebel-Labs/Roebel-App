@@ -16,12 +16,14 @@ import {
   recoverTypedDataAddress,
   type Hex,
 } from "viem";
-import { emulateSafeIsValidSignature } from "../../passkey/__tests__/safe-1271-emulator";
+import { emulateSafeIsValidSignature, safeMessageHash } from "../../passkey/__tests__/safe-1271-emulator";
 import type { AccountSignatureClient } from "../account-signature-core";
 
 export interface FakeGnosis {
   thirdweb: Map<string, { admins: Set<string>; deployed: boolean }>;
   safes: Map<string, { x: Hex; y: Hex }>;
+  /** Expert-path Safes (single ECDSA owner). Counterfactual ones accept only an ERC-6492 wrapper whose factory data matches. */
+  ecdsaSafes?: Map<string, { owner: Hex; deployed: boolean; factoryData: Hex }>;
   down?: boolean;
 }
 
@@ -63,6 +65,21 @@ export function fakeGnosisClient(w: FakeGnosis): AccountSignatureClient & { call
         if (!tw.deployed && inner === signature) return false; // counterfactual: only 6492 works
         return thirdwebErc1271(address, hash, inner, tw.admins);
       }
+      const ecdsa = w.ecdsaSafes?.get(lc(address));
+      if (ecdsa) {
+        const wrapped = parseErc6492Signature(signature);
+        if (!ecdsa.deployed) {
+          if (wrapped.signature === signature) return false; // counterfactual: only 6492 works
+          if (lc(wrapped.data as string) !== lc(ecdsa.factoryData)) return false;
+        }
+        try {
+          // Safe ERC-1271: ECDSA over the SafeMessage hash of the digest, signer = the single owner.
+          const signer = await recoverAddress({ hash: safeMessageHash(address, hash), signature: wrapped.signature });
+          return isAddressEqual(signer, ecdsa.owner);
+        } catch {
+          return false;
+        }
+      }
       const safe = w.safes.get(lc(address));
       if (safe) return emulateSafeIsValidSignature({ safe: address, x: safe.x, y: safe.y, hash, signature });
       try {
@@ -77,7 +94,7 @@ export function fakeGnosisClient(w: FakeGnosis): AccountSignatureClient & { call
       if (functionName !== "isAdmin") throw new Error(`unexpected ${functionName}`);
       const tw = w.thirdweb.get(lc(address));
       if (tw && tw.deployed) return tw.admins.has(lc(args[0] as string));
-      if (w.safes.has(lc(address))) {
+      if (w.safes.has(lc(address)) || w.ecdsaSafes?.get(lc(address))?.deployed) {
         throw new Named("ContractFunctionExecutionError", new Named("ContractFunctionRevertedError"));
       }
       throw new Named("ContractFunctionExecutionError", new Named("ContractFunctionZeroDataError"));
