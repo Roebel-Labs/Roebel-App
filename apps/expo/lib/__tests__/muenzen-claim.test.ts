@@ -160,6 +160,25 @@ describe('claimMuenzenAsOneBatch', () => {
     expect(sent[0].calls.map((c) => c.to)).toEqual([HUB, HUB]);
   });
 
+  it('with the Guest hook: the Guest call goes first in the same one op, citizenship = group membership', async () => {
+    const { account, sent } = passkeyAccount(SAFE);
+    const REG = getAddress('0x' + '11'.repeat(20));
+    const guest = { to: REG, data: '0xb6a96c0a' as Hex };
+    const withGuest = jest.fn((_p: { address: Address; isCitizen: boolean }, run: (g: typeof guest | null) => Promise<unknown>) => run(guest)) as any;
+    await claimMuenzenAsOneBatch(account, reads({ isGroupMember: false }), { hub: HUB, group: GROUP }, { withGuest });
+    expect(withGuest.mock.calls[0][0]).toEqual({ address: SAFE, isCitizen: false });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].calls.map((c) => c.to)).toEqual([REG, HUB]);
+  });
+
+  it('with the Guest hook returning no Guest call: the op is the unchanged claim', async () => {
+    const { account, sent } = passkeyAccount(SAFE);
+    const withGuest = jest.fn((_p: unknown, run: (g: null) => Promise<unknown>) => run(null)) as any;
+    await claimMuenzenAsOneBatch(account, reads(), { hub: HUB, group: GROUP }, { withGuest });
+    expect(withGuest.mock.calls[0][0]).toEqual({ address: SAFE, isCitizen: true });
+    expect(sent[0].calls.map((c) => c.to)).toEqual([HUB, HUB]);
+  });
+
   it('nothing to claim: German message, no op', async () => {
     const { account, d } = passkeyAccount();
     await expect(

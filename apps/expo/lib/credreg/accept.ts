@@ -13,11 +13,11 @@
 import { claimCall, leafHash, type Leaf } from '@netizen-labs/credential-registry';
 import type { Account } from 'thirdweb/wallets';
 import type { Address, Hex } from 'viem';
-import { sendOrgCalls } from '@/lib/org-safe/send';
 import type { ApiResult, SigningAccount } from '@/lib/signed-request';
 import { fetchMine, respondInvitation } from './api';
-import { REGISTRY, readHolding } from './chain';
+import { REGISTRY, readHolding, readIsCitizen } from './chain';
 import { credentialsConfigured } from './gate';
+import { sendWithGuestClaim } from './guest';
 import type { HeldCredential } from './held';
 import type { InvitationView } from './types';
 
@@ -41,8 +41,9 @@ export type AcceptDeps = {
 };
 
 const defaultDeps: AcceptDeps = {
-  // Task 7 swaps this for sendWithGuestClaim.
-  send: sendOrgCalls,
+  // A non-citizen's first public claim also self-claims Guest (retried without it on failure).
+  send: (account, calls) =>
+    sendWithGuestClaim(account, calls, { isCitizen: () => readIsCitizen(account.address as Address) }),
   respond: respondInvitation,
   fetchMine,
   holding: readHolding,

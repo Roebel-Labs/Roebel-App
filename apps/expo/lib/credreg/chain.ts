@@ -5,7 +5,7 @@
 import { CREDENTIAL_REGISTRY_ABI, createCredentialRegistryReader, type CredentialRegistryReader } from '@netizen-labs/credential-registry';
 import { createPublicClient, hashMessage, hashTypedData, http, recoverTypedDataAddress, type Address, type Hex, type PublicClient } from 'viem';
 import { gnosis } from 'viem/chains';
-import { credentialRegistryGnosisAddress } from '@/constants/gnosis';
+import { citizenNFTGnosisAddress, credentialRegistryGnosisAddress } from '@/constants/gnosis';
 import { makeAccountSignatureVerifier, type AccountSignatureClient, type VerifyAccountSignature } from './account-signature-core';
 
 const RPC = process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
@@ -42,6 +42,21 @@ export async function readHolding(typeId: Hex, account: Address): Promise<{ batc
     args: [typeId, account],
   })) as { batchId: bigint; leaf: Hex; validUntil: bigint };
   return { batchId: BigInt(h.batchId), leaf: h.leaf, validUntil: BigInt(h.validUntil ?? 0) };
+}
+
+const BALANCE_OF_ABI = [
+  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ type: 'uint256' }] },
+] as const;
+
+/** Does the account hold the CitizenNFT (Gnosis v2)? Throws on RPC failure. */
+export async function readIsCitizen(account: Address): Promise<boolean> {
+  const balance = (await publicClient().readContract({
+    address: citizenNFTGnosisAddress as Address,
+    abi: BALANCE_OF_ABI,
+    functionName: 'balanceOf',
+    args: [account],
+  })) as bigint;
+  return balance > 0n;
 }
 
 /** The org a type belongs to (`getType`), null when the type does not exist. Throws on RPC failure. */
