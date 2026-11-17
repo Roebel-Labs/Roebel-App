@@ -10,7 +10,7 @@
  * All logic is in lib/passkey/recovery-flow.ts; the state is persisted, so leaving is safe.
  */
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveWallet } from 'thirdweb/react';
@@ -29,6 +29,8 @@ import WordsInput from '@/components/passkey/WordsInput';
 import { wordsFromSeed, type WordsKit } from '@/lib/passkey/words';
 import {
   NO_WORDS_ACCOUNT_MESSAGE,
+  WORDS_RESTORE_NO_VAULT_KEY_MESSAGE,
+  WORDS_VAULT_KEY_MISSING,
   findWalletsByWords,
   wordsKeyRestoreMessage,
   type WordsWallet,
@@ -237,14 +239,23 @@ export default function RestoreAccountScreen() {
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Dein Konto ist wieder da.</Text>
             <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>Ab jetzt meldest du dich mit deinem Fingerabdruck an.</Text>
-            {state.method === 'words' ? <WordsKeyRestore state={state} /> : null}
-            <BigButton
-              label="Weiter"
-              onPress={async () => {
-                await clearRecoveryState(recoveryStorage).catch(() => undefined);
-                router.replace('/settings/passkey' as any);
-              }}
-            />
+            {state.method === 'words' ? (
+              <WordsKeyRestore
+                wallet={state.wallet}
+                onContinue={async () => {
+                  await clearRecoveryState(recoveryStorage).catch(() => undefined);
+                  router.replace('/settings/passkey' as any);
+                }}
+              />
+            ) : (
+              <BigButton
+                label="Weiter"
+                onPress={async () => {
+                  await clearRecoveryState(recoveryStorage).catch(() => undefined);
+                  router.replace('/settings/passkey' as any);
+                }}
+              />
+            )}
           </>
         ) : state.step === 'cancelled' ? (
           <>
@@ -352,7 +363,8 @@ function ChooseMethod({ onChoose }: { onChoose: (m: 'guardians' | 'words') => vo
   );
 }
 
-type WordsHit = WordsWallet & { name: string };
+/** `name` is shown; `passkeyName` names the new passkey (never the "Konto N" placeholder). */
+type WordsHit = WordsWallet & { name: string; passkeyName: string };
 
 /**
  * "Mit 12 Wörtern": the words (checked while typing: unknown word / checksum) → their 5 pool
@@ -387,7 +399,7 @@ function WordsRestore({
     const s = secret.current;
     if (!s) return;
     try {
-      await onStart(hit, hit.name, s.phrase, s.kit);
+      await onStart(hit, hit.passkeyName, s.phrase, s.kit);
     } finally {
       secret.current = null;
       setHits(null);
@@ -410,7 +422,7 @@ function WordsRestore({
       const people = await resolvePeopleNow(found.map((f) => f.wallet)).catch(() => new Map());
       const named: WordsHit[] = found.map((f, i) => {
         const p = people.get(f.wallet.toLowerCase());
-        return { ...f, name: p?.known ? p.name : `Konto ${i + 1}` };
+        return p?.known ? { ...f, name: p.name, passkeyName: p.name } : { ...f, name: `Konto ${i + 1}`, passkeyName: 'Röbel' };
       });
       secret.current = { phrase, kit };
       if (named.length === 1) await start(named[0]);
@@ -463,37 +475,70 @@ function WordsRestore({
   );
 }
 
-/** After a words recovery: the keys from their words copies (2 fingerprints), with a retry. */
-function WordsKeyRestore({ state }: { state: RecoveryState }) {
+/**
+ * After a words recovery: the keys come back from their words copies (started right away, 2
+ * fingerprints). "Weiter" waits for the first attempt; skipping after a failure asks first. A
+ * skipped restore stays pending (words-recovery marker) and is offered again in the settings.
+ */
+function WordsKeyRestore({ wallet, onContinue }: { wallet: Address; onContinue: () => void }) {
   const { colors } = useTheme();
-  const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
+  const [phase, setPhase] = useState<'running' | 'done' | 'failed'>('running');
   const [message, setMessage] = useState<string | null>(null);
 
-  const run = useCallback(async () => {
-    setPhase('running');
-    setMessage(null);
+  const attempt = useCallback(async () => {
     try {
       const rt = await import('@/lib/passkey/derived-keys-runtime');
-      const r = await rt.restoreKeysAfterWordsRecovery(state);
+      const r = await rt.restorePendingWordsKeys(wallet);
       setMessage(wordsKeyRestoreMessage(r));
       setPhase('done');
     } catch (e) {
-      setMessage(friendlyError(e, 'Deine Schlüssel konnten nicht geladen werden. Bitte versuche es erneut.'));
-      setPhase('failed');
+      // No vault key: a retry cannot help (shown as final, no retry button).
+      const missing = (e as { name?: string } | null)?.name === WORDS_VAULT_KEY_MISSING;
+      setMessage(missing ? WORDS_RESTORE_NO_VAULT_KEY_MESSAGE : friendlyError(e, 'Deine Schlüssel konnten nicht geladen werden. Bitte versuche es erneut.'));
+      setPhase(missing ? 'done' : 'failed');
     }
-  }, [state]);
+  }, [wallet]);
 
-  if (phase === 'done') return <Notice tone={message ? 'info' : 'success'} text={message ?? 'Deine Schlüssel sind wieder da.'} />;
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    attempt().catch(() => undefined);
+  }, [attempt]);
+
+  const retry = () => {
+    setPhase('running');
+    setMessage(null);
+    attempt().catch(() => undefined);
+  };
+
+  const skip = () =>
+    Alert.alert(
+      'Schlüssel später zurückholen?',
+      'Ohne deine Schlüssel kannst du noch nicht abstimmen und keine Nachrichten lesen. Du kannst sie später in den Einstellungen zurückholen.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Später', onPress: onContinue },
+      ],
+    );
+
   return (
-    <Card>
-      <Text style={[passkeyStyles.label, { color: colors.textPrimary }]}>Deine Schlüssel zurückholen</Text>
-      <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
-        Deine Schlüssel für Abstimmungen und Nachrichten waren mit deinen Wörtern gesichert. Bestätige zweimal mit deinem
-        Fingerabdruck.
-      </Text>
-      {message ? <Notice tone="warning" text={message} /> : null}
-      <BigButton label={phase === 'failed' ? 'Erneut versuchen' : 'Schlüssel zurückholen'} busy={phase === 'running'} onPress={run} />
-    </Card>
+    <>
+      <Card>
+        <Text style={[passkeyStyles.label, { color: colors.textPrimary }]}>Deine Schlüssel zurückholen</Text>
+        <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
+          Deine Schlüssel für Abstimmungen und Nachrichten waren mit deinen Wörtern gesichert. Bestätige zweimal mit deinem
+          Fingerabdruck.
+        </Text>
+        {phase === 'running' ? <ActivityIndicator color={colors.primary} /> : null}
+        {phase === 'done' ? (
+          <Notice tone={message ? 'info' : 'success'} text={message ?? 'Deine Schlüssel sind wieder da.'} />
+        ) : null}
+        {phase === 'failed' && message ? <Notice tone="warning" text={message} /> : null}
+        {phase === 'failed' ? <BigButton label="Erneut versuchen" onPress={retry} /> : null}
+      </Card>
+      <BigButton label="Weiter" disabled={phase === 'running'} onPress={phase === 'failed' ? skip : onContinue} />
+    </>
   );
 }
 

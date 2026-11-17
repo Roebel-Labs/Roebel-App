@@ -8,12 +8,23 @@ import { createLookupChain, guardianAddedEvent } from '../recovery-lookup';
 import { deriveWordAddresses } from '../words';
 import {
   NO_WORDS_ACCOUNT_MESSAGE,
+  WORDS_VAULT_KEY_MISSING,
+  clearPendingWordsRestore,
   findWalletsByWords,
+  loadPendingVaultKey,
+  loadPendingWordsRestore,
+  markWordsRecoveryDone,
+  pendingRestoreVaultKeySlot,
+  pendingWordsRestoreKey,
+  runPendingWordsRestore,
+  savePendingVaultKey,
+  type WordsKeyRestore,
   restoreKeysWithVaultKey,
   signWordApprovals,
   wordsKeyRestoreMessage,
 } from '../words-recovery';
-import { WORDS_OFF_BLOB, unwrapWordsVault } from '../words-vault';
+import { WORDS_OFF_BLOB, WORDS_VAULT_KEY_STORE, unwrapWordsVault } from '../words-vault';
+import { WORDS_POOL_KEY, loadWordsPool } from '../words-guardians';
 import v from './words-recovery-vector.json';
 
 const addr = (n: number) => getAddress(`0x${n.toString(16).padStart(40, '0')}`);
@@ -84,12 +95,12 @@ describe('signWordApprovals', () => {
 
 describe('findWalletsByWords', () => {
   it('fewer word guardians than the threshold: no account', async () => {
-    const chain = { guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }], readGuardians: async () => [POOL[0], P1], readThreshold: async () => 2n };
+    const chain = { guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }], readGuardians: async () => [POOL[0], P1], readThreshold: async () => 2n, isPasskeySafe: async () => true };
     expect(await findWalletsByWords(POOL, chain)).toEqual([]);
   });
 
   it('words that were removed find nothing even though the log exists', async () => {
-    const chain = { guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }], readGuardians: async () => [P1], readThreshold: async () => 1n };
+    const chain = { guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }], readGuardians: async () => [P1], readThreshold: async () => 1n, isPasskeySafe: async () => true };
     expect(await findWalletsByWords(POOL, chain)).toEqual([]);
   });
 
@@ -102,6 +113,7 @@ describe('findWalletsByWords', () => {
       ]),
       readGuardians: async (w: Address) => (w === SAFE ? [P1, POOL[1], POOL[0]] : [POOL[0]]),
       readThreshold: async (w: Address) => (w === SAFE ? 2n : 1n),
+      isPasskeySafe: async () => true,
     };
     expect(await findWalletsByWords(POOL, chain)).toEqual([
       { wallet: SAFE, wordGuardians: [POOL[0], POOL[1]], threshold: 2 },
@@ -115,8 +127,24 @@ describe('findWalletsByWords', () => {
       guardianLogsFor: async () => [{ wallet: SAFE, guardian: POOL[0] }],
       readGuardians: async () => Promise.reject(new Error('rpc down')),
       readThreshold: async () => 1n,
+      isPasskeySafe: async () => true,
     };
     await expect(findWalletsByWords(POOL, chain)).rejects.toThrow('rpc down');
+  });
+
+  it('a decoy wallet that added the public pool addresses as guardians is not offered', async () => {
+    const DECOY = addr(0xde);
+    const chain = {
+      guardianLogsFor: async () => [
+        { wallet: DECOY, guardian: POOL[0] },
+        { wallet: SAFE, guardian: POOL[0] },
+      ],
+      readGuardians: async () => [POOL[0]],
+      readThreshold: async () => 1n,
+      isPasskeySafe: jest.fn(async (w: Address) => w === SAFE),
+    };
+    expect(await findWalletsByWords(POOL, chain)).toEqual([{ wallet: SAFE, wordGuardians: [POOL[0]], threshold: 1 }]);
+    expect(chain.isPasskeySafe).toHaveBeenCalledWith(DECOY);
   });
 
   it('has the German message for "no account"', () => {
@@ -172,7 +200,7 @@ describe('restoreKeysWithVaultKey', () => {
     const getPrf = jest.fn(async () => null);
     const r = await restoreKeysWithVaultKey({ vaultKey: KEY_A, remote, getPrf, wrap: wrapSecret, unwrap: unwrapSecret, saveLocal, pool: POOL });
 
-    expect(r).toEqual({ restored: ['maci', 'salt'], missing: ['nostr'], rewrapped: true });
+    expect(r).toEqual({ restored: ['maci', 'salt'], missing: ['nostr'], rewrapped: true, retryable: false });
     expect(saveLocal).toHaveBeenCalledWith('maci', maciBytes);
     expect(saveLocal).toHaveBeenCalledWith('salt', saltBytes);
     expect(getPrf).not.toHaveBeenCalled(); // the read's assertion already gave the PRF
@@ -194,7 +222,7 @@ describe('restoreKeysWithVaultKey', () => {
     const { remote, writes } = remoteWith({ status: 'found', blobs, prf: PRF2 });
     const saveLocal = jest.fn(async () => undefined);
     const r = await restoreKeysWithVaultKey({ vaultKey: KEY_A, remote, getPrf: async () => null, wrap: wrapSecret, unwrap: unwrapSecret, saveLocal, pool: POOL });
-    expect(r).toEqual({ restored: [], missing: ['maci', 'nostr', 'salt'], rewrapped: true });
+    expect(r).toEqual({ restored: [], missing: ['maci', 'nostr', 'salt'], rewrapped: true, retryable: false });
     expect(saveLocal).not.toHaveBeenCalled();
     expect(Object.keys(writes[0].blobs)).toEqual(['wvk']);
     expect(wordsKeyRestoreMessage(r)).toMatch(/keine Sicherung deiner Schlüssel/);
@@ -210,7 +238,7 @@ describe('restoreKeysWithVaultKey', () => {
     expect(getPrf).toHaveBeenCalledTimes(1);
     expect(saveLocal).toHaveBeenCalledWith('nostr', nostr);
     expect(writes).toHaveLength(0);
-    expect(r).toEqual({ restored: ['nostr'], missing: ['maci', 'salt'], rewrapped: false });
+    expect(r).toEqual({ restored: ['nostr'], missing: ['maci', 'salt'], rewrapped: false, retryable: false });
     expect(bytesToHex(nostr)).toMatch(/^0x03/);
   });
 
@@ -219,5 +247,85 @@ describe('restoreKeysWithVaultKey', () => {
     await expect(
       restoreKeysWithVaultKey({ vaultKey: KEY_A, remote, getPrf: async () => PRF2, wrap: wrapSecret, unwrap: unwrapSecret, saveLocal: jest.fn() }),
     ).rejects.toThrow('offline');
+  });
+});
+
+describe('pending words restore (outlives the recovery state)', () => {
+  const KEY = `0x${'a1'.repeat(32)}` as Hex;
+  const OTHER_ACCOUNT_KEY = `0x${'e9'.repeat(32)}` as Hex;
+  const done = { wallet: SAFE, credentialId: 'cred-1', x: `0x${'01'.repeat(32)}` as Hex, y: `0x${'02'.repeat(32)}` as Hex, signer: P1, wordsPool: POOL };
+
+  function stores() {
+    const kv = new Map<string, string>();
+    const vault = new Map<string, string>([[WORDS_VAULT_KEY_STORE, OTHER_ACCOUNT_KEY]]);
+    return {
+      kv,
+      vault,
+      storage: {
+        getItem: async (k: string) => kv.get(k) ?? null,
+        setItem: async (k: string, v: string) => void kv.set(k, v),
+        removeItem: async (k: string) => void kv.delete(k),
+      },
+      vaultStorage: {
+        getItem: async (k: string) => vault.get(k) ?? null,
+        setItem: async (k: string, v: string) => void vault.set(k, v),
+        deleteItem: async (k: string) => void vault.delete(k),
+      },
+    };
+  }
+  const ok: WordsKeyRestore = { restored: ['maci'], missing: ['nostr', 'salt'], rewrapped: true, retryable: false };
+
+  it('done saves the words pool and the marker (public data only; SecureStore-safe keys)', async () => {
+    const st = stores();
+    await markWordsRecoveryDone(done, st.storage, () => 42);
+    expect(await loadWordsPool(st.storage)).toEqual({ addresses: POOL, confirmedAt: 42 });
+    expect(st.kv.has(WORDS_POOL_KEY)).toBe(true);
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).toEqual(done);
+    expect(st.kv.get(pendingWordsRestoreKey(SAFE))).not.toMatch(/0xa1a1/);
+    for (const k of [pendingWordsRestoreKey(SAFE), pendingRestoreVaultKeySlot(SAFE)]) expect(k).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+
+  it('skipped without a restore: the marker and the per-wallet vault key stay for the settings offer', async () => {
+    const st = stores();
+    await savePendingVaultKey(st.vaultStorage, SAFE, KEY);
+    await markWordsRecoveryDone(done, st.storage);
+    // ...the recovery state is cleared, nothing else ran...
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).not.toBeNull();
+    expect(await loadPendingVaultKey(st.vaultStorage, SAFE)).toBe(KEY);
+    expect(await loadPendingWordsRestore(st.storage, SAFE2)).toBeNull();
+  });
+
+  it('the restore uses the per-wallet vault key, never the global one, and clears both on success', async () => {
+    const st = stores();
+    await savePendingVaultKey(st.vaultStorage, SAFE, KEY);
+    await markWordsRecoveryDone(done, st.storage);
+    const restore = jest.fn(async () => ok);
+    expect(await runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore })).toEqual(ok);
+    expect(restore).toHaveBeenCalledWith(done, KEY);
+    expect(st.vault.get(WORDS_VAULT_KEY_STORE)).toBe(OTHER_ACCOUNT_KEY); // another account's key untouched
+    expect(st.vault.has(pendingRestoreVaultKeySlot(SAFE))).toBe(false);
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).toBeNull();
+  });
+
+  it('a failed read or a retryable write keeps everything for the next try', async () => {
+    const st = stores();
+    await savePendingVaultKey(st.vaultStorage, SAFE, KEY);
+    await markWordsRecoveryDone(done, st.storage);
+    await expect(
+      runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore: async () => Promise.reject(new Error('offline')) }),
+    ).rejects.toThrow('offline');
+    await runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore: async () => ({ ...ok, rewrapped: false, retryable: true }) });
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).not.toBeNull();
+    expect(await loadPendingVaultKey(st.vaultStorage, SAFE)).toBe(KEY);
+  });
+
+  it('no vault key: a retry cannot help, so it clears the marker and throws the named error', async () => {
+    const st = stores();
+    await markWordsRecoveryDone(done, st.storage);
+    const restore = jest.fn();
+    await expect(runPendingWordsRestore(SAFE, { storage: st.storage, vault: st.vaultStorage, restore })).rejects.toMatchObject({ name: WORDS_VAULT_KEY_MISSING });
+    expect(restore).not.toHaveBeenCalled();
+    expect(await loadPendingWordsRestore(st.storage, SAFE)).toBeNull();
+    await clearPendingWordsRestore(st.storage, st.vaultStorage, SAFE);
   });
 });

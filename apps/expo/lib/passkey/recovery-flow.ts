@@ -97,6 +97,11 @@ export type RecoveryDeps = {
   sendPasskeyUserOp: (args: PasskeyUserOpArgs) => Promise<{ userOpHash: Hex; txHash: Hex }>;
   /** Unix seconds. */
   now?: () => number;
+  /**
+   * A words recovery reached `done` (words-recovery `markWordsRecoveryDone`: words pool + the
+   * pending key-restore marker that outlives this state). Best effort.
+   */
+  wordsDone?: (s: RecoveryState) => Promise<void>;
 };
 
 const nowSec = (deps: RecoveryDeps) => (deps.now ? deps.now() : Math.floor(Date.now() / 1000));
@@ -196,8 +201,12 @@ export async function startRecovery(
 export type WordsRecoveryDeps = RecoveryDeps & {
   readGuardians: (wallet: Address) => Promise<Address[]>;
   readNonce: (wallet: Address) => Promise<bigint>;
-  /** Stores the words vault key on this phone (the `_w` key copies are restored with it after `done`). */
-  saveVaultKey: (key: Hex) => Promise<void>;
+  /**
+   * Stores the words vault key on this phone in the recovered WALLET's own slot (never the global
+   * one: another account's vault key on this phone stays untouched); the `_w` key copies are
+   * restored with it after `done`.
+   */
+  saveVaultKey: (key: Hex, wallet: Address) => Promise<void>;
 };
 
 /**
@@ -269,7 +278,7 @@ export async function startWordsRecovery(
     return persist(deps, { ...s, step: 'error', message: 'Keine Verbindung. Bitte versuche es erneut.', detail: detailOf(e) });
   }
   try {
-    await deps.saveVaultKey(kit.vaultKey());
+    await deps.saveVaultKey(kit.vaultKey(), wallet);
   } catch (e) {
     return persist(deps, { ...s, step: 'error', message: 'Auf diesem Handy konnte nichts gespeichert werden. Bitte versuche es erneut.', detail: detailOf(e) });
   }
@@ -418,6 +427,7 @@ async function completeRecovery(s: RecoveryState, deps: RecoveryDeps): Promise<R
     owner: s.signer,
     ...(s.recoveryLegacy ? { legacy: s.recoveryLegacy } : {}),
   });
+  if (s.method === 'words' && deps.wordsDone) await deps.wordsDone(s).catch(() => undefined);
   return persist(deps, { ...s, step: 'done', message: undefined, detail: undefined });
 }
 

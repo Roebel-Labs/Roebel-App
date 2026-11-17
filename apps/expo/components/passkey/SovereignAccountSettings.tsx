@@ -19,6 +19,7 @@ import EmailRow from '@/components/passkey/EmailRow';
 import GuardiansSection from '@/components/passkey/GuardiansSection';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
+import PendingWordsRestore from '@/components/passkey/PendingWordsRestore';
 import RecoveryWordsEntry from '@/components/passkey/RecoveryWordsEntry';
 import { BigButton, Card, Notice, passkeyStyles } from '@/components/passkey/PasskeyUi';
 
@@ -77,6 +78,7 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
 
       <Text style={[passkeyStyles.sectionHeading, { color: colors.textSecondary }]}>WIEDERHERSTELLUNG</Text>
       <GuardiansSection record={record} />
+      <PendingWordsRestore safe={record.safe} />
       <RecoveryWordsEntry safe={record.safe} />
       <Card>
         <Pressable onPress={() => router.push('/passkey/code' as any)} accessibilityRole="button" style={styles.link}>

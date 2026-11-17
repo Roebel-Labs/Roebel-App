@@ -310,7 +310,7 @@ describe('startWordsRecovery', () => {
   function wordsDeps(over: Partial<Parameters<typeof startWordsRecovery>[1]> = {}) {
     const h = makeDeps();
     let nonce = 0n;
-    const saveVaultKey = jest.fn(async (_k: Hex) => undefined);
+    const saveVaultKey = jest.fn(async (_k: Hex, _w: Address) => undefined);
     h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
       h.sent.push(a);
       h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: DELAY, newOwners: [SIGNER] });
@@ -354,7 +354,7 @@ describe('startWordsRecovery', () => {
   it('saves the words vault key before the op and never persists the words', async () => {
     const h = wordsDeps();
     await start(h);
-    expect(h.saveVaultKey).toHaveBeenCalledWith(wordsVaultKey(PHRASE));
+    expect(h.saveVaultKey).toHaveBeenCalledWith(wordsVaultKey(PHRASE), WALLET);
     expect(h.saveVaultKey.mock.invocationCallOrder[0]).toBeLessThan((h.deps.sendPasskeyUserOp as jest.Mock).mock.invocationCallOrder[0]);
     const persisted = h.storage.map.get(RECOVERY_STORE_KEY)!;
     expect(persisted).toBeTruthy();
@@ -408,6 +408,22 @@ describe('startWordsRecovery', () => {
       const signer = await recoverTypedDataAddress({ ...recoveryApprovalTypedData(WALLET, [SIGNER], 1, 1n), signature: g.signature });
       expect(signer).toBe(g.signer);
     }
+  });
+
+  it('reaching done calls wordsDone once (pool + pending key restore); a guardian recovery does not', async () => {
+    const wordsDone = jest.fn(async () => undefined);
+    const h = wordsDeps({ wordsDone });
+    const s = await start(h);
+    h.setOwners([SIGNER]);
+    const fin = await finalizeRecoveryStep({ ...s, step: 'finalizing', executeAfter: NOW - 1 }, h.deps);
+    expect(fin.step).toBe('done');
+    expect(wordsDone).toHaveBeenCalledTimes(1);
+    expect(wordsDone.mock.calls[0][0]).toMatchObject({ wallet: WALLET, method: 'words', wordsPool: POOL, signer: SIGNER });
+
+    const g = makeDeps({ wordsDone });
+    const gs = await startRecovery({ wallet: WALLET, name: 'Erna' }, g.deps);
+    await finalizeRecoveryStep({ ...gs, step: 'finalizing', executeAfter: NOW - 1 }, g.deps);
+    expect(wordsDone).toHaveBeenCalledTimes(1);
   });
 
   it('a failed op keeps the passkey; after resume the words are asked again and the same passkey is reused', async () => {

@@ -24,8 +24,7 @@ import type { RecoveryStorage, WordsRecoveryDeps } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
 import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall, type UserOpDeps } from './userop';
 import { createPasskey } from './webauthn';
-import type { WordsLookupChain } from './words-recovery';
-import { saveVaultKey } from './words-vault';
+import { markWordsRecoveryDone, savePendingVaultKey, type WordsLookupChain } from './words-recovery';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
 export const GNOSIS_LOGS_RPC_URL = process.env.EXPO_PUBLIC_GNOSIS_LOGS_RPC_URL || 'https://rpc.gnosischain.com';
@@ -224,6 +223,7 @@ export const wordsLookupChain: WordsLookupChain = {
   guardianLogsFor: (guardians) => lookupChain.guardianLogsFor(guardians),
   readGuardians: (w) => readGuardians(w),
   readThreshold: (w) => readThreshold(w),
+  isPasskeySafe: (w) => lookupChain.isPasskeySafe(w),
 };
 
 /** Deps for both recovery methods (the words path also reads guardians + nonce and keeps the vault key). */
@@ -240,11 +240,12 @@ export function createRecoveryDeps(): WordsRecoveryDeps {
     sendPasskeyUserOp: (a) => sendPasskeyUserOp(a),
     readGuardians: (w) => readGuardians(w),
     readNonce: (w) => readRecoveryNonce(w),
-    saveVaultKey: async (k) => {
+    saveVaultKey: async (k, wallet) => {
       // Loaded lazily: derived-keys-runtime imports this module (no cycle at load time).
       const { wordsVaultKeyStorage } = await import('./derived-keys-runtime');
-      await saveVaultKey(wordsVaultKeyStorage, k);
+      await savePendingVaultKey(wordsVaultKeyStorage, wallet, k);
     },
+    wordsDone: (s) => markWordsRecoveryDone(s, secureKeyValueStorage),
   };
 }
 
