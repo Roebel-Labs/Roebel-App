@@ -285,8 +285,8 @@ export type SyncPlan = {
 };
 
 /**
- * Database → chain. Owners in the database become Safe owners; admins/members
- * become registry roles; a role left on an owner or on someone no longer in the
+ * Database → chain. Owners in the database become Safe owners; admins become
+ * registry roles (ordinary members are NOT written; see below); a role left on an owner or on someone no longer in the
  * org is cleared. Safe owners are never REMOVED here — that only happens when a
  * person leaves (see leaveSafeCall), so a sync can never lock anyone out.
  */
@@ -303,8 +303,12 @@ export function planSync(state: OrgChainState, members: readonly DbMember[]): Sy
   const setRoles: SyncPlan['setRoles'] = [];
   const accounts = new Set([...Object.keys(state.roles), ...want.keys()]);
   for (const a of [...accounts].sort()) {
-    const desired = dbOwners.has(a) || chainOwners.has(a) ? 'none' : (want.get(a) ?? 'none');
     const current = state.roles[a] ?? 'none';
+    const wanted = want.get(a) ?? 'none';
+    // Ordinary members live in the credential register, never in OrgRegistry:
+    // an existing chain `member` is kept while still in the org, none is never upgraded.
+    const desired =
+      dbOwners.has(a) || chainOwners.has(a) ? 'none' : wanted === 'member' ? (current === 'member' ? 'member' : 'none') : wanted;
     if (desired !== current) setRoles.push({ account: getAddress(a), role: desired });
   }
   return { addOwners, setRoles };
