@@ -11,9 +11,7 @@ import {
   prepareContributeToRoebelTaler, prepareSendRoebelTaler, isGroupMember,
 } from '@/lib/roebel-taler';
 import { circlesHubAddress, roebeltalerGroupAddress } from '@/constants/gnosis';
-import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount, type WithGuest } from '@/lib/muenzen-claim';
-import { withGuestClaim } from '@/lib/credreg/guest';
-import { readIsCitizen } from '@/lib/credreg/chain';
+import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount } from '@/lib/muenzen-claim';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recordMuenzenClaim } from '@/lib/muenzen-daily-mint';
 import { convertibleRaw, findMyInvitation, getInviteReserveRaw } from '@/lib/muenzen-invite';
@@ -27,13 +25,6 @@ const CLAIM_READS = {
 const CLAIM_ADDRS = {
   hub: circlesHubAddress as `0x${string}`,
   group: roebeltalerGroupAddress as `0x${string}`,
-};
-/**
- * A non-citizen's claim also self-claims Guest in the same op (retried once without it on
- * failure). A non-member is checked against the CitizenNFT only when the register gate is open.
- */
-const CLAIM_OPTS: { withGuest: WithGuest } = {
-  withGuest: (p, run) => withGuestClaim({ address: p.address, isCitizen: p.isCitizen || (() => readIsCitizen(p.address)) }, run),
 };
 
 export interface SettlementJob {
@@ -159,7 +150,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     setMinting(true);
     try {
       if (claimsAsOneBatch(gnosisAccount)) {
-        await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS, CLAIM_OPTS);
+        await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
         return;
       }
       await sendTransaction({ account: gnosisAccount, transaction: prepareDailyMint() });
@@ -190,7 +181,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     if (!claimsAsOneBatch(gnosisAccount)) throw new Error('claimNow is for passkey sessions only');
     setMinting(true);
     try {
-      const { mintedRaw } = await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS, CLAIM_OPTS);
+      const { mintedRaw } = await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
       const claimedAt = Date.now();
       const streak = await recordMuenzenClaim(AsyncStorage, gnosisAccount.address, claimedAt);
       await reconcile().catch(() => {});

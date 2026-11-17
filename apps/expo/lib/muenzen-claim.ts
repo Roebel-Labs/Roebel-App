@@ -116,20 +116,10 @@ export function wholeMuenzen(raw: bigint): number {
  * fingerprint). Reads that fail throw (the user sees an error and can tap again) — a failed
  * membership read must not silently skip the group mint.
  */
-/**
- * Optional Guest self-claim (lib/credreg/guest `withGuestClaim`): runs the send with the Guest call
- * put first, or with null. Omitted = the claim goes out exactly as before.
- */
-export type WithGuest = <T>(
-  p: { address: Address; isCitizen: boolean },
-  run: (guest: { to: Address; data: Hex } | null) => Promise<T>,
-) => Promise<T>;
-
 export async function claimMuenzenAsOneBatch(
   account: BatchAccount,
   reads: ClaimReads,
   addrs: { hub: Address; group: Address },
-  opts: { withGuest?: WithGuest } = {},
 ): Promise<{ transactionHash: Hex; mintedRaw: bigint }> {
   if (!claimsAsOneBatch(account) || typeof account.sendBatchTransaction !== 'function') {
     throw new Error('claimMuenzenAsOneBatch is for passkey sessions only');
@@ -143,10 +133,6 @@ export async function claimMuenzenAsOneBatch(
   ]);
   const txs = buildMuenzenClaimTxs({ ...addrs, self, member, personalBalance, mintable, reserve });
   if (txs.length === 0) throw new Error(CLAIM_NOTHING_MESSAGE);
-  const sendBatch = account.sendBatchTransaction.bind(account);
-  const send = (guest: { to: Address; data: Hex } | null) =>
-    sendBatch(guest ? [{ chainId: 100 as const, to: guest.to, value: 0n as const, data: guest.data }, ...txs] : txs);
-  // A group member is a citizen; for everyone else the Guest helper checks citizenship itself.
-  const { transactionHash } = opts.withGuest ? await opts.withGuest({ address: self, isCitizen: member }, send) : await send(null);
+  const { transactionHash } = await account.sendBatchTransaction(txs);
   return { transactionHash, mintedRaw: mintable };
 }

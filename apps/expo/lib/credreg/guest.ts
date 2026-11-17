@@ -3,9 +3,11 @@
  * operation as their first on-chain action (citizenship request, collecting Röbel Münzen,
  * publicly accepting an Ausweis).
  *
- * Guest must never block the real action: when an operation carrying the Guest call fails for
- * any reason other than the person cancelling, the real action is sent once more without it,
- * and Guest is not tried again on this device for 24 hours.
+ * Guest must never block the real action: when an operation carrying the Guest call was refused
+ * before submission or mined and reverted (atomic: nothing happened), and the register confirms
+ * Guest is still not held, the real action is sent once more without it and Guest is not tried
+ * again on this device for 24 hours. An operation that may have gone out (receipt timeout,
+ * network failure, aborted submission) or that the person declined is never sent again.
  *
  * Gate closed, no registry configured, a citizen, already held, or any read error → no Guest
  * call: the caller's operation goes out exactly as it did before this feature.
@@ -16,6 +18,7 @@ import { RESERVED_TYPE_IDS, selfClaimCall } from '@netizen-labs/credential-regis
 import type { Account } from 'thirdweb/wallets';
 import type { Address, Hex } from 'viem';
 import { sendOrgCalls, sendOrgCallsKeepingHash } from '@/lib/org-safe/send';
+import { classifySendError } from '@/lib/org-safe/send-errors';
 import type { Call } from '@/lib/org-safe/ops';
 import { REGISTRY, registryReader } from './chain';
 import { credentialsConfigured, isCredentialsAllowed } from './gate';
@@ -69,11 +72,11 @@ class AlreadySent extends Error {
   }
 }
 
-function isCancellation(e: unknown): boolean {
-  const name = (e as { name?: unknown } | null)?.name;
-  const message = (e as { message?: unknown } | null)?.message;
-  if (typeof name === 'string' && /cancel/i.test(name)) return true;
-  return typeof message === 'string' && /abgebrochen|user (cancel|reject|denied)|cancelled by the user/i.test(message);
+/** Retry without Guest only after a proven non-submission or an atomic mined revert. */
+function safeToResend(e: unknown): boolean {
+  if (e instanceof AlreadySent) return false;
+  const outcome = classifySendError(e);
+  return outcome === 'not_sent' || outcome === 'reverted';
 }
 
 async function skippedUntilLater(address: string, d: GuestDeps): Promise<boolean> {
@@ -121,8 +124,10 @@ export async function guestCallIfNeeded(
 
 /**
  * Runs an operation with the Guest call when needed. `run(guest)` sends the real calls, with
- * `guest` first when it is not null. When the run with Guest fails (not a cancellation, not an
- * operation that already went out) it runs once more with null and Guest is skipped for 24 hours.
+ * `guest` first when it is not null. When the run with Guest fails before submission or reverts
+ * on chain (`classifySendError`: not_sent / reverted) and a fresh read shows Guest still not held,
+ * it runs once more with null and Guest is skipped for 24 hours. Every other failure (possibly
+ * sent, declined, the fresh read failing or showing Guest held) is thrown unchanged, no resend.
  * Without a Guest call `run(null)` runs exactly once, as before.
  */
 export async function withGuestClaim<T>(
@@ -140,12 +145,24 @@ export async function withGuestClaim<T>(
       throw unwrap(e);
     }
   }
+  const key = p.address.toLowerCase();
   try {
     const result = await run(guest);
-    heldCache.set(p.address.toLowerCase(), true);
+    heldCache.set(key, true);
     return result;
   } catch (e) {
-    if (e instanceof AlreadySent || isCancellation(e)) throw unwrap(e);
+    if (!safeToResend(e)) throw unwrap(e);
+    // Belt and braces: if Guest is held now, the operation landed after all — never resend.
+    let heldNow: boolean;
+    try {
+      heldNow = await d.holds(RESERVED_TYPE_IDS.guest, p.address);
+    } catch {
+      throw unwrap(e);
+    }
+    if (heldNow) {
+      heldCache.set(key, true);
+      throw unwrap(e);
+    }
     await rememberSkip(p.address, d);
   }
   try {

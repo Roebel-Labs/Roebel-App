@@ -30,6 +30,12 @@ const account = { address: ADDR } as any;
 const GUEST = selfClaimCall(REG, RESERVED_TYPE_IDS.guest);
 const REAL = { to: ('0x' + '33'.repeat(20)) as `0x${string}`, data: '0x12345678' as Hex };
 const HASH = ('0x' + 'ee'.repeat(32)) as Hex;
+// Refused before submission (passkey sponsor answered 4xx / thirdweb paymaster): safe to resend.
+const SPONSOR_REFUSED = new Error('HTTP 403: Diese Aktion wird nicht übernommen');
+// Possibly sent: the op may land later.
+const THIRDWEB_TIMEOUT = new Error('Timeout waiting for userOp to be mined on chain 100 with UserOp hash 0xabc');
+const PASSKEY_TIMEOUT = new Error('timed out waiting for the userOp receipt');
+const ABORTED = Object.assign(new Error('Aborted'), { name: 'AbortError' });
 
 function memoryStorage() {
   const m = new Map<string, string>();
@@ -145,8 +151,8 @@ describe('sendWithGuestClaim', () => {
     expect(d.holds).toHaveBeenCalledTimes(1);
   });
 
-  it('a failure with the Guest call is retried once without it and the real action succeeds', async () => {
-    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(new Error('policy rejected'))) });
+  it('a refusal before submission with the Guest call is retried once without it and the real action succeeds', async () => {
+    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)) });
     await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, d)).resolves.toBe(HASH);
     expect(d.sendKeepingHash).toHaveBeenCalledTimes(1);
     expect(d.send).toHaveBeenCalledTimes(1);
@@ -156,11 +162,53 @@ describe('sendWithGuestClaim', () => {
   it('a failure of the real action without Guest surfaces the real error, retried only once', async () => {
     const real = new Error('real failure');
     const d = deps({
-      sendKeepingHash: jest.fn(async () => Promise.reject(new Error('with guest'))),
+      sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)),
       send: jest.fn(async () => Promise.reject(real)),
     });
     await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, d)).rejects.toBe(real);
     expect(d.send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['thirdweb receipt timeout', THIRDWEB_TIMEOUT],
+    ['passkey receipt timeout', PASSKEY_TIMEOUT],
+    ['aborted submission', ABORTED],
+  ])('sent then %s: never sent a second time', async (_label, err) => {
+    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(err)) });
+    await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, d)).rejects.toBe(err);
+    expect(d.send).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
+
+    __resetGuestCacheForTests();
+    const run = jest.fn(async () => Promise.reject(err));
+    await expect(withGuestClaim({ address: ADDR, isCitizen: false }, run, deps())).rejects.toBe(err);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mined revert (atomic, nothing happened) is retried once without Guest', async () => {
+    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(new Error('userOp reverted: x'))) });
+    await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, d)).resolves.toBe(HASH);
+    expect(d.send).toHaveBeenCalledWith(account, [REAL]);
+  });
+
+  it('after a refusal Guest is re-read: held now or an unreadable register means no resend', async () => {
+    const holdsNow = deps({
+      holds: jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true),
+      sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)),
+    });
+    await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, holdsNow)).rejects.toBe(SPONSOR_REFUSED);
+    expect(holdsNow.send).not.toHaveBeenCalled();
+    // Marked held: the next operation carries no Guest call.
+    await sendWithGuestClaim(account, [REAL], { isCitizen: false }, holdsNow);
+    expect(holdsNow.send).toHaveBeenCalledWith(account, [REAL]);
+
+    __resetGuestCacheForTests();
+    const unreadable = deps({
+      holds: jest.fn().mockResolvedValueOnce(false).mockRejectedValueOnce(new Error('rpc down')),
+      sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)),
+    });
+    await expect(sendWithGuestClaim(account, [REAL], { isCitizen: false }, unreadable)).rejects.toBe(SPONSOR_REFUSED);
+    expect(unreadable.send).not.toHaveBeenCalled();
   });
 
   it('a cancellation by the person is not retried', async () => {
@@ -178,7 +226,7 @@ describe('sendWithGuestClaim', () => {
   });
 
   it('after a fallback the Guest call is skipped for 24 hours', async () => {
-    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(new Error('policy rejected'))) });
+    const d = deps({ sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)) });
     await sendWithGuestClaim(account, [REAL], { isCitizen: false }, d);
     expect(storage.map.has(guestSkipKey(ADDR))).toBe(true);
 
@@ -203,7 +251,7 @@ describe('sendWithGuestClaim', () => {
 describe('withGuestClaim (custom senders)', () => {
   it('runs once with the Guest call, then once with null after a failure', async () => {
     const run = jest.fn(async (g: unknown) => {
-      if (g) throw new Error('rejected');
+      if (g) throw SPONSOR_REFUSED;
       return 'ok';
     });
     await expect(withGuestClaim({ address: ADDR, isCitizen: false }, run, deps())).resolves.toBe('ok');
