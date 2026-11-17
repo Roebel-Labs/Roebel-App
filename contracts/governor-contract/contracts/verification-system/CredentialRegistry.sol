@@ -42,12 +42,21 @@ interface ICredOrgSource {
  *             (OrgRegistry.isOrgOwner) or an account with Role.Admin — creates,
  *             edits and retires the org's types and appoints per-type delegates.
  *             Authority and delegates may publish batches (Merkle roots of
- *             salted leaves) and revoke them, or single leaves.
+ *             salted leaves) and revoke them, or single leaves. By design a single
+ *             Safe owner acts alone, without the Safe's threshold: an owner gets
+ *             nothing an Admin lacks (audit P1-01, accepted by the owner).
+ *           - Delegates persist across the removal of the admin who appointed them
+ *             and across Safe rotation; recovery = the authority revokes each
+ *             delegate (DelegateSet events list them) (P1-04, accepted).
  *           - The community namespace is managed by `owner()` alone.
  *           - `owner()` may additionally mark a type as recognised (an official
  *             office), switch an org's private-only flag, and replace the three
- *             source contracts through a delayed two-step. It can NOT create,
- *             issue or revoke an org's credentials: it is not that org's authority.
+ *             source contracts through a delayed two-step. It is not an org's
+ *             authority, but it is trusted: through a replacement OrgRegistry it
+ *             controls, after SOURCES_DELAY and an explicit, evented rebindType
+ *             per type, it could gain authority over an org's types (P1-03).
+ *             Every step of that is visible on chain.
+ *           - Editing a recognised type drops the recognition (P1-05).
  *           - Private-only ("members may not be publicly visible"): the org's
  *             authority turns it on and off, an attester can only turn it on
  *             (protection), the owner can do both. Never for COMMUNITY.
@@ -60,14 +69,25 @@ interface ICredOrgSource {
  *         Citizen and Attester are reserved `External` types: `holds` asks
  *         CitizenNFT / AttesterNFT directly and nothing is ever minted for them.
  *
- *         Generation caveat: a type remembers the OrgRegistry generation it was
- *         created under and goes dark when the org is revoked, even if the same
- *         id registers again. The three sources (CitizenNFT, AttesterNFT,
- *         OrgRegistry) change together via proposeSources → SOURCES_DELAY →
- *         applySources; a replacement OrgRegistry must carry the same generation
- *         numbers, or every org type created under the old one goes dark.
+ *         Generations and registry binding: an org type is bound to the
+ *         OrgRegistry and the generation it was created under (typeRegistryOf,
+ *         CredentialType.orgGeneration) and goes dark when the org is revoked,
+ *         even if the same id registers again. The three sources (CitizenNFT,
+ *         AttesterNFT, OrgRegistry) change together via proposeSources →
+ *         SOURCES_DELAY → applySources. After an OrgRegistry swap every org type
+ *         is inactive until anyone calls rebindType(typeId): that succeeds only
+ *         while the OLD registry still has the org alive at the type's generation
+ *         and the new one has the org registered, and then adopts the new
+ *         registry's generation. A type that was dead before the swap never
+ *         revives (P1-02). While a type awaits rebinding (its org still alive in
+ *         the registry it is bound to), prune refuses to burn its holdings.
  *
  *         Non-transferable: every transfer and approval reverts; a balance is 0 or 1.
+ *         balanceOf is validity-aware, not a raw ERC-1155 balance: expiry, batch
+ *         or leaf revocation, retirement, org death and the NFT sources change it
+ *         without a TransferSingle event; prune emits the burn (P1-07, accepted).
+ *         External types report 1 without any mint. A source that reverts makes
+ *         the views answer "not held" / inactive instead of reverting (P1-06).
  *         Every state change is emitted, so a log-only indexer reproduces every view.
  */
 contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
@@ -122,6 +142,8 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
 
     mapping(bytes32 => CredentialType) private _types;
     mapping(bytes32 => bool) private _exists;
+    /// @dev The OrgRegistry an org type is currently valid under (unused for COMMUNITY types).
+    mapping(bytes32 => address) private _typeRegistry;
     mapping(bytes32 => mapping(address => bool)) private _delegates;
     /// @notice true = the org's Membership types can only be proven privately, never claimed publicly.
     mapping(bytes32 => bool) public orgPrivateOnly;
@@ -135,6 +157,7 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     event TypeConfigured(bytes32 indexed typeId, TypeConfig config);
     event TypeRetired(bytes32 indexed typeId);
     event TypeRecognised(bytes32 indexed typeId, bool recognised);
+    event TypeRebound(bytes32 indexed typeId, address indexed orgRegistry, uint64 orgGeneration);
     event DelegateSet(bytes32 indexed typeId, address indexed delegate, bool allowed);
     event OrgPrivateOnlySet(bytes32 indexed orgId, bool privateOnly, address indexed by);
     event BatchAdded(uint64 indexed batchId, bytes32 indexed typeId, address indexed issuer, bytes32 root, uint32 count);
@@ -176,6 +199,7 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     error NotContract(address account);
     error NoPendingSources();
     error SourcesNotReady(uint64 eta);
+    error NotRebindable(bytes32 typeId);
 
     /// @param reservedURIs metadata URIs of Citizen, Attester and Guest, in that order.
     constructor(
@@ -211,18 +235,48 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         if (policy == ClaimPolicy.External) revert WrongPolicy(typeId);
         if (_exists[typeId]) revert TypeExists(typeId);
         _validateConfig(cfg);
-        uint64 generation = orgId == COMMUNITY ? 0 : ICredOrgSource(orgRegistry).getOrg(orgId).generation;
+        uint64 generation;
+        if (orgId != COMMUNITY) {
+            address reg = orgRegistry;
+            generation = ICredOrgSource(reg).getOrg(orgId).generation;
+            _typeRegistry[typeId] = reg;
+        }
         _create(typeId, orgId, localId, kind, policy, generation, cfg);
     }
 
     /// @notice Changes a type's config; kind and policy are fixed at creation.
     ///         The owner may edit the reserved types' metadata through this.
+    ///         Editing a recognised type drops the recognition (the owner may seal
+    ///         it again). A cap below the current supply is allowed: nothing is
+    ///         burned, new mints revert until supply < cap, renewals still work.
     function updateType(bytes32 typeId, TypeConfig calldata cfg) external {
         CredentialType storage t = _requireType(typeId);
         _requireActiveAndManager(typeId, t);
         _validateConfig(cfg);
+        bool uriChanged = keccak256(bytes(t.config.metadataURI)) != keccak256(bytes(cfg.metadataURI));
         t.config = cfg;
         emit TypeConfigured(typeId, cfg);
+        if (uriChanged) emit URI(cfg.metadataURI, uint256(typeId));
+        if (t.recognised) {
+            t.recognised = false;
+            emit TypeRecognised(typeId, false);
+        }
+    }
+
+    /// @notice Permissionless. After an OrgRegistry swap, carries a live org type
+    ///         over to the current registry: the old registry must still have the
+    ///         org registered at the type's generation, the current one must have
+    ///         it registered; the type then takes the current generation.
+    function rebindType(bytes32 typeId) external {
+        CredentialType storage t = _requireType(typeId);
+        bool ok;
+        uint64 gen;
+        address reg = orgRegistry;
+        if (_awaitingRebind(typeId, t)) (ok, gen) = _orgGeneration(reg, t.orgId);
+        if (!ok) revert NotRebindable(typeId);
+        _typeRegistry[typeId] = reg;
+        t.orgGeneration = gen;
+        emit TypeRebound(typeId, reg, gen);
     }
 
     /// @notice Irreversible: the type stops counting and its id stays taken.
@@ -288,6 +342,9 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
 
     /// @notice Revokes single leaves of a batch; a claimed leaf that is its holder's
     ///         current holding is burned. Already revoked leaves are skipped.
+    ///         The array is unbounded: clients chunk at about 500 leaves. Needs an
+    ///         active type, so a dead generation's batches cannot be revoked later
+    ///         (they no longer count anyway).
     function revokeLeaves(uint64 batchId, bytes32[] calldata leaves) external {
         Batch storage b = _requireBatch(batchId);
         bytes32 typeId = b.typeId;
@@ -312,6 +369,8 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     ///         ClaimKey leaf by whoever holds the key (EIP-712 signature over
     ///         batchId, leaf and msg.sender), after which it stays bound to that account.
     ///         Claiming while holding replaces the holding (renewal) without a second mint.
+    ///         A stale holder still fills a capped slot until pruned: apps batch
+    ///         prune + claim in one user operation (P1-09, accepted).
     function claim(uint64 batchId, Leaf calldata leaf, bytes32[] calldata proof, bytes calldata claimSignature)
         external
     {
@@ -367,9 +426,11 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
 
     /// @notice Anyone may burn a holding that no longer counts (expired, revoked,
     ///         retired type or dead org), which also frees a capped slot.
+    ///         A type that awaits rebindType after a registry swap (its org still
+    ///         alive in the registry it is bound to) is not pruned.
     function prune(bytes32 typeId, address account) external {
         _requireBurnable(typeId, account);
-        if (holds(typeId, account)) revert StillValid(typeId, account);
+        if (_awaitingRebind(typeId, _types[typeId]) || holds(typeId, account)) revert StillValid(typeId, account);
         _burn(typeId, account);
         emit Pruned(typeId, account);
     }
@@ -414,8 +475,12 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
 
     /// @notice True iff `account` currently holds a credential of `typeId`.
     function holds(bytes32 typeId, address account) public view returns (bool) {
-        if (typeId == CITIZEN_TYPE) return ICredCitizenSource(citizenNFT).hasCitizenNFT(account);
-        if (typeId == ATTESTER_TYPE) return ICredAttesterSource(attesterNFT).hasAttesterNFT(account);
+        if (typeId == CITIZEN_TYPE) {
+            try ICredCitizenSource(citizenNFT).hasCitizenNFT(account) returns (bool c) { return c; } catch { return false; }
+        }
+        if (typeId == ATTESTER_TYPE) {
+            try ICredAttesterSource(attesterNFT).hasAttesterNFT(account) returns (bool a) { return a; } catch { return false; }
+        }
         if (_rawBalance(typeId, account) == 0 || !isTypeActive(typeId)) return false;
         Holding storage h = _holdings[typeId][account];
         if (h.validUntil != 0 && block.timestamp > h.validUntil) return false;
@@ -462,15 +527,23 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         return _exists[typeId];
     }
 
-    /// @notice Exists, not retired, and (for an org type) the org is registered at
-    ///         the generation the type was created under.
+    /// @notice Exists, not retired, and (for an org type) bound to the current
+    ///         OrgRegistry, where the org is registered at the type's generation.
+    ///         A reverting registry answers false.
     function isTypeActive(bytes32 typeId) public view returns (bool) {
         if (!_exists[typeId]) return false;
         CredentialType storage t = _types[typeId];
         if (t.retired) return false;
         if (t.orgId == COMMUNITY) return true;
-        ICredOrgSource reg = ICredOrgSource(orgRegistry);
-        return reg.isRegistered(t.orgId) && reg.getOrg(t.orgId).generation == t.orgGeneration;
+        address reg = orgRegistry;
+        if (_typeRegistry[typeId] != reg) return false;
+        (bool ok, uint64 gen) = _orgGeneration(reg, t.orgId);
+        return ok && gen == t.orgGeneration;
+    }
+
+    /// @notice The OrgRegistry an org type is bound to (zero for COMMUNITY types).
+    function typeRegistryOf(bytes32 typeId) external view returns (address) {
+        return _typeRegistry[typeId];
     }
 
     /// @notice COMMUNITY: the owner. An org: its Safe, a Safe owner, or an Admin.
@@ -597,6 +670,30 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         t.config = cfg;
         emit TypeCreated(typeId, orgId, localId, kind, policy, generation);
         emit TypeConfigured(typeId, cfg);
+        emit URI(cfg.metadataURI, uint256(typeId));
+    }
+
+    /// @dev (registered, generation) of `orgId` in `reg`; a reverting registry reads as unregistered.
+    function _orgGeneration(address reg, bytes32 orgId) private view returns (bool ok, uint64 gen) {
+        try ICredOrgSource(reg).isRegistered(orgId) returns (bool r) {
+            if (!r) return (false, 0);
+        } catch {
+            return (false, 0);
+        }
+        try ICredOrgSource(reg).getOrg(orgId) returns (ICredOrgSource.Org memory o) {
+            return (true, o.generation);
+        } catch {
+            return (false, 0);
+        }
+    }
+
+    /// @dev An org type, not retired, bound to a registry other than the current one,
+    ///      in which its org is still alive at the type's generation.
+    function _awaitingRebind(bytes32 typeId, CredentialType storage t) private view returns (bool) {
+        address old = _typeRegistry[typeId];
+        if (t.orgId == COMMUNITY || t.policy == ClaimPolicy.External || t.retired || old == orgRegistry) return false;
+        (bool ok, uint64 gen) = _orgGeneration(old, t.orgId);
+        return ok && gen == t.orgGeneration;
     }
 
     function _requireType(bytes32 typeId) internal view returns (CredentialType storage t) {

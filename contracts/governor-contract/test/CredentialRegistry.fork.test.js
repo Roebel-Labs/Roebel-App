@@ -284,9 +284,25 @@ d("CredentialRegistry — Gnosis fork, live OrgRegistry + NFTs + Safe 1.4.1", fu
   });
 
   it("sources hand-over", async function () {
-    const { registry, attesterSafe, citizens, citV2 } = s;
+    const { registry, attesterSafe, citizens, citV2, orgs, orgOwner, memberOwner } = s;
     const testC = TEST_ENV.contracts;
     const testCit = new ethers.Contract(testC.citizenNFTv2, NFT_ABI, ethers.provider);
+
+    // A second, live org on the live registry with a type and a holder, to follow across the swap.
+    const liveSafe = await deploySafe(orgOwner);
+    const liveSafeAddr = await liveSafe.getAddress();
+    const liveOrgId = orgIdOf(ethers.hexlify(ethers.randomBytes(16)).slice(2));
+    await orgs.connect(attesterSafe).migrationRegister([liveOrgId], [liveSafeAddr], ["netizen-test://credreg-fork/live"], [ethers.ZeroHash]);
+    const liveLocal = LOCAL("fork-live-members");
+    const liveType = typeId(liveOrgId, liveLocal);
+    await execAsSafe(liveSafe, orgOwner, registry, "createType", [liveOrgId, liveLocal, Kind.Membership, Policy.IssuerBatch, cfg()]);
+    expect(await registry.typeRegistryOf(liveType)).to.equal(ORG_REGISTRY);
+    const liveLeaf = leaf(LeafKind.Account, liveType, memberOwner.address);
+    const liveTree = tree([liveLeaf]);
+    await execAsSafe(liveSafe, orgOwner, registry, "addBatch", [liveType, liveTree.root, 1]);
+    const liveBatch = await registry.batchCount();
+    await registry.connect(memberOwner).claim(liveBatch, liveLeaf, liveTree.proof(liveLeaf), "0x");
+    expect(await registry.holds(liveType, memberOwner.address)).to.equal(true);
 
     await expect(registry.connect(attesterSafe).proposeSources(testC.citizenNFTv2, testC.attesterNFTv2, testC.orgRegistry))
       .to.emit(registry, "SourcesProposed");
@@ -315,5 +331,34 @@ d("CredentialRegistry — Gnosis fork, live OrgRegistry + NFTs + Safe 1.4.1", fu
     for (const a of testOnly) expect(await registry.holds(CITIZEN_TYPE, a), a).to.equal(true);
     for (const a of liveOnly) expect(await registry.holds(CITIZEN_TYPE, a), a).to.equal(false);
     console.log(`      test-only citizens=${testOnly.length}, live-only citizens=${liveOnly.length}`);
+
+    // Org types stay bound to the live registry: inactive until rebound, holdings not prunable.
+    expect(await registry.isTypeActive(liveType)).to.equal(false);
+    expect(await registry.holds(liveType, memberOwner.address)).to.equal(false);
+    // Not registered in the test registry yet: not rebindable, but still alive in the
+    // registry it is bound to, so its holdings cannot be pruned meanwhile.
+    await expect(registry.rebindType(liveType)).to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(liveType);
+    await expect(registry.connect(s.outsider).prune(liveType, memberOwner.address))
+      .to.be.revertedWithCustomError(registry, "StillValid");
+    // The org revoked on the live registry earlier never revives, even once imported.
+    const testOrgs = new ethers.Contract(testC.orgRegistry, ORG_ABI, ethers.provider);
+    expect(await testOrgs.migrationFinalized(), "test OrgRegistry migration still open").to.equal(false);
+    const testOwner = await impersonate(await testOrgs.owner());
+    const deadSafe = await deploySafe(orgOwner);
+    await testOrgs.connect(testOwner).migrationRegister(
+      [liveOrgId, s.orgId], [liveSafeAddr, await deadSafe.getAddress()], ["", ""], [ethers.ZeroHash, ethers.ZeroHash],
+    );
+    await expect(registry.rebindType(s.typeId)).to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(s.typeId);
+    expect(await registry.isTypeActive(s.typeId)).to.equal(false);
+    await expect(registry.connect(s.outsider).prune(liveType, memberOwner.address))
+      .to.be.revertedWithCustomError(registry, "StillValid");
+
+    // Anyone rebinds the live type; it continues under the test registry.
+    await expect(registry.connect(s.outsider).rebindType(liveType))
+      .to.emit(registry, "TypeRebound").withArgs(liveType, testC.orgRegistry, 0n);
+    expect(await registry.typeRegistryOf(liveType)).to.equal(testC.orgRegistry);
+    expect(await registry.isTypeActive(liveType)).to.equal(true);
+    expect(await registry.holds(liveType, memberOwner.address)).to.equal(true);
+    expect(await registry.canManage(liveOrgId, liveSafeAddr)).to.equal(true);
   });
 });

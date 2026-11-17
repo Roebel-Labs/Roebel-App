@@ -37,7 +37,7 @@ These are the five items of spec section 9, treated as decided. **If the owner o
 Tasks are written against the default. Each is a contract decision that cannot be changed after deployment without a new deployment.
 
 1. **Safe owners may act directly.** Spec 5.1 names "the org's Safe, or an account with the `Admin` role". An org's owners are the Safe's owners and hold no `Admin` role (`apps/expo/lib/org-safe/ops.ts` `planSync` clears it), so by the letter an owner would have to wrap every call in a Safe transaction, and an owner of a Safe with threshold 2 could not issue at all while an admin could. *Default: authority = the Safe itself, or `OrgRegistry.isOrgOwner`, or `Role.Admin`. This gives an owner nothing an admin does not already have.*
-2. **OrgRegistry is a settable pointer too.** The spec asks for settable NFT pointers because OrgRegistry's immutable `attesters` forces its redeploy at the v3 cutover. That same redeploy would orphan this contract. *Default: all three sources (CitizenNFT, AttesterNFT, OrgRegistry) change together through propose → wait `SOURCES_DELAY` = 2 days → apply.* Caveat written into the NatSpec: a type remembers the org generation it was created under, so a new OrgRegistry must carry the same generation numbers or the org's types go dark.
+2. **OrgRegistry is a settable pointer too.** The spec asks for settable NFT pointers because OrgRegistry's immutable `attesters` forces its redeploy at the v3 cutover. That same redeploy would orphan this contract. *Default: all three sources (CitizenNFT, AttesterNFT, OrgRegistry) change together through propose → wait `SOURCES_DELAY` = 2 days → apply.* ~~Caveat: a new OrgRegistry must carry the same generation numbers.~~ Superseded by audit pass 1 (P1-02): each org type is bound to the OrgRegistry it is valid under (`typeRegistryOf`); after a swap, anyone calls `rebindType`, which succeeds only for types still alive in their old registry and registered in the new one.
 3. **Who may switch an org to private-only, and back.** *Decided (see update note): on and off by the org's authority; on only by an attester; both by the contract owner.* The app sets it for `fraktion` and `stadt` orgs (plan 2).
 4. **Guest stays after citizenship.** A guest who becomes a citizen keeps the Guest token unless they renounce it. *Default: keep; the app hides the Gastkarte for citizens as today.*
 5. **Recognised flag on the reserved types.** *Default: not set at deploy; the owner sets it per type.*
@@ -118,6 +118,7 @@ function retireType(bytes32 typeId) external;                              // ir
 function setDelegate(bytes32 typeId, address delegate, bool allowed) external;
 function setOrgPrivateOnly(bytes32 orgId, bool privateOnly) external;      // see open question 3
 function setRecognised(bytes32 typeId, bool recognised) external;          // onlyOwner
+function rebindType(bytes32 typeId) external;                              // permissionless; after an OrgRegistry swap (audit P1-02)
 
 // issuing — org authority or a delegate of the type
 function addBatch(bytes32 typeId, bytes32 root, uint32 count) external returns (uint64 batchId);   // ids start at 1
@@ -142,7 +143,8 @@ function getType(bytes32 typeId) external view returns (CredentialType memory); 
 function getBatch(uint64 batchId) external view returns (Batch memory);                  // reverts UnknownBatch
 function holdingOf(bytes32 typeId, address account) external view returns (Holding memory);
 function typeExists(bytes32 typeId) external view returns (bool);
-function isTypeActive(bytes32 typeId) public view returns (bool);                        // exists, not retired, org alive at the type's generation
+function isTypeActive(bytes32 typeId) public view returns (bool);                        // exists, not retired, bound to the current registry, org alive at the type's generation
+function typeRegistryOf(bytes32 typeId) external view returns (address);                 // the OrgRegistry an org type is bound to; zero for COMMUNITY
 function canManage(bytes32 orgId, address account) public view returns (bool);
 function canIssue(bytes32 typeId, address account) public view returns (bool);           // canManage(type's org) or delegate
 function isDelegate(bytes32 typeId, address account) external view returns (bool);
@@ -158,12 +160,13 @@ function typeIdOf(bytes32 orgId, bytes32 localId) public pure returns (bytes32);
 function leafHash(Leaf calldata leaf) public pure returns (bytes32);
 function claimDigest(uint64 batchId, bytes32 leaf, address account) public view returns (bytes32);   // EIP-712 digest
 // ERC-1155 overrides: balanceOf(account, id) returns holds(bytes32(id), account) ? 1 : 0; uri(id) returns the type's metadataURI ("" if unknown);
-// setApprovalForAll and every transfer revert Soulbound().
+// setApprovalForAll and every transfer revert Soulbound(). balanceOf is validity-aware, not a raw ERC-1155 balance (audit P1-07, accepted).
 
 event TypeCreated(bytes32 indexed typeId, bytes32 indexed orgId, bytes32 localId, Kind kind, ClaimPolicy policy, uint64 orgGeneration);
 event TypeConfigured(bytes32 indexed typeId, TypeConfig config);            // on create and on update
 event TypeRetired(bytes32 indexed typeId);
-event TypeRecognised(bytes32 indexed typeId, bool recognised);
+event TypeRecognised(bytes32 indexed typeId, bool recognised);           // also (false) when updateType edits a recognised type
+event TypeRebound(bytes32 indexed typeId, address indexed orgRegistry, uint64 orgGeneration);
 event DelegateSet(bytes32 indexed typeId, address indexed delegate, bool allowed);
 event OrgPrivateOnlySet(bytes32 indexed orgId, bool privateOnly, address indexed by);
 event BatchAdded(uint64 indexed batchId, bytes32 indexed typeId, address indexed issuer, bytes32 root, uint32 count);
@@ -177,6 +180,7 @@ event SourcesProposed(address citizenNFT, address attesterNFT, address orgRegist
 event SourcesApplied(address citizenNFT, address attesterNFT, address orgRegistry);
 event SourcesCancelled();
 // plus ERC-1155 TransferSingle on every mint (from 0) and burn (to 0)
+// plus ERC-1155 URI(metadataURI, uint256(typeId)) on every type creation (reserved types included) and on updateType when the URI changed
 
 error NotAuthorised(address caller);
 error UnknownType(bytes32 typeId);
@@ -206,6 +210,7 @@ error Soulbound();
 error NotContract(address account);
 error NoPendingSources();
 error SourcesNotReady(uint64 eta);
+error NotRebindable(bytes32 typeId);
 ```
 
 ### Encodings (byte-exact, mirrored in TypeScript)
@@ -225,7 +230,9 @@ error SourcesNotReady(uint64 eta);
 
 ### Rules the code must follow (each has a test)
 
-- `isTypeActive`: exists, not retired, and for an org type `orgRegistry.isRegistered(orgId) && orgRegistry.getOrg(orgId).generation == type.orgGeneration`.
+- `isTypeActive`: exists, not retired, and for an org type `typeRegistryOf(typeId) == orgRegistry && orgRegistry.isRegistered(orgId) && orgRegistry.getOrg(orgId).generation == type.orgGeneration`. A reverting source reads as false (`holds`, `isTypeActive`, hence `checkLeaf`, `balanceOf`, `balanceOfBatch` never revert because of a source; audit P1-06).
+- `createType` binds an org type to the current `orgRegistry`. `rebindType(typeId)`: org type, not retired, bound registry ≠ current, the bound (old) registry still has the org registered at `type.orgGeneration`, the current registry has the org registered → bind to the current registry, `orgGeneration` = its generation, emit `TypeRebound`; otherwise `NotRebindable`. `prune` reverts `StillValid` while a type awaits rebinding (org still alive in its bound registry).
+- `updateType` on a recognised type clears `recognised` and emits `TypeRecognised(typeId, false)` (audit P1-05). A cap below supply is allowed (nothing burned).
 - `holds` (non-external): raw balance 1 AND `isTypeActive` AND (`validUntil == 0 || block.timestamp <= validUntil`) AND (`batchId == 0` OR (batch not revoked AND leaf not revoked in that batch)).
 - `claim` checks, in this order: batch exists → `isTypeActive` → `leaf.typeId == batch.typeId` → `config.publicClaim` and not (`orgPrivateOnly[orgId]` and `kind == Membership`) → claim window → batch not revoked → proof → leaf not revoked → not expired → subject (`Account`: `msg.sender == subject`; `ClaimKey`: bound account is zero or `msg.sender`, and when zero the signature must recover to `subject`) → bind the leaf to `msg.sender` → write the holding → if the raw balance was 0: cap check, mint, `supply++`.
 - Claiming while already holding replaces the holding record with the new leaf (renewal). It never mints twice.

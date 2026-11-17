@@ -266,6 +266,21 @@ describe("CredentialRegistry — batches, claiming, revocation, soulbound", func
     expect((await registry.getType(tId)).supply).to.equal(1n);
   });
 
+  it("revoke after renewal: revoking the old leaf burns nothing", async function () {
+    const ctx = await loadFixture(withIssued);
+    const { registry, safe, orgOwner, bob, typeId: tId, batchId, leaves, t } = ctx;
+    await claimAs(ctx, bob, batchId, leaves.bob, t);
+    const renewed = leaf(LeafKind.Account, tId, bob.address, leaves.bob.validUntil + BigInt(60 * DAY));
+    const b2 = await addBatchOf(ctx, tId, [renewed]);
+    await claimAs(ctx, bob, b2.batchId, renewed, b2.t);
+    const oldHash = hashLeaf(leaves.bob);
+    const tx = asSafe(safe, orgOwner, registry, "revokeLeaves", [batchId, [oldHash]]);
+    await expect(tx).to.emit(registry, "LeafRevoked").withArgs(batchId, oldHash);
+    await expect(tx).to.not.emit(registry, "TransferSingle");
+    expect(await registry.holds(tId, bob.address)).to.equal(true);
+    expect((await registry.holdingOf(tId, bob.address)).batchId).to.equal(b2.batchId);
+  });
+
   it("an expired leaf cannot be claimed", async function () {
     let ctx = await loadFixture(withIssued);
     const v = ctx.leaves.bob.validUntil;
@@ -657,5 +672,16 @@ describe("CredentialRegistry — batches, claiming, revocation, soulbound", func
     expect(claimGas).to.be.lessThan(250000n);
     expect(keyGas).to.be.lessThan(250000n);
     expect(addGas).to.be.lessThan(150000n);
+  });
+
+  it("gas: addBatch by a Safe owner directly (isOrgOwner path)", async function () {
+    const ctx = await loadFixture(base);
+    const { registry, orgOwner2 } = ctx;
+    const tId = await createOrgType(ctx);
+    const t = tree([leaf(LeafKind.Account, tId, ctx.alice.address), leaf(LeafKind.Account, tId, ctx.bob.address)]);
+    expect(await registry.canManage(ORG_A, orgOwner2.address)).to.equal(true);
+    const gas = (await (await registry.connect(orgOwner2).addBatch(tId, t.root, 2)).wait()).gasUsed;
+    console.log(`      gas: addBatch (Safe owner, isOrgOwner path) ${gas}`);
+    expect(gas).to.be.lessThan(150000n);
   });
 });
