@@ -8,6 +8,7 @@ import {
   pickConfirmPositions,
   validatePhrase,
   wordAccount,
+  wordsFromSeed,
   wordsVaultKey,
   WORDS_POOL_SIZE,
 } from '../words';
@@ -71,6 +72,14 @@ describe('recovery words primitives', () => {
     ).toEqual(['0x9858EfFD232B4033E47d90003D41EC34EcaEda94']);
     expect(deriveWordAddresses(JUNK)).toHaveLength(WORDS_POOL_SIZE);
     expect(wordAccount(JUNK, 1).address).toBe('0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+  });
+
+  it('wordsFromSeed yields the vector, addresses and accounts from one seed', () => {
+    const kit = wordsFromSeed(vector.phrase);
+    expect(kit.vaultKey()).toBe(vector.vaultKey);
+    expect(kit.addresses()).toEqual(deriveWordAddresses(vector.phrase));
+    expect(kit.addresses(3)[1]).toBe('0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+    expect(kit.account(0).address).toBe(wordAccount(vector.phrase, 0).address);
   });
 
   it('generatePhrase yields a valid 12-word phrase from the injected entropy', () => {

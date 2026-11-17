@@ -75,22 +75,47 @@ function seedRoot(phrase: string): HDKey {
   return HDKey.fromMasterSeed(seed);
 }
 
+export type WordsKit = {
+  account(index: number): HDAccount;
+  addresses(count?: number): Address[];
+  vaultKey(): Hex;
+};
+
+/**
+ * Seed-once derivation: runs the 2048-round seed a single time and hands back everything derived
+ * from it. Callers that need several outputs (restore, setup) use this. No module-level cache, so
+ * no secret material outlives the caller's reference. Callers must run `validatePhrase` first;
+ * derivation does not check the checksum.
+ */
+export function wordsFromSeed(phrase: string): WordsKit {
+  const root = seedRoot(phrase);
+  return {
+    account: (index) => hdKeyToAccount(root, { addressIndex: index }),
+    addresses: (count = WORDS_POOL_SIZE) => {
+      const out: Address[] = [];
+      for (let i = 0; i < count; i++) out.push(hdKeyToAccount(root, { addressIndex: i }).address);
+      return out;
+    },
+    vaultKey: () => {
+      const ikm = hdKeyToAccount(root, { changeIndex: 1 }).getHdKey().privateKey;
+      if (!ikm) throw new Error('no private key');
+      return bytesToHex(hkdf(sha256, ikm, utf8Encode(WORDS_VAULT_SALT), new Uint8Array(0), 32));
+    },
+  };
+}
+
+/** One account per call re-runs the seed; prefer `wordsFromSeed` for several. Validate first. */
 export function wordAccount(phrase: string, index: number): HDAccount {
-  return hdKeyToAccount(seedRoot(phrase), { addressIndex: index });
+  return wordsFromSeed(phrase).account(index);
 }
 
 export function deriveWordAddresses(phrase: string, count: number = WORDS_POOL_SIZE): Address[] {
-  const root = seedRoot(phrase);
-  const out: Address[] = [];
-  for (let i = 0; i < count; i++) out.push(hdKeyToAccount(root, { addressIndex: i }).address);
-  return out;
+  return wordsFromSeed(phrase).addresses(count);
 }
 
 /** HKDF-SHA256 over the key at m/44'/60'/0'/1/0; used wherever prf-vault takes a PRF output. */
 export function wordsVaultKey(phrase: string): Hex {
-  const ikm = hdKeyToAccount(seedRoot(phrase), { changeIndex: 1 }).getHdKey().privateKey;
-  if (!ikm) throw new Error('no private key');
-  return bytesToHex(hkdf(sha256, ikm, utf8Encode(WORDS_VAULT_SALT), new Uint8Array(0), 32));
+  return wordsFromSeed(phrase).vaultKey();
 }
 
 /** Three distinct positions 0-11, ascending. Rejection-samples bytes (no modulo bias). */
