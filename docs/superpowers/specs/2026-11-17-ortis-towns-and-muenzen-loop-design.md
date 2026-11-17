@@ -20,7 +20,7 @@ reward for local participation, spent inside the app and kept as recognition; th
 
 ## 3. Goals, non-goals, anti-goals
 
-**Goals:** a new town goes live through one guided flow; each town owns its on-chain layer; credentials and
+**Goals:** a town grows from its first citizens to a full community without Ortis staff in the loop; each town owns its on-chain layer; credentials and
 citizenship are per town but checkable across towns; a self-refilling Münzen loop per town that rewards
 participation.
 **Non-goals:** shop payments, euro exchange, cross-town citizenship rules beyond "one home town", migrating Röbel to
@@ -47,17 +47,34 @@ votes or influence; a town locked into Ortis hosting; wording that frames Münze
 | Backend node | database, mini-app index, sponsoring, push, identity service | the town's data | Ortis (hosted) or the town (sovereign), same software, switchable without any account changing |
 | App | Ortis app with a town switch; Röbel keeps its own app as town #1 | Ortis | Ortis |
 
-### 5.2 Setting up a town ("Gemeinde gründen")
+### 5.2 Growing a town from its citizens (replaces the staffed setup, Max 2026-11-17)
 
-A flow in the Ortis operator console, run by Ortis staff as a service:
-1. **Founding circle:** ≥ 3 people from ≥ 2 different institutions become the first attesters and create the town's
-   Attester Safe from their phones (each signs in with project 1's independent account).
-2. **Deploy:** the community factory (`contracts/governor-contract/scripts/community-factory.cjs`) is extended to also
-   deploy OrgRegistry and CredentialRegistry and to create the Circles group and the pool Safe; ownership goes to the
-   town's Safe, the deployer renounces everything, the set is recorded in CommunityRegistry. Ortis pays the gas.
-3. **Backend:** Ortis provisions the town's node (hosted mode) with its own sponsoring budget and web address.
-4. **Go live:** the town appears in the app's town switch; attesters verify the first citizens.
-5. **Hand-over record:** a public, signed record of every address and owner, stating Ortis holds no keys.
+Ortis starts with individual citizens, not with town halls, so a town cannot be set up by staff or by one person.
+It grows in stages, guided by an AI agent, with humans signing every step and Ortis staff only handling exceptions.
+
+| Stage | Trigger | What exists | What people get |
+|---|---|---|---|
+| 0 Ort | someone signs up and picks a town (postcode/location) | nothing per town; the shared hosted node | guest card, feed, mini apps, Ortis agents; "In deinem Ort sind schon N Leute" |
+| 1 Initiative | ≥ 3 founders from the town meet and vouch for each other | identity contracts deployed (Citizen/Attester, credential register), founders = provisional attesters, label "im Aufbau" | founders can verify neighbours, Vereine can join |
+| 2 Gemeinschaft | e.g. ≥ 25 verified residents, ≥ 5 attesters, ≥ 2 orgs | governance (Governor/Timelock/MACI), Münzen group + pool | votes, Münzen rewards, full features |
+| 3 Anerkannt | the town administration or council joins | recognised offices (Stadtvertreter etc.) | official roles on the register |
+
+- **Lazy deployment:** contracts are deployed only when a stage needs them, gas paid from an Ortis budget, so
+  thousands of stage-0 towns cost nothing.
+- **Bootstrapping trust without attesters:** founders confirm each other by meeting in person (phone-to-phone QR
+  scan) and are additionally vouched for by a **Paten-Gemeinde**: attesters of an established nearby town (Röbel
+  first) confirm the founders once. Provisional attesters have limited power until stage 2 (no revocations, caps on
+  verifications per day), which limits damage from a faked start.
+- **The founding agent ("Gründungs-Assistent"):** a Mecky-style agent in the app and in Ortis Studio that explains
+  the stages, invites neighbours, suggests local Vereine and places from public data, drafts the founding text,
+  prepares every deployment and threshold change for the founders to sign, watches the stage thresholds, writes the
+  public hand-over record and answers first-level support. It never holds keys and cannot sign; humans approve each
+  step on their phones.
+- **Backend scaling:** all stage-0 to stage-2 towns share one hosted multi-tenant node; a town gets its own node only
+  when it asks for it (sovereign mode) or outgrows the shared one.
+- **Honest wording:** below stage 3 the citizen card means "verified resident confirmed by neighbours", not an
+  official municipal status; the app says so.
+- **Ortis staff:** review flagged starts (suspicious founder patterns), handle abuse, never approve citizens.
 
 ### 5.3 Credentials and citizenship across towns
 
