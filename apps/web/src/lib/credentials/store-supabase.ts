@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Hex } from "viem";
 import {
+  assertInvitationFilter,
   CredentialStoreError,
   type AccountRow,
   type ActionRow,
@@ -328,7 +329,8 @@ export class SupabaseCredentialStore implements CredentialStore {
     return ((r.data ?? []) as Row[]).length > 0;
   }
 
-  private filterInvitations(q: any, f: InvitationFilter): any {
+  private filterInvitations(q: any, f: InvitationFilter, op: string): any {
+    assertInvitationFilter(f, op);
     let out = q;
     if (f.batchId !== undefined) out = out.eq("batch_id", f.batchId);
     if (f.typeId !== undefined) out = out.eq("type_id", f.typeId.toLowerCase());
@@ -347,7 +349,7 @@ export class SupabaseCredentialStore implements CredentialStore {
     const out: InvitationRow[] = [];
     // Batches hold up to 2000 rows; page past PostgREST's default row cap.
     for (let from = 0; ; from += 1000) {
-      const r = await this.filterInvitations(this.db.from(T.invitations).select("*"), filter)
+      const r = await this.filterInvitations(this.db.from(T.invitations).select("*"), filter, "listInvitations")
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
         .range(from, from + 999);
@@ -366,7 +368,7 @@ export class SupabaseCredentialStore implements CredentialStore {
     return ((r.data ?? []) as Row[]).length > 0;
   }
   async updateInvitations(filter: InvitationFilter, patch: Partial<Omit<InvitationRow, "id">>) {
-    const r = await this.filterInvitations(this.db.from(T.invitations).update(toColumns(patch, INVITATION_FIELDS)), filter).select("id");
+    const r = await this.filterInvitations(this.db.from(T.invitations).update(toColumns(patch, INVITATION_FIELDS)), filter, "updateInvitations").select("id");
     check("updateInvitations", r);
     return ((r.data ?? []) as Row[]).length;
   }

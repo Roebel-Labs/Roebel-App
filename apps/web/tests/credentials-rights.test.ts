@@ -5,6 +5,7 @@ import type { Address, Hex } from "viem";
 import { InMemoryCredentialStore } from "../src/lib/credentials/store";
 import {
   chainReadiness,
+  createNodeRegistryReader,
   membersMayBePublic,
   needsPrivateOnlyStep,
   orgContextFor,
@@ -76,4 +77,22 @@ test("chainReadiness distinguishes an unregistered org from a caller without cha
   assert.equal(await chainReadiness(mk(false, [OWNER]), o, OWNER as Address), "org_not_registered");
   assert.equal(await chainReadiness(mk(true, []), o, OWNER as Address), "no_chain_authority");
   assert.equal(await chainReadiness(mk(true, [OWNER]), o, OWNER as Address), "ready");
+});
+
+test("isOrgRegistered lets an RPC error through instead of reading it as not registered", async () => {
+  const client = {
+    readContract: async ({ functionName }: { functionName: string }) => {
+      if (functionName === "orgRegistry") return "0x00000000000000000000000000000000000000b1";
+      throw new Error("rpc unreachable");
+    },
+  };
+  const reader = createNodeRegistryReader({ client: client as never, address: "0x00000000000000000000000000000000000000c1" });
+  await assert.rejects(() => reader.isOrgRegistered(orgIdFromUuid(ORG) as Hex), /rpc unreachable/);
+});
+
+test("the store refuses an empty invitation filter for list and bulk update", async () => {
+  const s = seeded();
+  await assert.rejects(() => s.listInvitations({}), /EMPTY_FILTER/);
+  await assert.rejects(() => s.updateInvitations({}, { status: "revoked" }), /EMPTY_FILTER/);
+  assert.deepEqual(await s.listInvitations({ statuses: ["invited"] }), []);
 });

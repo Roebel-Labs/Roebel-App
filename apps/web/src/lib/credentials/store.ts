@@ -222,6 +222,13 @@ function matchesInvitation(i: InvitationRow, f: InvitationFilter): boolean {
   return true;
 }
 
+/** An empty filter would match every invitation of every org: refuse it. */
+export function assertInvitationFilter(f: InvitationFilter, op: string): void {
+  const any =
+    f.batchId !== undefined || f.typeId !== undefined || f.recipientWallet !== undefined || f.leafHash !== undefined || f.statuses !== undefined;
+  if (!any) throw new CredentialStoreError(op, "EMPTY_FILTER");
+}
+
 function normaliseInvitationPatch(patch: Partial<InvitationRow>): Partial<InvitationRow> {
   const p = { ...patch };
   if (p.recipientWallet !== undefined) p.recipientWallet = lc(p.recipientWallet);
@@ -386,6 +393,7 @@ export class InMemoryCredentialStore implements CredentialStore {
     return i ? clone(i) : null;
   }
   async listInvitations(filter: InvitationFilter) {
+    assertInvitationFilter(filter, "listInvitations");
     return [...this.invitations.values()].filter((i) => matchesInvitation(i, filter)).map(clone);
   }
   async updateInvitation(id: string, patch: Partial<Omit<InvitationRow, "id">>, guard: InvitationGuard = {}) {
@@ -397,6 +405,7 @@ export class InMemoryCredentialStore implements CredentialStore {
     return true;
   }
   async updateInvitations(filter: InvitationFilter, patch: Partial<Omit<InvitationRow, "id">>) {
+    assertInvitationFilter(filter, "updateInvitations");
     let n = 0;
     for (const i of this.invitations.values()) {
       if (!matchesInvitation(i, filter)) continue;

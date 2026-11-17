@@ -80,13 +80,10 @@ export function createNodeRegistryReader({ client, address }: { client: PublicCl
     ...base,
     orgPrivateOnly: (orgId) => readRegistry<boolean>("orgPrivateOnly", [orgId]),
     async isOrgRegistered(orgId) {
-      // Mirrors the contract's _orgInfo: the register's current OrgRegistry decides.
+      // Mirrors the contract's _orgInfo: the register's current OrgRegistry decides. RPC errors
+      // propagate: "unreachable" must not read as "not registered".
       const orgRegistry = await readRegistry<Address>("orgRegistry", []);
-      try {
-        return (await client.readContract({ address: orgRegistry, abi: ORG_SOURCE_ABI, functionName: "isRegistered", args: [orgId] })) === true;
-      } catch {
-        return false;
-      }
+      return (await client.readContract({ address: orgRegistry, abi: ORG_SOURCE_ABI, functionName: "isRegistered", args: [orgId] })) === true;
     },
   };
 }

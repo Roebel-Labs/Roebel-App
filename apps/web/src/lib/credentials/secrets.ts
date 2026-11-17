@@ -3,12 +3,19 @@
 // (lib/chat/harness/connectors/crypto.ts), own key and an explicit, dotted format:
 //   "v1.<iv>.<ciphertext>.<tag>", each part base64url.
 // Key: env CREDENTIAL_SECRETS_KEY = base64 of exactly 32 bytes. Missing or malformed → throws.
+// `context` binds a ciphertext to its row (for example `invitation:<id>:claim_key`): it is part
+// of the AAD, so a sealed value copied into another row does not open there.
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const VERSION = "v1";
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
-const AAD = Buffer.from("roebel-credential-secret-v1", "utf8");
+const AAD_PREFIX = "roebel-credential-secret-v1:";
+
+function aad(context: string): Buffer {
+  if (typeof context !== "string" || context.length === 0) throw new CredentialSecretError("secret context is required");
+  return Buffer.from(AAD_PREFIX + context, "utf8");
+}
 
 export class CredentialSecretError extends Error {}
 
@@ -19,16 +26,18 @@ function secretsKey(raw: string | undefined = process.env.CREDENTIAL_SECRETS_KEY
   return key;
 }
 
-export function sealSecret(plain: string): string {
+export function sealSecret(plain: string, context: string): string {
+  const additional = aad(context);
   const key = secretsKey();
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(AAD);
+  cipher.setAAD(additional);
   const body = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return [VERSION, iv.toString("base64url"), body.toString("base64url"), cipher.getAuthTag().toString("base64url")].join(".");
 }
 
-export function openSecret(sealed: string): string {
+export function openSecret(sealed: string, context: string): string {
+  const additional = aad(context);
   const key = secretsKey();
   const parts = typeof sealed === "string" ? sealed.split(".") : [];
   if (parts.length !== 4 || parts[0] !== VERSION) throw new CredentialSecretError("unknown sealed secret format");
@@ -37,7 +46,7 @@ export function openSecret(sealed: string): string {
   const tag = Buffer.from(parts[3], "base64url");
   if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) throw new CredentialSecretError("sealed secret is damaged");
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAAD(AAD);
+  decipher.setAAD(additional);
   decipher.setAuthTag(tag);
   try {
     return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
