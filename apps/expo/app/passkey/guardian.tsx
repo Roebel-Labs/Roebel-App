@@ -20,7 +20,7 @@ export default function AddGuardianFromLinkScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const allowed = usePasskeyGate();
+  const allowed = usePasskeyGate('signup', true, 'account');
   // useLocalSearchParams may hand out a new object per render: key the parse on its content.
   const paramsKey = JSON.stringify(params);
   const link = useMemo(() => parseGuardianParams(JSON.parse(paramsKey) as Record<string, string>), [paramsKey]);
