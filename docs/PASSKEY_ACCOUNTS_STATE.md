@@ -39,7 +39,7 @@ Expo passkey tests: 70 (`cd apps/expo && ./node_modules/.bin/jest lib/passkey --
 |---|---|---|
 | `legacy` (body names `legacy`) | the legacy thirdweb account | tranche-1 shapes + `legacy.execute(v3, 0, moveTo(sender))` on the configured v3 NFTs only + `AccountFactory.createAccount(admin, 0x)` as call #0 when `factory.getAddress(admin, 0x) == legacy` and legacy has no code (the handover is then verified by ECDSA recovery against `admin`, low-s) |
 | `safe` (no `legacy`, citizen(sender)) | the sender Safe | SRM guardian management + `confirmRecovery` |
-| `recovery` (no `legacy`) | the wallet being recovered | `multiConfirmRecovery` / `executeRecovery` with newOwners = [getSigner(x, y)], threshold 1; `finalizeRecovery` when the pending owners are [getSigner(x, y)] and the delay is over; `confirmRecovery` when the sender is a guardian; `createSigner(x, y)`. The wallet must be citizen(wallet) or admin of a citizen `recoveryLegacy`, with ≥ 1 guardian. Any passkey Safe may send these (family members are not citizens). |
+| `recovery` (no `legacy`) | the wallet being recovered (a guest wallet: the sender Safe, see the sovereign sign-up section) | `multiConfirmRecovery` / `executeRecovery` with newOwners = [getSigner(x, y)], threshold 1; `finalizeRecovery` when the pending owners are [getSigner(x, y)] and the delay is over; `confirmRecovery` when the sender is a guardian; `createSigner(x, y)`. The wallet must be citizen(wallet) or admin of a citizen `recoveryLegacy`, with ≥ 1 guardian. Any passkey Safe may send these (family members are not citizens). |
 
 Identity and recovery calls never mix; a non-citizen passkey Safe gets nothing else. **Registration of brand-new users is not sponsored** (they need attesters first). Verified live: the counterfactual v2 citizen `0xEbf3…5227` has no code, `hasCitizenNFT == true`, and `AccountFactory.getAddress(0x21e7…0e90, 0x)` (admin read from Base) equals it.
 
@@ -165,17 +165,31 @@ other surface that surface's own flag:
 
 At launch set only `passkey_accounts_enabled`, then `passkey_accounts_enabled_production`. Leave the other three unset.
 
+**Existing accounts are not behind the sign-up flags** (`apps/expo/lib/passkey/existing-account.ts`). The flags and
+the kill switch close NEW sign-up entry points only. When the device holds a passkey session or a connected migration
+record (status `done`), the Settings kind (`settings-kind.ts`), the root recovery banner (`PasskeyRecoveryWatch`) and
+the recovery screens `/passkey/code` and `/passkey/restore` (the latter also while a recovery is in progress on the
+device, `passkey_recovery_v1`) are decided by `passkeyChannelAllowed()` alone, so guardians, the warning email and the
+"someone is recovering your account" banner never disappear for someone who already has an account. `useSettingsKind`
+reads all surface flags with one fetch (`passkeySurfacesAllowed`). The independent-account settings never write a
+fresh migration record over the stored one after a failed SecureStore read; they show "Erneut versuchen" instead
+(`sovereign-record.ts`).
+
 **Guest tier (sponsor).** A non-citizen Safe is sponsored for: `CitizenNFTv2.createAttestationRequest`, guardian
 management (add/revoke guardian, threshold, cancel recovery), `Hub.registerHuman`, `Hub.personalMint`,
 `NameRegistry.updateMetadataDigest`, and recovery of a guest Safe that has at least one guardian (the Safe must pass
-the shape check, including the SocialRecoveryModule). Not sponsored for guests: `groupMint`, `trust`, `send`, legacy
+the shape check, including the SocialRecoveryModule). The recovery of a guest Safe is charged to the **submitting
+Safe's** key (plus the guest group), never to the guest wallet: any passkey Safe can submit such an op (it reverts on
+chain without the guardians, but the paymaster pays), and charging the wallet would let a stranger exhaust the
+budget the wallet needs for its own `cancelRecovery`. Citizen recovery stays keyed to the wallet. Not sponsored for guests: `groupMint`, `trust`, `send`, legacy
 shapes (handover, `moveTo`, calls to a legacy account). A Safe is a guest only if it is not a citizen identity.
 
 **Budgets.**
 - `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI`: per guest Safe per UTC day, default 0.002 xDAI.
 - `PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI`: all guests together per UTC day (shared row `'guests'`), default 0.02 xDAI.
   It must stay **below** `PASSKEY_SPONSOR_GLOBAL_DAILY_WEI`. Guests also count against the global total, so a guest cap
-  at or above it would let guests use up the budget citizens need.
+  at or above it would let guests use up the budget citizens need. Enforced in code: the handler clamps it to
+  global cap - 1 wei (`guestGroupCap` in `sponsor-handler.ts`).
 - Measured prefunds (Task 5, EntryPoint prefund per op): deploy + guardian + citizenship request = 0.00234 xDAI at
   1.5 gwei, 0.00468 at 3 gwei (an upper bound for verification gas only); `personalMint` on a deployed Safe = 0.00159 /
   0.00318. **The default onboarding cap of 0.002 xDAI therefore does not fit a guest's first op even at 1.5 gwei.**
@@ -193,12 +207,19 @@ account. Known residuals: the history signal can be forged (worst case is a lock
 scan grows by about 52 windows per month, so an index or a pinned block will be needed eventually.
 
 **Boot rule** (`apps/expo/lib/passkey/boot.ts`). `bootWallets` takes ordered `SessionSource`s. A source that is stored
-but fails to restore (corrupt record, storage error, lazy import failure) is a **failed** boot: the app shows
-"restore failed" and retries in the background. It never falls through to thirdweb and never logs the person out.
-Production below runtime 3.8.0 builds no passkey source and boots exactly as before.
+but fails to restore because of a storage error or a failing lazy import is a **failed** boot: the app shows "restore
+failed" and retries in the background. It never falls through to thirdweb and never logs the person out. A stored
+session that is **corrupt** (unparsable, so retrying cannot help) is different: after one attempt the boot falls
+through to the thirdweb path. The background retry does the same (`backgroundRestore`): when the failed source's
+session turns out corrupt or gone, the source is dropped and thirdweb is restored in the same tick, so the timer never
+keeps retrying a session that no longer exists. The passkey source's presence check (`hasStored`) is a direct
+SecureStore read in `boot-source.ts`; only `load` / `connect` import the sign-in runtime, so a failing import can only
+affect someone who really holds a passkey session. Production below runtime 3.8.0 builds no passkey source and boots
+exactly as before.
 
 **Other.** The recovery-alert cron (`/api/passkey/recovery-alerts`, every 10 minutes, `CRON_SECRET` bearer) is now in
-`apps/web/vercel.json`. The warning-email limiter is shared when `PASSKEY_RATE_LIMIT_STORE=supabase`; if the store is
+`apps/web/vercel.json` (Vercel runs crons on the production deployment only; the route answers 503 until the email
+flags and the Supabase store are set). The warning-email limiter is shared when `PASSKEY_RATE_LIMIT_STORE=supabase`; if the store is
 down, `start` answers 503 `store_unavailable` and sends nothing. The consent processor list still names the provider
 on purpose (DSGVO). A Safe can join Circles (fork proof `contracts/passkey-accounts/test/SafeCircles.t.sol`).
 
