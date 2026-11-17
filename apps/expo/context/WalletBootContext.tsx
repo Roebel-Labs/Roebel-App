@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import { useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
 import { client } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
-import { bootWallets, retrySource, type SessionSource } from '@/lib/passkey/boot';
+import { bootWallets, lazySessionSource, retrySource, type SessionSource } from '@/lib/passkey/boot';
 import { passkeyChannelAllowed } from '@/lib/passkey/gate';
 import { bufferError } from '@/lib/sentry-init';
 import {
@@ -191,7 +191,12 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
         // Sovereign session first (preview channels only; production builds no sources and reads
         // no storage), else the thirdweb path above. See lib/passkey/boot.ts.
         const sources: SessionSource[] = passkeyChannelAllowed()
-          ? [(await import('@/lib/passkey/signin-runtime')).passkeySessionSource(setActiveWallet) as SessionSource]
+          ? [
+              // Lazy: a failing import lands inside bootWallets (retry -> failed), never as a logout.
+              lazySessionSource('passkey', async () =>
+                (await import('@/lib/passkey/signin-runtime')).passkeySessionSource(setActiveWallet),
+              ) as SessionSource,
+            ]
           : [];
         const { owner, result } = await bootWallets({
           channelAllowed: () => passkeyChannelAllowed(),

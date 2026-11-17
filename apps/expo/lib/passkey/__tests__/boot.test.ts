@@ -4,7 +4,7 @@ jest.mock('@/lib/supabase-app-settings', () => ({ fetchPasskeyFlags: jest.fn(asy
 
 import { getAddress, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
-import { bootWallets, retrySource, type BootDeps, type SessionSource } from '../boot';
+import { bootWallets, lazySessionSource, retrySource, type BootDeps, type SessionSource } from '../boot';
 import { passkeyChannelAllowed } from '../gate';
 import { PASSKEY_SESSION_KEY, clearPasskeySession, loadPasskeySession, parsePasskeySession, savePasskeySession, type PasskeySession } from '../session';
 import { passkeyWalletOptions, WRONG_CHAIN_MESSAGE } from '../thirdweb-adapter';
@@ -133,6 +133,15 @@ describe('bootWallets', () => {
     const { d } = deps({ isCancelled: () => true });
     expect((await bootWallets(d)).result.outcome).toBe('cancelled');
     expect(d.restoreThirdweb).not.toHaveBeenCalled();
+  });
+
+  it('a failing lazy import of the session module is a failure, not a logout', async () => {
+    const restoreThirdweb = jest.fn(async () => ({ outcome: 'restored', attempts: 1, errors: [], hadStoredSession: true }) as const);
+    const loader = jest.fn(async () => { throw new Error('native module missing'); });
+    const { d } = deps({ restoreThirdweb, sources: [lazySessionSource('passkey', loader) as SessionSource] });
+    const r = await bootWallets(d);
+    expect(r).toMatchObject({ owner: 'passkey', result: { outcome: 'failed', attempts: 4 } });
+    expect(restoreThirdweb).not.toHaveBeenCalled();
   });
 
   it('retrySource makes exactly one attempt', async () => {

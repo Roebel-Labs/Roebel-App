@@ -40,14 +40,23 @@ export type BootDeps = {
 
 export type BootResult = { owner: 'passkey' | 'words' | 'thirdweb'; result: RestoreResult };
 
-const isCorrupt = (e: unknown) => e instanceof SessionCorruptError;
+/** Wraps a lazily loaded source: a failing import surfaces as a storage-style error inside the boot (retry -> failed), never as a logout. */
+export function lazySessionSource<S>(owner: SessionSource['owner'], loader: () => Promise<SessionSource<S>>): SessionSource<S> {
+  return {
+    owner,
+    hasStored: async () => (await loader()).hasStored(),
+    load: async () => (await loader()).load(),
+    connect: async (session) => (await loader()).connect(session),
+  };
+}
 
-function restoreSource(
+async function restoreSource(
   source: SessionSource,
   deps: Pick<BootDeps, 'sleep' | 'isCancelled'>,
   delaysMs: readonly number[],
-): Promise<RestoreResult> {
-  return restoreWithRetry({
+): Promise<{ result: RestoreResult; corrupt: boolean }> {
+  let corrupt = false;
+  const result = await restoreWithRetry({
     attempt: async () => {
       const session = await source.load();
       if (session === null) throw new SessionCorruptError();
@@ -58,13 +67,14 @@ function restoreSource(
     delaysMs,
     sleep: deps.sleep,
     isCancelled: deps.isCancelled,
-    isFatal: isCorrupt,
+    isFatal: (e) => (e instanceof SessionCorruptError ? (corrupt = true) : false),
   });
+  return { result, corrupt };
 }
 
 /** One attempt, for the background timer after a failed boot restore. */
-export function retrySource(source: SessionSource, deps: Pick<BootDeps, 'sleep' | 'isCancelled'>): Promise<RestoreResult> {
-  return restoreSource(source, deps, []);
+export async function retrySource(source: SessionSource, deps: Pick<BootDeps, 'sleep' | 'isCancelled'>): Promise<RestoreResult> {
+  return (await restoreSource(source, deps, [])).result;
 }
 
 export async function bootWallets(deps: BootDeps): Promise<BootResult> {
@@ -78,9 +88,8 @@ export async function bootWallets(deps: BootDeps): Promise<BootResult> {
       }
       if (deps.isCancelled?.()) return { owner: source.owner, result: { outcome: 'cancelled', attempts: 0, errors: [], hadStoredSession: true } };
       if (!stored) continue;
-      const result = await restoreSource(source, deps, deps.delaysMs);
+      const { result, corrupt } = await restoreSource(source, deps, deps.delaysMs);
       if (result.outcome === 'restored' || result.outcome === 'cancelled') return { owner: source.owner, result };
-      const corrupt = result.errors.length > 0 && result.errors.every((m) => m === new SessionCorruptError().message);
       if (result.outcome === 'failed' && corrupt) break; // unreadable session: thirdweb path
       return { owner: source.owner, result };
     }
