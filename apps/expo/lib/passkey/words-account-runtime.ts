@@ -4,7 +4,7 @@
  */
 import { findLinkedLegacies, findSafesByOwner } from './recovery-lookup';
 import { findWalletsByWords } from './words-recovery';
-import { lookupChain, wordsLookupChain } from './guardians-runtime';
+import { lookupChain, recoveryStorage, wordsLookupChain } from './guardians-runtime';
 import { secureKeyValueStorage } from './migration-runtime';
 import { phraseStore } from './phrase-store-runtime';
 import { randomBytes } from './random';
@@ -23,6 +23,7 @@ export function createWordsAccountDeps(): WordsAccountDeps {
       const [legacies, known] = await Promise.all([findLinkedLegacies(safe, lookupChain), isKnownAccount(safe)]);
       return legacies.length > 0 || known;
     },
+    recoveryStorage,
     random: randomBytes,
   };
 }

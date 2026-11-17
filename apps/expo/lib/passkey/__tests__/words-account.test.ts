@@ -1,6 +1,7 @@
 import { getAddress, hexToBytes, type Address, type Hex } from 'viem';
 import { predictEcdsaSafeAddress } from '../ecdsa-safe';
 import { loadMigrationRecord, MIGRATION_STORE_KEY } from '../migration';
+import { RECOVERY_STORE_KEY } from '../recovery-flow';
 import {
   createPhraseStore,
   NO_BIOMETRICS_MESSAGE,
@@ -20,6 +21,7 @@ import {
   WORDS_ALREADY_STORED_MESSAGE,
   WORDS_ARE_RECOVERY_WORDS_MESSAGE,
   WORDS_FAILED_MESSAGE,
+  WORDS_IN_RECOVERY_MESSAGE,
   WORDS_MIGRATION_PENDING_MESSAGE,
   WORDS_NOT_STORED_MESSAGE,
   WORDS_RECOVERY_ROUTE,
@@ -384,6 +386,25 @@ describe('openStoredWordsAccount', () => {
     d.secure.readThrows = 'User canceled the authentication';
     expect(await openStoredWordsAccount(d)).toEqual({ status: 'cancelled' });
     expect(d.findSafesByOwner).not.toHaveBeenCalled();
+  });
+
+  it('M-3: the new words of a running expert recovery go to the recovery screen, never to the fresh Safe', async () => {
+    const fresh = predictEcdsaSafeAddress(JUNK_OWNER);
+    const d = deps({ findSafesByOwner: async () => [fresh] });
+    await d.phrase.write(JUNK);
+    const running = { step: 'waitingDelay', wallet: RECOVERED, recoveryLegacy: null, name: 'Erna', ownerKind: 'ecdsa', signer: JUNK_OWNER, newSafe: fresh };
+    await d.migrationStorage.setItem(RECOVERY_STORE_KEY, JSON.stringify(running));
+    expect(await openStoredWordsAccount(d)).toEqual({ status: 'recoveryWords', message: WORDS_IN_RECOVERY_MESSAGE, route: WORDS_RECOVERY_ROUTE });
+    expect(await loadPasskeySession(d.sessionStorage)).toBeNull();
+    expect(d.findSafesByOwner).not.toHaveBeenCalled();
+    // Typed in again: the same.
+    expect(await signInWithWords(JUNK, d)).toEqual({ status: 'recoveryWords', message: WORDS_IN_RECOVERY_MESSAGE, route: WORDS_RECOVERY_ROUTE });
+    expect(await loadPasskeySession(d.sessionStorage)).toBeNull();
+    // A cancelled recovery, or one for other words, does not hold the words back.
+    await d.migrationStorage.setItem(RECOVERY_STORE_KEY, JSON.stringify({ ...running, step: 'cancelled' }));
+    expect(await openStoredWordsAccount(d)).toMatchObject({ status: 'signedIn', session: { safe: fresh } });
+    await d.migrationStorage.setItem(RECOVERY_STORE_KEY, JSON.stringify({ ...running, signer: OTHER }));
+    expect(await openStoredWordsAccount(d)).toMatchObject({ status: 'signedIn' });
   });
 
   it('a failed lookup is an error here too', async () => {

@@ -13,6 +13,8 @@
  *                          error and never someone else's account).
  *   openStoredWordsAccount the words stored on this device (one device unlock) → as above,
  *                          without storing them again.
+ *   Both send the NEW words of an expert recovery still running on this device to the recovery
+ *   screen instead of opening the fresh Safe that sends it (M-3).
  *
  * Rules (preflight):
  *   E4  a stored phrase of ANOTHER account that was never confirmed may be that account's only
@@ -51,6 +53,7 @@ import {
   type PhraseStore,
 } from './phrase-store';
 import { randomBytes } from './random';
+import { loadRecoveryState, type RecoveryStorage } from './recovery-flow';
 import { isWordsOwner, loadPasskeySession, savePasskeySession, WORDS_KEY_PLACEHOLDER, type PasskeySession, type SessionStorage } from './session';
 import { generatePhrase, phraseErrorMessage, validatePhrase, wordsFromSeed, WORDS_POOL_SIZE } from './words';
 import type { WordsWallet } from './words-recovery';
@@ -69,6 +72,9 @@ export const WORDS_UNREADABLE_MESSAGE =
 export const WORDS_STORE_FAILED_MESSAGE = 'Die Wörter konnten nicht sicher gespeichert werden. Bitte versuche es erneut.';
 export const WORDS_FAILED_MESSAGE = 'Das hat nicht geklappt. Bitte versuche es erneut.';
 export const WORDS_SAVE_FAILED_MESSAGE = 'Das Konto konnte nicht gespeichert werden. Bitte versuche es erneut.';
+/** The words are the NEW words of a guardian recovery still running on this device (M-3). */
+export const WORDS_IN_RECOVERY_MESSAGE =
+  'Diese Wörter gehören zu einer Wiederherstellung, die auf diesem Gerät noch läuft. Mach unter „Konto wiederherstellen" weiter.';
 /** A passkey migration on this device is not finished: its record must not be replaced. */
 export const WORDS_MIGRATION_PENDING_MESSAGE =
   'Auf diesem Gerät ist die Einrichtung deines Passkeys noch nicht abgeschlossen. Schließe sie zuerst unter Einstellungen → Passkey ab.';
@@ -83,6 +89,8 @@ export type WordsAccountDeps = {
   findWalletsByWords: (pool: readonly Address[]) => Promise<WordsWallet[]>;
   /** A Safe with history (legacy link or users row): the tie-break among several owned Safes. */
   hasHistory?: (safe: Address) => Promise<boolean>;
+  /** Where restore.tsx keeps a running guardian recovery (M-3); default `migrationStorage`. */
+  recoveryStorage?: RecoveryStorage;
   random?: (n: number) => Uint8Array;
 };
 
@@ -123,6 +131,18 @@ async function migrationPending(storage: KeyValueStorage): Promise<boolean> {
   const rec = await loadMigrationRecord(storage).catch(() => null);
   return !!rec && !isWordsOwner(rec) && !!rec.legacy && rec.status !== 'done';
 }
+
+/**
+ * M-3: words that are the new owner of an expert recovery still running on this device (not
+ * cancelled) must not open an account of their own — that would be the fresh, empty Safe that
+ * sends the recovery, not the account being recovered. The recovery screen finishes it.
+ */
+async function inRunningRecovery(deps: WordsAccountDeps, owner: Address): Promise<boolean> {
+  const s = await loadRecoveryState(deps.recoveryStorage ?? deps.migrationStorage).catch(() => null);
+  return !!s && s.ownerKind === 'ecdsa' && !!s.signer && s.step !== 'cancelled' && isAddressEqual(s.signer, owner);
+}
+
+const IN_RECOVERY: WordsResult = { status: 'recoveryWords', message: WORDS_IN_RECOVERY_MESSAGE, route: WORDS_RECOVERY_ROUTE };
 
 /** The words session + record for `safe` (identity = the Safe: an expert account has no legacy account). */
 async function saveWordsAccount(deps: WordsAccountDeps, safe: Address, owner: Address): Promise<PasskeySession> {
@@ -243,6 +263,7 @@ export function signInWithWords(input: string, deps: WordsAccountDeps): Promise<
       return { status: 'error', message: PHRASE_OVERWRITE_MESSAGE, reason: 'overwrite' };
     }
     if (await migrationPending(deps.migrationStorage)) return { status: 'error', message: WORDS_MIGRATION_PENDING_MESSAGE };
+    if (await inRunningRecovery(deps, owner)) return IN_RECOVERY;
     const found = await resolveWordsSafe(pool, deps);
     if (!('safe' in found)) return found;
     try {
@@ -283,6 +304,7 @@ export function openStoredWordsAccount(deps: WordsAccountDeps): Promise<WordsRes
     if (!check.ok) return { status: 'error', message: WORDS_UNREADABLE_MESSAGE };
     if (await migrationPending(deps.migrationStorage)) return { status: 'error', message: WORDS_MIGRATION_PENDING_MESSAGE };
     const pool = wordsFromSeed(check.phrase).addresses(WORDS_POOL_SIZE);
+    if (await inRunningRecovery(deps, pool[0])) return IN_RECOVERY;
     const found = await resolveWordsSafe(pool, deps);
     if (!('safe' in found)) return found;
     try {
