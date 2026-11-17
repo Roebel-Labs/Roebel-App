@@ -259,13 +259,15 @@ export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResul
     await d.saveLocal(secret);
     // A new phone: sync the words vault (key + pool) from this read and its PRF, and give the key
     // its words copy when it has none yet (a key made before the words, on a phone that did not
-    // set them up): a plain write under the session token, no extra prompt. A stale copy (under
-    // earlier words, or a tombstone) needs a `replace` proof: left to "Schlüssel sichern", which
-    // replaces all stale copies in one write, so resolving a key never costs an extra fingerprint.
-    if (d.wordsVaultKey && prf && d.remote) {
+    // set them up). That write happens ONLY with an already cached session token
+    // (`writeWithoutPrompt`, a peek): without one, `write` would sign a new API session = an
+    // extra fingerprint, so the copy is left to "Schlüssel sichern" / key completion. A stale copy
+    // (under earlier words, or a tombstone) needs a `replace` proof: also left to "Schlüssel
+    // sichern", which replaces all stale copies in one write. Resolving a key never costs an extra fingerprint.
+    if (d.wordsVaultKey && prf && d.remote?.writeWithoutPrompt) {
       try {
         const plan = await planWordsCopies(d, read, prf, [{ slot: d.slot, secret }]);
-        if (plan.on) await writeWithWordsCopies(d.remote, {}, plan, false);
+        if (plan.on && Object.keys(plan.fresh).length > 0) await d.remote.writeWithoutPrompt(plan.fresh);
       } catch {
         // Best effort: the key is restored either way.
       }

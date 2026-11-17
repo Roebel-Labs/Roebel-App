@@ -11,6 +11,9 @@
  * this phone cannot tell, unnamed guardians might be words: they are shown as ONE entry
  * "Wiederherstellungswörter (nicht geladen)" and every change is refused with a German hint until
  * the words screen loaded the pool (planning without it would keep old words as "people").
+ * That refusal applies only while the 'words' surface is open (the words screen, the only way
+ * out, is reachable) AND words were seen for this account on this phone (ruling N2, in
+ * `currentWordsPool`); otherwise every guardian is a person, as before the words existed.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
@@ -24,6 +27,7 @@ import {
   isValidThreshold,
   pendingSuggestions,
 } from '@/lib/passkey/guardian-plan';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import { planGuardianSet, splitGuardians, type WordsPool } from '@/lib/passkey/words-guardians';
 import { currentWordsPool, WORDS_NOT_LOADED_MESSAGE, type WordsPoolView } from '@/lib/passkey/words-setup';
@@ -85,7 +89,10 @@ export function useGuardianManager(record: MigrationRecord | null) {
       const [state, identity] = await Promise.all([readGuardianState(record.safe), readIdentityMode(record).catch(() => null)]);
       const view: WordsPoolView = await import('@/lib/passkey/words-setup-runtime')
         .then((rt) => rt.wordsPoolView(state.guardians, account))
-        .catch(() => currentWordsPool(state.guardians, { storage: secureKeyValueStorage }));
+        // Runtime not loadable: the local view under the same N2 rule (gate + "words seen").
+        .catch(() =>
+          currentWordsPool(state.guardians, { storage: secureKeyValueStorage, wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words') }),
+        );
       const wordsPool = view.pool;
       // Word guardians are never resolved or shown as people.
       const peopleOnChain = splitGuardians(state.guardians, wordsPool).people;

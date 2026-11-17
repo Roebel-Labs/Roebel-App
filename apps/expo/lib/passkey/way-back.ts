@@ -12,7 +12,8 @@
 import type { Address } from 'viem';
 import { passkeySessionOf } from './active';
 import { identityKind, type PasskeySession } from './session';
-import { splitGuardians, type WordsPool } from './words-guardians';
+// words-split, not words-guardians: the latter pulls in guardians.ts → userop/webauthn natives.
+import { splitGuardians, type WordsPool } from './words-split';
 
 export type AccountKind = 'provider' | 'passkey' | 'words';
 

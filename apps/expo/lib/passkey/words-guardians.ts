@@ -15,13 +15,13 @@ import { encodeAddGuardian, encodeChangeThreshold, encodeRevokeGuardian } from '
 import type { KeyValueStorage } from './migration';
 import type { SponsoredCall } from './userop';
 import { WORDS_POOL_SIZE } from './words';
+import type { WordsPool } from './words-split';
 
 export const WORDS_POOL_KEY = 'passkey_words_pool_v1';
 
 export const WORDS_THRESHOLD_LIMIT_MESSAGE = 'Mit Wiederherstellungswörtern können höchstens 5 Personen zustimmen müssen.';
 
-/** The 5 word addresses in derivation order (index 0 first). */
-export type WordsPool = { addresses: Address[]; confirmedAt: number };
+export { splitGuardians, type WordsPool } from './words-split';
 
 type RemovableStorage = KeyValueStorage & { removeItem?: (key: string) => Promise<void> };
 
@@ -49,14 +49,6 @@ export async function saveWordsPool(storage: KeyValueStorage, pool: WordsPool): 
 export async function clearWordsPool(storage: RemovableStorage): Promise<void> {
   if (storage.removeItem) await storage.removeItem(WORDS_POOL_KEY);
   else await storage.setItem(WORDS_POOL_KEY, '');
-}
-
-/** On-chain guardians split into people and word addresses (case-insensitive, chain order kept). */
-export function splitGuardians(onChain: readonly Address[], pool: WordsPool | null): { people: Address[]; words: Address[] } {
-  const people: Address[] = [];
-  const words: Address[] = [];
-  for (const g of onChain) (pool && includesAddr(pool.addresses, g) ? words : people).push(g);
-  return { people, words };
 }
 
 /** How many must agree for `peopleCount` people: the wanted value (default 2) clamped, never below 1. */

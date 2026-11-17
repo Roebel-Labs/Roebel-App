@@ -86,7 +86,11 @@ const uniq = (xs: KeyBackupSlot[]) => KEY_BACKUP_SLOTS.filter((s) => xs.includes
 
 /** Serves the read we already paid a fingerprint for, so backupDeviceSecrets does not re-read. */
 function withCachedRead(remote: RemoteBackup, read: RemoteRead): RemoteBackup {
-  return { read: async () => read, write: (blobs, replace) => remote.write(blobs, replace) };
+  return {
+    read: async () => read,
+    write: (blobs, replace) => remote.write(blobs, replace),
+    ...(remote.writeWithoutPrompt ? { writeWithoutPrompt: remote.writeWithoutPrompt } : {}),
+  };
 }
 
 export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionResult> {

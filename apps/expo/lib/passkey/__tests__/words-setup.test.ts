@@ -32,6 +32,8 @@ const P3 = getAddress('0x3333333333333333333333333333333333333333');
 const PRF = `0x${'42'.repeat(32)}` as Hex;
 const NEW = deriveWordAddresses(JUNK);
 const OLD = deriveWordAddresses(ABOUT);
+/** The 'words' surface is open (currentWordsPool treats an absent gate as closed). */
+const OPEN = { wordsSurfaceOpen: async () => true };
 
 function deps(o: {
   state: { guardians: Address[]; threshold: number };
@@ -436,7 +438,8 @@ describe('retryWordsBackup / readWordsStatus', () => {
     expect(await readWordsStatus(SAFE, (await setup({ state: { guardians: [NEW[0], P1], threshold: 1 }, pool })).deps)).toEqual({ on: true, pending: null, unknown: false });
     // An outdated pool (none of it on chain) is no pool: without a token read the guardian is unknown.
     expect(await readWordsStatus(SAFE, (await setup({ state: { guardians: [P1], threshold: 1 }, pool })).deps)).toEqual({ on: false, pending: null, unknown: true });
-    expect(await readWordsStatus(SAFE, (await setup({ state: { guardians: [NEW[0]], threshold: 1 } })).deps)).toEqual({ on: false, pending: null, unknown: true });
+    // No pool, no pending, nothing seen: nothing points to words (N2) → all guardians are people.
+    expect(await readWordsStatus(SAFE, (await setup({ state: { guardians: [NEW[0]], threshold: 1 } })).deps)).toEqual({ on: false, pending: null, unknown: false });
     expect(await readWordsStatus(SAFE, (await setup({ state: { guardians: [P1], threshold: 1 }, token: true })).deps)).toEqual({ on: false, pending: null, unknown: false });
   });
 });
@@ -492,24 +495,69 @@ describe('pool authority (I1)', () => {
   it('currentWordsPool: valid local pool / none (no guardians, token read without wvk, confirmed people) / unknown', async () => {
     const pool = { addresses: NEW, confirmedAt: 1 };
     const a = await setup({ state: { guardians: [], threshold: 0 }, pool });
-    expect(await currentWordsPool([NEW[0], P1], a.deps)).toEqual({ pool, state: 'local' });
-    expect(await currentWordsPool([], a.deps)).toEqual({ pool: null, state: 'none' });
-    expect(await currentWordsPool([P1], a.deps)).toEqual({ pool: null, state: 'unknown' });
+    expect(await currentWordsPool([NEW[0], P1], { ...a.deps, ...OPEN })).toEqual({ pool, state: 'local' });
+    expect(await currentWordsPool([], { ...a.deps, ...OPEN })).toEqual({ pool: null, state: 'none' });
+    expect(await currentWordsPool([P1], { ...a.deps, ...OPEN })).toEqual({ pool: null, state: 'unknown' });
     const tokenNone = await setup({ state: { guardians: [], threshold: 0 }, token: true, server: { wvk: WORDS_OFF_BLOB } });
-    expect(await currentWordsPool([P1], tokenNone.deps)).toEqual({ pool: null, state: 'none' });
+    expect(await currentWordsPool([P1], { ...tokenNone.deps, ...OPEN })).toEqual({ pool: null, state: 'none' });
     const tokenReal = await setup({ state: { guardians: [], threshold: 0 }, token: true, server: { wvk: await wrapVaultKey(PRF, wordsVaultKey(JUNK), wrapSecret, NEW) } });
-    expect(await currentWordsPool([P1, NEW[0]], tokenReal.deps)).toEqual({ pool: null, state: 'unknown' });
+    expect(await currentWordsPool([P1, NEW[0]], { ...tokenReal.deps, ...OPEN })).toEqual({ pool: null, state: 'unknown' });
     expect(tokenReal.getPrf).not.toHaveBeenCalled();
     const noWvk = await setup({ state: { guardians: [], threshold: 0 }, token: true, server: { wvk: WORDS_NO_WVK_BLOB } });
-    expect((await currentWordsPool([P1], noWvk.deps)).state).toBe('unknown');
+    expect((await currentWordsPool([P1], { ...noWvk.deps, ...OPEN })).state).toBe('unknown');
   });
 
   it('after "Wörter entfernen" the remaining people need no prompt to be known as people', async () => {
     const d = await setup({ state: { guardians: [P1, NEW[0]], threshold: 1 }, pool: { addresses: NEW, confirmedAt: 1 }, vaultKey: wordsVaultKey(JUNK) });
     expect((await disableRecoveryWords({ safe: SAFE }, d.deps)).status).toBe('done');
-    expect(await currentWordsPool([P1], d.deps)).toEqual({ pool: null, state: 'none' });
-    // a guardian added later by someone else is not covered
-    expect((await currentWordsPool([P1, P2], d.deps)).state).toBe('unknown');
+    expect(await currentWordsPool([P1], { ...d.deps, ...OPEN })).toEqual({ pool: null, state: 'none' });
+    // A guardian added later is not covered by the record, but the words are off: nothing points to words (N2).
+    expect((await currentWordsPool([P1, P2], { ...d.deps, ...OPEN })).state).toBe('none');
+  });
+
+  describe('N2: unknown refuses changes only with the words surface open AND words seen', () => {
+    const realWvk = () => wrapVaultKey(PRF, wordsVaultKey(JUNK), wrapSecret, NEW);
+
+    it('surface closed: an unknown guardian set is planned as people (none), even with a local pool or a real wvk', async () => {
+      const outdated = await setup({ state: { guardians: [], threshold: 0 }, pool: { addresses: OLD, confirmedAt: 1 } });
+      expect(await currentWordsPool([P1, NEW[0]], outdated.deps)).toEqual({ pool: null, state: 'none' });
+      expect(await currentWordsPool([P1, NEW[0]], { ...outdated.deps, wordsSurfaceOpen: async () => false })).toEqual({ pool: null, state: 'none' });
+      const real = await setup({ state: { guardians: [], threshold: 0 }, token: true, server: { wvk: await realWvk() } });
+      expect((await currentWordsPool([P1, NEW[0]], { ...real.deps, wordsSurfaceOpen: async () => false })).state).toBe('none');
+      // A failing gate counts as closed.
+      expect((await currentWordsPool([P1, NEW[0]], { ...real.deps, wordsSurfaceOpen: async () => { throw new Error('x'); } })).state).toBe('none');
+    });
+
+    it('a disabled key backup counts as none (no words backup can exist)', async () => {
+      const d = await setup({ state: { guardians: [], threshold: 0 }, pool: { addresses: OLD, confirmedAt: 1 } });
+      d.remote.readWithoutPrompt = jest.fn(async (): Promise<RemoteRead> => ({ status: 'disabled' }));
+      expect(await currentWordsPool([P1, NEW[0]], { ...d.deps, ...OPEN })).toEqual({ pool: null, state: 'none' });
+    });
+
+    it('surface open, nothing seen and no token: none (people = all guardians)', async () => {
+      const d = await setup({ state: { guardians: [], threshold: 0 } });
+      expect(await currentWordsPool([P1, NEW[0]], { ...d.deps, ...OPEN })).toEqual({ pool: null, state: 'none' });
+    });
+
+    it('surface open + words seen + unknown: still refused (local pool, pending marker, or a wvk seen in an earlier read)', async () => {
+      const byPool = await setup({ state: { guardians: [], threshold: 0 }, pool: { addresses: OLD, confirmedAt: 1 } });
+      expect((await currentWordsPool([P1, NEW[0]], { ...byPool.deps, ...OPEN })).state).toBe('unknown');
+
+      const byPending = await setup({ state: { guardians: [], threshold: 0 } });
+      await byPending.storage.setItem(WORDS_PENDING_KEY, 'on');
+      expect((await currentWordsPool([P1, NEW[0]], { ...byPending.deps, ...OPEN })).state).toBe('unknown');
+
+      // An earlier token read saw a real wvk; later there is no token: still unknown.
+      const bySeen = await setup({ state: { guardians: [], threshold: 0 }, token: true, server: { wvk: await realWvk() } });
+      expect((await currentWordsPool([P1, NEW[0]], { ...bySeen.deps, ...OPEN })).state).toBe('unknown');
+      const { readWithoutPrompt: _gone, ...noToken } = bySeen.remote;
+      expect((await currentWordsPool([P1, NEW[0]], { ...bySeen.deps, remote: noToken as RemoteBackup, ...OPEN })).state).toBe('unknown');
+
+      // A later read that shows the words off clears that evidence.
+      bySeen.server.wvk = WORDS_OFF_BLOB;
+      expect((await currentWordsPool([P1, NEW[0]], { ...bySeen.deps, ...OPEN })).state).toBe('none');
+      expect((await currentWordsPool([P1, NEW[0]], { ...bySeen.deps, remote: noToken as RemoteBackup, ...OPEN })).state).toBe('none');
+    });
   });
 
   it('syncWordsPool: one signed read learns the pool and the vault key; the guardian list then knows the words', async () => {

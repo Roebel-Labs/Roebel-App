@@ -87,6 +87,12 @@ export type RemoteBackup = {
    */
   readWithoutPrompt?: () => Promise<RemoteRead | null>;
   write: (blobs: KeyBackupBlobs, replace?: boolean) => Promise<RemoteWrite>;
+  /**
+   * A plain (no `replace`) write that never prompts: only with an already cached session token
+   * (peek, never a new session), else null and nothing is sent or signed. Optional like
+   * `readWithoutPrompt`; callers that must not cost a fingerprint skip the write when it is absent.
+   */
+  writeWithoutPrompt?: (blobs: KeyBackupBlobs) => Promise<RemoteWrite | null>;
 };
 
 type FetchLike = (
@@ -170,6 +176,13 @@ function parseRead(r: { status: number; ok: boolean; json: any }, prf?: Hex): Re
   return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
 }
 
+function parseWrite(r: { status: number; ok: boolean; json: any }): RemoteWrite {
+  if (isDisabled(r)) return 'disabled';
+  if (r.status === 409 && r.json?.error === 'exists') return 'exists';
+  if (!r.ok) throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
+  return 'stored';
+}
+
 /** Transport errors and unexpected answers THROW (German): callers must never treat them as "no backup". */
 export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
   const now = () => (d.nowSec ?? (() => Math.floor(Date.now() / 1000)))();
@@ -208,10 +221,12 @@ export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
           proof: { timestamp, signature },
         });
       }
-      if (isDisabled(r)) return 'disabled';
-      if (r.status === 409 && r.json?.error === 'exists') return 'exists';
-      if (!r.ok) throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
-      return 'stored';
+      return parseWrite(r);
+    },
+    async writeWithoutPrompt(blobs) {
+      if (!d.apiUrl) return 'disabled';
+      const r = await postWithToken(d, () => d.session!.peek(), '/api/passkey/key-backup/put', { identity: d.identity, blobs });
+      return r ? parseWrite(r) : null;
     },
   };
 }

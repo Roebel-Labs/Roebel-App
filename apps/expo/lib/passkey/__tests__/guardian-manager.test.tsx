@@ -1,6 +1,7 @@
 /**
  * useGuardianManager: the threshold every change asks for (W2 rules: never silently lower what is
- * on chain) and the words pool rule (I1: guardians this phone cannot classify block changes).
+ * on chain) and the words pool rule (I1: guardians this phone cannot classify block changes;
+ * N2: only with the 'words' surface open and words seen on this phone).
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -16,22 +17,38 @@ const W0 = getAddress('0x4444444444444444444444444444444444444440');
 const mockChain: { guardians: Address[]; threshold: number } = { guardians: [], threshold: 0 };
 const mockSent: SponsoredCall[][] = [];
 const mockNames = new Map<string, string>();
-const mockView: { state: 'local' | 'none' | 'unknown'; pool: { addresses: Address[]; confirmedAt: number } | null } = {
-  state: 'none',
-  pool: null,
-};
+/** This phone's key-value storage (words pool, pending marker, seen flag) and the 'words' gate. */
+const mockKv = new Map<string, string>();
+let mockSurfaceOpen = false;
 const mockSuggested: { guardian: Address; approver: Address }[] = [];
 
 jest.mock('thirdweb/react', () => ({ useActiveAccount: () => undefined }));
+// Built lazily: the mock factories run before this file's top-level constants exist.
+const mockStorage = () => ({
+  getItem: async (k: string) => mockKv.get(k) ?? null,
+  setItem: async (k: string, v: string) => void mockKv.set(k, v),
+  removeItem: async (k: string) => void mockKv.delete(k),
+});
 jest.mock('@/lib/passkey/migration-runtime', () => ({
-  secureKeyValueStorage: { getItem: async () => null, setItem: async () => undefined },
+  get secureKeyValueStorage() {
+    return mockStorage();
+  },
 }));
+jest.mock('@/lib/passkey/gate', () => ({ isPasskeySurfaceAllowed: async () => mockSurfaceOpen }));
 jest.mock('@/components/passkey/PasskeyUi', () => ({
   friendlyError: (e: unknown, fallback?: string) => (e instanceof Error ? e.message : fallback ?? null),
 }));
 jest.mock('@/lib/passkey/recovery-helper-runtime', () => ({ loadHelpers: async () => ({}) }));
 jest.mock('@/lib/passkey/recovery-lookup', () => ({ suggestDefaultGuardians: async () => mockSuggested }));
-jest.mock('@/lib/passkey/words-setup-runtime', () => ({ wordsPoolView: async () => ({ ...mockView }) }));
+// The runtime view = the real currentWordsPool on this phone's storage and gate, without a token read
+// (the hook falls back to the same call when the runtime cannot be loaded).
+jest.mock('@/lib/passkey/words-setup-runtime', () => ({
+  wordsPoolView: async (guardians: Address[]) =>
+    jest.requireActual('@/lib/passkey/words-setup').currentWordsPool(guardians, {
+      storage: mockStorage(),
+      wordsSurfaceOpen: async () => mockSurfaceOpen,
+    }),
+}));
 jest.mock('@/lib/passkey/guardians-runtime', () => ({
   isAttester: async () => false,
   lookupChain: {},
@@ -52,7 +69,7 @@ jest.mock('@/lib/passkey/guardians-runtime', () => ({
 }));
 
 import { managerThreshold, useGuardianManager } from '@/components/passkey/useGuardianManager';
-import { planGuardianSet } from '../words-guardians';
+import { planGuardianSet, WORDS_POOL_KEY } from '../words-guardians';
 import { WORDS_NOT_LOADED_MESSAGE } from '../words-setup';
 
 const RECORD = {
@@ -88,9 +105,13 @@ beforeEach(() => {
   mockSent.length = 0;
   mockNames.clear();
   mockSuggested.length = 0;
-  mockView.state = 'none';
-  mockView.pool = null;
+  mockKv.clear();
+  mockSurfaceOpen = false;
 });
+
+/** An outdated local pool (none of it on chain): words were seen on this phone, the pool cannot classify. */
+const OUTDATED = [0, 1, 2, 3, 4].map((i) => getAddress(`0x555555555555555555555555555555555555555${i}`));
+const wordsSeenHere = () => mockKv.set(WORDS_POOL_KEY, JSON.stringify({ addresses: OUTDATED, confirmedAt: 1 }));
 
 describe('managerThreshold (W2 rules)', () => {
   it('adopting the suggestion never lowers a stricter choice, and asks at least 2', () => {
@@ -150,7 +171,8 @@ describe('useGuardianManager', () => {
   });
 
   it('pool unknown + an unnamed guardian: shown as words "nicht geladen", every change refused with the German hint', async () => {
-    mockView.state = 'unknown';
+    mockSurfaceOpen = true;
+    wordsSeenHere();
     mockChain.guardians = [P1, W0];
     mockChain.threshold = 1;
     mockNames.set(P1.toLowerCase(), 'Erna');
@@ -167,8 +189,46 @@ describe('useGuardianManager', () => {
     expect(m.current().notice).toEqual({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
   });
 
+  describe('N2: the refusal needs the words surface open AND words seen on this phone', () => {
+    const tryAdd = async () => {
+      mockChain.guardians = [P1, W0];
+      mockChain.threshold = 1;
+      mockNames.set(P1.toLowerCase(), 'Erna');
+      const m = await mount();
+      await act(async () => {
+        await m.current().addGuardian(P2, 'Kurt');
+      });
+      return m;
+    };
+
+    it('surface closed + unknown (words seen, no token): every guardian is a person, changes go through', async () => {
+      mockSurfaceOpen = false;
+      wordsSeenHere();
+      const m = await tryAdd();
+      expect(m.current().wordsUnloaded).toBe(false);
+      expect(mockSent).toEqual([expected([P1, W0, P2], managerThreshold.add(1, 3))]);
+    });
+
+    it('surface open + nothing seen: changes go through', async () => {
+      mockSurfaceOpen = true;
+      const m = await tryAdd();
+      expect(m.current().wordsUnloaded).toBe(false);
+      expect(mockSent).toHaveLength(1);
+    });
+
+    it('surface open + words seen + unknown: still refused with the German hint', async () => {
+      mockSurfaceOpen = true;
+      wordsSeenHere();
+      const m = await tryAdd();
+      expect(m.current().wordsUnloaded).toBe(true);
+      expect(mockSent).toHaveLength(0);
+      expect(m.current().notice).toEqual({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
+    });
+  });
+
   it('pool unknown but every guardian is a named person: changes go through', async () => {
-    mockView.state = 'unknown';
+    mockSurfaceOpen = true;
+    wordsSeenHere();
     mockChain.guardians = [P1];
     mockChain.threshold = 1;
     mockNames.set(P1.toLowerCase(), 'Erna');

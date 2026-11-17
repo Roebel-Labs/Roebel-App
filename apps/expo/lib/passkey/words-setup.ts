@@ -158,14 +158,38 @@ async function loadNoneRecord(storage: KeyValueStorage): Promise<Address[] | nul
 
 async function saveNoneRecord(storage: KeyValueStorage, guardians: readonly Address[]): Promise<void> {
   await storage.setItem(WORDS_NONE_KEY, JSON.stringify(guardians.map((g) => g.toLowerCase())));
+  await setWordsSeen(storage, false);
+}
+
+/**
+ * Set once this phone saw words for the account in a server read (a real `wvk` or the no-wvk
+ * marker); cleared when words are confirmed off. Together with a local pool (valid or not) and a
+ * pending marker it is the evidence "words exist here" that the unknown→refuse rule needs (N2).
+ */
+export const WORDS_SEEN_KEY = 'passkey_words_seen_v1';
+
+async function setWordsSeen(storage: KeyValueStorage, seen: boolean): Promise<void> {
+  const s = storage as RemovableStorage;
+  if (seen) await storage.setItem(WORDS_SEEN_KEY, '1');
+  else if (s.removeItem) await s.removeItem(WORDS_SEEN_KEY);
+  else await storage.setItem(WORDS_SEEN_KEY, '');
+}
+
+/** Words were seen for this account on this phone: a local pool, a pending marker, or a seen `wvk`. */
+async function wordsSeen(storage: KeyValueStorage): Promise<boolean> {
+  const [pool, pending, seen] = await Promise.all(
+    [WORDS_POOL_KEY, WORDS_PENDING_KEY, WORDS_SEEN_KEY].map((k) => storage.getItem(k).catch(() => null)),
+  );
+  return !!pool || !!pending || !!seen;
 }
 
 export type WordsPoolView = {
   pool: WordsPool | null;
   /**
    * local   = this device's pool, valid on chain
-   * none    = no words among the guardians (no guardians, words confirmed off, or the server says off)
-   * unknown = guardians this phone cannot classify (no valid pool, and no promptless answer)
+   * none    = no words among the guardians (no guardians, words confirmed off, the server says
+   *           off, the key backup is disabled), or nothing points to words (see `currentWordsPool`)
+   * unknown = guardians this phone cannot classify while words are known to exist (refuse changes)
    */
   state: 'local' | 'none' | 'unknown';
 };
@@ -173,12 +197,18 @@ export type WordsPoolView = {
 /**
  * The words pool for `guardians` WITHOUT a prompt: the valid local pool; else "none" when there
  * are no guardians, when every guardian was confirmed "no words" by this phone (`WORDS_NONE_KEY`),
- * or when a token read shows no `wvk` / the off marker; else "unknown" (a real `wvk` needs the
- * PRF, i.e. a prompt, which only `syncWordsPool` and the setup flows pay for).
+ * when a token read shows no `wvk` / the off marker, or when the key backup is disabled (no words
+ * backup can exist). Otherwise "unknown" (a real `wvk` needs the PRF, i.e. a prompt, which only
+ * `syncWordsPool` and the setup flows pay for), but ONLY when the 'words' surface is open
+ * (`wordsSurfaceOpen`, absent = closed) AND words were seen for this account on this phone (a
+ * local pool, a pending marker, or a real `wvk` / no-wvk marker in an earlier read). In every other
+ * case "none": all guardians are people, as before the words existed (controller ruling N2: an
+ * unknown that refuses every guardian change would lock people out when the words screen, the
+ * only escape, is hidden).
  */
 export async function currentWordsPool(
   guardians: readonly Address[],
-  d: { storage: KeyValueStorage; remote?: RemoteBackup },
+  d: { storage: KeyValueStorage; remote?: RemoteBackup; wordsSurfaceOpen?: () => Promise<boolean> },
 ): Promise<WordsPoolView> {
   const local = await validLocalPool(d.storage, guardians);
   if (local) return { pool: local, state: 'local' };
@@ -186,10 +216,17 @@ export async function currentWordsPool(
   const none = await loadNoneRecord(d.storage);
   if (none && guardians.every((g) => none.some((x) => isAddressEqual(x as Address, g)))) return { pool: null, state: 'none' };
   const read = d.remote?.readWithoutPrompt ? await d.remote.readWithoutPrompt().catch(() => null) : null;
-  if (read && read.status !== 'disabled') {
+  if (read?.status === 'disabled') return { pool: null, state: 'none' };
+  if (read) {
     const wvk = read.status === 'found' ? read.blobs.wvk : undefined;
-    if (!wvk || isWordsOffBlob(wvk)) return { pool: null, state: 'none' };
+    if (!wvk || isWordsOffBlob(wvk)) {
+      await setWordsSeen(d.storage, false).catch(() => undefined);
+      return { pool: null, state: 'none' };
+    }
+    await setWordsSeen(d.storage, true).catch(() => undefined);
   }
+  const open = d.wordsSurfaceOpen ? await d.wordsSurfaceOpen().catch(() => false) : false;
+  if (!open || !(await wordsSeen(d.storage))) return { pool: null, state: 'none' };
   return { pool: null, state: 'unknown' };
 }
 
@@ -212,7 +249,10 @@ export async function syncWordsPool(
     const read = peeked ?? (await deps.remote.read());
     if (read.status === 'disabled') return { status: 'error', message: WORDS_LOAD_FAILED_MESSAGE };
     const wvk = read.status === 'found' ? read.blobs.wvk : undefined;
-    if (isWordsNoWvkBlob(wvk)) return { status: 'error', message: WORDS_ELSEWHERE_MESSAGE };
+    if (isWordsNoWvkBlob(wvk)) {
+      await setWordsSeen(deps.storage, true).catch(() => undefined);
+      return { status: 'error', message: WORDS_ELSEWHERE_MESSAGE };
+    }
     const off = async () => {
       await clearWordsPool(deps.storage);
       await clearVaultKey(deps.vaultStorage);
@@ -525,6 +565,7 @@ export async function readWordsStatus(
   deps: Pick<WordsSetupDeps, 'storage' | 'readState'> & { remote?: RemoteBackup },
 ): Promise<{ on: boolean; pending: WordsPending | null; unknown: boolean }> {
   const [state, pending] = await Promise.all([deps.readState(safe), loadWordsPending(deps.storage).catch(() => null)]);
-  const view = await currentWordsPool(state.guardians, deps);
+  // Only the words screens (behind the 'words' surface) ask for the status.
+  const view = await currentWordsPool(state.guardians, { ...deps, wordsSurfaceOpen: async () => true });
   return { on: view.state === 'local', pending, unknown: view.state === 'unknown' };
 }

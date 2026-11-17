@@ -8,6 +8,7 @@
  */
 import type { Address, Hex } from 'viem';
 import { passkeySessionOf } from './active';
+import { isPasskeySurfaceAllowed } from './gate';
 import { deviceSecretSources, keyBackupFor, wordsVaultKeyStorage } from './derived-keys-runtime';
 import { actingPasskeySession } from './detach-runtime';
 import type { IdentityMode } from './guardian-plan';
@@ -46,7 +47,11 @@ export async function wordsPoolView(guardians: readonly Address[], account: unkn
     passkeySessionOf<PasskeySession>(account),
     (account as { address?: Address } | null | undefined)?.address,
   ).catch(() => null);
-  return currentWordsPool(guardians, { storage: recoveryStorage, ...(session ? { remote: keyBackupFor(session) } : {}) });
+  return currentWordsPool(guardians, {
+    storage: recoveryStorage,
+    wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words'),
+    ...(session ? { remote: keyBackupFor(session) } : {}),
+  });
 }
 
 export function createWordsSetupDeps(record: MigrationRecord, session: PasskeySession, mode: IdentityMode): WordsSetupDeps {

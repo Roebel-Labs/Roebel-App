@@ -10,7 +10,7 @@ import {
   UNWRAP_FAILED_MESSAGE,
   type ResolveDeps,
 } from '../derived-keys';
-import type { KeyBackupBlobs, RemoteBackup, RemoteRead } from '../key-backup';
+import { createKeyBackupClient, type KeyBackupBlobs, type RemoteBackup, type RemoteRead } from '../key-backup';
 import { MACI_WRAP_LABEL, NOSTR_WRAP_LABEL, WRAPPED_MACI_KEY, WRAPPED_NOSTR_KEY } from '../migration';
 import { unwrapSecret, wrapSecret } from '../prf-vault';
 
@@ -22,7 +22,15 @@ const text = (b: Uint8Array) => new TextDecoder().decode(b);
 
 function fakeRemote(
   initial: KeyBackupBlobs = {},
-  opts: { disabled?: boolean; failRead?: boolean; prf?: Hex; writeResult?: 'stored' | 'exists'; existsIf?: (b: KeyBackupBlobs, replace?: boolean) => boolean } = {},
+  opts: {
+    disabled?: boolean;
+    failRead?: boolean;
+    prf?: Hex;
+    writeResult?: 'stored' | 'exists';
+    existsIf?: (b: KeyBackupBlobs, replace?: boolean) => boolean;
+    /** No cached API-session token: `writeWithoutPrompt` answers null (default: a token is cached). */
+    noToken?: boolean;
+  } = {},
 ) {
   const blobs: KeyBackupBlobs = { ...initial };
   const writes: KeyBackupBlobs[] = [];
@@ -43,6 +51,7 @@ function fakeRemote(
       return 'stored' as const;
     }),
   };
+  remote.writeWithoutPrompt = jest.fn(async (b: KeyBackupBlobs) => (opts.noToken ? null : remote.write(b)));
   return { remote, blobs, writes, replaces };
 }
 
@@ -155,6 +164,49 @@ describe('resolvePasskeySecret', () => {
     const s = deps({ remote: stale.remote, wordsVaultKey: async () => VAULT });
     expect((await resolvePasskeySecret(s.d)).source).toBe('backup');
     expect(stale.remote.write).not.toHaveBeenCalled();
+  });
+
+  it("(b') N1: without a cached session token the words copy is NOT written (no new session = no fingerprint)", async () => {
+    const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
+    const noToken = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' }, { prf: PRF, noToken: true });
+    const t = deps({ remote: noToken.remote, wordsVaultKey: async () => VAULT });
+    expect((await resolvePasskeySecret(t.d)).source).toBe('backup');
+    expect(noToken.remote.writeWithoutPrompt).toHaveBeenCalledTimes(1);
+    expect(noToken.remote.write).not.toHaveBeenCalled();
+    expect(noToken.writes).toEqual([]);
+    expect(t.d.getPrf).not.toHaveBeenCalled();
+
+    // A remote without a promptless write never gets the (b') copy either.
+    const legacy = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    delete legacy.remote.writeWithoutPrompt;
+    expect((await resolvePasskeySecret(deps({ remote: legacy.remote, wordsVaultKey: async () => VAULT }).d)).source).toBe('backup');
+    expect(legacy.remote.write).not.toHaveBeenCalled();
+  });
+
+  it("(b') N1 with the real client: session.get would sign a new session → nothing is signed and nothing is written", async () => {
+    const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
+    const sign = jest.fn(async () => ({ signature: `0x${'ab'.repeat(65)}` as Hex, prf: PRF }));
+    const get = jest.fn(async () => {
+      await sign(); // a new API session = one signature (fingerprint)
+      return { token: 'pst1.new', deviceId: 'd' };
+    });
+    const sent: string[] = [];
+    const remote = createKeyBackupClient({
+      apiUrl: 'https://api.test',
+      identity: '0x1111111111111111111111111111111111111111',
+      sign,
+      session: { peek: async () => null, get, invalidate: async () => undefined },
+      fetch: async (url) => {
+        sent.push(url);
+        return { ok: true, status: 200, json: async () => ({ blobs: { maci: blob, wvk: 'pkv1:wvk-blob' } }) };
+      },
+    });
+    const t = deps({ remote, wordsVaultKey: async () => VAULT });
+    expect((await resolvePasskeySecret(t.d)).source).toBe('backup');
+    // The read itself signed once (no token); the words copy added nothing.
+    expect(sent).toEqual(['https://api.test/api/passkey/key-backup/get']);
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(get).not.toHaveBeenCalled();
   });
 
   it('(c) passkey-only: a RANDOM key, wrapped, backed up, then persisted', async () => {

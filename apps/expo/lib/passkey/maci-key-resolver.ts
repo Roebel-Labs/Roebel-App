@@ -169,6 +169,7 @@ function memoRead(remote: RemoteBackup): RemoteBackup {
       return read;
     },
     write: (blobs, replace) => remote.write(blobs, replace),
+    ...(remote.writeWithoutPrompt ? { writeWithoutPrompt: remote.writeWithoutPrompt } : {}),
   };
 }
 
