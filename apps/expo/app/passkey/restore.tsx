@@ -116,6 +116,8 @@ export default function RestoreAccountScreen() {
   // Start problems (outside the persisted state): a failed start, or E4 (offer the discard, M2).
   const [startNotice, setStartNotice] = useState<string | null>(null);
   const [startOverwrite, setStartOverwrite] = useState(false);
+  /** "Weiter" after an expert recovery could not save the session: the state stays, retry (M-5). */
+  const [openFailed, setOpenFailed] = useState(false);
 
   useEffect(() => {
     if (!allowed) return;
@@ -204,11 +206,16 @@ export default function RestoreAccountScreen() {
     const s = stateRef.current;
     // M3: the session is switched only now, on the person's tap.
     const session = s ? await openRecoveredWordsSession(s, deps).catch(() => null) : null;
+    if (!session) {
+      // Keep the recovery state: it is the only pointer to the recovered account; "Weiter" retries.
+      setOpenFailed(true);
+      return;
+    }
+    setOpenFailed(false);
     await clearRecoveryState(recoveryStorage).catch(() => undefined);
     const rt = await import('@/lib/passkey/signin-runtime');
     if (router.canDismiss()) router.dismissAll();
     router.replace('/' as any);
-    if (!session) return;
     await rt
       .activatePasskeySession(session, setActiveWallet)
       .catch(() => Alert.alert('Anmeldung nicht abgeschlossen', 'Dein Konto ist gespeichert. Starte die App neu, dann bist du angemeldet.'));
@@ -366,7 +373,10 @@ export default function RestoreAccountScreen() {
                 : 'Ab jetzt meldest du dich mit deinem Fingerabdruck an.'}
             </Text>
             {state.ownerKind === 'ecdsa' ? (
-              <BigButton label="Weiter" onPress={openRecovered} />
+              <>
+                {openFailed ? <Notice tone="error" text="Das hat nicht geklappt. Bitte tippe noch einmal auf „Weiter"." /> : null}
+                <BigButton label="Weiter" onPress={openRecovered} />
+              </>
             ) : state.method === 'words' ? (
               <WordsKeyRestore
                 wallet={state.wallet}
