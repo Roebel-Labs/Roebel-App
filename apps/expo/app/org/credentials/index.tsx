@@ -44,6 +44,8 @@ export default function OrgCredentialsScreen() {
   const [data, setData] = useState<Data | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Synchronous guard: a double tap must never start two requests (state updates are async).
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notOnChain, setNotOnChain] = useState(false);
   const key = `${accountId}:${account?.address ?? ''}:${reloadKey}`;
@@ -97,29 +99,34 @@ export default function OrgCredentialsScreen() {
   };
 
   const switchMembersPublic = async (membersPublic: boolean) => {
-    if (!account || !accountId || busy) return;
+    if (inFlight.current || !account || !accountId || busy) return;
+    inFlight.current = true;
     setBusy('switch');
     setError(null);
     try {
       prepared(await prepareMembersPublic(account, { accountId, membersPublic }));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
 
   const revoke = (type: TypeView, row: PersonRow) => {
-    if (!account || !accountId || busy) return;
+    if (inFlight.current || !account || !accountId || busy) return;
     Alert.alert('Ausweis widerrufen?', `${row.displayName} verliert „${type.name}“ sofort. Das lässt sich nicht rückgängig machen.`, [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Widerrufen',
         style: 'destructive',
         onPress: async () => {
+          if (inFlight.current) return;
+          inFlight.current = true;
           setBusy(row.id);
           setError(null);
           try {
             prepared(await prepareRevocation(account, { accountId, invitationIds: [row.id] }));
           } finally {
+            inFlight.current = false;
             setBusy(null);
           }
         },

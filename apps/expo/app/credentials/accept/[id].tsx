@@ -3,7 +3,7 @@
  * private-only org leaves), and "Ablehnen". Opened from a push (`credential_invite`), the inbox,
  * the profile row, or right after an invite link was redeemed.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -66,6 +66,8 @@ export default function AcceptCredentialScreen() {
   const [reloadKey, setReloadKey] = useState(0);
   const [choice, setChoice] = useState<AcceptChoice | null>(null);
   const [busy, setBusy] = useState<AcceptChoice | null>(null);
+  // Synchronous guard: a double tap must never start two requests (state updates are async).
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<AcceptChoice | null>(null);
 
@@ -98,11 +100,17 @@ export default function AcceptCredentialScreen() {
   const inv = current ? load.inv : null;
 
   const answer = async (c: AcceptChoice) => {
-    if (!account || !inv || busy) return;
+    if (inFlight.current || !account || !inv || busy) return;
+    inFlight.current = true;
     setBusy(c);
     setError(null);
-    const result = await acceptInvitation(account, inv, c);
-    setBusy(null);
+    let result: Awaited<ReturnType<typeof acceptInvitation>>;
+    try {
+      result = await acceptInvitation(account, inv, c);
+    } finally {
+      inFlight.current = false;
+      setBusy(null);
+    }
     if (!result.ok) {
       setError(result.message);
       if (result.code === 'NOT_PUBLIC') {

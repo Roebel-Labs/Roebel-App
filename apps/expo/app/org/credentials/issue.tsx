@@ -3,7 +3,7 @@
  * one button. Prepares a batch with one recipient and opens the approve screen. The search hit's
  * account is only sent back to the server, never rendered.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Hex } from 'viem';
@@ -30,6 +30,8 @@ export default function IssueCredentialScreen() {
   const [person, setPerson] = useState<PersonSearchHit | null>(null);
   const [until, setUntil] = useState('');
   const [busy, setBusy] = useState(false);
+  // Synchronous guard: a double tap must never start two requests (state updates are async).
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notOnChain, setNotOnChain] = useState(false);
   const typesKey = `${accountId}:${account?.address ?? ''}`;
@@ -123,7 +125,8 @@ export default function IssueCredentialScreen() {
   const canSubmit = !!typeId && !!person && untilIso !== null && !busy;
 
   const submit = async () => {
-    if (!account || !typeId || !person || untilIso === null || busy) return;
+    if (inFlight.current || !account || !typeId || !person || untilIso === null || busy) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -141,6 +144,7 @@ export default function IssueCredentialScreen() {
       if (res.code === 'ORG_NOT_ON_CHAIN') setNotOnChain(true);
       else setError(submittedMessage(res));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };

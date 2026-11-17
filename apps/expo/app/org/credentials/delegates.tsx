@@ -31,6 +31,8 @@ export default function DelegatesScreen() {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<{ query: string; list: PersonSearchHit[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Synchronous guard: a double tap must never start two requests (state updates are async).
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notOnChain, setNotOnChain] = useState(false);
   const typesKey = `${accountId}:${account?.address ?? ''}`;
@@ -137,7 +139,8 @@ export default function DelegatesScreen() {
   }
 
   const change = async (delegate: string, allowed: boolean, label?: string) => {
-    if (!account || !typeId || busy) return;
+    if (inFlight.current || !account || !typeId || busy) return;
+    inFlight.current = true;
     setBusy(delegate);
     setError(null);
     try {
@@ -152,6 +155,7 @@ export default function DelegatesScreen() {
       if (res.code === 'ORG_NOT_ON_CHAIN') setNotOnChain(true);
       else setError(submittedMessage(res));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
