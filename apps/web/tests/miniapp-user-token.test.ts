@@ -53,8 +53,14 @@ test("another app's audience is refused", async () => {
 });
 
 test("an expired token is refused", async () => {
-  const r = await verify(await issuer.sign(claims), { nowSec: 1601 });
+  const r = await verify(await issuer.sign(claims), { nowSec: 1640 });
   assert.deepEqual(r, { ok: false, code: "expired" });
+});
+
+test("a token 20 s past exp still verifies (30 s clock tolerance), 40 s past does not", async () => {
+  const t = await issuer.sign(claims);
+  assert.equal((await verify(t, { nowSec: 1620 })).ok, true);
+  assert.deepEqual(await verify(t, { nowSec: 1640 }), { ok: false, code: "expired" });
 });
 
 test("a token signed by another key is refused", async () => {

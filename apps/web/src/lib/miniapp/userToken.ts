@@ -5,6 +5,8 @@ import { SignJWT, errors, importJWK, jwtVerify, type JWK } from "jose";
 
 export const MINIAPP_TOKEN_TTL_SEC = 600;
 export const MINIAPP_TOKEN_TYP = "miniapp+jwt";
+/** Seconds of clock skew between issuer and verifier tolerated on exp/iat/nbf. */
+export const MINIAPP_TOKEN_CLOCK_TOLERANCE_SEC = 30;
 
 export interface MiniAppTokenClaims {
   iss: string;
@@ -65,6 +67,7 @@ export async function verifyUserToken(
       typ: MINIAPP_TOKEN_TYP,
       issuer: [...p.issuers],
       audience: p.audience,
+      clockTolerance: MINIAPP_TOKEN_CLOCK_TOLERANCE_SEC,
       ...(p.nowSec !== undefined ? { currentDate: new Date(p.nowSec * 1000) } : {}),
     });
     if (

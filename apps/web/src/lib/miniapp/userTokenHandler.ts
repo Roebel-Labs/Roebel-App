@@ -46,5 +46,6 @@ export async function handleUserTokenRequest(body: unknown, headers: HeaderBag, 
     jti: deps.jti(),
     v: 1,
   });
-  return { status: 200, json: { token, expiresAt: exp } };
+  // `expiresIn` lets clients compute the expiry on their own clock (a phone's clock may be off).
+  return { status: 200, json: { token, expiresAt: exp, expiresIn: exp - iat } };
 }

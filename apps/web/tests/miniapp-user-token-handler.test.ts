@@ -44,6 +44,7 @@ test("a verified request for a live app gets a token for that app and wallet", a
   const v = await verifyUserToken(r.json.token as string, { keys, issuers: [ISS], audience: "miniapp:demo", nowSec: NOW });
   assert.ok(v.ok && v.claims.addr === WALLET && v.claims.sub === WALLET && v.claims.app === APP_ID && v.claims.exp === NOW + 600);
   assert.equal(r.json.expiresAt, NOW + 600);
+  assert.equal(r.json.expiresIn, 600);
 });
 
 test("the wallet comes from the verified request, not from the payload", async () => {

@@ -84,7 +84,7 @@ test("a token whose app id does not match the resolved app is 401", async () => 
 
 test("an expired token plus a valid wallet is 401 with the switch off", async () => {
   const legacy: LegacyCall[] = [];
-  const expired = await mint({ exp: NOW - 1 });
+  const expired = await mint({ exp: NOW - 60 });
   await assert401(resolveRuntimeUser({ authorization: `Bearer ${expired}`, app, claimedWallet: WALLET, route: "notifications" }, deps({ legacy })));
   assert.equal(legacy.length, 0);
 });

@@ -11,7 +11,7 @@ export interface TokenSigningAccount {
   signMessage(a: { message: string }): Promise<string>;
 }
 
-/** Refresh this many seconds before the token's `expiresAt`. */
+/** Refresh this many seconds before the token's expiry (measured on the local clock). */
 const REFRESH_MARGIN_SEC = 60;
 /** After a failed fetch (declined signature, 4xx/5xx, offline), do not ask again for this long. */
 const FAILURE_COOLDOWN_SEC = 60;
@@ -22,10 +22,25 @@ export interface ClientTokenDeps {
   fetch?: typeof fetch;
 }
 
+/** (wallet, app) → token and its expiry on the LOCAL clock (sec). */
 const cache = new Map<string, { token: string; expiresAt: number }>();
 /** (wallet, app) → time (sec) until which a new attempt is suppressed. */
 const failedUntil = new Map<string, number>();
 const inflight = new Map<string, Promise<string | null>>();
+
+function cacheKey(wallet: string, app: string): string {
+  return `${wallet.toLowerCase()}|${app}`;
+}
+
+/**
+ * Drop the cached token for (wallet, app) after the server refused it (401), so the next
+ * call fetches a fresh one. With `token`, only that token is dropped (a newer one stays).
+ */
+export function invalidateUserToken(wallet: string, app: string, token?: string): void {
+  const key = cacheKey(wallet, app);
+  const hit = cache.get(key);
+  if (hit && (token === undefined || hit.token === token)) cache.delete(key);
+}
 
 export async function fetchUserTokenWithAccount(
   account: TokenSigningAccount,
@@ -34,7 +49,7 @@ export async function fetchUserTokenWithAccount(
 ): Promise<string | null> {
   const nowMs = deps.nowMs ?? Date.now;
   const doFetch = deps.fetch ?? fetch;
-  const key = `${account.address.toLowerCase()}|${app}`;
+  const key = cacheKey(account.address, app);
   const nowSec = Math.floor(nowMs() / 1000);
   const hit = cache.get(key);
   if (hit && hit.expiresAt - REFRESH_MARGIN_SEC > nowSec) return hit.token;
@@ -65,9 +80,15 @@ export async function fetchUserTokenWithAccount(
         }),
       });
       if (!res.ok) return null;
-      const json = (await res.json().catch(() => null)) as { token?: unknown; expiresAt?: unknown } | null;
+      const json = (await res.json().catch(() => null)) as { token?: unknown; expiresAt?: unknown; expiresIn?: unknown } | null;
       if (!json || typeof json.token !== "string" || typeof json.expiresAt !== "number") return null;
-      cache.set(key, { token: json.token, expiresAt: json.expiresAt });
+      // Expiry on the local clock: receipt time + the server's `expiresIn`, so a skewed
+      // device clock cannot keep an expired token alive. Older servers: their `expiresAt`.
+      const expiresAt =
+        typeof json.expiresIn === "number" && Number.isFinite(json.expiresIn)
+          ? Math.floor(nowMs() / 1000) + json.expiresIn
+          : json.expiresAt;
+      cache.set(key, { token: json.token, expiresAt });
       return json.token;
     } catch {
       return null;
