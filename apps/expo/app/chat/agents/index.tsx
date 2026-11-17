@@ -15,7 +15,7 @@ type Cell = { type: 'agent'; agent: AgentSummary } | { type: 'add' } | { type: '
 
 const FIGURE_HEIGHT = 148;
 
-/** "Meine Agenten": the main assistant and every illustrated character the person took on. */
+/** "Meine Agenten": the main assistant and every own agent (character, own picture, or an older bot). */
 export default function ChatAgentsScreen() {
   const t = useChatTokens();
   const router = useRouter();
@@ -92,7 +92,7 @@ export default function ChatAgentsScreen() {
                   Agent hinzufügen
                 </Text>
                 <Text numberOfLines={1} style={[styles.role, { color: t.textSecondary }]}>
-                  {AGENT_CHARACTERS.length} Figuren
+                  Eigenes Bild oder {AGENT_CHARACTERS.length} Figuren
                 </Text>
               </Pressable>
             );
@@ -106,7 +106,12 @@ export default function ChatAgentsScreen() {
               style={({ pressed }) => [styles.cell, { opacity: pressed ? 0.75 : 1 }]}
             >
               <View>
-                <CharacterFigure characterId={agent.characterId} height={FIGURE_HEIGHT} fallback={agentAvatarSpec(agent, bots)} />
+                <CharacterFigure
+                  characterId={agent.characterId}
+                  height={FIGURE_HEIGHT}
+                  fallback={agentAvatarSpec(agent, bots)}
+                  name={agent.name}
+                />
                 {agent.isMain ? (
                   <View style={[styles.badge, { backgroundColor: t.primaryButton }]}>
                     <Feather name="star" size={11} color={t.primaryButtonText} />

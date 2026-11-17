@@ -4,10 +4,11 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { BotAvatarSpec } from '@/lib/chat/types';
 import { tierBadgeLabel, type InspirationTask } from '@/lib/chat/inspiration';
-import { BOT_COLORS, BotAvatar } from './BotAvatar';
+import { BotAvatar } from './BotAvatar';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 import { chatFont, haloShadow, useChatTokens } from './tokens';
 
-const FALLBACK_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dots' };
+const FALLBACK_AVATAR: BotAvatarSpec = MECKY_AVATAR_SPEC;
 
 export type InspirationCardProps = {
   task: InspirationTask;
@@ -53,7 +54,7 @@ export function InspirationCard({ task, onPress, onRoutinePress, onLongPress, bu
       ]}
     >
       <View style={styles.row}>
-        <BotAvatar spec={task.bot?.avatar ?? FALLBACK_AVATAR} size={44} />
+        <BotAvatar spec={task.bot?.avatar ?? FALLBACK_AVATAR} name={task.bot?.name} size={44} />
         <View style={styles.body}>
           <View style={styles.titleRow}>
             <Text numberOfLines={2} style={[styles.title, { color: t.textPrimary }]}>

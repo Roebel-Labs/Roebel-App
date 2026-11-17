@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,12 +17,20 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatAccount, useChatActions, useChatBootstrap } from '@/context/ChatContext';
-import { ChatApiError, deleteCharacterAgent, patchAgentProfile, patchCharacterAgent } from '@/lib/chat/api';
+import {
+  ChatApiError,
+  deleteCharacterAgent,
+  patchAgentProfile,
+  patchCharacterAgent,
+  uploadAgentPicture,
+} from '@/lib/chat/api';
 import { setAgentView, useAgentView } from '@/lib/chat/agent-store';
 import {
   MAX_AGENT_INSTRUCTIONS,
   MAX_AGENT_NAME,
+  MAX_AGENT_ROLE,
   agentAvatarSpec,
+  agentLook,
   agentRoleLine,
   agentSince,
   cleanAgentName,
@@ -31,22 +40,28 @@ import {
 import { agentShareUrl, characterById } from '@/lib/chat/characters';
 import { findDirectThread } from '@/lib/chat/inspiration';
 import {
+  AgentPictureError,
   BlackPillButton,
   CharacterFigure,
   ScreenMessage,
   SettingsListSkeleton,
   chatFont,
   chatSize,
+  useAgentPicturePicker,
   useChatSheets,
   useChatTokens,
 } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 function errorText(err: unknown, fallback: string): string {
+  if (err instanceof AgentPictureError && err.message) return err.message;
   return err instanceof ChatApiError && err.message ? err.message : fallback;
 }
 
-/** One agent: start a chat, rename, personality, character, main assistant, share, remove. */
+const OWN_INSTRUCTIONS_PLACEHOLDER =
+  'z. B. Antworte kurz und freundlich. Frag nach, wenn etwas unklar ist. Schreib Einkaufslisten als Aufzählung.';
+
+/** One agent: start a chat, rename, personality, picture or character, task, main assistant, share, remove. */
 export default function ChatAgentDetailScreen() {
   const t = useChatTokens();
   const params = useLocalSearchParams<{ botId: string }>();
@@ -96,8 +111,12 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
   const account = useChatAccount();
   const boot = useChatBootstrap();
   const actions = useChatActions();
+  const pickPicture = useAgentPicturePicker();
 
   const character = characterById(agent.characterId);
+  // 'character' | 'picture' | 'none' (an older bot without either); presets keep their house picture.
+  const look = agentLook(agent);
+  const ownLook = !agent.isPreset && look !== 'character';
   const bots = useMemo(() => [...boot.presets, ...boot.bots], [boot.presets, boot.bots]);
   // Name, personality and instructions of the default assistant live on the profile, which always
   // belongs to the main assistant. A default assistant that is not the main one cannot be edited.
@@ -106,11 +125,16 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
 
   const [name, setName] = useState(agent.name);
   const [instructions, setInstructions] = useState(view.agent.customInstructions);
+  // Own agents without a character: what it is for and how it should work (saved on the bot).
+  const [role, setRole] = useState(agent.role);
+  const [botInstructions, setBotInstructions] = useState(agent.instructions ?? '');
   /** Which action is running: one at a time. */
   const [busy, setBusy] = useState<string | null>(null);
 
   const nameChanged = cleanAgentName(name) !== agent.name && (cleanAgentName(name) !== '' || agent.name !== defaultName);
   const instructionsChanged = agent.isMain && instructions.trim() !== view.agent.customInstructions.trim();
+  const roleChanged = ownLook && role.trim() !== agent.role.trim();
+  const botInstructionsChanged = ownLook && botInstructions.trim() !== (agent.instructions ?? '').trim();
 
   /** Runs one mutation; every agent endpoint answers with the full view. */
   const run = async (key: string, work: () => Promise<AgentView>, done?: string): Promise<boolean> => {
@@ -159,6 +183,53 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
   const saveInstructions = () => {
     if (!account) return;
     void run('instructions', () => patchAgentProfile(account, { customInstructions: instructions.trim() }), 'Anweisungen gespeichert');
+  };
+
+  const saveOwnDetails = async () => {
+    if (!account) return;
+    const ok = await run(
+      'details',
+      () =>
+        patchCharacterAgent(account, agent.botId, {
+          ...(roleChanged ? { role: role.trim() } : {}),
+          ...(botInstructionsChanged ? { instructions: botInstructions.trim() } : {}),
+        }),
+      'Gespeichert',
+    );
+    if (ok) {
+      setRole(role.trim());
+      setBotInstructions(botInstructions.trim());
+    }
+  };
+
+  /** Own picture: pick, upload, then switch the agent to it (a character goes). */
+  const changePicture = async () => {
+    if (!account || busy) return;
+    let uri: string | null;
+    try {
+      uri = await pickPicture();
+    } catch (err) {
+      showSnackbar({ message: errorText(err, 'Die Fotoauswahl konnte nicht geöffnet werden.') });
+      return;
+    }
+    if (!uri) return;
+    const local = uri;
+    // A former character agent loses its role line on the server: show what the server keeps.
+    const after: { agent?: AgentSummary } = {};
+    const ok = await run(
+      'picture',
+      async () => {
+        const uploaded = await uploadAgentPicture(account, local);
+        const next = await patchCharacterAgent(account, agent.botId, { imageUrl: uploaded.url });
+        after.agent = next.agents.find((a) => a.botId === agent.botId);
+        return next;
+      },
+      'Bild gespeichert',
+    );
+    if (ok && after.agent) {
+      setRole(after.agent.role);
+      setBotInstructions(after.agent.instructions ?? '');
+    }
   };
 
   const makeMain = async () => {
@@ -224,17 +295,28 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
 
   const since = agentSince(agent.since);
 
-  const rows: { icon: keyof typeof Feather.glyphMap; label: string; onPress: () => void; destructive?: boolean }[] = [];
+  const rows: {
+    key: string;
+    icon: keyof typeof Feather.glyphMap;
+    label: string;
+    onPress: () => void;
+    destructive?: boolean;
+  }[] = [];
+  const openCharacterPicker = () =>
+    router.push({ pathname: '/chat/agents/new', params: { botId: agent.botId } } as unknown as Href);
   if (!agent.isPreset) {
-    rows.push({
-      icon: 'refresh-cw',
-      label: 'Figur ändern',
-      onPress: () => router.push({ pathname: '/chat/agents/new', params: { botId: agent.botId } } as unknown as Href),
-    });
+    if (look === 'character') {
+      rows.push({ key: 'character', icon: 'refresh-cw', label: 'Figur ändern', onPress: openCharacterPicker });
+      rows.push({ key: 'picture', icon: 'image', label: 'Eigenes Bild verwenden', onPress: () => void changePicture() });
+    } else {
+      rows.push({ key: 'picture', icon: 'image', label: 'Bild ändern', onPress: () => void changePicture() });
+      rows.push({ key: 'character', icon: 'smile', label: 'Stattdessen eine Figur wählen', onPress: openCharacterPicker });
+    }
   }
-  if (!agent.isMain) rows.push({ icon: 'star', label: 'Zum Hauptassistenten machen', onPress: () => void makeMain() });
-  if (character) rows.push({ icon: 'share', label: 'Teilen', onPress: share });
-  if (!agent.isPreset) rows.push({ icon: 'trash-2', label: 'Entfernen', onPress: () => void remove(), destructive: true });
+  if (!agent.isMain) rows.push({ key: 'main', icon: 'star', label: 'Zum Hauptassistenten machen', onPress: () => void makeMain() });
+  // The public share page only exists for illustrated characters.
+  if (character) rows.push({ key: 'share', icon: 'share', label: 'Teilen', onPress: share });
+  if (!agent.isPreset) rows.push({ key: 'remove', icon: 'trash-2', label: 'Entfernen', onPress: () => void remove(), destructive: true });
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -242,7 +324,29 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
       >
-        <CharacterFigure characterId={agent.characterId} height={260} fallback={agentAvatarSpec(agent, bots)} />
+        <CharacterFigure
+          characterId={agent.characterId}
+          height={260}
+          fallback={agentAvatarSpec(agent, bots)}
+          name={agent.name}
+        />
+        {look === 'none' && !agent.isPreset ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={!!busy}
+            onPress={() => void changePicture()}
+            style={({ pressed }) => [styles.pictureHint, { backgroundColor: t.chipBackground, opacity: pressed ? 0.7 : 1 }]}
+          >
+            {busy === 'picture' ? (
+              <ActivityIndicator size="small" color={t.textSecondary} />
+            ) : (
+              <Feather name="image" size={16} color={t.textPrimary} />
+            )}
+            <Text style={[styles.pictureHintText, { color: t.textPrimary }]}>
+              {busy === 'picture' ? 'Wird hochgeladen …' : `Gib ${agent.name} ein Bild`}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.head}>
           <Text style={[styles.name, { color: t.textPrimary }]}>{agent.name}</Text>
@@ -325,6 +429,42 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
               </>
             ) : null}
 
+            {ownLook ? (
+              <>
+                <Text style={[styles.label, { color: t.textSecondary }]}>Wofür ist {agent.name} da?</Text>
+                <View style={[styles.field, { backgroundColor: t.groupedBackground }]}>
+                  <TextInput
+                    value={role}
+                    onChangeText={setRole}
+                    placeholder="z. B. Hilft mir beim Kochen und plant die Woche"
+                    placeholderTextColor={t.placeholder}
+                    maxLength={MAX_AGENT_ROLE}
+                    returnKeyType="done"
+                    selectionColor={t.link}
+                    style={[styles.input, { color: t.textPrimary }]}
+                    accessibilityLabel={`Wofür ${agent.name} da ist`}
+                  />
+                </View>
+                <Text style={[styles.label, { color: t.textSecondary }]}>Wie soll {agent.name} arbeiten?</Text>
+                <View style={[styles.field, styles.fieldTall, { backgroundColor: t.groupedBackground }]}>
+                  <TextInput
+                    value={botInstructions}
+                    onChangeText={setBotInstructions}
+                    placeholder={OWN_INSTRUCTIONS_PLACEHOLDER}
+                    placeholderTextColor={t.placeholder}
+                    multiline
+                    maxLength={MAX_AGENT_INSTRUCTIONS}
+                    selectionColor={t.link}
+                    style={[styles.input, styles.inputTall, { color: t.textPrimary }]}
+                    accessibilityLabel={`Wie ${agent.name} arbeiten soll`}
+                  />
+                </View>
+                {roleChanged || botInstructionsChanged ? (
+                  <BlackPillButton label="Speichern" onPress={saveOwnDetails} loading={busy === 'details'} style={styles.save} />
+                ) : null}
+              </>
+            ) : null}
+
             {agent.isMain ? (
               <>
                 <Text style={[styles.label, { color: t.textSecondary }]}>Eigene Anweisungen</Text>
@@ -367,9 +507,10 @@ function AgentDetail({ agent, view }: { agent: AgentSummary; view: AgentView }) 
             <View style={[styles.group, { backgroundColor: t.groupedBackground }]}>
               {rows.map((row, i) => (
                 <ActionRow
-                  key={row.label}
+                  key={row.key}
                   icon={row.icon}
-                  label={row.label}
+                  label={row.key === 'picture' && busy === 'picture' ? 'Wird hochgeladen …' : row.label}
+                  loading={row.key === 'picture' && busy === 'picture'}
                   onPress={row.onPress}
                   destructive={row.destructive}
                   disabled={!!busy}
@@ -391,10 +532,12 @@ function ActionRow({
   disabled,
   destructive,
   divider,
+  loading,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   onPress: () => void;
+  loading?: boolean;
   disabled?: boolean;
   destructive?: boolean;
   divider?: boolean;
@@ -416,7 +559,7 @@ function ActionRow({
         pressed ? { opacity: 0.6 } : null,
       ]}
     >
-      <Feather name={icon} size={19} color={color} />
+      {loading ? <ActivityIndicator size="small" color={t.textSecondary} /> : <Feather name={icon} size={19} color={color} />}
       <Text style={[styles.actionLabel, { color }]}>{label}</Text>
     </Pressable>
   );
@@ -448,4 +591,15 @@ const styles = StyleSheet.create({
   rowSub: { fontFamily: chatFont.regular, fontSize: 14, lineHeight: 19, marginTop: 2 },
   check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontFamily: chatFont.medium, fontSize: 16 },
+  pictureHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 7,
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  pictureHintText: { fontFamily: chatFont.medium, fontSize: 15 },
 });

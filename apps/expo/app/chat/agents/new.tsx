@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,9 +18,22 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatAccount, useChatBootstrap } from '@/context/ChatContext';
-import { ChatApiError, createCharacterAgent, patchCharacterAgent } from '@/lib/chat/api';
+import {
+  ChatApiError,
+  createCharacterAgent,
+  createOwnAgent,
+  patchCharacterAgent,
+  uploadAgentPicture,
+} from '@/lib/chat/api';
 import { setAgentView, useAgentView } from '@/lib/chat/agent-store';
-import { MAX_AGENT_NAME, cleanAgentName, type AgentPersonality, type AgentSummary } from '@/lib/chat/agents';
+import {
+  MAX_AGENT_INSTRUCTIONS,
+  MAX_AGENT_NAME,
+  MAX_AGENT_ROLE,
+  cleanAgentName,
+  type AgentPersonality,
+  type AgentSummary,
+} from '@/lib/chat/agents';
 import {
   AGENT_CHARACTERS,
   characterArt,
@@ -29,6 +43,7 @@ import {
   type AgentCharacter,
 } from '@/lib/chat/characters';
 import {
+  AgentPictureError,
   BlackPillButton,
   CharacterFigure,
   GlassCircleButton,
@@ -36,16 +51,27 @@ import {
   SettingsListSkeleton,
   chatFont,
   chatSize,
+  useAgentPicturePicker,
   useChatTokens,
 } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const COLUMNS = 4;
 const TILE_GAP = 10;
+const PREVIEW_SIZE = 168;
+
+const OWN_INSTRUCTIONS_PLACEHOLDER =
+  'z. B. Antworte kurz und freundlich. Frag nach, wenn etwas unklar ist. Schreib Einkaufslisten als Aufzählung.';
+
+function errorText(err: unknown, fallback: string): string {
+  if (err instanceof AgentPictureError && err.message) return err.message;
+  return err instanceof ChatApiError && err.message ? err.message : fallback;
+}
 
 /**
- * Character picker. Without `botId` it adds a new agent; with `botId` it changes the character of an
- * existing own agent (its chats stay).
+ * Agent builder. Without `botId` it adds a new agent: an own picture (name, what it is for, how it should
+ * work) or one of the illustrated characters. With `botId` it changes the character of an existing own
+ * agent (its chats stay).
  */
 export default function ChatAgentPickerScreen() {
   const t = useChatTokens();
@@ -112,8 +138,43 @@ function Picker({ editing, personalities }: { editing: AgentSummary | null; pers
   const withPersonality = !editing?.isMain;
   const [busy, setBusy] = useState(false);
 
+  // Own picture (new agents only): the local, prepared 512 px JPEG, uploaded on "Agent erstellen".
+  const pickPicture = useAgentPicturePicker();
+  const [mode, setMode] = useState<'character' | 'picture'>('character');
+  const [pictureUri, setPictureUri] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [role, setRole] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const pictureMode = mode === 'picture' && !editing;
+
+  const choosePicture = async () => {
+    if (picking || busy) return;
+    Haptics.selectionAsync().catch(() => {});
+    setError(null);
+    setPicking(true);
+    try {
+      const uri = await pickPicture();
+      if (uri) {
+        setPictureUri(uri);
+        setMode('picture');
+        if (!personalityTouched) setPersonality('standard');
+      } else if (pictureUri) {
+        // Cancelled, but a picture is already there: show it again.
+        setMode('picture');
+      }
+    } catch (err) {
+      setError(errorText(err, 'Die Fotoauswahl konnte nicht geöffnet werden.'));
+    } finally {
+      setPicking(false);
+    }
+  };
+
   const choose = (c: AgentCharacter) => {
     Haptics.selectionAsync().catch(() => {});
+    setMode('character');
+    setError(null);
     setCharacter(c);
     if (!nameTouched) setName(c.name);
     if (!personalityTouched) setPersonality(c.personality);
@@ -123,7 +184,47 @@ function Picker({ editing, personalities }: { editing: AgentSummary | null; pers
   const chosen = personalities.find((p) => p.key === personality) ?? null;
   const tile = Math.floor((win.width - chatSize.screenPadH * 2 - TILE_GAP * (COLUMNS - 1)) / COLUMNS);
 
+  const customNameClean = cleanAgentName(customName);
+  const canCreateOwn = Boolean(pictureUri && customNameClean);
+
+  const submitOwn = async () => {
+    if (!account || busy) return;
+    if (!pictureUri) {
+      setError('Wähle zuerst ein Bild aus.');
+      return;
+    }
+    if (!customNameClean) {
+      setError('Gib deinem Agenten einen Namen.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const uploaded = await uploadAgentPicture(account, pictureUri);
+      const res = await createOwnAgent(account, {
+        imageUrl: uploaded.url,
+        name: customNameClean,
+        role: role.trim(),
+        instructions: instructions.trim(),
+        personality,
+      });
+      setAgentView(account, res.view);
+      void boot.refresh();
+      if (res.createdId) router.replace(`/chat/agents/${res.createdId}` as Href);
+      else if (router.canGoBack()) router.back();
+      else router.replace('/chat/agents' as Href);
+    } catch (err) {
+      setError(errorText(err, 'Der Agent konnte nicht erstellt werden.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async () => {
+    if (pictureMode) {
+      await submitOwn();
+      return;
+    }
     if (!account || busy) return;
     setBusy(true);
     try {
@@ -156,7 +257,7 @@ function Picker({ editing, personalities }: { editing: AgentSummary | null; pers
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <SettingsHeader
-        title={editing ? 'Figur ändern' : 'Agent hinzufügen'}
+        title={editing ? (editing.characterId ? 'Figur ändern' : 'Figur wählen') : 'Agent hinzufügen'}
         right={
           <GlassCircleButton accessibilityLabel="Zufällige Figur" onPress={() => choose(shuffleCharacter(character.id))}>
             <Feather name="shuffle" size={20} color={t.icon} />
@@ -164,37 +265,146 @@ function Picker({ editing, personalities }: { editing: AgentSummary | null; pers
         }
       />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <CharacterFigure characterId={character.id} height={220} />
+        {pictureMode ? (
+          <>
+            <View style={styles.previewWrap}>
+              {pictureUri ? (
+                <View style={[styles.preview, { backgroundColor: t.chipBackground }]}>
+                  <Image source={{ uri: pictureUri }} style={styles.previewImage} contentFit="cover" accessible={false} />
+                </View>
+              ) : (
+                <View style={[styles.preview, styles.previewEmpty, { borderColor: t.separator, backgroundColor: t.groupedBackground }]}>
+                  <Feather name="image" size={36} color={t.textTertiary} />
+                </View>
+              )}
+              <Pressable
+                accessibilityRole="button"
+                disabled={picking || busy}
+                onPress={() => void choosePicture()}
+                style={({ pressed }) => [styles.pictureBtn, { backgroundColor: t.chipBackground, opacity: pressed ? 0.7 : 1 }]}
+              >
+                {picking ? <ActivityIndicator size="small" color={t.textSecondary} /> : <Feather name="image" size={16} color={t.textPrimary} />}
+                <Text style={[styles.pictureBtnText, { color: t.textPrimary }]}>{pictureUri ? 'Anderes Bild' : 'Bild wählen'}</Text>
+              </Pressable>
+            </View>
 
-        <TextInput
-          value={name}
-          onChangeText={(v) => {
-            setName(v);
-            setNameTouched(true);
-          }}
-          onBlur={() => {
-            if (!name.trim()) {
-              setName(character.name);
-              setNameTouched(false);
-            }
-          }}
-          placeholder={character.name}
-          placeholderTextColor={t.placeholder}
-          maxLength={MAX_AGENT_NAME}
-          returnKeyType="done"
-          selectionColor={t.link}
-          style={[styles.nameInput, { color: t.textPrimary }]}
-          accessibilityLabel="Name des Agenten"
-        />
-        <Text style={[styles.role, { color: t.textSecondary }]}>
-          {characterRoleLine(character)}. {character.tagline}
-        </Text>
-        <Text style={[styles.note, { color: t.textTertiary }]}>Bei allem anderen hilft {shownName} trotzdem.</Text>
+            <TextInput
+              value={customName}
+              onChangeText={setCustomName}
+              placeholder="Name deines Agenten"
+              placeholderTextColor={t.placeholder}
+              maxLength={MAX_AGENT_NAME}
+              returnKeyType="done"
+              selectionColor={t.link}
+              style={[styles.nameInput, { color: t.textPrimary }]}
+              accessibilityLabel="Name des Agenten"
+            />
 
-        <Text style={[styles.label, { color: t.textSecondary }]}>Figur</Text>
+            <Text style={[styles.label, { color: t.textSecondary }]}>Wofür ist dein Agent da?</Text>
+            <View style={[styles.field, { backgroundColor: t.groupedBackground }]}>
+              <TextInput
+                value={role}
+                onChangeText={setRole}
+                placeholder="z. B. Hilft mir beim Kochen und plant die Woche"
+                placeholderTextColor={t.placeholder}
+                maxLength={MAX_AGENT_ROLE}
+                returnKeyType="done"
+                selectionColor={t.link}
+                style={[styles.input, { color: t.textPrimary }]}
+                accessibilityLabel="Wofür dein Agent da ist"
+              />
+            </View>
+
+            <Text style={[styles.label, { color: t.textSecondary }]}>Wie soll er arbeiten?</Text>
+            <View style={[styles.field, styles.fieldTall, { backgroundColor: t.groupedBackground }]}>
+              <TextInput
+                value={instructions}
+                onChangeText={setInstructions}
+                placeholder={OWN_INSTRUCTIONS_PLACEHOLDER}
+                placeholderTextColor={t.placeholder}
+                multiline
+                maxLength={MAX_AGENT_INSTRUCTIONS}
+                selectionColor={t.link}
+                style={[styles.input, styles.inputTall, { color: t.textPrimary }]}
+                accessibilityLabel="Wie dein Agent arbeiten soll"
+              />
+            </View>
+            <Text style={[styles.note, styles.noteLeft, { color: t.textTertiary }]}>
+              Optional. Bei allem anderen hilft dein Agent trotzdem.
+            </Text>
+          </>
+        ) : (
+          <>
+          <CharacterFigure characterId={character.id} height={220} />
+
+          <TextInput
+            value={name}
+            onChangeText={(v) => {
+              setName(v);
+              setNameTouched(true);
+            }}
+            onBlur={() => {
+              if (!name.trim()) {
+                setName(character.name);
+                setNameTouched(false);
+              }
+            }}
+            placeholder={character.name}
+            placeholderTextColor={t.placeholder}
+            maxLength={MAX_AGENT_NAME}
+            returnKeyType="done"
+            selectionColor={t.link}
+            style={[styles.nameInput, { color: t.textPrimary }]}
+            accessibilityLabel="Name des Agenten"
+          />
+          <Text style={[styles.role, { color: t.textSecondary }]}>
+            {characterRoleLine(character)}. {character.tagline}
+          </Text>
+          <Text style={[styles.note, { color: t.textTertiary }]}>Bei allem anderen hilft {shownName} trotzdem.</Text>
+          </>
+        )}
+
+        <Text style={[styles.label, { color: t.textSecondary }]}>{editing ? 'Figur' : 'Bild oder Figur'}</Text>
         <View style={styles.grid} accessibilityRole="radiogroup">
+          {editing ? null : (
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ checked: pictureMode }}
+              accessibilityLabel="Eigenes Bild"
+              disabled={picking || busy}
+              onPress={() => void choosePicture()}
+              style={({ pressed }) => [{ width: tile, opacity: pressed ? 0.75 : 1 }]}
+            >
+              <View
+                style={[
+                  styles.tile,
+                  styles.ownTile,
+                  {
+                    width: tile,
+                    height: tile,
+                    backgroundColor: t.chipBackground,
+                    borderColor: pictureMode ? t.textPrimary : 'transparent',
+                  },
+                ]}
+              >
+                {pictureUri ? (
+                  <Image source={{ uri: pictureUri }} style={styles.tileImage} contentFit="cover" accessible={false} />
+                ) : picking ? (
+                  <ActivityIndicator size="small" color={t.textSecondary} />
+                ) : (
+                  <Feather name="image" size={24} color={t.textSecondary} />
+                )}
+              </View>
+              <Text
+                numberOfLines={1}
+                style={[styles.tileName, { color: pictureMode ? t.textPrimary : t.textSecondary }, pictureMode ? styles.tileNameOn : null]}
+              >
+                Eigenes Bild
+              </Text>
+            </Pressable>
+          )}
           {AGENT_CHARACTERS.map((c) => {
-            const on = c.id === character.id;
+            const on = !pictureMode && c.id === character.id;
             return (
               <Pressable
                 key={c.id}
@@ -262,12 +472,20 @@ function Picker({ editing, personalities }: { editing: AgentSummary | null; pers
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12, backgroundColor: t.background }]}>
+        {error ? <Text style={[styles.error, { color: t.recordingRed }]}>{error}</Text> : null}
         <BlackPillButton
-          label={editing ? 'Übernehmen' : `${shownName} hinzufügen`}
+          label={editing ? 'Übernehmen' : pictureMode ? 'Agent erstellen' : `${shownName} hinzufügen`}
           onPress={submit}
           loading={busy}
+          variant={pictureMode && !canCreateOwn ? 'disabled' : 'primary'}
         />
-        <Text style={[styles.footNote, { color: t.textTertiary }]}>Du kannst die Figur oder den Namen jederzeit ändern.</Text>
+        <Text style={[styles.footNote, { color: t.textTertiary }]}>
+          {pictureMode
+            ? busy
+              ? 'Bild wird hochgeladen …'
+              : 'Du kannst Bild, Name und Aufgabe jederzeit ändern.'
+            : 'Du kannst die Figur oder den Namen jederzeit ändern.'}
+        </Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -298,5 +516,25 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 36, borderRadius: 18, paddingHorizontal: 14 },
   chipText: { fontFamily: chatFont.medium, fontSize: 15 },
   footer: { paddingHorizontal: 22, paddingTop: 10 },
+  error: { fontFamily: chatFont.regular, fontSize: 14, lineHeight: 19, textAlign: 'center', marginBottom: 10 },
+  ownTile: { alignItems: 'center', justifyContent: 'center' },
+  previewWrap: { alignItems: 'center', paddingTop: 8 },
+  preview: { width: PREVIEW_SIZE, height: PREVIEW_SIZE, borderRadius: PREVIEW_SIZE / 2, overflow: 'hidden' },
+  previewEmpty: { borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  previewImage: { width: PREVIEW_SIZE, height: PREVIEW_SIZE },
+  pictureBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  pictureBtnText: { fontFamily: chatFont.medium, fontSize: 15 },
+  field: { borderRadius: 18, paddingHorizontal: 14, minHeight: 48, justifyContent: 'center' },
+  fieldTall: { paddingVertical: 10, justifyContent: 'flex-start' },
+  input: { fontFamily: chatFont.regular, fontSize: 17, paddingVertical: 0 },
+  inputTall: { minHeight: 110, lineHeight: 22, textAlignVertical: 'top' },
   footNote: { fontFamily: chatFont.regular, fontSize: 13, textAlign: 'center', marginTop: 8 },
 });

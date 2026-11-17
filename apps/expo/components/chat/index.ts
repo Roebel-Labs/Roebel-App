@@ -41,3 +41,4 @@ export * from './InspirationCard';
 export * from './InspirationEntryRow';
 export * from './Shimmer';
 export * from './ScreenMessage';
+export * from './useAgentPicturePicker';

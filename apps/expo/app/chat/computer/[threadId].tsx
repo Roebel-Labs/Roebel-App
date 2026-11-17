@@ -8,7 +8,6 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatBootstrap } from '@/context/ChatContext';
 import { threadTitle } from '@/lib/chat/format';
 import {
-  BOT_COLORS,
   BotAvatar,
   GlassCircleButton,
   GlassPillHeader,
@@ -17,6 +16,7 @@ import {
   chatSize,
   useChatSheets,
 } from '@/components/chat';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 
 /** The bot's computer (ref 18). Until phase 5 there is no VM → empty state; with `vmUrl` a noVNC WebView. */
 export default function ChatComputerScreen() {
@@ -40,7 +40,7 @@ export default function ChatComputerScreen() {
           <Feather name="chevron-left" size={26} color="#FFFFFF" />
         </GlassCircleButton>
         {thread ? (
-          <GlassPillHeader avatars={bots.map((b) => b.avatar)} title={threadTitle(thread)} tone="dark" style={styles.pill} />
+          <GlassPillHeader avatars={bots.map((b) => b.avatar)} names={bots.map((b) => b.name)} title={threadTitle(thread)} tone="dark" style={styles.pill} />
         ) : null}
         <View style={styles.flex} />
         <GlassCircleButton accessibilityLabel="Tastatur" tone="dark" onPress={() => showSnackbar({ message: 'Bald verfügbar' })}>
@@ -79,7 +79,8 @@ export default function ChatComputerScreen() {
           ) : (
             <View style={styles.empty}>
               <BotAvatar
-                spec={bots[0]?.avatar ?? { shape: 'circle', color: BOT_COLORS.grey, eyes: 'dots' }}
+                spec={bots[0]?.avatar ?? MECKY_AVATAR_SPEC}
+                name={bots[0]?.name}
                 size={44}
                 style={styles.mascot}
               />

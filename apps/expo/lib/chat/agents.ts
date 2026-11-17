@@ -1,5 +1,6 @@
 // The person's agents (roster): contract of GET /api/chat/agent and pure helpers for the agent screens.
 import { characterById, characterRoleLine } from './characters';
+import { FALLBACK_TILE_COLOR, MECKY_AVATAR_SPEC } from './avatar-picture';
 import type { BotAvatarSpec, ChatBot } from './types';
 
 /** One roster entry (`agents[]` of GET /api/chat/agent). */
@@ -7,8 +8,12 @@ export interface AgentSummary {
   botId: string;
   name: string;
   characterId: string | null;
+  /** Own uploaded picture (agents without a character); null otherwise. */
+  imageUrl: string | null;
   /** "Agentin für …" for a character, the bot description otherwise. */
   role: string;
+  /** How the agent should work (own bots only; null for presets). */
+  instructions: string | null;
   isMain: boolean;
   isPreset: boolean;
   personality: string;
@@ -28,6 +33,7 @@ export interface AgentProfile {
   defaultName: string;
   description: string;
   characterId: string | null;
+  imageUrl: string | null;
   isPreset: boolean;
   since: string;
   personality: string;
@@ -43,19 +49,47 @@ export interface AgentView {
 
 export const MAX_AGENT_NAME = 30;
 export const MAX_AGENT_INSTRUCTIONS = 4000;
+/** "Wofür ist dein Agent da?" (own-picture agents). */
+export const MAX_AGENT_ROLE = 120;
+
+/** What an agent looks like: an illustrated character, an own picture, or neither (older bots, presets). */
+export type AgentLook = 'character' | 'picture' | 'none';
+
+export function agentLook(agent: Pick<AgentSummary, 'characterId' | 'imageUrl'>): AgentLook {
+  if (characterById(agent.characterId)) return 'character';
+  return agent.imageUrl ? 'picture' : 'none';
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+function normalizeSummary(a: AgentSummary): AgentSummary {
+  return {
+    ...a,
+    name: str(a.name) ?? '',
+    characterId: str(a.characterId),
+    imageUrl: str(a.imageUrl) || null,
+    role: str(a.role) ?? '',
+    instructions: str(a.instructions),
+    isMain: Boolean(a.isMain),
+    isPreset: Boolean(a.isPreset),
+    personality: str(a.personality) ?? 'standard',
+    since: str(a.since) ?? '',
+  };
+}
 
 /** Tolerates a partial or older response: never throws, always arrays. */
 export function normalizeAgentView(raw: Partial<AgentView> | null | undefined): AgentView | null {
   if (!raw || typeof raw !== 'object' || !raw.agent || typeof raw.agent.botId !== 'string') return null;
   const agent = raw.agent;
   return {
-    agents: Array.isArray(raw.agents) ? raw.agents.filter((a) => a && typeof a.botId === 'string') : [],
+    agents: Array.isArray(raw.agents) ? raw.agents.filter((a) => a && typeof a.botId === 'string').map(normalizeSummary) : [],
     agent: {
       botId: agent.botId,
       name: agent.name ?? '',
       defaultName: agent.defaultName ?? agent.name ?? '',
       description: agent.description ?? '',
       characterId: agent.characterId ?? null,
+      imageUrl: str(agent.imageUrl) || null,
       isPreset: Boolean(agent.isPreset),
       since: agent.since ?? '',
       personality: agent.personality ?? 'standard',
@@ -104,15 +138,26 @@ export function cleanAgentName(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, MAX_AGENT_NAME);
 }
 
-const DEFAULT_ASSISTANT_AVATAR: BotAvatarSpec = { shape: 'circle', color: '#000000', eyes: 'dots' };
-
 /**
- * Avatar of a roster entry: the bot's own avatar when the bootstrap knows it, else the character's
- * (art + colour), else the plain default.
+ * Avatar of a roster entry. The roster is fresher than the bootstrap: its character or own picture wins,
+ * then the bot's own avatar from the bootstrap, then Mecky's picture for the default assistant, then a
+ * plain initial tile. Render it with the agent's name (BotAvatar `name`) for the letter.
  */
-export function agentAvatarSpec(agent: Pick<AgentSummary, 'botId' | 'characterId'>, bots: ChatBot[]): BotAvatarSpec {
+export function agentAvatarSpec(
+  agent: Pick<AgentSummary, 'botId' | 'characterId'> & Partial<Pick<AgentSummary, 'imageUrl' | 'isPreset'>>,
+  bots: ChatBot[],
+): BotAvatarSpec {
   const bot = bots.find((b) => b.id === agent.botId);
   const c = characterById(agent.characterId);
-  if (c) return { shape: 'circle', eyes: 'dots', ...(bot?.avatar ?? {}), color: c.color, character: c.id };
-  return bot?.avatar ?? DEFAULT_ASSISTANT_AVATAR;
+  const base: BotAvatarSpec = bot?.avatar ?? { shape: 'circle', eyes: 'dots', color: FALLBACK_TILE_COLOR };
+  if (c) {
+    const { imageUrl: _ignored, ...rest } = base;
+    return { ...rest, color: c.color, character: c.id };
+  }
+  if (agent.imageUrl) {
+    const { character: _ignored, ...rest } = base;
+    return { ...rest, imageUrl: agent.imageUrl };
+  }
+  if (bot) return bot.avatar;
+  return agent.isPreset ? MECKY_AVATAR_SPEC : base;
 }

@@ -44,7 +44,7 @@ describe('agent characters', () => {
   it('points the artwork at the website', () => {
     expect(characterArt('otto')).toEqual({
       full: 'https://www.roebel.app/agents/otto/full.webp',
-      tile: 'https://www.roebel.app/agents/otto/mail.png',
+      tile: 'https://www.roebel.app/agents/otto/tile.webp',
       card: 'https://www.roebel.app/agents/otto/card.png',
     });
   });

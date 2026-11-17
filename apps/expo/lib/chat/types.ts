@@ -91,10 +91,15 @@ export interface BotAvatarSpec {
   shape: BotShape;
   color: string;
   eyes: BotEyes;
-  /** Illustrated agent character (lib/chat/characters.ts); unknown ids fall back to the shape. */
+  /** Illustrated agent character (lib/chat/characters.ts); unknown ids fall back to the initial tile. */
   character?: string;
   /** Personality preset key of a character agent (the main assistant uses its profile's instead). */
   personality?: string;
+  /**
+   * Own uploaded picture or house artwork (presets). Wins over the character. shape/eyes are legacy fields
+   * the app no longer draws (see lib/chat/avatar-picture.ts for the picture rule).
+   */
+  imageUrl?: string;
 }
 
 export interface ChatBot {

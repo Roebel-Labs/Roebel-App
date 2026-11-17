@@ -3,28 +3,33 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import type { BotAvatarSpec } from '@/lib/chat/types';
 import { MECKY_COLOR, characterArt, characterById } from '@/lib/chat/characters';
-import { BOT_COLORS, BotAvatar } from './BotAvatar';
-
-const MECKY_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dots' };
+import { MECKY_AVATAR_SPEC, MECKY_TILE_URL, botPictureUrl } from '@/lib/chat/avatar-picture';
+import { BotAvatar } from './BotAvatar';
+import { useChatTokens } from './tokens';
 
 export type CharacterFigureProps = {
-  /** Character id; null or unknown shows `fallback` (the bot's shape avatar). */
+  /** Character id; null or unknown shows `fallback` (the agent's picture) as a large round avatar. */
   characterId: string | null | undefined;
   /** Height of the stage; the figure is fitted inside. */
   height: number;
-  /** Shape avatar for an agent without a character, or while the artwork cannot be loaded. */
+  /** Avatar for an agent without a character (own picture, Mecky, or initial tile). Defaults to Mecky. */
   fallback?: BotAvatarSpec;
+  /** Agent name, for Mecky's picture and the letter of the initial tile. */
+  name?: string;
   /** Rounded stage in the character's colour (default); false draws the figure only. */
   stage?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-/** The transparent full figure of a character on its colour. Remote artwork, cached on disk. */
-export function CharacterFigure({ characterId, height, fallback, stage = true, style }: CharacterFigureProps) {
+/** The transparent full figure of a character on its colour, else the agent's picture. Remote, cached on disk. */
+export function CharacterFigure({ characterId, height, fallback, name, stage = true, style }: CharacterFigureProps) {
+  const t = useChatTokens();
   const character = characterById(characterId);
   const [failedId, setFailedId] = useState<string | null>(null);
   const art = character && failedId !== character.id ? character : null;
-  const color = character?.color ?? MECKY_COLOR;
+  const spec = fallback ?? MECKY_AVATAR_SPEC;
+  // Characters stand on their colour, Mecky on his; own pictures on the neutral chip grey.
+  const color = character?.color ?? (botPictureUrl(spec, name) === MECKY_TILE_URL ? MECKY_COLOR : t.chipBackground);
   return (
     <View
       style={[
@@ -48,7 +53,7 @@ export function CharacterFigure({ characterId, height, fallback, stage = true, s
           onError={() => setFailedId(art.id)}
         />
       ) : (
-        <BotAvatar spec={fallback ?? MECKY_AVATAR} size={Math.round(Math.min(120, height * 0.5))} />
+        <BotAvatar spec={spec} name={name} size={Math.round(Math.min(160, height * 0.6))} />
       )}
     </View>
   );

@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from '@/components/PressableScale';
 import { BotAvatar, BotAvatarStack } from '@/components/chat';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { threadTitle } from '@/lib/chat/format';
@@ -15,7 +16,7 @@ const CARD_LIGHT = '#F2F3F5';
 const CARD_LIGHT_PRESSED = '#E6E8EB';
 const PLACEHOLDER_LIGHT = '#D9D9D9';
 
-const MECKY_SPEC: BotAvatarSpec = { shape: 'circle', color: '#00498B', eyes: 'dots' };
+const MECKY_SPEC: BotAvatarSpec = MECKY_AVATAR_SPEC;
 
 type Row = { key: string; name: string; preview: string };
 
@@ -57,7 +58,9 @@ export default function ChatAgentsBanner({ wallet }: Props) {
     : FALLBACK_ROWS;
 
   const lead = hasThreads ? threads[0] : null;
-  const leadSpecs = lead ? lead.bots.map((b) => b.avatar).filter(Boolean) : [];
+  const leadBots = lead ? lead.bots.filter((b) => Boolean(b.avatar)) : [];
+  const leadSpecs = leadBots.map((b) => b.avatar);
+  const leadNames = leadBots.map((b) => b.name);
 
   const cardBg = isDark ? (pressed ? colors.surface : colors.surfaceSecondary) : pressed ? CARD_LIGHT_PRESSED : CARD_LIGHT;
   const placeholderBg = isDark ? colors.surface : PLACEHOLDER_LIGHT;
@@ -67,9 +70,9 @@ export default function ChatAgentsBanner({ wallet }: Props) {
   if (loading) {
     avatar = <View style={[styles.placeholder, { backgroundColor: placeholderBg }]} />;
   } else if (lead && leadSpecs.length > 1) {
-    avatar = <BotAvatarStack specs={leadSpecs} size={AVATAR_SIZE} />;
+    avatar = <BotAvatarStack specs={leadSpecs} names={leadNames} size={AVATAR_SIZE} />;
   } else if (lead && leadSpecs.length === 1) {
-    avatar = <BotAvatar spec={leadSpecs[0]} size={AVATAR_SIZE} />;
+    avatar = <BotAvatar spec={leadSpecs[0]} name={leadNames[0]} size={AVATAR_SIZE} />;
   } else {
     avatar = <BotAvatar spec={MECKY_SPEC} size={AVATAR_SIZE} />;
   }

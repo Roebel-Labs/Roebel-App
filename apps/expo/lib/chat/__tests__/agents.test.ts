@@ -7,13 +7,15 @@ import {
   normalizeAgentView,
   personalityTitle,
   sortRoster,
+  agentLook,
   type AgentSummary,
 } from '../agents';
 import type { ChatBot } from '../types';
+import { MECKY_AVATAR_SPEC } from '../avatar-picture';
 
 const agent = (over: Partial<AgentSummary>): AgentSummary => ({
-  botId: 'b1', name: 'Mecky', characterId: null, role: 'Dein Assistent', isMain: false, isPreset: true,
-  personality: 'standard', since: '2026-11-13T10:00:00Z', ...over,
+  botId: 'b1', name: 'Mecky', characterId: null, imageUrl: null, role: 'Dein Assistent', instructions: null,
+  isMain: false, isPreset: true, personality: 'standard', since: '2026-11-13T10:00:00Z', ...over,
 });
 
 describe('normalizeAgentView', () => {
@@ -90,8 +92,23 @@ describe('agentAvatarSpec', () => {
     expect(agentAvatarSpec(agent({}), [bot({})])).toEqual({ shape: 'cloud', color: '#111111', eyes: 'happy' });
   });
 
-  it('falls back to the default avatar when the bot is unknown', () => {
-    expect(agentAvatarSpec(agent({ botId: 'zz' }), [bot({})])).toEqual({ shape: 'circle', color: '#000000', eyes: 'dots' });
+  it('falls back to Mecky for an unknown preset and to a plain tile for an unknown own bot', () => {
+    expect(agentAvatarSpec(agent({ botId: 'zz' }), [bot({})])).toEqual(MECKY_AVATAR_SPEC);
+    expect(agentAvatarSpec(agent({ botId: 'zz', isPreset: false }), [bot({})])).toEqual({
+      shape: 'circle', eyes: 'dots', color: '#00498B',
+    });
+  });
+
+  it('uses the roster picture over the bootstrap avatar and drops a stale character', () => {
+    const url = 'https://x.supabase.co/storage/v1/object/public/images/chat/avatars/a.jpg';
+    expect(agentAvatarSpec(agent({ imageUrl: url }), [bot({ avatar: { shape: 'circle', color: '#111111', eyes: 'dots', character: 'otto' } })]))
+      .toEqual({ shape: 'circle', color: '#111111', eyes: 'dots', imageUrl: url });
+  });
+
+  it('drops an old picture once the roster says character', () => {
+    const spec = agentAvatarSpec(agent({ characterId: 'otto' }), [bot({ avatar: { shape: 'circle', color: '#111111', eyes: 'dots', imageUrl: 'https://a/b.jpg' } })]);
+    expect(spec.imageUrl).toBeUndefined();
+    expect(spec.character).toBe('otto');
   });
 
   it('carries the character even when the bootstrap does not know the bot yet', () => {
@@ -102,5 +119,26 @@ describe('agentAvatarSpec', () => {
 
   it('ignores an unknown character id', () => {
     expect(agentAvatarSpec(agent({ characterId: 'berta' }), [bot({})]).character).toBeUndefined();
+  });
+});
+
+describe('agentLook', () => {
+  it('tells character, own picture and neither apart', () => {
+    expect(agentLook({ characterId: 'otto', imageUrl: null })).toBe('character');
+    expect(agentLook({ characterId: null, imageUrl: 'https://a/b.jpg' })).toBe('picture');
+    expect(agentLook({ characterId: null, imageUrl: null })).toBe('none');
+    expect(agentLook({ characterId: 'berta', imageUrl: null })).toBe('none');
+  });
+});
+
+describe('normalizeAgentView roster fields', () => {
+  it('fills imageUrl and instructions on older responses', () => {
+    const view = normalizeAgentView({
+      agent: { botId: 'b1', name: 'Mecky' } as never,
+      agents: [{ botId: 'b2', name: 'Kochi', characterId: null, role: 'Kochen' } as never],
+    });
+    expect(view?.agents[0].imageUrl).toBeNull();
+    expect(view?.agents[0].instructions).toBeNull();
+    expect(view?.agent.imageUrl).toBeNull();
   });
 });

@@ -38,7 +38,6 @@ import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { parseTalerAmount } from '@/lib/roebel-taler';
 import type { BotAvatarSpec, ChatBot, ChatMessage, ChatPart } from '@/lib/chat/types';
 import {
-  BOT_COLORS,
   BotSheet,
   Composer,
   DayStamp,
@@ -62,6 +61,7 @@ import {
   type ComposerImage,
   type MentionCandidate,
 } from '@/components/chat';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 
 type FilePart = Extract<ChatPart, { type: 'file' }>;
 type ApprovalPart = Extract<ChatPart, { type: 'approval' }>;
@@ -70,14 +70,10 @@ type Item =
   | { kind: 'day'; key: string; iso: string }
   | { kind: 'new'; key: string }
   | { kind: 'msg'; key: string; message: ChatMessage; botName: string | null }
-  | { kind: 'typing'; key: string; spec: BotAvatarSpec }
+  | { kind: 'typing'; key: string; spec: BotAvatarSpec; name?: string }
   | { kind: 'failed'; key: string };
 
-const FALLBACK_AVATAR: BotAvatarSpec = {
-  shape: 'circle',
-  color: BOT_COLORS.black,
-  eyes: 'dots',
-};
+const FALLBACK_AVATAR: BotAvatarSpec = MECKY_AVATAR_SPEC;
 const MAX_RECORDING_SECONDS = 180;
 
 const VOICE_RECORDING_OPTIONS: RecordingOptions = {
@@ -632,8 +628,9 @@ export default function ChatThreadScreen() {
       if (!streamingMsg || streamingMsg.parts.length === 0) {
         const lastBot = [...th.messages].reverse().find((m) => m.role === 'bot');
         const botId = th.streamingBotId ?? lastBot?.botId ?? bots[0]?.id ?? null;
-        const spec = bots.find((b) => b.id === botId)?.avatar ?? bots[0]?.avatar ?? FALLBACK_AVATAR;
-        out.push({ kind: 'typing', key: 'typing', spec });
+        const typingBot = bots.find((b) => b.id === botId) ?? bots[0];
+        const spec = typingBot?.avatar ?? FALLBACK_AVATAR;
+        out.push({ kind: 'typing', key: 'typing', spec, name: typingBot?.name });
       }
     }
     return out.reverse();
@@ -649,7 +646,7 @@ export default function ChatThreadScreen() {
         case 'new':
           return <NewDivider />;
         case 'typing':
-          return <TypingIndicator spec={item.spec} style={styles.typing} />;
+          return <TypingIndicator spec={item.spec} name={item.name} style={styles.typing} />;
         case 'failed':
           return (
             <Pressable
@@ -794,6 +791,7 @@ export default function ChatThreadScreen() {
         {thread ? (
           <GlassPillHeader
             avatars={bots.map((b) => b.avatar)}
+            names={bots.map((b) => b.name)}
             title={title}
             onPress={() => setBotSheetOpen(true)}
             style={styles.pill}

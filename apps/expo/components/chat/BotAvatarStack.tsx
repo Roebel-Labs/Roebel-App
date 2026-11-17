@@ -6,13 +6,15 @@ import { BotAvatar } from './BotAvatar';
 export type BotAvatarStackProps = {
   /** First three are drawn (top-center, bottom-left, bottom-right). */
   specs: BotAvatarSpec[];
+  /** Bot names in the same order as `specs` (Mecky's picture, initial-tile letters). */
+  names?: (string | undefined)[];
   /** Outer box edge, same as a single list avatar (default 42). */
   size?: number;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Group avatar: three small mascots in a triangle (ref 6, row 2). */
-export function BotAvatarStack({ specs, size = 42, style }: BotAvatarStackProps) {
+/** Group avatar: three small agent pictures in a triangle (ref 6, row 2). */
+export function BotAvatarStack({ specs, names, size = 42, style }: BotAvatarStackProps) {
   const s = Math.round(size * 0.56);
   const slots = [
     { left: (size - s) / 2, top: -size * 0.1 },
@@ -20,13 +22,13 @@ export function BotAvatarStack({ specs, size = 42, style }: BotAvatarStackProps)
     { left: size * 0.52, top: size * 0.44 },
   ];
   if (specs.length === 1) {
-    return <BotAvatar spec={specs[0]} size={size} style={style} />;
+    return <BotAvatar spec={specs[0]} name={names?.[0]} size={size} style={style} />;
   }
   if (specs.length === 2) {
     return (
       <View style={[{ width: size, height: size }, style]}>
-        <BotAvatar spec={specs[0]} size={s} style={{ position: 'absolute', left: -size * 0.04, top: 0 }} />
-        <BotAvatar spec={specs[1]} size={s} style={{ position: 'absolute', left: size * 0.48, top: size * 0.44 }} />
+        <BotAvatar spec={specs[0]} name={names?.[0]} size={s} style={{ position: 'absolute', left: -size * 0.04, top: 0 }} />
+        <BotAvatar spec={specs[1]} name={names?.[1]} size={s} style={{ position: 'absolute', left: size * 0.48, top: size * 0.44 }} />
       </View>
     );
   }
@@ -36,6 +38,7 @@ export function BotAvatarStack({ specs, size = 42, style }: BotAvatarStackProps)
         <BotAvatar
           key={i}
           spec={spec}
+          name={names?.[i]}
           size={i === 2 ? Math.round(s * 0.88) : s}
           style={{ position: 'absolute', left: slots[i].left, top: slots[i].top + (i === 2 ? s * 0.06 : 0) }}
         />

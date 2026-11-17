@@ -47,12 +47,12 @@ export function characterRoleLine(c: Pick<AgentCharacter, 'feminine' | 'role'>):
 }
 
 /**
- * Remote artwork: `full` = transparent figure (about 1000 × 1600), `tile` = 132 px square on the
+ * Remote artwork: `full` = transparent figure (about 1000 × 1600), `tile` = 512 px opaque square on the
  * character's colour (avatars), `card` = 1200 × 630 share card.
  */
 export function characterArt(id: string): { full: string; tile: string; card: string } {
   const base = `${AGENT_SITE_ORIGIN}/agents/${encodeURIComponent(id)}`;
-  return { full: `${base}/full.webp`, tile: `${base}/mail.png`, card: `${base}/card.png` };
+  return { full: `${base}/full.webp`, tile: `${base}/tile.webp`, card: `${base}/card.png` };
 }
 
 /** Public page with a link preview, for "Teilen". The name is only sent when it differs from the character's. */

@@ -30,7 +30,7 @@ export function MentionPopover({ candidates, onSelect, style }: MentionPopoverPr
           }}
           style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.chipBackground } : null]}
         >
-          <BotAvatar spec={c.avatar} size={22} />
+          <BotAvatar spec={c.avatar} name={c.name} size={22} />
           <View style={[styles.labelWrap, i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: t.separator } : null]}>
             <Text numberOfLines={1} style={[styles.label, { color: t.textPrimary }]}>
               {c.name}

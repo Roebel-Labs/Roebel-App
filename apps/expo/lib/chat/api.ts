@@ -595,6 +595,56 @@ export interface CreateAgentInput {
   main?: boolean;
 }
 
+/** An own agent with an own picture (from uploadAgentPicture) instead of a character. */
+export interface CreateOwnAgentInput {
+  imageUrl: string;
+  /** Required, ≤ 30. */
+  name: string;
+  /** What the agent is for, ≤ 120. */
+  role?: string;
+  /** How it should work, ≤ 4000. */
+  instructions?: string;
+  personality?: string;
+  main?: boolean;
+}
+
+/** Uploaded agent picture (public URL, goes into imageUrl of create/patch). */
+export interface UploadedAgentPicture {
+  url: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * Uploads a local square JPEG as an agent picture (POST /api/chat/agent/avatar, JPEG/PNG/WebP ≤ 4 MB,
+ * ≥ 96 px). Errors carry the server's German message.
+ */
+export async function uploadAgentPicture(account: SigningAccount, uri: string): Promise<UploadedAgentPicture> {
+  const res = await request<Partial<UploadedAgentPicture> | null>(account, 'POST', '/api/chat/agent/avatar', {
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+    form: () => {
+      const form = new FormData();
+      form.append('file', { uri, name: 'agent.jpg', type: 'image/jpeg' } as unknown as Blob);
+      return form;
+    },
+  });
+  if (!res || typeof res.url !== 'string' || !res.url) {
+    throw new ChatApiError('bad_response', 'Das Bild konnte nicht hochgeladen werden. Bitte versuche es erneut.');
+  }
+  return { url: res.url, width: Number(res.width) || 0, height: Number(res.height) || 0 };
+}
+
+/** Creates an own agent with an own picture; `createdId` is the new bot. */
+export async function createOwnAgent(
+  account: SigningAccount,
+  input: CreateOwnAgentInput,
+): Promise<{ view: AgentView; createdId: string | null }> {
+  const res = await request<(Partial<AgentView> & { createdId?: string }) | null>(account, 'POST', '/api/chat/agent/agents', {
+    json: input,
+  });
+  return { view: agentViewOrThrow(res), createdId: typeof res?.createdId === 'string' ? res.createdId : null };
+}
+
 /** Takes on an illustrated character as an own agent; `createdId` is the new bot. */
 export async function createCharacterAgent(
   account: SigningAccount,
@@ -608,7 +658,14 @@ export async function createCharacterAgent(
 
 export interface AgentPatch {
   name?: string;
+  /** Switches to (or between) characters; an own picture goes. */
   character?: string;
+  /** Switches to an own picture (from uploadAgentPicture); the character goes. */
+  imageUrl?: string;
+  /** What the agent is for (agents without a character only), ≤ 120. */
+  role?: string;
+  /** How it should work, ≤ 4000. */
+  instructions?: string;
   personality?: string;
 }
 
