@@ -592,6 +592,18 @@ export function passkeyOpSigner(
 }
 
 /**
+ * The ECDSA signer's gas-estimation stand-in: a fixed, well-formed r ++ s ++ v signature (v = 27,
+ * low-s, r a real curve point, no zero bytes). It is a real signature by the public test key 1 over
+ * keccak256("roebel ecdsa dummy signature 3"), so over any op hash it recovers to SOME non-zero,
+ * non-owner address. That makes the Safe's check take the same path as the real signature
+ * (ecrecover, then the cold `owners[recovered]` read) before it fails. A v = 0xff stand-in would take
+ * the eth_sign branch, recover address(0) and stop before that read: under-estimated verification gas.
+ * The fork test EcdsaSafe.t.sol (`test_dummySignatureCoversRealVerificationGas`) asserts it.
+ */
+export const ECDSA_DUMMY_SIGNATURE: Hex =
+  '0x134a75f59d27787d05a79232d0dc26d6500f736a7d731f4016d6181a5db0918b726b8b1644daeb10c9cf161051f3f6d9ffe8625252f71cbec3904a30cbfbbece1b';
+
+/**
  * The expert path's signer: the Safe has ONE plain ECDSA owner (the words' account key).
  * `signDigest` signs the raw 32-byte digest (no message prefix) and returns r ++ s ++ v (65 bytes,
  * v = 27/28): exactly the Safe's ECDSA owner signature, so it goes after the validity window as is.
@@ -602,7 +614,7 @@ export function ecdsaOpSigner(owner: Address, signDigest: (digest: Hex) => Promi
     proof: { ecdsaOwner },
     predicted: predictEcdsaSafeAddress(ecdsaOwner),
     factoryData: ecdsaSafeFactoryData(ecdsaOwner),
-    dummySignature: encodeUserOpSignature(0, 0, `0x${'ff'.repeat(65)}`),
+    dummySignature: encodeUserOpSignature(0, 0, ECDSA_DUMMY_SIGNATURE),
     signOpHash: async (hash) => encodeUserOpSignature(0, 0, normalizeEcdsaSignature(await signDigest(hash))),
   };
 }

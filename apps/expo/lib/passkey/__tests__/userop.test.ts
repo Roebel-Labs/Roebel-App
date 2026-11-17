@@ -549,10 +549,18 @@ describe('userop — post-recovery signature vector', () => {
 
 // ---- signer-neutral sender: the expert-path (ECDSA-owner) Safe (plan 3 Task 2) ----
 
-import { getAddress, type Address } from 'viem';
+import { getAddress, isAddressEqual, recoverAddress, zeroAddress, type Address } from 'viem';
 import ev from './ecdsa-safe-vector.json';
 import { ecdsaSafeFactoryData } from '../ecdsa-safe';
-import { ecdsaOpSigner, passkeyOpSigner, sendSafeUserOp, type SafeOpSigner, type SafeUserOpArgs } from '../userop';
+import {
+  ECDSA_DUMMY_SIGNATURE,
+  ecdsaOpSigner,
+  normalizeEcdsaSignature,
+  passkeyOpSigner,
+  sendSafeUserOp,
+  type SafeOpSigner,
+  type SafeUserOpArgs,
+} from '../userop';
 import { validatePhrase, wordsFromSeed } from '../words';
 
 const ecdsaVector = { ...ev, owner: ev.owner as Address };
@@ -658,8 +666,22 @@ describe('ECDSA signer (expert path) vs the fork vector', () => {
     expect(s.predicted).toBe(getAddress(ecdsaVector.safeAddress));
     expect(s.factoryData).toBe(ecdsaSafeFactoryData(ecdsaVector.owner));
     expect(s.proof).toEqual({ ecdsaOwner: getAddress(ecdsaVector.owner) });
-    expect(s.dummySignature).toBe(encodeUserOpSignature(0, 0, `0x${'ff'.repeat(65)}`));
+    expect(s.dummySignature).toBe(encodeUserOpSignature(0, 0, ECDSA_DUMMY_SIGNATURE));
     expect(size(s.dummySignature)).toBe(size(eu.userOpSignature as Hex));
+  });
+
+  it('I-2: the ECDSA dummy is a well-formed 65-byte v = 27 signature that recovers to a non-owner', async () => {
+    expect(size(ECDSA_DUMMY_SIGNATURE)).toBe(65);
+    expect(parseInt(ECDSA_DUMMY_SIGNATURE.slice(-2), 16)).toBe(27);
+    expect(normalizeEcdsaSignature(ECDSA_DUMMY_SIGNATURE)).toBe(ECDSA_DUMMY_SIGNATURE);
+    // No zero byte: the estimate's calldata is never cheaper than a real signature's.
+    expect(ECDSA_DUMMY_SIGNATURE.slice(2).match(/../g)).not.toContain('00');
+    // Low-s and a real point: it recovers (to some address that is not the owner) over the op hash.
+    const s = BigInt(`0x${ECDSA_DUMMY_SIGNATURE.slice(66, 130)}`);
+    expect(s <= 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n).toBe(true);
+    const recovered = await recoverAddress({ hash: eu.safeOpHash as Hex, signature: ECDSA_DUMMY_SIGNATURE });
+    expect(recovered).not.toBe(zeroAddress);
+    expect(isAddressEqual(recovered, ecdsaVector.owner)).toBe(false);
   });
 
   it('ecdsaOpSigner refuses a signature that is not 65 bytes', async () => {

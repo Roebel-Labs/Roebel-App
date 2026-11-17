@@ -265,6 +265,74 @@ contract EcdsaSafeTest is PasskeySafeBase {
         entryPoint.handleOps(ops, payable(bundler));
     }
 
+    /// The app's ECDSA gas-estimation stand-in (apps/expo/lib/passkey/userop.ts ECDSA_DUMMY_SIGNATURE):
+    /// v = 27, low-s, a real curve point, recovering to a non-owner over any op hash.
+    bytes internal constant ECDSA_DUMMY_SIGNATURE =
+        hex"134a75f59d27787d05a79232d0dc26d6500f736a7d731f4016d6181a5db0918b726b8b1644daeb10c9cf161051f3f6d9ffe8625252f71cbec3904a30cbfbbece1b";
+
+    /// Verification gas of `op` with `signature` as the EntryPoint calls it (Safe -> Safe4337Module
+    /// fallback), every touched account cold, the state reverted afterwards.
+    function _validationGas(PackedUserOperation memory op, bytes memory signature) internal returns (uint256 gasUsed, uint256 validationData) {
+        uint256 snap = vm.snapshotState();
+        op.signature = signature;
+        vm.cool(safe);
+        vm.cool(SAFE_4337_MODULE);
+        vm.cool(SAFE_L2_SINGLETON);
+        vm.prank(ENTRY_POINT);
+        uint256 g = gasleft();
+        (bool ok, bytes memory ret) =
+            safe.call(abi.encodeWithSignature("validateUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32,uint256)", op, bytes32(0), uint256(0)));
+        gasUsed = g - gasleft();
+        assertTrue(ok, "validateUserOp must not revert (a bad signature returns SIG_VALIDATION_FAILED)");
+        validationData = abi.decode(ret, (uint256));
+        vm.revertToState(snap);
+    }
+
+    /// Final review I-2: the dummy signature the app estimates with must take the Safe's ECDSA
+    /// branch (ecrecover + the cold owners[] read) and cost at least as much verification gas as
+    /// the real signature, so the estimate never under-shoots. The old v = 0xff stand-in recovered
+    /// address(0) on the eth_sign branch and skipped the owners[] read.
+    function test_dummySignatureCoversRealVerificationGas() public {
+        assertEq(ECDSA_DUMMY_SIGNATURE.length, 65, "65 bytes");
+        assertEq(uint8(ECDSA_DUMMY_SIGNATURE[64]), 27, "v = 27");
+        _deploy();
+        PackedUserOperation memory op = _followUp(safe, ownerKey, _executeUserOpCallData(SINK, 1, ""));
+        bytes memory real = op.signature;
+        bytes memory dummy = abi.encodePacked(uint48(0), uint48(0), ECDSA_DUMMY_SIGNATURE);
+        assertEq(dummy.length, real.length, "same layout and size as the real signature");
+
+        // The dummy recovers to some real, non-owner address over the op hash.
+        bytes32 opHash = module4337.getOperationHash(op);
+        bytes32 r;
+        bytes32 s;
+        bytes memory d = ECDSA_DUMMY_SIGNATURE;
+        assembly {
+            r := mload(add(d, 0x20))
+            s := mload(add(d, 0x40))
+        }
+        address recovered = ecrecover(opHash, 27, r, s);
+        assertTrue(recovered != address(0), "recovers to a real address");
+        assertTrue(recovered != owner, "not the owner");
+
+        (uint256 realGas, uint256 realData) = _validationGas(op, real);
+        (uint256 dummyGas, uint256 dummyData) = _validationGas(op, dummy);
+        assertEq(realData, 0, "the real signature validates");
+        assertEq(dummyData, 1, "the dummy fails validation (SIG_VALIDATION_FAILED), it does not revert");
+        emit log_named_uint("validateUserOp gas, real signature", realGas);
+        emit log_named_uint("validateUserOp gas, dummy signature", dummyGas);
+        assertGe(dummyGas, realGas, "the dummy's verification gas covers the real signature's");
+
+        // The old 0xff stand-in did not (documents the bug this replaces).
+        (uint256 oldGas,) = _validationGas(op, abi.encodePacked(uint48(0), uint48(0), _ffs()));
+        emit log_named_uint("validateUserOp gas, old 0xff stand-in", oldGas);
+        assertLt(oldGas, realGas, "the old stand-in under-estimated");
+    }
+
+    function _ffs() internal pure returns (bytes memory b) {
+        b = new bytes(65);
+        for (uint256 i; i < 65; ++i) b[i] = 0xff;
+    }
+
     function test_writeVector() public {
         // Fixed userOp: deploy + 1 wei to SINK, stub paymasterAndData (paymaster ++ gas limits ++ 320 zero bytes).
         PackedUserOperation memory op =
