@@ -160,6 +160,25 @@ describe('claimMuenzenAsOneBatch', () => {
     expect(sent[0].calls.map((c) => c.to)).toEqual([HUB, HUB]);
   });
 
+  it('guest Safe (isGroupMember false): the userOp carries personalMint ONLY, never groupMint', async () => {
+    const { account, d, sent } = passkeyAccount(SAFE);
+    const r = reads({ isGroupMember: false, personalBalance: 5n * ONE, mintable: 3n * ONE });
+    await claimMuenzenAsOneBatch(account, r, { hub: HUB, group: GROUP });
+    expect(d.sendUserOp).toHaveBeenCalledTimes(1);
+    expect(sent[0].calls).toHaveLength(1);
+    expect(sent[0].calls[0].to).toBe(HUB);
+    expect(decodeFunctionData({ abi: hubAbi, data: sent[0].calls[0].data }).functionName).toBe('personalMint');
+    // No groupMint selector anywhere in the op, however much personal balance there is.
+    expect(sent[0].calls.some((c) => c.data.startsWith('0x6cb498e5'))).toBe(false);
+  });
+
+  it('guest Safe with nothing accrued: nothing is sent (no groupMint sweep)', async () => {
+    const { account, d } = passkeyAccount(SAFE);
+    const r = reads({ isGroupMember: false, personalBalance: 5n * ONE, mintable: 0n });
+    await expect(claimMuenzenAsOneBatch(account, r, { hub: HUB, group: GROUP })).rejects.toThrow(CLAIM_NOTHING_MESSAGE);
+    expect(d.sendUserOp).not.toHaveBeenCalled();
+  });
+
   it('nothing to claim: German message, no op', async () => {
     const { account, d } = passkeyAccount();
     await expect(
