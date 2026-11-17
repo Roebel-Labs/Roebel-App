@@ -10,6 +10,7 @@ import type { Mailer, OutgoingMail } from "../email-mailer";
 import { formatDeadline, recoveryAlertMail } from "../email-mailer";
 import {
   ALERT_CURSOR_ID,
+  MAX_PUSH_ATTEMPTS,
   RECOVERY_EXECUTED_EVENT,
   runRecoveryAlerts,
   type RecoveryExecutedLog,
@@ -339,7 +340,7 @@ test("supabase push: active tokens of the wallet (lowercased), sent in chunks of
   assert.equal((bodies[0][0] as { title: string }).title, "Jemand stellt dein Konto wieder her");
 });
 
-test("supabase push: an HTTP error or no accepted ticket throws; dead tokens are deactivated", async () => {
+test("supabase push: an HTTP error or no accepted ticket throws; one accepted device counts as delivered; dead tokens are deactivated", async () => {
   const { db, calls } = fakeDb([]);
   const down = createSupabaseAlertPush(db as never, (async () => new Response("no", { status: 500 })) as unknown as typeof fetch);
   await assert.rejects(down.send(["ExponentPushToken[a]"], recoveryAlertPush(LATER)));
@@ -350,7 +351,7 @@ test("supabase push: an HTTP error or no accepted ticket throws; dead tokens are
   );
   await assert.rejects(dead.send(["ExponentPushToken[dead]"], recoveryAlertPush(LATER)));
   assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[dead]"));
-  // One chunk fine, the other an HTTP error: the whole push is retried (claim released).
+  // One chunk fine, the other an HTTP error: delivered (devices were warned), the rest only logged.
   let call = 0;
   const partial = createSupabaseAlertPush(
     db as never,
@@ -361,14 +362,20 @@ test("supabase push: an HTTP error or no accepted ticket throws; dead tokens are
     }) as unknown as typeof fetch,
   );
   const many = Array.from({ length: 150 }, (_, i) => `ExponentPushToken[${i}]`);
-  await assert.rejects(partial.send(many, recoveryAlertPush(LATER)));
-  // An error ticket other than DeviceNotRegistered next to an accepted one also throws.
+  await partial.send(many, recoveryAlertPush(LATER));
+  // An error ticket other than DeviceNotRegistered next to an accepted one: delivered, logged.
   const mixed = createSupabaseAlertPush(
     db as never,
     (async () =>
       new Response(JSON.stringify({ data: [{ status: "ok" }, { status: "error", details: { error: "MessageRateExceeded" } }] }), { status: 200 })) as unknown as typeof fetch,
   );
-  await assert.rejects(mixed.send(["ExponentPushToken[a]", "ExponentPushToken[b]"], recoveryAlertPush(LATER)));
+  await mixed.send(["ExponentPushToken[a]", "ExponentPushToken[b]"], recoveryAlertPush(LATER));
+  // Only error tickets: not delivered, throws (the caller retries).
+  const allBad = createSupabaseAlertPush(
+    db as never,
+    (async () => new Response(JSON.stringify({ data: [{ status: "error", details: { error: "MessageRateExceeded" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await assert.rejects(allBad.send(["ExponentPushToken[a]"], recoveryAlertPush(LATER)));
   // Accepted + DeviceNotRegistered only: sent, the dead token deactivated, no throw.
   const okDead = createSupabaseAlertPush(
     db as never,
@@ -379,4 +386,40 @@ test("supabase push: an HTTP error or no accepted ticket throws; dead tokens are
   assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[gone]"));
   const failing = fakeDb([], true);
   await assert.rejects(createSupabaseAlertPush(failing.db as never).tokensFor(WALLET));
+});
+
+test("a push that keeps failing is given up after MAX_PUSH_ATTEMPTS runs: the cursor moves on, the email went out once", async () => {
+  const store = await storeWith([WALLET, "w@example.de"]);
+  const m = mailer();
+  const push = fakePush({ [WALLET]: ["ExponentPushToken[broken]"] }, 1_000);
+  for (let i = 1; i < MAX_PUSH_ATTEMPTS; i++) {
+    await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store, mailer: m, push, nowSec });
+    assert.equal(await store.getCursor(ALERT_CURSOR_ID), null, `run ${i} holds the cursor for a retry`);
+  }
+  const last = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store, mailer: m, push, nowSec });
+  assert.equal(last.failed, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 995n);
+  assert.equal(m.sent.length, 1);
+  const after = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store: freshCursor(store), mailer: m, push, nowSec });
+  assert.equal(after.failed, 0); // no further push attempt for that nonce
+  // A new recovery (new nonce) is pushed again.
+  const ok = fakePush({ [WALLET]: ["ExponentPushToken[a]"] });
+  const again = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 8n)]), store: freshCursor(store), mailer: m, push: ok, nowSec });
+  assert.equal(again.pushed, 1);
+});
+
+test("a failing push in an early range does not delay the email of a later range", async () => {
+  const store = await storeWith([W2, "three@example.de"]);
+  await store.setCursor(ALERT_CURSOR_ID, 1_000n);
+  const m = mailer();
+  const push = fakePush({ [W1]: ["ExponentPushToken[broken]"] }, 1_000);
+  const r = reader(30_000n, [
+    { wallet: W1, nonce: 1n, executeAfter: LATER, blockNumber: 5_000n },
+    { wallet: W2, nonce: 1n, executeAfter: LATER, blockNumber: 25_000n },
+  ]);
+  const res = await runRecoveryAlerts({ reader: r, store, mailer: m, push, nowSec: () => NOW, chunkBlocks: 10_000n, confirmations: 0n });
+  assert.equal(m.sent.length, 1);
+  assert.equal(m.sent[0].to, "three@example.de");
+  assert.equal(res.sent, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 1_000n); // held at the failed range
 });

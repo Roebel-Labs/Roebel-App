@@ -7,11 +7,11 @@
  * email and the in-app banner (plan open question 3).
  *
  * Sends through the Expo push API in chunks of 100, as app/actions/push-notifications.ts does.
- * `send` throws, so the caller releases its claim and retries the whole push next run, when no
- * message was accepted OR any chunk / ticket failed for a reason other than DeviceNotRegistered
- * (HTTP error, network error, an error ticket). A retry may reach a device that already got the
- * alert a second time; missing a recovery alert is worse than a duplicate. DeviceNotRegistered
- * tokens are deactivated and do not count as a failure.
+ * A push counts as DELIVERED when at least one device accepted it: the person is warned, and one
+ * persistently failing token (a broken device, a rate limit) must not hold every later alert
+ * hostage. The rest is logged (counts only). `send` throws only when no device accepted it (HTTP
+ * error, network error, error tickets everywhere); the caller then releases its claim and retries
+ * a few times (recovery-alerts.ts caps it per nonce). DeviceNotRegistered tokens are deactivated.
  * No log line carries a token or an address.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -98,7 +98,8 @@ export function createSupabaseAlertPush(db: SupabaseClient, fetchImpl: typeof fe
         // Best effort: the next run then sees no device instead of retrying a dead token.
         await Promise.resolve(db.from("push_tokens").update({ is_active: false }).in("expo_push_token", dead)).catch(() => undefined);
       }
-      if (accepted === 0 || failed) throw new AlertPushError("send");
+      if (accepted === 0) throw new AlertPushError("send");
+      if (failed) console.warn(`[passkey-recovery-alerts] push partly failed: ${accepted} of ${tokens.length - dead.length} devices accepted`);
     },
   };
 }

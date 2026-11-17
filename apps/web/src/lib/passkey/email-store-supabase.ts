@@ -12,7 +12,7 @@
  * lacks the migration keeps the in-memory store instead of failing.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { EmailStoreError, type AlertChannel, type EmailChallenge, type EmailContact, type PasskeyEmailStore } from "./email-store";
+import { alertFailureId, EmailStoreError, type AlertChannel, type EmailChallenge, type EmailContact, type PasskeyEmailStore } from "./email-store";
 
 export const PASSKEY_EMAIL_TABLES = {
   contacts: "passkey_contacts",
@@ -143,5 +143,13 @@ export class SupabaseEmailStore implements PasskeyEmailStore {
       .eq("recovery_nonce", nonce.toString())
       .eq("channel", channel);
     check("releaseAlert", r);
+  }
+
+  /** Stored in the cursor table under `alertFailureId` (one row per alert that failed; no schema change). */
+  async countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel): Promise<number> {
+    const id = alertFailureId(wallet, nonce, channel);
+    const n = ((await this.getCursor(id)) ?? 0n) + 1n;
+    await this.setCursor(id, n);
+    return Number(n);
   }
 }

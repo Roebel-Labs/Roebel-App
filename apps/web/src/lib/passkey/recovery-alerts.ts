@@ -12,7 +12,11 @@
  * sending and released if its send fails, so a re-run neither double-sends nor drops it, and a
  * failed push is retried without a second email (and the other way round). A new recovery after
  * a cancel has a new nonce and alerts again. The cursor only advances past a block range once
- * every alert in it was sent or skipped.
+ * every alert in it was sent or skipped; a failed range does not stop the scan of the later
+ * ones (their alerts go out now, protected by their claims), it only holds the cursor.
+ * A push that keeps failing is tried MAX_PUSH_ATTEMPTS times per (wallet, nonce), then given up
+ * (claim kept, logged), so one broken device cannot hold the cursor for the whole delay window;
+ * the email channel and the in-app banner still warn.
  * No log line carries an email address.
  */
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
@@ -32,6 +36,8 @@ export const DEFAULT_LOOKBACK_BLOCKS = 60_000n;
 export const DEFAULT_CHUNK_BLOCKS = 10_000n;
 export const DEFAULT_MAX_BLOCKS_PER_RUN = 120_000n;
 export const DEFAULT_CONFIRMATIONS = 5n;
+/** Push sends per (wallet, nonce) before the push for that recovery is given up. */
+export const MAX_PUSH_ATTEMPTS = 3;
 
 export type RecoveryExecutedLog = { wallet: Address; nonce: bigint; executeAfter: bigint; blockNumber: bigint };
 
@@ -91,6 +97,7 @@ export async function runRecoveryAlerts(deps: {
   if (from > to) return result;
   result.fromBlock = from.toString();
 
+  let held = false;
   for (let start = from; start <= to; start += chunk) {
     const end = start + chunk - 1n < to ? start + chunk - 1n : to;
     const logs = await deps.reader.recoveryExecuted(start, end);
@@ -104,7 +111,10 @@ export async function runRecoveryAlerts(deps: {
       if (deps.mailer && !(await alertByEmail(deps.store, deps.mailer, log, result))) chunkOk = false;
       if (deps.push && !(await alertByPush(deps.store, deps.push, log, result))) chunkOk = false;
     }
-    if (!chunkOk) break; // retry this range next run; sent alerts are protected by their claims
+    // A failed range is retried next run (sent alerts are protected by their claims); later
+    // ranges are still scanned so their alerts are not delayed, but the cursor stays put.
+    if (!chunkOk) held = true;
+    if (held) continue;
     await deps.store.setCursor(ALERT_CURSOR_ID, end);
     result.toBlock = end.toString();
   }
@@ -158,6 +168,12 @@ async function alertByPush(store: PasskeyEmailStore, push: AlertPush, log: Recov
   } catch (e) {
     result.failed++;
     console.error("[passkey-recovery-alerts] alert push failed:", e instanceof Error ? e.name : typeof e);
+    const attempts = await store.countAlertFailure(log.wallet, log.nonce, "push").catch(() => 0);
+    if (attempts >= MAX_PUSH_ATTEMPTS) {
+      // Given up: the claim stays, so the cursor can move on.
+      console.error(`[passkey-recovery-alerts] push given up after ${attempts} attempts`);
+      return true;
+    }
     await store.releaseAlert(log.wallet, log.nonce, "push").catch(() => undefined);
     return false;
   }

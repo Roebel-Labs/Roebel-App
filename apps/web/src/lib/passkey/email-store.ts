@@ -47,7 +47,13 @@ export interface PasskeyEmailStore {
   claimAlert(wallet: string, nonce: bigint, executeAfter: bigint, channel?: AlertChannel): Promise<boolean>;
   /** Releases a claim whose alert could not be sent, so the next run retries it. Default channel 'email'. */
   releaseAlert(wallet: string, nonce: bigint, channel?: AlertChannel): Promise<void>;
+  /** Counts one more failed send of (wallet, nonce, channel); returns the new total (survives a release). */
+  countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel): Promise<number>;
 }
+
+/** Key of the failure counter of one alert (kept beside the scan cursor; no extra table). */
+export const alertFailureId = (wallet: string, nonce: bigint, channel: AlertChannel) =>
+  `alert-failures:${wallet.toLowerCase()}:${nonce}:${channel}`;
 
 export class InMemoryEmailStore implements PasskeyEmailStore {
   readonly challenges = new Map<string, EmailChallenge>();
@@ -102,6 +108,12 @@ export class InMemoryEmailStore implements PasskeyEmailStore {
   }
   async releaseAlert(wallet: string, nonce: bigint, channel: AlertChannel = "email") {
     this.alerts.delete(`${wallet.toLowerCase()}:${nonce}:${channel}`);
+  }
+  async countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel) {
+    const id = alertFailureId(wallet, nonce, channel);
+    const n = (this.cursors.get(id) ?? 0n) + 1n;
+    this.cursors.set(id, n);
+    return Number(n);
   }
 }
 
