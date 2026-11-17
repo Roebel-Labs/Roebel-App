@@ -7,7 +7,7 @@ import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { isAddressEqual } from 'viem';
 
 import { isPasskeyWallet, passkeySessionOf } from '@/lib/passkey/active';
-import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { passkeyChannelAllowed, passkeySurfacesAllowed } from '@/lib/passkey/gate';
 import { loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import { settingsKind, type SettingsKind } from '@/lib/passkey/settings-kind';
@@ -33,13 +33,14 @@ export function useSettingsKind(): SettingsKindState {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [signupOpen, migrationOpen, detachOpen, record] = await Promise.all([
-        isPasskeySurfaceAllowed('signup').catch(() => false),
-        isPasskeySurfaceAllowed('migration').catch(() => false),
-        isPasskeySurfaceAllowed('detach').catch(() => false),
+      // One app-settings fetch for all three surfaces.
+      const [surfaces, record] = await Promise.all([
+        passkeySurfacesAllowed(['signup', 'migration', 'detach'] as const).catch(() => ({ signup: false, migration: false, detach: false })),
         loadMigrationRecord(secureKeyValueStorage).catch(() => null),
       ]);
-      if (!cancelled) setLoaded({ signupOpen, migrationOpen, detachOpen, record });
+      if (!cancelled) {
+        setLoaded({ signupOpen: surfaces.signup, migrationOpen: surfaces.migration, detachOpen: surfaces.detach, record });
+      }
     })();
     return () => {
       cancelled = true;
@@ -56,6 +57,8 @@ export function useSettingsKind(): SettingsKindState {
     identityIsSafe,
     hasRecord: !!loaded.record,
     recordConnected: loaded.record?.status === 'done',
+    // An existing account (session / connected record) is fenced by the channel only.
+    channelAllowed: passkeyChannelAllowed(),
     signupOpen: loaded.signupOpen,
     migrationOpen: loaded.migrationOpen,
   });

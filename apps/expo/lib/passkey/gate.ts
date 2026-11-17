@@ -82,26 +82,36 @@ function readRuntimeVersion(): string | null {
 }
 
 export async function isPasskeySurfaceAllowed(surface: PasskeySurface): Promise<boolean> {
+  return (await passkeySurfacesAllowed([surface]))[surface];
+}
+
+/** Several surfaces from ONE app-settings fetch (same rules as isPasskeySurfaceAllowed). */
+export async function passkeySurfacesAllowed<T extends PasskeySurface>(surfaces: readonly T[]): Promise<Record<T, boolean>> {
+  const closed = Object.fromEntries(surfaces.map((s) => [s, false])) as Record<T, boolean>;
   const channel = readChannel();
   const runtimeVersion = readRuntimeVersion();
   const dev = typeof __DEV__ !== 'undefined' && __DEV__;
   if (!dev) {
     // A release build without a channel is closed without asking Supabase; so is a production
     // binary that cannot hold a passkey.
-    if (!channel) return false;
-    if (channel === 'production' && !runtimeSupportsPasskeys(runtimeVersion)) return false;
+    if (!channel) return closed;
+    if (channel === 'production' && !runtimeSupportsPasskeys(runtimeVersion)) return closed;
   }
   let flags: Record<string, boolean> = {};
   try {
     flags = await fetchPasskeyFlags();
   } catch {
-    return false;
+    return closed;
   }
   const productionFlags: Partial<Record<PasskeySurface, boolean>> = {};
   for (const k of Object.keys(SURFACE_PRODUCTION_FLAG) as PasskeySurface[]) {
     productionFlags[k] = !!flags[SURFACE_PRODUCTION_FLAG[k]];
   }
-  return passkeySurfaceAllowed({ surface, flag: !!flags.passkey_accounts_enabled, channel, dev, productionFlags, runtimeVersion });
+  const out = { ...closed };
+  for (const surface of surfaces) {
+    out[surface] = passkeySurfaceAllowed({ surface, flag: !!flags.passkey_accounts_enabled, channel, dev, productionFlags, runtimeVersion });
+  }
+  return out;
 }
 
 /**

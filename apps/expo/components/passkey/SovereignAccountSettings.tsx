@@ -11,59 +11,56 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { passkeySessionOf } from '@/lib/passkey/active';
-import { MIGRATION_STORE_KEY, loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migration';
+import type { MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
 import type { PasskeySession } from '@/lib/passkey/session';
+import { ensureSovereignRecord } from '@/lib/passkey/sovereign-record';
 import EmailRow from '@/components/passkey/EmailRow';
 import GuardiansSection from '@/components/passkey/GuardiansSection';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
-import { Card, passkeyStyles } from '@/components/passkey/PasskeyUi';
-
-/** The same record shape `finish()` in signin.ts writes for a Safe-only account. */
-function recordFromSession(s: PasskeySession): MigrationRecord {
-  return {
-    credentialId: s.credentialId,
-    x: s.x,
-    y: s.y,
-    safe: s.safe,
-    ownerType: s.ownerType,
-    owner: s.owner,
-    status: 'passkeyCreated',
-  };
-}
+import { BigButton, Card, Notice, passkeyStyles } from '@/components/passkey/PasskeyUi';
 
 export default function SovereignAccountSettings({ initialRecord }: { initialRecord: MigrationRecord | null }) {
   const { colors } = useTheme();
   const router = useRouter();
   const account = useActiveAccount();
   const [record, setRecord] = useState<MigrationRecord | null>(initialRecord);
+  const [readFailed, setReadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (record) return;
     let cancelled = false;
     (async () => {
-      const existing = await loadMigrationRecord(secureKeyValueStorage).catch(() => null);
+      // A failed read never writes a fresh record over the stored one (sovereign-record.ts).
+      const r = await ensureSovereignRecord(secureKeyValueStorage, passkeySessionOf<PasskeySession>(account));
       if (cancelled) return;
-      if (existing) {
-        setRecord(existing);
-        return;
-      }
-      const session = passkeySessionOf<PasskeySession>(account);
-      if (!session) return;
-      const rec = recordFromSession(session);
-      await secureKeyValueStorage.setItem(MIGRATION_STORE_KEY, JSON.stringify(rec)).catch(() => undefined);
-      if (!cancelled) setRecord(rec);
+      if (r.status === 'ok') setRecord(r.record);
+      setReadFailed(r.status === 'error');
     })();
     return () => {
       cancelled = true;
     };
-  }, [record, account]);
+  }, [record, account, attempt]);
 
   if (!record) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        {readFailed ? (
+          <View style={styles.retry}>
+            <Notice tone="error" text="Dein Konto-Status konnte gerade nicht gelesen werden. Bitte versuche es noch einmal." />
+            <BigButton
+              label="Erneut versuchen"
+              onPress={() => {
+                setReadFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+            />
+          </View>
+        ) : (
+          <ActivityIndicator color={colors.primary} />
+        )}
       </View>
     );
   }
@@ -104,6 +101,7 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  retry: { alignSelf: 'stretch', gap: 14 },
   content: { padding: 16, paddingBottom: 56, gap: 14 },
   lede: { fontFamily: fontFamily.heading, fontSize: 26, lineHeight: 31 },
   subLede: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22, marginTop: -6 },

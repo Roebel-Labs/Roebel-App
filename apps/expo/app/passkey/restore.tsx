@@ -48,7 +48,8 @@ type Found = { name: string; candidates: RecoveryCandidate[] };
 export default function RestoreAccountScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const allowed = usePasskeyGate();
+  // An existing account, or a recovery already in progress, keeps this screen with sign-up closed.
+  const allowed = usePasskeyGate('signup', true, 'account-or-recovery');
   const [state, setState] = useState<RecoveryState | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));

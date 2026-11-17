@@ -64,7 +64,7 @@ describe('isPasskeySurfaceAllowed', () => {
   const g = globalThis as { __DEV__?: boolean };
   const prevDev = g.__DEV__;
   const settings = jest.requireMock('@/lib/supabase-app-settings') as { fetchPasskeyFlags: jest.Mock };
-  const { isPasskeySurfaceAllowed } = jest.requireActual('../gate') as typeof import('../gate');
+  const { isPasskeySurfaceAllowed, passkeySurfacesAllowed } = jest.requireActual('../gate') as typeof import('../gate');
   beforeEach(() => {
     g.__DEV__ = false;
     settings.fetchPasskeyFlags.mockReset().mockResolvedValue({ passkey_accounts_enabled: true });
@@ -102,5 +102,18 @@ describe('isPasskeySurfaceAllowed', () => {
     mockUpdates.runtimeVersion = '3.8.0';
     await expect(isPasskeySurfaceAllowed('signup')).resolves.toBe(false);
     expect(settings.fetchPasskeyFlags).not.toHaveBeenCalled();
+  });
+  it('passkeySurfacesAllowed answers several surfaces from ONE flag fetch', async () => {
+    mockUpdates.channel = 'production';
+    mockUpdates.runtimeVersion = '3.8.0';
+    settings.fetchPasskeyFlags.mockResolvedValue({
+      passkey_accounts_enabled: true,
+      passkey_accounts_enabled_production: true,
+      passkey_migration_enabled_production: true,
+    });
+    await expect(passkeySurfacesAllowed(['signup', 'migration', 'detach'])).resolves.toEqual({ signup: true, migration: true, detach: false });
+    expect(settings.fetchPasskeyFlags).toHaveBeenCalledTimes(1);
+    settings.fetchPasskeyFlags.mockRejectedValue(new Error('offline'));
+    await expect(passkeySurfacesAllowed(['signup', 'detach'])).resolves.toEqual({ signup: false, detach: false });
   });
 });

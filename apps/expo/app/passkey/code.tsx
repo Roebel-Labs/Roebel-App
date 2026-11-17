@@ -21,7 +21,8 @@ import { createPasskey } from '@/lib/passkey/webauthn';
 export default function KontoCodeScreen() {
   const { colors } = useTheme();
   const { user } = useUser();
-  const allowed = usePasskeyGate();
+  // An existing account keeps its code screen with sign-up closed (channel fence only).
+  const allowed = usePasskeyGate('signup', true, 'account');
   const [record, setRecord] = useState<MigrationRecord | null | undefined>(undefined);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);

@@ -210,17 +210,6 @@ export default function MigrationSettings({ initialRecord, canStart, canDetach }
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTitle: { fontFamily: fontFamily.semiBold, fontSize: 17 },
-  headerSpacer: { width: 24 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   content: { padding: 16, paddingBottom: 56, gap: 14 },
   lede: { fontFamily: fontFamily.heading, fontSize: 26, lineHeight: 31 },
   subLede: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22, marginTop: -6 },

@@ -8,18 +8,28 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { isRecoverySurfaceAllowed, type ExistingAccountScope } from '@/lib/passkey/existing-account';
 import { isPasskeySurfaceAllowed, type PasskeySurface } from '@/lib/passkey/gate';
 
 /**
  * The preview fence for deep-linked passkey screens: null while checking, false = closed (the
  * screen is replaced by home, so production users never see anything).
+ *
+ * `existing` marks a recovery screen: for a device that already holds a passkey account (and, with
+ * 'account-or-recovery', a recovery in progress) only passkeyChannelAllowed() decides, never the
+ * sign-up flag or the kill switch (lib/passkey/existing-account.ts). New sign-up entry points
+ * leave it unset and stay gated by the surface.
  */
-export function usePasskeyGate(surface: PasskeySurface = 'signup', redirectHome = true): boolean | null {
+export function usePasskeyGate(
+  surface: PasskeySurface = 'signup',
+  redirectHome = true,
+  existing?: ExistingAccountScope,
+): boolean | null {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
-    isPasskeySurfaceAllowed(surface)
+    (existing ? isRecoverySurfaceAllowed(surface, existing) : isPasskeySurfaceAllowed(surface))
       .catch(() => false)
       .then((ok) => {
         if (cancelled) return;
@@ -29,7 +39,7 @@ export function usePasskeyGate(surface: PasskeySurface = 'signup', redirectHome 
     return () => {
       cancelled = true;
     };
-  }, [router, surface, redirectHome]);
+  }, [router, surface, redirectHome, existing]);
   return allowed;
 }
 
