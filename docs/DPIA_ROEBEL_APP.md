@@ -34,6 +34,21 @@ blockchain-spezifischen Prüfpunkten (§§ 97–99) — diese Struktur wird hier
 | Vorschläge, Ergebnisse | Governor `0x5F5e49…` | Proposer-Adresse, Tallies |
 | Gemeinschaftswährung | Circles-Gruppe `0xAc2C…` | Zahlungsgraph (pseudonym) |
 | Spenden | Safe + EURe V2 | Spender-Adressen |
+| Organisationen (Safe-Identität, NSP-14) | OrgRegistry `0x320b4e…` | `RoleSet`-Logs: wer Admin oder Mitglied welcher Organisation ist — auch von Fraktionen (Art.-9-Nähe, siehe R10); bestehende Einträge bleiben, neue Mitglieder werden ab dem App-Release von Plan 3 nicht mehr dorthin geschrieben |
+| Credential-Register (Ausweise, Mitgliedschaften) | CredentialRegistry (Gnosis) | **Öffentlich:** Ausweis-Typ, Batch-Größe und Merkle-Wurzel je Ausgabe; bei einem öffentlichen Anspruch zusätzlich Konto ↔ Ausweis. **Nicht öffentlich:** nie beanspruchter Einträge — dort steht nur ein gesalzenes Commitment (Blatt-Hash), keine Person |
+
+**Credential-Register — Öffentlich zeigen / Privat behalten.** Jede Person entscheidet je
+Ausweis selbst und jederzeit zwischen „Öffentlich zeigen" (öffentlicher Anspruch, Konto ↔
+Ausweis sichtbar) und „Privat behalten" (Nachweis nur auf Wunsch per kurzlebigem Code).
+Der Wechsel öffentlich → privat ist ein `renounce`; der frühere öffentliche Anspruch
+**bleibt in der Chain-Historie** und ist dauerhaft einsehbar. Das Widerrufen eines nie
+beanspruchten Blatts offenbart keine Person. Die Organisations-Option „Mitglieder dürfen
+öffentlich sichtbar sein" (on-chain `orgPrivateOnly`, invertiert) ist bei Fraktion und Stadt
+zunächst aus; die Organisation kann sie öffnen, ein Attester kann sie schließen, der Vertrags-
+Owner beides. Das Schließen verbrennt nie bestehende öffentliche Bestände — die Inhaber:innen
+ziehen sich selbst zurück. Bekannte Grenze: eine Organisation kann ableiten, wer privat
+angenommen hat (angenommen minus öffentlich sichtbar); die Batch-Größe ist öffentlich. Details:
+`docs/CREDENTIAL_REGISTRY_AUDIT.md` (Known limits).
 
 **Grundsatz:** on-chain stehen ausschließlich pseudonyme Adressen, Status und Commitments —
 keine Namen, keine Klartext-Daten, keine Hashes personenbezogener Payloads.
@@ -63,6 +78,25 @@ Consent-Präferenzen + Audit-Log (Policy-Version 1.1.0), Teilnahme-Mirror `vote_
 gesendet**), Inhalte (Posts, Kommentare, Events), Push-Tokens, Punkte/Münzen-Caches,
 Mecky-Chats. Vollständige Tabellenliste = Sweep der `delete-user-account`-Funktion
 (Stand 2026-07-31).
+
+**Credential-Register-Spiegel (Plan 2, Migration `20261117cra_credential_register.sql`):**
+`credential_types`, `credential_actions` (inkl. `prepared_block`), `credential_batches`,
+`credential_invitations` (inkl. `mail_attempts`), `credential_delegates`,
+`credential_presentations`, `credential_sync_state` — alle RLS ohne Policies + REVOKE.
+Die Kette ist die Wahrheit; der Spiegel hält Salts und Claim-Keys für die Beweise.
+Die optionale E-Mail-Adresse einer Einladung wird genau einmal zum Versand genutzt und
+nach einmaligem Versand gelöscht (nach 3 fehlgeschlagenen Versuchen ebenfalls — dann nur
+Link). Claim-Keys und Link-Token liegen mit AES-256-GCM an die Zeile gebunden versiegelt,
+Link-Token zusätzlich nur als SHA-256. Vorzeigecodes (`credential_presentations`) laufen
+nach 300 s ab und sind einmalig. Push-Texte nennen bei Organisationen, deren Mitglieder
+nicht öffentlich sein dürfen, weder Organisation noch Typ. Kontolöschung leert in
+`credential_invitations` Name, E-Mail, Claim-Key, Token, Proof und Salt der Person (die Zeile
+bleibt für die Zählung der Organisation) bricht noch unbestätigte `credential_actions` samt vorbereiteten Batches ab und leert
+sie (`prepared_by` → `deleted`, `summary`/`steps` leer). Bewusst bleiben Wallet-bezogene
+Felder: `subject`/`recipient_wallet` bei Konto-Blättern (entsprechen ohnehin öffentlichen
+Chain-Daten, Zählung der Organisation), `confirmed_by`, `created_by` der Typen und
+Delegierten-Einträge der Organisation (Organisationsdaten, nicht Personendaten der
+gelöschten Person; reine Pseudonyme ohne Klarnamen).
 
 ### 2.4 KI-Systeme
 
@@ -164,6 +198,7 @@ Skalen: Eintritt (niedrig/mittel/hoch) × Schwere (niedrig/mittel/hoch).
 | R7 | Drittland-/Node-Replikation | niedrig | mittel | Pseudonymie + löschbare Brücke; SCC/DPF bei Prozessoren | niedrig **[Offen: EDPB-Linie]** |
 | R8 | KI-Fehlinformation unter Stadt-Identität | mittel | mittel | Art.-50-Kennzeichnung überall; Mecky-Systemprompt („nie kommunale Fakten erfinden"); Kill-Switches | niedrig–mittel |
 | R9 | Kryptografie-Verfall (Quantenhorizont) | niedrig (langfristig) | mittel | keine verschlüsselten personenbezogenen Payloads on-chain — Angriffsfläche minimal | niedrig |
+| R10 | Mitgliedschaft in Fraktion/Verein/Gewerkschaft/Kirche ableitbar aus öffentlichen `RoleSet`-Logs oder öffentlichen Credential-Ansprüchen (Art. 9: politische Meinung, religiöse Überzeugung, Gewerkschaftszugehörigkeit); ein öffentlicher Anspruch bleibt nach `renounce` in der Chain-Historie | mittel | hoch | Standard „Privat behalten"; Fraktion/Stadt starten mit „Mitglieder dürfen öffentlich sichtbar sein" aus; Wahl pro Person jederzeit; Hinweis in der App, dass früheres öffentliches Zeigen in der Chain-Historie bleibt; Mitglieder werden nicht mehr in OrgRegistry geschrieben; unbeanspruchte Blätter nur als gesalzenes Commitment; Spiegel löschbar | mittel **[Offen: Rechtsprüfung vor Produktivschaltung]** |
 
 ## 8. Ergebnis
 
@@ -190,3 +225,6 @@ Nachweise (§ 4).
    der Syncer die Mitgliedschaft bei jedem Lauf), (c) Registrierung für noch nicht
    deployte Smart Accounts (ERC-6492; heute `wallet-not-deployed`). Ohne (b) und (c)
    würde (a) nur eine Re-Consent-Abfrage ohne Wirkung auslösen.
+8. Credential-Register und OrgRegistry (§ 2.1, R10): Dieser Text ist keine Rechtsberatung.
+   Der Mitgliedschaftsteil (Art. 9 DSGVO) braucht eine Rechtsprüfung, bevor
+   `credentials_enabled_production` eingeschaltet wird.

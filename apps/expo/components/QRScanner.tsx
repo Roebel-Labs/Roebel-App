@@ -10,13 +10,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import ErrorDrawer from './ErrorDrawer';
+import { parseAusweisPayload } from '@/lib/credreg/show-code';
 
 // Module-level constant so CameraView doesn't see a new object on every
 // render — a fresh prop identity can stall barcode detection on some devices.
 const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'studio_pair' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'studio_pair' | 'credential' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
@@ -36,7 +37,13 @@ interface QRScannerProps {
   allowedTypes?: QRScanResult['type'][];
 }
 
-function parseQRCode(data: string): QRScanResult {
+export function parseQRCode(data: string): QRScanResult {
+  // Shown credential (Vorzeigen): roebel-ausweis:<12-character presentation code>
+  const ausweisCode = parseAusweisPayload(data);
+  if (ausweisCode) {
+    return { type: 'credential', data, id: ausweisCode };
+  }
+
   // Verification: hometownevents://verification/request/{id}?type=citizen
   const verificationMatch = data.match(/(?:hometownevents|roebel):\/\/verification\/request\/(\d+)\?type=(\w+)/);
   if (verificationMatch) {
@@ -155,6 +162,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         roebel_card: 'Röbel Card',
         event: 'Event',
         ticket: 'Ticket',
+        credential: 'Ausweis',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
@@ -196,6 +204,9 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       return;
     } else if (result.type === 'event' && result.id) {
       router.push(`/e/${result.id}` as any);
+      return;
+    } else if (result.type === 'credential' && result.id) {
+      router.push({ pathname: '/credentials/check', params: { code: result.id } } as any);
       return;
     } else if (result.type === 'studio_pair' && result.id) {
       router.push({ pathname: '/chat/pair', params: { code: result.id } } as any);

@@ -81,6 +81,9 @@ importers:
       '@livekit/react-native-webrtc':
         specifier: 150.1.1
         version: 150.1.1(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))
+      '@netizen-labs/credential-registry':
+        specifier: workspace:*
+        version: link:../../packages/credential-registry
       '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../packages/miniapp-sdk
@@ -694,6 +697,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@netizen-labs/credential-registry':
+        specifier: workspace:*
+        version: link:../../packages/credential-registry
       '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../packages/miniapp-sdk

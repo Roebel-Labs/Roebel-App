@@ -22,7 +22,15 @@ export const LIVE_SCOPE = 'roebel-live-v1';
 export type LiveAction = 'live_session';
 /** Mini-app user token (apps/web /api/mini-apps/token); signed under MINIAPP_SCOPE (lib/miniapp-token.ts). */
 export type MiniAppAction = 'user_token';
-export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction;
+/** Credential register (apps/web/src/lib/signed-request/message.ts); signed under CREDENTIALS_SCOPE. */
+export const CREDENTIALS_SCOPE = 'roebel-credentials-v1';
+export type CredentialAction =
+  | 'types_list' | 'type_prepare' | 'people_list' | 'people_search' | 'batch_prepare' | 'revoke_prepare'
+  | 'delegate_prepare' | 'members_public_prepare' | 'orgs_list' | 'actions_list' | 'action_get' | 'action_submitted'
+  | 'action_cancel' | 'letters' | 'mine' | 'redeem' | 'respond' | 'holdings' | 'present_create' | 'present_resolve'
+  | 'people_preview' | 'event_badges_list' | 'event_badge_setup' | 'event_badge_get' | 'event_badge_prepare'
+  | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status';
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {
   address: string;

@@ -19,6 +19,16 @@
  *    NameRegistry.updateMetadataDigest (the profile sync). groupMint, trust,
  *    safeTransferFrom and everything else stay citizen-tier: a guest moves no
  *    Münzen and extends no trust.
+ *    The CredentialRegistry holder calls claim / selfClaim / renounce are
+ *    onboarding-tier too (a guest may pick up a credential).
+ *
+ * CredentialRegistry (address from env CREDENTIAL_REGISTRY_ADDRESS; unset = no
+ * register call matches): holder calls are onboarding-tier, issuer calls
+ * (createType, updateType, retireType, setDelegate, setOrgPrivateOnly, addBatch,
+ * revokeBatch, revokeLeaves) citizen-tier, and an org Safe may make the issuer
+ * calls too. prune, rebindType (both permissionless), setRecognised, the source
+ * timelock and ownership functions are never sponsored. The contract does the
+ * authorisation; the allowlist only bounds what the paymaster pays for.
  *
  * Addresses: packages/blockchain/src/index.ts (CONTRACTS) + apps/expo/constants/gnosis.ts
  * (Hub, group, NameRegistry). Selectors checked against deployed bytecode on
@@ -35,8 +45,10 @@ import {
   concatHex,
   decodeFunctionData,
   encodeAbiParameters,
+  getAddress,
   getContractAddress,
   hexToBigInt,
+  isAddress,
   isAddressEqual,
   keccak256,
   numberToHex,
@@ -106,6 +118,42 @@ export const orgRegistryAttesterAbi = parseAbi([
 ]);
 export const EXEC_TRANSACTION_SELECTOR: Hex = "0x6a761202";
 
+/**
+ * The CredentialRegistry this node sponsors, from CREDENTIAL_REGISTRY_ADDRESS (read
+ * on every call). null (unset or not an address) = no register entry matches.
+ */
+export function credentialRegistryAddress(): Hex | null {
+  const raw = process.env.CREDENTIAL_REGISTRY_ADDRESS?.trim();
+  if (!raw || !isAddress(raw, { strict: false })) return null;
+  return getAddress(raw);
+}
+
+/** CredentialRegistry calls a holder makes for themself (onboarding tier). */
+export const credentialRegistryHolderAbi = parseAbi([
+  "struct Leaf { uint8 kind; bytes32 typeId; address subject; uint64 validUntil; bytes32 salt; }",
+  "function claim(uint64 batchId, Leaf leaf, bytes32[] proof, bytes claimSignature)",
+  "function selfClaim(bytes32 typeId)",
+  "function renounce(bytes32 typeId)",
+]);
+/** CredentialRegistry calls an issuer makes (citizen tier; also allowed from an org Safe). */
+export const credentialRegistryIssuerAbi = parseAbi([
+  "struct TypeConfig { string metadataURI; uint64 defaultValidity; uint64 claimStart; uint64 claimEnd; uint32 supplyCap; bool publicClaim; }",
+  "function createType(bytes32 orgId, bytes32 localId, uint8 kind, uint8 policy, TypeConfig cfg) returns (bytes32 typeId)",
+  "function updateType(bytes32 typeId, TypeConfig cfg)",
+  "function retireType(bytes32 typeId)",
+  "function setDelegate(bytes32 typeId, address delegate, bool allowed)",
+  "function setOrgPrivateOnly(bytes32 orgId, bool privateOnly)",
+  "function addBatch(bytes32 typeId, bytes32 root, uint32 count) returns (uint64 batchId)",
+  "function revokeBatch(uint64 batchId)",
+  "function revokeLeaves(uint64 batchId, bytes32[] leaves)",
+]);
+
+/** True when `to` is the configured CredentialRegistry (case-insensitive). */
+function isCredentialRegistry(to: Hex): boolean {
+  const reg = credentialRegistryAddress();
+  return reg !== null && isAddressEqual(to, reg);
+}
+
 export const hubAbi = parseAbi([
   "function personalMint()",
   "function registerHuman(address inviter, bytes32 metadataDigest)",
@@ -153,6 +201,17 @@ export const EVERYDAY_SELECTORS = {
   "Safe.execTransaction(...) [org Safe, pre-validated by the identity]": "0x6a761202",
   "OrgRegistry.approveRequest(uint256)": "0xd7d1bbdb",
   "OrgRegistry.rejectRequest(uint256)": "0x2d7788db",
+  "CredentialRegistry.claim(uint64,(uint8,bytes32,address,uint64,bytes32),bytes32[],bytes)": "0x22ff7228",
+  "CredentialRegistry.selfClaim(bytes32)": "0xb6a96c0a",
+  "CredentialRegistry.renounce(bytes32)": "0xabd7688e",
+  "CredentialRegistry.createType(bytes32,bytes32,uint8,uint8,(string,uint64,uint64,uint64,uint32,bool))": "0xba1ad2da",
+  "CredentialRegistry.updateType(bytes32,(string,uint64,uint64,uint64,uint32,bool))": "0xd44ea56a",
+  "CredentialRegistry.retireType(bytes32)": "0x7f5ee2a9",
+  "CredentialRegistry.setDelegate(bytes32,address,bool)": "0xc74d8c05",
+  "CredentialRegistry.setOrgPrivateOnly(bytes32,bool)": "0xb0fc692d",
+  "CredentialRegistry.addBatch(bytes32,bytes32,uint32)": "0x52a597e1",
+  "CredentialRegistry.revokeBatch(uint64)": "0x1db538be",
+  "CredentialRegistry.revokeLeaves(uint64,bytes32[])": "0x2efe83ae",
 } as const;
 
 export const PUBLISH_MESSAGE_SELECTOR: Hex = "0x27bea0da";
@@ -257,6 +316,14 @@ export function classifyEverydayCall(to: Hex, value: bigint, data: Hex, identity
     return yes(`OrgRegistry.${d.functionName}`);
   }
 
+  if (isCredentialRegistry(to)) {
+    const holder = decode(() => decodeFunctionData({ abi: credentialRegistryHolderAbi, data }));
+    if (holder) return yes(`CredentialRegistry.${holder.functionName}`, "onboarding");
+    const issuer = decode(() => decodeFunctionData({ abi: credentialRegistryIssuerAbi, data }));
+    if (issuer) return yes(`CredentialRegistry.${issuer.functionName}`);
+    return no("CredentialRegistry function not allowlisted");
+  }
+
   if (sliceHex(data, 0, 4).toLowerCase() === EXEC_TRANSACTION_SELECTOR) return classifyOrgSafeExec(to, data, identity);
 
   if (looksLikePollVote(data)) {
@@ -295,10 +362,15 @@ function classifyOrgSafeDeploy(data: Hex, identity: Hex): EverydayVerdict {
   return { ok: true, tier: "citizen", label: "SafeProxyFactory.createProxyWithNonce (org Safe)", createdSafe };
 }
 
-/** One inner call an org Safe makes: registry writes, or owner management on itself. */
+/** One inner call an org Safe makes: registry writes, register issuer calls, or owner management on itself. */
 function checkOrgSafeInner(safe: Hex, to: Hex, data: Hex): string | null {
   if (isAddressEqual(to, EVERYDAY_CONTRACTS.orgRegistry)) {
     return decode(() => decodeFunctionData({ abi: orgRegistrySafeAbi, data })) ? null : "org Safe registry call not allowlisted";
+  }
+  if (isCredentialRegistry(to)) {
+    return decode(() => decodeFunctionData({ abi: credentialRegistryIssuerAbi, data }))
+      ? null
+      : "org Safe CredentialRegistry call not allowlisted (issuer functions only)";
   }
   if (isAddressEqual(to, safe)) {
     const d = decode(() => decodeFunctionData({ abi: orgSafeAbi, data }));
@@ -307,7 +379,7 @@ function checkOrgSafeInner(safe: Hex, to: Hex, data: Hex): string | null {
     }
     return "org Safe self-call not allowlisted (owner management only)";
   }
-  return "org Safe may only call the OrgRegistry or manage its own owners";
+  return "org Safe may only call the OrgRegistry, the CredentialRegistry issuer functions, or manage its own owners";
 }
 
 /** MultiSend packing: uint8 op ++ address to ++ uint256 value ++ uint256 len ++ data. */
@@ -330,7 +402,7 @@ function* unpackMultiSend(txs: Hex): Generator<{ op: number; to: Hex; value: big
 /**
  * Safe.execTransaction on an org Safe, executed by the identity itself: pre-validated
  * signature (r = identity, s = 0, v = 1), no gas refund, value 0. The Safe may call
- * the OrgRegistry or manage its own owners — directly, or batched through
+ * the OrgRegistry, the CredentialRegistry issuer functions, or manage its own owners — directly, or batched through
  * MultiSendCallOnly. The target's Safe-ness is a claim the policy verifies.
  */
 function classifyOrgSafeExec(safe: Hex, data: Hex, identity: Hex): EverydayVerdict {

@@ -8,6 +8,8 @@ type NotificationData = Record<string, unknown> | null | undefined;
 const str = (value: unknown): string | null =>
   typeof value === 'string' && value.length > 0 ? value : null;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function vorhabenRoute(data: { screen?: unknown; proposalId?: unknown; taskId?: unknown }): string | null {
   const proposalId = str(data.proposalId);
   const taskId = str(data.taskId);
@@ -47,6 +49,23 @@ export function routeForNotification(data: NotificationData): string | null {
       return str(data.slug) && `/org/sponsoring/${data.slug}`;
     case 'reward':
       return '/rewards';
+    case 'credential_visibility': {
+      // An org stopped showing its members: the profile opens the detail sheet of that type.
+      const typeId = str(data.typeId);
+      return typeId && /^0x[0-9a-fA-F]{64}$/.test(typeId) ? `/profile?credential=${typeId}` : '/profile';
+    }
+    case 'credential_invite': {
+      // A new Ausweis: the accept screen (public/private choice). Unknown id → the inbox.
+      const invitationId = str(data.invitationId);
+      return invitationId && UUID.test(invitationId) ? `/credentials/accept/${invitationId}` : '/credentials';
+    }
+    case 'credential_letters':
+      return '/credentials';
+    case 'credential_action': {
+      // A step prepared on a desktop, waiting for this phone to confirm.
+      const actionId = str(data.actionId);
+      return actionId && UUID.test(actionId) ? `/org/credentials/approve/${actionId}` : null;
+    }
     case 'org':
       // Weekly follower digest for org owners/admins.
       return str(data.accountId) && `/account/${data.accountId}`;

@@ -82,10 +82,36 @@ describe('sync plan', () => {
       { wallet_address: D.toLowerCase(), role: 'member' },
     ]);
     expect(plan.addOwners).toEqual([B]);
-    expect(plan.setRoles).toEqual([
-      { account: C, role: 'admin' },
-      { account: D, role: 'member' },
-    ]);
+    expect(plan.setRoles).toEqual([{ account: C, role: 'admin' }]);
+  });
+
+  it('a new database member produces no setRole', () => {
+    const plan = planSync(state(), [{ wallet_address: D, role: 'member' }]);
+    expect(plan.setRoles).toEqual([]);
+  });
+
+  it('an existing chain member who is still in the org is left untouched', () => {
+    const plan = planSync(state({ roles: { [D.toLowerCase()]: 'member' } }), [{ wallet_address: D, role: 'member' }]);
+    expect(plan.setRoles).toEqual([]);
+  });
+
+  it('a chain member who left the org is cleared', () => {
+    const plan = planSync(state({ roles: { [D.toLowerCase()]: 'member' } }), []);
+    expect(plan.setRoles).toEqual([{ account: D, role: 'none' }]);
+  });
+
+  it('admins are still set and cleared as before', () => {
+    expect(planSync(state(), [{ wallet_address: C, role: 'admin' }]).setRoles).toEqual([{ account: C, role: 'admin' }]);
+    expect(planSync(state({ roles: { [C.toLowerCase()]: 'admin' } }), []).setRoles).toEqual([{ account: C, role: 'none' }]);
+  });
+
+  it('a database member whose chain role is admin is cleared to none', () => {
+    const plan = planSync(state({ roles: { [C.toLowerCase()]: 'admin' } }), [{ wallet_address: C, role: 'member' }]);
+    expect(plan.setRoles).toEqual([{ account: C, role: 'none' }]);
+  });
+
+  it('an org whose only difference is members is in sync', () => {
+    expect(isInSync(planSync(state(), [{ wallet_address: D, role: 'member' }]))).toBe(true);
   });
 
   it('clears roles of people who left or became owners, and is idempotent', () => {
@@ -107,7 +133,7 @@ describe('sync plan', () => {
     const plan = planSync(state({ owners: [A] }), [
       { wallet_address: A, role: 'owner' },
       { wallet_address: B, role: 'owner' },
-      { wallet_address: C, role: 'member' },
+      { wallet_address: C, role: 'admin' },
     ]);
     const call = syncCall({ safe: SAFE, executor: A, registry: REGISTRY, orgId: ORG, plan })!;
     expect(call.to).toBe(SAFE);
@@ -127,7 +153,7 @@ describe('leaving', () => {
   it('is blocked without another database owner in the Safe, or while out of sync', () => {
     expect(leaveBlocker(state({ owners: [A] }), members, A)).toBe('no_other_owner');
     expect(leaveBlocker(state({ owners: [A, C] }), [{ wallet_address: A, role: 'owner' }], A)).toBe('no_other_owner');
-    expect(leaveBlocker(state(), [...members, { wallet_address: C, role: 'member' }], A)).toBe('not_in_sync');
+    expect(leaveBlocker(state(), [...members, { wallet_address: C, role: 'admin' }], A)).toBe('not_in_sync');
     expect(leaveBlocker(state(), members, C)).toBe('not_an_owner');
     expect(leaveBlocker(state(), members, A)).toBeNull();
   });

@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { encodeFunctionData, type Hex } from "viem";
+import { encodeFunctionData, getAddress, toFunctionSelector, type AbiFunction, type Hex } from "viem";
 import { evaluateSponsorPolicy, parseSponsorRequest, type ChainReader, type SponsorContext, type SponsorUserOp } from "../sponsor-policy";
 import {
   EVERYDAY_CONTRACTS as C,
@@ -13,12 +13,16 @@ import {
   attesterNftAbi,
   citizenNftAbi,
   classifyEverydayCall,
+  credentialRegistryAddress,
+  credentialRegistryHolderAbi,
+  credentialRegistryIssuerAbi,
   hubAbi,
   maciAbi,
   nameRegistryAbi,
   pollAbi,
 } from "../everyday-allowlist";
 import { CONTRACTS } from "../../../../../../packages/blockchain/src/index";
+import { CREDENTIAL_REGISTRY_ABI } from "../../../../../../packages/credential-registry/src/abi";
 import { predictSafeAddress } from "../safe-address";
 import { KEY, LEGACY, OTHER_LEGACY, RECIPIENT, SAFE, brokenChain, fakeChain, type FakeWorld } from "./fake-chain";
 import { NOW, account, deployOp, execLegacy, handover, op, outer, viaMultiSend } from "./policy-helpers";
@@ -315,4 +319,176 @@ test("parseSponsorRequest reads the optional pollId", () => {
   assert.equal(parseSponsorRequest({ ...base, pollId: "0x2" }).pollId, 2n);
   assert.equal(parseSponsorRequest(base).pollId, undefined);
   assert.throws(() => parseSponsorRequest({ ...base, pollId: 2 }));
+});
+
+// =====================================================================
+// CredentialRegistry (holders: onboarding tier, issuers: citizen tier)
+// =====================================================================
+
+/** Test-environment register (mixed case: the comparison must be case-insensitive). */
+const REGISTER = getAddress("0x7a1b2c3d4e5f60718293a4b5c6d7e8f901234567") as Hex;
+const withRegister = async (addr: string | undefined, fn: () => Promise<void> | void) => {
+  const before = process.env.CREDENTIAL_REGISTRY_ADDRESS;
+  if (addr === undefined) delete process.env.CREDENTIAL_REGISTRY_ADDRESS;
+  else process.env.CREDENTIAL_REGISTRY_ADDRESS = addr;
+  try {
+    await fn();
+  } finally {
+    if (before === undefined) delete process.env.CREDENTIAL_REGISTRY_ADDRESS;
+    else process.env.CREDENTIAL_REGISTRY_ADDRESS = before;
+  }
+};
+const TYPE_ID = `0x${"c1".repeat(32)}` as Hex;
+const ORG_ID = `0x${"0a".repeat(32)}` as Hex;
+const CFG = { metadataURI: "https://x/1", defaultValidity: 0n, claimStart: 0n, claimEnd: 0n, supplyCap: 0, publicClaim: false };
+const rClaim = encodeFunctionData({
+  abi: credentialRegistryHolderAbi,
+  functionName: "claim",
+  args: [3n, { kind: 1, typeId: TYPE_ID, subject: SAFE, validUntil: 0n, salt: `0x${"5a".repeat(32)}` }, [], "0x"],
+});
+const rSelfClaim = encodeFunctionData({ abi: credentialRegistryHolderAbi, functionName: "selfClaim", args: [TYPE_ID] });
+const rRenounce = encodeFunctionData({ abi: credentialRegistryHolderAbi, functionName: "renounce", args: [TYPE_ID] });
+const rIssuer: Record<string, Hex> = {
+  createType: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "createType", args: [ORG_ID, TYPE_ID, 1, 0, CFG] }),
+  updateType: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "updateType", args: [TYPE_ID, CFG] }),
+  retireType: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "retireType", args: [TYPE_ID] }),
+  setDelegate: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "setDelegate", args: [TYPE_ID, RECIPIENT, true] }),
+  setOrgPrivateOnly: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "setOrgPrivateOnly", args: [ORG_ID, true] }),
+  addBatch: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "addBatch", args: [TYPE_ID, `0x${"77".repeat(32)}`, 5] }),
+  revokeBatch: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "revokeBatch", args: [3n] }),
+  revokeLeaves: encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "revokeLeaves", args: [3n, [`0x${"88".repeat(32)}`]] }),
+};
+const fullAbi = CREDENTIAL_REGISTRY_ABI as unknown as AbiFunction[];
+const rawCall = (name: string, args: unknown[]) =>
+  encodeFunctionData({ abi: fullAbi.filter((f) => f.type === "function" && f.name === name), functionName: name, args } as never) as Hex;
+
+test("register selectors: pinned, equal to the generated ABI, and the sponsored ABIs are subsets of it", () => {
+  const pinned: Record<string, Hex> = {
+    "CredentialRegistry.claim(uint64,(uint8,bytes32,address,uint64,bytes32),bytes32[],bytes)": "0x22ff7228",
+    "CredentialRegistry.selfClaim(bytes32)": "0xb6a96c0a",
+    "CredentialRegistry.renounce(bytes32)": "0xabd7688e",
+    "CredentialRegistry.createType(bytes32,bytes32,uint8,uint8,(string,uint64,uint64,uint64,uint32,bool))": "0xba1ad2da",
+    "CredentialRegistry.updateType(bytes32,(string,uint64,uint64,uint64,uint32,bool))": "0xd44ea56a",
+    "CredentialRegistry.retireType(bytes32)": "0x7f5ee2a9",
+    "CredentialRegistry.setDelegate(bytes32,address,bool)": "0xc74d8c05",
+    "CredentialRegistry.setOrgPrivateOnly(bytes32,bool)": "0xb0fc692d",
+    "CredentialRegistry.addBatch(bytes32,bytes32,uint32)": "0x52a597e1",
+    "CredentialRegistry.revokeBatch(uint64)": "0x1db538be",
+    "CredentialRegistry.revokeLeaves(uint64,bytes32[])": "0x2efe83ae",
+  };
+  const table = EVERYDAY_SELECTORS as Record<string, string>;
+  for (const [k, sel] of Object.entries(pinned)) {
+    assert.equal(table[k], sel, k);
+    assert.equal(toFunctionSelector(`function ${k.slice("CredentialRegistry.".length)}`), sel, k);
+  }
+  const generated = new Set(fullAbi.filter((f) => f.type === "function").map((f) => toFunctionSelector(f)));
+  const sponsored = [...credentialRegistryHolderAbi, ...credentialRegistryIssuerAbi].map((f) => toFunctionSelector(f as AbiFunction));
+  assert.equal(sponsored.length, 11);
+  for (const s of sponsored) assert.ok(generated.has(s), `${s} not in CREDENTIAL_REGISTRY_ABI`);
+  assert.deepEqual(new Set(sponsored), new Set(Object.values(pinned)));
+});
+
+test("credentialRegistryAddress reads CREDENTIAL_REGISTRY_ADDRESS (null when unset or malformed)", async () => {
+  await withRegister(undefined, () => assert.equal(credentialRegistryAddress(), null));
+  await withRegister("", () => assert.equal(credentialRegistryAddress(), null));
+  await withRegister("not-an-address", () => assert.equal(credentialRegistryAddress(), null));
+  await withRegister(REGISTER.toLowerCase(), () => assert.equal(credentialRegistryAddress()?.toLowerCase(), REGISTER.toLowerCase()));
+});
+
+test("a non-citizen Safe may claim, self-claim and renounce (onboarding tier)", async () => {
+  await withRegister(REGISTER, async () => {
+    for (const data of [rClaim, rSelfClaim, rRenounce]) {
+      const v = classifyEverydayCall(REGISTER, 0n, data, SAFE);
+      assert.ok(v.ok && v.tier === "onboarding", JSON.stringify(v));
+      await ok(op(outer(REGISTER, data)), fakeChain(), NO_LEGACY, SAFE, "onboarding");
+    }
+    // Case-insensitive target comparison.
+    assert.equal(classifyEverydayCall(REGISTER.toLowerCase() as Hex, 0n, rSelfClaim, SAFE).ok, true);
+    // A citizen Safe and a citizen legacy identity may too (citizen tier then).
+    await ok(op(outer(REGISTER, rSelfClaim)), fakeChain(citizenSafe), NO_LEGACY, SAFE, "citizen");
+    await ok(op(outer(LEGACY, execLegacy(REGISTER, 0n, rRenounce))), fakeChain(), CTX, LEGACY);
+  });
+});
+
+test("issuer functions need the citizen tier", async () => {
+  await withRegister(REGISTER, async () => {
+    for (const [name, data] of Object.entries(rIssuer)) {
+      const v = classifyEverydayCall(REGISTER, 0n, data, SAFE);
+      assert.ok(v.ok && v.tier === "citizen", `${name}: ${JSON.stringify(v)}`);
+      await rejected(op(outer(REGISTER, data)), /citizen/, fakeChain(), NO_LEGACY);
+      await ok(op(outer(REGISTER, data)), fakeChain(citizenSafe), NO_LEGACY, SAFE);
+      await ok(op(outer(LEGACY, execLegacy(REGISTER, 0n, data))), fakeChain(), CTX, LEGACY);
+    }
+  });
+});
+
+test("setRecognised, proposeSources and prune are not sponsored", async () => {
+  await withRegister(REGISTER, async () => {
+    const refused: Hex[] = [
+      rawCall("setRecognised", [TYPE_ID, true]),
+      rawCall("proposeSources", [RECIPIENT, RECIPIENT, RECIPIENT]),
+      rawCall("applySources", []),
+      rawCall("cancelSources", []),
+      rawCall("prune", [TYPE_ID, RECIPIENT]),
+      rawCall("rebindType", [TYPE_ID]),
+      rawCall("transferOwnership", [RECIPIENT]),
+      rawCall("acceptOwnership", []),
+      rawCall("renounceOwnership", []),
+      "0x12345678",
+    ];
+    for (const data of refused) {
+      const v = classifyEverydayCall(REGISTER, 0n, data, SAFE);
+      assert.ok(!v.ok && /CredentialRegistry function not allowlisted/.test(v.reason), `${data.slice(0, 10)}: ${JSON.stringify(v)}`);
+      await rejected(op(outer(REGISTER, data)), /not allowlisted/, fakeChain(citizenSafe), NO_LEGACY);
+    }
+  });
+});
+
+test("a register call with value is refused", async () => {
+  await withRegister(REGISTER, async () => {
+    for (const data of [rSelfClaim, rIssuer.addBatch]) {
+      const v = classifyEverydayCall(REGISTER, 1n, data, SAFE);
+      assert.ok(!v.ok && /value 0/.test(v.reason));
+      await rejected(op(outer(LEGACY, execLegacy(REGISTER, 1n, data))), /value 0/, fakeChain(), CTX);
+    }
+  });
+});
+
+test("with CREDENTIAL_REGISTRY_ADDRESS unset no register call is sponsored", async () => {
+  await withRegister(undefined, async () => {
+    for (const data of [rClaim, rSelfClaim, rRenounce, ...Object.values(rIssuer)]) {
+      assert.equal(classifyEverydayCall(REGISTER, 0n, data, SAFE).ok, false);
+      await rejected(op(outer(REGISTER, data)), /not allowlisted/, fakeChain(citizenSafe), NO_LEGACY);
+    }
+  });
+  // Set to something else: the real register address is just another unknown target.
+  await withRegister(RECIPIENT, () => assert.equal(classifyEverydayCall(REGISTER, 0n, rSelfClaim, SAFE).ok, false));
+});
+
+test("one op with selfClaim + createAttestationRequest stays onboarding-only", async () => {
+  await withRegister(REGISTER, async () => {
+    await ok(
+      op(viaMultiSend([{ to: C.citizenNft, data: askCitizen }, { to: REGISTER, data: rSelfClaim }])),
+      fakeChain(),
+      NO_LEGACY,
+      SAFE,
+      "onboarding",
+    );
+    // A brand-new Safe: deploy + ask + self-claim in one op.
+    const fresh = { x: `0x${"aa".repeat(32)}` as Hex, y: `0x${"bb".repeat(32)}` as Hex };
+    const freshSafe = predictSafeAddress(fresh);
+    const r = await evaluateSponsorPolicy(
+      deployOp(fresh, freshSafe, viaMultiSend([{ to: C.citizenNft, data: askCitizen }, { to: REGISTER, data: rSelfClaim }])),
+      { ...fresh, nowSeconds: NOW },
+      fakeChain(),
+    );
+    assert.ok(r.ok && r.mode === "everyday" && r.tier === "onboarding", JSON.stringify(r));
+    // Adding an issuer call lifts the op to the citizen tier: refused for a non-citizen.
+    await rejected(
+      op(viaMultiSend([{ to: REGISTER, data: rSelfClaim }, { to: REGISTER, data: rIssuer.addBatch }])),
+      /citizen/,
+      fakeChain(),
+      NO_LEGACY,
+    );
+  });
 });

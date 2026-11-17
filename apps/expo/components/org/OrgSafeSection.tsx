@@ -245,19 +245,19 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
           {accountName} ist onchain bestätigt. Safe-Inhaber: {chain.owners.map(nameOf).join(', ')}.
         </Text>
         {isInSync(plan) ? (
-          <Text style={[styles.sectionBody, { color: colors.textPrimary }]}>Alle Mitglieder sind übertragen.</Text>
+          <Text style={[styles.sectionBody, { color: colors.textPrimary }]}>Inhaber:innen und Admins sind abgeglichen.</Text>
         ) : iAmSafeOwner ? (
           <>
             <Text style={[styles.sectionBody, { color: colors.textPrimary }]}>
-              {pending} {pending === 1 ? 'Änderung' : 'Änderungen'} zu übertragen
+              {pending} {pending === 1 ? 'Änderung' : 'Änderungen'} zum Abgleichen
               {plan.addOwners.length ? ` · neue Inhaber: ${plan.addOwners.map(nameOf).join(', ')}` : ''}
               {plan.setRoles.length ? ` · ${plan.setRoles.length} Rollen` : ''}.
             </Text>
-            <Button label="Mitglieder übertragen" onPress={onSync} kind="sync" />
+            <Button label="Inhaber:innen und Admins abgleichen" onPress={onSync} kind="sync" />
           </>
         ) : (
           <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
-            Ein bisheriger Safe-Inhaber muss die Mitglieder übertragen.
+            Ein bisheriger Safe-Inhaber muss Inhaber:innen und Admins abgleichen.
           </Text>
         )}
 
@@ -265,9 +265,9 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
           <View style={[styles.leaveBox, { borderTopColor: colors.border }]}>
             <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
               {blocker === 'no_other_owner'
-                ? 'Zum Übergeben muss eine weitere Person Inhaber sein und im Safe stehen. Lade sie unter „Mitglieder“ als Inhaber ein und übertrage danach.'
+                ? 'Zum Übergeben muss eine weitere Person Inhaber sein und im Safe stehen. Lade sie unter „Mitglieder“ als Inhaber ein und gleiche danach ab.'
                 : blocker === 'not_in_sync'
-                  ? 'Übertrage zuerst alle Mitglieder, dann kannst du übergeben.'
+                  ? 'Gleiche zuerst Inhaber:innen und Admins ab, dann kannst du übergeben.'
                   : 'Du kannst die Organisation jetzt übergeben: Du wirst aus dem Safe entfernt und verlässt die Organisation.'}
             </Text>
             <Pressable

@@ -26,7 +26,7 @@ const nextConfig = {
   // unrelated package. Naming it removes that dependency on a coincidence.
   transpilePackages: [
     "@netizen-labs/miniapp-sdk", "@netizen-labs/workspace", "@netizen-labs/record-client",
-    "@netizen-labs/nostr", "@netizen-labs/protocol",
+    "@netizen-labs/nostr", "@netizen-labs/protocol", "@netizen-labs/credential-registry",
   ],
   // Keep heavy server-only packages OUT of the webpack bundle (loaded from
   // node_modules at runtime instead). @safe-global/protocol-kit pulls in
@@ -151,6 +151,17 @@ const nextConfig = {
         // API. Auth is the Bearer header only; with `*` browsers never send cookies, so the
         // cookie-authenticated pairing approval stays same-origin.
         source: '/api/chat/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'authorization, content-type, x-roebel-device' },
+          { key: 'Access-Control-Max-Age', value: '600' },
+        ],
+      },
+      {
+        // Credential register API: same clients as the chat API (app, Ortis Studio, browser
+        // pairing session); Bearer header auth only, so `*` never carries cookies.
+        source: '/api/credentials/:path*',
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
           { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },

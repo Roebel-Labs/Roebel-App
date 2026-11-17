@@ -26,6 +26,16 @@ export type LiveAction = "live_session";
 /** Mini-app user tokens (host asks the server for a short-lived token); own scope like the others. */
 export const MINIAPP_SCOPE = "roebel-miniapp-v1" as const;
 export type MiniAppAction = "user_token";
+/** Credential register (apps/web/src/lib/credentials); own scope like sponsoring. Mirrored in
+ *  apps/expo/lib/signed-request.ts. `people_preview` and the event/badge actions arrive in plan 4,
+ *  the two `zk_*` actions in plan 6. */
+export const CREDENTIALS_SCOPE = "roebel-credentials-v1" as const;
+export type CredentialAction =
+  | "types_list" | "type_prepare" | "people_list" | "people_search" | "batch_prepare" | "revoke_prepare"
+  | "delegate_prepare" | "members_public_prepare" | "orgs_list" | "actions_list" | "action_get" | "action_submitted"
+  | "action_cancel" | "letters" | "mine" | "redeem" | "respond" | "holdings" | "present_create" | "present_resolve"
+  | "people_preview" | "event_badges_list" | "event_badge_setup" | "event_badge_get" | "event_badge_prepare"
+  | "event_badge_auto" | "badge_nudge" | "zk_join" | "zk_status";
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"

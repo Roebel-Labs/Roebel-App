@@ -121,6 +121,10 @@ All on Gnosis (100). Selectors computed with viem `toFunctionSelector`.
 | CitizenNFTv2 | `0x59aA…5dE5` | `approveRequest(uint256,bool)` / `rejectRequest(uint256,bool)` | `0x767e0b9c` / `0x1effb912` | `hooks/useVerification.ts:332,401` |
 | AttesterNFTv2 | `0xC587…db82` | `approveRequest(uint256)` / `rejectRequest(uint256)` | `0xd7d1bbdb` / `0x2d7788db` | `hooks/useVerification.ts:339,407` |
 | MaciAttesterGovernor | `0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3` | `castVote(uint256,uint8)` | `0x56781388` | `components/VoteButtonsEnhanced.tsx:80` (**dead code**, nothing imports it) |
+| CredentialRegistry | env `CREDENTIAL_REGISTRY_ADDRESS` (unset = nothing sponsored) | holder, **onboarding tier**: `claim(uint64,(uint8,bytes32,address,uint64,bytes32),bytes32[],bytes)` / `selfClaim(bytes32)` / `renounce(bytes32)` | `0x22ff7228` / `0xb6a96c0a` / `0xabd7688e` | credential register (plan credreg-2/3) |
+| CredentialRegistry | same | issuer, citizen tier: `createType(bytes32,bytes32,uint8,uint8,(string,uint64,uint64,uint64,uint32,bool))` / `updateType(bytes32,(string,uint64,uint64,uint64,uint32,bool))` / `retireType(bytes32)` | `0xba1ad2da` / `0xd44ea56a` / `0x7f5ee2a9` | credential register |
+| CredentialRegistry | same | issuer, citizen tier: `setDelegate(bytes32,address,bool)` / `setOrgPrivateOnly(bytes32,bool)` | `0xc74d8c05` / `0xb0fc692d` | credential register |
+| CredentialRegistry | same | issuer, citizen tier: `addBatch(bytes32,bytes32,uint32)` / `revokeBatch(uint64)` / `revokeLeaves(uint64,bytes32[])` | `0x52a597e1` / `0x1db538be` / `0x2efe83ae` | credential register (also from an org Safe) |
 | Deliberate | `0xB208C359A206A0C35a7D4D99DEf63d9F6143de9B` | `join`, `addArgument`, `stakePro`/`stakeCon`, `tallyTree`, `createDebate` | `0x049878f3`, `0xd79083bc`, `0x87cb96f4`/`0x38ac4721`, `0x6700c92e`, `0x8ee9f901` | `lib/deliberate/chain.ts` (**dormant**) |
 
 Writes the sponsor will (correctly) refuse, and what the person sees:
@@ -301,6 +305,18 @@ handover check (on-chain semantics), `lib/shamir/tally-session.ts` (runs in the 
   count there too). The 0.002 default does not fit a guest's first op (deploy + guardian + request = 0.00234 xDAI at
   1.5 gwei; `personalMint` on a deployed Safe 0.00159): the owner sets the onboarding cap (suggested 0.006 xDAI)
   before opening sign-up. A deploy op (factory + factoryData) may carry the first op.
+- **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe
+  (onboarding tier):** only `CitizenNFTv2.createAttestationRequest(string)`, budget
+  `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day per Safe, never above the normal cap). A deploy op
+  (factory + factoryData) may carry it. The CredentialRegistry holder calls (`claim`, `selfClaim`, `renounce`) are
+  onboarding-tier too, so a guest can pick up a credential, alone or in one op with `createAttestationRequest`.
+- **CredentialRegistry** (`CREDENTIAL_REGISTRY_ADDRESS`, compared case-insensitively; unset or malformed = no register
+  call is sponsored): holder calls onboarding-tier, issuer calls (`createType`, `updateType`, `retireType`,
+  `setDelegate`, `setOrgPrivateOnly`, `addBatch`, `revokeBatch`, `revokeLeaves`) citizen-tier; an org Safe may make
+  the issuer calls through `execTransaction` (direct or MultiSendCallOnly), like its OrgRegistry calls. Never
+  sponsored: `prune` and `rebindType` (permissionless), `setRecognised`, `proposeSources`/`applySources`/
+  `cancelSources`, ownership functions. Value 0 as everywhere. The contract does the authorisation; the allowlist
+  only bounds what the paymaster pays for.
 - **Allowlist** = the table in §3 minus the dead/dormant rows, with argument rules: `groupMint` only into the Röbel
   group; `safeTransferFrom` only `from == identity` and `id == uint256(RöbelGroup)`; value 0 everywhere.
   `registerHuman` and `trust` are citizen-tier. Not sponsored: native sends, mini-app transactions, governor
