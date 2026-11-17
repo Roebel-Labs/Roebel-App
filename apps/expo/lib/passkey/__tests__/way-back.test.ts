@@ -102,6 +102,19 @@ describe('readWayBack: a 12-word account', () => {
   it('one person is a way back even with unconfirmed words', async () => {
     expect(await readWayBack(wordsAccount, wordsDeps([PERSON], false))).toEqual({ kind: 'words', ok: true });
   });
+  it('unconfirmed words but an exported backup file: a way back', async () => {
+    const d: WayBackDeps = { ...wordsDeps([], false), backupFileExported: jest.fn(async () => true) };
+    expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: true });
+    expect(d.backupFileExported).toHaveBeenCalledTimes(1);
+  });
+  it('no exported file, unconfirmed words, no person: still no way back', async () => {
+    const d: WayBackDeps = { ...wordsDeps([], false), backupFileExported: async () => false };
+    expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: false });
+  });
+  it('an unreadable exported flag is "unknown", never "ok"', async () => {
+    const d: WayBackDeps = { ...wordsDeps([], false), backupFileExported: async () => { throw new Error('store'); } };
+    expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: null });
+  });
   it('an unreadable confirmed flag is "unknown", never "ok"', async () => {
     const d: WayBackDeps = { ...deps([]), phraseConfirmed: async () => { throw new Error('store'); } };
     expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: null });

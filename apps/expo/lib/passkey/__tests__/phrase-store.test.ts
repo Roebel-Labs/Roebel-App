@@ -7,6 +7,7 @@ import {
   PhraseCancelledError,
   PhraseOverwriteError,
   PhraseUnavailableError,
+  WORDS_BACKUP_EXPORTED_KEY,
   WORDS_CONFIRMED_KEY,
   WORDS_PHRASE_KEY,
   WORDS_PHRASE_MARKER_KEY,
@@ -217,6 +218,35 @@ describe('phrase store', () => {
     expect(await store.has()).toBe(false);
     expect(s.m.has(WORDS_PHRASE_KEY)).toBe(false);
     expect(s.m.has(WORDS_CONFIRMED_KEY)).toBe(false);
+  });
+
+  it('the exported-backup flag: plain (no prompt), device-only, reset by write and remove (E3)', async () => {
+    const s = fakeSecure();
+    const store = createPhraseStore(s);
+    await store.write(JUNK);
+    expect(await store.isBackupExported()).toBe(false);
+    await store.markBackupExported();
+    expect(await store.isBackupExported()).toBe(true);
+    const set = s.calls.find((c) => c.op === 'set' && c.key === WORDS_BACKUP_EXPORTED_KEY);
+    expect(set?.options).toEqual({ keychainAccessible: s.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+    expect(s.authenticatedReads).toBe(0);
+    await store.write(JUNK);
+    expect(await store.isBackupExported()).toBe(false);
+    await store.markBackupExported();
+    await store.remove();
+    expect(await store.isBackupExported()).toBe(false);
+    expect(s.m.has(WORDS_BACKUP_EXPORTED_KEY)).toBe(false);
+    expect(WORDS_BACKUP_EXPORTED_KEY).toBe('words_backup_exported_v1');
+  });
+
+  it('discarding unreadable words resets the exported flag too', async () => {
+    const s = fakeSecure();
+    const store = createPhraseStore(s);
+    await store.write(JUNK);
+    await store.markBackupExported();
+    s.invalidate();
+    expect(await store.discardIfUnreadable()).toBe(true);
+    expect(await store.isBackupExported()).toBe(false);
   });
 
   it('refuses to overwrite an unconfirmed phrase of another account; same words or a confirmed one may be replaced (E4)', async () => {

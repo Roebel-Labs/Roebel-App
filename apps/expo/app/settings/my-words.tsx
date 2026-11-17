@@ -8,6 +8,10 @@
  *     'inactive' (iOS app-switcher snapshot) a blank cover hides them.
  *   - "Wörter bestätigen" while unconfirmed: three of the words (one device unlock, or none if
  *     they are already on screen) → `markConfirmed`.
+ *   - "Backup-Datei speichern" (plan 4), only when the binary has the share module: a password
+ *     typed twice, then one device unlock, the words encrypted into a file and the share sheet.
+ *     Once the sheet closed without an error the export counts as a way back. The password lives
+ *     only in this screen's state and is cleared after every attempt, on background and unmount.
  *   - "Wörter von diesem Gerät löschen" only when confirmed: device unlock, the words are
  *     removed and the person is logged out (the words sign them in again).
  *   - Re-entry (`?reenter=1` from the root watcher on PhraseUnavailableError, a failed read here,
@@ -16,18 +20,22 @@
  *     confirmed again (the write reset the flag, preflight E3). A dismissed prompt keeps the text.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { isAddressEqual, type Address } from 'viem';
 
 import { useTheme } from '@/context/ThemeContext';
+import { fontFamily } from '@/constants/theme';
 import { BigButton, Card, Notice, ScreenHeader, passkeyStyles, usePasskeyGate } from '@/components/passkey/PasskeyUi';
 import WordsConfirm from '@/components/passkey/WordsConfirm';
 import WordsGrid from '@/components/passkey/WordsGrid';
 import WordsInput from '@/components/passkey/WordsInput';
 import { passkeySessionOf } from '@/lib/passkey/active';
+import { exportBackup } from '@/lib/passkey/backup-export';
+import { passwordProblem } from '@/lib/passkey/backup-file';
+import { backupFileSupport, pbkdf2Native, shareBackupFile } from '@/lib/passkey/backup-file-native';
 import {
   DELETE_OTHER_WORDS_MESSAGE,
   PHRASE_PROMPT,
@@ -38,6 +46,7 @@ import {
   removeOwnPhrase,
 } from '@/lib/passkey/phrase-store';
 import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
+import { randomBytes } from '@/lib/passkey/random';
 import { pickConfirmPositions, validatePhrase, wordsFromSeed } from '@/lib/passkey/words';
 
 const REENTER_TEXT =
@@ -45,10 +54,14 @@ const REENTER_TEXT =
 const WRONG_WORDS_TEXT = 'Diese Wörter gehören nicht zu diesem Konto.';
 const DELETE_TEXT = 'Danach brauchst du die 12 Wörter, um dich wieder anzumelden.';
 const FAILED_TEXT = 'Das hat nicht geklappt. Bitte versuche es erneut.';
+const EXPORT_TEXT =
+  'Wähle ein Passwort für die Datei. Wenn du das Passwort vergisst, kann niemand die Datei öffnen, auch wir nicht.';
+const EXPORTED_TEXT = 'Gespeichert. Lege die Datei an einen Ort, an den du auch ohne dieses Handy kommst.';
+const ENCRYPTING_TEXT = 'Datei wird verschlüsselt …';
 
-type View_ = 'loading' | 'main' | 'show' | 'confirm' | 'reenter';
+type View_ = 'loading' | 'main' | 'show' | 'confirm' | 'reenter' | 'export';
 type NoticeState = { tone: 'error' | 'info' | 'success'; text: string } | null;
-type Busy = 'show' | 'confirm' | 'reenter' | 'delete' | 'discard' | null;
+type Busy = 'show' | 'confirm' | 'reenter' | 'delete' | 'discard' | 'export' | null;
 
 const isCancel = (e: unknown) => e instanceof PhraseCancelledError || /cancel/i.test(e instanceof Error ? e.message : String(e));
 const loadStore = () => import('@/lib/passkey/phrase-store-runtime').then((m) => m.phraseStore);
@@ -80,10 +93,22 @@ export default function MyWordsScreen() {
   // iOS-only in effect: iOS reports 'inactive' while it takes the app-switcher snapshot; Android
   // goes straight to 'background' (where the words are dropped anyway). The cover hides them.
   const [covered, setCovered] = useState(false);
+  // Probed once: an OTA on a binary without the share module shows no export button.
+  const [canShare] = useState(() => backupFileSupport().share);
+  const [password, setPassword] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [encrypting, setEncrypting] = useState(false);
+  // The temp file name is fixed: one export at a time, even across fast double taps.
+  const exporting = useRef(false);
 
   const forget = useCallback(() => {
     held.current = false;
     setPhrase(null);
+  }, []);
+
+  const clearPasswords = useCallback(() => {
+    setPassword('');
+    setRepeat('');
   }, []);
 
   useEffect(() => {
@@ -114,7 +139,10 @@ export default function MyWordsScreen() {
     const sub = AppState.addEventListener('change', (state) => {
       setCovered(state === 'inactive');
       // 'background' only: the unlock prompt makes iOS report 'inactive' while we read.
-      if (state !== 'background' || !held.current) return;
+      if (state !== 'background') return;
+      // The share sheet itself can background the app (e.g. another app opens): never clear while exporting.
+      if (!exporting.current) clearPasswords();
+      if (!held.current) return;
       forget();
       setView((v) => (v === 'show' || v === 'confirm' ? 'main' : v));
     });
@@ -122,7 +150,7 @@ export default function MyWordsScreen() {
       sub.remove();
       held.current = false;
     };
-  }, [forget]);
+  }, [forget, clearPasswords]);
 
   /** One device unlock → the stored words (checked against this account), or null with a notice. */
   const readWords = async (): Promise<string | null> => {
@@ -224,6 +252,48 @@ export default function MyWordsScreen() {
     }
   };
 
+  const saveBackup = async () => {
+    if (busy || exporting.current) return;
+    exporting.current = true;
+    setBusy('export');
+    setNotice(null);
+    try {
+      const store = await loadStore();
+      const result = await exportBackup(
+        { password, repeat },
+        {
+          phrase: store,
+          pbkdf2: pbkdf2Native,
+          random: randomBytes,
+          now: () => new Date(),
+          share: shareBackupFile,
+          owner,
+          onEncrypting: () => setEncrypting(true),
+        },
+      );
+      if (result.status === 'error') {
+        setNotice({ tone: 'error', text: result.message });
+        // A rule problem keeps the typed passwords so they can be fixed; anything later clears them.
+        if (!passwordProblem(password, repeat)) clearPasswords();
+        return;
+      }
+      clearPasswords();
+      if (result.status === 'shared') {
+        setView('main');
+        setNotice({ tone: 'success', text: EXPORTED_TEXT });
+      }
+      // 'dismissed': nothing saved, nothing to say; the person can try again.
+    } catch (e) {
+      clearPasswords();
+      if (e instanceof PhraseUnavailableError) setView('reenter');
+      else setNotice({ tone: 'error', text: FAILED_TEXT });
+    } finally {
+      setEncrypting(false);
+      setBusy(null);
+      exporting.current = false;
+    }
+  };
+
   // E4 escape, on an explicit tap only: costs one unlock prompt if the stored words are readable.
   const discard = async () => {
     if (busy) return;
@@ -313,6 +383,56 @@ export default function MyWordsScreen() {
               }}
             />
           </>
+        ) : view === 'export' ? (
+          <>
+            <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Backup-Datei speichern</Text>
+            {body(EXPORT_TEXT)}
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="off"
+              textContentType="newPassword"
+              editable={busy !== 'export'}
+              placeholder="Passwort (mindestens 10 Zeichen)"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Passwort"
+              style={[styles.input, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+            />
+            <TextInput
+              value={repeat}
+              onChangeText={setRepeat}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="off"
+              textContentType="newPassword"
+              editable={busy !== 'export'}
+              placeholder="Passwort wiederholen"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Passwort wiederholen"
+              style={[styles.input, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.surface }]}
+            />
+            {encrypting ? body(ENCRYPTING_TEXT) : null}
+            <BigButton
+              label="Datei speichern"
+              busy={busy === 'export'}
+              disabled={password.length === 0 || repeat.length === 0}
+              onPress={() => void saveBackup()}
+            />
+            <BigButton
+              label="Abbrechen"
+              kind="secondary"
+              disabled={busy === 'export'}
+              onPress={() => {
+                clearPasswords();
+                setNotice(null);
+                setView('main');
+              }}
+            />
+          </>
         ) : view === 'confirm' ? (
           <>
             <WordsConfirm phrase={phrase ?? ''} positions={positions} onConfirmed={() => void onConfirmed()} />
@@ -326,6 +446,18 @@ export default function MyWordsScreen() {
             {confirmed ? null : (
               <BigButton label="Wörter bestätigen" kind="secondary" busy={busy === 'confirm'} onPress={() => void startConfirm()} />
             )}
+            {canShare ? (
+              <BigButton
+                label="Backup-Datei speichern"
+                kind="secondary"
+                onPress={() => {
+                  if (busy) return;
+                  clearPasswords();
+                  setNotice(null);
+                  setView('export');
+                }}
+              />
+            ) : null}
             {confirmed ? (
               askDelete ? (
                 <Card>
@@ -353,4 +485,5 @@ export default function MyWordsScreen() {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12 },
   flex: { flex: 1 },
+  input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontFamily: fontFamily.medium, fontSize: 17 },
 });

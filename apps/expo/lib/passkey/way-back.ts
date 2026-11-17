@@ -60,6 +60,8 @@ export type WayBackDeps = {
   loadPool: () => Promise<WordsPool | null>;
   /** Expert account: the stored 12 words were confirmed (phrase-store `isConfirmed`, no prompt). */
   phraseConfirmed?: () => Promise<boolean>;
+  /** Expert account: an encrypted backup file was shared (phrase-store `isBackupExported`, no prompt). */
+  backupFileExported?: () => Promise<boolean>;
 };
 
 export type WayBackResult = { kind: AccountKind; ok: boolean } | { kind: AccountKind; ok: null };
@@ -75,11 +77,20 @@ export async function readWayBack(account: unknown, deps: WayBackDeps): Promise<
   if (isWordsOwner(session)) {
     try {
       // A words account has no recovery-words pool: every guardian is a person.
-      const [state, confirmed] = await Promise.all([
+      const [state, confirmed, exported] = await Promise.all([
         deps.readState(session.safe),
         deps.phraseConfirmed ? deps.phraseConfirmed() : Promise.resolve(false),
+        deps.backupFileExported ? deps.backupFileExported() : Promise.resolve(false),
       ]);
-      return { kind: 'words', ok: hasWayBack('words', { people: state.guardians.length, wordsOn: false, phraseConfirmed: confirmed }) };
+      return {
+        kind: 'words',
+        ok: hasWayBack('words', {
+          people: state.guardians.length,
+          wordsOn: false,
+          phraseConfirmed: confirmed,
+          backupFileExported: exported,
+        }),
+      };
     } catch {
       return { kind: 'words', ok: null };
     }

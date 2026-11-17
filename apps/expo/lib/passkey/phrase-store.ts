@@ -11,7 +11,8 @@
  *     KeyPermanentlyInvalidatedException, iOS biometryCurrentSet — expo-secure-store then returns
  *     null) `read` throws PhraseUnavailableError: the person stays signed in and is asked for the
  *     words again; a cancelled prompt is PhraseCancelledError;
- *   - `write` and `remove` reset the confirmed flag (preflight E3), and `write` refuses to replace a
+ *   - `write` and `remove` reset the confirmed flag (preflight E3) and the exported-backup flag
+ *     (plan 4: both belong to the phrase stored NOW), and `write` refuses to replace a
  *     phrase of ANOTHER account that was never confirmed (E4): it may be that account's only key —
  *     unless it is unreadable anyway (`discardIfUnreadable`);
  *   - `write` deletes the old item before adding the new one (iOS would otherwise update the item
@@ -25,6 +26,8 @@ import { validatePhrase, wordAccount } from './words';
 export const WORDS_PHRASE_KEY = 'words_phrase_v1';
 export const WORDS_PHRASE_MARKER_KEY = 'words_phrase_present_v1';
 export const WORDS_CONFIRMED_KEY = 'words_phrase_confirmed_v1';
+/** Plan 4: an encrypted backup file of the stored phrase was shared (a way back, spec 5.4). */
+export const WORDS_BACKUP_EXPORTED_KEY = 'words_backup_exported_v1';
 
 export const PHRASE_PROMPT = 'Bestätige, dass du es bist';
 export const NO_BIOMETRICS_MESSAGE =
@@ -94,6 +97,10 @@ export type PhraseStore = {
   discardIfUnreadable(): Promise<boolean>;
   isConfirmed(): Promise<boolean>;
   markConfirmed(): Promise<void>;
+  /** An encrypted backup file of the stored phrase was shared (plain flag, no prompt). */
+  isBackupExported(): Promise<boolean>;
+  /** Call only after the share sheet closed without an error for a file of the stored phrase. */
+  markBackupExported(): Promise<void>;
 };
 
 export const DELETE_OTHER_WORDS_MESSAGE =
@@ -181,6 +188,7 @@ export function createPhraseStore(secure: SecureStoreLike): PhraseStore {
     await secure.deleteItemAsync(WORDS_PHRASE_KEY, protectedOpts(PHRASE_PROMPT));
     await secure.deleteItemAsync(WORDS_PHRASE_MARKER_KEY, plain);
     await secure.deleteItemAsync(WORDS_CONFIRMED_KEY, plain);
+    await secure.deleteItemAsync(WORDS_BACKUP_EXPORTED_KEY, plain);
   };
 
   return {
@@ -203,6 +211,7 @@ export function createPhraseStore(secure: SecureStoreLike): PhraseStore {
       // a phrase (read -> PhraseUnavailableError -> enter the words again), never a wrong owner.
       await secure.setItemAsync(WORDS_PHRASE_MARKER_KEY, owner, plain);
       await secure.deleteItemAsync(WORDS_CONFIRMED_KEY, plain);
+      await secure.deleteItemAsync(WORDS_BACKUP_EXPORTED_KEY, plain);
       await secure.setItemAsync(WORDS_PHRASE_KEY, check.phrase, protectedOpts(PHRASE_PROMPT));
     },
     read: (reason) => readPhrase(reason),
@@ -224,6 +233,11 @@ export function createPhraseStore(secure: SecureStoreLike): PhraseStore {
     // sign-in or re-entry with the words typed in).
     markConfirmed: async () => {
       await secure.setItemAsync(WORDS_CONFIRMED_KEY, '1', plain);
+    },
+    isBackupExported: async () => (await secure.getItemAsync(WORDS_BACKUP_EXPORTED_KEY, plain)) === '1',
+    // Same invariant as markConfirmed: `write` and `remove` clear it.
+    markBackupExported: async () => {
+      await secure.setItemAsync(WORDS_BACKUP_EXPORTED_KEY, '1', plain);
     },
   };
 }
