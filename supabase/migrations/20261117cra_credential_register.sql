@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.credential_actions (
   tx_hash       text,
   error         text,
   -- Chain head when the action was prepared: a receipt from this block or earlier cannot be its transaction.
-  prepared_block bigint,
+  prepared_block bigint NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
   expires_at    timestamptz NOT NULL
 );
@@ -106,6 +106,8 @@ CREATE INDEX IF NOT EXISTS credential_invitations_batch_idx
   ON public.credential_invitations (batch_id);
 CREATE INDEX IF NOT EXISTS credential_invitations_leaf_idx
   ON public.credential_invitations (leaf_hash);
+CREATE INDEX IF NOT EXISTS credential_invitations_type_idx
+  ON public.credential_invitations (type_id);
 
 CREATE TABLE IF NOT EXISTS public.credential_delegates (
   type_id   text NOT NULL,

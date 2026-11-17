@@ -49,10 +49,14 @@ test("unique live root", () => {
 });
 
 test("actions carry the prepare block and a transaction settles one action", () => {
-  assert.match(sql, /prepared_block\s+bigint/i);
+  assert.match(sql, /prepared_block\s+bigint\s+not null/i);
   assert.match(sql, /unique index[^;]+credential_actions\s*\(tx_hash\)\s*where tx_hash is not null/i);
 });
 
 test("invitations count mail attempts (link-only fallback after repeated failures)", () => {
   assert.match(sql, /mail_attempts\s+integer\s+not null\s+default 0/i);
+});
+
+test("invitations are indexed by type", () => {
+  assert.match(sql, /create index if not exists \w+\s+on public\.credential_invitations \(type_id\)/i);
 });
