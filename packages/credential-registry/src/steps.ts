@@ -179,6 +179,21 @@ function decodeRegistryLogs(registry: Address, logs: readonly ChainLog[]): Decod
 
 const eqHex = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b.toLowerCase();
 
+/** The config a `TypeConfigured` event carries equals the step's (an earlier or other update does not confirm). */
+function sameConfig(raw: unknown, c: TypeConfigInput): boolean {
+  if (typeof raw !== "object" || raw === null) return false;
+  const e = raw as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "bigint" || typeof v === "number" ? BigInt(v) : null);
+  return (
+    e.metadataURI === c.metadataURI &&
+    n(e.defaultValidity) === BigInt(c.defaultValidity) &&
+    n(e.claimStart) === BigInt(c.claimStart) &&
+    n(e.claimEnd) === BigInt(c.claimEnd) &&
+    n(e.supplyCap) === BigInt(c.supplyCap) &&
+    e.publicClaim === c.publicClaim
+  );
+}
+
 /**
  * Matches the steps, in order, against the registry's own logs (other addresses and
  * unrelated register events are skipped). Returns the chain batch id per `addBatch` root.
@@ -214,7 +229,7 @@ export function stepsConfirmedBy(
         break;
       }
       case "updateType":
-        hit = find((e) => e.name === "TypeConfigured" && eqHex(e.args.typeId, step.typeId));
+        hit = find((e) => e.name === "TypeConfigured" && eqHex(e.args.typeId, step.typeId) && sameConfig(e.args.config, step.config));
         break;
       case "retireType":
         hit = find((e) => e.name === "TypeRetired" && eqHex(e.args.typeId, step.typeId));

@@ -168,3 +168,11 @@ test("selfClaimCall and renounceCall encode the type id", () => {
   assert.deepEqual(s.args, [TYPE]);
   assert.deepEqual(r.args, [TYPE]);
 });
+
+test("updateType is confirmed only by a TypeConfigured with the same config", () => {
+  const step: RegisterStep = { fn: "updateType", typeId: TYPE, config: cfg };
+  const other = ev("TypeConfigured", { typeId: TYPE, config: { ...cfg, defaultValidity: 60n, publicClaim: false } });
+  assert.deepEqual(stepsConfirmedBy([step], REG, [other]), { ok: false, missing: 0 });
+  const same = ev("TypeConfigured", { typeId: TYPE, config: { ...cfg, defaultValidity: 60n } });
+  assert.deepEqual(stepsConfirmedBy([step], REG, [other, same]), { ok: true, batchIds: {} });
+});
