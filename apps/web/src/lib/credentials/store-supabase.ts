@@ -427,6 +427,19 @@ export class SupabaseCredentialStore implements CredentialStore {
     check("findInvitationByTokenHash", r);
     return r.data ? toInvitation(r.data as Row) : null;
   }
+  async onchainBatchesWithPreparedInvitations() {
+    // Inner embed: only batches with at least one prepared invitation (one FK, no ambiguity).
+    const r = await this.db
+      .from(T.batches)
+      .select(`id, ${T.invitations}!inner(id)`)
+      .eq("status", "onchain")
+      .eq(`${T.invitations}.status`, "prepared")
+      .limit(1, { referencedTable: T.invitations })
+      .order("created_at", { ascending: true })
+      .limit(200);
+    check("onchainBatchesWithPreparedInvitations", r);
+    return ((r.data ?? []) as Row[]).map((b) => String(b.id));
+  }
   async invitationsForWallet(wallet: string) {
     return this.listInvitations({ recipientWallet: wallet });
   }

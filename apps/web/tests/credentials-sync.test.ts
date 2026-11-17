@@ -4,7 +4,8 @@ import { orgIdFromUuid } from "@netizen-labs/protocol";
 import { credentialTypeId, type RegisterLog } from "@netizen-labs/credential-registry";
 import { keccak256, toHex, type Address, type Hex } from "viem";
 import { InMemoryCredentialStore, type ActionRow, type NewInvitation, type TypeRow } from "../src/lib/credentials/store";
-import { applyConfirmedAction, applyRegisterLogs, syncRegister, type SyncDeps } from "../src/lib/credentials/sync";
+import { applyConfirmedAction, applyRegisterLogs, sweepUndelivered, syncRegister, type SyncDeps } from "../src/lib/credentials/sync";
+import { deliverInvitations } from "../src/lib/credentials/delivery";
 import type { Notifier } from "../src/lib/credentials/notify";
 
 const REGISTRY = "0x00000000000000000000000000000000000000c1" as Address;
@@ -286,4 +287,54 @@ test("the window is capped at maxBlocks and stops three blocks before head", asy
 test("an unconfigured registry skips with not_configured", async () => {
   const w = await world();
   assert.deepEqual(await syncRegister({ ...w.d, registry: "" as Address }), { skipped: "not_configured" });
+});
+
+test("Claimed matches the invitation by leaf hash and the event's batch, not another batch with the same leaf", async () => {
+  const w = await world();
+  const OTHER_ROOT = keccak256(toHex("root-2"));
+  const OTHER_BATCH = "22222222-2222-4222-8222-222222222223";
+  const OTHER_INV = "33333333-3333-4333-8333-333333333339";
+  await w.store.insertBatchWithInvitations({ id: OTHER_BATCH, actionId: null, typeId: TYPE, root: OTHER_ROOT, count: 1, source: "people" }, [invitation(OTHER_INV, LEAF_B, null)]);
+  await applyRegisterLogs(w.d, [batchAdded(), log("BatchAdded", { batchId: 8n, typeId: TYPE, issuer: OWNER, root: OTHER_ROOT, count: 1 })]);
+  await applyRegisterLogs(w.d, [log("Claimed", { typeId: TYPE, account: BOB, batchId: 8n, leaf: LEAF_B, validUntil: 0n })]);
+  assert.equal((await w.store.getInvitation(OTHER_INV))?.status, "accepted");
+  assert.equal((await w.store.getInvitation("33333333-3333-4333-8333-333333333332"))?.status, "prepared");
+  // A Claimed for a batch the mirror does not know changes nothing.
+  await applyRegisterLogs(w.d, [log("Claimed", { typeId: TYPE, account: ALICE, batchId: 99n, leaf: LEAF_A, validUntil: 0n })]);
+  assert.equal((await w.store.getInvitation("33333333-3333-4333-8333-333333333331"))?.status, "prepared");
+});
+
+test("sweepUndelivered redelivers onchain batches that still hold prepared invitations, and only those", async () => {
+  const w = await world();
+  // The batch went on chain but delivery never ran (process died after the CAS).
+  await w.store.updateBatch(BATCH_ID, { status: "onchain", chainBatchId: "7" });
+  const PENDING_BATCH = "22222222-2222-4222-8222-222222222224";
+  await w.store.insertBatchWithInvitations({ id: PENDING_BATCH, actionId: null, typeId: TYPE, root: keccak256(toHex("root-3")), count: 1, source: "people" }, [
+    invitation("33333333-3333-4333-8333-33333333333a", keccak256(toHex("leaf-c")), ALICE),
+  ]);
+  const r = await sweepUndelivered(w.d);
+  assert.deepEqual(r, { batches: 1 });
+  assert.deepEqual(w.delivered, [BATCH_ID]);
+});
+
+test("concurrent sweeps with the real delivery send each invitation once", async () => {
+  const w = await world();
+  await w.store.updateBatch(BATCH_ID, { status: "onchain", chainBatchId: "7" });
+  const pushes: string[] = [];
+  const deliveryDeps = { store: w.store, notify: { push: async (p: { data: Record<string, string> }) => void pushes.push(p.data.invitationId) }, mailer: null, now: () => Date.parse(T0) };
+  w.d.deliver = async (id) => void (await deliverInvitations(deliveryDeps as never, id));
+  await Promise.all([sweepUndelivered(w.d), sweepUndelivered(w.d), sweepUndelivered(w.d)]);
+  assert.deepEqual(pushes, ["33333333-3333-4333-8333-333333333331"]);
+  assert.equal((await w.store.getInvitation("33333333-3333-4333-8333-333333333332"))?.status, "invited");
+  // Nothing left: the next sweep finds no batch.
+  assert.deepEqual(await sweepUndelivered(w.d), { batches: 0 });
+});
+
+test("a sweep keeps going when one batch's delivery throws", async () => {
+  const w = await world();
+  await w.store.updateBatch(BATCH_ID, { status: "onchain", chainBatchId: "7" });
+  w.d.deliver = async () => {
+    throw new Error("boom");
+  };
+  assert.deepEqual(await sweepUndelivered(w.d), { batches: 1 });
 });

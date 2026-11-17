@@ -19,6 +19,8 @@ import {
 import { prepareBatch, prepareRevocation, type RecipientInput } from "@/lib/credentials/batch";
 import { listPeople, parsePeopleCsv, searchPeople } from "@/lib/credentials/people";
 import { credentialDeps } from "@/lib/credentials/runtime";
+import { prepareLetters } from "@/lib/credentials/delivery";
+import { renderLetters } from "@/lib/credentials/letters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +36,7 @@ const ACTIONS: readonly CredentialAction[] = [
   "people_search",
   "batch_prepare",
   "revoke_prepare",
+  "letters",
 ];
 
 /** Upper bound for a pasted list (2000 people fit comfortably). */
@@ -121,6 +124,19 @@ export async function POST(request: NextRequest) {
             batchId: p.batchId as string | undefined,
           }),
         );
+      case "letters": {
+        // Owner or admin; the PDF holds the personal links of the batch's open claim-key invitations.
+        const r = await prepareLetters(d, c, { accountId: String(p.accountId ?? ""), batchId: String(p.batchId ?? "") }, renderLetters);
+        if (!r.ok) return respond(r);
+        return new Response(new Uint8Array(r.data), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="ausweis-briefe.pdf"',
+            "Cache-Control": "no-store",
+          },
+        });
+      }
       default:
         return jsonFail(400, "BAD_REQUEST", "unknown action");
     }

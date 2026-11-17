@@ -2,7 +2,9 @@
  * Chain → mirror sync for the credential register. The chain is the truth; these handlers write
  * what the register events say into the mirror tables. Every handler is idempotent: replaying
  * the same logs (a re-run window, or the cron and a phone's receipt racing) changes nothing more.
- * Invitations are delivered exactly once, guarded by the batch's compare-and-set prepared → onchain.
+ * Invitations are delivered once: the batch's compare-and-set prepared → onchain decides who calls
+ * `deliver`, and deliverInvitations takes each invitation with its own compare-and-set. When that
+ * call never ran or died half-way, `sweepUndelivered` (every cron run) delivers what is left.
  *
  * Relative imports only: loaded by `npx tsx --test`.
  */
@@ -18,7 +20,7 @@ export type SyncDeps = {
   head(): Promise<bigint>;
   registry: Address;
   deployBlock: bigint;
-  /** Task 7 `deliverInvitations` bound to its deps. Called once per batch that reached the chain. */
+  /** `deliverInvitations` bound to its deps: once per batch that reached the chain, and again by the sweep. */
   deliver(batchRowId: string): Promise<void>;
   notify: Notifier;
 };
@@ -129,7 +131,10 @@ async function onBatchAdded(d: SyncDeps, a: Record<string, unknown>): Promise<vo
 async function onClaimed(d: SyncDeps, a: Record<string, unknown>): Promise<void> {
   const typeId = lc<Hex>(a.typeId);
   const account = lc<string>(a.account);
-  const hits = await d.store.listInvitations({ leafHash: lc<Hex>(a.leaf), typeId });
+  // The leaf belongs to the event's batch: match by batch and leaf, never by leaf alone.
+  const batch = await d.store.getBatchByChainId(dec(a.batchId));
+  if (!batch || batch.typeId !== typeId) return;
+  const hits = await d.store.listInvitations({ batchId: batch.id, leafHash: lc<Hex>(a.leaf), typeId });
   for (const i of hits) {
     await d.store.updateInvitation(i.id, {
       claimedOnchain: true,
@@ -272,4 +277,21 @@ export async function syncRegister(
   const { applied } = await applyRegisterLogs(d, logs);
   await d.store.setSyncCursor({ registry, lastBlock: to });
   return { from, to, applied };
+}
+
+/**
+ * Recovery: on-chain batches that still hold `prepared` invitations (delivery threw, or the
+ * process died after the batch's compare-and-set) are handed to `deliver` again. Safe with
+ * concurrent sweeps and syncs: deliverInvitations takes each invitation with a compare-and-set.
+ */
+export async function sweepUndelivered(d: SyncDeps): Promise<{ batches: number }> {
+  const ids = await d.store.onchainBatchesWithPreparedInvitations();
+  for (const id of ids) {
+    try {
+      await d.deliver(id);
+    } catch (err) {
+      console.error("[credentials/sync] redelivery failed", id, err instanceof Error ? err.message : err);
+    }
+  }
+  return { batches: ids.length };
 }

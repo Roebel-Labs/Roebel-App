@@ -6,6 +6,8 @@ import { gnosis } from "viem/chains";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Deps } from "./actions";
 import { registryConfig } from "./config";
+import { deliverInvitations, type DeliveryDeps } from "./delivery";
+import { createResendMailer } from "@/lib/passkey/email-mailer";
 import { sendNotificationNotifier } from "./notify";
 import { createNodeRegistryReader } from "./rights";
 import { supabaseCredentialStore } from "./store-supabase";
@@ -28,6 +30,9 @@ export function credentialSyncDeps(): SyncDeps | null {
   if (!cfg) return null;
   const client = gnosisClient();
   const store = supabaseCredentialStore(createAdminClient());
+  const notify = sendNotificationNotifier();
+  const resendKey = process.env.RESEND_API_KEY;
+  const delivery: DeliveryDeps = { store, notify, mailer: resendKey ? createResendMailer(resendKey) : null, now: () => Date.now() };
   return {
     store,
     registry: cfg.address,
@@ -44,13 +49,11 @@ export function credentialSyncDeps(): SyncDeps | null {
       }
       return out;
     },
-    // Task 7 binds deliverInvitations here. Until then a batch that reaches the chain keeps its
-    // invitations `prepared`; Task 7 must deliver those (deliverInvitations takes every prepared
-    // invitation of the batch, so a later call for an onchain batch still works).
     async deliver(batchRowId) {
-      console.warn("[credentials/sync] invitation delivery not wired yet", batchRowId);
+      const r = await deliverInvitations(delivery, batchRowId);
+      console.log("[credentials/sync] delivered", batchRowId, r);
     },
-    notify: sendNotificationNotifier(),
+    notify,
   };
 }
 

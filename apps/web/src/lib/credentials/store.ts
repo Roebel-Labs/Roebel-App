@@ -213,6 +213,8 @@ export interface CredentialStore {
   /** Bulk update of every invitation matching the filter; returns how many changed. */
   updateInvitations(filter: InvitationFilter, patch: Partial<Omit<InvitationRow, "id">>): Promise<number>;
   findInvitationByTokenHash(tokenHash: string): Promise<InvitationRow | null>;
+  /** Ids of `onchain` batches that still have `prepared` invitations (the delivery sweep), at most 200. */
+  onchainBatchesWithPreparedInvitations(): Promise<string[]>;
   invitationsForWallet(wallet: string): Promise<InvitationRow[]>;
 
   // credential_delegates
@@ -470,6 +472,10 @@ export class InMemoryCredentialStore implements CredentialStore {
   async findInvitationByTokenHash(tokenHash: string) {
     const i = [...this.invitations.values()].find((x) => x.tokenHash === tokenHash);
     return i ? clone(i) : null;
+  }
+  async onchainBatchesWithPreparedInvitations() {
+    const pending = new Set([...this.invitations.values()].filter((i) => i.status === "prepared").map((i) => i.batchId));
+    return [...this.batches.values()].filter((b) => b.status === "onchain" && pending.has(b.id)).map((b) => b.id).slice(0, 200);
   }
   async invitationsForWallet(wallet: string) {
     return this.listInvitations({ recipientWallet: wallet });

@@ -1,7 +1,8 @@
-// Cron: mirrors the credential register's chain events into the credential_* tables (every 5 min).
+// Cron: mirrors the credential register's chain events into the credential_* tables (every 5 min),
+// then delivers invitations of on-chain batches that a failed or interrupted delivery left behind.
 import { NextRequest, NextResponse } from "next/server";
 import { credentialSyncDeps } from "@/lib/credentials/runtime";
-import { syncRegister } from "@/lib/credentials/sync";
+import { sweepUndelivered, syncRegister } from "@/lib/credentials/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
       if (r.skipped === "registry_mismatch") console.error("[cron/credentials-sync] stored cursor belongs to another registry");
       return NextResponse.json(r, { status: r.skipped === "registry_mismatch" ? 409 : 200 });
     }
-    return NextResponse.json({ from: r.from.toString(), to: r.to.toString(), applied: r.applied });
+    const swept = await sweepUndelivered(deps);
+    return NextResponse.json({ from: r.from.toString(), to: r.to.toString(), applied: r.applied, redelivered: swept.batches });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[cron/credentials-sync] failed", msg);
