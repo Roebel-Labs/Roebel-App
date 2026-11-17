@@ -13,6 +13,9 @@ import { liveRoom } from '../../live-room/controller';
 import { removalPlan } from './removal';
 import type { Action } from '../../state/reducer';
 import { useTileDrag } from './tile-drag';
+import { ScreenPicker } from './ScreenPicker';
+import { arrange } from './arrange';
+import { defaultFrame } from '../../render/layout';
 
 const THUMB_W = 192;
 const THUMB_H = 108;
@@ -79,9 +82,9 @@ function cameraLabel(d: MediaDeviceInfo, i: number): string {
   return d.label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)$/i, '') || `Kamera ${i + 1}`;
 }
 
-type MenuView = 'root' | 'camera' | 'color' | 'split' | 'pip';
+type MenuView = 'root' | 'camera' | 'color' | 'split' | 'pip' | 'free';
 
-function AddSourceMenu({ onClose }: { onClose: () => void }) {
+function AddSourceMenu({ onClose, onPickScreen }: { onClose: () => void; onPickScreen: () => void }) {
   const { state, dispatch } = useShow();
   const [view, setView] = useState<MenuView>('root');
   const [cams, setCams] = useState<MediaDeviceInfo[] | null>(null);
@@ -91,6 +94,7 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
   const [b, setB] = useState(state.sources[1]?.id ?? state.sources[0]?.id ?? '');
   const [fill, setFill] = useState(true);
   const [bg, setBg] = useState('');
+  const [extra, setExtra] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -172,6 +176,22 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  // Free layout: one big picture, every other picked source as a small box (bottom right, side by side).
+  const addFree = () => {
+    if (!a) return;
+    const tops = extra.filter((x) => x !== a);
+    const frames: NonNullable<Scene['frames']> = { [a]: { x: 0, y: 0, w: 1920, h: 1080 } };
+    tops.forEach((id, i) => (frames[id] = defaultFrame(1920, 1080, i)));
+    const id = `scene-${Date.now().toString(36)}`;
+    dispatch({
+      type: 'addScene',
+      scene: { id, label: [a, ...tops].map(labelOf).join(' + '), layout: 'free', sourceIds: [a, ...tops], frames },
+    });
+    dispatch({ type: 'setPreview', sceneId: id });
+    arrange.open(tops[0] ?? a);
+    onClose();
+  };
+
   const back = (
     <button className="menu-item menu-back" onClick={() => setView('root')}>
       {t('‹ Zurück')}
@@ -199,7 +219,19 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
           <button className="menu-item" onClick={() => setView('color')}>
             {t('Farbfläche')}
           </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              onPickScreen();
+              onClose();
+            }}
+          >
+            {t('Bildschirm oder Fenster…')}
+          </button>
           <div className="menu-sep" />
+          <button className="menu-item" disabled={state.sources.length < 2} onClick={() => setView('free')}>
+            {t('Freie Anordnung (z. B. Bildschirm + Gesicht)')}
+          </button>
           <button className="menu-item" disabled={state.sources.length < 2} onClick={() => setView('split')}>
             {t('Split (zwei nebeneinander)')}
           </button>
@@ -262,6 +294,44 @@ function AddSourceMenu({ onClose }: { onClose: () => void }) {
             >
               {t('Farbfläche hinzufügen')}
             </button>
+          </div>
+        </>
+      )}
+
+      {view === 'free' && (
+        <>
+          {back}
+          <div className="menu-sep" />
+          <div className="menu-sub">
+            <label className="field">
+              <span>{t('Großes Bild')}</span>
+              <select className="input" value={a} onChange={(e) => setA(e.target.value)}>
+                {state.sources.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="field">
+              <span>{t('Darüber (klein, frei verschiebbar)')}</span>
+              {state.sources
+                .filter((s) => s.id !== a)
+                .map((s) => (
+                  <label key={s.id} className="check">
+                    <input
+                      type="checkbox"
+                      checked={extra.includes(s.id)}
+                      onChange={(e) => setExtra((cur) => (e.target.checked ? [...cur, s.id] : cur.filter((x) => x !== s.id)))}
+                    />
+                    {s.label}
+                  </label>
+                ))}
+            </div>
+            <button className="btn" disabled={!a || extra.filter((x) => x !== a).length === 0} onClick={addFree}>
+              {t('Anlegen und anordnen')}
+            </button>
+            <div className="hint">{t('Danach im Vorschaubild verschieben und Größe ziehen.')}</div>
           </div>
         </>
       )}
@@ -362,6 +432,16 @@ function ComboEdit({ scene, onClose }: { scene: Scene; onClose: () => void }) {
           onBg={(v) => dispatch({ type: 'updateScene', id: scene.id, patch: { backgroundSourceId: v || undefined } })}
         />
         <div className="hint">{t('Änderungen gelten sofort, auch im Live-Bild.')}</div>
+        <button
+          className="btn"
+          onClick={() => {
+            dispatch({ type: 'setPreview', sceneId: scene.id });
+            arrange.open();
+            onClose();
+          }}
+        >
+          {t('Frei anordnen…')}
+        </button>
       </div>
     </div>
   );
@@ -374,6 +454,7 @@ export function SourceRow() {
   const [menu, setMenu] = useState(false);
   const [removing, setRemoving] = useState<Scene | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [screenPicker, setScreenPicker] = useState(false);
   const kindOf = (id: string) => state.sources.find((s) => s.id === id)?.kind;
   const [dropNote, setDropNote] = useState<string | null>(null);
   const drag = useTileDrag('scene', (id, to) => dispatch({ type: 'moveScene', id, to }), async (files) => {
@@ -436,9 +517,17 @@ export function SourceRow() {
                 <button
                   className="tile-edit"
                   aria-label={t('{name} anpassen', { name: scene.label })}
-                  title={t('Ausfüllen und Hintergrund')}
+                  title={scene.layout === 'free' ? t('Im Vorschaubild anordnen') : t('Ausfüllen und Hintergrund')}
                   aria-expanded={editing === scene.id}
-                  onClick={() => setEditing((cur) => (cur === scene.id ? null : scene.id))}
+                  onClick={() => {
+                    // A free scene is edited in the preview ("Anordnen"); split / pip keep their quick options.
+                    if (scene.layout === 'free') {
+                      dispatch({ type: 'setPreview', sceneId: scene.id });
+                      arrange.open();
+                      return;
+                    }
+                    setEditing((cur) => (cur === scene.id ? null : scene.id));
+                  }}
                 >
                   ⚙
                 </button>
@@ -467,9 +556,10 @@ export function SourceRow() {
           <button className="add-tile" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
             {t('+ Quelle')}
           </button>
-          {menu && <AddSourceMenu onClose={() => setMenu(false)} />}
+          {menu && <AddSourceMenu onClose={() => setMenu(false)} onPickScreen={() => setScreenPicker(true)} />}
         </div>
       </div>
+      {screenPicker && <ScreenPicker onClose={() => setScreenPicker(false)} />}
       {removing && (
         <ConfirmDialog
           title={t('„{name}“ entfernen?', { name: removing.label })}

@@ -52,7 +52,33 @@ type Entry = {
   extOff: () => void;
   /** External sources: the live video track the element currently shows (re-register without a change = no flash). */
   extTrackId: string | null;
+  /** Screen sources: the capture id actually opened (differs from source.screenId after a window was found by name). */
+  screenId?: string;
 };
+
+/** Desktop capture constraints (Electron): the picked screen/window, at most program size, at the show's rate. */
+export function screenConstraints(screenId: string, fps: 30 | 50): MediaTrackConstraints {
+  return {
+    mandatory: {
+      chromeMediaSource: 'desktop',
+      chromeMediaSourceId: screenId,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      maxFrameRate: fps,
+    },
+  } as unknown as MediaTrackConstraints;
+}
+
+/**
+ * Finds a screen source again: same capture id, else (window ids change when the app restarts) the same title,
+ * else for a whole screen the same screen name. null = not there right now.
+ */
+export function resolveScreen(list: Array<{ id: string; name: string; kind: string }>, source: Pick<Source, 'screenId' | 'label' | 'screenKind'>): string | null {
+  if (source.screenId && list.some((x) => x.id === source.screenId)) return source.screenId;
+  const kind = source.screenKind ?? (source.screenId?.startsWith('screen:') ? 'screen' : 'window');
+  const byName = list.find((x) => x.kind === kind && x.name === source.label);
+  return byName ? byName.id : null;
+}
 
 type StatusListener = (sourceId: string, status: SourceHealth) => void;
 
@@ -66,6 +92,8 @@ function keyOf(s: Source): string | null {
       return s.url ? `image:${s.url}` : null;
     case 'external':
       return `external:${s.id}`;
+    case 'screen':
+      return s.screenId ? `screen:${s.screenId}` : null;
     default:
       return null; // 'color' is drawn by the renderer directly
   }
@@ -174,7 +202,7 @@ export class SourceRegistry {
   private emit(e: Entry, ev: SourceEvent) {
     if (e.disposed) return;
     // A stale 'playing' from an ended stream (Chromium shows a 2×2 placeholder) must not mask a loss.
-    if (ev === 'playing' && e.source.kind === 'camera' && !hasLiveVideo(e.stream)) return;
+    if (ev === 'playing' && (e.source.kind === 'camera' || e.source.kind === 'screen') && !hasLiveVideo(e.stream)) return;
     if (ev === 'playing' && e.source.kind === 'external' && !hasLiveVideo(externalMedia.get(e.source.id))) return;
     const prev = e.status;
     const next = sourceStatus(prev, ev);
@@ -182,7 +210,7 @@ export class SourceRegistry {
     else if (ev === 'stalled' && prev === 'ok') this.armWatchdog(e, STALL_TIMEOUT_MS, 'stalled');
     if (next === 'lost') {
       this.ensureRetry(e);
-      if (e.source.kind === 'camera') this.dropCameraStream(e);
+      if (e.source.kind === 'camera' || e.source.kind === 'screen') this.dropCameraStream(e);
     } else this.clearRetry(e);
     if (next === e.status) return;
     e.status = next;
@@ -273,6 +301,7 @@ export class SourceRegistry {
         el.removeEventListener('loadeddata', onLoaded);
       };
       if (s.kind === 'camera') void this.openCamera(e);
+      else if (s.kind === 'screen') void this.openScreen(e, s.screenId!);
       else if (s.kind === 'external') this.attachExternal(e);
       else this.openVideo(e);
     } else {
@@ -350,6 +379,38 @@ export class SourceRegistry {
     }
   }
 
+  private async openScreen(e: Entry, screenId: string) {
+    if (e.opening || e.disposed) return;
+    e.opening = true;
+    const video = e.el as HTMLVideoElement;
+    try {
+      stopStream(e.stream);
+      e.stream = null;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: screenConstraints(screenId, this.opts.fps), audio: false });
+      if (e.disposed) {
+        stopStream(stream);
+        return;
+      }
+      e.stream = stream;
+      e.screenId = screenId;
+      for (const t of stream.getVideoTracks()) {
+        // The window closed or the screen went away.
+        t.addEventListener('ended', () => {
+          if (e.stream === stream) this.emit(e, 'ended');
+        });
+      }
+      this.emit(e, 'started');
+      this.armWatchdog(e, START_TIMEOUT_MS, 'opened');
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+    } catch (err) {
+      console.warn(`[sources] screen ${e.source.label} unavailable`, err);
+      this.emit(e, 'deviceGone');
+    } finally {
+      e.opening = false;
+    }
+  }
+
   /**
    * Points an external source's element at its current stream (from media/external.ts). No stream or no
    * live video track → 'lost' ("Signal verloren"). The tracks belong to the stream's owner: never stopped here.
@@ -416,6 +477,15 @@ export class SourceRegistry {
     if (e.source.kind === 'external') {
       // Comes back when its owner hands in a stream again (externalMedia listener); polling only re-checks.
       if (hasLiveVideo(externalMedia.get(e.source.id))) this.attachExternal(e);
+      return;
+    }
+    if (e.source.kind === 'screen') {
+      // Re-open only once the window/screen is listed again (found by title when its id changed).
+      const list = await window.studio.screen?.list({ thumbnails: false }).catch(() => null);
+      const id = list ? resolveScreen(list, e.source) : null;
+      if (!id || e.disposed || e.status !== 'lost') return;
+      this.emit(e, 'deviceBack');
+      await this.openScreen(e, id);
       return;
     }
     if (e.source.kind === 'camera') {

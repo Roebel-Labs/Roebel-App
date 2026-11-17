@@ -6,6 +6,7 @@ import { FORBIDDEN_TEMPLATE_KINDS, STARTER_TEMPLATES, STARTER_VERSION, STARTERS_
 import type {
   AudioChannel,
   Destination,
+  Frame,
   OutputTarget,
   OverlayInstance,
   Scene,
@@ -25,7 +26,7 @@ export type Action =
   | { type: 'removeSource'; id: string }
   | { type: 'addScene'; scene: Omit<Scene, 'id'> & { id?: string } }
   | { type: 'removeScene'; id: string }
-  | { type: 'updateScene'; id: string; patch: Pick<Scene, 'fill' | 'backgroundSourceId'> }
+  | { type: 'updateScene'; id: string; patch: Partial<Pick<Scene, 'fill' | 'backgroundSourceId' | 'layout' | 'sourceIds' | 'frames' | 'label'>> }
   | { type: 'setPreview'; sceneId: string | null }
   | { type: 'take'; now: number }
   | { type: 'cut' }
@@ -166,6 +167,24 @@ function dropScenes(s: ShowState, gone: Set<string>): ShowState {
   };
 }
 
+/**
+ * Removes a source from every scene. A free scene just loses that layer (and is dropped only when nothing is left);
+ * every other scene showing it goes, as before.
+ */
+function dropSourceFromScenes(s: ShowState, id: string): ShowState {
+  const gone = new Set<string>();
+  const scenes = s.scenes.map((sc) => {
+    if (!sc.sourceIds.includes(id)) return sc;
+    if (sc.layout !== 'free' || sc.sourceIds.length <= 1) {
+      gone.add(sc.id);
+      return sc;
+    }
+    const { [id]: _drop, ...frames } = sc.frames ?? {};
+    return { ...sc, sourceIds: sc.sourceIds.filter((x) => x !== id), frames };
+  });
+  return dropScenes({ ...s, scenes }, gone);
+}
+
 /** Sponsor logos are broadcast to the OBS page: only /media/ capability URLs from media.allow() are accepted. */
 const MEDIA_URL = new RegExp(`^http://127\\.0\\.0\\.1:${OVERLAY_PORT}/media/[0-9a-f]{32}$`);
 const safeLogo = (u: unknown): string | null => (typeof u === 'string' && MEDIA_URL.test(u) ? u : null);
@@ -197,8 +216,7 @@ const externalChannelId = (sourceId: string) => `ach-${sourceId}`;
 
 /** Removes an external source with every scene showing it and its audio channel(s). */
 function dropExternal(s: ShowState, id: string): ShowState {
-  const gone = new Set(s.scenes.filter((sc) => sc.sourceIds.includes(id)).map((sc) => sc.id));
-  const out = dropScenes(s, gone);
+  const out = dropSourceFromScenes(s, id);
   return {
     ...out,
     sources: out.sources.filter((x) => x.id !== id),
@@ -282,8 +300,8 @@ function reduce(s: ShowState, a: Action): ShowState {
     case 'removeSource': {
       // An external source takes its audio channel with it (the operator removed the guest's tile).
       if (s.sources.some((x) => x.id === a.id && x.kind === 'external')) return dropExternal(s, a.id);
-      const gone = new Set(s.scenes.filter((sc) => sc.sourceIds.includes(a.id)).map((sc) => sc.id));
-      return { ...dropScenes(s, gone), sources: s.sources.filter((x) => x.id !== a.id) };
+      const out = dropSourceFromScenes(s, a.id);
+      return { ...out, sources: out.sources.filter((x) => x.id !== a.id) };
     }
     case 'addScene':
       return { ...s, scenes: [...s.scenes, { ...a.scene, id: a.scene.id ?? uid() }] };
@@ -647,6 +665,28 @@ function restoreAudio(v: unknown): ShowState['audio'] {
   return { channels, masterDb: num(v.masterDb, d.masterDb) };
 }
 
+/** Keeps only well-formed frames (finite numbers, at least 1 px) for sources the scene still shows. */
+function restoreSceneFrames(sc: Scene): Scene {
+  if (sc.layout !== 'free') {
+    const { frames: _f, ...rest } = sc;
+    return rest;
+  }
+  const raw = isObj(sc.frames) ? (sc.frames as Record<string, unknown>) : {};
+  const frames: Record<string, Frame> = {};
+  for (const id of sc.sourceIds) {
+    const f = raw[id];
+    if (!isObj(f)) continue;
+    const [x, y, w, h] = [f.x, f.y, f.w, f.h].map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN));
+    if (![x, y, w, h].every(Number.isFinite) || w < 1 || h < 1) continue;
+    const frame: Frame = { x, y, w, h };
+    if (f.fit === 'contain' || f.fit === 'cover') frame.fit = f.fit;
+    if (typeof f.radius === 'number' && Number.isFinite(f.radius) && f.radius > 0) frame.radius = f.radius;
+    if (f.border === true) frame.border = true;
+    frames[id] = frame;
+  }
+  return { ...sc, frames };
+}
+
 export function restore(json: string | null): ShowState {
   const d = initialState();
   if (!json) return d;
@@ -666,10 +706,13 @@ export function restore(json: string | null): ShowState {
   const sources = allSources.filter((x) => !external.has(x.id));
   const scenes = arr<unknown>(raw.scenes, [])
     .filter(hasId)
-    .map((sc) => ({
+    .map((sc) => restoreSceneFrames({
       ...(sc as unknown as Scene),
       sourceIds: arr<unknown>(sc.sourceIds, []).filter((x): x is string => typeof x === 'string'),
     }))
+    // A free scene only loses the guest's layer; any other scene with a guest goes.
+    .map((sc) => (sc.layout === 'free' ? { ...sc, sourceIds: sc.sourceIds.filter((id) => !external.has(id)) } : sc))
+    .filter((sc) => sc.sourceIds.length > 0 || sc.layout !== 'free')
     .filter((sc) => !sc.sourceIds.some((id) => external.has(id)))
     // A guest used as background is gone after a restart: fall back to black.
     .map((sc) => (sc.backgroundSourceId && external.has(sc.backgroundSourceId) ? { ...sc, backgroundSourceId: undefined } : sc));

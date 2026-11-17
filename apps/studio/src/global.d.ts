@@ -1,6 +1,7 @@
 import type { OutputConfig, OutputStatus, StreamTarget } from './state/types';
 
 declare global {
+  type ScreenSourceInfo = { id: string; name: string; kind: 'screen' | 'window'; thumbnail: string | null; icon: string | null };
   interface Window {
     studio: {
       output: {
@@ -26,6 +27,12 @@ declare global {
         askAccess?: () => Promise<boolean>;
         /** Grants the renderer access to a local file; resolves to http://127.0.0.1:7311/media/<token>. */
         allow(absPath: string): Promise<string>;
+      };
+      /** Installer ≥ 0.3.13 only: screens and app windows for capture. */
+      screen?: {
+        list(opts?: { thumbnails?: boolean }): Promise<ScreenSourceInfo[]>;
+        access(): Promise<'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown'>;
+        openSettings(): Promise<boolean>;
       };
       fs: {
         /** Appends one spot to <recordDir>/werbung-airtime.jsonl; never rejects. */

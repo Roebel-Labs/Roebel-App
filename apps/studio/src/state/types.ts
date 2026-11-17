@@ -55,9 +55,13 @@ export type Source = {
   id: string;
   /** 'external': a MediaStream handed in at runtime (Live-Raum phone guest). The stream itself is held in
    * media/external.ts, never here; external sources do not survive a restart. */
-  kind: 'camera' | 'video' | 'image' | 'color' | 'external';
+  kind: 'camera' | 'video' | 'image' | 'color' | 'external' | 'screen';
   label: string;
   deviceId?: string;
+  /** 'screen': desktop capture id from the picker ("screen:1:0", "window:1234:0"). Window ids change when the app
+   * restarts, so the source is found again by `label` (the window title / screen name) when the id is gone. */
+  screenId?: string;
+  screenKind?: 'screen' | 'window';
   url?: string;
   color?: string;
   loop?: boolean;
@@ -66,11 +70,28 @@ export type Source = {
   detached?: boolean;
 };
 
+/** Where one layer of a 'free' scene sits, in program pixels (1920×1080). */
+export type Frame = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** cover = fill the box (edges cropped), contain = whole picture with bars. Default cover. */
+  fit?: 'cover' | 'contain';
+  /** Corner radius in program px; ≥ half the short side = pill / circle. */
+  radius?: number;
+  /** Thin white frame around the layer. */
+  border?: boolean;
+};
+
 export type Scene = {
   id: string;
   label: string;
-  layout: 'full' | 'pip' | 'split';
+  /** free = every source has its own box (`frames`), drawn in `sourceIds` order (first = bottom). */
+  layout: 'full' | 'pip' | 'split' | 'free';
   sourceIds: string[];
+  /** Free only: one frame per source id. A source without a frame fills the whole picture. */
+  frames?: Record<string, Frame>;
   /** Split only: both halves fill the frame height (cropped) instead of two 16:9 halves with bars. */
   fill?: boolean;
   /** Split / picture-in-picture: source drawn full-frame behind the layout instead of black. */

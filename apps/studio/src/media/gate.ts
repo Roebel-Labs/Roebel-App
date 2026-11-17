@@ -1,6 +1,6 @@
 // Capture gate: cameras and microphones open ONLY while the operator is in the Livestream section or a
 // broadcast/recording runs. Opening Ortis Studio for the workspace must never light the camera
-// (Max, 2026-11-12: "creepy"). Off → camera sources and device audio channels are withheld from the
+// (Max, 2026-11-12: "creepy"). Off → camera and screen sources and device audio channels are withheld from the
 // engine, which releases them (camera light off); video files, images, colours and network ingest stay.
 import type { AudioChannel, ShowState } from '../state/types';
 
@@ -9,7 +9,8 @@ export function captureAllowed(section: string, phase: 'off' | string): boolean 
 }
 
 export function gateSources(sources: ShowState['sources'], allowed: boolean): ShowState['sources'] {
-  return allowed ? sources : sources.filter((s) => s.kind !== 'camera');
+  // Screen capture is held to the same rule: the desktop is never recorded while someone just chats.
+  return allowed ? sources : sources.filter((s) => s.kind !== 'camera' && s.kind !== 'screen');
 }
 
 export function gateAudio(audio: ShowState['audio'], allowed: boolean): ShowState['audio'] {

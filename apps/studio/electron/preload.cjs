@@ -31,6 +31,13 @@ contextBridge.exposeInMainWorld('studio', {
     // macOS camera/microphone permission, asked when the livestream is first opened (installer ≥ 0.2.0).
     askAccess: () => ipcRenderer.invoke('media:askAccess'),
   },
+  // Screen / window capture (installer ≥ 0.3.13).
+  screen: {
+    // [{ id, name, kind: 'screen' | 'window', thumbnail, icon }] (data URLs; null without thumbnails)
+    list: (opts) => ipcRenderer.invoke('screen:list', opts),
+    access: () => ipcRenderer.invoke('screen:access'),
+    openSettings: () => ipcRenderer.invoke('screen:openSettings'),
+  },
   fs: {
     // { recordDir, sponsorId, name, startedAt, endedAt } -> { ok, error? }; appends to <recordDir>/werbung-airtime.jsonl.
     appendAirLog: (entry) => ipcRenderer.invoke('fs:appendAirLog', entry),

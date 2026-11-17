@@ -1,7 +1,7 @@
 'use strict';
 // Electron main process for Ortis Studio.
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, powerSaveBlocker, session, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, nativeImage, powerSaveBlocker, session, shell, systemPreferences } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { resolveUserDataDir } = require('./userdata.cjs');
@@ -635,6 +635,43 @@ ipcMain.handle('media:askAccess', async (e) => {
   guard('media:askAccess', e);
   await askMacMediaAccess();
   return true;
+});
+// Screen / window capture for the livestream (installer ≥ 0.3.13). The renderer opens the picked id with
+// getUserMedia({ chromeMediaSource: 'desktop' }); the permission handler already limits media to our own page.
+// Thumbnails only for the picker; the reconnect lookup asks without them (cheap).
+ipcMain.handle('screen:list', async (e, opts) => {
+  guard('screen:list', e);
+  const thumbs = !(opts && opts.thumbnails === false);
+  const size = thumbs ? { width: 384, height: 216 } : { width: 0, height: 0 };
+  const own = win && !win.isDestroyed() ? win.getMediaSourceId() : null;
+  const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: size, fetchWindowIcons: thumbs });
+  return list
+    .filter((s) => s.id !== own)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: s.id.startsWith('screen:') ? 'screen' : 'window',
+      thumbnail: thumbs && s.thumbnail && !s.thumbnail.isEmpty() ? s.thumbnail.toDataURL() : null,
+      icon: thumbs && s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : null,
+    }));
+});
+// macOS Screen Recording permission: 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown'.
+ipcMain.handle('screen:access', (e) => {
+  guard('screen:access', e);
+  if (process.platform !== 'darwin') return 'granted';
+  try {
+    return systemPreferences.getMediaAccessStatus('screen');
+  } catch {
+    return 'unknown';
+  }
+});
+ipcMain.handle('screen:openSettings', async (e) => {
+  guard('screen:openSettings', e);
+  if (process.platform === 'darwin') {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+    return true;
+  }
+  return false;
 });
 ipcMain.handle('desktop:capture', (e) => {
   guard('desktop:capture', e);

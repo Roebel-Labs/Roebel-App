@@ -821,3 +821,34 @@ describe('Unterstützungen are never on air (donation template removed)', () => 
     expect(showReducer(s, { type: 'updateTemplate', template: { ...lt, kind: 'donation' } as never })).toBe(s);
   });
 });
+
+describe('free scenes', () => {
+  it('removing a source only drops its layer from a free scene', () => {
+    let s = withScenes();
+    const [a, b] = s.sources.map((x) => x.id);
+    s = showReducer(s, { type: 'addScene', scene: { id: 'free', label: 'A + B', layout: 'free', sourceIds: [a, b], frames: { [b]: { x: 0, y: 0, w: 100, h: 100 } } } });
+    s = showReducer(s, { type: 'removeSource', id: b });
+    const free = s.scenes.find((x) => x.id === 'free')!;
+    expect(free.sourceIds).toEqual([a]);
+    expect(free.frames).toEqual({});
+    s = showReducer(s, { type: 'removeSource', id: a });
+    expect(s.scenes.find((x) => x.id === 'free')).toBeUndefined();
+  });
+  it('restore keeps valid frames and drops broken ones', () => {
+    let s = withScenes();
+    const [a, b] = s.sources.map((x) => x.id);
+    s = showReducer(s, {
+      type: 'addScene',
+      scene: { id: 'free', label: '', layout: 'free', sourceIds: [a, b], frames: { [a]: { x: 1, y: 2, w: 3, h: 4, fit: 'contain', radius: 24, border: true }, [b]: { x: 0, y: 0, w: 0, h: 10 } } },
+    });
+    const r = restore(serialize(s)).scenes.find((x) => x.id === 'free')!;
+    expect(r.frames).toEqual({ [a]: { x: 1, y: 2, w: 3, h: 4, fit: 'contain', radius: 24, border: true } });
+  });
+  it('updateScene turns a pip into a free scene', () => {
+    let s = withScenes();
+    const [a, b] = s.sources.map((x) => x.id);
+    s = showReducer(s, { type: 'addScene', scene: { id: 'p', label: '', layout: 'pip', sourceIds: [a, b], backgroundSourceId: a } });
+    s = showReducer(s, { type: 'updateScene', id: 'p', patch: { layout: 'free', frames: { [b]: { x: 5, y: 5, w: 50, h: 50 } }, backgroundSourceId: undefined } });
+    expect(s.scenes.find((x) => x.id === 'p')).toMatchObject({ layout: 'free', backgroundSourceId: undefined });
+  });
+});

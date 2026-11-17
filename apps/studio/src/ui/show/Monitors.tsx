@@ -6,6 +6,8 @@ import { useShow } from '../../state/store';
 import type { ShowState } from '../../state/types';
 import { useStudio } from '../studio';
 import { TransitionBar } from './TransitionBar';
+import { arrange, useArrange } from './arrange';
+import { ArrangeBar, LayoutEditor } from './LayoutEditor';
 
 const MON_W = 960;
 const MON_H = 540;
@@ -41,7 +43,10 @@ function PreviewMonitor() {
       if (t - last < minGap) return;
       last = t;
       const s = latest.current;
-      const shown = asProgram(s, s.previewSceneId);
+      // Mid-drag in "Anordnen": draw the dragged layout instead of the saved one.
+      const draft = arrange.draft();
+      const base = draft && draft.id === s.previewSceneId ? { ...s, scenes: s.scenes.map((x) => (x.id === draft.id ? draft : x)) } : s;
+      const shown = asProgram(base, s.previewSceneId);
       renderFrame(ctx, shown, engine.registry.lookup, defaultRenderContext(shown), Date.now(), { scale: MON_W / 1920 });
     };
     raf = requestAnimationFrame(draw);
@@ -49,14 +54,27 @@ function PreviewMonitor() {
   }, [engine]);
 
   const label = sceneLabel(state, state.previewSceneId);
+  const { on: arranging } = useArrange();
+  const scene = state.scenes.find((x) => x.id === state.previewSceneId) ?? null;
+  const editingLive = arranging && !!scene && scene.id === state.programSceneId;
   return (
     <div className="pvw">
       <div className="monitor-head">
         <span className="monitor-title">{t('Vorschau')}</span>
         <span className="monitor-scene">{label}</span>
+        <button
+          className={`monitor-action${arranging ? ' on' : ''}`}
+          aria-pressed={arranging}
+          disabled={!scene && !arranging}
+          onClick={() => arrange.toggle()}
+          title={t('Bilder in dieser Ansicht verschieben und in der Größe ändern')}
+        >
+          {arranging ? t('Fertig') : t('Anordnen')}
+        </button>
       </div>
-      <div className="monitor-frame">
+      <div className={`monitor-frame${arranging ? ' arranging' : ''}`}>
         <canvas ref={ref} width={MON_W} height={MON_H} />
+        {arranging && scene && <LayoutEditor scene={scene} />}
         {!state.previewSceneId && (
           <div className="monitor-empty">
             {state.scenes.length === 0
@@ -65,6 +83,12 @@ function PreviewMonitor() {
           </div>
         )}
       </div>
+      {arranging && scene && (
+        <>
+          {editingLive && <div className="arrange-live-note">{t('Diese Ansicht ist gerade live: jede Änderung ist sofort im Stream.')}</div>}
+          <ArrangeBar scene={scene} />
+        </>
+      )}
     </div>
   );
 }

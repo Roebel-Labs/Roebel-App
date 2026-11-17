@@ -12,7 +12,7 @@ import type {
 } from '../state/types';
 import { ease, overlayProgress, transitionProgress } from './anim';
 import { resolveBindings } from './bindings';
-import { fitRect, sceneRects, type Rect } from './layout';
+import { fitRect, sceneLayers, type Layer, type Rect } from './layout';
 
 // Canvas renderer shared by the preview monitor, the 1920×1080 program canvas and the OBS overlay page.
 // Everything is drawn in 1920×1080 space; `opts.scale` maps that onto smaller canvases.
@@ -177,32 +177,49 @@ function drawTransition(
 
 function drawScene(ctx: CanvasRenderingContext2D, state: ShowState, scene: Scene | undefined, media: MediaLookup) {
   if (!scene) return;
-  const rects = sceneRects(scene.layout, FRAME_W, FRAME_H, { fill: scene.fill });
   if (scene.layout !== 'full') {
-    // Base fill so letterbox bars / pip backgrounds are black even inside a fading transition.
+    // Base fill so letterbox bars / pip / free-layout backgrounds are black even inside a fading transition.
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, FRAME_W, FRAME_H);
-    // Optional background behind the layout; a removed background source simply stays black.
-    const bg = scene.backgroundSourceId ? state.sources.find((s) => s.id === scene.backgroundSourceId) : undefined;
-    if (bg) guarded(ctx, 'source', () => drawSource(ctx, bg, { x: 0, y: 0, w: FRAME_W, h: FRAME_H }, media));
   }
-  rects.forEach((r, i) => {
-    const id = scene.sourceIds[i];
-    if (id === undefined) return;
-    const source = state.sources.find((s) => s.id === id);
-    guarded(ctx, 'source', () => drawSource(ctx, source, r, media));
-    if (scene.layout === 'pip' && i === 1) drawInsetFrame(ctx, r);
-  });
+  // A removed background source simply stays black; a removed foreground source shows the slate.
+  for (const layer of sceneLayers(scene, FRAME_W, FRAME_H)) {
+    const source = state.sources.find((s) => s.id === layer.sourceId);
+    if (!source && layer.sourceId === scene.backgroundSourceId) continue;
+    guarded(ctx, 'source', () => drawLayer(ctx, source, layer, media));
+  }
 }
 
-function drawInsetFrame(ctx: CanvasRenderingContext2D, r: Rect) {
+/** One layer: its source clipped to the (optionally rounded) box, plus the optional white frame. */
+function drawLayer(ctx: CanvasRenderingContext2D, source: Source | undefined, layer: Layer, media: MediaLookup) {
+  const r = layer.rect;
+  if (!(r.w > 0) || !(r.h > 0)) return;
+  const radius = Math.min(layer.radius, r.w / 2, r.h / 2);
+  if (radius > 0) {
+    ctx.save();
+    try {
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, radius);
+      ctx.clip();
+      drawSource(ctx, source, r, media, layer.fit, layer.free);
+    } finally {
+      ctx.restore();
+    }
+  } else {
+    drawSource(ctx, source, r, media, layer.fit, layer.free);
+  }
+  if (layer.border) drawInsetFrame(ctx, r, radius);
+}
+
+function drawInsetFrame(ctx: CanvasRenderingContext2D, r: Rect, radius = 0) {
   const b = 3;
   ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.fillRect(r.x - b, r.y - b, r.w + 2 * b, b);
-  ctx.fillRect(r.x - b, r.y + r.h, r.w + 2 * b, b);
-  ctx.fillRect(r.x - b, r.y, b, r.h);
-  ctx.fillRect(r.x + r.w, r.y, b, r.h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = b;
+  ctx.beginPath();
+  // The line sits just outside the picture, like the old picture-in-picture frame.
+  ctx.roundRect(r.x - b / 2, r.y - b / 2, r.w + b, r.h + b, radius > 0 ? radius + b / 2 : 0);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -219,7 +236,7 @@ function sizeOf(el: CanvasImageSource): { w: number; h: number } {
   return { w: n(w), h: n(h) };
 }
 
-function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r: Rect, media: MediaLookup) {
+function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r: Rect, media: MediaLookup, fitMode: Layer['fit'] = 'auto', free = false) {
   if (!source) {
     drawSlate(ctx, r, 'Signal verloren', '');
     return;
@@ -239,10 +256,14 @@ function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r
   if (m.status !== 'ok' || !m.el) return drawSlate(ctx, r, 'Lädt…', source.label);
   const { w, h } = sizeOf(m.el);
   if (!(w > 0) || !(h > 0)) return drawSlate(ctx, r, 'Lädt…', source.label);
-  const fit = source.kind === 'image' ? 'contain' : 'cover';
+  // Images and screens are never cropped by the fixed layouts (a slide's edge matters); cameras and videos fill.
+  const fit = fitMode !== 'auto' ? fitMode : source.kind === 'image' || source.kind === 'screen' ? 'contain' : 'cover';
   const dst = fitRect(w, h, r, fit);
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
+  // Fixed layouts letterbox on black; a free layer stays transparent around its picture (a logo over the screen).
+  if (!free) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
   ctx.save();
   try {
     ctx.beginPath();
