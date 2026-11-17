@@ -4,7 +4,7 @@
  * of the steps (reviewAction), never from the server's title; a mismatch shows the reason and no
  * "Bestätigen". One primary button, one "Verwerfen" text link.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -14,15 +14,42 @@ import { fontFamily } from '@/constants/theme';
 import { CredentialScreenFrame, CredentialStatus, frameStyles } from '@/components/credentials/CredentialScreenFrame';
 import { OrgChainNotice } from '@/components/credentials/OrgCredentialParts';
 import { cancelAction, fetchAction, fetchActions, fetchOrgs, fetchTypes } from '@/lib/credreg/api';
+import { parseSteps } from '@netizen-labs/credential-registry';
+import { readBatchType, readTypeOrg } from '@/lib/credreg/chain';
+import { nameAccounts } from '@/lib/credreg/delegates';
 import { useCredentialsGate } from '@/lib/credreg/gate';
-import { confirmAction, preparedLabel, reportSent, reviewAction, submittedMessage, typeNamesFrom } from '@/lib/credreg/org';
+import {
+  confirmAction,
+  delegateAccounts,
+  expectedDelegateFor,
+  preparedLabel,
+  reportSent,
+  resolveActionOrg,
+  reviewAction,
+  submittedMessage,
+  typeNamesFrom,
+  type PhoneOrg,
+} from '@/lib/credreg/org';
 import type { ActionVia, PhoneAction, TypeView } from '@/lib/credreg/types';
 import type { Hex } from 'viem';
 
 type Loaded =
   | { key: string; status: 'error'; code: string; message: string }
-  | { key: string; status: 'ready'; action: PhoneAction; types: TypeView[]; via: ActionVia | null };
+  | {
+      key: string;
+      status: 'ready';
+      action: PhoneAction;
+      types: TypeView[];
+      via: ActionVia | null;
+      orgs: PhoneOrg[];
+      /** The one org of the caller every step belongs to (from the phone's own list), or why not. */
+      org: { ok: true; name: string } | { ok: false; reason: string };
+      /** Lowercase account → display name, for setDelegate steps. */
+      accountNames: Record<string, string>;
+      loadedAt: number;
+    };
 
+const CHAIN_UNAVAILABLE = 'Das Register ist gerade nicht erreichbar. Bitte versuche es gleich noch einmal.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function ApproveActionScreen() {
@@ -30,7 +57,6 @@ export default function ApproveActionScreen() {
   const { colors } = useTheme();
   const params = useLocalSearchParams<{ id?: string; org?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  const orgHint = typeof params.org === 'string' && UUID.test(params.org) ? params.org : null;
   const gate = useCredentialsGate();
   const account = useActiveAccount();
   const { gnosisAccount } = useGnosisWallet();
@@ -40,6 +66,7 @@ export default function ApproveActionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<Hex | null>(null);
   const [done, setDone] = useState<'done' | 'submitted' | 'cancelled' | null>(null);
+  const inFlight = useRef(false);
   const key = `${id}:${account?.address ?? ''}:${reloadKey}`;
 
   useEffect(() => {
@@ -52,21 +79,47 @@ export default function ApproveActionScreen() {
         setLoaded({ key, status: 'error', code: res.code, message: submittedMessage(res) });
         return;
       }
-      // Names and "prepared where" from the org's own lists; best effort.
-      let orgIds: string[] = orgHint ? [orgHint] : [];
-      if (!orgHint) {
-        const orgs = await fetchOrgs(account);
-        orgIds = orgs.ok ? orgs.data.map((o) => o.accountId) : [];
-      }
-      const lists = await Promise.all(orgIds.map((o) => Promise.all([fetchTypes(account, o), fetchActions(account, o)])));
+      // The phone's own org list: every step must belong to exactly one of these orgs.
+      const orgsRes = await fetchOrgs(account);
       if (cancelled) return;
-      const types: TypeView[] = [];
-      let via: ActionVia | null = null;
-      for (const [t, a] of lists) {
-        if (t.ok) types.push(...t.data);
-        if (a.ok) via = a.data.find((x) => x.id === id)?.via ?? via;
+      if (!orgsRes.ok) {
+        setLoaded({ key, status: 'error', code: orgsRes.code, message: submittedMessage(orgsRes) });
+        return;
       }
-      setLoaded({ key, status: 'ready', action: res.data, types, via });
+      const orgs: PhoneOrg[] = orgsRes.data.map((o) => ({ accountId: o.accountId, name: o.name }));
+      let steps: ReturnType<typeof parseSteps> = [];
+      try {
+        steps = parseSteps(res.data.steps);
+      } catch {
+        steps = []; // reviewAction names the problem
+      }
+      let org: { ok: true; name: string; accountId: string } | { ok: false; reason: string };
+      try {
+        const bound = steps.length ? await resolveActionOrg(steps, orgs, { typeOrg: readTypeOrg, batchType: readBatchType }) : null;
+        org = !bound ? { ok: false, reason: '' } : bound.ok ? { ok: true, name: bound.org.name, accountId: bound.org.accountId } : bound;
+      } catch {
+        org = { ok: false, reason: CHAIN_UNAVAILABLE };
+      }
+      // Names and "prepared where" from that org's own lists; best effort.
+      const [t, a, named] = await Promise.all([
+        org.ok ? fetchTypes(account, org.accountId) : null,
+        org.ok ? fetchActions(account, org.accountId) : null,
+        nameAccounts(delegateAccounts(steps)),
+      ]);
+      if (cancelled) return;
+      const accountNames: Record<string, string> = {};
+      for (const n of named) if (n.displayName !== 'Konto ohne Namen') accountNames[n.address.toLowerCase()] = n.displayName;
+      setLoaded({
+        key,
+        status: 'ready',
+        action: res.data,
+        types: t?.ok ? t.data : [],
+        via: a?.ok ? (a.data.find((x) => x.id === id)?.via ?? null) : null,
+        orgs,
+        org: org.ok ? { ok: true, name: org.name } : org,
+        accountNames,
+        loadedAt: Date.now(),
+      });
     })();
     return () => {
       cancelled = true;
@@ -133,7 +186,15 @@ export default function ApproveActionScreen() {
   }
 
   const action = current.action;
-  const review = reviewAction(action, typeNamesFrom(current.types));
+  const accountNames = current.accountNames;
+  const expectedDelegate = expectedDelegateFor(action.id);
+  const reviewed = reviewAction(action, typeNamesFrom(current.types), current.loadedAt, {
+    accounts: (address) => accountNames[address.toLowerCase()] ?? null,
+    expectedDelegate,
+  });
+  const orgProblem = !current.org.ok && current.org.reason ? current.org.reason : null;
+  const review = { ...reviewed, problem: reviewed.problem ?? orgProblem };
+  const orgName = current.org.ok ? current.org.name : null;
 
   if (done) {
     const message =
@@ -152,27 +213,31 @@ export default function ApproveActionScreen() {
   }
 
   const confirm = async () => {
-    if (busy || !account) return;
+    // Synchronous guard: a double tap must never start two sends (state updates are async).
+    if (inFlight.current || busy || !account) return;
     if (!gnosisAccount) {
       setError('Dein Konto ist gerade nicht verbunden. Bitte versuche es gleich noch einmal.');
       return;
     }
+    inFlight.current = true;
     setBusy('confirm');
     setError(null);
     try {
-      const r = await confirmAction(gnosisAccount, action, { apiAccount: account });
+      const r = await confirmAction(gnosisAccount, action, { apiAccount: account, orgs: current.orgs, expectedDelegate });
       if (r.ok) setDone(r.status);
       else {
         setError(r.message);
         if (r.sent) setSent(r.sent.txHash);
       }
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
 
   const reportAgain = async () => {
-    if (busy || !account || !sent) return;
+    if (inFlight.current || busy || !account || !sent) return;
+    inFlight.current = true;
     setBusy('report');
     setError(null);
     try {
@@ -180,12 +245,14 @@ export default function ApproveActionScreen() {
       if (r.ok) setDone(r.status);
       else setError(r.message);
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
 
   const discard = async () => {
-    if (busy || !account) return;
+    if (inFlight.current || busy || !account) return;
+    inFlight.current = true;
     setBusy('cancel');
     setError(null);
     try {
@@ -193,6 +260,7 @@ export default function ApproveActionScreen() {
       if (r.ok) setDone('cancelled');
       else setError(submittedMessage(r));
     } finally {
+      inFlight.current = false;
       setBusy(null);
     }
   };
@@ -203,7 +271,7 @@ export default function ApproveActionScreen() {
   return (
     <CredentialScreenFrame title={title}>
       <ScrollView contentContainerStyle={styles.content}>
-        {action.summary?.orgName ? <Text style={[styles.org, { color: colors.textPrimary }]}>{action.summary.orgName}</Text> : null}
+        {orgName ? <Text style={[styles.org, { color: colors.textPrimary }]}>{orgName}</Text> : null}
         {prepared ? <Text style={[styles.meta, { color: colors.textSecondary }]}>{prepared}</Text> : null}
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>

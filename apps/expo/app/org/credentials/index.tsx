@@ -12,7 +12,7 @@ import { fontFamily } from '@/constants/theme';
 import { CredentialScreenFrame, CredentialStatus, formatValidity } from '@/components/credentials/CredentialScreenFrame';
 import { OrgChainNotice, useCredOrg } from '@/components/credentials/OrgCredentialParts';
 import { fetchActions, fetchPeople, fetchTypes, prepareMembersPublic, prepareRevocation } from '@/lib/credreg/api';
-import { preparedLabel, submittedMessage } from '@/lib/credreg/org';
+import { preparedLabel, safeServerText, submittedMessage } from '@/lib/credreg/org';
 import type { ActionView, PersonRow, PersonState, TypeView } from '@/lib/credreg/types';
 
 const STATE_LABEL: Record<PersonState, string> = {
@@ -22,6 +22,8 @@ const STATE_LABEL: Record<PersonState, string> = {
   widerrufen: 'Widerrufen',
   abgelaufen: 'Abgelaufen',
 };
+
+const WAITING_FALLBACK = 'Eine Aktion wartet auf deine Bestätigung';
 
 type Data = {
   key: string;
@@ -207,10 +209,10 @@ export default function OrgCredentialsScreen() {
                 onPress={() => toApprove(a.id)}
                 style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
                 accessibilityRole="button"
-                accessibilityLabel={`${a.summary.title} prüfen`}
+                accessibilityLabel={`${safeServerText(a.summary?.title, WAITING_FALLBACK)} prüfen`}
               >
                 <View style={styles.rowBody}>
-                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{a.summary.title}</Text>
+                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{safeServerText(a.summary?.title, WAITING_FALLBACK)}</Text>
                   {preparedLabel(a.via) ? <Text style={[styles.meta, { color: colors.textSecondary }]}>{preparedLabel(a.via)}</Text> : null}
                 </View>
                 <Text style={[styles.link, { color: colors.primary }]}>Prüfen</Text>

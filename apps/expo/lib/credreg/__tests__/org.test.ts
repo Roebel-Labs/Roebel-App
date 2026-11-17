@@ -8,15 +8,31 @@ jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 import { credentialTypeId, encodeSteps, type RegisterStep } from '@netizen-labs/credential-registry';
 import type { Hex } from 'viem';
 import type { PhoneAction } from '../types';
+import { orgIdFromUuid } from '@/lib/org-safe/ops';
 import { currentDelegates } from '../delegates';
-import { checkSummary, confirmAction, describeSteps, germanDateToIso, reviewAction, submittedMessage, typeNamesFrom, type ConfirmDeps } from '../org';
+import {
+  checkSummary,
+  confirmAction,
+  describeSteps,
+  germanDateToIso,
+  resolveActionOrg,
+  reviewAction,
+  safeServerText,
+  submittedMessage,
+  typeNamesFrom,
+  type ConfirmDeps,
+} from '../org';
 
 const REG = ('0x' + '11'.repeat(20)) as `0x${string}`;
 const OTHER_REG = ('0x' + '99'.repeat(20)) as `0x${string}`;
 const ADDR = '0x' + 'ab'.repeat(20);
 const account = { address: ADDR, signMessage: jest.fn(async () => '0x') } as any;
 const b32 = (n: number) => ('0x' + n.toString(16).padStart(64, '0')) as Hex;
-const ORG = b32(0xaa);
+const ORG_UUID = '6f1c2c7e-0d3a-4b5e-9a51-3f7a1d2b9c10';
+const OTHER_UUID = '11111111-2222-4333-8444-555555555555';
+const ORG = orgIdFromUuid(ORG_UUID);
+const OTHER_ORG = orgIdFromUuid(OTHER_UUID);
+const ORGS = [{ accountId: ORG_UUID, name: 'Feuerwehr Röbel' }];
 const TYPE = b32(7);
 const BADGE = b32(8);
 const TX = ('0x' + 'ee'.repeat(32)) as Hex;
@@ -48,9 +64,10 @@ function deps(over: Partial<ConfirmDeps> = {}): ConfirmDeps {
     canIssue: jest.fn(async () => true),
     typeOrg: jest.fn(async () => ORG),
     batchType: jest.fn(async () => TYPE),
-    send: jest.fn(async () => TX),
+    send: jest.fn(async () => ({ txHash: TX, confirmed: true })),
     report: jest.fn(async () => ({ ok: true as const, data: { status: 'done' as const } })),
     nowMs: () => Date.now(),
+    orgs: ORGS,
     ...over,
   };
 }
@@ -71,13 +88,13 @@ describe('describeSteps', () => {
       { fn: 'revokeBatch', batchId: '4' },
       { fn: 'retireType', typeId: b32(999) },
     ];
-    const lines = describeSteps(steps, names, kinds);
+    const lines = describeSteps(steps, names, kinds, (a) => (a === DELEGATE.toLowerCase() ? 'Anna' : null));
     expect(lines).toEqual([
       'Ausweis-Typ anlegen: Vorstand',
       'Ausweis-Typ ändern: Feuerwehr',
       'Ausweis-Typ dauerhaft stilllegen: Feuerwehr',
-      'Ein Konto zum Ausstellen berechtigen: Feuerwehr',
-      'Berechtigung zum Ausstellen entziehen: Feuerwehr',
+      'Ein Konto zum Ausstellen berechtigen: Anna für Feuerwehr',
+      'Berechtigung zum Ausstellen entziehen: Anna für Feuerwehr',
       'Mitglieder nur noch privat zulassen',
       'Mitglieder dürfen öffentlich sichtbar sein',
       '70 Ausweise ausstellen: Feuerwehr',
@@ -87,6 +104,12 @@ describe('describeSteps', () => {
       'Ausweis-Typ dauerhaft stilllegen: Unbekannter Typ',
     ]);
     for (const l of lines) expect(l).not.toMatch(HEX_ADDRESS);
+  });
+
+  it('an unnamed delegate is "ein Konto ohne Namen", never the address', () => {
+    const [line] = describeSteps([{ fn: 'setDelegate', typeId: TYPE, delegate: DELEGATE, allowed: true }], names);
+    expect(line).toBe('Ein Konto zum Ausstellen berechtigen: ein Konto ohne Namen für Feuerwehr');
+    expect(line).not.toMatch(HEX_ADDRESS);
   });
 
   it('a single item is singular', () => {
@@ -204,7 +227,7 @@ describe('confirmAction', () => {
   });
 
   it('a rejected signature leaves the action untouched and returns a message without an address', async () => {
-    const d = deps({ send: jest.fn(async () => Promise.reject(new Error('User rejected the request from 0x' + 'ab'.repeat(20)))) });
+    const d = deps({ send: jest.fn(async () => Promise.reject(Object.assign(new Error('User rejected the request from 0x' + 'ab'.repeat(20)), { code: 4001 }))) });
     const r = await confirmAction(account, action(), d);
     expect(r.ok).toBe(false);
     expect(d.report).not.toHaveBeenCalled();
@@ -277,5 +300,85 @@ describe('reviewAction', () => {
     const unknown = reviewAction(action({ steps: [{ fn: 'nope' } as any] }), t);
     expect(unknown.problem).not.toBeNull();
     expect(unknown.lines).toEqual([]);
+  });
+});
+
+describe('confirmAction: one org of the caller', () => {
+  const delegateAction = (delegate = DELEGATE) =>
+    action({ steps: [{ fn: 'setDelegate', typeId: TYPE, delegate, allowed: true }], summary: { title: '', lines: [], orgName: null } });
+
+  it('refuses steps that belong to an org the caller does not manage', async () => {
+    const d = deps({ typeOrg: jest.fn(async () => OTHER_ORG) });
+    const r = await confirmAction(account, action(), d);
+    expect(r.ok).toBe(false);
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it('refuses steps spanning two orgs, even when both are the caller\'s', async () => {
+    const d = deps({ orgs: [...ORGS, { accountId: OTHER_UUID, name: 'Verein' }] });
+    const r = await confirmAction(
+      account,
+      action({
+        steps: [
+          { fn: 'setOrgPrivateOnly', orgId: ORG, privateOnly: true },
+          { fn: 'setOrgPrivateOnly', orgId: OTHER_ORG, privateOnly: false },
+        ],
+        summary: { title: '', lines: [], orgName: null },
+      }),
+      d,
+    );
+    expect(r.ok).toBe(false);
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it('refuses without the caller\'s org list', async () => {
+    const d = deps({ orgs: undefined });
+    expect((await confirmAction(account, action(), d)).ok).toBe(false);
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it('resolveActionOrg follows a batch to its type and the type to its org, and names the phone\'s org', async () => {
+    const typeOrg = jest.fn(async () => ORG);
+    const batchType = jest.fn(async () => TYPE);
+    const r = await resolveActionOrg([{ fn: 'revokeBatch', batchId: '9' }], ORGS, { typeOrg, batchType });
+    expect(batchType).toHaveBeenCalledWith(9n);
+    expect(typeOrg).toHaveBeenCalledWith(TYPE);
+    expect(r).toEqual({ ok: true, orgId: ORG.toLowerCase(), org: ORGS[0] });
+    const unknown = await resolveActionOrg([{ fn: 'revokeBatch', batchId: '9' }], ORGS, { typeOrg, batchType: async () => null });
+    expect(unknown.ok).toBe(false);
+  });
+
+  it('an action started in the app for one account refuses a step naming another', async () => {
+    const d = deps({ expectedDelegate: ('0x' + 'ef'.repeat(20)).toUpperCase().replace('0X', '0x') });
+    const r = await confirmAction(account, delegateAction(), d);
+    expect(r.ok).toBe(false);
+    expect(d.send).not.toHaveBeenCalled();
+    const ok = await confirmAction(account, delegateAction(), deps({ expectedDelegate: DELEGATE.toUpperCase().replace('0X', '0x') }));
+    expect(ok.ok).toBe(true);
+    expect(reviewAction(delegateAction(), typeNamesFrom([]), Date.now(), { expectedDelegate: '0x' + 'ef'.repeat(20) }).problem).not.toBeNull();
+  });
+});
+
+describe('confirmAction: sent but unconfirmed', () => {
+  it('a receipt wait that failed after sending still reports the hash and never sends twice', async () => {
+    const d = deps({ send: jest.fn(async () => ({ txHash: TX, confirmed: false })) });
+    const r = await confirmAction(account, action(), d);
+    expect(r).toEqual({ ok: true, status: 'done' });
+    expect(d.report).toHaveBeenCalledWith(account, expect.any(String), TX);
+    expect(d.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('a generic error mentioning "cancel" is not a user rejection', async () => {
+    const d = deps({ send: jest.fn(async () => Promise.reject(new Error('operation cancelled by bundler'))) });
+    const r = await confirmAction(account, action(), d);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).not.toMatch(/Abgebrochen/);
+  });
+});
+
+describe('safeServerText', () => {
+  it('drops a title that carries an address', () => {
+    expect(safeServerText('Feuerwehr', 'x')).toBe('Feuerwehr');
+    expect(safeServerText('An 0x' + 'ab'.repeat(20), 'Eine Aktion')).toBe('Eine Aktion');
   });
 });

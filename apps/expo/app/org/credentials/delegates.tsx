@@ -13,7 +13,7 @@ import { CredentialScreenFrame, CredentialStatus } from '@/components/credential
 import { OrgChainNotice, useCredOrg } from '@/components/credentials/OrgCredentialParts';
 import { fetchTypes, prepareDelegate, searchPeople } from '@/lib/credreg/api';
 import { nameAccounts, readDelegates, type Delegate } from '@/lib/credreg/delegates';
-import { submittedMessage } from '@/lib/credreg/org';
+import { rememberExpectedDelegate, submittedMessage } from '@/lib/credreg/org';
 import type { PersonSearchHit, TypeView } from '@/lib/credreg/types';
 
 const SEARCH_DELAY_MS = 350;
@@ -143,6 +143,8 @@ export default function DelegatesScreen() {
     try {
       const res = await prepareDelegate(account, { accountId: org.accountId, typeId, delegate, allowed, ...(label ? { label: label.slice(0, 80) } : {}) });
       if (res.ok) {
+        // In memory only: the approve screen refuses a step that names another account.
+        rememberExpectedDelegate(res.data.actionId, delegate);
         setQuery('');
         router.push({ pathname: '/org/credentials/approve/[id]', params: { id: res.data.actionId, org: org.accountId } } as any);
         return;

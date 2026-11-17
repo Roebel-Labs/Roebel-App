@@ -12,7 +12,8 @@
 import { credentialTypeId, encodeSteps, parseSteps, type RegisterStep } from '@netizen-labs/credential-registry';
 import type { Account } from 'thirdweb/wallets';
 import type { Address, Hex } from 'viem';
-import { sendOrgCalls } from '@/lib/org-safe/send';
+import { orgIdFromUuid } from '@/lib/org-safe/ops';
+import { sendOrgCallsKeepingHash } from '@/lib/org-safe/send';
 import type { ApiResult, SigningAccount } from '@/lib/signed-request';
 import { reportSubmitted } from './api';
 import { REGISTRY, readBatchType, readTypeOrg, registryReader } from './chain';
@@ -32,6 +33,11 @@ const UNKNOWN_STEPS = 'Diese Aktion enthält Schritte, die die App nicht kennt. 
 const NOT_CONFIGURED = 'Ausweise gibt es in deiner App bald.';
 const NO_RECEIPT =
   'Die Aktion wurde gesendet, aber die App hat keine Quittung erhalten. Bitte schau in der Übersicht nach, bevor du es noch einmal versuchst.';
+const NOT_YOUR_ORG = 'Diese Aktion gehört zu keiner Organisation, die du verwaltest. Sie wird nicht bestätigt.';
+const SEVERAL_ORGS = 'Diese Aktion betrifft mehrere Organisationen. Sie wird aus Sicherheitsgründen nicht bestätigt.';
+const UNKNOWN_ORG = 'Ein Schritt dieser Aktion gehört zu keinem bekannten Ausweis. Sie wird nicht bestätigt.';
+const OTHER_DELEGATE = 'Diese Aktion berechtigt ein anderes Konto als das, das du gewählt hast. Sie wird nicht bestätigt.';
+export const NO_NAME_ACCOUNT = 'ein Konto ohne Namen';
 const REPORT_PENDING = 'Die Aktion wurde gesendet. Die App konnte es noch nicht melden. Bitte tippe auf „Erneut melden“.';
 
 const SUBMITTED_COPY: Record<string, string> = {
@@ -63,7 +69,9 @@ export function describeSteps(
   steps: readonly RegisterStep[],
   names: (typeId: Hex) => string | null,
   kinds: (typeId: Hex) => CredentialKind | null = () => null,
+  accounts: (address: string) => string | null = () => null,
 ): string[] {
+  const who = (address: string) => accounts(address.toLowerCase()) ?? NO_NAME_ACCOUNT;
   const name = (typeId: Hex) => names(typeId.toLowerCase() as Hex) ?? names(typeId) ?? UNKNOWN_TYPE;
   const kind = (typeId: Hex) => kinds(typeId.toLowerCase() as Hex) ?? kinds(typeId);
   return steps.map((s) => {
@@ -76,8 +84,8 @@ export function describeSteps(
         return `Ausweis-Typ dauerhaft stilllegen: ${name(s.typeId)}`;
       case 'setDelegate':
         return s.allowed
-          ? `Ein Konto zum Ausstellen berechtigen: ${name(s.typeId)}`
-          : `Berechtigung zum Ausstellen entziehen: ${name(s.typeId)}`;
+          ? `Ein Konto zum Ausstellen berechtigen: ${who(s.delegate)} für ${name(s.typeId)}`
+          : `Berechtigung zum Ausstellen entziehen: ${who(s.delegate)} für ${name(s.typeId)}`;
       case 'setOrgPrivateOnly':
         return s.privateOnly ? 'Mitglieder nur noch privat zulassen' : 'Mitglieder dürfen öffentlich sichtbar sein';
       case 'addBatch':
@@ -120,7 +128,100 @@ export function checkSummary(steps: readonly RegisterStep[], summary: ActionSumm
   return { ok: true };
 }
 
-type Send = (account: Account, calls: readonly { to: Address; data: Hex }[]) => Promise<Hex | null>;
+/** Resolves with the hash once the operation is out (also when the receipt wait failed); throws only when nothing was sent. */
+type Send = (account: Account, calls: readonly { to: Address; data: Hex }[]) => Promise<{ txHash: Hex; confirmed: boolean } | null>;
+
+/** An org of the caller, from orgs_list. */
+export type PhoneOrg = { accountId: string; name: string };
+
+/** The delegate accounts named in setDelegate steps (lowercase), for naming them. */
+export function delegateAccounts(steps: readonly RegisterStep[]): Address[] {
+  const out = new Set<string>();
+  for (const s of steps) if (s.fn === 'setDelegate') out.add(s.delegate.toLowerCase());
+  return [...out] as Address[];
+}
+
+// An action started in this app for one chosen account: the approve screen refuses any other.
+const expectedDelegates = new Map<string, string>();
+export function rememberExpectedDelegate(actionId: string, wallet: string): void {
+  expectedDelegates.set(actionId, wallet.toLowerCase());
+}
+export function expectedDelegateFor(actionId: string): string | null {
+  return expectedDelegates.get(actionId) ?? null;
+}
+
+/** True when the app expected one account and the steps name another (or none). */
+export function delegateMismatch(steps: readonly RegisterStep[], expected: string | null | undefined): boolean {
+  if (!expected) return false;
+  const set = steps.filter((s): s is Extract<RegisterStep, { fn: 'setDelegate' }> => s.fn === 'setDelegate');
+  return set.length === 0 || set.some((s) => s.delegate.toLowerCase() !== expected.toLowerCase());
+}
+
+type OrgReads = { typeOrg: (typeId: Hex) => Promise<Hex | null>; batchType: (batchId: bigint) => Promise<Hex | null> };
+
+/**
+ * Every step must belong to ONE org, and that org must be one of the caller's (orgId =
+ * orgIdFromUuid(accountId)). Types resolve through getType, batches through getBatch → type.
+ * Throws on RPC failure.
+ */
+export async function resolveActionOrg(
+  steps: readonly RegisterStep[],
+  orgs: readonly PhoneOrg[],
+  d: OrgReads,
+): Promise<{ ok: true; orgId: Hex; org: PhoneOrg } | { ok: false; reason: string }> {
+  const ids = new Set<string>();
+  for (const s of steps) {
+    let orgId: Hex | null = null;
+    switch (s.fn) {
+      case 'createType':
+      case 'setOrgPrivateOnly':
+        orgId = s.orgId;
+        break;
+      case 'updateType':
+      case 'retireType':
+      case 'setDelegate':
+      case 'addBatch':
+        orgId = await d.typeOrg(s.typeId);
+        break;
+      case 'revokeLeaves':
+      case 'revokeBatch': {
+        const typeId = await d.batchType(BigInt(s.batchId));
+        orgId = typeId ? await d.typeOrg(typeId) : null;
+        break;
+      }
+    }
+    if (!orgId) return { ok: false, reason: UNKNOWN_ORG };
+    ids.add(orgId.toLowerCase());
+  }
+  if (ids.size !== 1) return { ok: false, reason: ids.size === 0 ? UNKNOWN_ORG : SEVERAL_ORGS };
+  const [orgId] = [...ids] as Hex[];
+  const org = orgs.find((o) => {
+    try {
+      return orgIdFromUuid(o.accountId).toLowerCase() === orgId;
+    } catch {
+      return false;
+    }
+  });
+  return org ? { ok: true, orgId, org } : { ok: false, reason: NOT_YOUR_ORG };
+}
+
+/** Caches the chain reads of one confirmation (org binding and authority read the same types). */
+function memoReads(d: OrgReads): OrgReads {
+  const types = new Map<string, Promise<Hex | null>>();
+  const batches = new Map<string, Promise<Hex | null>>();
+  return {
+    typeOrg: (typeId) => {
+      const k = typeId.toLowerCase();
+      if (!types.has(k)) types.set(k, d.typeOrg(typeId));
+      return types.get(k)!;
+    },
+    batchType: (batchId) => {
+      const k = batchId.toString();
+      if (!batches.has(k)) batches.set(k, d.batchType(batchId));
+      return batches.get(k)!;
+    },
+  };
+}
 
 export type ConfirmDeps = {
   configured: () => boolean;
@@ -135,6 +236,10 @@ export type ConfirmDeps = {
   nowMs: () => number;
   /** Signs the API request; defaults to the sending account (same address). */
   apiAccount?: SigningAccount;
+  /** The caller's orgs (orgs_list). Every step must belong to exactly one of them. */
+  orgs?: readonly PhoneOrg[];
+  /** Set when the action was started in this app for one chosen account (setDelegate). */
+  expectedDelegate?: string | null;
 };
 
 const defaultDeps: ConfirmDeps = {
@@ -143,7 +248,7 @@ const defaultDeps: ConfirmDeps = {
   canIssue: (typeId, account) => registryReader().canIssue(typeId, account),
   typeOrg: readTypeOrg,
   batchType: readBatchType,
-  send: sendOrgCalls,
+  send: sendOrgCallsKeepingHash,
   report: reportSubmitted,
   nowMs: () => Date.now(),
 };
@@ -202,7 +307,17 @@ async function mayDoAll(steps: readonly RegisterStep[], who: Address, d: Confirm
   return true;
 }
 
-const isRejection = (err: unknown) => /reject|denied|cancel|abgebrochen/i.test(String((err as Error)?.message ?? err ?? ''));
+/** Only the wallet's own "user rejected" (EIP-1193 4001 / viem UserRejectedRequestError), also when wrapped. */
+function isUserRejection(err: unknown): boolean {
+  let e: unknown = err;
+  for (let depth = 0; depth < 5 && e && typeof e === 'object'; depth++) {
+    const x = e as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown };
+    if (x.code === 4001 || x.name === 'UserRejectedRequestError') return true;
+    if (typeof x.message === 'string' && /\buser (rejected|denied)\b/i.test(x.message)) return true;
+    e = x.cause;
+  }
+  return false;
+}
 
 /** Reports a sent operation; a network failure is tried once more. */
 export async function reportSent(
@@ -245,21 +360,27 @@ export async function confirmAction(account: Account, action: PhoneAction, deps?
 
   const summary = checkSummary(steps, action.summary);
   if (!summary.ok) return { ok: false, message: summary.reason };
+  if (delegateMismatch(steps, d.expectedDelegate)) return { ok: false, message: OTHER_DELEGATE };
 
+  const reads = memoReads(d);
+  const checked: ConfirmDeps = { ...d, ...reads };
   try {
-    if (!(await mayDoAll(steps, account.address as Address, d))) return { ok: false, message: ROLE_SYNC_MESSAGE };
+    const bound = await resolveActionOrg(steps, d.orgs ?? [], reads);
+    if (!bound.ok) return { ok: false, message: bound.reason };
+    if (!(await mayDoAll(steps, account.address as Address, checked))) return { ok: false, message: ROLE_SYNC_MESSAGE };
   } catch {
     return { ok: false, message: CHAIN_UNAVAILABLE };
   }
 
-  let txHash: Hex | null;
+  let sent: { txHash: Hex; confirmed: boolean } | null;
   try {
-    txHash = await d.send(account, encodeSteps(steps, REGISTRY));
+    sent = await d.send(account, encodeSteps(steps, REGISTRY));
   } catch (err) {
-    return { ok: false, message: isRejection(err) ? CANCELLED : FAILED };
+    return { ok: false, message: isUserRejection(err) ? CANCELLED : FAILED };
   }
-  if (!txHash) return { ok: false, message: NO_RECEIPT };
-  return reportSent(d.apiAccount ?? account, action.id, txHash, d.report);
+  if (!sent) return { ok: false, message: NO_RECEIPT };
+  // Out on the chain: from here on only the report may be repeated, never the send.
+  return reportSent(d.apiAccount ?? account, action.id, sent.txHash, d.report);
 }
 
 // ── context for the approve screen ───────────────────────────────────────────
@@ -303,6 +424,7 @@ export function reviewAction(
   action: PhoneAction,
   t: TypeNames,
   nowMs: number = Date.now(),
+  opts: { accounts?: (address: string) => string | null; expectedDelegate?: string | null } = {},
 ): { lines: string[]; counts: { app: number; link: number } | null; problem: string | null; hasBatch: boolean } {
   let steps: RegisterStep[];
   try {
@@ -310,7 +432,7 @@ export function reviewAction(
   } catch {
     return { lines: [], counts: null, problem: UNKNOWN_STEPS, hasBatch: false };
   }
-  const lines = describeSteps(steps, t.names, t.kinds);
+  const lines = describeSteps(steps, t.names, t.kinds, opts.accounts);
   const hasBatch = steps.some((s) => s.fn === 'addBatch');
   const summary = checkSummary(steps, action.summary);
   const counts = summary.ok && action.summary?.counts ? { app: action.summary.counts.app, link: action.summary.counts.link } : null;
@@ -318,8 +440,14 @@ export function reviewAction(
   if (steps.length === 0) problem = UNKNOWN_STEPS;
   else if (typeof action.registry !== 'string' || action.registry.toLowerCase() !== REGISTRY.toLowerCase()) problem = OTHER_REGISTRY;
   else if (!summary.ok) problem = summary.reason;
+  else if (delegateMismatch(steps, opts.expectedDelegate)) problem = OTHER_DELEGATE;
   else if (action.status === 'expired' || (Number.isFinite(Date.parse(action.expiresAt)) && Date.parse(action.expiresAt) <= nowMs)) {
     problem = SUBMITTED_COPY.ACTION_EXPIRED;
   } else if (action.status !== 'awaiting_confirmation') problem = SUBMITTED_COPY.ACTION_NOT_PENDING;
   return { lines, counts, problem, hasBatch };
+}
+
+/** Server text for a list row (e.g. an action's title): shown only when it carries no address or hash. */
+export function safeServerText(text: unknown, fallback: string): string {
+  return typeof text === 'string' && text.trim().length > 0 && !/0x[0-9a-fA-F]{6,}/.test(text) ? text : fallback;
 }
