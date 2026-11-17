@@ -27,6 +27,7 @@ import type {
   PayParams,
   WalletAccount,
 } from "@netizen-labs/miniapp-sdk";
+import { gateWalletRequest } from "./walletGate";
 
 export interface WebHostApp {
   id: string;
@@ -67,6 +68,12 @@ export interface WebMiniAppHostOptions {
    * mutating calls (rewards/analytics) for an app that isn't registered yet.
    */
   overrides?: Partial<HostHandlers>;
+  /**
+   * Mini-app user token for user-scoped calls (balance, rewards, user data).
+   * When it resolves to a token, those fetches send `Authorization: Bearer <token>`.
+   * Omitted / null → the calls go out without a token, as before.
+   */
+  getUserToken?: () => Promise<string | null>;
 }
 
 export interface WebMiniAppHost {
@@ -76,14 +83,6 @@ export interface WebMiniAppHost {
   /** Detach the window message listener. Call on unmount. */
   destroy: () => void;
 }
-
-const SIGNING_METHODS = new Set([
-  "eth_sendTransaction",
-  "personal_sign",
-  "eth_sign",
-  "eth_signTypedData",
-  "eth_signTypedData_v4",
-]);
 
 function rejected(): never {
   throw { code: "user_rejected", message: "Vom Nutzer abgelehnt." };
@@ -106,9 +105,26 @@ function originOf(url: string): string {
  * The mini app must load with `src={app.homeUrl}` for origin filtering to work.
  */
 export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHost {
-  const { iframe, app, user, walletProvider, account, authToken, onCall, confirmSign, overrides } =
-    opts;
+  const {
+    iframe,
+    app,
+    user,
+    walletProvider,
+    account,
+    authToken,
+    onCall,
+    confirmSign,
+    overrides,
+    getUserToken,
+  } = opts;
   const targetOrigin = originOf(app.homeUrl);
+
+  /** `Authorization` header for user-scoped calls; empty when there is no token. */
+  const userAuthHeaders = async (): Promise<Record<string, string>> => {
+    if (!getUserToken) return {};
+    const token = await getUserToken().catch(() => null);
+    return token ? { authorization: `Bearer ${token}` } : {};
+  };
 
   const post = (message: BridgeMessage) => {
     // The iframe may not be same-origin; postMessage with the app's origin.
@@ -143,13 +159,13 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     walletGetAccount: () => account ?? null,
     walletRequest: async (req: Eip1193RequestArgs) => {
       if (!walletProvider) unsupported("Keine Wallet verbunden.");
-      if (SIGNING_METHODS.has(req.method)) {
-        const ok = confirmSign ? await confirmSign(req) : window.confirm(
-          `Mini App möchte signieren:\n${req.method}\n\nBestätigen?`,
-        );
-        if (!ok) rejected();
-      }
-      return walletProvider.request(req);
+      return gateWalletRequest(req, {
+        confirm: async (r) =>
+          confirmSign
+            ? confirmSign(r)
+            : window.confirm(`Mini App möchte signieren:\n${r.method}\n\nBestätigen?`),
+        forward: (r) => walletProvider.request(r),
+      });
     },
 
     authGetToken: () => (authToken ? { token: authToken } : null),
@@ -166,7 +182,8 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     getMuenzenBalance: async () => {
       if (!account?.address) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
       const res = await fetch(
-        `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}`,
+        `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}&app=${encodeURIComponent(app.id)}`,
+        { headers: await userAuthHeaders() },
       );
       if (!res.ok) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
       return (await res.json()) as { balance: string; decimals: number; symbol: "RÖ" };
@@ -177,7 +194,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       if (!recipient) unsupported("Keine Wallet für die Belohnung verbunden.");
       const res = await fetch("/api/mini-apps/rewards", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(await userAuthHeaders()) },
         body: JSON.stringify({
           appId: app.id,
           amount: p.amount,
@@ -273,7 +290,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       if (!account?.address) unsupported("Keine Wallet verbunden.");
       const res = await fetch(
         `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=user&wallet=${account.address}&key=${encodeURIComponent(p.key)}`,
-        { cache: "no-store" },
+        { cache: "no-store", headers: await userAuthHeaders() },
       );
       if (!res.ok) unsupported("Speicher ist für diese App nicht verfügbar.");
       return (await res.json()) as { value: unknown; exists: boolean };
@@ -282,7 +299,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       if (!account?.address) unsupported("Keine Wallet verbunden.");
       const res = await fetch("/api/mini-apps/data", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(await userAuthHeaders()) },
         body: JSON.stringify({
           app: app.id,
           scope: "user",
