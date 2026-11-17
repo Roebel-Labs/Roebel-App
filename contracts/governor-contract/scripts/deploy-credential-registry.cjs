@@ -81,32 +81,36 @@ async function main() {
   const dtx = c.deploymentTransaction();
   // Printed before waiting, so a process that dies mid-wait still leaves the address on screen.
   console.log(`sent:           tx ${dtx.hash}  → ${await c.getAddress()} (pending)`);
-  const rcpt = await dtx.wait();
-  if (!rcpt || rcpt.status !== 1) throw new Error(`deploy transaction failed (${dtx.hash})`);
   const address = await c.getAddress();
-  console.log(`deployed:       ${address}  tx ${rcpt.hash}  block ${rcpt.blockNumber}`);
 
-  // Write the record right away (verified: false), so a failed verification or a dead
-  // process can never lead a rerun to deploy a second registry.
+  // Write the record BEFORE waiting for the receipt: if wait() throws (RPC timeout, null
+  // receipt) the address and tx hash are on disk and a rerun refuses instead of deploying twice.
   const record = {
     network: "gnosis",
     chainId: 100,
     deployedAt: new Date().toISOString(),
     deployer: wallet.address,
     credentialRegistry: address,
-    deployBlock: rcpt.blockNumber,
-    txHash: rcpt.hash,
+    txHash: dtx.hash,
     owner,
     citizenNFT: citizenNft,
     attesterNFT: attesterNft,
     orgRegistry,
     reservedURIs: { citizen: uris[0], attester: uris[1], guest: uris[2] },
+    mined: false,
     verified: false,
     note: "Owner = Attester Safe (recognition, reserved metadata, COMMUNITY types, 2-day delayed source swap). Hand ownership to the Timelock together with OrgRegistry after bootstrap.",
   };
   const writeRecord = () => fs.writeFileSync(RECORD, JSON.stringify(record, null, 2) + "\n");
   writeRecord();
-  console.log(`record:         ${RECORD} (verified: false)`);
+  console.log(`record:         ${RECORD} (mined: false, verified: false)`);
+
+  const rcpt = await dtx.wait();
+  if (!rcpt || rcpt.status !== 1) throw new Error(`deploy transaction failed (${dtx.hash}) — record left in place with mined: false`);
+  record.mined = true;
+  record.deployBlock = rcpt.blockNumber;
+  writeRecord();
+  console.log(`deployed:       ${address}  tx ${rcpt.hash}  block ${rcpt.blockNumber}`);
 
   const reg = new ethers.Contract(address, art.abi, provider);
 
