@@ -153,8 +153,12 @@ async function wordsBlobsFor(
 /**
  * Writes primary blobs together with their `_w` copies in ONE write (no `replace`: the primary
  * slots keep the server's 409 guard; the session token applies, so no extra proof). A `_w` slot
- * the read already showed (a stale copy from earlier words) — or a 409 that only a `_w` slot can
- * explain — goes into a separate `replace: true` write of the `_w` slots alone (rare; one proof).
+ * the read already showed (a stale copy from earlier words) goes into a separate `replace: true`
+ * write of the `_w` slots alone (rare; one proof).
+ * A 409 on the combined write is retried with the primary alone; if that succeeds, a `_w` slot
+ * appeared AFTER our read (likely words enabled / regenerated on another phone under a new vault
+ * key), so our copies are NOT forced: they are reported as not copied and the next run, reading
+ * the new `_w` together with the current `wvk`, handles them.
  * Returns the primary write's answer and which slots got their words copy.
  */
 async function writeWithWordsCopies(
@@ -175,12 +179,15 @@ async function writeWithWordsCopies(
   let w = await remote.write({ ...primary, ...fresh });
   if (w === 'exists' && Object.keys(fresh).length > 0) {
     // Either a primary slot was written meanwhile (race) or a `_w` slot was: retry the primary alone.
+    // The fresh copies are dropped, never replaced: they may be under a vault key that is no longer current.
     w = await remote.write(primary);
-    if (w === 'stored') Object.assign(stale, fresh);
     for (const k of Object.keys(fresh)) delete fresh[k as keyof WordsBlobs];
   }
   const copied = slots.filter((s) => w === 'stored' && fresh[KEY_BACKUP_WORDS_SLOT[s]] !== undefined);
   if (w === 'stored' && Object.keys(stale).length > 0) {
+    // Narrow race window (accepted): if the words are rotated on another phone between our read and
+    // this write, this replace puts copies under the old vault key over the new ones. The window is
+    // one round trip, and it only exists when the read already showed a stale `_w`.
     try {
       if ((await remote.write(stale, true)) === 'stored') {
         copied.push(...slots.filter((s) => stale[KEY_BACKUP_WORDS_SLOT[s]] !== undefined));

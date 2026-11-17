@@ -171,12 +171,13 @@ describe('resolvePasskeySecret', () => {
     expect(await unwrapSecret(VAULT, MACI_WRAP_LABEL, blobs.maci_w as string)).toEqual(r.secret);
   });
 
-  it('(c) a 409 caused by a _w slot alone: primary retried alone, then _w with replace; a primary race still throws', async () => {
+  it('(c) a 409 caused by a _w slot that appeared after the read: primary retried alone, the _w is NEVER replaced; a primary race still throws', async () => {
     const onlyW = fakeRemote({ wvk: 'pkv1:wvk-blob' }, { prf: PRF, existsIf: (b, replace) => !replace && b.maci_w !== undefined });
     const r = await resolvePasskeySecret(deps({ remote: onlyW.remote, hasLegacyHistory: jest.fn(async () => false), wordsVaultKey: async () => VAULT }).d);
     expect(r.backedUp).toBe(true);
-    expect(onlyW.writes.map((w) => Object.keys(w))).toEqual([['maci', 'maci_w'], ['maci'], ['maci_w']]);
-    expect(onlyW.replaces).toEqual([undefined, undefined, true]);
+    expect(onlyW.writes.map((w) => Object.keys(w))).toEqual([['maci', 'maci_w'], ['maci']]);
+    expect(onlyW.replaces).not.toContain(true);
+    expect(onlyW.blobs.maci_w).toBeUndefined();
     const race = fakeRemote({ wvk: 'pkv1:wvk-blob' }, { prf: PRF, writeResult: 'exists' });
     const t = deps({ remote: race.remote, hasLegacyHistory: jest.fn(async () => false), wordsVaultKey: async () => VAULT });
     await expect(resolvePasskeySecret(t.d)).rejects.toThrow(BACKUP_RACE_MESSAGE);
@@ -288,6 +289,21 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
     expect(replaces[0]).toBeFalsy();
     expect(Object.keys(writes[0])).toEqual(['maci', 'salt', 'maci_w', 'salt_w']);
     expect(text(await unwrapSecret(VAULT, SLOT_LABEL.salt, writes[0].salt_w as string))).toBe('123');
+  });
+
+  it('a 409 from a _w slot written after the read → primary saved, no replace, that words copy reported as failed', async () => {
+    const { remote, writes, replaces } = fakeRemote({ wvk: 'pkv1:wvk-blob' }, { prf: PRF, existsIf: (b, replace) => !replace && b.salt_w !== undefined });
+    const report = await backupDeviceSecrets(
+      [
+        { slot: 'maci', loadLocal: async () => bytes('M') },
+        { slot: 'salt', loadLocal: async () => bytes('123') },
+      ],
+      { ...deps({ remote }).d, wordsVaultKey: async () => VAULT },
+    );
+    expect(report.saved).toEqual(['maci', 'salt']);
+    expect(writes.map((w) => Object.keys(w))).toEqual([['maci', 'salt', 'maci_w', 'salt_w'], ['maci', 'salt']]);
+    expect(replaces).not.toContain(true);
+    expect(report.wordsCopies).toEqual({ stored: [], failed: ['maci', 'salt'] });
   });
 
   it('a failed replace of a stale _w is reported as failed; the primary stays saved', async () => {
