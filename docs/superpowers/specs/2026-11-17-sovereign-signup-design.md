@@ -222,13 +222,6 @@ Already known from the state doc, repeated because they block this project's goa
 - The guest allowlist entries, derived from what thirdweb guests do today.
 - Test strategy; the existing byte-exact vectors and fork tests are the pattern to follow.
 
-## 10. Open decision for Max
-
-**Backup file and the next store build.** The file export/import needs two native modules, so it cannot ship by
-OTA. Options: (a) ship passkey default + words + expert path with words only by OTA now, backup file with the next
-store build *(my recommendation)*; (b) hold the whole expert path until a store build; (c) drop the file and offer
-an encrypted QR code or text instead, which works in today's binary.
-
 ## 9. Honest dependency list (ships as `docs/SOVEREIGNTY_LEDGER.md`)
 
 The builder writes and maintains a short table: for each of key custody, key backup, recovery, gas, bundler, RPC,
@@ -238,3 +231,10 @@ the passkey default still syncs through the Apple or Google keychain unless the 
 distributed through the Apple and Google stores; Supabase, Vercel and Expo host the app's backend and updates; the
 optional "E-Mail oder Google als Helfer" recovery option uses thirdweb. None of them can move or seize an
 independent account; some can interrupt service.
+
+## 10. Open decision for Max
+
+**Backup file and the next store build.** The file export/import needs two native modules, so it cannot ship by
+OTA. Options: (a) ship passkey default + words + expert path with words only by OTA now, backup file with the next
+store build *(my recommendation)*; (b) hold the whole expert path until a store build; (c) drop the file and offer
+an encrypted QR code or text instead, which works in today's binary.
