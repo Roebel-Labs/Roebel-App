@@ -332,6 +332,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/recovery-words" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
           {/* Live room: black video on top, the rest follows the app theme; slides up. A card push, not a modal, so the

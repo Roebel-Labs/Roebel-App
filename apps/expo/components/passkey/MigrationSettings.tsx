@@ -13,6 +13,7 @@ import EmailRow from '@/components/passkey/EmailRow';
 import PasskeySessionSwitch from '@/components/passkey/PasskeySessionSwitch';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
+import RecoveryWordsEntry from '@/components/passkey/RecoveryWordsEntry';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
 import {
   loadMigrationRecord,
@@ -172,6 +173,7 @@ export default function MigrationSettings({ initialRecord, canStart, canDetach }
 
       <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>WIEDERHERSTELLUNG</Text>
       <PasskeyRecoverySection record={record} connected={connected} />
+      {connected && record ? <RecoveryWordsEntry safe={record.safe} /> : null}
 
       {connected && <EmailRow />}
 

@@ -21,7 +21,7 @@ import { secureKeyValueStorage } from './migration-runtime';
 import { resolvePeople, withLabel, type Person, type ProfileRow } from './people';
 import type { RecoveryDeps, RecoveryStorage } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
-import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall } from './userop';
+import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall, type UserOpDeps } from './userop';
 import { createPasskey } from './webauthn';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
@@ -178,7 +178,12 @@ export async function readIdentityMode(record: MigrationRecord): Promise<Identit
 // ---------------------------------------------------------------------------
 
 /** One fingerprint-signed op from this device's own Safe (guardian management / cancel). */
-export async function sendOwnSafeOp(record: MigrationRecord, mode: IdentityMode, calls: SponsoredCall[]): Promise<Hex> {
+export async function sendOwnSafeOp(
+  record: MigrationRecord,
+  mode: IdentityMode,
+  calls: SponsoredCall[],
+  userOpDeps?: UserOpDeps,
+): Promise<Hex> {
   const deployed = await isSafeDeployed(record.safe);
   const { txHash } = await sendPasskeyUserOp({
     credentialId: record.credentialId,
@@ -189,7 +194,7 @@ export async function sendOwnSafeOp(record: MigrationRecord, mode: IdentityMode,
     sender: record.safe,
     owner: record.owner,
     ...(mode.mode === 'legacy' ? { legacy: mode.legacy } : {}),
-  });
+  }, userOpDeps);
   return txHash;
 }
 

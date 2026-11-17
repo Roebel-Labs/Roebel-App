@@ -105,7 +105,8 @@ export type ResolveDeps = {
    * The CURRENT recovery-words vault key, verified against the server's `wvk` (words-vault.ts
    * `resolveVaultKey`), or null (words off / unverifiable). `ctx` = the PRF and `wvk` blob of the
    * backup read this resolution already made. Used for the `_w` copy of a generated key (c) and of
-   * every secret `backupDeviceSecrets` uploads. A failure never fails the key.
+   * every secret `backupDeviceSecrets` uploads, and once after a (b') restore so a new phone
+   * learns the vault key and the words pool from the read it already made. A failure never fails the key.
    */
   wordsVaultKey?: (ctx: { prf: Hex | null; wvkBlob?: string }) => Promise<Hex | null>;
 };
@@ -234,6 +235,14 @@ export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResul
     const secret = await unwrapWith(remoteBlob);
     await d.storage.setItem(SLOT_DEVICE_BLOB[d.slot], remoteBlob);
     await d.saveLocal(secret);
+    // A new phone: sync the words vault (key + pool) from this read and its PRF. No prompt, no write.
+    if (d.wordsVaultKey && prf) {
+      try {
+        await d.wordsVaultKey({ prf, wvkBlob: read.status === 'found' ? read.blobs.wvk : undefined });
+      } catch {
+        // Best effort: the key is restored either way.
+      }
+    }
     return { secret, source: 'backup' };
   }
 

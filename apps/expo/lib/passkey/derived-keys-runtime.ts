@@ -35,6 +35,9 @@ import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from 
 import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
 import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
+import { loadWordsPool, saveWordsPool } from './words-guardians';
+import { loadWordsPending } from './words-setup';
+import { secureKeyValueStorage } from './migration-runtime';
 
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
@@ -92,12 +95,27 @@ export function keyBackupFor(session: PasskeySession): RemoteBackup {
   });
 }
 
+/** The words pool from a `wvk` blob (a second phone): saved when this device lacks it or holds another. */
+async function syncWordsPool(addresses: Address[]): Promise<void> {
+  const local = await loadWordsPool(secureKeyValueStorage).catch(() => null);
+  if (local && local.addresses.every((a, i) => a.toLowerCase() === addresses[i]?.toLowerCase())) return;
+  await saveWordsPool(secureKeyValueStorage, { addresses, confirmedAt: Date.now() });
+}
+
 /**
  * The `wordsVaultKey` hook: the current words vault key, verified against the server's `wvk`
- * (words-vault.ts `resolveVaultKey`; it also syncs or clears this device's copy). Never throws.
+ * (words-vault.ts `resolveVaultKey`; it also syncs or clears this device's copy and syncs the
+ * words pool). Stays out of the way (null, nothing touched) while this device has a words backup
+ * write pending (words-setup.ts): the server's `wvk` is stale until that write lands. Never throws.
  */
-export const resolveWordsVaultKey: NonNullable<ResolveDeps['wordsVaultKey']> = (ctx) =>
-  resolveVaultKey({ storage: wordsVaultKeyStorage, wvkBlob: ctx.wvkBlob, prf: ctx.prf, unwrap: unwrapSecret }).catch(() => null);
+export const resolveWordsVaultKey: NonNullable<ResolveDeps['wordsVaultKey']> = async (ctx) => {
+  try {
+    if (await loadWordsPending(secureKeyValueStorage)) return null;
+    return await resolveVaultKey({ storage: wordsVaultKeyStorage, wvkBlob: ctx.wvkBlob, prf: ctx.prf, unwrap: unwrapSecret, savePool: syncWordsPool });
+  } catch {
+    return null;
+  }
+};
 
 /** Migrated person: the identity is a legacy account, or the Safe administers one (v3 moveTo). */
 export async function hasLegacyHistory(session: PasskeySession): Promise<boolean> {

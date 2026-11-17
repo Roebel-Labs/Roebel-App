@@ -17,13 +17,50 @@
  *
  * Pure: storage, backup and wrapping are injected (derived-keys-runtime.ts wires them).
  */
-import { bytesToHex, hexToBytes, isHex, type Hex } from 'viem';
+import { bytesToHex, getAddress, hexToBytes, isHex, type Address, type Hex } from 'viem';
 import { SLOT_LABEL } from './derived-keys';
 import { KEY_BACKUP_WORDS_SLOT, type KeyBackupBlobs, type KeyBackupSlot, type RemoteBackup } from './key-backup';
+import { WORDS_POOL_SIZE } from './words';
 
 export const WORDS_VAULT_KEY_STORE = 'passkey_words_vault_key_v1';
 /** HKDF label of the `wvk` blob (the vault key wrapped under the passkey PRF). */
 export const WORDS_VAULT_KEY_LABEL = 'roebel/words-vault-key/v1';
+
+/**
+ * "Words switched off": written into `wvk` and every `_w` slot when the words are removed (the
+ * backup API has no delete). It matches the server's blob format but is not ciphertext, so it
+ * never unwraps; `resolveVaultKey` reads it exactly like "no wvk" (the device copy is cleared).
+ */
+export const WORDS_OFF_BLOB = `pkv1:words-off-${'0'.repeat(32)}`;
+export const isWordsOffBlob = (blob: string | undefined | null): boolean => blob === WORDS_OFF_BLOB;
+
+const ADDRESS_BYTES = 20;
+
+/**
+ * Plaintext of the `wvk` blob: the 32-byte vault key, optionally followed by the 5 public word
+ * addresses (pool order), so a second phone that unwraps `wvk` also knows which guardians are
+ * the words (never shown as people). Ciphertext on the server like everything else.
+ */
+export function encodeWordsVault(vaultKey: Hex, addresses?: readonly Address[]): Uint8Array {
+  const key = hexToBytes(vaultKey);
+  if (key.length !== 32) throw new Error('a words vault key is 32 bytes');
+  if (!addresses) return key;
+  if (addresses.length !== WORDS_POOL_SIZE) throw new Error(`a words pool has exactly ${WORDS_POOL_SIZE} addresses`);
+  const out = new Uint8Array(32 + ADDRESS_BYTES * WORDS_POOL_SIZE);
+  out.set(key, 0);
+  addresses.forEach((a, i) => out.set(hexToBytes(getAddress(a)), 32 + i * ADDRESS_BYTES));
+  return out;
+}
+
+export function decodeWordsVault(bytes: Uint8Array): { vaultKey: Hex; addresses: Address[] | null } | null {
+  if (bytes.length === 32) return { vaultKey: bytesToHex(bytes), addresses: null };
+  if (bytes.length !== 32 + ADDRESS_BYTES * WORDS_POOL_SIZE) return null;
+  const addresses: Address[] = [];
+  for (let i = 0; i < WORDS_POOL_SIZE; i++) {
+    addresses.push(getAddress(bytesToHex(bytes.slice(32 + i * ADDRESS_BYTES, 32 + (i + 1) * ADDRESS_BYTES))));
+  }
+  return { vaultKey: bytesToHex(bytes.slice(0, 32)), addresses };
+}
 
 export function wordsSlot(slot: KeyBackupSlot): 'maci_w' | 'nostr_w' | 'salt_w' {
   return KEY_BACKUP_WORDS_SLOT[slot];
@@ -60,7 +97,8 @@ type Wrap = (prf: Hex, label: string, secret: Uint8Array) => Promise<string>;
  *
  * The server's `wvk` is the truth: words replaced or switched off on another phone must never be
  * overwritten by a stale device copy.
- *   - server has no `wvk`            → words are off: the device copy is cleared, null
+ *   - server has no `wvk`, or the off marker (`WORDS_OFF_BLOB`) → words are off: the device copy
+ *     is cleared, null
  *   - `wvk` + PRF                    → unwrap it; the device copy is overwritten when it differs
  *   - `wvk` but no PRF, or a `wvk` for another passkey → null (the device copy alone is not
  *     trusted, and it is kept: it cannot be checked)
@@ -71,27 +109,45 @@ export async function resolveVaultKey(d: {
   wvkBlob?: string;
   prf?: Hex | null;
   unwrap: Unwrap;
+  /** Called with the pool addresses when the `wvk` blob carries them (best effort, never fails the key). */
+  savePool?: (addresses: Address[]) => Promise<void>;
 }): Promise<Hex | null> {
-  if (!d.wvkBlob) {
+  if (!d.wvkBlob || isWordsOffBlob(d.wvkBlob)) {
     if ((await d.storage.getItem(WORDS_VAULT_KEY_STORE)) !== null) await clearVaultKey(d.storage);
     return null;
   }
   if (!d.prf) return null;
-  let key: Hex;
-  try {
-    const bytes = await d.unwrap(d.prf, WORDS_VAULT_KEY_LABEL, d.wvkBlob);
-    if (bytes.length !== 32) return null;
-    key = bytesToHex(bytes);
-  } catch {
-    return null;
-  }
+  const vault = await unwrapWordsVault(d.prf, d.wvkBlob, d.unwrap);
+  if (!vault) return null;
+  const key = vault.vaultKey;
   if ((await loadVaultKey(d.storage)) !== key) await saveVaultKey(d.storage, key);
+  if (vault.addresses && d.savePool) {
+    try {
+      await d.savePool(vault.addresses);
+    } catch {
+      // The pool is a display aid; the key is what matters here.
+    }
+  }
   return key;
 }
 
-/** The `wvk` blob for a vault key (T5 passes it to `writeWordsCopies` via `extra`). */
-export function wrapVaultKey(prf: Hex, vaultKey: Hex, wrap: Wrap): Promise<string> {
-  return wrap(prf, WORDS_VAULT_KEY_LABEL, hexToBytes(vaultKey));
+/** Unwraps a `wvk` blob: null for the off marker, a wrong passkey or a malformed payload. Never throws. */
+export async function unwrapWordsVault(
+  prf: Hex,
+  blob: string,
+  unwrap: Unwrap,
+): Promise<{ vaultKey: Hex; addresses: Address[] | null } | null> {
+  if (isWordsOffBlob(blob)) return null;
+  try {
+    return decodeWordsVault(await unwrap(prf, WORDS_VAULT_KEY_LABEL, blob));
+  } catch {
+    return null;
+  }
+}
+
+/** The `wvk` blob for a vault key (and, from setup, the 5 public pool addresses). */
+export function wrapVaultKey(prf: Hex, vaultKey: Hex, wrap: Wrap, addresses?: readonly Address[]): Promise<string> {
+  return wrap(prf, WORDS_VAULT_KEY_LABEL, encodeWordsVault(vaultKey, addresses));
 }
 
 /** `wvk` is present only when `extra.wvk` was given: whether that blob was stored. */

@@ -1,4 +1,4 @@
-import { hexToBytes, type Hex } from 'viem';
+import { getAddress, hexToBytes, type Hex } from 'viem';
 import { resolvePasskeySecret, SLOT_LABEL, type ResolveDeps } from '../derived-keys';
 import { utf8Encode } from '../encoding';
 import type { KeyBackupBlobs, RemoteBackup } from '../key-backup';
@@ -13,6 +13,9 @@ import {
   WORDS_VAULT_KEY_LABEL,
   WORDS_VAULT_KEY_STORE,
   wrapVaultKey,
+  unwrapWordsVault,
+  isWordsOffBlob,
+  WORDS_OFF_BLOB,
   type VaultKeyStorage,
 } from '../words-vault';
 
@@ -119,6 +122,36 @@ describe('words vault: second wrapped copy under the recovery words', () => {
     expect(await loadVaultKey(storage)).toBeNull();
     expect(await loadVaultKey(mem({ [WORDS_VAULT_KEY_STORE]: 'junk' }))).toBeNull();
     await expect(saveVaultKey(storage, '0x1234' as Hex)).rejects.toThrow();
+  });
+
+  it('switched-off marker: a valid backup blob that reads as "no wvk" (device key cleared, null)', async () => {
+    expect(WORDS_OFF_BLOB).toMatch(/^pkv1:[A-Za-z0-9_-]{38,4000}$/); // the server's blob format
+    expect(isWordsOffBlob(WORDS_OFF_BLOB)).toBe(true);
+    expect(isWordsOffBlob(await wrapVaultKey(PRF, KEY_A, wrapSecret))).toBe(false);
+    const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
+    const unwrap = jest.fn(unwrapSecret);
+    expect(await resolveVaultKey({ storage, wvkBlob: WORDS_OFF_BLOB, prf: PRF, unwrap })).toBeNull();
+    expect(unwrap).not.toHaveBeenCalled();
+    expect(await loadVaultKey(storage)).toBeNull();
+  });
+
+  it('the wvk blob can carry the 5 public pool addresses: a second phone learns the pool with the key', async () => {
+    const pool = [1, 2, 3, 4, 5].map((i) => `0x${String(i).repeat(40)}` as `0x${string}`);
+    const wvk = await wrapVaultKey(PRF, KEY_A, wrapSecret, pool);
+    expect(await unwrapWordsVault(PRF, wvk, unwrapSecret)).toEqual({ vaultKey: KEY_A, addresses: pool.map((a) => getAddress(a)) });
+    const storage = mem();
+    const savePool = jest.fn(async () => undefined);
+    expect(await resolveVaultKey({ storage, wvkBlob: wvk, prf: PRF, unwrap: unwrapSecret, savePool })).toBe(KEY_A);
+    expect(savePool).toHaveBeenCalledWith(pool.map((a) => getAddress(a)));
+    // a key-only blob still works and saves no pool
+    savePool.mockClear();
+    expect(await resolveVaultKey({ storage, wvkBlob: await wrapVaultKey(PRF, KEY_B, wrapSecret), prf: PRF, unwrap: unwrapSecret, savePool })).toBe(KEY_B);
+    expect(savePool).not.toHaveBeenCalled();
+    // a failing pool save never fails the key
+    const failing = jest.fn(async () => { throw new Error('disk'); });
+    expect(await resolveVaultKey({ storage, wvkBlob: wvk, prf: PRF, unwrap: unwrapSecret, savePool: failing })).toBe(KEY_A);
+    expect(await unwrapWordsVault(PRF, WORDS_OFF_BLOB, unwrapSecret)).toBeNull();
+    expect(await unwrapWordsVault(OTHER_PRF, wvk, unwrapSecret)).toBeNull();
   });
 });
 

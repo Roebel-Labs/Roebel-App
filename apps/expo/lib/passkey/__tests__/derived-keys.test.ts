@@ -127,6 +127,20 @@ describe('resolvePasskeySecret', () => {
     expect(t.saved).toHaveLength(1);
   });
 
+  it("(b') a new phone syncs the words vault (key + pool) from the read it already made: no extra prompt, no write", async () => {
+    const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
+    const { remote } = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' });
+    const wordsVaultKey = jest.fn(async () => VAULT);
+    const t = deps({ remote, wordsVaultKey });
+    expect((await resolvePasskeySecret(t.d)).source).toBe('backup');
+    expect(wordsVaultKey).toHaveBeenCalledWith({ prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+    expect(t.d.getPrf).toHaveBeenCalledTimes(1); // the unwrap's own PRF, reused
+    expect(remote.write).not.toHaveBeenCalled();
+    // a failing sync never fails the key
+    const failing = deps({ remote: fakeRemote({ maci: blob }, { prf: PRF }).remote, wordsVaultKey: jest.fn(async () => { throw new Error('x'); }) });
+    expect(text((await resolvePasskeySecret(failing.d)).secret)).toBe('K');
+  });
+
   it('(c) passkey-only: a RANDOM key, wrapped, backed up, then persisted', async () => {
     const { remote, writes } = fakeRemote({}, { prf: PRF });
     const t = deps({ remote, hasLegacyHistory: jest.fn(async () => false) });
