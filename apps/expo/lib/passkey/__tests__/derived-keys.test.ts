@@ -127,9 +127,9 @@ describe('resolvePasskeySecret', () => {
     expect(t.saved).toHaveLength(1);
   });
 
-  it("(b') a new phone syncs the words vault (key + pool) from the read it already made: no extra prompt, no write", async () => {
+  it("(b') a new phone syncs the words vault (key + pool) from the read it already made: no extra prompt, no write when the copy is current", async () => {
     const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
-    const { remote } = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' });
+    const { remote } = fakeRemote({ maci: blob, maci_w: await wrapSecret(VAULT, MACI_WRAP_LABEL, bytes('K')), wvk: 'pkv1:wvk-blob' });
     const wordsVaultKey = jest.fn(async () => VAULT);
     const t = deps({ remote, wordsVaultKey });
     expect((await resolvePasskeySecret(t.d)).source).toBe('backup');
@@ -139,6 +139,22 @@ describe('resolvePasskeySecret', () => {
     // a failing sync never fails the key
     const failing = deps({ remote: fakeRemote({ maci: blob }, { prf: PRF }).remote, wordsVaultKey: jest.fn(async () => { throw new Error('x'); }) });
     expect(text((await resolvePasskeySecret(failing.d)).secret)).toBe('K');
+  });
+
+  it("(b') I2: a restored key without a words copy gets one in a plain write (token, no prompt); a stale copy is left to \"Schlüssel sichern\"", async () => {
+    const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
+    const missing = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    const t = deps({ remote: missing.remote, wordsVaultKey: async () => VAULT });
+    expect((await resolvePasskeySecret(t.d)).source).toBe('backup');
+    expect(missing.writes.map((w) => Object.keys(w))).toEqual([['maci_w']]);
+    expect(missing.replaces).toEqual([undefined]);
+    expect(t.d.getPrf).not.toHaveBeenCalled();
+    expect(text(await unwrapSecret(VAULT, SLOT_LABEL.maci, missing.writes[0].maci_w as string))).toBe('K');
+
+    const stale = fakeRemote({ maci: blob, maci_w: `pkv1:words-off-${'0'.repeat(32)}`, wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    const s = deps({ remote: stale.remote, wordsVaultKey: async () => VAULT });
+    expect((await resolvePasskeySecret(s.d)).source).toBe('backup');
+    expect(stale.remote.write).not.toHaveBeenCalled();
   });
 
   it('(c) passkey-only: a RANDOM key, wrapped, backed up, then persisted', async () => {
@@ -333,22 +349,61 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
     expect(report.wordsCopies).toEqual({ stored: ['maci'], failed: ['salt'] });
   });
 
-  it('a server copy that is already there (same secret) gets no words copy; a conflict neither', async () => {
+  it('a server copy that is already there (same secret) with a CURRENT words copy: nothing written; a conflict gets no copy', async () => {
     const { remote } = fakeRemote(
-      { maci: await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('M')), nostr: await wrapSecret(PRF, NOSTR_WRAP_LABEL, bytes('OTHER')) },
+      {
+        maci: await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('M')),
+        maci_w: await wrapSecret(VAULT, MACI_WRAP_LABEL, bytes('M')),
+        nostr: await wrapSecret(PRF, NOSTR_WRAP_LABEL, bytes('OTHER')),
+      },
       { prf: PRF },
     );
-    const wordsVaultKey = jest.fn(async () => VAULT);
     const report = await backupDeviceSecrets(
       [
         { slot: 'maci', loadLocal: async () => bytes('M') },
         { slot: 'nostr', loadLocal: async () => bytes('N') },
       ],
-      { ...deps({ remote }).d, wordsVaultKey },
+      { ...deps({ remote }).d, wordsVaultKey: async () => VAULT },
     );
-    expect(wordsVaultKey).not.toHaveBeenCalled();
     expect(remote.write).not.toHaveBeenCalled();
     expect(report.wordsCopies).toEqual({ stored: [], failed: [] });
+  });
+
+  it('I2: a key already in the backup but without a words copy gets one (plain write, no replace, no new prompt)', async () => {
+    const { remote, writes, replaces } = fakeRemote({ maci: await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('M')), wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    const t = deps({ remote });
+    const report = await backupDeviceSecrets([{ slot: 'maci', loadLocal: async () => bytes('M') }], { ...t.d, wordsVaultKey: async () => VAULT });
+    expect(report.saved).toEqual(['maci']);
+    expect(report.wordsCopies).toEqual({ stored: ['maci'], failed: [] });
+    expect(writes.map((w) => Object.keys(w))).toEqual([['maci_w']]);
+    expect(replaces).toEqual([undefined]);
+    expect(t.d.getPrf).not.toHaveBeenCalled();
+    expect(text(await unwrapSecret(VAULT, SLOT_LABEL.maci, writes[0].maci_w as string))).toBe('M');
+  });
+
+  it('I2: a words copy under EARLIER words or a tombstone is replaced (the existing stale rule: one replace write)', async () => {
+    const OLD_VAULT = `0x${'b2'.repeat(32)}` as Hex;
+    const { remote, writes, replaces } = fakeRemote(
+      {
+        maci: await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('M')),
+        maci_w: await wrapSecret(OLD_VAULT, MACI_WRAP_LABEL, bytes('M')),
+        nostr: await wrapSecret(PRF, NOSTR_WRAP_LABEL, bytes('N')),
+        nostr_w: `pkv1:words-off-${'0'.repeat(32)}`,
+        wvk: 'pkv1:wvk-blob',
+      },
+      { prf: PRF },
+    );
+    const report = await backupDeviceSecrets(
+      [
+        { slot: 'maci', loadLocal: async () => bytes('M') },
+        { slot: 'nostr', loadLocal: async () => bytes('N') },
+      ],
+      { ...deps({ remote }).d, wordsVaultKey: async () => VAULT },
+    );
+    expect(writes.map((w) => Object.keys(w))).toEqual([['maci_w', 'nostr_w']]);
+    expect(replaces).toEqual([true]);
+    expect(report.wordsCopies).toEqual({ stored: ['maci', 'nostr'], failed: [] });
+    expect(text(await unwrapSecret(VAULT, SLOT_LABEL.maci, writes[0].maci_w as string))).toBe('M');
   });
 
   it('backup service off → status disabled, nothing signed beyond the read', async () => {
