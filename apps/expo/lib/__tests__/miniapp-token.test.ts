@@ -127,6 +127,43 @@ describe('createMiniAppTokenCache', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it('counts expiresIn on the device clock: a phone 120 s behind the server refreshes in time', async () => {
+    // Device clock 1000, server clock 1120: the server says exp 1720 (= its now + 600).
+    let now = 1000;
+    const request = jest.fn(async (): Promise<UserToken | null> => ({
+      token: `t${request.mock.calls.length}`,
+      expiresAt: now + 120 + 600,
+      expiresIn: 600,
+    }));
+    const cache = createMiniAppTokenCache({ request, nowSec: () => now });
+    expect(await cache.get('app', W1)).toBe('t1');
+    now = 1539;
+    expect(cache.peek('app', W1)).toBe('t1');
+    // 1541 device = 1661 server: the server expiresAt - 60 (1660) alone would still look valid
+    // on the slow device clock; the device-clock expiry (1600) makes it refresh.
+    now = 1541;
+    expect(cache.peek('app', W1)).toBeNull();
+    expect(await cache.get('app', W1)).toBe('t2');
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidate() drops the refused token so the next get requests a new one', async () => {
+    const request = jest.fn(async (): Promise<UserToken | null> => ({ token: `t${request.mock.calls.length}`, expiresAt: 600 }));
+    const cache = createMiniAppTokenCache({ request, nowSec: () => 0 });
+    expect(await cache.get('app', W1)).toBe('t1');
+    cache.invalidate('app', W1.toUpperCase().replace('0X', '0x'), 't1');
+    expect(cache.peek('app', W1)).toBeNull();
+    expect(await cache.get('app', W1)).toBe('t2');
+  });
+
+  it('invalidate() with an older token keeps the newer one', async () => {
+    const request = jest.fn(async (): Promise<UserToken | null> => ({ token: 'new', expiresAt: 600 }));
+    const cache = createMiniAppTokenCache({ request, nowSec: () => 0 });
+    await cache.get('app', W1);
+    cache.invalidate('app', W1, 'old');
+    expect(cache.peek('app', W1)).toBe('new');
+  });
+
   it('clear() drops cached tokens and the failure back-off', async () => {
     const request = jest.fn(async (): Promise<UserToken | null> => null);
     const cache = createMiniAppTokenCache({ request, nowSec: () => 0 });
@@ -203,6 +240,12 @@ describe('requestMiniAppUserToken', () => {
     const hash = createHash('sha256').update(JSON.stringify({ app: 'my-app' })).digest('hex');
     expect(a.signMessage).toHaveBeenCalledWith({ message: `roebel-miniapp-v1:user_token:${W1}:${body.timestampSec}:${hash}` });
     expect(body.signature).toBe(SIG);
+  });
+
+  it('passes the server expiresIn through', async () => {
+    const a = account();
+    (global as any).fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: 'tok', expiresAt: 1234, expiresIn: 600 }) }));
+    expect(await requestMiniAppUserToken(a, 'my-app')).toEqual({ token: 'tok', expiresAt: 1234, expiresIn: 600 });
   });
 
   it('silent on a non-passkey account still uses its (silent) wallet signature', async () => {

@@ -22,9 +22,13 @@ export const MINIAPP_SCOPE = 'roebel-miniapp-v1';
 const ACTION: MiniAppAction = 'user_token';
 const PATH = '/api/mini-apps/token';
 
-export type UserToken = { token: string; expiresAt: number };
+/**
+ * `expiresAt` is the server's clock; `expiresIn` (seconds, newer servers) lets the cache count
+ * the expiry on the device clock, which may be off by minutes.
+ */
+export type UserToken = { token: string; expiresAt: number; expiresIn?: number };
 
-/** Refresh this many seconds before the token's `expiresAt`. */
+/** Refresh this many seconds before the token's expiry (on the device clock). */
 const REFRESH_MARGIN_SEC = 60;
 /** After a failed fetch, do not ask again for this long. */
 const FAILURE_COOLDOWN_SEC = 60;
@@ -44,11 +48,15 @@ async function postToken(body: unknown, headers: Record<string, string>): Promis
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const json = (await res.json().catch(() => null)) as { token?: unknown; expiresAt?: unknown; code?: unknown } | null;
+    const json = (await res.json().catch(() => null)) as
+      | { token?: unknown; expiresAt?: unknown; expiresIn?: unknown; code?: unknown }
+      | null;
     const status = res.status ?? 0;
     if (!res.ok) return { status, code: typeof json?.code === 'string' ? json.code : undefined, value: null };
     if (!json || typeof json.token !== 'string' || typeof json.expiresAt !== 'number') return { status, value: null };
-    return { status, value: { token: json.token, expiresAt: json.expiresAt } };
+    const expiresIn =
+      typeof json.expiresIn === 'number' && Number.isFinite(json.expiresIn) ? json.expiresIn : undefined;
+    return { status, value: { token: json.token, expiresAt: json.expiresAt, ...(expiresIn !== undefined ? { expiresIn } : {}) } };
   } catch {
     return { status: 0, value: null };
   } finally {
@@ -106,11 +114,17 @@ export type MiniAppTokenCache = {
   /** A valid cached token (not within 60 s of expiry), or null. Never requests. */
   peek(appRef: string, wallet: string): string | null;
   get(appRef: string, wallet: string, opts?: GetOptions): Promise<string | null>;
+  /**
+   * Drop the cached token for (appRef, wallet) after the server refused it (401). With `token`,
+   * only that token is dropped (a newer one stays). The back-off is untouched.
+   */
+  invalidate(appRef: string, wallet: string, token?: string): void;
   clear(): void;
 };
 
 /**
- * Per-host token cache: one token per (appRef, wallet), reused until 60 s before expiry;
+ * Per-host token cache: one token per (appRef, wallet), reused until 60 s before expiry
+ * (counted on the device clock: receipt time + `expiresIn`, else the server's `expiresAt`);
  * concurrent `get`s share one request; after a `null` result no new request for 60 s.
  * A failed silent request only holds back silent requests (a later write may still ask once);
  * a failed prompting request holds back both.
@@ -120,7 +134,8 @@ export function createMiniAppTokenCache(deps: {
   nowSec?: () => number;
 }): MiniAppTokenCache {
   const nowSec = deps.nowSec ?? (() => Math.floor(Date.now() / 1000));
-  let tokens = new Map<string, UserToken>();
+  /** key → token and its expiry on the device clock (sec). */
+  let tokens = new Map<string, { token: string; expiresAt: number }>();
   let failedUntil = new Map<string, number>();
   let inflight = new Map<string, Promise<string | null>>();
   const keyOf = (appRef: string, wallet: string) => `${wallet.toLowerCase()}|${appRef}`;
@@ -158,7 +173,8 @@ export function createMiniAppTokenCache(deps: {
         .then((res) => {
           i.delete(mode);
           if (res) {
-            t.set(key, res);
+            const expiresAt = res.expiresIn !== undefined ? nowSec() + res.expiresIn : res.expiresAt;
+            t.set(key, { token: res.token, expiresAt });
             f.delete(loud);
             f.delete(quiet);
             return res.token;
@@ -168,6 +184,11 @@ export function createMiniAppTokenCache(deps: {
         });
       i.set(mode, run);
       return run;
+    },
+    invalidate(appRef, wallet, token) {
+      const key = keyOf(appRef, wallet);
+      const hit = tokens.get(key);
+      if (hit && (token === undefined || hit.token === token)) tokens.delete(key);
     },
     clear() {
       tokens = new Map();

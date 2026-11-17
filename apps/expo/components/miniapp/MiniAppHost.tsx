@@ -507,7 +507,16 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   // --- host handlers --------------------------------------------------------
   const handlers = useMemo<HostHandlers>(() => {
     const apiId = { miniAppId: app.id, slug: app.slug, wallet: walletLc };
-    const userApiId = async (opts?: { silent?: boolean }) => ({ ...apiId, token: await getUserToken(opts) });
+    // A 401 on a call carrying the token drops it from the cache (the next call fetches a new
+    // one); the failed call itself is not retried without the token.
+    const onTokenRejected = (token: string) => {
+      if (walletLc) tokenCacheRef.current?.invalidate(app.id, walletLc, token);
+    };
+    const userApiId = async (opts?: { silent?: boolean }) => ({
+      ...apiId,
+      token: await getUserToken(opts),
+      onTokenRejected,
+    });
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: () => setSplashVisible(false),
