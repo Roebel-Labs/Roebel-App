@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       case "present_resolve":
         return respond(await resolvePresentation(d, c, { code: p.code as string }));
       default:
-        return jsonFail(400, "BAD_REQUEST", "unknown action");
+        return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }
   } catch (err) {
     console.error("[credentials/me]", c.action, err instanceof Error ? err.message : err);

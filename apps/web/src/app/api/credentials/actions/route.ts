@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       case "action_cancel":
         return respond(await cancelAction(d, c, actionId));
       default:
-        return jsonFail(400, "BAD_REQUEST", "unknown action");
+        return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }
   } catch (err) {
     console.error("[credentials/actions]", c.action, err instanceof Error ? err.message : err);

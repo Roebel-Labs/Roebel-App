@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         });
       }
       default:
-        return jsonFail(400, "BAD_REQUEST", "unknown action");
+        return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }
   } catch (err) {
     console.error("[credentials/org]", c.action, err instanceof Error ? err.message : err);
