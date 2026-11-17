@@ -1,11 +1,10 @@
 import { hexToBytes, type Hex } from 'viem';
-import { backupDeviceSecrets, resolvePasskeySecret, SLOT_LABEL, type ResolveDeps } from '../derived-keys';
+import { resolvePasskeySecret, SLOT_LABEL, type ResolveDeps } from '../derived-keys';
 import { utf8Encode } from '../encoding';
 import type { KeyBackupBlobs, RemoteBackup } from '../key-backup';
 import { unwrapSecret, wrapSecret } from '../prf-vault';
 import {
   clearVaultKey,
-  createWordsCopier,
   loadVaultKey,
   resolveVaultKey,
   saveVaultKey,
@@ -67,11 +66,19 @@ describe('words vault: second wrapped copy under the recovery words', () => {
   it('the wvk blob and replace ride in the SAME write (one write = one proof)', async () => {
     const calls: { b: KeyBackupBlobs; replace?: boolean }[] = [];
     const remote: RemoteBackup = { read: async () => ({ status: 'none' }), write: async (b, replace) => (calls.push({ b, replace }), 'stored') };
-    await writeWordsCopies({ vaultKey: KEY_A, secrets: [{ slot: 'maci', secret: utf8Encode('m') }], remote, wrap: wrapSecret, replace: true, extra: { wvk: 'pkv1:wvk' } });
+    const r = await writeWordsCopies({ vaultKey: KEY_A, secrets: [{ slot: 'maci', secret: utf8Encode('m') }], remote, wrap: wrapSecret, replace: true, extra: { wvk: 'pkv1:wvk' } });
+    expect(r).toEqual({ stored: ['maci'], failed: [], wvk: true });
     expect(calls).toHaveLength(1);
     expect(Object.keys(calls[0].b)).toEqual(['maci_w', 'wvk']);
     expect(calls[0].b.wvk).toBe('pkv1:wvk');
     expect(calls[0].replace).toBe(true);
+  });
+
+  it('a write carrying only wvk reports whether wvk was stored', async () => {
+    const ok: RemoteBackup = { read: async () => ({ status: 'none' }), write: async () => 'stored' };
+    const bad: RemoteBackup = { read: async () => ({ status: 'none' }), write: async () => { throw new Error('offline'); } };
+    expect(await writeWordsCopies({ vaultKey: KEY_A, secrets: [], remote: ok, wrap: wrapSecret, replace: true, extra: { wvk: 'pkv1:wvk' } })).toEqual({ stored: [], failed: [], wvk: true });
+    expect(await writeWordsCopies({ vaultKey: KEY_A, secrets: [], remote: bad, wrap: wrapSecret, replace: true, extra: { wvk: 'pkv1:wvk' } })).toEqual({ stored: [], failed: [], wvk: false });
   });
 
   it('a phone with only the passkey gets the vault key from the wvk blob', async () => {
@@ -82,11 +89,25 @@ describe('words vault: second wrapped copy under the recovery words', () => {
     expect(await resolveVaultKey({ storage: mem(), prf: PRF, unwrap: unwrapSecret })).toBeNull();
   });
 
-  it('the device copy wins; a wvk blob for another passkey or no PRF yields null, never throws', async () => {
-    const wvk = await wrapSecret(PRF, WORDS_VAULT_KEY_LABEL, hexToBytes(KEY_A));
-    expect(await resolveVaultKey({ storage: mem({ [WORDS_VAULT_KEY_STORE]: KEY_B }), wvkBlob: wvk, prf: PRF, unwrap: unwrapSecret })).toBe(KEY_B);
-    expect(await resolveVaultKey({ storage: mem(), wvkBlob: wvk, prf: OTHER_PRF, unwrap: unwrapSecret })).toBeNull();
-    expect(await resolveVaultKey({ storage: mem(), wvkBlob: wvk, prf: null, unwrap: unwrapSecret })).toBeNull();
+  it("the server's wvk is the truth: a stale device key (old words) is overwritten with the server's", async () => {
+    const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
+    const wvk = await wrapVaultKey(PRF, KEY_B, wrapSecret);
+    expect(await resolveVaultKey({ storage, wvkBlob: wvk, prf: PRF, unwrap: unwrapSecret })).toBe(KEY_B);
+    expect(await loadVaultKey(storage)).toBe(KEY_B);
+  });
+
+  it('server without wvk (words switched off elsewhere) → null and the stale device key is cleared', async () => {
+    const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
+    expect(await resolveVaultKey({ storage, prf: PRF, unwrap: unwrapSecret })).toBeNull();
+    expect(await loadVaultKey(storage)).toBeNull();
+  });
+
+  it('wvk but no PRF, or a wvk for another passkey → null; the device key alone is never trusted (and kept)', async () => {
+    const wvk = await wrapVaultKey(PRF, KEY_B, wrapSecret);
+    const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
+    expect(await resolveVaultKey({ storage, wvkBlob: wvk, prf: null, unwrap: unwrapSecret })).toBeNull();
+    expect(await resolveVaultKey({ storage, wvkBlob: wvk, prf: OTHER_PRF, unwrap: unwrapSecret })).toBeNull();
+    expect(await loadVaultKey(storage)).toBe(KEY_A);
   });
 
   it('save / load / clear the device copy; a malformed stored value reads as none', async () => {
@@ -134,59 +155,47 @@ function resolveDeps(remote: RemoteBackup, over: Partial<ResolveDeps> = {}): Res
   };
 }
 
-describe('words copier (the runtime wordsCopy hook)', () => {
-  it('a key created AFTER the words were set up (vault key on the device) gets its _w copy, written with replace', async () => {
-    const server = fakeServer();
+/** The runtime wiring of `wordsVaultKey` (derived-keys-runtime.resolveWordsVaultKey) over an in-memory device store. */
+const vaultHook = (storage: VaultKeyStorage): NonNullable<ResolveDeps['wordsVaultKey']> => (ctx) =>
+  resolveVaultKey({ storage, wvkBlob: ctx.wvkBlob, prf: ctx.prf, unwrap: unwrapSecret }).catch(() => null);
+
+describe('words copy of new keys (Review Focus 3, end to end)', () => {
+  it('a key created AFTER the words were set up gets its _w copy in the one primary write (no replace, no extra proof)', async () => {
+    const server = fakeServer({ wvk: await wrapVaultKey(PRF, KEY_A, wrapSecret) });
     const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
-    const wordsCopy = createWordsCopier({ storage, remote: () => server.remote, wrap: wrapSecret, unwrap: unwrapSecret });
-    const r = await resolvePasskeySecret(resolveDeps(server.remote, { wordsCopy }));
+    const r = await resolvePasskeySecret(resolveDeps(server.remote, { wordsVaultKey: vaultHook(storage) }));
     expect(r.source).toBe('generated');
-    expect(server.writes).toHaveLength(2); // primary, then the words copy
-    expect(server.writes[1].replace).toBe(true);
-    expect(Object.keys(server.writes[1].b)).toEqual(['maci_w']);
+    expect(server.writes).toHaveLength(1);
+    expect(server.writes[0].replace).toBeFalsy();
+    expect(Object.keys(server.writes[0].b)).toEqual(['maci', 'maci_w']);
     expect(await unwrapSecret(KEY_A, SLOT_LABEL.maci, server.blobs.maci_w!)).toEqual(r.secret);
   });
 
   it('a second phone with only the passkey: the vault key comes from the wvk blob, is saved, and the new key gets its _w copy', async () => {
     const server = fakeServer({ wvk: await wrapVaultKey(PRF, KEY_A, wrapSecret) });
     const storage = mem(); // nothing on this phone
-    const wordsCopy = createWordsCopier({ storage, remote: () => server.remote, wrap: wrapSecret, unwrap: unwrapSecret });
-    const r = await resolvePasskeySecret(resolveDeps(server.remote, { slot: 'nostr', wordsCopy }));
+    const r = await resolvePasskeySecret(resolveDeps(server.remote, { slot: 'nostr', wordsVaultKey: vaultHook(storage) }));
     expect(r.source).toBe('generated');
+    expect(server.writes).toHaveLength(1);
     expect(await loadVaultKey(storage)).toBe(KEY_A);
     expect(await unwrapSecret(KEY_A, SLOT_LABEL.nostr, server.blobs.nostr_w!)).toEqual(r.secret);
   });
 
-  it('words not set up (no device key, no wvk) → no words write at all', async () => {
-    const server = fakeServer();
-    const wordsCopy = createWordsCopier({ storage: mem(), remote: () => server.remote, wrap: wrapSecret, unwrap: unwrapSecret });
-    await resolvePasskeySecret(resolveDeps(server.remote, { wordsCopy }));
-    expect(server.writes).toHaveLength(1);
-    expect(server.blobs.maci_w).toBeUndefined();
+  it('words replaced on another phone (device K1, server wvk K2) → the copy is made under K2', async () => {
+    const server = fakeServer({ wvk: await wrapVaultKey(PRF, KEY_B, wrapSecret) });
+    const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
+    const r = await resolvePasskeySecret(resolveDeps(server.remote, { wordsVaultKey: vaultHook(storage) }));
+    expect(await unwrapSecret(KEY_B, SLOT_LABEL.maci, server.blobs.maci_w!)).toEqual(r.secret);
+    await expect(unwrapSecret(KEY_A, SLOT_LABEL.maci, server.blobs.maci_w!)).rejects.toThrow();
+    expect(await loadVaultKey(storage)).toBe(KEY_B);
   });
 
-  it('"Schlüssel sichern" with two uploads makes ONE words write (one proof), both copies readable', async () => {
+  it('words switched off elsewhere (server has no wvk) → no copy, and the device key is cleared', async () => {
     const server = fakeServer();
     const storage = mem({ [WORDS_VAULT_KEY_STORE]: KEY_A });
-    const wordsCopy = createWordsCopier({ storage, remote: () => server.remote, wrap: wrapSecret, unwrap: unwrapSecret });
-    const d = resolveDeps(server.remote, { wordsCopy });
-    const report = await backupDeviceSecrets(
-      [
-        { slot: 'maci', loadLocal: async () => utf8Encode('M') },
-        { slot: 'salt', loadLocal: async () => utf8Encode('123') },
-      ],
-      d,
-    );
-    expect(report.wordsCopies).toEqual({ stored: ['maci', 'salt'], failed: [] });
-    expect(server.writes).toHaveLength(2);
-    expect(Object.keys(server.writes[1].b)).toEqual(['maci_w', 'salt_w']);
-    expect(server.writes[1].replace).toBe(true);
-    expect(await unwrapSecret(KEY_A, SLOT_LABEL.salt, server.blobs.salt_w!)).toEqual(utf8Encode('123'));
-  });
-
-  it('a failed words write rejects each call (reported as failed by the caller)', async () => {
-    const remote: RemoteBackup = { read: async () => ({ status: 'none' }), write: async () => { throw new Error('offline'); } };
-    const wordsCopy = createWordsCopier({ storage: mem({ [WORDS_VAULT_KEY_STORE]: KEY_A }), remote: () => remote, wrap: wrapSecret, unwrap: unwrapSecret });
-    await expect(wordsCopy('maci', utf8Encode('m'), { prf: null })).rejects.toThrow();
+    await resolvePasskeySecret(resolveDeps(server.remote, { wordsVaultKey: vaultHook(storage) }));
+    expect(server.writes).toHaveLength(1);
+    expect(Object.keys(server.writes[0].b)).toEqual(['maci']);
+    expect(await loadVaultKey(storage)).toBeNull();
   });
 });

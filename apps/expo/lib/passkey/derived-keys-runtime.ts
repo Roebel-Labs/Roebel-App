@@ -34,7 +34,7 @@ import { identityKind, type PasskeySession } from './session';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
 import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
-import { createWordsCopier, type VaultKeyStorage } from './words-vault';
+import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
 
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
@@ -93,18 +93,11 @@ export function keyBackupFor(session: PasskeySession): RemoteBackup {
 }
 
 /**
- * The `wordsCopy` hook for a session: resolve the words vault key (device copy, else the `wvk`
- * blob with the PRF), then write the `_w` copies with `replace: true` in one write (one proof).
- * No vault key (words not set up) → no-op.
+ * The `wordsVaultKey` hook: the current words vault key, verified against the server's `wvk`
+ * (words-vault.ts `resolveVaultKey`; it also syncs or clears this device's copy). Never throws.
  */
-export function wordsCopyFor(session: PasskeySession): NonNullable<ResolveDeps['wordsCopy']> {
-  return createWordsCopier({
-    storage: wordsVaultKeyStorage,
-    remote: () => keyBackupFor(session),
-    wrap: wrapSecret,
-    unwrap: unwrapSecret,
-  });
-}
+export const resolveWordsVaultKey: NonNullable<ResolveDeps['wordsVaultKey']> = (ctx) =>
+  resolveVaultKey({ storage: wordsVaultKeyStorage, wvkBlob: ctx.wvkBlob, prf: ctx.prf, unwrap: unwrapSecret }).catch(() => null);
 
 /** Migrated person: the identity is a legacy account, or the Safe administers one (v3 moveTo). */
 export async function hasLegacyHistory(session: PasskeySession): Promise<boolean> {
@@ -144,7 +137,7 @@ function resolveOnce(
     generate: SLOT_GENERATORS[slot],
     wrap: wrapSecret,
     unwrap: unwrapSecret,
-    wordsCopy: wordsCopyFor(session),
+    wordsVaultKey: resolveWordsVaultKey,
   });
 }
 
@@ -175,8 +168,8 @@ export function deviceSecretSources(identity: string) {
 
 /**
  * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the passkey session's
- * identity (at most two fingerprints, plus one for the words copies when the words are set up).
- * Never overwrites a different server copy.
+ * identity (at most two fingerprints; the words copies ride in the same write). Never overwrites a
+ * different server copy.
  */
 export async function backupKeysForSession(session: PasskeySession): Promise<BackupReport> {
   return backupDeviceSecrets(deviceSecretSources(session.identity), {
@@ -185,7 +178,7 @@ export async function backupKeysForSession(session: PasskeySession): Promise<Bac
     remote: keyBackupFor(session),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
-    wordsCopy: wordsCopyFor(session),
+    wordsVaultKey: resolveWordsVaultKey,
   });
 }
 

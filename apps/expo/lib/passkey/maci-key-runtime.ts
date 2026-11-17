@@ -9,7 +9,7 @@
 import type { Account } from 'thirdweb/wallets';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { isCitizenTokenRegistered, lookupMaciSignUp, thirdwebMaciSource } from '@/lib/maci-signup-runtime';
-import { hasLegacyHistory, keyBackupFor, SLOT_GENERATORS, wordsCopyFor } from './derived-keys-runtime';
+import { hasLegacyHistory, keyBackupFor, resolveWordsVaultKey, SLOT_GENERATORS } from './derived-keys-runtime';
 import { MACI_KEYPAIR_STORE_KEY, singleFlight } from './derived-keys';
 import { maciPubKeyHashOf, silentThirdwebAccount } from './key-completion-runtime';
 import { resolveMaciKeyForIdentity, type MaciResolution } from './maci-key-resolver';
@@ -43,7 +43,7 @@ export function resolveMaciKeyForSession(
       getPrf: () => getPrfSecret(session.credentialId),
       wrap: wrapSecret,
       unwrap: unwrapSecret,
-      wordsCopy: wordsCopyFor(session),
+      wordsVaultKey: resolveWordsVaultKey,
       loadLocal: () => SecureStore.getItemAsync(MACI_KEYPAIR_STORE_KEY),
       saveLocal: (raw) => SecureStore.setItemAsync(MACI_KEYPAIR_STORE_KEY, raw),
       hasLegacyHistory: () => hasLegacyHistory(session),

@@ -8,27 +8,25 @@
  *
  * The app forgets the words after setup; it keeps the vault key on the device
  * (`WORDS_VAULT_KEY_STORE`, this device only) and, wrapped under the passkey PRF, in the `wvk`
- * slot. A second phone that has only the (synced) passkey unwraps `wvk` with the PRF of the read
- * it already paid for, saves the key, and can then make `_w` copies of keys created there.
+ * slot. The server's `wvk` is the truth (`resolveVaultKey`): a second phone that has only the
+ * (synced) passkey unwraps it with the PRF of the read it already paid for, and a phone with a
+ * stale device copy follows words replaced or switched off elsewhere.
+ *
+ * New keys (derived-keys.ts, case (c) and "Schlüssel sichern") carry their `_w` blob in the SAME
+ * write as the primary blob, so a words copy costs no extra proof.
  *
  * Pure: storage, backup and wrapping are injected (derived-keys-runtime.ts wires them).
  */
 import { bytesToHex, hexToBytes, isHex, type Hex } from 'viem';
 import { SLOT_LABEL } from './derived-keys';
-import type { KeyBackupBlobs, KeyBackupSlot, RemoteBackup } from './key-backup';
+import { KEY_BACKUP_WORDS_SLOT, type KeyBackupBlobs, type KeyBackupSlot, type RemoteBackup } from './key-backup';
 
 export const WORDS_VAULT_KEY_STORE = 'passkey_words_vault_key_v1';
 /** HKDF label of the `wvk` blob (the vault key wrapped under the passkey PRF). */
 export const WORDS_VAULT_KEY_LABEL = 'roebel/words-vault-key/v1';
 
-const WORDS_SLOT: Record<KeyBackupSlot, 'maci_w' | 'nostr_w' | 'salt_w'> = {
-  maci: 'maci_w',
-  nostr: 'nostr_w',
-  salt: 'salt_w',
-};
-
 export function wordsSlot(slot: KeyBackupSlot): 'maci_w' | 'nostr_w' | 'salt_w' {
-  return WORDS_SLOT[slot];
+  return KEY_BACKUP_WORDS_SLOT[slot];
 }
 
 export type VaultKeyStorage = {
@@ -57,9 +55,16 @@ type Unwrap = (prf: Hex, label: string, blob: string) => Promise<Uint8Array>;
 type Wrap = (prf: Hex, label: string, secret: Uint8Array) => Promise<string>;
 
 /**
- * The vault key: the device copy, else the `wvk` blob unwrapped with the PRF (then saved on this
- * device), else null (words not set up, or no PRF / a blob for another passkey). Never throws on
- * a bad blob: no vault key only means no second copy.
+ * The vault key of the CURRENT words, verified against the server. `wvkBlob` is the `wvk` slot of
+ * a fresh backup read (undefined = the server has none) and `prf` the PRF of that read's assertion.
+ *
+ * The server's `wvk` is the truth: words replaced or switched off on another phone must never be
+ * overwritten by a stale device copy.
+ *   - server has no `wvk`            → words are off: the device copy is cleared, null
+ *   - `wvk` + PRF                    → unwrap it; the device copy is overwritten when it differs
+ *   - `wvk` but no PRF, or a `wvk` for another passkey → null (the device copy alone is not
+ *     trusted, and it is kept: it cannot be checked)
+ * Never throws on a bad blob: no vault key only means no second copy.
  */
 export async function resolveVaultKey(d: {
   storage: VaultKeyStorage;
@@ -67,9 +72,11 @@ export async function resolveVaultKey(d: {
   prf?: Hex | null;
   unwrap: Unwrap;
 }): Promise<Hex | null> {
-  const local = await loadVaultKey(d.storage);
-  if (local) return local;
-  if (!d.wvkBlob || !d.prf) return null;
+  if (!d.wvkBlob) {
+    if ((await d.storage.getItem(WORDS_VAULT_KEY_STORE)) !== null) await clearVaultKey(d.storage);
+    return null;
+  }
+  if (!d.prf) return null;
   let key: Hex;
   try {
     const bytes = await d.unwrap(d.prf, WORDS_VAULT_KEY_LABEL, d.wvkBlob);
@@ -78,7 +85,7 @@ export async function resolveVaultKey(d: {
   } catch {
     return null;
   }
-  await saveVaultKey(d.storage, key);
+  if ((await loadVaultKey(d.storage)) !== key) await saveVaultKey(d.storage, key);
   return key;
 }
 
@@ -87,7 +94,8 @@ export function wrapVaultKey(prf: Hex, vaultKey: Hex, wrap: Wrap): Promise<strin
   return wrap(prf, WORDS_VAULT_KEY_LABEL, hexToBytes(vaultKey));
 }
 
-export type WordsCopyResult = { stored: KeyBackupSlot[]; failed: KeyBackupSlot[] };
+/** `wvk` is present only when `extra.wvk` was given: whether that blob was stored. */
+export type WordsCopyResult = { stored: KeyBackupSlot[]; failed: KeyBackupSlot[]; wvk?: boolean };
 
 /**
  * Wraps every secret under the vault key into its `_w` slot and stores them (plus `extra.wvk`) in
@@ -104,77 +112,15 @@ export async function writeWordsCopies(d: {
   extra?: { wvk?: string };
 }): Promise<WordsCopyResult> {
   const slots = d.secrets.map((s) => s.slot);
+  const withWvk = (ok: boolean) => (d.extra?.wvk ? { wvk: ok } : {});
   if (slots.length === 0 && !d.extra?.wvk) return { stored: [], failed: [] };
   try {
     const blobs: KeyBackupBlobs = {};
     for (const { slot, secret } of d.secrets) blobs[wordsSlot(slot)] = await d.wrap(d.vaultKey, SLOT_LABEL[slot], secret);
     if (d.extra?.wvk) blobs.wvk = d.extra.wvk;
     const w = await d.remote.write(blobs, d.replace ?? false);
-    return w === 'stored' ? { stored: slots, failed: [] } : { stored: [], failed: slots };
+    return w === 'stored' ? { stored: slots, failed: [], ...withWvk(true) } : { stored: [], failed: slots, ...withWvk(false) };
   } catch {
-    return { stored: [], failed: slots };
+    return { stored: [], failed: slots, ...withWvk(false) };
   }
-}
-
-export const WORDS_COPY_FAILED_MESSAGE = 'Die zweite Sicherung unter deinen Wiederherstellungswörtern ist fehlgeschlagen.';
-
-type CopyCtx = { prf: Hex | null; wvkBlob?: string };
-
-/**
- * The `ResolveDeps.wordsCopy` hook: resolves the vault key, then writes the `_w` copies with
- * `replace: true`. Calls made in the same tick (backupDeviceSecrets issues one per uploaded slot
- * before awaiting) are coalesced into ONE write, so a "Schlüssel sichern" costs one extra proof,
- * not three. No vault key (words not set up) → nothing is written and the call resolves.
- * A failed copy rejects (the caller reports it; it never fails the key itself).
- */
-export function createWordsCopier(d: {
-  storage: VaultKeyStorage;
-  remote: () => RemoteBackup;
-  wrap: Wrap;
-  unwrap: Unwrap;
-}): (slot: KeyBackupSlot, secret: Uint8Array, ctx: CopyCtx) => Promise<void> {
-  type Item = { slot: KeyBackupSlot; secret: Uint8Array; resolve: () => void; reject: (e: Error) => void };
-  let pending: { items: Item[]; ctx: CopyCtx } | null = null;
-
-  const flush = async (b: { items: Item[]; ctx: CopyCtx }) => {
-    try {
-      const vaultKey = await resolveVaultKey({ storage: d.storage, wvkBlob: b.ctx.wvkBlob, prf: b.ctx.prf, unwrap: d.unwrap });
-      if (!vaultKey) {
-        for (const i of b.items) i.resolve();
-        return;
-      }
-      // One entry per slot (a later call for the same slot wins).
-      const bySlot = new Map<KeyBackupSlot, Uint8Array>();
-      for (const i of b.items) bySlot.set(i.slot, i.secret);
-      const r = await writeWordsCopies({
-        vaultKey,
-        secrets: [...bySlot].map(([slot, secret]) => ({ slot, secret })),
-        remote: d.remote(),
-        wrap: d.wrap,
-        replace: true,
-      });
-      for (const i of b.items) {
-        if (r.failed.includes(i.slot)) i.reject(new Error(WORDS_COPY_FAILED_MESSAGE));
-        else i.resolve();
-      }
-    } catch {
-      for (const i of b.items) i.reject(new Error(WORDS_COPY_FAILED_MESSAGE));
-    }
-  };
-
-  return (slot, secret, ctx) =>
-    new Promise<void>((resolve, reject) => {
-      if (!pending) {
-        const batch: { items: Item[]; ctx: CopyCtx } = { items: [], ctx: { prf: null } };
-        pending = batch;
-        queueMicrotask(() => {
-          pending = null;
-          void flush(batch);
-        });
-      }
-      const b = pending;
-      if (!b.ctx.prf && ctx.prf) b.ctx.prf = ctx.prf;
-      if (!b.ctx.wvkBlob && ctx.wvkBlob) b.ctx.wvkBlob = ctx.wvkBlob;
-      b.items.push({ slot, secret, resolve, reject });
-    });
 }

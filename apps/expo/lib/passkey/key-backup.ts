@@ -23,6 +23,12 @@ export const KEY_BACKUP_SLOTS = ['maci', 'nostr', 'salt'] as const;
 export type KeyBackupSlot = (typeof KEY_BACKUP_SLOTS)[number];
 /** The same three secrets wrapped a second time, under the recovery-words vault key (words-vault.ts). */
 export const KEY_BACKUP_WORDS_SLOTS = ['maci_w', 'nostr_w', 'salt_w'] as const;
+/** Primary slot → its words slot. */
+export const KEY_BACKUP_WORDS_SLOT: Record<KeyBackupSlot, (typeof KEY_BACKUP_WORDS_SLOTS)[number]> = {
+  maci: 'maci_w',
+  nostr: 'nostr_w',
+  salt: 'salt_w',
+};
 /** The words vault key, wrapped under the passkey PRF (a phone with only the passkey reads it). */
 export const KEY_BACKUP_VAULT_SLOT = 'wvk';
 export type KeyBackupBlobKey = KeyBackupSlot | (typeof KEY_BACKUP_WORDS_SLOTS)[number] | typeof KEY_BACKUP_VAULT_SLOT;

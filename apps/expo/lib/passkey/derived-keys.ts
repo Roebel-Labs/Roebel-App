@@ -17,14 +17,15 @@
  * A transport failure of the backup service throws (retry later); it is never read as "no backup",
  * so (c) cannot mint a second key just because the network was down.
  *
- * Recovery words (words-vault.ts): when the optional `wordsCopy` hook is given, a key generated in
- * (c) and every secret "Schlüssel sichern" uploads also get a second copy under the words vault
- * key. That copy is best effort: its failure never fails the key.
+ * Recovery words (words-vault.ts): when the optional `wordsVaultKey` hook yields the current words
+ * vault key, a key generated in (c) and every secret "Schlüssel sichern" uploads also get a second
+ * copy (`_w` slot) under it, in the SAME write as the primary blob (no extra proof). That copy is
+ * best effort: its failure never fails the key.
  *
  * Pure: storage, PRF, backup and generation are injected (derived-keys-runtime.ts wires them).
  */
 import type { Hex } from 'viem';
-import type { KeyBackupSlot, RemoteBackup, RemoteRead } from './key-backup';
+import { KEY_BACKUP_WORDS_SLOT, type KeyBackupBlobs, type KeyBackupSlot, type RemoteBackup, type RemoteRead } from './key-backup';
 import { MACI_WRAP_LABEL, NOSTR_WRAP_LABEL, WRAPPED_MACI_KEY, WRAPPED_NOSTR_KEY } from './migration';
 
 export const SALT_WRAP_LABEL = 'roebel/commitment-salt/v1';
@@ -101,12 +102,12 @@ export type ResolveDeps = {
   wrap: (prf: Hex, label: string, secret: Uint8Array) => Promise<string>;
   unwrap: (prf: Hex, label: string, blob: string) => Promise<Uint8Array>;
   /**
-   * Second copy under the recovery words (words-vault.ts `createWordsCopier`): called after a
-   * generated key was stored and backed up (c), and for every secret `backupDeviceSecrets`
-   * uploads. `ctx` carries the PRF and the server's `wvk` blob, so a phone with only the passkey
-   * can recover the vault key. A rejection never fails the resolve.
+   * The CURRENT recovery-words vault key, verified against the server's `wvk` (words-vault.ts
+   * `resolveVaultKey`), or null (words off / unverifiable). `ctx` = the PRF and `wvk` blob of the
+   * backup read this resolution already made. Used for the `_w` copy of a generated key (c) and of
+   * every secret `backupDeviceSecrets` uploads. A failure never fails the key.
    */
-  wordsCopy?: (slot: KeyBackupSlot, secret: Uint8Array, ctx: { prf: Hex | null; wvkBlob?: string }) => Promise<void>;
+  wordsVaultKey?: (ctx: { prf: Hex | null; wvkBlob?: string }) => Promise<Hex | null>;
 };
 
 export type ResolveSource = 'local' | 'deviceBlob' | 'backup' | 'generated';
@@ -123,6 +124,72 @@ export function singleFlight<T>(inFlight: Map<string, Promise<T>>, key: string, 
     inFlight.set(key, pending);
   }
   return pending;
+}
+
+type WordsBlobs = Partial<Record<(typeof KEY_BACKUP_WORDS_SLOT)[KeyBackupSlot], string>>;
+
+/**
+ * `_w` blobs for `secrets` under the current words vault key; empty when words are off or the key
+ * cannot be verified. Never throws.
+ */
+async function wordsBlobsFor(
+  d: Pick<ResolveDeps, 'wordsVaultKey' | 'wrap'>,
+  read: RemoteRead,
+  prf: Hex | null,
+  secrets: { slot: KeyBackupSlot; secret: Uint8Array }[],
+): Promise<{ blobs: WordsBlobs; on: boolean }> {
+  if (!d.wordsVaultKey || read.status === 'disabled' || secrets.length === 0) return { blobs: {}, on: false };
+  try {
+    const vaultKey = await d.wordsVaultKey({ prf, wvkBlob: read.status === 'found' ? read.blobs.wvk : undefined });
+    if (!vaultKey) return { blobs: {}, on: false };
+    const blobs: WordsBlobs = {};
+    for (const { slot, secret } of secrets) blobs[KEY_BACKUP_WORDS_SLOT[slot]] = await d.wrap(vaultKey, SLOT_LABEL[slot], secret);
+    return { blobs, on: true };
+  } catch {
+    return { blobs: {}, on: false };
+  }
+}
+
+/**
+ * Writes primary blobs together with their `_w` copies in ONE write (no `replace`: the primary
+ * slots keep the server's 409 guard; the session token applies, so no extra proof). A `_w` slot
+ * the read already showed (a stale copy from earlier words) — or a 409 that only a `_w` slot can
+ * explain — goes into a separate `replace: true` write of the `_w` slots alone (rare; one proof).
+ * Returns the primary write's answer and which slots got their words copy.
+ */
+async function writeWithWordsCopies(
+  remote: RemoteBackup,
+  read: RemoteRead,
+  primary: Partial<Record<KeyBackupSlot, string>>,
+  words: WordsBlobs,
+): Promise<{ w: Awaited<ReturnType<RemoteBackup['write']>>; copied: KeyBackupSlot[] }> {
+  const existing: KeyBackupBlobs = read.status === 'found' ? read.blobs : {};
+  const slots = Object.keys(primary) as KeyBackupSlot[];
+  const fresh: WordsBlobs = {};
+  const stale: WordsBlobs = {};
+  for (const slot of slots) {
+    const ws = KEY_BACKUP_WORDS_SLOT[slot];
+    if (words[ws] === undefined) continue;
+    (existing[ws] === undefined ? fresh : stale)[ws] = words[ws];
+  }
+  let w = await remote.write({ ...primary, ...fresh });
+  if (w === 'exists' && Object.keys(fresh).length > 0) {
+    // Either a primary slot was written meanwhile (race) or a `_w` slot was: retry the primary alone.
+    w = await remote.write(primary);
+    if (w === 'stored') Object.assign(stale, fresh);
+    for (const k of Object.keys(fresh)) delete fresh[k as keyof WordsBlobs];
+  }
+  const copied = slots.filter((s) => w === 'stored' && fresh[KEY_BACKUP_WORDS_SLOT[s]] !== undefined);
+  if (w === 'stored' && Object.keys(stale).length > 0) {
+    try {
+      if ((await remote.write(stale, true)) === 'stored') {
+        copied.push(...slots.filter((s) => stale[KEY_BACKUP_WORDS_SLOT[s]] !== undefined));
+      }
+    } catch {
+      // Best effort: the primary blobs are stored.
+    }
+  }
+  return { w, copied };
 }
 
 export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResult> {
@@ -177,20 +244,13 @@ export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResul
   const blob = await d.wrap(prf, SLOT_LABEL[d.slot], secret);
   let backedUp = false;
   if (d.remote && read.status !== 'disabled') {
-    const w = await d.remote.write({ [d.slot]: blob });
+    const words = await wordsBlobsFor(d, read, prf, [{ slot: d.slot, secret }]);
+    const { w } = await writeWithWordsCopies(d.remote, read, { [d.slot]: blob }, words.blobs);
     if (w === 'exists') throw new Error(BACKUP_RACE_MESSAGE);
     backedUp = w === 'stored';
   }
   await d.storage.setItem(SLOT_DEVICE_BLOB[d.slot], blob);
   await d.saveLocal(secret);
-  if (backedUp && d.wordsCopy) {
-    const wvkBlob = read.status === 'found' ? read.blobs.wvk : undefined;
-    try {
-      await d.wordsCopy(d.slot, secret, { prf: prf ?? null, wvkBlob });
-    } catch {
-      // Best effort: the key is stored and backed up; "Schlüssel sichern" can make the copy later.
-    }
-  }
   return { secret, source: 'generated', backedUp };
 }
 
@@ -208,7 +268,7 @@ export type BackupReport = {
   /** Slots this device has no secret for. */
   missing: KeyBackupSlot[];
   status: 'done' | 'disabled';
-  /** Second copies under the recovery words for this run's uploads (empty without `wordsCopy`). */
+  /** Second copies under the recovery words for this run's uploads (empty when the words are off). */
   wordsCopies: { stored: KeyBackupSlot[]; failed: KeyBackupSlot[] };
 };
 
@@ -218,11 +278,12 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.e
  * Uploads the device's secrets (reusing its device blobs, wrapping the rest under the PRF).
  * Never overwrites a server blob: a slot the server already has is compared by PLAINTEXT
  * (blobs differ per wrap because of the random IV) and reported as saved or as a conflict.
- * Costs at most two fingerprints (read + write).
+ * Costs at most two fingerprints (read + write): the `_w` copies under the recovery words ride in
+ * the same write. Only a stale `_w` copy from earlier words needs one more (`replace`) proof.
  */
 export async function backupDeviceSecrets(
   sources: BackupSource[],
-  d: Pick<ResolveDeps, 'storage' | 'getPrf' | 'remote' | 'wrap' | 'unwrap' | 'wordsCopy'>,
+  d: Pick<ResolveDeps, 'storage' | 'getPrf' | 'remote' | 'wrap' | 'unwrap' | 'wordsVaultKey'>,
 ): Promise<BackupReport> {
   const off = (): BackupReport => ({ saved: [], conflicts: [], missing: [], status: 'disabled', wordsCopies: { stored: [], failed: [] } });
   if (!d.remote) return off();
@@ -275,16 +336,15 @@ export async function backupDeviceSecrets(
     uploaded.push({ slot, secret });
   }
   if (Object.keys(upload).length > 0) {
-    const w = await d.remote.write(upload);
+    // No PRF yet (token read, device blobs reused) → the vault key cannot be verified: no copy.
+    const words = await wordsBlobsFor(d, read, prf ?? null, uploaded);
+    const { w, copied } = await writeWithWordsCopies(d.remote, read, upload, words.blobs);
     if (w === 'disabled') return { ...report, status: 'disabled' };
     if (w === 'exists') throw new Error(BACKUP_RACE_MESSAGE);
     report.saved.push(...(Object.keys(upload) as KeyBackupSlot[]));
-    if (d.wordsCopy) {
-      const copy = d.wordsCopy;
-      const ctx = { prf: prf ?? null, wvkBlob: read.status === 'found' ? read.blobs.wvk : undefined };
-      // Issued in one tick (no await in between) so the runtime coalesces them into one write.
-      const results = await Promise.allSettled(uploaded.map(({ slot, secret }) => copy(slot, secret, ctx)));
-      results.forEach((r, i) => (r.status === 'fulfilled' ? report.wordsCopies.stored : report.wordsCopies.failed).push(uploaded[i].slot));
+    if (words.on) {
+      report.wordsCopies.stored.push(...copied);
+      report.wordsCopies.failed.push(...uploaded.map((u) => u.slot).filter((s) => !copied.includes(s)));
     }
   }
   return report;

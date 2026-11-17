@@ -19,7 +19,7 @@ import { isCitizenTokenRegistered, lookupMaciSignUp, thirdwebMaciSource } from '
 import { deriveCommitmentSalt, loadCitizenPreimage } from '@/lib/citizen-commitment';
 import { deriveAndStoreIdentity } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
-import { deviceSecretSources, keyBackupFor, wordsCopyFor } from './derived-keys-runtime';
+import { deviceSecretSources, keyBackupFor, resolveWordsVaultKey } from './derived-keys-runtime';
 import { MACI_KEYPAIR_STORE_KEY } from './derived-keys';
 import { completeKeyBackup, type CompletionResult, type ThirdwebKeySource } from './key-completion';
 import { deriveMaciSlotFromThirdweb } from './maci-key-resolver';
@@ -151,7 +151,7 @@ export async function completeKeysForSession(
     getPrf: () => getPrfSecret(session.credentialId),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
-    wordsCopy: wordsCopyFor(session),
+    wordsVaultKey: resolveWordsVaultKey,
     hasCommitment: () => hasCommitment(session.identity),
     thirdweb: async () => {
       const acc = opts.thirdwebAccount ?? (await silentThirdwebAccount(opts.activeAccount));
