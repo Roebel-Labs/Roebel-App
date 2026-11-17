@@ -8,7 +8,9 @@
  *          gives x, y, the Safe and its owner directly;
  *        - otherwise the key is RECOVERED from the P-256 signature (a `get` never returns the
  *          public key, and the key cannot be stored in the userHandle at creation because it
- *          does not exist yet). Recovery gives two candidates; the one whose passkey Safe is known
+ *          does not exist yet). Recovery gives two candidates. First, a candidate whose per-key
+ *          signer (SafeWebAuthnSignerFactory.getSigner) owns a Safe wins: a Safe recovered to this
+ *          passkey keeps its address, so the key no longer derives it. Otherwise the one whose passkey Safe is known
  *          (deployed, admin of a legacy account, or has a users row) wins. When neither is known
  *          (a brand-new counterfactual account on a second device), a second assertion with the
  *          same credential decides (the intersection of both candidate sets is the key);
@@ -65,6 +67,10 @@ export type KeyChain = {
   findLinkedLegacies: (safe: Address) => Promise<Address[]>;
   /** A users row with this wallet exists (a passkey-only account that signed up before). */
   isKnownAccount?: (a: Address) => Promise<boolean>;
+  /** SafeWebAuthnSignerFactory.getSigner(x, y): the per-key owner a recovery installs (has code once created). */
+  getSigner: (x: Hex, y: Hex) => Promise<Address>;
+  /** Safes whose only owner is `owner` right now (recovery-lookup `findSafesByOwner`). */
+  findSafesByOwner: (owner: Address) => Promise<Address[]>;
 };
 
 /** Candidate keys of one assertion (2 in practice). */
@@ -97,6 +103,48 @@ export class PasskeySignInError extends Error {
   }
 }
 
+const AMBIGUOUS_MESSAGE = 'Dieser Passkey passt zu mehreren Konten. Bitte wende dich an den Support.';
+const LOOKUP_FAILED_MESSAGE = 'Dein Konto konnte gerade nicht geprüft werden. Bitte versuche es gleich noch einmal.';
+
+/** A Safe with history beyond its code: linked to a legacy account, or has a users row. */
+async function hasHistory(safe: Address, chain: KeyChain): Promise<boolean> {
+  const [legacies, row] = await Promise.all([
+    chain.findLinkedLegacies(safe),
+    chain.isKnownAccount ? chain.isKnownAccount(safe) : Promise.resolve(false),
+  ]);
+  return legacies.length > 0 || row;
+}
+
+/**
+ * Candidate keys whose per-key signer owns a Safe (a Safe recovered to this passkey keeps its
+ * address, so the key no longer derives it). A signer without code never ran `createSigner` →
+ * no log scan. Several valid Safes for one signer → the single one with history wins, else it
+ * is ambiguous (history is forgeable: a known residual, see recovery-lookup `findSafesByOwner`). A failed read stops the sign-in: falling through could pick the throwaway
+ * SharedSigner Safe the recovery phone deployed for the same key (wrong account).
+ */
+async function recoveredSafeKeys(keys: P256Point[], chain: KeyChain): Promise<ResolvedKey[]> {
+  const out: ResolvedKey[] = [];
+  for (const k of keys) {
+    let safes: Address[];
+    let signer: Address;
+    try {
+      signer = getAddress(await chain.getSigner(k.x, k.y));
+      if (!(await chain.hasCode(signer))) continue;
+      safes = await chain.findSafesByOwner(signer);
+      if (safes.length > 1) {
+        const withHistory: Address[] = [];
+        for (const s of safes) if (await hasHistory(s, chain)) withHistory.push(s);
+        if (withHistory.length === 1) safes = withHistory;
+      }
+    } catch {
+      throw new PasskeySignInError(LOOKUP_FAILED_MESSAGE);
+    }
+    if (safes.length > 1) throw new PasskeySignInError(AMBIGUOUS_MESSAGE);
+    if (safes.length === 1) out.push({ x: k.x, y: k.y, safe: getAddress(safes[0]), owner: signer, ownerType: 'webauthnSigner' });
+  }
+  return out;
+}
+
 export const NO_ACCOUNT_MESSAGE =
   'Zu diesem Passkey haben wir kein Konto gefunden. Erstelle ein neues unabhängiges Konto oder nutze die Kontowiederherstellung.';
 
@@ -117,13 +165,20 @@ export async function resolveCredentialKey(
 
   const first = candidateKeys(assertion);
   if (first.length === 0) throw new PasskeySignInError('Die Passkey-Signatur konnte nicht gelesen werden.');
+
+  // (1) A Safe recovered to this passkey wins over everything else.
+  const recovered = await recoveredSafeKeys(first, deps.chain);
+  if (recovered.length === 1) return recovered[0];
+  if (recovered.length > 1) throw new PasskeySignInError(AMBIGUOUS_MESSAGE);
+
+  // (2) The Safe the key derives (owner = SafeWebAuthnSharedSigner).
   const known: ResolvedKey[] = [];
   for (const k of first) {
     const key = sharedSignerKey(k);
     if (await isKnownSafe(key.safe, deps.chain)) known.push(key);
   }
   if (known.length === 1) return known[0];
-  if (known.length > 1) throw new PasskeySignInError('Dieser Passkey passt zu mehreren Konten. Bitte wende dich an den Support.');
+  if (known.length > 1) throw new PasskeySignInError(AMBIGUOUS_MESSAGE);
 
   // Neither Safe is known (a counterfactual account with no trace yet): ask once more.
   const second = candidateKeys(await deps.signAgain(assertion.credentialId));

@@ -5,7 +5,8 @@ import Constants from 'expo-constants';
 import { useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
 import { client } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
-import { bootWallets } from '@/lib/passkey/boot';
+import { backgroundRestore, bootWallets, type SessionSource } from '@/lib/passkey/boot';
+import { passkeyBootSource } from '@/lib/passkey/boot-source';
 import { passkeyChannelAllowed } from '@/lib/passkey/gate';
 import { bufferError } from '@/lib/sentry-init';
 import {
@@ -24,7 +25,11 @@ const THIRDWEB_AUTH_TOKEN_KEY = `walletToken-${client.clientId}`;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Writes one restore outcome to the on-device log (and to crash reporting when it failed). */
-function recordRestore(result: RestoreResult, outcome: RestoreReport['outcome'] = result.outcome): void {
+function recordRestore(
+  result: RestoreResult,
+  outcome: RestoreReport['outcome'] = result.outcome,
+  owner: RestoreReport['owner'] = 'thirdweb',
+): void {
   let updateId: string | null | undefined;
   let embeddedLaunch: boolean | undefined;
   try {
@@ -38,6 +43,7 @@ function recordRestore(result: RestoreResult, outcome: RestoreReport['outcome'] 
   const report: RestoreReport = {
     ...result,
     outcome,
+    owner,
     at: new Date().toISOString(),
     appVersion: Constants.expoConfig?.version,
     platform: Platform.OS,
@@ -95,6 +101,9 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
     let appStateSub: { remove: () => void } | null = null;
     let backgroundBusy = false;
     let backgroundTicks = 0;
+    // Set when a sovereign session owns a failed boot: the background retry then retries that
+    // source and never falls to thirdweb.
+    let failedSource: SessionSource | null = null;
 
     // One pass over the wallets. true = connected, false = nothing to restore; throws the last
     // error when a wallet's restore failed (the caller decides whether that is a logout).
@@ -133,64 +142,82 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
       }
       backgroundBusy = true;
       try {
-        const result = await restoreWithRetry({
-          attempt: attemptThirdweb,
-          hasStoredSession,
-          delaysMs: [],
+        // A source whose session turned out corrupt or gone is dropped here and thirdweb is
+        // restored in the same tick (lib/passkey/boot.ts backgroundRestore).
+        const { owner, result, failedSource: next } = await backgroundRestore({
+          failedSource,
+          restoreThirdweb: () =>
+            restoreWithRetry({
+              attempt: attemptThirdweb,
+              hasStoredSession,
+              delaysMs: [],
+              sleep,
+              isCancelled: () => cancelled,
+            }),
           sleep,
           isCancelled: () => cancelled,
         });
-        if (cancelled || result.outcome === 'failed' || result.outcome === 'cancelled') return;
+        if (cancelled) return;
+        failedSource = next;
+        if (result.outcome === 'failed' || result.outcome === 'cancelled') return;
         stopBackground();
         setRestoreFailed(false);
-        if (result.outcome === 'restored') recordRestore(result, 'restored-late');
+        if (result.outcome === 'restored') recordRestore(result, 'restored-late', owner);
       } finally {
         backgroundBusy = false;
       }
     };
 
-    const autoConnectThirdweb = async () => {
-      const result = await restoreWithRetry({
+    const restoreThirdweb = (): Promise<RestoreResult> =>
+      restoreWithRetry({
         attempt: attemptThirdweb,
         hasStoredSession,
         delaysMs: RESTORE_RETRY_DELAYS_MS,
         sleep,
         isCancelled: () => cancelled,
       });
-      if (cancelled || result.outcome === 'cancelled') return;
-      // A plain logged-out start is not worth a log line; everything else is.
-      if (result.outcome !== 'no-session' && (result.outcome !== 'restored' || result.attempts > 1)) {
-        recordRestore(result);
-      }
-      if (result.outcome === 'failed') {
-        setRestoreFailed(true);
-        backgroundTimer = setInterval(() => {
-          // The timer gives up after ~5 minutes; coming back to the app still retries.
-          backgroundTicks += 1;
-          if (backgroundTicks > RESTORE_BACKGROUND_MAX_TICKS && backgroundTimer) {
-            clearInterval(backgroundTimer);
-            backgroundTimer = null;
-            return;
-          }
-          void backgroundRetry();
-        }, RESTORE_BACKGROUND_INTERVAL_MS);
-        appStateSub = AppState.addEventListener('change', (state) => {
-          if (state === 'active') void backgroundRetry();
-        });
-      }
+
+    const startBackgroundRetry = () => {
+      setRestoreFailed(true);
+      backgroundTimer = setInterval(() => {
+        // The timer gives up after ~5 minutes; coming back to the app still retries.
+        backgroundTicks += 1;
+        if (backgroundTicks > RESTORE_BACKGROUND_MAX_TICKS && backgroundTimer) {
+          clearInterval(backgroundTimer);
+          backgroundTimer = null;
+          return;
+        }
+        void backgroundRetry();
+      }, RESTORE_BACKGROUND_INTERVAL_MS);
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') void backgroundRetry();
+      });
     };
+
     (async () => {
       try {
-        // Passkey session first (preview channels only; production skips this without reading
-        // any storage), else the thirdweb path above. See lib/passkey/boot.ts.
-        await bootWallets({
+        // Sovereign session first (only where passkeyChannelAllowed(); elsewhere no sources and no
+        // storage read), else the thirdweb path above. See lib/passkey/boot.ts. The presence check
+        // is a direct SecureStore read; only load/connect import the sign-in runtime, so a failing
+        // import can only affect someone who really holds a passkey session.
+        const sources: SessionSource[] = passkeyChannelAllowed() ? [passkeyBootSource(setActiveWallet)] : [];
+        const { owner, result } = await bootWallets({
           channelAllowed: () => passkeyChannelAllowed(),
-          loadSession: async () => (await import('@/lib/passkey/signin-runtime')).loadStoredPasskeySession(),
-          connectPasskey: async (session) =>
-            (await import('@/lib/passkey/signin-runtime')).activatePasskeySession(session, setActiveWallet),
-          autoConnectThirdweb,
+          sources,
+          restoreThirdweb,
+          delaysMs: RESTORE_RETRY_DELAYS_MS,
+          sleep,
           isCancelled: () => cancelled,
         });
+        if (cancelled || result.outcome === 'cancelled') return;
+        // A plain logged-out start is not worth a log line; everything else is.
+        if (result.outcome !== 'no-session' && (result.outcome !== 'restored' || result.attempts > 1)) {
+          recordRestore(result, result.outcome, owner);
+        }
+        if (result.outcome === 'failed') {
+          failedSource = owner === 'thirdweb' ? null : (sources.find((x) => x.owner === owner) ?? null);
+          startBackgroundRetry();
+        }
       } finally {
         if (!cancelled) setAutoConnectFinished(true);
       }

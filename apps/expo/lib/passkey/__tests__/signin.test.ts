@@ -3,9 +3,11 @@ jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: je
 import { getAddress, isAddressEqual, type Address, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
 import { MIGRATION_STORE_KEY, loadMigrationRecord } from '../migration';
+import { createLookupChain, findSafesByOwner } from '../recovery-lookup';
 import { predictSafeAddress } from '../safe-address';
 import { PASSKEY_SESSION_KEY, loadPasskeySession } from '../session';
 import {
+  PasskeySignInError,
   resolveCredentialKey,
   resolveIdentity,
   signInFromMigrationRecord,
@@ -15,10 +17,15 @@ import {
   type KeyChain,
   type SignInDeps,
 } from '../signin';
+import { internalRpcError, shapeClient } from '../__testutils__/lookup-client';
 import { assertionFor, mem, newTestPasskey, type TestPasskey } from '../__testutils__/signin-helpers';
 
 const LEGACY = getAddress('0xc49dE63CcfeE46C6C5c3E393293f66779799Fb28');
 const LEGACY2 = getAddress('0x00000000000000000000000000000000000000aa');
+const SIGNER = getAddress('0x00000000000000000000000000000000000051a1');
+const OTHER_SIGNER = getAddress('0x00000000000000000000000000000000000051a2');
+const NO_SIGNER = getAddress('0x00000000000000000000000000000000000051a0');
+const RECOVERED = getAddress('0x000000000000000000000000000000000000ec0e');
 
 function identityChain(p: { links?: Record<string, Address[]>; v2?: Address[]; v3?: Address[] } = {}): IdentityChain {
   return {
@@ -27,6 +34,9 @@ function identityChain(p: { links?: Record<string, Address[]>; v2?: Address[]; v
     holdsCitizenV3: async (a) => (p.v3 ?? []).some((x) => isAddressEqual(x, a)),
   };
 }
+
+/** KeyChain stubs for flows that never meet a recovered Safe. */
+const noSigner = { getSigner: async () => NO_SIGNER, findSafesByOwner: async () => [] as Address[] };
 
 const safeOf = (pk: TestPasskey) => predictSafeAddress({ x: pk.x, y: pk.y });
 
@@ -51,7 +61,20 @@ describe('resolveIdentity (adapter address)', () => {
 describe('resolveCredentialKey (credential → key → Safe)', () => {
   const pk = newTestPasskey();
   const disc = (challenge: Hex) => ({ ...assertionFor(pk, challenge), credentialId: 'cred-1', userHandle: 'aGFuZGxl' });
-  const noChain: KeyChain = { hasCode: async () => false, findLinkedLegacies: async () => [], isKnownAccount: async () => false };
+  const noChain: KeyChain = {
+    hasCode: async () => false,
+    findLinkedLegacies: async () => [],
+    isKnownAccount: async () => false,
+    getSigner: async () => NO_SIGNER,
+    findSafesByOwner: async () => [],
+  };
+  /** A chain where exactly these addresses have code. */
+  const knownChain = (p: { hasCode: Address[] }): KeyChain => ({
+    ...noChain,
+    hasCode: async (a) => p.hasCode.some((x) => isAddressEqual(x, a)),
+  });
+  /** The per-key signer exists only for the real key (the other recovered candidate gets another address). */
+  const signerOfPk = async (x: Hex) => (x === pk.x ? SIGNER : OTHER_SIGNER);
 
   it('uses the local record when the credential matches (no recovery, no second prompt)', async () => {
     const signAgain = jest.fn();
@@ -86,6 +109,134 @@ describe('resolveCredentialKey (credential → key → Safe)', () => {
     expect(k.safe).toBe(safeOf(pk));
     expect(signAgain).toHaveBeenCalledTimes(1);
   });
+
+  // Review Focus 1: the phone that ran the recovery deployed a throwaway SharedSigner Safe for
+  // its new key, so that Safe "is known" too. The Safe owned by the per-key signer must win.
+  it('a recovered Safe wins over the throwaway Safe the recovery phone deployed', async () => {
+    const signAgain = jest.fn();
+    const findSafesByOwner = jest.fn(async (o: Address) => (isAddressEqual(o, SIGNER) ? [RECOVERED] : []));
+    const chain: KeyChain = { ...knownChain({ hasCode: [safeOf(pk), SIGNER] }), getSigner: signerOfPk, findSafesByOwner };
+    const key = await resolveCredentialKey(disc(`0x${'06'.repeat(32)}`), { local: [], chain, signAgain });
+    expect(key).toEqual({ x: pk.x, y: pk.y, safe: RECOVERED, owner: SIGNER, ownerType: 'webauthnSigner' });
+    expect(findSafesByOwner).toHaveBeenCalledWith(SIGNER);
+    expect(signAgain).not.toHaveBeenCalled();
+  });
+
+  it("no signer contract → no log scan, today's behaviour", async () => {
+    const findSafesByOwner = jest.fn(async () => [] as Address[]);
+    const chain: KeyChain = { ...knownChain({ hasCode: [safeOf(pk)] }), getSigner: signerOfPk, findSafesByOwner };
+    const key = await resolveCredentialKey(disc(`0x${'07'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() });
+    expect(findSafesByOwner).not.toHaveBeenCalled();
+    expect(key).toMatchObject({ safe: safeOf(pk), owner: SAFE_WEBAUTHN_SHARED_SIGNER, ownerType: 'sharedSigner' });
+  });
+
+  it('a signer that owns several Safes is ambiguous', async () => {
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: async () => [RECOVERED, LEGACY2],
+    };
+    await expect(resolveCredentialKey(disc(`0x${'08'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+      'passt zu mehreren Konten',
+    );
+  });
+
+  it('several valid Safes for the signer: the single one with history wins', async () => {
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: async () => [LEGACY2, RECOVERED],
+      isKnownAccount: async (a) => isAddressEqual(a, RECOVERED),
+    };
+    const key = await resolveCredentialKey(disc(`0x${'0a'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() });
+    expect(key).toMatchObject({ safe: RECOVERED, owner: SIGNER, ownerType: 'webauthnSigner' });
+  });
+
+  it('a transport error on the recovered Safe\'s getOwners stops the sign-in (no fallback to the throwaway Safe)', async () => {
+    const lookup = {
+      ownerLogsFor: async () => [{ emitter: RECOVERED, blockNumber: 1n }],
+      isPasskeySafe: async () => true,
+      readOwners: async () => {
+        throw new Error('HTTP request failed: timeout');
+      },
+    };
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [safeOf(pk), SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: (o) => findSafesByOwner(o, lookup),
+    };
+    await expect(resolveCredentialKey(disc(`0x${'0b'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+      PasskeySignInError,
+    );
+  });
+
+  it('a valid attacker-built Safe with a much newer AddedOwner log loses to the real Safe with history', async () => {
+    const ATTACKER = getAddress('0x00000000000000000000000000000000000ba0ba');
+    const client = shapeClient({
+      tip: 1_000n,
+      safes: [RECOVERED, ATTACKER],
+      owners: { [RECOVERED]: [SIGNER], [ATTACKER]: [SIGNER] },
+      logs: [
+        { emitter: ATTACKER, block: 995n }, // newest batch
+        { emitter: RECOVERED, block: 120n }, // the real finalize, > one batch (4 x 50 blocks) older
+      ],
+    });
+    const lookup = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [safeOf(pk), SIGNER, RECOVERED, ATTACKER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: (o) => findSafesByOwner(o, lookup),
+      findLinkedLegacies: async (s) => (isAddressEqual(s, RECOVERED) ? [LEGACY] : []),
+    };
+    const key = await resolveCredentialKey(disc(`0x${'0c'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() });
+    expect(key).toEqual({ x: pk.x, y: pk.y, safe: RECOVERED, owner: SIGNER, ownerType: 'webauthnSigner' });
+  });
+
+  it('a transient -32603 (viem reports it as a revert) on the real Safe stops the sign-in, no fallback', async () => {
+    for (const failRead of [{ getModulesPaginated: internalRpcError() }, { getOwners: internalRpcError('getOwners') }]) {
+      const client = shapeClient({
+        tip: 100n,
+        safes: [RECOVERED],
+        owners: { [RECOVERED]: [SIGNER] },
+        logs: [{ emitter: RECOVERED, block: 60n }],
+        failRead,
+      });
+      const lookup = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+      const chain: KeyChain = {
+        ...knownChain({ hasCode: [safeOf(pk), SIGNER, RECOVERED] }),
+        getSigner: signerOfPk,
+        findSafesByOwner: (o) => findSafesByOwner(o, lookup),
+      };
+      await expect(resolveCredentialKey(disc(`0x${'0e'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+        PasskeySignInError,
+      );
+    }
+  });
+
+  it('two valid Safes, neither (or both) with history → ambiguous, never a silent pick', async () => {
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: async () => [LEGACY2, RECOVERED],
+      isKnownAccount: async () => true,
+    };
+    await expect(resolveCredentialKey(disc(`0x${'0d'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+      'passt zu mehreren Konten',
+    );
+  });
+
+  it('a signer contract whose Safe lookup fails stops the sign-in instead of falling back to the throwaway Safe', async () => {
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [safeOf(pk), SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: async () => {
+        throw new Error('rpc down');
+      },
+    };
+    await expect(resolveCredentialKey(disc(`0x${'09'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+      PasskeySignInError,
+    );
+  });
 });
 
 function signInDeps(pk: TestPasskey, over: Partial<SignInDeps> = {}) {
@@ -98,7 +249,7 @@ function signInDeps(pk: TestPasskey, over: Partial<SignInDeps> = {}) {
     randomChallenge: () => `0x${(++n).toString(16).padStart(2, '0').repeat(32)}` as Hex,
     getDiscoverableAssertion: async (c) => ({ ...assertionFor(pk, c), credentialId: 'cred-9', userHandle: null }),
     signWithCredential: async (_id, c) => assertionFor(pk, c),
-    keyChain: { hasCode: async () => false, findLinkedLegacies: async () => [] },
+    keyChain: { hasCode: async () => false, findLinkedLegacies: async () => [], ...noSigner },
     identityChain: identityChain(),
     createPasskey: jest.fn(async () => ({ credentialId: 'new-cred', x: pk.x, y: pk.y, prfSupported: true })),
     ...over,
@@ -112,7 +263,7 @@ describe('signInWithPasskey', () => {
     const safe = safeOf(pk);
     const links = { [safe.toLowerCase()]: [LEGACY] };
     const { deps, migrationStorage, sessionStorage } = signInDeps(pk, {
-      keyChain: { hasCode: async (a) => isAddressEqual(a, safe), findLinkedLegacies: async () => [] },
+      keyChain: { hasCode: async (a) => isAddressEqual(a, safe), findLinkedLegacies: async () => [], ...noSigner },
       identityChain: identityChain({ links }),
     });
     const res = await signInWithPasskey(deps);

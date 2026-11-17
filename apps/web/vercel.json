@@ -67,6 +67,10 @@
     {
       "path": "/api/cron/vorhaben",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/passkey/recovery-alerts",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -22,6 +22,9 @@ contract SocialRecoveryTest is PasskeySafeBase {
     address internal newOwner;
     address[] internal newOwners;
 
+    /// Safe OwnerManager event; the app finds a recovered Safe from its new owner by this log.
+    event AddedOwner(address indexed owner);
+
     function setUp() public {
         _fork();
         (uint256 x, uint256 y) = vm.publicKeyP256(PASSKEY_PK);
@@ -93,6 +96,8 @@ contract SocialRecoveryTest is PasskeySafeBase {
         srm.finalizeRecovery(safe);
 
         vm.warp(block.timestamp + RECOVERY_PERIOD + 1);
+        vm.expectEmit(true, false, false, false, address(safe));
+        emit AddedOwner(newOwner);
         srm.finalizeRecovery(safe);
 
         address[] memory owners = ISafe(safe).getOwners();

@@ -191,6 +191,10 @@ device without the record uses public-key recovery instead (above).
 2. If a `passkey_session_v1` exists, activate the adapter wallet (no biometric prompt) and stop.
 3. Otherwise, or if step 2 throws, run the **unchanged** thirdweb loop (`wallet.autoConnect({ client })` per
    `wallets`, then `setActiveWallet`).
+   Sources are ordered `SessionSource`s (`lib/passkey/boot.ts`, `passkeySessionSource`). **A failed sovereign boot is
+   not a logout:** a stored session that cannot be restored (corrupt, storage error, failing lazy import) is
+   reported as failed, retried in the background (`retrySource`), and never handed to the thirdweb loop.
+   Sources are built only after `passkeyChannelAllowed()`, so production < 3.8.0 never loads passkey code.
 4. The `app_settings.passkey_accounts_enabled` flag is deliberately not checked at boot. Turning the flag off hides
    the sign-in option but never signs out someone already on a passkey session.
 
@@ -224,13 +228,16 @@ a provider, so migrated accounts keep theirs. The optimistic cached-user hydrati
 
 ## 7. Known gaps
 
-- A Safe recovered to a new key (owner = per-key signer) can only sign in on the device that ran the recovery (it
-  has the record). Discoverable sign-in elsewhere assumes the SharedSigner Safe for the recovered key. Resolving
-  "signer → Safe" (Safe `AddedOwner` logs) is not built.
-- The settings migration screen still assumes a thirdweb login for its own "Passkey einrichten" flow. For a
-  passkey-only person it shows its existing error.
-- Circles for a passkey-only (Safe) identity: registration and invite flows were built for thirdweb accounts (see
-  `docs/CIRCLES_ROEBEL_MUENZEN_STATE.md`).
+- ~~A Safe recovered to a new key can only sign in on the device that ran the recovery.~~ **Closed** (Sovereign
+  sign-up plan 1, Task 6): `findSafesByOwner` in `lib/passkey/recovery-lookup.ts`, used by `resolveCredentialKey` in
+  `signin.ts`. Residuals: the history signal can be forged (a lockout at worst, never a wrong account); the full scan
+  grows ~52 windows per month, so an index or pinned block is needed eventually; a lookup RPC error fails sign-in
+  with "try again".
+- ~~The settings migration screen still assumes a thirdweb login.~~ **Closed** (Task 7): `settingsKind` picks
+  `MigrationSettings` or `SovereignAccountSettings`; the passkey-only person no longer sees the thirdweb flow.
+- ~~Circles for a passkey-only (Safe) identity.~~ **Closed** (Task 8): fork proof `SafeCircles.t.sol` (a Safe joins
+  Circles and mints), the app walk found no thirdweb dependency, guests claim with `personalMint` only
+  (`lib/muenzen-claim.ts`).
 
 ## 8. Server side (web + edge, built 2026-09-27, not deployed)
 
@@ -284,10 +291,16 @@ handover check (on-chain semantics), `lib/shamir/tally-session.ts` (runs in the 
   MultiSendCallOnly). The sender must already be an admin (`isAdmin(legacy, sender)`), `legacy` must carry the
   thirdweb proxy code and hold CitizenNFTv2 (or v3). A direct call from the Safe while `legacy` is named is refused
   (wrong `msg.sender`).
-- **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe
-  (onboarding tier):** only `CitizenNFTv2.createAttestationRequest(string)`, budget
-  `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day per Safe, never above the normal cap). A deploy op
-  (factory + factoryData) may carry it.
+- **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe (guest
+  tier, since 2026-11-17):** `CitizenNFTv2.createAttestationRequest(string)`, `Hub.registerHuman`, `Hub.personalMint`,
+  `NameRegistry.updateMetadataDigest`, guardian management (add/revoke guardian with threshold, `changeThreshold`,
+  `cancelRecovery`; `confirmRecovery` only alongside it) and recovery of a guest Safe with >= 1 guardian (shape-checked).
+  Never for guests: `groupMint`, `trust`, `safeTransferFrom`, legacy shapes. Budget per Safe
+  `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day, never above the normal cap) **and** all guests
+  together `PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI` (default 0.02 xDAI, must stay below the overall global cap: guests
+  count there too). The 0.002 default does not fit a guest's first op (deploy + guardian + request = 0.00234 xDAI at
+  1.5 gwei; `personalMint` on a deployed Safe 0.00159): the owner sets the onboarding cap (suggested 0.006 xDAI)
+  before opening sign-up. A deploy op (factory + factoryData) may carry the first op.
 - **Allowlist** = the table in §3 minus the dead/dormant rows, with argument rules: `groupMint` only into the Röbel
   group; `safeTransferFrom` only `from == identity` and `id == uint256(RöbelGroup)`; value 0 everywhere.
   `registerHuman` and `trust` are citizen-tier. Not sponsored: native sends, mini-app transactions, governor

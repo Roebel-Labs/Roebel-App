@@ -290,10 +290,11 @@ test("a citizen Safe (v3 holder) manages its guardians without naming a legacy",
   await ok(op(viaMultiSend(guardianCalls.map((data) => ({ to: SRM, data })))), fakeChain(citizenSafe), NO_LEGACY, SAFE);
 });
 
-test("attack: guardian management by a non-citizen Safe, or with v3 unset", async () => {
+test("guardian management by a non-citizen Safe, or with v3 unset, is a guest op (never citizen budget)", async () => {
+  const guest = { ok: true, mode: "safe", budgetKey: SAFE, guest: true };
   for (const c of guardianCalls) {
-    await rejected(op(outer(SRM, c)), /no CitizenNFT/, fakeChain(), NO_LEGACY);
-    await rejected(op(outer(SRM, c)), /no CitizenNFT/, fakeChain(citizenSafe), { ...NO_LEGACY, v3: undefined });
+    assert.deepEqual(await evaluateSponsorPolicy(op(outer(SRM, c)), NO_LEGACY, fakeChain()), guest);
+    assert.deepEqual(await evaluateSponsorPolicy(op(outer(SRM, c)), { ...NO_LEGACY, v3: undefined }, fakeChain(citizenSafe)), guest);
   }
 });
 
@@ -470,8 +471,10 @@ test("attack: family Safe confirming for a non-citizen wallet, or when it is not
 
 test("attack: a family Safe trying anything other than confirmRecovery", async () => {
   const world = recoveryWorld();
-  // Guardian management / legacy calls: it is no citizen and names no legacy.
-  for (const c of guardianCalls) await rejected(op(outer(SRM, c)), /no CitizenNFT/, world, NO_LEGACY);
+  // Guardian management of its OWN Safe is a guest op (its own budget), never the wallet's.
+  for (const c of guardianCalls) {
+    assert.deepEqual(await evaluateSponsorPolicy(op(outer(SRM, c)), NO_LEGACY, world), { ok: true, mode: "safe", budgetKey: SAFE, guest: true });
+  }
   await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /legacy account/, world, NO_LEGACY);
   // Driving the recovery to its own key or to someone else's: its key's signer is not the new owner.
   await rejected(op(outer(SRM, multiConfirm())), /submitter's own passkey signer/, world, NO_LEGACY);

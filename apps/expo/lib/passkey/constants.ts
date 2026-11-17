@@ -6,7 +6,7 @@
  * (contracts/passkey-accounts/test/fixtures/passkey-safe-vector.json) pins the
  * encodings built from them.
  */
-import { keccak256, stringToHex, type Address, type Hex } from 'viem';
+import { keccak256, slice, stringToHex, type Address, type Hex } from 'viem';
 
 export const PASSKEY_CHAIN_ID = 100;
 
@@ -53,6 +53,15 @@ export const SAFE_SALT_NONCE = 0n;
  */
 export const SAFE_PROXY_CREATION_CODE: Hex =
   '0x608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441364736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564';
+
+/**
+ * Deployed SafeProxy runtime: the 0xab bytes the creation code copies from offset 0x119
+ * (`codecopy(0, 0x119, 0xab)`). Checked against a fork-deployed passkey Safe (2026-11-17).
+ */
+export const SAFE_PROXY_RUNTIME_CODE: Hex = slice(SAFE_PROXY_CREATION_CODE, 0x119, 0x119 + 0xab);
+
+/** Safe FallbackManager slot: keccak256("fallback_manager.handler.address"). */
+export const SAFE_FALLBACK_HANDLER_SLOT: Hex = '0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5';
 
 export const PASSKEY_RP_ID = 'id.ortis.app';
 export const PASSKEY_RP_NAME = 'Röbel';

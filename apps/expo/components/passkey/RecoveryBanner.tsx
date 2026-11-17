@@ -4,8 +4,8 @@
  * sponsored op from my Safe, one fingerprint).
  *
  * `RecoveryBanner` is used on the passkey screen (re-checked on focus). `RecordRecoveryWatch` is
- * the root-layout variant, loaded by PasskeyRecoveryWatch only after the preview gate opened, and
- * rendered only when a local migration record exists — so production users are untouched.
+ * the root-layout variant, loaded by PasskeyRecoveryWatch only after its gate opened
+ * (lib/passkey/existing-account.ts), and rendered only when a connected local migration record exists.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
@@ -132,7 +132,7 @@ function BannerCore({
 }
 
 /**
- * Loaded by PasskeyRecoveryWatch only after the preview gate opened: renders the floating banner
+ * Loaded by PasskeyRecoveryWatch only after its gate opened: renders the floating banner
  * when this device holds a connected passkey record.
  */
 export function RecordRecoveryWatch() {

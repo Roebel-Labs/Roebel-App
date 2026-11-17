@@ -9,13 +9,15 @@ import { client, chain } from '@/constants/thirdweb';
 import { supabase } from '@/lib/supabase';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { CITIZEN_NFT_V2 } from './constants';
+import { readWebAuthnSigner } from './guardians';
 import { lookupChain } from './guardians-runtime';
 import { secureKeyValueStorage } from './migration-runtime';
 import { isV3Enabled, parseV3Config } from './migration-v3';
 import { randomBytes } from './random';
-import { findLinkedLegacies } from './recovery-lookup';
+import { findLinkedLegacies, findSafesByOwner } from './recovery-lookup';
 import { passkeyApiSession } from './api-session-runtime';
-import { clearPasskeySession, loadPasskeySession, type PasskeySession, type SessionStorage } from './session';
+import type { SessionSource } from './boot';
+import { clearPasskeySession, loadPasskeySession, PASSKEY_SESSION_KEY, type PasskeySession, type SessionStorage } from './session';
 import { randomChallengeFrom, type IdentityChain, type KeyChain, type SignInDeps } from './signin';
 import { passkeyWalletOptions, type AdapterDeps } from './thirdweb-adapter';
 import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp } from './userop';
@@ -75,6 +77,8 @@ const keyChain: KeyChain = {
   },
   findLinkedLegacies: (safe) => findLinkedLegacies(safe, lookupChain),
   isKnownAccount,
+  getSigner: (x, y) => readWebAuthnSigner(x, y),
+  findSafesByOwner: (owner) => findSafesByOwner(owner, lookupChain),
 };
 
 export function createSignInDeps(): SignInDeps & { createPasskey: typeof createPasskey } {
@@ -123,3 +127,16 @@ export async function activatePasskeySession(
 }
 
 export const loadStoredPasskeySession = () => loadPasskeySession(secureSessionStorage);
+
+/** Boot source for the stored passkey session; reads through the same storage for presence and load. */
+export function passkeySessionSource(
+  setActiveWallet: (w: Wallet) => Promise<void>,
+  storage: SessionStorage = secureSessionStorage,
+): SessionSource<PasskeySession> {
+  return {
+    owner: 'passkey',
+    hasStored: async () => (await storage.getItem(PASSKEY_SESSION_KEY)) !== null,
+    load: () => loadPasskeySession(storage),
+    connect: (session) => activatePasskeySession(session, setActiveWallet),
+  };
+}

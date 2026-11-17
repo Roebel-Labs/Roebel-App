@@ -28,8 +28,17 @@
  *   PASSKEY_PAYMASTER_ADDRESS  the DEDICATED preview paymaster; required, no default
  *   PASSKEY_CITIZEN_NFT_V3     optional; CitizenNFTv3 (citizen check + moveTo target). Unset = v3 off
  *   PASSKEY_ATTESTER_NFT_V3    optional; AttesterNFTv3 (moveTo target). Unset = attester moveTo off
- *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per NON-citizen Safe per UTC day (everyday
- *                              onboarding tier), default 0.002 xDAI; never above the per-identity cap
+ *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per guest (NON-citizen) account per UTC day
+ *                              (every guest result), default 0.002 xDAI; never above the per-identity cap.
+ *                              The default does NOT fit a guest's first op (deploy + guardian + request
+ *                              measured 0.00234 xDAI at 1.5 gwei): the owner must set it (suggested
+ *                              0.006 xDAI) before opening sign-up
+ *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI optional; ALL guest (non-citizen) Safes together per
+ *                              UTC day, default 0.02 xDAI. MUST stay below the overall global cap:
+ *                              guests also count against the global total, so a guest cap at or above
+ *                              it would let guests use up the budget citizens need. Enforced in code
+ *                              (guestGroupCap): a value at or above the global cap is clamped to
+ *                              global cap - 1 wei
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -45,7 +54,15 @@ import {
   type ChainReader,
   type V3Config,
 } from "./sponsor-policy";
-import { DEFAULT_ONBOARDING_DAILY_WEI, weiFromEnv, type ReserveLimits, type SponsorBudget } from "./sponsor-budget";
+import {
+  DEFAULT_GLOBAL_DAILY_WEI,
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
+  DEFAULT_ONBOARDING_DAILY_WEI,
+  GUEST_GROUP_KEY,
+  weiFromEnv,
+  type ReserveLimits,
+  type SponsorBudget,
+} from "./sponsor-budget";
 import { issueSponsorship, requiredPrefund } from "./voucher";
 
 const CHAIN_ID = 100;
@@ -100,6 +117,18 @@ export function v3ConfigFromEnv(env: Record<string, string | undefined> = proces
   return { citizenNft: pick("PASSKEY_CITIZEN_NFT_V3"), attesterNft: pick("PASSKEY_ATTESTER_NFT_V3") };
 }
 
+/**
+ * The guest group's daily cap, always strictly below the overall global cap (fail-safe against a
+ * misconfigured env): guests also count against the global total, so a guest cap at or above it
+ * would let guests use up the budget citizens need.
+ */
+export function guestGroupCap(env: Record<string, string | undefined> = process.env): bigint {
+  const guest = weiFromEnv(env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI, DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+  const global = weiFromEnv(env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI, DEFAULT_GLOBAL_DAILY_WEI);
+  const ceiling = global > 0n ? global - 1n : 0n;
+  return guest < ceiling ? guest : ceiling;
+}
+
 export async function handleSponsorRequest(
   request: Request,
   deps: { chain: ChainReader; budget: SponsorBudget },
@@ -133,8 +162,15 @@ export async function handleSponsorRequest(
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
     budgetKey = verdict.budgetKey;
-    if (verdict.tier === "onboarding") {
-      limits = { perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI) };
+    // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe -
+    // the latter keyed to the SUBMITTING Safe, see sponsor-policy mode C) gets the onboarding
+    // per-account cap AND counts against the one shared guest total.
+    // Citizen results carry no `guest` and keep the ordinary caps.
+    if (verdict.guest) {
+      limits = {
+        perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI),
+        group: { key: GUEST_GROUP_KEY, dailyWei: guestGroupCap() },
+      };
     }
   } catch (err) {
     // Fail closed: no chain facts, no voucher.

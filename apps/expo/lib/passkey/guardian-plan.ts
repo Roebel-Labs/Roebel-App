@@ -135,7 +135,7 @@ export type IdentityMode = { mode: 'safe' } | { mode: 'legacy'; legacy: Address 
 /**
  * mode "safe" once the Safe itself holds citizenship (after the v3 moveTo); else mode "legacy"
  * through the citizen legacy account the Safe administers; null = nothing the sponsor would pay
- * for (e.g. a family member's Safe without citizenship).
+ * for (an unfinished migration). A record without `legacy` is an independent account: mode "safe".
  */
 export function identityModeFor(p: {
   record: Pick<MigrationRecord, 'legacy' | 'status'>;
@@ -143,7 +143,8 @@ export function identityModeFor(p: {
   legacyIsCitizen: boolean;
 }): IdentityMode | null {
   if (p.safeIsCitizen) return { mode: 'safe' };
-  if (p.record.legacy && p.record.status === 'done' && p.legacyIsCitizen) return { mode: 'legacy', legacy: p.record.legacy };
+  if (!p.record.legacy) return { mode: 'safe' }; // an independent account: the server sponsors guests too
+  if (p.record.status === 'done' && p.legacyIsCitizen) return { mode: 'legacy', legacy: p.record.legacy };
   return null;
 }
 

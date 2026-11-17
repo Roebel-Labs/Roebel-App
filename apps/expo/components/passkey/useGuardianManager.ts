@@ -119,7 +119,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
     async (action: Exclude<GuardianAction, null>, calls: SponsoredCall[], success: string): Promise<boolean> => {
       if (!record || calls.length === 0) return false;
       if (!mode) {
-        setNotice({ tone: 'warning', text: 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' });
+        setNotice({ tone: 'warning', text: record.legacy ? 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.' });
         return false;
       }
       setBusy(action);
@@ -176,7 +176,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
     async (login: HelperLogin): Promise<boolean> => {
       if (!record) return false;
       if (!mode) {
-        setNotice({ tone: 'warning', text: 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' });
+        setNotice({ tone: 'warning', text: record.legacy ? 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.' });
         return false;
       }
       setBusy('helper');

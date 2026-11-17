@@ -11,7 +11,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSetActiveWallet } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import type { PasskeySession } from '@/lib/passkey/session';
 import type { SignInResult } from '@/lib/passkey/signin';
 
@@ -39,7 +39,7 @@ export default function PasskeySignInOption({ onSignedIn, beforeActivate, initia
 
   useEffect(() => {
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    isPasskeySurfaceAllowed('signup')
       .catch(() => false)
       .then((ok) => {
         if (cancelled) return;

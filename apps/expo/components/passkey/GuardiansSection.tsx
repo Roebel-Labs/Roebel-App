@@ -164,7 +164,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
                 {!onPasskeySession ? (
                   <Notice tone="info" text="Melde dich zuerst mit deinem Passkey an. Dann kannst du hier ein Helfer-Konto hinzufügen." />
                 ) : !m.mode ? (
-                  <Notice tone="info" text="Das geht, sobald dein Passkey mit deinem Bürgerkonto verbunden ist." />
+                  <Notice tone="info" text={record.legacy ? 'Das geht, sobald dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.'} />
                 ) : (
                   <HelperLogin
                     busy={m.busy === 'helper'}
@@ -217,7 +217,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
             ) : null}
 
             {!m.mode ? (
-              <Notice tone="info" text="Änderungen sind möglich, sobald dein Passkey mit deinem Bürgerkonto verbunden ist." />
+              <Notice tone="info" text={record.legacy ? 'Änderungen sind möglich, sobald dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Änderungen sind gerade nicht möglich. Versuche es gleich noch einmal.'} />
             ) : null}
           </>
         )}
