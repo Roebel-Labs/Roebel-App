@@ -300,6 +300,13 @@ d("CredentialRegistry — Gnosis fork, live OrgRegistry + NFTs + Safe 1.4.1", fu
     const liveLeaf = leaf(LeafKind.Account, liveType, memberOwner.address);
     const liveTree = tree([liveLeaf]);
     await execAsSafe(liveSafe, orgOwner, registry, "addBatch", [liveType, liveTree.root, 1]);
+    // A third org whose id the test registry will import to a different Safe (P2-01).
+    const otherSafe = await deploySafe(orgOwner);
+    const otherOrgId = orgIdOf(ethers.hexlify(ethers.randomBytes(16)).slice(2));
+    await orgs.connect(attesterSafe).migrationRegister([otherOrgId], [await otherSafe.getAddress()], [""], [ethers.ZeroHash]);
+    const otherLocal = LOCAL("fork-other-members");
+    const otherType = typeId(otherOrgId, otherLocal);
+    await execAsSafe(otherSafe, orgOwner, registry, "createType", [otherOrgId, otherLocal, Kind.Membership, Policy.IssuerBatch, cfg()]);
     const liveBatch = await registry.batchCount();
     await registry.connect(memberOwner).claim(liveBatch, liveLeaf, liveTree.proof(liveLeaf), "0x");
     expect(await registry.holds(liveType, memberOwner.address)).to.equal(true);
@@ -340,16 +347,21 @@ d("CredentialRegistry — Gnosis fork, live OrgRegistry + NFTs + Safe 1.4.1", fu
     await expect(registry.rebindType(liveType)).to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(liveType);
     await expect(registry.connect(s.outsider).prune(liveType, memberOwner.address))
       .to.be.revertedWithCustomError(registry, "StillValid");
-    // The org revoked on the live registry earlier never revives, even once imported.
+    // The org revoked on the live registry earlier never revives, even once imported
+    // with its original Safe (so the same-Safe rule passes and the generation rule decides).
     const testOrgs = new ethers.Contract(testC.orgRegistry, ORG_ABI, ethers.provider);
     expect(await testOrgs.migrationFinalized(), "test OrgRegistry migration still open").to.equal(false);
     const testOwner = await impersonate(await testOrgs.owner());
-    const deadSafe = await deploySafe(orgOwner);
     await testOrgs.connect(testOwner).migrationRegister(
-      [liveOrgId, s.orgId], [liveSafeAddr, await deadSafe.getAddress()], ["", ""], [ethers.ZeroHash, ethers.ZeroHash],
+      [liveOrgId, s.orgId], [liveSafeAddr, await s.orgSafe.getAddress()], ["", ""], [ethers.ZeroHash, ethers.ZeroHash],
     );
     await expect(registry.rebindType(s.typeId)).to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(s.typeId);
     expect(await registry.isTypeActive(s.typeId)).to.equal(false);
+    // The same id under a different Safe in the new registry is a different org: no rebind.
+    const strangerSafe = await deploySafe(memberOwner);
+    await testOrgs.connect(testOwner).migrationRegister([otherOrgId], [await strangerSafe.getAddress()], [""], [ethers.ZeroHash]);
+    await expect(registry.rebindType(otherType)).to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(otherType);
+    expect(await registry.isTypeActive(otherType)).to.equal(false);
     await expect(registry.connect(s.outsider).prune(liveType, memberOwner.address))
       .to.be.revertedWithCustomError(registry, "StillValid");
 

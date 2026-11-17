@@ -243,3 +243,17 @@ test("COMMUNITY holdings stay live across a registry swap", () => {
   ]);
   assert.equal(isHoldingLive(s, s.holdings.get(key(ALICE))!, ctx), true);
 });
+
+test("a rebind of a recognised type clears the seal (TypeRebound then TypeRecognised false)", () => {
+  const s = replayRegisterEvents([
+    sources(REG1),
+    ...created(),
+    log("TypeRecognised", { typeId: TYPE, recognised: true }),
+    sources(REG2),
+    log("TypeRebound", { typeId: TYPE, orgRegistry: REG2, orgGeneration: 0n }),
+    log("TypeRecognised", { typeId: TYPE, recognised: false }),
+  ]);
+  const t = s.types.get(TYPE)!;
+  assert.equal(t.orgRegistry, REG2.toLowerCase());
+  assert.equal(t.recognised, false);
+});

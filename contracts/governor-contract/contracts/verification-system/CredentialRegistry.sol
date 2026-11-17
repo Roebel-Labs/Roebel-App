@@ -77,10 +77,16 @@ interface ICredOrgSource {
  *         SOURCES_DELAY → applySources. After an OrgRegistry swap every org type
  *         is inactive until anyone calls rebindType(typeId): that succeeds only
  *         while the OLD registry still has the org alive at the type's generation
- *         and the new one has the org registered, and then adopts the new
- *         registry's generation. A type that was dead before the swap never
- *         revives (P1-02). While a type awaits rebinding (its org still alive in
- *         the registry it is bound to), prune refuses to burn its holdings.
+ *         and the new one has the org registered with the SAME Safe, and then
+ *         adopts the new registry's generation and drops the recognition seal.
+ *         A type that was dead before the swap never revives (P1-02), and a
+ *         different entity under the same id never inherits it (P2-01). While a
+ *         type awaits rebinding (its org still alive in the registry it is bound
+ *         to), prune refuses to burn its holdings (P2-04).
+ *         Runbook: rebind every live org type right after applySources, while the
+ *         old registry is frozen (no revocations, no Safe rotations) — the rebind
+ *         reads the old registry's LIVE state (P2-03), and a type whose org
+ *         rotated its Safe first stays inactive (the org creates new types).
  *
  *         Non-transferable: every transfer and approval reverts; a balance is 0 or 1.
  *         balanceOf is validity-aware, not a raw ERC-1155 balance: expiry, batch
@@ -266,17 +272,28 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     /// @notice Permissionless. After an OrgRegistry swap, carries a live org type
     ///         over to the current registry: the old registry must still have the
     ///         org registered at the type's generation, the current one must have
-    ///         it registered; the type then takes the current generation.
+    ///         it registered, and the org's Safe must be the same in both (P2-01:
+    ///         same org, not merely the same id). The type then takes the current
+    ///         generation and loses its recognition seal (P2-02; the owner re-seals).
+    ///         Keepers rebind every live type right after applySources, before any
+    ///         Safe rotation or revocation in either registry: a type whose org
+    ///         changed its Safe first stays inactive, and the org creates new types.
+    ///         Idempotent and caller-independent (P2-07).
     function rebindType(bytes32 typeId) external {
         CredentialType storage t = _requireType(typeId);
-        bool ok;
+        (bool ok, address oldSafe) = _awaitingRebind(typeId, t);
         uint64 gen;
+        address safe;
         address reg = orgRegistry;
-        if (_awaitingRebind(typeId, t)) (ok, gen) = _orgGeneration(reg, t.orgId);
-        if (!ok) revert NotRebindable(typeId);
+        if (ok) (ok, gen, safe) = _orgInfo(reg, t.orgId);
+        if (!ok || safe != oldSafe) revert NotRebindable(typeId);
         _typeRegistry[typeId] = reg;
         t.orgGeneration = gen;
         emit TypeRebound(typeId, reg, gen);
+        if (t.recognised) {
+            t.recognised = false;
+            emit TypeRecognised(typeId, false);
+        }
     }
 
     /// @notice Irreversible: the type stops counting and its id stays taken.
@@ -301,7 +318,8 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     /// @notice On and off by the org's authority or the owner; on only by an attester.
     ///         The flag is kept per orgId and survives a re-registration of that id.
     function setOrgPrivateOnly(bytes32 orgId, bool privateOnly) external {
-        if (orgId == COMMUNITY || !ICredOrgSource(orgRegistry).isRegistered(orgId)) revert NotAuthorised(msg.sender);
+        (bool registered,,) = _orgInfo(orgRegistry, orgId);
+        if (orgId == COMMUNITY || !registered) revert NotAuthorised(msg.sender);
         bool allowed = msg.sender == owner() || canManage(orgId, msg.sender)
             || (privateOnly && ICredAttesterSource(attesterNFT).hasAttesterNFT(msg.sender));
         if (!allowed) revert NotAuthorised(msg.sender);
@@ -309,9 +327,13 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         emit OrgPrivateOnlySet(orgId, privateOnly, msg.sender);
     }
 
-    /// @notice Marks a type as an official office of the community.
+    /// @notice Marks a type as an official office of the community. Sealing needs
+    ///         an active type (P2-08); unsealing is always allowed. Apps still
+    ///         check isTypeActive: a sealed type can go inactive later.
     function setRecognised(bytes32 typeId, bool recognised) external onlyOwner {
-        _requireType(typeId).recognised = recognised;
+        CredentialType storage t = _requireType(typeId);
+        if (recognised && !isTypeActive(typeId)) revert TypeInactive(typeId);
+        t.recognised = recognised;
         emit TypeRecognised(typeId, recognised);
     }
 
@@ -427,10 +449,12 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     /// @notice Anyone may burn a holding that no longer counts (expired, revoked,
     ///         retired type or dead org), which also frees a capped slot.
     ///         A type that awaits rebindType after a registry swap (its org still
-    ///         alive in the registry it is bound to) is not pruned.
+    ///         alive in the registry it is bound to) is not pruned; its stale
+    ///         holdings are pruned after the rebind (P2-04).
     function prune(bytes32 typeId, address account) external {
         _requireBurnable(typeId, account);
-        if (_awaitingRebind(typeId, _types[typeId]) || holds(typeId, account)) revert StillValid(typeId, account);
+        (bool awaiting,) = _awaitingRebind(typeId, _types[typeId]);
+        if (awaiting || holds(typeId, account)) revert StillValid(typeId, account);
         _burn(typeId, account);
         emit Pruned(typeId, account);
     }
@@ -537,7 +561,7 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         if (t.orgId == COMMUNITY) return true;
         address reg = orgRegistry;
         if (_typeRegistry[typeId] != reg) return false;
-        (bool ok, uint64 gen) = _orgGeneration(reg, t.orgId);
+        (bool ok, uint64 gen,) = _orgInfo(reg, t.orgId);
         return ok && gen == t.orgGeneration;
     }
 
@@ -547,13 +571,24 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     }
 
     /// @notice COMMUNITY: the owner. An org: its Safe, a Safe owner, or an Admin.
+    ///         A reverting registry answers false (P2-06), so readers degrade;
+    ///         state-changing paths then revert NotAuthorised.
     function canManage(bytes32 orgId, address account) public view returns (bool) {
         if (orgId == COMMUNITY) return account == owner();
-        ICredOrgSource reg = ICredOrgSource(orgRegistry);
-        if (!reg.isRegistered(orgId)) return false;
-        if (reg.getOrg(orgId).safe == account) return true;
-        if (reg.roleOf(orgId, account) == ORG_ROLE_ADMIN) return true;
-        return reg.isOrgOwner(orgId, account);
+        address reg = orgRegistry;
+        (bool ok,, address safe) = _orgInfo(reg, orgId);
+        if (!ok) return false;
+        if (safe == account) return true;
+        try ICredOrgSource(reg).roleOf(orgId, account) returns (uint8 role) {
+            if (role == ORG_ROLE_ADMIN) return true;
+        } catch {
+            return false;
+        }
+        try ICredOrgSource(reg).isOrgOwner(orgId, account) returns (bool isOwner) {
+            return isOwner;
+        } catch {
+            return false;
+        }
     }
 
     function canIssue(bytes32 typeId, address account) public view returns (bool) {
@@ -673,27 +708,32 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         emit URI(cfg.metadataURI, uint256(typeId));
     }
 
-    /// @dev (registered, generation) of `orgId` in `reg`; a reverting registry reads as unregistered.
-    function _orgGeneration(address reg, bytes32 orgId) private view returns (bool ok, uint64 gen) {
+    /// @dev (registered, generation, safe) of `orgId` in `reg`; a reverting registry
+    ///      reads as unregistered. Not caught (P2-05, owner trust): malformed return
+    ///      data, a source without code, gas exhaustion and returnbombs.
+    function _orgInfo(address reg, bytes32 orgId) private view returns (bool ok, uint64 gen, address safe) {
         try ICredOrgSource(reg).isRegistered(orgId) returns (bool r) {
-            if (!r) return (false, 0);
+            if (!r) return (false, 0, address(0));
         } catch {
-            return (false, 0);
+            return (false, 0, address(0));
         }
         try ICredOrgSource(reg).getOrg(orgId) returns (ICredOrgSource.Org memory o) {
-            return (true, o.generation);
+            return (true, o.generation, o.safe);
         } catch {
-            return (false, 0);
+            return (false, 0, address(0));
         }
     }
 
     /// @dev An org type, not retired, bound to a registry other than the current one,
-    ///      in which its org is still alive at the type's generation.
-    function _awaitingRebind(bytes32 typeId, CredentialType storage t) private view returns (bool) {
+    ///      in which its org is still alive at the type's generation; plus the org's
+    ///      Safe there. Depends on the old registry's live state (P2-03).
+    function _awaitingRebind(bytes32 typeId, CredentialType storage t) private view returns (bool, address) {
         address old = _typeRegistry[typeId];
-        if (t.orgId == COMMUNITY || t.policy == ClaimPolicy.External || t.retired || old == orgRegistry) return false;
-        (bool ok, uint64 gen) = _orgGeneration(old, t.orgId);
-        return ok && gen == t.orgGeneration;
+        if (t.orgId == COMMUNITY || t.policy == ClaimPolicy.External || t.retired || old == orgRegistry) {
+            return (false, address(0));
+        }
+        (bool ok, uint64 gen, address safe) = _orgInfo(old, t.orgId);
+        return (ok && gen == t.orgGeneration, safe);
     }
 
     function _requireType(bytes32 typeId) internal view returns (CredentialType storage t) {

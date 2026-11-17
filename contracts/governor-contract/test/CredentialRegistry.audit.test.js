@@ -97,17 +97,26 @@ describe("CredentialRegistry — audit pass 1 PoCs", function () {
 
   it("P1-03 (accepted, narrowed): after the delay AND an explicit rebind, an owner-controlled registry grants authority", async function () {
     // Residual owner trust, visible on chain: SourcesProposed, 2 days, SourcesApplied,
-    // then a TypeRebound per type. Documented in the contract NatSpec.
+    // then a TypeRebound per type. Documented in the contract NatSpec. Since P2-01 a
+    // real OrgRegistry that imports the id to a different Safe cannot be rebound to;
+    // a registry the owner controls can still report the org's Safe and appoint an Admin.
     const ctx = await loadFixture(withIssued);
-    const { registry, owner, stranger } = ctx;
+    const { registry, owner, stranger, safe } = ctx;
     const ownerSafe = await (await ethers.getContractFactory("OrgMockSafe")).deploy([owner.address]);
     const orgs2 = await freshOrgRegistry(ctx, ORG_A, await ownerSafe.getAddress());
+    const fake = await (await ethers.getContractFactory("CredMockOrgRegistry")).deploy();
+    await fake.setOrg(ORG_A, await safe.getAddress(), 7n, true);
+    await fake.setRole(ORG_A, owner.address, OrgRole.Admin);
+
     await repointOrgRegistry(ctx, await orgs2.getAddress());
     await expect(registry.connect(stranger).rebindType(ctx.typeId))
-      .to.emit(registry, "TypeRebound").withArgs(ctx.typeId, await orgs2.getAddress(), 0n);
+      .to.be.revertedWithCustomError(registry, "NotRebindable").withArgs(ctx.typeId);
+
+    await repointOrgRegistry(ctx, await fake.getAddress());
+    await expect(registry.connect(stranger).rebindType(ctx.typeId))
+      .to.emit(registry, "TypeRebound").withArgs(ctx.typeId, await fake.getAddress(), 7n);
     const t = tree([leaf(LeafKind.Account, ctx.typeId, stranger.address)]);
-    await expect(asSafe(ownerSafe, owner, registry, "addBatch", [ctx.typeId, t.root, 1]))
-      .to.emit(registry, "BatchAdded");
+    await expect(registry.connect(owner).addBatch(ctx.typeId, t.root, 1)).to.emit(registry, "BatchAdded");
   });
 
   it("P1-04 (accepted): delegates survive admin removal and Safe rotation; the authority revokes each", async function () {
