@@ -7,6 +7,7 @@
  * paths byte-for-byte.
  */
 import { bytesToHex, hashMessage, type Address, type Hex } from 'viem';
+import { WHEN_UNLOCKED_THIS_DEVICE_ONLY } from 'expo-secure-store';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { deriveMaciKeypairFromSeed } from '@/lib/maci';
 import { deriveNostrIdentity } from '@netizen-labs/nostr';
@@ -21,10 +22,11 @@ import {
   resolvePasskeySecret,
   singleFlight,
   type BackupReport,
+  type ResolveDeps,
   type ResolveResult,
 } from './derived-keys';
 import { lookupChain } from './guardians-runtime';
-import { createKeyBackupClient, type KeyBackupSlot, type RemoteBackup } from './key-backup';
+import { createKeyBackupClient, KEY_BACKUP_SLOTS, type KeyBackupSlot, type RemoteBackup } from './key-backup';
 import { unwrapSecret, wrapSecret } from './prf-vault';
 import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
@@ -32,6 +34,7 @@ import { identityKind, type PasskeySession } from './session';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
 import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
+import { createWordsCopier, type VaultKeyStorage } from './words-vault';
 
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
@@ -42,6 +45,14 @@ const adapterDeps: AdapterDeps = {
 const storage = {
   getItem: (k: string) => SecureStore.getItemAsync(k),
   setItem: (k: string, v: string) => SecureStore.setItemAsync(k, v),
+};
+
+/** The words vault key: this device only, readable only while unlocked (never in a backup). */
+const VAULT_KEY_OPTIONS = { keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+export const wordsVaultKeyStorage: VaultKeyStorage = {
+  getItem: (k) => SecureStore.getItemAsync(k, VAULT_KEY_OPTIONS),
+  setItem: (k, v) => SecureStore.setItemAsync(k, v, VAULT_KEY_OPTIONS),
+  deleteItem: (k) => SecureStore.deleteItemAsync(k, VAULT_KEY_OPTIONS),
 };
 
 const enc = new TextEncoder();
@@ -78,6 +89,20 @@ export function keyBackupFor(session: PasskeySession): RemoteBackup {
       get: () => passkeyApiSession.get(signer),
       invalidate: (token) => passkeyApiSession.invalidate(token),
     },
+  });
+}
+
+/**
+ * The `wordsCopy` hook for a session: resolve the words vault key (device copy, else the `wvk`
+ * blob with the PRF), then write the `_w` copies with `replace: true` in one write (one proof).
+ * No vault key (words not set up) → no-op.
+ */
+export function wordsCopyFor(session: PasskeySession): NonNullable<ResolveDeps['wordsCopy']> {
+  return createWordsCopier({
+    storage: wordsVaultKeyStorage,
+    remote: () => keyBackupFor(session),
+    wrap: wrapSecret,
+    unwrap: unwrapSecret,
   });
 }
 
@@ -119,6 +144,7 @@ function resolveOnce(
     generate: SLOT_GENERATORS[slot],
     wrap: wrapSecret,
     unwrap: unwrapSecret,
+    wordsCopy: wordsCopyFor(session),
   });
 }
 
@@ -149,7 +175,8 @@ export function deviceSecretSources(identity: string) {
 
 /**
  * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the passkey session's
- * identity (at most two fingerprints). Never overwrites a different server copy.
+ * identity (at most two fingerprints, plus one for the words copies when the words are set up).
+ * Never overwrites a different server copy.
  */
 export async function backupKeysForSession(session: PasskeySession): Promise<BackupReport> {
   return backupDeviceSecrets(deviceSecretSources(session.identity), {
@@ -158,6 +185,7 @@ export async function backupKeysForSession(session: PasskeySession): Promise<Bac
     remote: keyBackupFor(session),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
+    wordsCopy: wordsCopyFor(session),
   });
 }
 
@@ -167,7 +195,7 @@ export async function readBackupStatus(
 ): Promise<{ status: 'disabled' } | { status: 'ok'; slots: KeyBackupSlot[]; prf?: Hex }> {
   const r = await keyBackupFor(session).read();
   if (r.status === 'disabled') return { status: 'disabled' };
-  return { status: 'ok', slots: r.status === 'found' ? (Object.keys(r.blobs) as KeyBackupSlot[]) : [], ...(r.prf ? { prf: r.prf } : {}) };
+  return { status: 'ok', slots: r.status === 'found' ? KEY_BACKUP_SLOTS.filter((s) => r.blobs[s] !== undefined) : [], ...(r.prf ? { prf: r.prf } : {}) };
 }
 
 // ---------------------------------------------------------------------------

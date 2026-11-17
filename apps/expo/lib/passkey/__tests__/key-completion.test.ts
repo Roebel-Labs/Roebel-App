@@ -172,7 +172,7 @@ describe('checklist "Schlüssel gesichert"', () => {
 
 describe('describeCompletion', () => {
   const { describeCompletion } = require('../key-completion');
-  const report = { saved: [], conflicts: [], missing: [], status: 'done' };
+  const report = { saved: [], conflicts: [], missing: [], status: 'done', wordsCopies: { stored: [], failed: [] } };
   it('German lines per outcome', () => {
     expect(describeCompletion({ status: 'disabled' }).tone).toBe('info');
     const needs = describeCompletion({ status: 'needsThirdweb', required: ['maci', 'nostr'], missing: ['maci'], backedUp: ['nostr'], report });

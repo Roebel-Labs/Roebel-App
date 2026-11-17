@@ -50,7 +50,7 @@ export type ThirdwebKeySource = {
   derive: (slot: KeyBackupSlot) => Promise<Uint8Array>;
 };
 
-export type CompletionDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap'> & {
+export type CompletionDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap' | 'wordsCopy'> & {
   identity: string;
   remote?: RemoteBackup;
   /** This device's secrets per slot (derived-keys-runtime.deviceSecretSources). */
@@ -95,7 +95,7 @@ export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionRe
   if (read.status === 'disabled') return { status: 'disabled' };
 
   const required = requiredKeySlots(await d.hasCommitment());
-  const inBackup = read.status === 'found' ? (Object.keys(read.blobs) as KeyBackupSlot[]) : [];
+  const inBackup = read.status === 'found' ? KEY_BACKUP_SLOTS.filter((s) => read.blobs[s] !== undefined) : [];
   const local = new Map<KeyBackupSlot, Uint8Array>();
   for (const s of d.sources) {
     const v = await s.loadLocal();
@@ -132,6 +132,7 @@ export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionRe
     remote: withCachedRead(d.remote, read),
     wrap: d.wrap,
     unwrap: d.unwrap,
+    wordsCopy: d.wordsCopy,
   });
   if (report.status === 'disabled') return { status: 'disabled' };
 

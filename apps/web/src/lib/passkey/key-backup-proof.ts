@@ -20,6 +20,14 @@ import type { Address } from "viem";
 export const KEY_BACKUP_PROOF_MAX_SKEW_SEC = 600;
 export const KEY_BACKUP_SLOTS = ["maci", "nostr", "salt"] as const;
 export type KeyBackupSlot = (typeof KEY_BACKUP_SLOTS)[number];
+/** The same three secrets wrapped a second time, under the recovery-words vault key. */
+export const KEY_BACKUP_WORDS_SLOTS = ["maci_w", "nostr_w", "salt_w"] as const;
+/** The words vault key, wrapped under the passkey PRF (a phone with only the passkey reads it). */
+export const KEY_BACKUP_VAULT_SLOT = "wvk";
+export type KeyBackupBlobKey = KeyBackupSlot | (typeof KEY_BACKUP_WORDS_SLOTS)[number] | typeof KEY_BACKUP_VAULT_SLOT;
+export type KeyBackupBlobs = Partial<Record<KeyBackupBlobKey, string>>;
+/** Every stored slot, in content order. */
+export const KEY_BACKUP_BLOB_KEYS: readonly KeyBackupBlobKey[] = [...KEY_BACKUP_SLOTS, ...KEY_BACKUP_WORDS_SLOTS, KEY_BACKUP_VAULT_SLOT];
 export type KeyBackupAction = "read" | "write";
 
 /** `pkv1:` + base64url(iv ++ AES-GCM ciphertext ++ tag) — apps/expo/lib/passkey/prf-vault.ts. */
@@ -28,14 +36,20 @@ export const KEY_BACKUP_BLOB_RE = /^pkv1:[A-Za-z0-9_-]{38,4000}$/;
 export const isKeyBackupSlot = (v: unknown): v is KeyBackupSlot =>
   typeof v === "string" && (KEY_BACKUP_SLOTS as readonly string[]).includes(v);
 
-/** Canonical content of a write: `slot=blob` lines in slot order, then `replace=0|1`. */
-export function keyBackupContent(blobs: Partial<Record<KeyBackupSlot, string>>, replace: boolean): string {
-  const lines = KEY_BACKUP_SLOTS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
+export const isKeyBackupBlobKey = (v: unknown): v is KeyBackupBlobKey =>
+  typeof v === "string" && (KEY_BACKUP_BLOB_KEYS as readonly string[]).includes(v);
+
+/**
+ * Canonical content of a write: `slot=blob` lines in the order
+ * maci, nostr, salt, maci_w, nostr_w, salt_w, wvk (present ones only), then `replace=0|1`.
+ */
+export function keyBackupContent(blobs: KeyBackupBlobs, replace: boolean): string {
+  const lines = KEY_BACKUP_BLOB_KEYS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
   lines.push(`replace=${replace ? 1 : 0}`);
   return lines.join("\n");
 }
 
-export function keyBackupContentHash(blobs: Partial<Record<KeyBackupSlot, string>>, replace: boolean): string {
+export function keyBackupContentHash(blobs: KeyBackupBlobs, replace: boolean): string {
   return createHash("sha256").update(keyBackupContent(blobs, replace), "utf8").digest("hex");
 }
 

@@ -21,14 +21,24 @@ import { utf8Encode } from './encoding';
 
 export const KEY_BACKUP_SLOTS = ['maci', 'nostr', 'salt'] as const;
 export type KeyBackupSlot = (typeof KEY_BACKUP_SLOTS)[number];
-export type KeyBackupBlobs = Partial<Record<KeyBackupSlot, string>>;
+/** The same three secrets wrapped a second time, under the recovery-words vault key (words-vault.ts). */
+export const KEY_BACKUP_WORDS_SLOTS = ['maci_w', 'nostr_w', 'salt_w'] as const;
+/** The words vault key, wrapped under the passkey PRF (a phone with only the passkey reads it). */
+export const KEY_BACKUP_VAULT_SLOT = 'wvk';
+export type KeyBackupBlobKey = KeyBackupSlot | (typeof KEY_BACKUP_WORDS_SLOTS)[number] | typeof KEY_BACKUP_VAULT_SLOT;
+export type KeyBackupBlobs = Partial<Record<KeyBackupBlobKey, string>>;
+/** Every stored slot, in content order (same as the server). */
+export const KEY_BACKUP_BLOB_KEYS: readonly KeyBackupBlobKey[] = [...KEY_BACKUP_SLOTS, ...KEY_BACKUP_WORDS_SLOTS, KEY_BACKUP_VAULT_SLOT];
 
 export const KEY_BACKUP_UNAVAILABLE_MESSAGE =
   'Die Schlüssel-Sicherung ist gerade nicht erreichbar. Bitte prüfe deine Verbindung und versuche es erneut.';
 
-/** `slot=blob` lines in slot order, then `replace=0|1` (same as the server). */
+/**
+ * `slot=blob` lines in the order maci, nostr, salt, maci_w, nostr_w, salt_w, wvk (present ones
+ * only), then `replace=0|1` (same as the server).
+ */
 export function keyBackupContent(blobs: KeyBackupBlobs, replace: boolean): string {
-  const lines = KEY_BACKUP_SLOTS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
+  const lines = KEY_BACKUP_BLOB_KEYS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
   lines.push(`replace=${replace ? 1 : 0}`);
   return lines.join('\n');
 }
@@ -157,7 +167,7 @@ export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
         throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
       }
       const blobs: KeyBackupBlobs = {};
-      for (const s of KEY_BACKUP_SLOTS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
+      for (const s of KEY_BACKUP_BLOB_KEYS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
       const withPrf = prf ? { prf } : {};
       return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
     },

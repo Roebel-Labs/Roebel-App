@@ -123,13 +123,47 @@ describe('resolvePasskeySecret', () => {
 
   it('(c) passkey-only: a RANDOM key, wrapped, backed up, then persisted', async () => {
     const { remote, writes } = fakeRemote({}, { prf: PRF });
-    const t = deps({ remote, hasLegacyHistory: jest.fn(async () => false) });
+    const wordsCopy = jest.fn(async () => {});
+    const t = deps({ remote, hasLegacyHistory: jest.fn(async () => false), wordsCopy });
     const r = await resolvePasskeySecret(t.d);
     expect(r).toMatchObject({ source: 'generated', backedUp: true });
     expect(writes).toHaveLength(1);
     expect(text(await unwrapSecret(PRF, MACI_WRAP_LABEL, writes[0].maci as string))).toBe('{"privKey":"random"}');
     expect(t.store.get(WRAPPED_MACI_KEY)).toBe(writes[0].maci);
     expect(t.saved).toHaveLength(1);
+    expect(wordsCopy).toHaveBeenCalledTimes(1);
+    expect(wordsCopy).toHaveBeenCalledWith('maci', r.secret, { prf: PRF, wvkBlob: undefined });
+  });
+
+  it('(c) a key created on a phone with only the passkey hands the wvk blob + PRF to the words copy', async () => {
+    const { remote } = fakeRemote({ wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    const wordsCopy = jest.fn(async () => {});
+    const t = deps({ slot: 'nostr', remote, hasLegacyHistory: jest.fn(async () => false), wordsCopy });
+    const r = await resolvePasskeySecret(t.d);
+    expect(r.source).toBe('generated');
+    expect(wordsCopy).toHaveBeenCalledWith('nostr', r.secret, { prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+  });
+
+  it('(c) a words copy that fails never fails the resolve', async () => {
+    const { remote } = fakeRemote({}, { prf: PRF });
+    const wordsCopy = jest.fn(async () => {
+      throw new Error('offline');
+    });
+    const t = deps({ remote, hasLegacyHistory: jest.fn(async () => false), wordsCopy });
+    const r = await resolvePasskeySecret(t.d);
+    expect(r).toMatchObject({ source: 'generated', backedUp: true });
+    expect(text(r.secret)).toBe('{"privKey":"random"}');
+    expect(wordsCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it('(c) not backed up (service off) → no words copy; (a)/(b) never make one', async () => {
+    const wordsCopy = jest.fn(async () => {});
+    const { remote } = fakeRemote({}, { disabled: true });
+    await resolvePasskeySecret(deps({ remote, hasLegacyHistory: jest.fn(async () => false), wordsCopy }).d);
+    const t = deps({ wordsCopy });
+    t.setLocal(bytes('local'));
+    await resolvePasskeySecret(t.d);
+    expect(wordsCopy).not.toHaveBeenCalled();
   });
 
   it('(c) backup service off: still a random key (wrapped on the device), reported as not backed up', async () => {
@@ -187,7 +221,7 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
       ],
       t.d,
     );
-    expect(report).toEqual({ saved: ['maci', 'salt'], conflicts: [], missing: ['nostr'], status: 'done' });
+    expect(report).toEqual({ saved: ['maci', 'salt'], conflicts: [], missing: ['nostr'], status: 'done', wordsCopies: { stored: [], failed: [] } });
     expect(writes[0].maci).toBe(maciBlob);
     expect(text(await unwrapSecret(PRF, SLOT_LABEL.salt, writes[0].salt as string))).toBe('123');
     expect(t.d.getPrf).not.toHaveBeenCalled(); // PRF came with the read
@@ -205,7 +239,7 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
       ],
       deps({ remote }).d,
     );
-    expect(report).toEqual({ saved: ['maci'], conflicts: ['nostr'], missing: [], status: 'done' });
+    expect(report).toEqual({ saved: ['maci'], conflicts: ['nostr'], missing: [], status: 'done', wordsCopies: { stored: [], failed: [] } });
     expect(remote.write).not.toHaveBeenCalled();
   });
 
@@ -215,6 +249,42 @@ describe('backupDeviceSecrets ("Schlüssel sichern")', () => {
     t.store.set(WRAPPED_MACI_KEY, await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('OLD')));
     await backupDeviceSecrets([{ slot: 'maci', loadLocal: async () => bytes('NEW') }], t.d);
     expect(text(await unwrapSecret(PRF, MACI_WRAP_LABEL, writes[0].maci as string))).toBe('NEW');
+  });
+
+  it('every secret it uploads gets a words copy; a failed one is reported', async () => {
+    const { remote } = fakeRemote({ wvk: 'pkv1:wvk-blob' }, { prf: PRF });
+    const wordsCopy = jest.fn(async (slot: string) => {
+      if (slot === 'salt') throw new Error('offline');
+    });
+    const report = await backupDeviceSecrets(
+      [
+        { slot: 'maci', loadLocal: async () => bytes('M') },
+        { slot: 'salt', loadLocal: async () => bytes('123') },
+        { slot: 'nostr', loadLocal: async () => null },
+      ],
+      { ...deps({ remote }).d, wordsCopy },
+    );
+    expect(report.saved).toEqual(['maci', 'salt']);
+    expect(report.wordsCopies).toEqual({ stored: ['maci'], failed: ['salt'] });
+    expect(wordsCopy).toHaveBeenCalledTimes(2);
+    expect(wordsCopy).toHaveBeenCalledWith('maci', bytes('M'), { prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+    expect(wordsCopy).toHaveBeenCalledWith('salt', bytes('123'), { prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+  });
+
+  it('a server copy that is already there (same secret) gets no words copy; a conflict neither', async () => {
+    const { remote } = fakeRemote(
+      { maci: await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('M')), nostr: await wrapSecret(PRF, NOSTR_WRAP_LABEL, bytes('OTHER')) },
+      { prf: PRF },
+    );
+    const wordsCopy = jest.fn(async () => {});
+    await backupDeviceSecrets(
+      [
+        { slot: 'maci', loadLocal: async () => bytes('M') },
+        { slot: 'nostr', loadLocal: async () => bytes('N') },
+      ],
+      { ...deps({ remote }).d, wordsCopy },
+    );
+    expect(wordsCopy).not.toHaveBeenCalled();
   });
 
   it('backup service off → status disabled, nothing signed beyond the read', async () => {

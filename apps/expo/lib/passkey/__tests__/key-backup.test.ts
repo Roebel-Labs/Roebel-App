@@ -4,7 +4,10 @@ import {
   createKeyBackupClient,
   keyBackupContent,
   keyBackupContentHash,
+  KEY_BACKUP_SLOTS,
   KEY_BACKUP_UNAVAILABLE_MESSAGE,
+  KEY_BACKUP_VAULT_SLOT,
+  KEY_BACKUP_WORDS_SLOTS,
 } from '../key-backup';
 import v from './key-backup-vector.json';
 
@@ -22,6 +25,16 @@ describe('key backup proof text (byte-exact with apps/web key-backup-proof.ts)',
     expect(write).toBe(v.writeMessage);
     expect(hashMessage(read)).toBe(v.readMessageHash);
     expect(hashMessage(write)).toBe(v.writeMessageHash);
+  });
+
+  it('second case: words slots and the vault key follow the primary slots (key-backup-vector.json wordsCase)', () => {
+    const blobs = { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c' };
+    expect(keyBackupContent(blobs, false)).toBe('maci=pkv1:a\nmaci_w=pkv1:b\nwvk=pkv1:c\nreplace=0');
+    expect(keyBackupContent(v.wordsCase.blobs, false)).toBe(v.wordsCase.content);
+    expect(keyBackupContentHash(blobs, false)).toBe(v.wordsCase.contentHash);
+    expect(KEY_BACKUP_SLOTS).toEqual(['maci', 'nostr', 'salt']);
+    expect(KEY_BACKUP_WORDS_SLOTS).toEqual(['maci_w', 'nostr_w', 'salt_w']);
+    expect(KEY_BACKUP_VAULT_SLOT).toBe('wvk');
   });
 });
 
@@ -55,6 +68,11 @@ describe('key backup client', () => {
     expect(t.signed[0]).toBe(v.readMessage);
     t = client(() => ({ status: 200, json: { blobs: {} } }));
     await expect(t.c.read()).resolves.toEqual({ status: 'none', prf: PRF });
+  });
+
+  it('read: words copies and the wrapped vault key come back too; unknown slots are dropped', async () => {
+    const t = client(() => ({ status: 200, json: { blobs: { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c', maci_x: 'pkv1:d' } } }));
+    await expect(t.c.read()).resolves.toEqual({ status: 'found', blobs: { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c' }, prf: PRF });
   });
 
   it('read: 503 disabled = disabled; any other failure THROWS (never "no backup")', async () => {

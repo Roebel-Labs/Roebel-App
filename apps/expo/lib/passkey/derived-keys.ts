@@ -17,6 +17,10 @@
  * A transport failure of the backup service throws (retry later); it is never read as "no backup",
  * so (c) cannot mint a second key just because the network was down.
  *
+ * Recovery words (words-vault.ts): when the optional `wordsCopy` hook is given, a key generated in
+ * (c) and every secret "Schlüssel sichern" uploads also get a second copy under the words vault
+ * key. That copy is best effort: its failure never fails the key.
+ *
  * Pure: storage, PRF, backup and generation are injected (derived-keys-runtime.ts wires them).
  */
 import type { Hex } from 'viem';
@@ -96,6 +100,13 @@ export type ResolveDeps = {
   generate: () => Uint8Array;
   wrap: (prf: Hex, label: string, secret: Uint8Array) => Promise<string>;
   unwrap: (prf: Hex, label: string, blob: string) => Promise<Uint8Array>;
+  /**
+   * Second copy under the recovery words (words-vault.ts `createWordsCopier`): called after a
+   * generated key was stored and backed up (c), and for every secret `backupDeviceSecrets`
+   * uploads. `ctx` carries the PRF and the server's `wvk` blob, so a phone with only the passkey
+   * can recover the vault key. A rejection never fails the resolve.
+   */
+  wordsCopy?: (slot: KeyBackupSlot, secret: Uint8Array, ctx: { prf: Hex | null; wvkBlob?: string }) => Promise<void>;
 };
 
 export type ResolveSource = 'local' | 'deviceBlob' | 'backup' | 'generated';
@@ -172,6 +183,14 @@ export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResul
   }
   await d.storage.setItem(SLOT_DEVICE_BLOB[d.slot], blob);
   await d.saveLocal(secret);
+  if (backedUp && d.wordsCopy) {
+    const wvkBlob = read.status === 'found' ? read.blobs.wvk : undefined;
+    try {
+      await d.wordsCopy(d.slot, secret, { prf: prf ?? null, wvkBlob });
+    } catch {
+      // Best effort: the key is stored and backed up; "Schlüssel sichern" can make the copy later.
+    }
+  }
   return { secret, source: 'generated', backedUp };
 }
 
@@ -189,6 +208,8 @@ export type BackupReport = {
   /** Slots this device has no secret for. */
   missing: KeyBackupSlot[];
   status: 'done' | 'disabled';
+  /** Second copies under the recovery words for this run's uploads (empty without `wordsCopy`). */
+  wordsCopies: { stored: KeyBackupSlot[]; failed: KeyBackupSlot[] };
 };
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -201,11 +222,12 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.e
  */
 export async function backupDeviceSecrets(
   sources: BackupSource[],
-  d: Pick<ResolveDeps, 'storage' | 'getPrf' | 'remote' | 'wrap' | 'unwrap'>,
+  d: Pick<ResolveDeps, 'storage' | 'getPrf' | 'remote' | 'wrap' | 'unwrap' | 'wordsCopy'>,
 ): Promise<BackupReport> {
-  if (!d.remote) return { saved: [], conflicts: [], missing: [], status: 'disabled' };
+  const off = (): BackupReport => ({ saved: [], conflicts: [], missing: [], status: 'disabled', wordsCopies: { stored: [], failed: [] } });
+  if (!d.remote) return off();
   const read = await d.remote.read();
-  if (read.status === 'disabled') return { saved: [], conflicts: [], missing: [], status: 'disabled' };
+  if (read.status === 'disabled') return off();
   let prf: Hex | null | undefined = read.prf;
   const prfOnce = async (): Promise<Hex> => {
     if (prf === undefined) prf = await d.getPrf();
@@ -213,8 +235,9 @@ export async function backupDeviceSecrets(
     return prf;
   };
 
-  const report: BackupReport = { saved: [], conflicts: [], missing: [], status: 'done' };
+  const report: BackupReport = { saved: [], conflicts: [], missing: [], status: 'done', wordsCopies: { stored: [], failed: [] } };
   const upload: Partial<Record<KeyBackupSlot, string>> = {};
+  const uploaded: { slot: KeyBackupSlot; secret: Uint8Array }[] = [];
   for (const { slot, loadLocal } of sources) {
     const secret = await loadLocal();
     if (!secret || secret.length === 0) {
@@ -249,12 +272,20 @@ export async function backupDeviceSecrets(
       await d.storage.setItem(SLOT_DEVICE_BLOB[slot], blob);
     }
     upload[slot] = blob;
+    uploaded.push({ slot, secret });
   }
   if (Object.keys(upload).length > 0) {
     const w = await d.remote.write(upload);
     if (w === 'disabled') return { ...report, status: 'disabled' };
     if (w === 'exists') throw new Error(BACKUP_RACE_MESSAGE);
     report.saved.push(...(Object.keys(upload) as KeyBackupSlot[]));
+    if (d.wordsCopy) {
+      const copy = d.wordsCopy;
+      const ctx = { prf: prf ?? null, wvkBlob: read.status === 'found' ? read.blobs.wvk : undefined };
+      // Issued in one tick (no await in between) so the runtime coalesces them into one write.
+      const results = await Promise.allSettled(uploaded.map(({ slot, secret }) => copy(slot, secret, ctx)));
+      results.forEach((r, i) => (r.status === 'fulfilled' ? report.wordsCopies.stored : report.wordsCopies.failed).push(uploaded[i].slot));
+    }
   }
   return report;
 }
