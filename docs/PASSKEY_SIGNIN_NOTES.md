@@ -347,8 +347,13 @@ validation). Unset or missing Supabase env = the old in-memory budget.
 - **Off by default.** Both routes return 503 `disabled` unless `PASSKEY_KEY_BACKUP_ENABLED=1`. They also need
   Supabase (`NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`). There is deliberately **no in-memory
   fallback**: a backup that vanishes on a cold start would tell people their keys are safe when they are not.
-- **Contents.** The table `passkey_key_backups` (`identity_address`, `slot` ∈ maci/nostr/salt, `blob` = `pkv1:…`)
-  holds ciphertext only. It is useless without the passkey's PRF.
+- **Contents.** The table `passkey_key_backups` (`identity_address`, `slot`, `blob` = `pkv1:…`) holds ciphertext
+  only. It is useless without the passkey's PRF (or, for the `_w` slots, the recovery words). There are **seven
+  slots**: `maci`, `nostr`, `salt` (wrapped under the passkey PRF), `maci_w`, `nostr_w`, `salt_w` (the same secrets
+  wrapped under the words vault key) and `wvk` (the vault key wrapped under the PRF, plus the 5 public word
+  addresses). Words switched off = the off marker blob in `wvk` and the `_w` slots. Recipe:
+  `PASSKEY_ACCOUNTS_STATE.md` "Wiederherstellungswörter". Migration `20261117c_passkey_key_backup_words_slots.sql`
+  (not applied).
 - **Proof.** Every request carries a signature by the identity over a fixed text, checked with
   `verifyAccountSignature` (Safe 1271/6492, Safe-admin envelope, thirdweb admin):
   - read: `Röbel: Schlüssel-Sicherung / Aktion: lesen / Konto / Zeit / …`

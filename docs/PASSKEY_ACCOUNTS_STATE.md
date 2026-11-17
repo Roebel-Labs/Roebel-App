@@ -230,6 +230,51 @@ backup flags, `CRON_SECRET`); deploy `ortis-id`; redeploy the four edge function
 warning email; EAS preview update and a device pass; do not go to production before the logout-after-update fix is
 confirmed on a real store update; then set the flags in the order above.
 
+## Wiederherstellungswörter (2026-11-17)
+
+Plan 2 of the sovereign sign-up project (branch `feat/sovsignup-2-recovery-words`, behind the `words` surface, except
+the way-back rule below). Twelve BIP-39 words (English list) are a second recovery route next to people. They are a
+recovery key, not an instant key: using them starts the same 3-day wait as guardian recovery and the owner can cancel.
+
+**Pool rule.** The words become **5 guardian addresses** (the "pool"), derived at `m/44'/60'/0'/0/i`, i = 0..4. The
+app keeps the 5 public addresses (SecureStore `passkey_words_pool_v1`; it is also saved on a restoring phone and
+carried to a second phone inside the `wvk` blob) and forgets the words after setup. Only the **first t** pool
+addresses are on chain as guardians, where t = the recovery threshold, so the words alone reach the threshold and
+nobody else is needed. `splitGuardians(onChain, pool)` separates people from word addresses; the UI shows the words
+as ONE entry, never as several people and never as addresses. Adding a person or changing the threshold changes the
+number of word guardians in the same op (`planGuardianSet`); the limit is 5 (the person count may not push the
+threshold above it). Anyone can confirm a recovery with the words in any wallet tool: sign the recovery approval with
+the key at `m/44'/60'/0'/0/i` of the phrase.
+
+**Vault key recipe** (so a third party can decrypt the `_w` blobs from the phrase alone):
+1. `ikm` = private key at `m/44'/60'/0'/1/0` of the phrase (change index 1).
+2. `vaultKey` = HKDF-SHA256(ikm, salt = utf8 `id.ortis.app/words-vault/v1`, info = empty, 32 bytes).
+3. Each secret blob is `pkv1:` + base64url(iv(12) ++ AES-256-GCM(key, iv, secret, aad = utf8(label)) ++ tag(16))
+   (`prf-vault.ts`), where `key` = HKDF-SHA256(ikm = `vaultKey`, salt = utf8(label), info = utf8
+   `id.ortis.app/passkey-vault/v1`, 32 bytes). The vault key plays the role of the passkey PRF output.
+   Labels: `roebel/maci-keypair/v1` (maci), `roebel/nostr-secret/v1` (nostr), `roebel/commitment-salt/v1` (salt).
+4. `wvk` is the vault key itself wrapped under the passkey PRF with label `roebel/words-vault-key/v1`; plaintext =
+   32 key bytes, optionally followed by the 5 pool addresses (20 bytes each). "Words off" is written as
+   `pkv1:words-off-000...0` into `wvk` and every `_w` slot (the backup API has no delete).
+
+**Derivation paths.** Guardian/approval keys `m/44'/60'/0'/0/i`; vault key source `m/44'/60'/0'/1/0`. The seed runs
+once per call (pbkdf2-sha512, 2048 rounds) through `wordsFromSeed`.
+
+**Alert channels.** The recovery-alert cron claims each alert per (wallet, recovery nonce, channel): `email` (needs a
+verified warning email) and `push` (`PASSKEY_PUSH_ALERTS_ENABLED=1`; devices from `push_tokens` by the Safe address).
+A cancelled recovery moves the nonce, so a second attempt alerts again. Migration `20261117d_passkey_alert_channels.sql`
+(not applied). The in-app banner is unchanged.
+
+**Way-back rule** (`apps/expo/lib/passkey/way-back.ts`; applies as soon as sign-up is open, NOT behind the `words`
+surface). Before the citizenship request (`app/verification/request-citizen/form.tsx` and the auto-request in
+`app/welcome/consent.tsx`) an independent account needs a way back: `passkey` = at least 1 person OR the words
+(`wordsOn`); Google/Apple/email logins and a passkey session on a legacy identity are exempt (`provider`); the
+`words` kind (expert account, plan 3) needs a confirmed phrase, an exported backup file (plan 4) or 1 person. No way
+back = `WayBackSheet` (fastest option primary: words when the surface is open, else "Vertrauensperson hinzufügen"),
+no request. A failed chain read = "Keine Verbindung. Bitte versuche es erneut." and no request (unknown is never
+"ok"). In the welcome wizard the screen is replaced afterwards, so it saves the draft and shows the reason as a
+snackbar instead of the sheet.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.
