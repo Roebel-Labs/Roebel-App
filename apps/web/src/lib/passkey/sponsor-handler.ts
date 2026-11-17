@@ -36,7 +36,9 @@
  *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI optional; ALL guest (non-citizen) Safes together per
  *                              UTC day, default 0.02 xDAI. MUST stay below the overall global cap:
  *                              guests also count against the global total, so a guest cap at or above
- *                              it would let guests use up the budget citizens need
+ *                              it would let guests use up the budget citizens need. Enforced in code
+ *                              (guestGroupCap): a value at or above the global cap is clamped to
+ *                              global cap - 1 wei
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -53,6 +55,7 @@ import {
   type V3Config,
 } from "./sponsor-policy";
 import {
+  DEFAULT_GLOBAL_DAILY_WEI,
   DEFAULT_GUEST_GLOBAL_DAILY_WEI,
   DEFAULT_ONBOARDING_DAILY_WEI,
   GUEST_GROUP_KEY,
@@ -114,6 +117,18 @@ export function v3ConfigFromEnv(env: Record<string, string | undefined> = proces
   return { citizenNft: pick("PASSKEY_CITIZEN_NFT_V3"), attesterNft: pick("PASSKEY_ATTESTER_NFT_V3") };
 }
 
+/**
+ * The guest group's daily cap, always strictly below the overall global cap (fail-safe against a
+ * misconfigured env): guests also count against the global total, so a guest cap at or above it
+ * would let guests use up the budget citizens need.
+ */
+export function guestGroupCap(env: Record<string, string | undefined> = process.env): bigint {
+  const guest = weiFromEnv(env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI, DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+  const global = weiFromEnv(env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI, DEFAULT_GLOBAL_DAILY_WEI);
+  const ceiling = global > 0n ? global - 1n : 0n;
+  return guest < ceiling ? guest : ceiling;
+}
+
 export async function handleSponsorRequest(
   request: Request,
   deps: { chain: ChainReader; budget: SponsorBudget },
@@ -147,16 +162,14 @@ export async function handleSponsorRequest(
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
     budgetKey = verdict.budgetKey;
-    // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe)
-    // gets the onboarding per-account cap AND counts against the one shared guest total.
+    // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe -
+    // the latter keyed to the SUBMITTING Safe, see sponsor-policy mode C) gets the onboarding
+    // per-account cap AND counts against the one shared guest total.
     // Citizen results carry no `guest` and keep the ordinary caps.
     if (verdict.guest) {
       limits = {
         perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI),
-        group: {
-          key: GUEST_GROUP_KEY,
-          dailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI, DEFAULT_GUEST_GLOBAL_DAILY_WEI),
-        },
+        group: { key: GUEST_GROUP_KEY, dailyWei: guestGroupCap() },
       };
     }
   } catch (err) {

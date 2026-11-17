@@ -4,8 +4,9 @@
  * The handler reserves the voucher's `maxCostWei` (EntryPoint v0.7 required
  * prefund, the most the paymaster can be charged) BEFORE signing, keyed by the
  * citizen identity the policy bound the op to (lowercased): the legacy
- * thirdweb account, the citizen Safe itself, or the wallet being recovered. A refused reservation spends
- * nothing.
+ * thirdweb account, the citizen Safe itself, or the citizen wallet being recovered (the recovery of a
+ * GUEST Safe is charged to the submitting Safe, never to the guest wallet). A refused reservation
+ * spends nothing.
  *
  * Two stores:
  *  - `SupabaseSponsorBudget` (env PASSKEY_SPONSOR_BUDGET_STORE=supabase): one

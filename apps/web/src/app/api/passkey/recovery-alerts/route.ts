@@ -7,8 +7,10 @@ import { createGnosisRecoveryLogReader, runRecoveryAlerts } from "@/lib/passkey/
  * Scans the Candide SocialRecoveryModule for RecoveryExecuted since the stored cursor and emails
  * each recovered wallet's verified warning address. Idempotent per (wallet, recovery nonce).
  *
- * NOT in vercel.json yet (gate). Needs PASSKEY_EMAIL_ENABLED=1 and PASSKEY_EMAIL_STORE=supabase
- * (the cursor and the sent-alert claims must survive between runs; the in-memory store is refused).
+ * Scheduled in vercel.json (every 10 minutes). Vercel runs crons on the PRODUCTION deployment only:
+ * preview deployments never call this route on a schedule. It stays a no-op (503) until
+ * PASSKEY_EMAIL_ENABLED=1 and PASSKEY_EMAIL_STORE=supabase are set (the cursor and the sent-alert
+ * claims must survive between runs; the in-memory store is refused).
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

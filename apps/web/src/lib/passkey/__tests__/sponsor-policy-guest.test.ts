@@ -146,13 +146,33 @@ const guestWallet = (w: FakeWorld) => {
 test("recovering a guest Safe: confirmRecovery by a guardian Safe is sponsored as a guest", async () => {
   const confirm = encodeFunctionData({ abi: srm, functionName: "confirmRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n, false] });
   const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, confirm)), NO_LEGACY, fakeChain(guestWallet));
-  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: WALLET, guest: true });
+  // Charged to the submitting Safe (the sender), never to the guest wallet.
+  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: SAFE, guest: true });
 });
 
 test("recovering a guest Safe: executeRecovery to the submitter's own signer", async () => {
   const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
   const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(guestWallet));
   assert.ok(r.ok && r.guest === true, JSON.stringify(r));
+});
+
+test("a third party's recovery op against a guest Safe is charged to the SENDER's key, not the wallet's", async () => {
+  // SAFE is not a guardian of WALLET: its executeRecovery / multiConfirmRecovery revert on chain,
+  // but the paymaster pays - so it must spend SAFE's budget, never the victim wallet's.
+  const thirdParty = (w: FakeWorld) => {
+    guestWallet(w);
+    w.guardians.set(WALLET.toLowerCase(), new Set([GUARDIAN.toLowerCase()]));
+  };
+  const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
+  const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(thirdParty));
+  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: SAFE, guest: true });
+  const multi = encodeFunctionData({
+    abi: srm,
+    functionName: "multiConfirmRecovery",
+    args: [WALLET, [RECOVERED_SIGNER], 1n, [{ signer: GUARDIAN, signature: "0x01" }], false],
+  });
+  const m = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, multi)), NO_LEGACY, fakeChain(thirdParty));
+  assert.deepEqual(m, { ok: true, mode: "recovery", budgetKey: SAFE, guest: true });
 });
 
 test("a wallet that is not a sovereign Safe, or has no guardian, is refused", async () => {
@@ -192,7 +212,7 @@ test("recovering a guest Safe: the other recovery rules still hold", async () =>
     w.recoveryRequests.set(WALLET.toLowerCase(), { executeAfter: BigInt(NOW - 60), newThreshold: 1n, newOwners: [RECOVERED_SIGNER] });
   };
   const d = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, finalize)), NO_LEGACY, fakeChain(due));
-  assert.deepEqual(d, { ok: true, mode: "recovery", budgetKey: WALLET, guest: true });
+  assert.deepEqual(d, { ok: true, mode: "recovery", budgetKey: SAFE, guest: true });
 });
 
 test("recovering a guest Safe: a wallet without the recovery module, or with two owners, is refused", async () => {

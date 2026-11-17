@@ -17,7 +17,7 @@ import {
 import { EVERYDAY_CONTRACTS, citizenNftAbi, hubAbi } from "../everyday-allowlist";
 import { predictSafeAddress } from "../safe-address";
 import { NOW, deployOp, op as policyOp, outer, srm as srmHelpers, viaMultiSend } from "./policy-helpers";
-import { PRODUCTION_SPONSOR_SIGNERS, handleSponsorRequest } from "../sponsor-handler";
+import { PRODUCTION_SPONSOR_SIGNERS, guestGroupCap, handleSponsorRequest } from "../sponsor-handler";
 import {
   DEFAULT_GUEST_GLOBAL_DAILY_WEI,
   DEFAULT_ONBOARDING_DAILY_WEI,
@@ -452,8 +452,65 @@ test("a guest recovery (wallet without citizenship) is reserved against the gues
   });
   const res = await POST(req(body(userOp(confirm), { legacy: undefined })));
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
-  assert.equal(recording.calls[0].key, WALLET.toLowerCase());
+  // Charged to the submitting Safe, never to the guest wallet being recovered.
+  assert.equal(recording.calls[0].key, SAFE.toLowerCase());
   assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("a third party's recovery op against a guest Safe is reserved on the SENDER's key, not the wallet's", async () => {
+  enable();
+  const WALLET = "0x9999999999999999999999999999999999999999" as Hex;
+  const OTHER_KEY = { x: `0x${"cc".repeat(32)}` as Hex, y: `0x${"dd".repeat(32)}` as Hex };
+  // SAFE (the sender) is NOT a guardian of WALLET: the op would revert on chain, the paymaster pays.
+  chain = fakeChain((w) => {
+    makePasskeySafe(w, WALLET, OTHER_KEY);
+    w.guardians.set(WALLET.toLowerCase(), new Set([GUARDIAN.toLowerCase()]));
+    w.webauthnSigners.set(signerKey(KEY), RECOVERED_SIGNER);
+  });
+  const recording = new RecordingBudget();
+  budget = recording;
+  const exec = encodeFunctionData({
+    abi: safe4337,
+    functionName: "executeUserOp",
+    args: [
+      PASSKEY_SAFE.socialRecoveryModule,
+      0n,
+      encodeFunctionData({ abi: srmHelpers, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] }),
+      0,
+    ],
+  });
+  const res = await POST(req(body(userOp(exec), { legacy: undefined })));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls.map((c) => c.key), [SAFE.toLowerCase()]);
+  assert.notEqual(recording.calls[0].key, WALLET.toLowerCase());
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("the guest group cap is clamped strictly below the overall global cap", async () => {
+  enable();
+  try {
+    process.env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI = "1000";
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "1000"; // equal = misconfigured
+    let recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 999n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "5000"; // above = misconfigured
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 999n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "400"; // below = unchanged
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 400n);
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI;
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+  assert.equal(guestGroupCap({ PASSKEY_SPONSOR_GLOBAL_DAILY_WEI: "0", PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI: "10" }), 0n);
+  assert.equal(guestGroupCap({}), DEFAULT_GUEST_GLOBAL_DAILY_WEI);
 });
 
 test("a citizen op carries no guest limits (unchanged)", async () => {

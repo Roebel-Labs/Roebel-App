@@ -53,7 +53,12 @@
  *     deployed sovereign passkey-Safe shape (checkDeployedSafeShape) and at
  *     least one guardian -> { mode "recovery", guest: true }.
  *     The sender may be ANY genuine passkey Safe (family guardians and the
- *     recovering person's fresh Safe are not citizens). Budget key = wallet.
+ *     recovering person's fresh Safe are not citizens). Budget key = wallet
+ *     for a citizen wallet; for a GUEST wallet the budget key is the SENDER
+ *     (plus the guest group): any passkey Safe may submit a recovery op for a
+ *     guest Safe (it reverts on chain without the guardians' confirmations, but
+ *     the paymaster still pays), so charging the wallet would let a stranger
+ *     drain the victim's own daily budget and block its cancelRecovery.
  *
  * All modes:
  *  1. Fees / gas within CAPS (maxFeePerGas <= 3 gwei, priority <= maxFee).
@@ -91,7 +96,7 @@
  *     sender is a guardian of the wallet; SafeWebAuthnSignerFactory.createSigner
  *     for exactly (x, y, verifiers). All calls name the same wallet != sender.
  *  An op that is only confirmRecovery calls is mode A with `legacy`, else B if
- *  the sender is a citizen, else C (budget = the wallet). Identity-only and recovery-only calls never
+ *  the sender is a citizen, else C (budget = the wallet; the sender for a guest wallet). Identity-only and recovery-only calls never
  *  mix. Any thirdweb-selector call to an address other than `legacy` is
  *  rejected: one legacy account per op.
  *
@@ -989,7 +994,9 @@ async function evaluateRecoveryMode(
     const guardian = await read(() => chain.isGuardian(wallet, op.sender));
     if (!guardian) return deny("sender is not a guardian of the wallet");
   }
-  return guest ? { ok: true, mode: "recovery", budgetKey: wallet, guest: true } : { ok: true, mode: "recovery", budgetKey: wallet };
+  // A guest wallet's recovery is charged to the SENDER (see the header, mode C): a stranger's
+  // recovery op must never spend the budget the wallet needs for its own cancelRecovery.
+  return guest ? { ok: true, mode: "recovery", budgetKey: op.sender, guest: true } : { ok: true, mode: "recovery", budgetKey: wallet };
 }
 
 /** Every multiConfirmRecovery / executeRecovery in the op sets newOwners == [signer]. */

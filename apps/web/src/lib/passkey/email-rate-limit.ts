@@ -7,6 +7,10 @@ import type { SponsorBudgetRpcClient } from "./sponsor-budget";
  * FixedWindowLimiter is in memory, per serverless instance, reset on cold start: the real
  * ceiling is limit x instances. SupabaseRateLimiter (PASSKEY_RATE_LIMIT_STORE=supabase, migration
  * 20261117b_passkey_rate_limits.sql) is the shared one for production.
+ *
+ * Deliberately NOT src/lib/rate-limit: that one stores raw keys and falls back to memory when the
+ * RPC fails; here the keys are email addresses (stored only as sha256) and a store error fails
+ * closed (no code email is sent).
  */
 export interface RateLimiter {
   /** Counts one hit for `key`; false when the window's limit is already reached. */
