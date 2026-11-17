@@ -3,7 +3,8 @@
  * zustimmen", the one-tap suggestion (the people who confirmed your citizenship), add by code or
  * name, remove, and change how many must agree. Each change = one fingerprint.
  * Recovery words are never listed as people: they show as ONE entry "Wiederherstellungswörter",
- * and the threshold label counts people only.
+ * and the threshold label counts people only. Guardians that may be words this phone cannot read
+ * show as ONE entry "Wiederherstellungswörter (nicht geladen)" (useGuardianManager).
  */
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -117,6 +118,24 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
                   </View>
                 </View>
               </View>
+            ) : null}
+
+            {m.wordsUnloaded ? (
+              <Pressable
+                onPress={() => router.push('/settings/recovery-words' as any)}
+                accessibilityRole="button"
+                style={[styles.row, { borderColor: colors.borderSecondary }]}
+              >
+                <View style={styles.rowTop}>
+                  <Initials name="Wiederherstellungswörter" />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      Wiederherstellungswörter (nicht geladen)
+                    </Text>
+                    <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>Tippe hier, um sie auf diesem Gerät zu laden.</Text>
+                  </View>
+                </View>
+              </Pressable>
             ) : null}
 
             {m.allAttesters ? (

@@ -34,6 +34,18 @@ export const WORDS_VAULT_KEY_LABEL = 'roebel/words-vault-key/v1';
 export const WORDS_OFF_BLOB = `pkv1:words-off-${'0'.repeat(32)}`;
 export const isWordsOffBlob = (blob: string | undefined | null): boolean => blob === WORDS_OFF_BLOB;
 
+/**
+ * "Words on, but no `wvk`": written into `wvk` by a setup whose passkey has no PRF (or whose PRF
+ * prompt failed), so no `wvk` of earlier words survives. Distinct from the off marker: other
+ * phones read it like "no vault key" (`resolveVaultKey` treats it like off), but the switch-off
+ * retry never takes it for its own state, and a phone without the pool knows that words it cannot
+ * read are on.
+ */
+export const WORDS_NO_WVK_BLOB = `pkv1:words-nowvk-${'0'.repeat(32)}`;
+export const isWordsNoWvkBlob = (blob: string | undefined | null): boolean => blob === WORDS_NO_WVK_BLOB;
+/** Either marker: never ciphertext, never unwraps. */
+export const isWordsMarkerBlob = (blob: string | undefined | null): boolean => isWordsOffBlob(blob) || isWordsNoWvkBlob(blob);
+
 const ADDRESS_BYTES = 20;
 
 /**
@@ -97,8 +109,8 @@ type Wrap = (prf: Hex, label: string, secret: Uint8Array) => Promise<string>;
  *
  * The server's `wvk` is the truth: words replaced or switched off on another phone must never be
  * overwritten by a stale device copy.
- *   - server has no `wvk`, or the off marker (`WORDS_OFF_BLOB`) → words are off: the device copy
- *     is cleared, null
+ *   - server has no `wvk`, the off marker (`WORDS_OFF_BLOB`) or the no-wvk marker
+ *     (`WORDS_NO_WVK_BLOB`) → no vault key to follow: the device copy is cleared, null
  *   - `wvk` + PRF                    → unwrap it; the device copy is overwritten when it differs
  *   - `wvk` but no PRF, or a `wvk` for another passkey → null (the device copy alone is not
  *     trusted, and it is kept: it cannot be checked)
@@ -112,7 +124,7 @@ export async function resolveVaultKey(d: {
   /** Called with the pool addresses when the `wvk` blob carries them (best effort, never fails the key). */
   savePool?: (addresses: Address[]) => Promise<void>;
 }): Promise<Hex | null> {
-  if (!d.wvkBlob || isWordsOffBlob(d.wvkBlob)) {
+  if (!d.wvkBlob || isWordsMarkerBlob(d.wvkBlob)) {
     if ((await d.storage.getItem(WORDS_VAULT_KEY_STORE)) !== null) await clearVaultKey(d.storage);
     return null;
   }
@@ -131,13 +143,13 @@ export async function resolveVaultKey(d: {
   return key;
 }
 
-/** Unwraps a `wvk` blob: null for the off marker, a wrong passkey or a malformed payload. Never throws. */
+/** Unwraps a `wvk` blob: null for a marker, a wrong passkey or a malformed payload. Never throws. */
 export async function unwrapWordsVault(
   prf: Hex,
   blob: string,
   unwrap: Unwrap,
 ): Promise<{ vaultKey: Hex; addresses: Address[] | null } | null> {
-  if (isWordsOffBlob(blob)) return null;
+  if (isWordsMarkerBlob(blob)) return null;
   try {
     return decodeWordsVault(await unwrap(prf, WORDS_VAULT_KEY_LABEL, blob));
   } catch {

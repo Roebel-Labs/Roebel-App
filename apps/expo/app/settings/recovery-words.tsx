@@ -3,7 +3,9 @@
  *
  * intro → show (12 words, once) → confirm (3 of them) → saving (fingerprint for the op, one more
  * for the backup write) → done. With words already on: the status plus "Neue Wörter erzeugen"
- * (the same flow with replace) and "Wörter entfernen".
+ * (the same flow with replace) and "Wörter entfernen". A phone that cannot tell whether some
+ * guardians are words (no valid pool, words-setup.ts `currentWordsPool`) offers "Angaben laden"
+ * (one fingerprint), which the guardian list's hint points to.
  *
  * The phrase lives only in this screen's state: gone on unmount, cleared after saving and as soon as
  * the app goes to the background (the flow then starts over); while 'inactive' (app switcher) a
@@ -45,7 +47,8 @@ export default function RecoveryWordsScreen() {
   const [positions, setPositions] = useState<[number, number, number]>([0, 1, 2]);
   const [incomplete, setIncomplete] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [busy, setBusy] = useState<'remove' | 'retry' | null>(null);
+  const [busy, setBusy] = useState<'remove' | 'retry' | 'load' | null>(null);
+  const [unknown, setUnknown] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   // The phrase is screen state only (lint forbids reading a ref in render); `held` lets the
   // AppState listener see it without re-subscribing.
@@ -60,12 +63,10 @@ export default function RecoveryWordsScreen() {
   }, []);
 
   const refresh = useCallback(async (c: Ctx) => {
-    const [{ readWordsStatus }, { readGuardianState, recoveryStorage }] = await Promise.all([
-      import('@/lib/passkey/words-setup'),
-      import('@/lib/passkey/guardians-runtime'),
-    ]);
-    const s = await readWordsStatus(c.record.safe, { storage: recoveryStorage, readState: readGuardianState });
+    const [{ readWordsStatus }, rt] = await Promise.all([import('@/lib/passkey/words-setup'), import('@/lib/passkey/words-setup-runtime')]);
+    const s = await readWordsStatus(c.record.safe, rt.createWordsReadDeps(c.session));
     setPending(s.pending);
+    setUnknown(s.unknown);
     setStep(s.on ? 'status' : 'intro');
   }, []);
 
@@ -139,6 +140,13 @@ export default function RecoveryWordsScreen() {
         setStep('confirm');
         return;
       }
+      if (r.status === 'checking') {
+        // Unclear whether the op landed: the status below tells, "Jetzt sichern" settles it.
+        forget();
+        setNotice({ tone: 'info', text: r.message });
+        await refresh(ctx).catch(() => setStep('intro'));
+        return;
+      }
       forget();
       const left = await loadWordsPending(deps.storage).catch(() => null);
       setPending(left);
@@ -165,6 +173,24 @@ export default function RecoveryWordsScreen() {
       }
       setConfirmRemove(false);
       setNotice({ tone: 'success', text: 'Die Wiederherstellungswörter sind entfernt.' });
+      await refresh(ctx);
+    } catch (e) {
+      const msg = friendlyError(e);
+      if (msg) setNotice({ tone: 'error', text: msg });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const load = async () => {
+    if (!ctx) return;
+    setBusy('load');
+    setNotice(null);
+    try {
+      const [{ syncWordsPool }, rt] = await Promise.all([import('@/lib/passkey/words-setup'), import('@/lib/passkey/words-setup-runtime')]);
+      const r = await syncWordsPool(ctx.record.safe, rt.createWordsReadDeps(ctx.session));
+      if (r.status === 'error') setNotice({ tone: 'error', text: r.message });
+      else setNotice({ tone: 'success', text: r.on ? 'Geladen.' : 'Geladen. Auf deinem Konto sind keine Wiederherstellungswörter eingerichtet.' });
       await refresh(ctx);
     } catch (e) {
       const msg = friendlyError(e);
@@ -243,6 +269,14 @@ export default function RecoveryWordsScreen() {
             {body('12 Wörter, mit denen du dein Konto auf einem neuen Handy zurückholst. Ohne Apple, ohne Google, ohne Vertrauenspersonen und ohne uns.')}
             {body('Wer die Wörter hat, kann dein Konto nach 3 Tagen übernehmen. In dieser Zeit wirst du gewarnt und kannst es abbrechen.')}
             {pendingNotice}
+            {unknown ? (
+              <Card>
+                <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
+                  Auf diesem Gerät fehlen die Angaben zu deinen Wiederherstellungswörtern. Lade sie einmal mit deinem Fingerabdruck.
+                </Text>
+                <BigButton label="Angaben laden" kind="secondary" busy={busy === 'load'} onPress={load} />
+              </Card>
+            ) : null}
             <BigButton label="Wörter erzeugen" onPress={() => start(false)} />
           </>
         ) : step === 'show' ? (
