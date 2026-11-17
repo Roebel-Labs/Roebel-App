@@ -53,6 +53,13 @@ export const orgRegistryDeployBlock = Number(
 	process.env.EXPO_PUBLIC_ORG_REGISTRY_DEPLOY_BLOCK || (process.env.EXPO_PUBLIC_ORG_REGISTRY_GNOSIS ? 0 : 48464904),
 );
 
+// Credential register (CredentialRegistry.sol). Empty until the production deployment: then the
+// production address becomes the fallback here. The phone encodes every register call against this
+// address only, so a server can never point it at another contract. Set BOTH vars together.
+export const credentialRegistryGnosisAddress = process.env.EXPO_PUBLIC_CREDENTIAL_REGISTRY_GNOSIS || "";
+/** First block to scan for CredentialRegistry events. */
+export const credentialRegistryDeployBlock = Number(process.env.EXPO_PUBLIC_CREDENTIAL_REGISTRY_DEPLOY_BLOCK || 0);
+
 // Röbeltaler Circles v2 BaseGroup (registered 2026-06-17; owner = Attester Safe,
 // standard mint policy, fee 0, citizen-gated via owner-curated trust of the 15
 // CitizenNFT holders).

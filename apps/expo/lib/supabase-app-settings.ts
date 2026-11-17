@@ -143,6 +143,19 @@ export async function fetchOrgSafesEnabledProduction(): Promise<boolean> {
 }
 
 /**
+ * Gate for the credential register (profile cards, badges, Ausweis screens). A NEW surface:
+ * missing key = OFF, only an explicit 'true' enables it (lib/credreg/gate.ts).
+ */
+export async function fetchCredentialsEnabled(): Promise<boolean> {
+  return (await fetchAppSetting('credentials_enabled')) === 'true';
+}
+
+/** Production switch for the credential register, on top of `credentials_enabled`. Missing key = OFF. */
+export async function fetchCredentialsEnabledProduction(): Promise<boolean> {
+  return (await fetchAppSetting('credentials_enabled_production')) === 'true';
+}
+
+/**
  * Tx hashes hidden from the Gemeinschaftskasse history (JSON array, lowercase).
  * Missing key, invalid JSON or any fetch error = [] (no filtering).
  */
