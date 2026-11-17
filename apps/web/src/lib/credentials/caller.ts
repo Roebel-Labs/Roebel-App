@@ -38,7 +38,7 @@ export async function authenticateCaller(
     const b = (body ?? {}) as Record<string, unknown>;
     const action = b.action;
     if (typeof action !== "string" || !actions.includes(action as CredentialAction)) {
-      return { ok: false, status: 400, code: "BAD_REQUEST", message: "unknown action" };
+      return { ok: false, status: 400, code: "BAD_REQUEST", message: "Unbekannte Aktion." };
     }
     if (APP_ONLY_ACTIONS.includes(action as CredentialAction)) {
       return { ok: false, status: 403, code: "APP_ONLY", message: "Das geht nur in der Röbel App." };

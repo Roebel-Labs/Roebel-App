@@ -316,3 +316,22 @@ test("redeem of a prepared invitation of an on-chain batch marks it invited and 
   assert.equal(m.id, id);
   ok(await respond(w.d, caller(ALICE, "respond"), { invitationId: id, decision: "accept" }));
 });
+
+test("validation messages of respond and holdings are German", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ wallet: ALICE }]);
+  const id = b.invitations[0].id;
+  const cases = [
+    await respond(w.d, caller(ALICE, "respond"), null as never),
+    await respond(w.d, caller(ALICE, "respond"), { invitationId: id, decision: "accept", visibility: "public" } as never),
+    await respond(w.d, caller(ALICE, "respond"), { invitationId: id, decision: "maybe" } as never),
+    await holdings(w.d, caller(ALICE, "holdings"), { typeIds: [] }),
+  ];
+  const messages = cases.map((r) => (r.ok ? "" : (r as { message: string }).message));
+  assert.deepEqual(messages, [
+    "Einladung und Entscheidung fehlen.",
+    "Unerwartete Angabe in der Anfrage.",
+    "Bitte annehmen oder ablehnen.",
+    "Bitte 1 bis 50 Ausweise abfragen.",
+  ]);
+});

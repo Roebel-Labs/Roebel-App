@@ -205,10 +205,10 @@ export async function redeem(d: HolderDeps, c: Caller, p: { token: string }): Pr
 /** Records accept / decline. Visibility is not taken: claiming publicly is the person's own transaction. */
 export async function respond(d: HolderDeps, c: Caller, p: { invitationId: string; decision: "accept" | "decline" }): Promise<Result<null>> {
   const wallet = c.wallet.toLowerCase();
-  if (!p || typeof p !== "object") return bad("invitationId and decision are required");
+  if (!p || typeof p !== "object") return bad("Einladung und Entscheidung fehlen.");
   const extra = Object.keys(p).filter((k) => k !== "invitationId" && k !== "decision");
-  if (extra.length > 0) return bad("unexpected field");
-  if (p.decision !== "accept" && p.decision !== "decline") return bad("decision must be accept or decline");
+  if (extra.length > 0) return bad("Unerwartete Angabe in der Anfrage.");
+  if (p.decision !== "accept" && p.decision !== "decline") return bad("Bitte annehmen oder ablehnen.");
   if (typeof p.invitationId !== "string" || !UUID.test(p.invitationId)) return INVITATION_NOT_FOUND;
   const inv = await d.store.getInvitation(p.invitationId);
   if (!inv || inv.recipientWallet !== wallet || inv.status === "prepared") return INVITATION_NOT_FOUND;
@@ -231,7 +231,7 @@ export async function holdings(d: HolderDeps, c: Caller, p: { typeIds: Hex[] }):
   const wallet = c.wallet.toLowerCase();
   const ids = p?.typeIds;
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_HOLDINGS_TYPES || !ids.every((t) => typeof t === "string" && BYTES32.test(t))) {
-    return bad(`typeIds must be 1 to ${MAX_HOLDINGS_TYPES} bytes32 values`);
+    return bad(`Bitte 1 bis ${MAX_HOLDINGS_TYPES} Ausweise abfragen.`);
   }
   const typeIds = ids.map((t) => t.toLowerCase() as Hex);
   const held = await d.reader.holdsMany(typeIds, wallet as Address);

@@ -216,3 +216,22 @@ test("a private part whose invitation is not accepted (declined or still open) i
   }
   assert.equal(w.store.presentations.size, 0);
 });
+
+test("a malformed presentation is refused with a German message", async () => {
+  const w = world();
+  const good = await presentation();
+  const cases: [unknown, string][] = [
+    [null, "Es wurde kein Ausweis vorgezeigt."],
+    [{ ...good, v: 2 }, "Ungültige Angabe beim Vorzeigen (v)."],
+    [{ ...good, nonce: "!" }, "Ungültige Angabe beim Vorzeigen (nonce)."],
+    [{ ...good, private: { batchId: "x" } }, "Ungültige Angabe beim Vorzeigen (private.batchId)."],
+  ];
+  for (const [p, message] of cases) {
+    const r = await createPresentation(w.d, caller(HOLDER, "present_create"), p as never);
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.code, "BAD_REQUEST");
+      assert.equal(r.message, message);
+    }
+  }
+});

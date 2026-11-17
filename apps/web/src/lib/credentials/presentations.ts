@@ -74,16 +74,19 @@ export function normalizePresentationCode(raw: unknown): string | null {
   return v;
 }
 
+/** German user message for a malformed field; the field name stays technical for support. */
+const invalid = (field: string) => `Ungültige Angabe beim Vorzeigen (${field}).`;
+
 /** Rebuilds the presentation from known fields only (anything else the client sent is dropped). */
 function parsePresentation(p: unknown): Presentation | string {
-  if (!p || typeof p !== "object") return "presentation required";
+  if (!p || typeof p !== "object") return "Es wurde kein Ausweis vorgezeigt.";
   const r = p as Record<string, unknown>;
-  if (r.v !== 1) return "v must be 1";
-  if (typeof r.typeId !== "string" || !BYTES32.test(r.typeId)) return "typeId invalid";
-  if (typeof r.account !== "string" || !isAddress(r.account, { strict: false })) return "account invalid";
-  if (typeof r.issuedAtSec !== "number" || !Number.isSafeInteger(r.issuedAtSec) || r.issuedAtSec <= 0) return "issuedAtSec invalid";
-  if (typeof r.nonce !== "string" || !NONCE.test(r.nonce)) return "nonce invalid";
-  if (!isHex(r.accountSignature)) return "accountSignature invalid";
+  if (r.v !== 1) return invalid("v");
+  if (typeof r.typeId !== "string" || !BYTES32.test(r.typeId)) return invalid("typeId");
+  if (typeof r.account !== "string" || !isAddress(r.account, { strict: false })) return invalid("account");
+  if (typeof r.issuedAtSec !== "number" || !Number.isSafeInteger(r.issuedAtSec) || r.issuedAtSec <= 0) return invalid("issuedAtSec");
+  if (typeof r.nonce !== "string" || !NONCE.test(r.nonce)) return invalid("nonce");
+  if (!isHex(r.accountSignature)) return invalid("accountSignature");
   const typeId = r.typeId.toLowerCase() as Hex;
   const out: Presentation = {
     v: 1,
@@ -95,17 +98,17 @@ function parsePresentation(p: unknown): Presentation | string {
   };
   if (r.private !== undefined) {
     const q = r.private as Record<string, unknown> | null;
-    if (!q || typeof q !== "object") return "private invalid";
+    if (!q || typeof q !== "object") return invalid("private");
     const leaf = q.leaf as Record<string, unknown> | null;
-    if (typeof q.batchId !== "string" || !DECIMAL.test(q.batchId)) return "private.batchId invalid";
-    if (!leaf || typeof leaf !== "object") return "private.leaf invalid";
-    if (leaf.kind !== "account" && leaf.kind !== "claimKey") return "private.leaf.kind invalid";
-    if (typeof leaf.typeId !== "string" || leaf.typeId.toLowerCase() !== typeId) return "private.leaf.typeId must match typeId";
-    if (typeof leaf.subject !== "string" || !isAddress(leaf.subject, { strict: false })) return "private.leaf.subject invalid";
-    if (typeof leaf.validUntil !== "string" || !DECIMAL.test(leaf.validUntil)) return "private.leaf.validUntil invalid";
-    if (typeof leaf.salt !== "string" || !BYTES32.test(leaf.salt)) return "private.leaf.salt invalid";
-    if (!Array.isArray(q.proof) || q.proof.length > MAX_PROOF || !q.proof.every((h) => typeof h === "string" && BYTES32.test(h))) return "private.proof invalid";
-    if (q.claimSignature !== null && !isHex(q.claimSignature, 1_000)) return "private.claimSignature invalid";
+    if (typeof q.batchId !== "string" || !DECIMAL.test(q.batchId)) return invalid("private.batchId");
+    if (!leaf || typeof leaf !== "object") return invalid("private.leaf");
+    if (leaf.kind !== "account" && leaf.kind !== "claimKey") return invalid("private.leaf.kind");
+    if (typeof leaf.typeId !== "string" || leaf.typeId.toLowerCase() !== typeId) return invalid("private.leaf.typeId");
+    if (typeof leaf.subject !== "string" || !isAddress(leaf.subject, { strict: false })) return invalid("private.leaf.subject");
+    if (typeof leaf.validUntil !== "string" || !DECIMAL.test(leaf.validUntil)) return invalid("private.leaf.validUntil");
+    if (typeof leaf.salt !== "string" || !BYTES32.test(leaf.salt)) return invalid("private.leaf.salt");
+    if (!Array.isArray(q.proof) || q.proof.length > MAX_PROOF || !q.proof.every((h) => typeof h === "string" && BYTES32.test(h))) return invalid("private.proof");
+    if (q.claimSignature !== null && !isHex(q.claimSignature, 1_000)) return invalid("private.claimSignature");
     out.private = {
       batchId: q.batchId,
       leaf: {

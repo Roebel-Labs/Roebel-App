@@ -89,3 +89,14 @@ test("a signed request with another scope is refused", async () => {
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.status, 400);
 });
+
+test("an unknown action is 400 BAD_REQUEST with a German message", async () => {
+  const r = await authenticateCaller(req("Bearer chat.jwt.token"), { action: "nope", payload: {} }, ALL, {
+    verifySigned: neverSigned,
+    verifyChatToken: async () => WALLET,
+  });
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.equal(r.code, "BAD_REQUEST");
+  assert.equal(r.message, "Unbekannte Aktion.");
+});
