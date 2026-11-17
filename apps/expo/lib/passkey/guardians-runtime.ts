@@ -10,6 +10,7 @@ import { identityModeFor, type GuardianConfirmPlan, type IdentityMode } from './
 import {
   readGuardians,
   readRecoveryApprovals,
+  readRecoveryNonce,
   readRecoveryRequest,
   readThreshold,
   readWebAuthnSigner,
@@ -19,10 +20,12 @@ import { parseV3Config, readIdentityTokens } from './migration-v3';
 import type { MigrationRecord } from './migration';
 import { secureKeyValueStorage } from './migration-runtime';
 import { resolvePeople, withLabel, type Person, type ProfileRow } from './people';
-import type { RecoveryDeps, RecoveryStorage } from './recovery-flow';
+import type { RecoveryStorage, WordsRecoveryDeps } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
 import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall, type UserOpDeps } from './userop';
 import { createPasskey } from './webauthn';
+import type { WordsLookupChain } from './words-recovery';
+import { saveVaultKey } from './words-vault';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
 export const GNOSIS_LOGS_RPC_URL = process.env.EXPO_PUBLIC_GNOSIS_LOGS_RPC_URL || 'https://rpc.gnosischain.com';
@@ -216,7 +219,15 @@ export const recoveryStorage: RecoveryStorage = {
   removeItem: (key) => SecureStore.deleteItemAsync(key),
 };
 
-export function createRecoveryDeps(): RecoveryDeps {
+/** Recovery words → candidate wallets (words-recovery.ts `findWalletsByWords`). */
+export const wordsLookupChain: WordsLookupChain = {
+  guardianLogsFor: (guardians) => lookupChain.guardianLogsFor(guardians),
+  readGuardians: (w) => readGuardians(w),
+  readThreshold: (w) => readThreshold(w),
+};
+
+/** Deps for both recovery methods (the words path also reads guardians + nonce and keeps the vault key). */
+export function createRecoveryDeps(): WordsRecoveryDeps {
   return {
     storage: recoveryStorage,
     createPasskey,
@@ -227,6 +238,13 @@ export function createRecoveryDeps(): RecoveryDeps {
     readOwners: readSafeOwners,
     isSafeDeployed: (s) => isSafeDeployed(s),
     sendPasskeyUserOp: (a) => sendPasskeyUserOp(a),
+    readGuardians: (w) => readGuardians(w),
+    readNonce: (w) => readRecoveryNonce(w),
+    saveVaultKey: async (k) => {
+      // Loaded lazily: derived-keys-runtime imports this module (no cycle at load time).
+      const { wordsVaultKeyStorage } = await import('./derived-keys-runtime');
+      await saveVaultKey(wordsVaultKeyStorage, k);
+    },
   };
 }
 

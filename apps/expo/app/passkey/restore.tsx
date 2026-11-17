@@ -4,6 +4,9 @@
  *   find the person by name → their passkey Safe (on-chain link, needs guardians) → new passkey →
  *   QR for the guardians → they confirm on-chain → start (3-day delay, fingerprint) → countdown →
  *   finish (fingerprint) → this phone operates the recovered Safe.
+ * Or, when the 'words' surface is open, "Mit 12 Wörtern": the words find the account and sign as
+ * guardians on this phone → the same 3-day delay (the owner is warned and can cancel) → finish →
+ * the keys come back from their words copies.
  * All logic is in lib/passkey/recovery-flow.ts; the state is persisted, so leaving is safe.
  */
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
@@ -20,7 +23,16 @@ import HelperLogin from '@/components/passkey/HelperLogin';
 import { HELPER_IDLE, helperBusy, helperReducer, planHelperConfirm } from '@/lib/passkey/recovery-helper';
 import type { HelperLogin as HelperLoginChoice } from '@/lib/passkey/recovery-helper-runtime';
 import { buildRecoverLink } from '@/lib/passkey/deeplinks';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { profileName } from '@/lib/passkey/people';
+import WordsInput from '@/components/passkey/WordsInput';
+import { wordsFromSeed, type WordsKit } from '@/lib/passkey/words';
+import {
+  NO_WORDS_ACCOUNT_MESSAGE,
+  findWalletsByWords,
+  wordsKeyRestoreMessage,
+  type WordsWallet,
+} from '@/lib/passkey/words-recovery';
 import {
   clearRecoveryState,
   executeRecoveryStep,
@@ -30,6 +42,7 @@ import {
   pollRecovery,
   resumeRecovery,
   startRecovery,
+  startWordsRecovery,
   type RecoveryState,
 } from '@/lib/passkey/recovery-flow';
 import { findRecoverableAccounts, type RecoveryCandidate } from '@/lib/passkey/recovery-lookup';
@@ -37,7 +50,9 @@ import {
   createRecoveryDeps,
   lookupChain,
   recoveryStorage,
+  resolvePeopleNow,
   searchPeopleByName,
+  wordsLookupChain,
   type PersonSearchHit,
 } from '@/lib/passkey/guardians-runtime';
 
@@ -55,6 +70,20 @@ export default function RestoreAccountScreen() {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const stateRef = useRef<RecoveryState | null | undefined>(undefined);
   stateRef.current = state;
+  // Which way back the person picked (before anything is persisted); null = not chosen yet.
+  const [method, setMethod] = useState<'guardians' | 'words' | null>(null);
+  const [wordsAllowed, setWordsAllowed] = useState(false);
+
+  useEffect(() => {
+    if (!allowed) return;
+    let cancelled = false;
+    isPasskeySurfaceAllowed('words')
+      .catch(() => false)
+      .then((ok) => !cancelled && setWordsAllowed(ok));
+    return () => {
+      cancelled = true;
+    };
+  }, [allowed]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -103,7 +132,20 @@ export default function RestoreAccountScreen() {
   const startOver = useCallback(async () => {
     await clearRecoveryState(recoveryStorage).catch(() => undefined);
     setState(null);
+    setMethod(null);
   }, []);
+
+  const startWords = useCallback(async (w: WordsWallet, name: string, phrase: string, kit: WordsKit) => {
+    setBusy(true);
+    try {
+      setState(await startWordsRecovery({ wallet: w.wallet, name, phrase, kit }, deps));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const picking = !state || state.step === 'idle' || state.step === 'creatingPasskey';
+  const chosen: 'guardians' | 'words' | null = state?.method === 'words' ? 'words' : wordsAllowed ? method : 'guardians';
 
   if (!allowed || state === undefined) {
     return (
@@ -117,7 +159,16 @@ export default function RestoreAccountScreen() {
     <SafeAreaView style={[passkeyStyles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenHeader title="Konto wiederherstellen" />
       <ScrollView contentContainerStyle={passkeyStyles.content} keyboardShouldPersistTaps="handled">
-        {!state || state.step === 'idle' || state.step === 'creatingPasskey' ? (
+        {picking && chosen === null ? (
+          <ChooseMethod onChoose={setMethod} />
+        ) : picking && chosen === 'words' ? (
+          <WordsRestore
+            notice={state?.message ?? null}
+            busy={busy}
+            onStart={startWords}
+            onBack={state?.method === 'words' ? startOver : () => setMethod(null)}
+          />
+        ) : picking ? (
           <FindAccount
             notice={state?.message ?? null}
             onChosen={async (name, c) => {
@@ -170,6 +221,9 @@ export default function RestoreAccountScreen() {
             <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
               Danach ist dein Konto wieder da. Du kannst die App solange schließen, wir merken uns alles.
             </Text>
+            {state.method === 'words' ? (
+              <Notice tone="info" text="Der Besitzer des Kontos wird jetzt gewarnt und kann das abbrechen." />
+            ) : null}
             {state.message ? <Notice tone="warning" text={state.message} /> : null}
           </>
         ) : state.step === 'finalizing' ? (
@@ -183,6 +237,7 @@ export default function RestoreAccountScreen() {
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Dein Konto ist wieder da.</Text>
             <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>Ab jetzt meldest du dich mit deinem Fingerabdruck an.</Text>
+            {state.method === 'words' ? <WordsKeyRestore state={state} /> : null}
             <BigButton
               label="Weiter"
               onPress={async () => {
@@ -281,6 +336,163 @@ function HelperConfirm({ wallet, signer, onConfirmed }: { wallet: Address; signe
           </>
         )
       ) : null}
+    </Card>
+  );
+}
+
+function ChooseMethod({ onChoose }: { onChoose: (m: 'guardians' | 'words') => void }) {
+  const { colors } = useTheme();
+  return (
+    <>
+      <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Neues Handy? Wir holen dein Konto zurück.</Text>
+      <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>Wie möchtest du dein Konto zurückholen?</Text>
+      <BigButton label="Mit Vertrauenspersonen" onPress={() => onChoose('guardians')} />
+      <BigButton label="Mit 12 Wörtern" onPress={() => onChoose('words')} />
+    </>
+  );
+}
+
+type WordsHit = WordsWallet & { name: string };
+
+/**
+ * "Mit 12 Wörtern": the words (checked while typing: unknown word / checksum) → their 5 pool
+ * addresses → the accounts they can recover right now → one passkey → the 3-day delay. The seed
+ * runs once; the derived kit lives only in a ref until the recovery starts.
+ */
+function WordsRestore({
+  notice,
+  busy,
+  onStart,
+  onBack,
+}: {
+  notice: string | null;
+  busy: boolean;
+  onStart: (w: WordsWallet, name: string, phrase: string, kit: WordsKit) => Promise<void>;
+  onBack: () => void;
+}) {
+  const { colors } = useTheme();
+  const [looking, setLooking] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [hits, setHits] = useState<WordsHit[] | null>(null);
+  const secret = useRef<{ phrase: string; kit: WordsKit } | null>(null);
+
+  useEffect(
+    () => () => {
+      secret.current = null;
+    },
+    [],
+  );
+
+  const start = async (hit: WordsHit) => {
+    const s = secret.current;
+    if (!s) return;
+    try {
+      await onStart(hit, hit.name, s.phrase, s.kit);
+    } finally {
+      secret.current = null;
+      setHits(null);
+    }
+  };
+
+  const lookUp = async (phrase: string) => {
+    setLooking(true);
+    setHint(null);
+    setHits(null);
+    try {
+      // Let the spinner render before the (synchronous) seed derivation.
+      await new Promise((r) => setTimeout(r, 0));
+      const kit = wordsFromSeed(phrase);
+      const found = await findWalletsByWords(kit.addresses(), wordsLookupChain);
+      if (found.length === 0) {
+        setHint(NO_WORDS_ACCOUNT_MESSAGE);
+        return;
+      }
+      const people = await resolvePeopleNow(found.map((f) => f.wallet)).catch(() => new Map());
+      const named: WordsHit[] = found.map((f, i) => {
+        const p = people.get(f.wallet.toLowerCase());
+        return { ...f, name: p?.known ? p.name : `Konto ${i + 1}` };
+      });
+      secret.current = { phrase, kit };
+      if (named.length === 1) await start(named[0]);
+      else setHits(named);
+    } catch (e) {
+      setHint(friendlyError(e, 'Keine Verbindung. Bitte versuche es erneut.'));
+    } finally {
+      setLooking(false);
+    }
+  };
+
+  if (hits) {
+    return (
+      <>
+        <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Welches Konto möchtest du zurückholen?</Text>
+        {hits.map((h) => (
+          <Pressable
+            key={h.wallet}
+            onPress={() => start(h)}
+            disabled={busy}
+            style={({ pressed }) => [styles.row, { backgroundColor: colors.surface, opacity: pressed ? 0.8 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`${h.name} auswählen`}
+          >
+            <Initials name={h.name} />
+            <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
+              {h.name}
+            </Text>
+            {busy ? <ActivityIndicator color={colors.primary} /> : null}
+          </Pressable>
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Gib deine 12 Wörter ein</Text>
+      <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
+        Danach richten wir deinen Fingerabdruck auf diesem Handy ein. Dein Konto ist nach 3 Tagen wieder da. So kann niemand
+        heimlich ein Konto übernehmen, auch nicht mit den Wörtern.
+      </Text>
+      {notice ? <Notice tone="info" text={notice} /> : null}
+      <WordsInput onValid={lookUp} busy={looking || busy} />
+      {hint ? <Notice tone="warning" text={hint} /> : null}
+      <Pressable onPress={onBack} accessibilityRole="button" style={styles.textButton}>
+        <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Zurück</Text>
+      </Pressable>
+    </>
+  );
+}
+
+/** After a words recovery: the keys from their words copies (2 fingerprints), with a retry. */
+function WordsKeyRestore({ state }: { state: RecoveryState }) {
+  const { colors } = useTheme();
+  const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
+  const [message, setMessage] = useState<string | null>(null);
+
+  const run = useCallback(async () => {
+    setPhase('running');
+    setMessage(null);
+    try {
+      const rt = await import('@/lib/passkey/derived-keys-runtime');
+      const r = await rt.restoreKeysAfterWordsRecovery(state);
+      setMessage(wordsKeyRestoreMessage(r));
+      setPhase('done');
+    } catch (e) {
+      setMessage(friendlyError(e, 'Deine Schlüssel konnten nicht geladen werden. Bitte versuche es erneut.'));
+      setPhase('failed');
+    }
+  }, [state]);
+
+  if (phase === 'done') return <Notice tone={message ? 'info' : 'success'} text={message ?? 'Deine Schlüssel sind wieder da.'} />;
+  return (
+    <Card>
+      <Text style={[passkeyStyles.label, { color: colors.textPrimary }]}>Deine Schlüssel zurückholen</Text>
+      <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
+        Deine Schlüssel für Abstimmungen und Nachrichten waren mit deinen Wörtern gesichert. Bestätige zweimal mit deinem
+        Fingerabdruck.
+      </Text>
+      {message ? <Notice tone="warning" text={message} /> : null}
+      <BigButton label={phase === 'failed' ? 'Erneut versuchen' : 'Schlüssel zurückholen'} busy={phase === 'running'} onPress={run} />
     </Card>
   );
 }

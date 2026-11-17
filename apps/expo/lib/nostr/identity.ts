@@ -59,6 +59,11 @@ export async function loadStoredIdentity(): Promise<NostrIdentity | null> {
   return { secretKey, publicKey, npub: npubEncode(publicKey) };
 }
 
+/** Persists a restored Nostr secret key (recovery-words restore); same format as a derived one. */
+export async function storeIdentitySecret(secretKey: Uint8Array): Promise<void> {
+  await SecureStore.setItemAsync(SECRET_KEY_STORE, toHex(secretKey));
+}
+
 /**
  * Derive (once) and persist this wallet's Nostr identity.
  *

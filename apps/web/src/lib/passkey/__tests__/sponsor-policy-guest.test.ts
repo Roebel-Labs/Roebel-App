@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { encodeFunctionData, type Hex } from "viem";
 import { ADDRESSES, evaluateSponsorPolicy, type SponsorContext } from "../sponsor-policy";
 import { EVERYDAY_CONTRACTS as C, citizenNftAbi, hubAbi, nameRegistryAbi } from "../everyday-allowlist";
-import { predictSafeAddress } from "../safe-address";
+import { WEBAUTHN_VERIFIERS, predictSafeAddress } from "../safe-address";
 import {
   GUARDIAN,
   KEY,
@@ -22,7 +22,7 @@ import {
   signerKey,
   type FakeWorld,
 } from "./fake-chain";
-import { NOW, deployOp, op, outer, srm, viaMultiSend } from "./policy-helpers";
+import { NOW, createSigner, deployOp, op, outer, srm, viaMultiSend } from "./policy-helpers";
 
 const NO_LEGACY: SponsorContext = { ...KEY, nowSeconds: NOW };
 const SENTINEL = "0x0000000000000000000000000000000000000001" as Hex;
@@ -239,4 +239,28 @@ test("recovering a citizen Safe carries no guest flag", async () => {
   };
   const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(citizenWallet));
   assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: WALLET });
+});
+
+test("recovering a guest Safe with the recovery words: [createSigner, multiConfirmRecovery] from the fresh Safe", async () => {
+  // A word address is a plain guardian (an EOA); the words sign off-chain, this phone submits.
+  const W0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as Hex;
+  const wordsWallet = (w: FakeWorld) => {
+    guestWallet(w);
+    w.guardians.set(WALLET.toLowerCase(), new Set([W0.toLowerCase()]));
+  };
+  const multi = encodeFunctionData({
+    abi: srm,
+    functionName: "multiConfirmRecovery",
+    args: [WALLET, [RECOVERED_SIGNER], 1n, [{ signer: W0, signature: `0x${"11".repeat(65)}` }], true],
+  });
+  const r = await evaluateSponsorPolicy(
+    deployOp(KEY, SAFE, viaMultiSend([
+      { to: ADDRESSES.signerFactory, data: createSigner(KEY, WEBAUTHN_VERIFIERS) },
+      { to: ADDRESSES.socialRecoveryModule, data: multi },
+    ])),
+    NO_LEGACY,
+    fakeChain(wordsWallet),
+  );
+  // Charged to the submitting fresh Safe (mode C guest rule), never to the wallet being recovered.
+  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: SAFE, guest: true });
 });

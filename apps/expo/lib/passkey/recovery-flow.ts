@@ -19,13 +19,27 @@
  *
  * The state is persisted (SecureStore) after every transition, so closing the app is safe; a
  * cancelled passkey sheet leaves nothing behind.
+ *
+ * With the recovery words (`startWordsRecovery`, method 'words') steps 2 and 3 collapse: the words
+ * ARE guardians, so they sign the approvals on this phone and ONE op
+ * [createSigner(x, y), multiConfirmRecovery(wallet, [signer], 1, approvals, execute = true)] starts
+ * the same 3-day delay. The words never give instant control; the owner can cancel, which moves
+ * the module nonce and kills every approval signed before. The phrase is never persisted.
  */
 import { getAddress, isAddressEqual, type Address, type Hex } from 'viem';
-import { encodeCreateSigner, encodeExecuteRecovery, encodeFinalizeRecovery, type RecoveryRequest } from './guardians';
+import {
+  encodeCreateSigner,
+  encodeExecuteRecovery,
+  encodeFinalizeRecovery,
+  encodeMultiConfirmRecovery,
+  type RecoveryRequest,
+} from './guardians';
 import { saveRecoveredRecord, type KeyValueStorage } from './migration';
 import { predictSafeAddress } from './safe-address';
 import type { PasskeyUserOpArgs } from './userop';
 import type { PasskeyCredential } from './webauthn';
+import { phraseErrorMessage, validatePhrase, wordsFromSeed, type WordsKit } from './words';
+import { NO_WORDS_ACCOUNT_MESSAGE, signWordApprovalsWithKit, wordGuardiansOf } from './words-recovery';
 
 export const RECOVERY_STORE_KEY = 'passkey_recovery_v1';
 
@@ -63,6 +77,10 @@ export type RecoveryState = {
   message?: string;
   /** Technical detail for logs only. */
   detail?: string;
+  /** How the recovery is confirmed (absent = 'guardians', the flow before the words existed). */
+  method?: 'guardians' | 'words';
+  /** Words recovery: the 5 public pool addresses (never the words), saved again after `done`. */
+  wordsPool?: Address[];
 };
 
 export type RecoveryStorage = KeyValueStorage & { removeItem?: (key: string) => Promise<void> };
@@ -84,6 +102,7 @@ export type RecoveryDeps = {
 const nowSec = (deps: RecoveryDeps) => (deps.now ? deps.now() : Math.floor(Date.now() / 1000));
 const errName = (e: unknown) => (e as { name?: string } | null)?.name;
 const detailOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const ownsOnly = (owners: readonly Address[], signer: Address) => owners.length === 1 && isAddressEqual(owners[0], signer);
 
 export async function loadRecoveryState(storage: RecoveryStorage): Promise<RecoveryState | null> {
   const raw = await storage.getItem(RECOVERY_STORE_KEY);
@@ -121,6 +140,42 @@ function opBase(s: RecoveryState): Pick<PasskeyUserOpArgs, 'credentialId' | 'x' 
  * Step 1. Creates the passkey + resolves its signer. A cancelled sheet returns `idle` and
  * persists nothing; an unsupported device returns `error` (not persisted either).
  */
+type KeyStep = { ok: true; state: RecoveryState } | { ok: false; state: RecoveryState };
+
+/** Creates the passkey of `base` (cancel → idle, unsupported → error; neither persisted). */
+async function createRecoveryKey(base: RecoveryState, deps: RecoveryDeps): Promise<KeyStep> {
+  let cred: PasskeyCredential;
+  try {
+    cred = await deps.createPasskey(base.name);
+  } catch (e) {
+    if (errName(e) === 'PasskeyCancelledError') {
+      return { ok: false, state: { ...base, step: 'idle', message: 'Abgebrochen. Du kannst es jederzeit erneut versuchen.' } };
+    }
+    if (errName(e) === 'PasskeyNotSupportedError') {
+      return { ok: false, state: { ...base, step: 'error', message: 'Dieses Gerät unterstützt keine Passkeys.', detail: detailOf(e) } };
+    }
+    return { ok: false, state: { ...base, step: 'error', message: 'Der Fingerabdruck konnte nicht eingerichtet werden.', detail: detailOf(e) } };
+  }
+  return {
+    ok: true,
+    state: { ...base, credentialId: cred.credentialId, x: cred.x, y: cred.y, newSafe: predictSafeAddress({ x: cred.x, y: cred.y }) },
+  };
+}
+
+/** Resolves the signer of a state that has its passkey; a failure is persisted (the passkey is reused on retry). */
+async function resolveSigner(s: RecoveryState, deps: RecoveryDeps): Promise<KeyStep> {
+  if (s.signer) return { ok: true, state: s };
+  try {
+    return { ok: true, state: { ...s, signer: await deps.getSigner(s.x!, s.y!) } };
+  } catch (e) {
+    return { ok: false, state: await persist(deps, { ...s, step: 'error', message: 'Keine Verbindung. Bitte versuche es erneut.', detail: detailOf(e) }) };
+  }
+}
+
+/**
+ * Step 1. Creates the passkey + resolves its signer. A cancelled sheet returns `idle` and
+ * persists nothing; an unsupported device returns `error` (not persisted either).
+ */
 export async function startRecovery(
   args: { wallet: Address; name: string; recoveryLegacy?: Address | null },
   deps: RecoveryDeps,
@@ -131,39 +186,122 @@ export async function startRecovery(
     recoveryLegacy: args.recoveryLegacy ? getAddress(args.recoveryLegacy) : null,
     name: args.name,
   };
-  let cred: PasskeyCredential;
-  try {
-    cred = await deps.createPasskey(args.name);
-  } catch (e) {
-    if (errName(e) === 'PasskeyCancelledError') {
-      return { ...base, step: 'idle', message: 'Abgebrochen. Du kannst es jederzeit erneut versuchen.' };
-    }
-    if (errName(e) === 'PasskeyNotSupportedError') {
-      return { ...base, step: 'error', message: 'Dieses Gerät unterstützt keine Passkeys.', detail: detailOf(e) };
-    }
-    return { ...base, step: 'error', message: 'Der Fingerabdruck konnte nicht eingerichtet werden.', detail: detailOf(e) };
-  }
-  const withKey: RecoveryState = {
-    ...base,
-    credentialId: cred.credentialId,
-    x: cred.x,
-    y: cred.y,
-    newSafe: predictSafeAddress({ x: cred.x, y: cred.y }),
+  const key = await createRecoveryKey(base, deps);
+  if (!key.ok) return key.state;
+  const signed = await resolveSigner(key.state, deps);
+  if (!signed.ok) return signed.state;
+  return persist(deps, { ...signed.state, step: 'waitingForGuardians' });
+}
+
+export type WordsRecoveryDeps = RecoveryDeps & {
+  readGuardians: (wallet: Address) => Promise<Address[]>;
+  readNonce: (wallet: Address) => Promise<bigint>;
+  /** Stores the words vault key on this phone (the `_w` key copies are restored with it after `done`). */
+  saveVaultKey: (key: Hex) => Promise<void>;
+};
+
+/**
+ * Recovery with the 12 words: checks the words BEFORE any passkey exists (typo → idle with the
+ * German reason; words that are not, or no longer, enough guardians → idle with
+ * NO_WORDS_ACCOUNT_MESSAGE), then new passkey → signer → the words sign the approvals at the
+ * current module nonce → vault key saved → ONE op from the fresh Safe → `waitingDelay`.
+ *
+ * A passkey made by an earlier attempt that did not start the delay (persisted idle / error
+ * words state for the same wallet) is reused, so retrying never piles up passkeys. `kit` lets a
+ * caller that already ran the seed (the screen's lookup) skip a second run. The phrase and the
+ * kit are dropped when this returns; only public addresses and the passkey are persisted.
+ */
+export async function startWordsRecovery(
+  args: { wallet: Address; name: string; phrase: string; recoveryLegacy?: Address | null; kit?: WordsKit },
+  deps: WordsRecoveryDeps,
+): Promise<RecoveryState> {
+  const wallet = getAddress(args.wallet);
+  const base: RecoveryState = {
+    step: 'creatingPasskey',
+    wallet,
+    recoveryLegacy: args.recoveryLegacy ? getAddress(args.recoveryLegacy) : null,
+    name: args.name,
+    method: 'words',
   };
-  let signer: Address;
+  const check = validatePhrase(args.phrase);
+  if (!check.ok) return { ...base, step: 'idle', message: phraseErrorMessage(check) };
+  const kit = args.kit ?? wordsFromSeed(check.phrase);
+  const pool = kit.addresses();
+
+  let guardians: Address[];
+  let threshold: bigint;
   try {
-    signer = await deps.getSigner(cred.x, cred.y);
+    [guardians, threshold] = await Promise.all([deps.readGuardians(wallet), deps.readThreshold(wallet)]);
   } catch (e) {
-    // The passkey exists: persist it so a retry reuses it instead of creating a second one.
-    return persist(deps, { ...withKey, step: 'error', message: 'Keine Verbindung. Bitte versuche es erneut.', detail: detailOf(e) });
+    return { ...base, step: 'idle', message: 'Keine Verbindung. Bitte versuche es erneut.', detail: detailOf(e) };
   }
-  return persist(deps, { ...withKey, signer, step: 'waitingForGuardians' });
+  if (threshold <= 0n || BigInt(wordGuardiansOf(pool, guardians).length) < threshold) {
+    return { ...base, step: 'idle', message: NO_WORDS_ACCOUNT_MESSAGE };
+  }
+
+  const prev = await loadRecoveryState(deps.storage).catch(() => null);
+  const reusable =
+    prev?.method === 'words' &&
+    isAddressEqual(prev.wallet, wallet) &&
+    !prev.executeAfter &&
+    (prev.step === 'idle' || prev.step === 'error') &&
+    !!prev.credentialId && !!prev.x && !!prev.y;
+  let s: RecoveryState;
+  if (reusable) {
+    s = { ...base, credentialId: prev.credentialId, x: prev.x, y: prev.y, newSafe: prev.newSafe, signer: prev.signer };
+  } else {
+    const key = await createRecoveryKey(base, deps);
+    if (!key.ok) return key.state;
+    s = key.state;
+  }
+  s = { ...s, wordsPool: pool };
+  const signed = await resolveSigner(s, deps);
+  if (!signed.ok) return signed.state;
+  s = signed.state;
+  const signer = s.signer!;
+
+  let calls;
+  try {
+    const nonce = await deps.readNonce(wallet);
+    const approvals = await signWordApprovalsWithKit(kit, { wallet, newOwner: signer, nonce, guardians, threshold: Number(threshold) });
+    calls = [encodeCreateSigner(s.x!, s.y!), encodeMultiConfirmRecovery(wallet, [signer], 1, approvals, true)];
+  } catch (e) {
+    return persist(deps, { ...s, step: 'error', message: 'Keine Verbindung. Bitte versuche es erneut.', detail: detailOf(e) });
+  }
+  try {
+    await deps.saveVaultKey(kit.vaultKey());
+  } catch (e) {
+    return persist(deps, { ...s, step: 'error', message: 'Auf diesem Handy konnte nichts gespeichert werden. Bitte versuche es erneut.', detail: detailOf(e) });
+  }
+  // Persist the passkey before the op: a crash during the op must not lose it.
+  s = await persist(deps, { ...s, step: 'idle', message: undefined, detail: undefined });
+
+  try {
+    const deployed = await deps.isSafeDeployed(s.newSafe!).catch(() => false);
+    await deps.sendPasskeyUserOp({ ...opBase(s), calls, deployed });
+  } catch (e) {
+    const req = await deps.readRequest(wallet).catch(() => null);
+    if (req && req.executeAfter > 0n && ownsOnly(req.newOwners, signer)) {
+      return persist(deps, { ...s, step: 'waitingDelay', executeAfter: Number(req.executeAfter) });
+    }
+    if (errName(e) === 'PasskeyCancelledError') {
+      return { ...s, step: 'idle', message: 'Abgebrochen. Gib die Wörter erneut ein, wenn du bereit bist.' };
+    }
+    return persist(deps, { ...s, step: 'error', message: 'Das hat nicht geklappt. Bitte versuche es erneut.', detail: detailOf(e) });
+  }
+  const req = await deps.readRequest(wallet).catch(() => null);
+  const executeAfter = req && req.executeAfter > 0n ? Number(req.executeAfter) : undefined;
+  return persist(deps, { ...s, step: 'waitingDelay', executeAfter });
 }
 
 /** Retries a persisted `error` state from the right step (the signer may still be missing). */
 export async function resumeRecovery(s: RecoveryState, deps: RecoveryDeps): Promise<RecoveryState> {
   if (s.step !== 'error') return s;
   if (!s.credentialId || !s.x || !s.y) return { ...s, step: 'idle' };
+  // Words: the phrase is gone; until the delay started, the words are asked again (the passkey stays).
+  if (s.method === 'words' && !s.executeAfter) {
+    return persist(deps, { ...s, step: 'idle', message: 'Gib die 12 Wörter bitte noch einmal ein.', detail: undefined });
+  }
   if (!s.signer) {
     try {
       const signer = await deps.getSigner(s.x, s.y);
@@ -175,8 +313,6 @@ export async function resumeRecovery(s: RecoveryState, deps: RecoveryDeps): Prom
   const back: RecoveryStep = s.executeAfter ? 'waitingDelay' : 'waitingForGuardians';
   return persist(deps, { ...s, step: back, message: undefined, detail: undefined });
 }
-
-const ownsOnly = (owners: readonly Address[], signer: Address) => owners.length === 1 && isAddressEqual(owners[0], signer);
 
 /**
  * One poll tick (call every few seconds while the screen is open, and on resume). Reads chain

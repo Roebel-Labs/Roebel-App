@@ -16,11 +16,17 @@ import {
   pollRecovery,
   resumeRecovery,
   startRecovery,
+  startWordsRecovery,
   type RecoveryDeps,
   type RecoveryState,
 } from '../recovery-flow';
 import type { PasskeyUserOpArgs } from '../userop';
 import vector from './passkey-safe-vector.json';
+import wordsVector from './words-recovery-vector.json';
+import { deriveWordAddresses, wordsVaultKey } from '../words';
+import { NO_WORDS_ACCOUNT_MESSAGE } from '../words-recovery';
+import { encodeCreateSigner, recoveryApprovalTypedData } from '../guardians';
+import { recoverTypedDataAddress } from 'viem';
 
 const x = vector.x as Hex;
 const y = vector.y as Hex;
@@ -293,5 +299,134 @@ describe('helpers', () => {
     const req = { guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: 5n, newOwners: [OTHER] };
     expect(isForeignRecoveryPending(req, OLD_OWNER)).toBe(true);
     expect(isForeignRecoveryPending({ ...req, newOwners: [OLD_OWNER] }, OLD_OWNER)).toBe(false);
+  });
+});
+
+describe('startWordsRecovery', () => {
+  const PHRASE = wordsVector.phrase;
+  const POOL = deriveWordAddresses(PHRASE);
+  const DELAY = BigInt(NOW + 259200);
+
+  function wordsDeps(over: Partial<Parameters<typeof startWordsRecovery>[1]> = {}) {
+    const h = makeDeps();
+    let nonce = 0n;
+    const saveVaultKey = jest.fn(async (_k: Hex) => undefined);
+    h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
+      h.sent.push(a);
+      h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: DELAY, newOwners: [SIGNER] });
+      return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
+    });
+    const deps = {
+      ...h.deps,
+      readGuardians: jest.fn(async () => [OTHER, POOL[0], POOL[1]]),
+      readNonce: jest.fn(async () => nonce),
+      saveVaultKey,
+      ...over,
+    };
+    return { ...h, deps, saveVaultKey, setNonce: (n: bigint) => (nonce = n) };
+  }
+
+  const start = (h: ReturnType<typeof wordsDeps>, phrase = PHRASE) =>
+    startWordsRecovery({ wallet: WALLET, name: 'Erna', phrase }, h.deps);
+
+  it('one op [createSigner, multiConfirmRecovery(execute)] from the fresh Safe, then waitingDelay', async () => {
+    const h = wordsDeps();
+    const s = await start(h);
+    expect(s.step).toBe('waitingDelay');
+    expect(s.executeAfter).toBe(Number(DELAY));
+    expect(s.method).toBe('words');
+    expect(s.wordsPool).toEqual(POOL);
+    expect(h.sent).toHaveLength(1);
+    const op = h.sent[0];
+    expect(op.deployed).toBe(false);
+    expect(op.sender).toBeUndefined();
+    expect(op.calls).toHaveLength(2);
+    expect(op.calls[0]).toEqual(encodeCreateSigner(x, y));
+    expect(op.calls[1].to).toBe(SOCIAL_RECOVERY_MODULE);
+    const d = srmFn(op.calls[1].data);
+    expect(d.functionName).toBe('multiConfirmRecovery');
+    const [wallet, owners, threshold, sigs, execute] = d.args as [Address, Address[], bigint, { signer: Address; signature: Hex }[], boolean];
+    expect([wallet, owners, threshold, execute]).toEqual([WALLET, [SIGNER], 1n, true]);
+    expect(sigs.map((g) => g.signer).sort()).toEqual([POOL[0], POOL[1]].sort());
+    expect(h.deps.readNonce).toHaveBeenCalledWith(WALLET);
+  });
+
+  it('saves the words vault key before the op and never persists the words', async () => {
+    const h = wordsDeps();
+    await start(h);
+    expect(h.saveVaultKey).toHaveBeenCalledWith(wordsVaultKey(PHRASE));
+    expect(h.saveVaultKey.mock.invocationCallOrder[0]).toBeLessThan((h.deps.sendPasskeyUserOp as jest.Mock).mock.invocationCallOrder[0]);
+    const persisted = h.storage.map.get(RECOVERY_STORE_KEY)!;
+    expect(persisted).toBeTruthy();
+    for (const w of PHRASE.split(' ')) expect(persisted).not.toContain(w);
+  });
+
+  it('a cancelled passkey sheet returns idle and sends nothing', async () => {
+    const h = wordsDeps({ createPasskey: jest.fn(async () => Promise.reject(new PasskeyCancelledError())) });
+    const s = await start(h);
+    expect(s.step).toBe('idle');
+    expect(h.sent).toHaveLength(0);
+    expect(h.saveVaultKey).not.toHaveBeenCalled();
+    expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+  });
+
+  it('a typo is caught before any passkey is created', async () => {
+    const h = wordsDeps();
+    const s = await start(h, PHRASE.replace('junk', 'test'));
+    expect(s.step).toBe('idle');
+    expect(s.message).toMatch(/passen nicht zusammen/);
+    expect(h.deps.createPasskey).not.toHaveBeenCalled();
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it('words removed from the account (or too few for the threshold): says so and creates nothing', async () => {
+    for (const guardians of [[OTHER], [OTHER, POOL[0]]]) {
+      const h = wordsDeps({ readGuardians: jest.fn(async () => guardians) });
+      const s = await start(h);
+      expect(s.step).toBe('idle');
+      expect(s.message).toBe(NO_WORDS_ACCOUNT_MESSAGE);
+      expect(h.deps.createPasskey).not.toHaveBeenCalled();
+      expect(h.saveVaultKey).not.toHaveBeenCalled();
+      expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+    }
+  });
+
+  it('owner cancels → cancelled; a new attempt signs the moved nonce (old approvals are dead)', async () => {
+    const h = wordsDeps();
+    const first = await start(h);
+    const firstSigs = (srmFn(h.sent[0].calls[1].data).args[3] as { signer: Address; signature: Hex }[]).map((g) => g.signature);
+    // The owner cancels: the request disappears, owners unchanged, the module nonce moved.
+    h.setRequest(noRequest);
+    h.setNonce(1n);
+    expect((await pollRecovery(first, h.deps)).step).toBe('cancelled');
+
+    const again = await start(h);
+    expect(again.step).toBe('waitingDelay');
+    const sigs = srmFn(h.sent[1].calls[1].data).args[3] as { signer: Address; signature: Hex }[];
+    for (const g of sigs) {
+      expect(firstSigs).not.toContain(g.signature);
+      const signer = await recoverTypedDataAddress({ ...recoveryApprovalTypedData(WALLET, [SIGNER], 1, 1n), signature: g.signature });
+      expect(signer).toBe(g.signer);
+    }
+  });
+
+  it('a failed op keeps the passkey; after resume the words are asked again and the same passkey is reused', async () => {
+    const h = wordsDeps();
+    h.deps.sendPasskeyUserOp = jest.fn(async () => Promise.reject(new Error('bundler down')));
+    const s = await start(h);
+    expect(s.step).toBe('error');
+    const persisted = (await loadRecoveryState(h.storage))!;
+    const r = await resumeRecovery(persisted, h.deps);
+    expect(r.step).toBe('idle');
+    expect(r.method).toBe('words');
+    h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
+      h.sent.push(a);
+      h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: DELAY, newOwners: [SIGNER] });
+      return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
+    });
+    const ok = await start(h);
+    expect(ok.step).toBe('waitingDelay');
+    expect(h.deps.createPasskey).toHaveBeenCalledTimes(1);
+    expect(ok.credentialId).toBe('cred-1');
   });
 });

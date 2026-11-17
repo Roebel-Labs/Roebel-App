@@ -12,7 +12,7 @@ import * as SecureStore from '@/lib/storage/secureStorage';
 import { deriveMaciKeypairFromSeed } from '@/lib/maci';
 import { deriveNostrIdentity } from '@netizen-labs/nostr';
 import { loadCitizenPreimage, passkeySaltKey, saltFromSignature } from '@/lib/citizen-commitment';
-import { loadStoredIdentity } from '@/lib/nostr/identity';
+import { loadStoredIdentity, storeIdentitySecret } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
 import { passkeyApiSession } from './api-session-runtime';
 import { PASSKEY_API_URL } from './constants';
@@ -34,7 +34,10 @@ import { identityKind, type PasskeySession } from './session';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
 import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
-import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
+import { loadVaultKey, resolveVaultKey, type VaultKeyStorage } from './words-vault';
+import type { RecoveryState } from './recovery-flow';
+import { resolveIdentity } from './signin';
+import { restoreKeysWithVaultKey, type WordsKeyRestore } from './words-recovery';
 import { loadWordsPool, saveWordsPool } from './words-guardians';
 import { loadWordsPending } from './words-setup';
 import { secureKeyValueStorage } from './migration-runtime';
@@ -219,3 +222,49 @@ export function signHashAsSafe(session: PasskeySession, hash: Hex): Promise<Hex>
 }
 
 export const isPasskeySafeDeployed = (safe: Address) => isSafeDeployed(safe);
+
+// ---------------------------------------------------------------------------
+// Recovery words: the keys after a words recovery (restore.tsx, once the recovery is `done`)
+// ---------------------------------------------------------------------------
+
+export const WORDS_RESTORE_NO_VAULT_KEY_MESSAGE =
+  'Der Schlüssel zu deinen Wörtern ist auf diesem Handy nicht mehr da. Dein Konto ist trotzdem wieder da.';
+
+/**
+ * Brings the MACI / Nostr / salt keys back from their words copies and backs them up under the
+ * new passkey (words-recovery.ts `restoreKeysWithVaultKey`: the backup read + one write, 2
+ * fingerprints), and saves the words pool so this phone knows which guardians are the words.
+ * The session is the one sign-in will open for the recovered Safe (same identity rule).
+ * Throws (German) when the vault key is gone or the backup read fails.
+ */
+export async function restoreKeysAfterWordsRecovery(state: RecoveryState): Promise<WordsKeyRestore> {
+  if (!state.credentialId || !state.x || !state.y || !state.signer) throw new Error('recovery state has no passkey');
+  const vaultKey = await loadVaultKey(wordsVaultKeyStorage);
+  if (!vaultKey) throw new Error(WORDS_RESTORE_NO_VAULT_KEY_MESSAGE);
+  // Lazily: sign-in wiring is not needed by any other key path.
+  const { identityChain } = await import('./signin-runtime');
+  const { identity } = await resolveIdentity(state.wallet, identityChain);
+  const session: PasskeySession = {
+    credentialId: state.credentialId,
+    x: state.x,
+    y: state.y,
+    safe: state.wallet,
+    identity,
+    ownerType: 'webauthnSigner',
+    owner: state.signer,
+  };
+  if (state.wordsPool) await saveWordsPool(secureKeyValueStorage, { addresses: state.wordsPool, confirmedAt: Date.now() }).catch(() => undefined);
+  return restoreKeysWithVaultKey({
+    vaultKey,
+    remote: keyBackupFor(session),
+    getPrf: () => getPrfSecret(session.credentialId),
+    wrap: wrapSecret,
+    unwrap: unwrapSecret,
+    pool: state.wordsPool,
+    saveLocal: async (slot, secret) => {
+      if (slot === 'maci') await SecureStore.setItemAsync(MACI_KEYPAIR_STORE_KEY, dec.decode(secret));
+      else if (slot === 'nostr') await storeIdentitySecret(secret);
+      else await SecureStore.setItemAsync(passkeySaltKey(identity), dec.decode(secret));
+    },
+  });
+}

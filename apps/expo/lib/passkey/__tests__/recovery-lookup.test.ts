@@ -58,6 +58,7 @@ function fakeChain(p: {
     ownerLogsFor: jest.fn(async () => []),
     readOwners: jest.fn(async () => []),
     isPasskeySafe: jest.fn(async () => false),
+    guardianLogsFor: jest.fn(async () => []),
   };
 }
 
