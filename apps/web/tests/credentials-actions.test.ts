@@ -123,7 +123,7 @@ test("type_prepare writes a draft row and a createType step with the node metada
   assert.equal(row.name, "Vorstand");
   assert.equal(row.kind, "role");
   assert.ok(row.localUuid);
-  const action = await w.store.getAction(r.actionId);
+  const action = await w.store.getAction(r.actionId!);
   assert.ok(action);
   assert.equal(action.status, "awaiting_confirmation");
   assert.equal(action.steps.length, 1);
@@ -140,7 +140,7 @@ test("type_prepare writes a draft row and a createType step with the node metada
 test("the first membership type of a fraktion gets a leading setOrgPrivateOnly(true) step and keeps publicClaim true", async () => {
   const w = world();
   const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: FRAKTION, op: "create", template: "mitglied" }));
-  const action = (await w.store.getAction(r.actionId))!;
+  const action = (await w.store.getAction(r.actionId!))!;
   assert.deepEqual(action.steps.map((s) => s.fn), ["setOrgPrivateOnly", "createType"]);
   assert.deepEqual(action.steps[0], { fn: "setOrgPrivateOnly", orgId: orgIdFromUuid(FRAKTION), privateOnly: true });
   const create = action.steps[1];
@@ -149,10 +149,10 @@ test("the first membership type of a fraktion gets a leading setOrgPrivateOnly(t
   // Once the chain flag is set, no leading step.
   const w2 = world({ privateOnly: [FRAKTION] });
   const r2 = must(await prepareTypeAction(w2.d, caller(OWNER, "type_prepare"), { accountId: FRAKTION, op: "create", template: "mitglied" }));
-  assert.deepEqual((await w2.store.getAction(r2.actionId))!.steps.map((s) => s.fn), ["createType"]);
+  assert.deepEqual((await w2.store.getAction(r2.actionId!))!.steps.map((s) => s.fn), ["createType"]);
   // A role type never needs it.
   const r3 = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: FRAKTION, op: "create", template: "vorstand" }));
-  assert.deepEqual((await w.store.getAction(r3.actionId))!.steps.map((s) => s.fn), ["createType"]);
+  assert.deepEqual((await w.store.getAction(r3.actionId!))!.steps.map((s) => s.fn), ["createType"]);
 });
 
 test("members_public_prepare opens and closes with one setOrgPrivateOnly step; a member role is FORBIDDEN", async () => {
@@ -200,7 +200,7 @@ test("orgs_list returns only owner/admin orgs with their chain readiness", async
 test("a membership type for a verein keeps the requested publicClaim", async () => {
   const w = world();
   const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "create", template: "mitglied", publicClaim: false }));
-  const action = (await w.store.getAction(r.actionId))!;
+  const action = (await w.store.getAction(r.actionId!))!;
   assert.deepEqual(action.steps.map((s) => s.fn), ["createType"]);
   const step = action.steps[0];
   assert.ok(step.fn === "createType" && step.config.publicClaim === false);
@@ -402,7 +402,7 @@ test("the push for an org whose members are not public names neither org nor typ
   const text = JSON.stringify(w.pushes[0]);
   assert.ok(!text.includes("Fraktion") && !text.includes("Mitglied"));
   // The in-app view keeps the full summary.
-  assert.match(String((await w.store.getAction(r.actionId))!.summary.title), /Mitglied/);
+  assert.match(String((await w.store.getAction(r.actionId!))!.summary.title), /Mitglied/);
   // An open org's push keeps the title.
   must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "create", template: "mitglied" }));
   assert.match(w.pushes[1].title, /Mitglied/);
