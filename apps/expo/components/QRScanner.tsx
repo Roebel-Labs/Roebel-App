@@ -10,7 +10,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import ErrorDrawer from './ErrorDrawer';
-import { parseAusweisPayload } from '@/lib/credreg/present';
+import { parseAusweisPayload } from '@/lib/credreg/show-code';
 
 // Module-level constant so CameraView doesn't see a new object on every
 // render — a fresh prop identity can stall barcode detection on some devices.

@@ -16,7 +16,7 @@ import RecognisedSeal from '@/components/profile/RecognisedSeal';
 import LoginDrawer from '@/components/LoginDrawer';
 import { CredentialScreenFrame, CredentialStatus, frameStyles } from '@/components/credentials/CredentialScreenFrame';
 import { resolvePresentation } from '@/lib/credreg/api';
-import { REGISTRY, fetchTypeMetadata, registryReader } from '@/lib/credreg/chain';
+import { REGISTRY, fetchTypeMetadata, readHolding, registryReader, verifyAccountMessage } from '@/lib/credreg/chain';
 import { useCredentialsGate } from '@/lib/credreg/gate';
 import { verifyPresentation, type CheckResult } from '@/lib/credreg/verify';
 
@@ -40,10 +40,14 @@ async function runCheck(account: NonNullable<ReturnType<typeof useActiveAccount>
       recoverClaimSigner,
       metadata: fetchTypeMetadata,
       registry: REGISTRY,
+      verifySignature: verifyAccountMessage,
+      holding: readHolding,
+      nowSec: () => Math.floor(Date.now() / 1000),
     });
     return { code, status: 'done', result };
   } catch {
-    // A chain read failed: the code is used up, but "Nicht gültig" would be wrong.
+    // A chain read, the signature check or the metadata failed: the code is used up, but
+    // "Nicht gültig" would be wrong.
     return { code, status: 'error', message: NO_CHECK };
   }
 }
@@ -178,6 +182,7 @@ export default function CheckCredentialScreen() {
             Dieser Code gehört nicht zu einem gültigen Ausweis dieses Kontos, oder er ist älter als fünf Minuten.
           </Text>
         ) : null}
+        <Text style={[styles.note, { color: colors.textSecondary }]}>Die Prüfung bestätigt den Ausweis, nicht die Person.</Text>
         <Pressable
           onPress={scanAgain}
           style={[frameStyles.primary, { backgroundColor: colors.primary }]}

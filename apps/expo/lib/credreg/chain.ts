@@ -3,9 +3,10 @@
  * own constants, never from a server response. Encodings live in @netizen-labs/credential-registry.
  */
 import { CREDENTIAL_REGISTRY_ABI, createCredentialRegistryReader, type CredentialRegistryReader } from '@netizen-labs/credential-registry';
-import { createPublicClient, http, type Address, type Hex, type PublicClient } from 'viem';
+import { createPublicClient, hashMessage, hashTypedData, http, recoverTypedDataAddress, type Address, type Hex, type PublicClient } from 'viem';
 import { gnosis } from 'viem/chains';
 import { credentialRegistryGnosisAddress } from '@/constants/gnosis';
+import { makeAccountSignatureVerifier, type AccountSignatureClient, type VerifyAccountSignature } from './account-signature-core';
 
 const RPC = process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 
@@ -29,17 +30,35 @@ export function registryReader(): CredentialRegistryReader {
 }
 
 /**
- * The account's on-chain holding of a type (`holdingOf`): which batch and leaf it came from.
- * batchId 0 and a zero leaf = nothing held (or self-claimed). Throws on RPC failure.
+ * The account's on-chain holding of a type (`holdingOf`): which batch and leaf it came from, and
+ * its validUntil (0 = no expiry). batchId 0 and a zero leaf = nothing held (or self-claimed).
+ * Throws on RPC failure.
  */
-export async function readHolding(typeId: Hex, account: Address): Promise<{ batchId: bigint; leaf: Hex }> {
+export async function readHolding(typeId: Hex, account: Address): Promise<{ batchId: bigint; leaf: Hex; validUntil: bigint }> {
   const h = (await publicClient().readContract({
     address: REGISTRY,
     abi: CREDENTIAL_REGISTRY_ABI,
     functionName: 'holdingOf',
     args: [typeId, account],
-  })) as { batchId: bigint; leaf: Hex };
-  return { batchId: BigInt(h.batchId), leaf: h.leaf };
+  })) as { batchId: bigint; leaf: Hex; validUntil: bigint };
+  return { batchId: BigInt(h.batchId), leaf: h.leaf, validUntil: BigInt(h.validUntil ?? 0) };
+}
+
+let signatureVerifier: VerifyAccountSignature | null = null;
+
+/**
+ * "Did this account sign this message?" on Gnosis, with the server's one rule
+ * (./account-signature-core: EOA, ERC-1271, ERC-6492, passkey-Safe envelope, thirdweb domain).
+ * Throws on RPC failure.
+ */
+export function verifyAccountMessage(address: string, message: string, signature: string): Promise<boolean> {
+  signatureVerifier =
+    signatureVerifier ??
+    makeAccountSignatureVerifier({
+      client: publicClient() as unknown as AccountSignatureClient,
+      utils: { hashMessage, hashTypedData: hashTypedData as never, recoverTypedDataAddress: recoverTypedDataAddress as never },
+    });
+  return signatureVerifier({ address, message, signature });
 }
 
 export type TypeMetadata = {

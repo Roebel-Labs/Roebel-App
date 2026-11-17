@@ -17,6 +17,9 @@ import type { Hex } from 'viem';
 import { parseQRCode } from '@/components/QRScanner';
 import type { HeldCredential } from '../held';
 import type { InvitationView } from '../types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { CODE_ALPHABET, PRESENTATION_CODE_LENGTH } from '../show-code';
 import { buildPresentation, newNonce, PresentationError, qrPayload, showCredential, showMessage, SHOW_SCOPE } from '../present';
 
 const ADDR = '0x' + 'AB'.repeat(20);
@@ -101,5 +104,33 @@ describe('present', () => {
     expect(parseQRCode('roebel-ausweis:abcdefghjkmn')).toMatchObject({ type: 'credential', id: 'ABCDEFGHJKMN' });
     expect(parseQRCode('roebel-ausweis:SHORT').type).toBe('unknown');
     expect(parseQRCode('roebel-ausweis:ABCDEFGHJKM1').type).toBe('unknown'); // 1 is not in the code alphabet
+  });
+
+  it('the code alphabet and length match the server', () => {
+    const web = join(__dirname, '../../../../web/src/lib');
+    const pairing = readFileSync(join(web, 'chat/pairing.ts'), 'utf8');
+    expect(pairing).toContain(`export const CODE_ALPHABET = "${CODE_ALPHABET}";`);
+    const presentations = readFileSync(join(web, 'credentials/presentations.ts'), 'utf8');
+    expect(presentations).toContain(`export const PRESENTATION_CODE_LENGTH = ${PRESENTATION_CODE_LENGTH};`);
+    expect(presentations).toContain('export const SHOW_SCOPE = "roebel-credential-show-v1";');
+    expect(presentations).toContain('export const SHOW_TTL_SECONDS = 300;');
+  });
+
+  it('the account-signature rule is a byte-identical copy of the server\'s', () => {
+    const web = readFileSync(join(__dirname, '../../../../web/src/lib/auth/account-signature-core.ts'), 'utf8');
+    const app = readFileSync(join(__dirname, '../account-signature-core.ts'), 'utf8');
+    expect(app).toBe(web);
+  });
+
+  it('showCredential: STALE asks to check the clock; the countdown ends at the server expiresAt when earlier', async () => {
+    const acc = account();
+    const fetchMine = jest.fn();
+    const stale = jest.fn(async () => ({ ok: false as const, code: 'STALE', message: 'Bitte zeige den Ausweis noch einmal neu vor.' }));
+    expect(await showCredential(acc as any, held(), { fetchMine, create: stale, nowSec: () => 1000 })).toEqual({
+      ok: false,
+      message: 'Bitte prüfe die Uhrzeit deines Telefons.',
+    });
+    const early = jest.fn(async () => ({ ok: true as const, data: { code: 'ABCDEFGHJKMN', expiresAt: new Date(1200 * 1000).toISOString() } }));
+    expect(await showCredential(acc as any, held(), { fetchMine, create: early, nowSec: () => 1000 })).toMatchObject({ ok: true, expiresAtSec: 1200 });
   });
 });

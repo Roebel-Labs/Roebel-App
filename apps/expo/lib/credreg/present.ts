@@ -14,29 +14,9 @@ import { signQueued, type ApiResult, type SigningAccount } from '@/lib/signed-re
 import { createPresentation, fetchMine } from './api';
 import type { HeldCredential } from './held';
 import type { InvitationView, Presentation, PresentationCreated } from './types';
-import { SHOW_TTL_SECONDS } from './verify';
+import { SHOW_TTL_SECONDS, showMessage } from './show-code';
 
-export { SHOW_TTL_SECONDS };
-export const SHOW_SCOPE = 'roebel-credential-show-v1';
-export const QR_PREFIX = 'roebel-ausweis:';
-/** Same alphabet and length as the server's presentation codes (no 0/O, 1/I/L). */
-const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const CODE_LENGTH = 12;
-
-export function showMessage(p: { typeId: Hex | string; account: string; issuedAtSec: number; nonce: string }): string {
-  return `${SHOW_SCOPE}:${p.typeId}:${p.account.toLowerCase()}:${p.issuedAtSec}:${p.nonce}`;
-}
-
-export const qrPayload = (code: string): string => `${QR_PREFIX}${code}`;
-
-/** The code inside a scanned `roebel-ausweis:<code>`, normalised; null for anything else. */
-export function parseAusweisPayload(data: string): string | null {
-  if (typeof data !== 'string' || !data.startsWith(QR_PREFIX)) return null;
-  const code = data.slice(QR_PREFIX.length).trim().toUpperCase();
-  if (code.length !== CODE_LENGTH) return null;
-  for (const ch of code) if (!CODE_ALPHABET.includes(ch)) return null;
-  return code;
-}
+export { parseAusweisPayload, qrPayload, QR_PREFIX, SHOW_SCOPE, SHOW_TTL_SECONDS, showMessage } from './show-code';
 
 /** 16 random bytes as hex (matches the server's nonce pattern). */
 export function newNonce(): string {
@@ -59,6 +39,7 @@ const NEEDS_PROOF = 'Für einen privaten Ausweis braucht die App eine Verbindung
 const EXPIRED = 'Dieser Ausweis ist abgelaufen.';
 const FAILED = 'Das hat nicht geklappt. Bitte versuche es noch einmal.';
 const NO_NETWORK = 'Keine Verbindung. Bitte versuche es noch einmal.';
+const STALE = 'Bitte prüfe die Uhrzeit deines Telefons.';
 
 type PresentAccount = Pick<SigningAccount, 'address' | 'signMessage'>;
 
@@ -110,7 +91,9 @@ async function withProof(account: SigningAccount, held: HeldCredential, d: ShowD
 const apiMessage = (res: { code: string; message: string }) =>
   res.code === 'NETWORK_ERROR'
     ? NO_NETWORK
-    : typeof res.message === 'string' && res.message.length > 0 && !/0x[0-9a-fA-F]{6,}/.test(res.message)
+    : res.code === 'STALE'
+      ? STALE
+      : typeof res.message === 'string' && res.message.length > 0 && !/0x[0-9a-fA-F]{6,}/.test(res.message)
       ? res.message
       : FAILED;
 
@@ -127,7 +110,11 @@ export async function showCredential(account: SigningAccount, held: HeldCredenti
     const presentation = await buildPresentation(account, h, nowSec, newNonce());
     const res = await deps.create(account, presentation);
     if (!res.ok) return { ok: false, message: apiMessage(res) };
-    return { ok: true, code: res.data.code, issuedAtSec: nowSec, expiresAtSec: nowSec + SHOW_TTL_SECONDS };
+    // The code lives until the server's expiresAt; never count down past issuedAt + 300 either.
+    const serverMs = Date.parse(res.data.expiresAt);
+    const local = nowSec + SHOW_TTL_SECONDS;
+    const expiresAtSec = Number.isFinite(serverMs) ? Math.min(local, Math.floor(serverMs / 1000)) : local;
+    return { ok: true, code: res.data.code, issuedAtSec: nowSec, expiresAtSec };
   } catch (err) {
     if (err instanceof PresentationError) return { ok: false, message: err.message };
     return { ok: false, message: FAILED };
