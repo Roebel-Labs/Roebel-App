@@ -8,7 +8,7 @@
  * tap only — let the app drop them if they are no longer readable (`discardIfUnreadable`).
  */
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Text } from 'react-native';
+import { Alert, ScrollView, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSetActiveWallet } from 'thirdweb/react';
@@ -53,10 +53,12 @@ export default function WordsSignInScreen() {
     if (r.status === 'signedIn') {
       const rt = await import('@/lib/passkey/signin-runtime');
       // Leave first: the welcome screen below would otherwise also react to the new login.
-      // The session is stored already, so a failed activation is restored on the next start.
+      // The session is stored already: a failed activation is restored on the next start (and said so).
       if (router.canDismiss()) router.dismissAll();
       router.replace('/' as any);
-      await rt.activatePasskeySession(r.session, setActiveWallet).catch(() => undefined);
+      await rt
+        .activatePasskeySession(r.session, setActiveWallet)
+        .catch(() => Alert.alert('Anmeldung nicht abgeschlossen', 'Dein Konto ist gespeichert. Starte die App neu, dann bist du angemeldet.'));
       return;
     }
     if (r.status === 'cancelled') return; // the typed words stay in the field

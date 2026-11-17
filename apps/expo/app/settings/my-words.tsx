@@ -1,6 +1,7 @@
 /**
- * Settings → Konto & Wiederherstellung → "Meine 12 Wörter" (only for a 12-word session, gated by
- * the 'words' surface).
+ * Settings → Konto & Wiederherstellung → "Meine 12 Wörter" (only for a 12-word session; gated by
+ * the 'words' surface with the existing-account scope: once this device holds the account, only
+ * the channel decides, so a flag flip never strands it).
  *
  *   - "Meine 12 Wörter anzeigen": one device unlock, then the words. They live only in this
  *     screen's state: cleared when the app goes to the background and on unmount; while
@@ -57,7 +58,8 @@ export default function MyWordsScreen() {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
-  const allowed = usePasskeyGate('words');
+  // Existing-account scope: a flag flip never strands a words account (E2 re-entry, way-back target).
+  const allowed = usePasskeyGate('words', true, 'account');
   const params = useLocalSearchParams<{ reenter?: string }>();
   const session = passkeySessionOf<PasskeySession>(account);
   const words = isWordsOwner(session) && !!session?.owner;
@@ -73,6 +75,8 @@ export default function MyWordsScreen() {
   // The phrase is screen state only; `held` lets the AppState listener see it without re-subscribing.
   const [phrase, setPhrase] = useState<string | null>(null);
   const held = useRef(false);
+  // iOS-only in effect: iOS reports 'inactive' while it takes the app-switcher snapshot; Android
+  // goes straight to 'background' (where the words are dropped anyway). The cover hides them.
   const [covered, setCovered] = useState(false);
 
   const forget = useCallback(() => {

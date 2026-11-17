@@ -12,11 +12,16 @@
  * The words live only in this screen's state: gone on unmount and as soon as the app goes to the
  * background (the screen then says where to find them); while 'inactive' (iOS app switcher
  * snapshot) a blank cover hides them. No copy button, no clipboard.
+ *
+ * Once the account exists (creating / show / confirm / away) EVERY way out — the header back, the
+ * iOS swipe-back and the Android hardware back — goes through `finish()` (usePreventRemove): a
+ * plain pop would leave a stored words session behind a logged-out welcome screen.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useSetActiveWallet } from 'thirdweb/react';
 
 import { useTheme } from '@/context/ThemeContext';
@@ -34,6 +39,9 @@ const INTRO_TEXT =
 const SHOW_TEXT = 'Schreib die Wörter auf Papier, in dieser Reihenfolge.';
 const AWAY_TEXT =
   'Dein Konto ist erstellt und deine 12 Wörter liegen sicher auf diesem Handy. Du findest sie jederzeit unter Einstellungen → Konto & Wiederherstellung → Meine 12 Wörter.';
+/** Shown when the session could not be switched on after leaving (it is stored: a restart opens it). */
+const ACTIVATE_FAILED_TITLE = 'Anmeldung nicht abgeschlossen';
+const ACTIVATE_FAILED_TEXT = 'Dein Konto ist gespeichert. Starte die App neu, dann bist du angemeldet.';
 const SAVE_FAILED_HINT = 'Schreib die Wörter trotzdem auf. Danach öffnest du dein Konto über „Gespeichertes Konto auf diesem Gerät öffnen".';
 
 export default function WordsSignUpScreen() {
@@ -51,7 +59,10 @@ export default function WordsSignUpScreen() {
   const [session, setSession] = useState<PasskeySession | null>(null);
   const [positions, setPositions] = useState<[number, number, number]>([0, 1, 2]);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  // iOS takes the app-switcher snapshot while 'inactive': the words are covered then.
+  // Set by finish(): the navigation runs in an effect AFTER the render that lifted the guard.
+  const [leaving, setLeaving] = useState<{ session: PasskeySession | null } | null>(null);
+  // iOS-only in effect: iOS reports 'inactive' while it takes the app-switcher snapshot; Android
+  // goes straight to 'background' (where the words are dropped anyway). The cover hides them.
   const [covered, setCovered] = useState(false);
 
   const forget = useCallback(() => {
@@ -109,26 +120,39 @@ export default function WordsSignUpScreen() {
     }
   };
 
-  const finish = async () => {
+  const finish = () => {
+    if (leaving) return;
     forget();
-    if (!session) {
+    if (session) deferWelcomeWizard(session.identity);
+    setStep('finishing');
+    setLeaving({ session });
+  };
+
+  // The account exists from 'creating' on: no way out but finish(). While creating, the person
+  // waits for the result (the store may be writing).
+  const guarded = step === 'creating' || step === 'show' || step === 'confirm' || step === 'away';
+  usePreventRemove(guarded, () => {
+    if (step !== 'creating') finish();
+  });
+
+  useEffect(() => {
+    if (!leaving) return;
+    const s = leaving.session;
+    if (!s) {
       router.replace('/passkey/words-signin' as any);
       return;
     }
-    setStep('finishing');
-    deferWelcomeWizard(session.identity);
-    try {
-      const rt = await import('@/lib/passkey/signin-runtime');
-      // Leave first: the welcome screen below would otherwise also react to the new login.
-      if (router.canDismiss()) router.dismissAll();
-      router.replace('/' as any);
-      await rt.activatePasskeySession(session, setActiveWallet);
-    } catch {
-      // The session is stored: the next start restores it.
-    }
-  };
+    // Leave first: the welcome screen below would otherwise also react to the new login.
+    if (router.canDismiss()) router.dismissAll();
+    router.replace('/' as any);
+    import('@/lib/passkey/signin-runtime')
+      .then((rt) => rt.activatePasskeySession(s, setActiveWallet))
+      .catch(() => Alert.alert(ACTIVATE_FAILED_TITLE, ACTIVATE_FAILED_TEXT));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaving]);
 
   const confirmed = async () => {
+    if (confirmBusy || leaving) return;
     setConfirmBusy(true);
     try {
       const { phraseStore } = await import('@/lib/passkey/phrase-store-runtime');
@@ -138,7 +162,7 @@ export default function WordsSignUpScreen() {
     } finally {
       setConfirmBusy(false);
     }
-    await finish();
+    finish();
   };
 
   if (!allowed) {

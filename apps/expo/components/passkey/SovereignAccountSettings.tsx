@@ -4,7 +4,7 @@
  * and messages section. No migration steps, no session switch, no detach row.
  *
  * A 12-word session (expert path): the lede reads "Dein Konto mit 12 Wörtern", the row "Meine 12
- * Wörter" opens settings/my-words (while the 'words' surface is open), and plan 2's recovery-words
+ * Wörter" opens settings/my-words (existing-account scope of the 'words' surface), and plan 2's recovery-words
  * entry is hidden — the 12 words ARE the key here, there are no separate recovery words.
  */
 import React, { useEffect, useState } from 'react';
@@ -17,7 +17,7 @@ import { fontFamily } from '@/constants/theme';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import type { MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
-import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { isRecoverySurfaceAllowed } from '@/lib/passkey/existing-account';
 import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { ensureSovereignRecord } from '@/lib/passkey/sovereign-record';
 import EmailRow from '@/components/passkey/EmailRow';
@@ -41,7 +41,8 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
   useEffect(() => {
     if (!wordsSession) return;
     let cancelled = false;
-    isPasskeySurfaceAllowed('words')
+    // Existing-account scope (as my-words): a flag flip never hides this account's words.
+    isRecoverySurfaceAllowed('words', 'account')
       .catch(() => false)
       .then((ok) => {
         if (!cancelled) setWordsOpen(ok);
