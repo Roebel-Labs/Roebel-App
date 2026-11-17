@@ -16,7 +16,7 @@ Implementation: [`apps/expo/lib/passkey/backup-file.ts`](../apps/expo/lib/passke
 
 ## The file
 
-UTF-8 JSON, one object, exactly these keys:
+UTF-8 JSON, one object, these keys (others are ignored):
 
 ```json
 {

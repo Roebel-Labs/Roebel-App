@@ -14,7 +14,7 @@
  * password is cleared after every attempt; the decrypted words never reach this screen.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSetActiveWallet } from 'thirdweb/react';
@@ -50,6 +50,14 @@ export default function WordsSignInScreen() {
   const [opening, setOpening] = useState(false);
   // State updates are async: a second tap in the same frame must not start a second run.
   const inFlight = useRef(false);
+
+  // The backup password never sits in memory while the app is in the background.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') setPassword('');
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!allowed) return;
@@ -246,7 +254,8 @@ export default function WordsSignInScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
-              textContentType="password"
+              textContentType="none"
+              importantForAutofill="no"
               editable={busy !== 'backup'}
               placeholder="Passwort"
               placeholderTextColor={colors.textTertiary}

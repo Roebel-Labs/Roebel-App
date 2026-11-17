@@ -394,7 +394,8 @@ export default function MyWordsScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
-              textContentType="newPassword"
+              textContentType="none"
+              importantForAutofill="no"
               editable={busy !== 'export'}
               placeholder="Passwort (mindestens 10 Zeichen)"
               placeholderTextColor={colors.textTertiary}
@@ -408,7 +409,8 @@ export default function MyWordsScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
-              textContentType="newPassword"
+              textContentType="none"
+              importantForAutofill="no"
               editable={busy !== 'export'}
               placeholder="Passwort wiederholen"
               placeholderTextColor={colors.textTertiary}
