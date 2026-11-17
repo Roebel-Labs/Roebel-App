@@ -430,3 +430,62 @@ test("revokeLeaves without events: done when the chain shows every leaf revoked,
   w.receipt(txB, "success", []);
   assert.deepEqual(must(await recordSubmitted(w.d, c, { actionId: b.actionId, txHash: txB })), { status: "done" });
 });
+
+async function setType(store: InMemoryCredentialStore, typeId: Hex, patch: Partial<TypeRow>) {
+  await store.updateType(typeId, patch);
+}
+
+test("type update: a text-only edit prepares nothing and changes the card text at once", async () => {
+  const w = world();
+  const typeId = await onchainType(w.store, VEREIN);
+  const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), {
+    accountId: VEREIN, op: "update", typeId, name: "Mitglied 2027", description: "Neu", imageUrl: "https://x/c.png", benefits: ["Rabatt"],
+  }));
+  assert.equal(r.actionId, null);
+  assert.equal(r.typeId, typeId);
+  assert.equal(w.pushes.length, 0);
+  const row = (await w.store.getType(typeId))!;
+  assert.equal(row.name, "Mitglied 2027");
+  assert.deepEqual(row.benefits, ["Rabatt"]);
+  // Repeating the current config is also no change.
+  const same = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "update", typeId, supplyCap: 0, publicClaim: true }));
+  assert.equal(same.actionId, null);
+});
+
+test("type update: a config edit prepares exactly one updateType step", async () => {
+  const w = world();
+  const typeId = await onchainType(w.store, VEREIN);
+  const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "update", typeId, supplyCap: 50 }));
+  assert.ok(r.actionId);
+  const action = (await w.store.getAction(r.actionId!))!;
+  assert.equal(action.steps.length, 1);
+  const step = action.steps[0];
+  assert.ok(step.fn === "updateType" && step.config.supplyCap === 50);
+  assert.deepEqual((action.summary as { lines: string[] }).lines, []);
+});
+
+test("type update: a recognised office cannot be renamed; art and benefits may change", async () => {
+  const w = world();
+  const typeId = await onchainType(w.store, VEREIN);
+  await setType(w.store, typeId, { recognised: true, kind: "role", name: "Bürgermeister" });
+  for (const edit of [{ name: "Bürgermeisterin" }, { description: "Anders" }]) {
+    const r = await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "update", typeId, ...edit });
+    assert.equal(r.ok, false);
+    if (r.ok) return;
+    assert.equal(r.status, 409);
+    assert.equal(r.message, "Anerkannte Ämter lassen sich nur mit neuer Anerkennung umbenennen.");
+  }
+  assert.equal((await w.store.getType(typeId))!.name, "Bürgermeister");
+  const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "update", typeId, imageUrl: "https://x/b.png", benefits: ["Sprechstunde"] }));
+  assert.equal(r.actionId, null);
+  assert.equal((await w.store.getType(typeId))!.imageUrl, "https://x/b.png");
+});
+
+test("type update: a config change on a recognised office warns that the recognition lapses", async () => {
+  const w = world();
+  const typeId = await onchainType(w.store, VEREIN);
+  await setType(w.store, typeId, { recognised: true, kind: "role" });
+  const r = must(await prepareTypeAction(w.d, caller(OWNER, "type_prepare"), { accountId: VEREIN, op: "update", typeId, claimEnd: "2027-01-01T00:00:00Z" }));
+  const action = (await w.store.getAction(r.actionId!))!;
+  assert.ok((action.summary as { lines: string[] }).lines.includes("Die Anerkennung als Amt entfällt und muss neu erteilt werden."));
+});

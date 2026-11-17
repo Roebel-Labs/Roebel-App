@@ -289,7 +289,11 @@ function configOf(t: Pick<TypeRow, "typeId" | "defaultValiditySeconds" | "claimS
   };
 }
 
-export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promise<Result<{ actionId: string; typeId: Hex }>> {
+/**
+ * create → createType step; retire → retireType step; update → an updateType step only when the
+ * on-chain config changes (a text-only edit returns `actionId: null` and prepares nothing).
+ */
+export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promise<Result<{ actionId: string | null; typeId: Hex }>> {
   if (!p || !["create", "update", "retire"].includes(p.op)) return bad("Unbekannte Aktion.");
   const clean = cleanTypeInput(p);
   if (isFail(clean)) return clean;
@@ -367,14 +371,21 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
   }
 
   if (clean.kind !== undefined && clean.kind !== t.kind) return bad("Die Art eines Ausweises lässt sich nicht ändern.");
-  // Card text and art are served by the node: they change now, without a transaction.
+  // A recognised office keeps its name and description: they are what the recognition was given for.
+  if (t.recognised && ((clean.name !== undefined && clean.name !== t.name) || (clean.description !== undefined && clean.description !== t.description))) {
+    return fail(409, "TYPE_RECOGNISED", "Anerkannte Ämter lassen sich nur mit neuer Anerkennung umbenennen.");
+  }
+  // Card text and art are served by the node (the on-chain metadataURI never changes), so they are
+  // written at once, without a transaction, even when a config step is prepared alongside: the
+  // updateType step only carries the config below, and a cancelled or expired step leaves the new
+  // text in place. That is deliberate and kept simple.
   const display: Partial<TypeRow> = {};
   if (clean.name !== undefined) display.name = clean.name;
   if (clean.description !== undefined) display.description = clean.description;
   if (clean.imageUrl !== undefined) display.imageUrl = clean.imageUrl;
   if (clean.benefits !== undefined) display.benefits = clean.benefits;
-  if (Object.keys(display).length > 0) await d.store.updateType(t.typeId, display);
   // The on-chain config lands in the row through the sync (TypeConfigured).
+  const current = configOf(t);
   const config = configOf({
     typeId: t.typeId,
     defaultValiditySeconds: t.defaultValiditySeconds,
@@ -383,14 +394,29 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
     supplyCap: clean.supplyCap ?? t.supplyCap,
     publicClaim: clean.publicClaim ?? t.publicClaim,
   });
+  if (Object.keys(display).length > 0) await d.store.updateType(t.typeId, display);
+  // updateType clears `recognised` on chain, so it is only prepared for a real config change.
+  if (sameConfig(current, config)) return ok({ actionId: null, typeId: t.typeId });
+  const lines = t.recognised ? ["Die Anerkennung als Amt entfällt und muss neu erteilt werden."] : [];
   const { actionId } = await prepareAction(d, {
     org,
     wallet: c.wallet,
     via,
     steps: [{ fn: "updateType", typeId: t.typeId, config }],
-    summary: { title: `Ausweis „${display.name ?? t.name}“ ändern`, lines: [], orgName: org.name },
+    summary: { title: `Ausweis „${display.name ?? t.name}“ ändern`, lines, orgName: org.name },
   });
   return ok({ actionId, typeId: t.typeId });
+}
+
+function sameConfig(a: TypeConfigInput, b: TypeConfigInput): boolean {
+  return (
+    a.metadataURI === b.metadataURI &&
+    a.defaultValidity === b.defaultValidity &&
+    a.claimStart === b.claimStart &&
+    a.claimEnd === b.claimEnd &&
+    a.supplyCap === b.supplyCap &&
+    a.publicClaim === b.publicClaim
+  );
 }
 
 const KIND_LABEL: Record<Kind, string> = { role: "Amt", membership: "Mitgliedschaft", badge: "Abzeichen" };
