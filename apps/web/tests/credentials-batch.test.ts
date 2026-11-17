@@ -133,7 +133,53 @@ test("the same person twice in one list is one leaf", () => {
     rand,
     seal,
   });
-  assert.equal(b.count, 3);
+  // Wallet and email duplicates merge; a name alone never identifies a person.
+  assert.equal(b.count, 4);
+});
+
+test("same name without email twice in one list is refused with row numbers", async () => {
+  const w = world();
+  const r = await prepareBatch(w.d, caller("batch_prepare"), {
+    accountId: VEREIN,
+    typeId: TYPE_ID,
+    recipients: [
+      { kind: "contact", name: "Hans Meier" },
+      { kind: "contact", name: "Erika", email: "erika@example.org" },
+      { kind: "contact", name: "hans  meier" },
+      { kind: "contact", name: "Hans Meier", email: "hans@example.org" },
+    ],
+  });
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.equal(r.code, "REJECTED_ROWS");
+  assert.match(r.message, /Zeile 1: Gleicher Name ohne E-Mail — bitte E-Mail ergänzen/);
+  assert.match(r.message, /Zeile 3: Gleicher Name ohne E-Mail/);
+  assert.doesNotMatch(r.message, /Zeile [24]/);
+});
+
+test("a name-only contact is never 'already invited'; a shorter earlier invitation counts as a renewal", async () => {
+  const w = world();
+  const first = must(
+    await prepareBatch(w.d, caller("batch_prepare"), {
+      accountId: VEREIN,
+      typeId: TYPE_ID,
+      recipients: [{ kind: "contact", name: "Hans Meier" }, { kind: "account", wallet: wallet(5) }],
+      validUntil: "2027-06-30",
+    }),
+  );
+  await w.store.updateBatch(first.batchId, { status: "onchain", chainBatchId: "2" });
+  await w.store.updateInvitations({ batchId: first.batchId }, { status: "invited" });
+  const second = must(
+    await prepareBatch(w.d, caller("batch_prepare"), {
+      accountId: VEREIN,
+      typeId: TYPE_ID,
+      recipients: [{ kind: "contact", name: "Hans Meier" }, { kind: "account", wallet: wallet(5) }],
+      validUntil: "2028-06-30",
+    }),
+  );
+  assert.deepEqual(second.counts, { app: 1, link: 1, skipped: 0 });
+  const action = await w.store.getAction(second.actionId);
+  assert.ok((action?.summary as { lines: string[] }).lines.includes("davon 1 Verlängerungen"));
 });
 
 test("2001 recipients and an empty list are refused", () => {

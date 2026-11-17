@@ -53,7 +53,27 @@ export function normaliseRecipients(raw: unknown): { recipients: RecipientInput[
     if (email && (!EMAIL.test(email) || email.length > 254)) return void rejected.push({ row, reason: "Ungültige E-Mail-Adresse" });
     recipients.push(email ? { kind: "contact", name, email: email.toLowerCase() } : { kind: "contact", name });
   });
-  return { recipients, rejected };
+
+  // Two contacts with the same name and no email cannot be told apart (one would silently get
+  // nothing): refuse every such row and ask for an email.
+  const nameOnly = new Map<string, number[]>();
+  raw.forEach((item, idx) => {
+    const o = typeof item === "object" && item !== null && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
+    if (!o) return;
+    const kind = o.kind ?? (o.wallet !== undefined ? "account" : "contact");
+    const name = str(o.name).replace(/\s+/g, " ").toLowerCase();
+    if (kind !== "contact" || !name || str(o.email)) return;
+    const row = typeof o.row === "number" && Number.isSafeInteger(o.row) ? o.row : idx + 1;
+    nameOnly.set(name, [...(nameOnly.get(name) ?? []), row]);
+  });
+  const clashing = new Set<string>([...nameOnly].filter(([, rows]) => rows.length > 1).map(([n]) => n));
+  if (clashing.size === 0) return { recipients, rejected };
+  for (const [n, rows] of nameOnly) if (clashing.has(n)) for (const row of rows) rejected.push({ row, reason: "Gleicher Name ohne E-Mail — bitte E-Mail ergänzen" });
+  rejected.sort((a, b) => a.row - b.row);
+  return {
+    recipients: recipients.filter((r) => !(r.kind === "contact" && !r.email && clashing.has(r.name.toLowerCase()))),
+    rejected,
+  };
 }
 
 function splitCsvLine(line: string, sep: string): string[] {
@@ -88,7 +108,7 @@ const HEADER_CELL = /^(name|vor-? ?und nachname|vorname|nachname|e-?mail|mail|e-
  * `{ row, name, email? }` per non-empty line, for normaliseRecipients.
  */
 export function parsePeopleCsv(text: string): unknown[] {
-  const lines = (typeof text === "string" ? text.replace(/^﻿/, "") : "").split(/\r?\n/);
+  const lines = (typeof text === "string" ? text.replace(/^\uFEFF/, "") : "").split(/\r?\n/);
   const first = lines.find((l) => l.trim() !== "") ?? "";
   const sep = first.includes(";") ? ";" : ",";
   const out: unknown[] = [];
@@ -101,7 +121,8 @@ export function parsePeopleCsv(text: string): unknown[] {
       if (!cells.some((c) => c.includes("@")) && cells.some((c) => HEADER_CELL.test(c))) return;
     }
     const email = cells.find((c) => c.includes("@")) ?? "";
-    const name = cells.find((c) => c !== "" && !c.includes("@")) ?? "";
+    // "Vorname;Nachname;E-Mail": every non-email cell is part of the name.
+    const name = cells.filter((c) => c !== "" && !c.includes("@")).join(" ");
     out.push(email ? { row: idx + 1, name, email } : { row: idx + 1, name });
   });
   return out;

@@ -50,11 +50,15 @@ function claimKey(rand: (bytes: number) => Uint8Array): Hex {
 
 const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
-/** Who a recipient is, for duplicates: the wallet, else the email, else the name. */
-export function recipientKey(r: RecipientInput): string {
+/**
+ * Who a recipient is, for duplicates: the wallet, else the email. null for a contact without
+ * email: a name alone never identifies a person (two people may share it), so such a contact is
+ * never merged and never counts as "already invited".
+ */
+export function recipientKey(r: RecipientInput): string | null {
   if (r.kind === "account") return `w:${r.wallet.toLowerCase()}`;
   if (r.email) return `e:${r.email.trim().toLowerCase()}`;
-  return `n:${normName(r.name).toLowerCase()}`;
+  return null;
 }
 
 /**
@@ -73,8 +77,10 @@ export function buildBatch(p: {
   const unique: RecipientInput[] = [];
   for (const r of p.recipients) {
     const k = recipientKey(r);
-    if (seen.has(k)) continue;
-    seen.add(k);
+    if (k !== null) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+    }
     unique.push(r);
   }
   if (unique.length === 0) throw new BatchInputError("no recipients");
@@ -182,27 +188,31 @@ function existingKey(i: InvitationRow): string[] {
   if (i.recipientWallet) keys.push(`w:${i.recipientWallet}`);
   if (i.leafKind === "account") keys.push(`w:${i.subject}`);
   if (i.contactEmail) keys.push(`e:${i.contactEmail.toLowerCase()}`);
-  else if (i.leafKind === "claim_key" && i.displayName) keys.push(`n:${normName(i.displayName).toLowerCase()}`);
   return keys;
 }
 
 /**
- * Keys of people who already hold a live invitation for the type that lasts at least until
- * `validUntil` (0 = forever). `prepared` invitations count only while their batch is still
+ * `live`: keys of people who already hold a live invitation for the type that lasts at least
+ * until `validUntil` (0 = forever). `prepared` invitations count only while their batch is still
  * prepared and its action still pending (an expired or failed action frees them).
+ * `renewable`: keys of people whose on-chain invitation ends earlier (a new one renews it).
  */
-async function livePeople(d: Deps, typeId: Hex, validUntil: bigint): Promise<Set<string>> {
+async function livePeople(d: Deps, typeId: Hex, validUntil: bigint): Promise<{ live: Set<string>; renewable: Set<string> }> {
   const invs = await d.store.listInvitations({ typeId, statuses: LIVE_STATUSES });
   const batches = new Map<string, BatchRow | null>();
   const actionLive = new Map<string, boolean>();
   const live = new Set<string>();
+  const renewable = new Set<string>();
   for (const i of invs) {
     const v = BigInt(i.validUntil);
     const lastsLongEnough = v === 0n || (validUntil !== 0n && v >= validUntil);
-    if (!lastsLongEnough) continue;
     if (!batches.has(i.batchId)) batches.set(i.batchId, await d.store.getBatch(i.batchId));
     const b = batches.get(i.batchId);
     if (!b || b.status === "cancelled" || b.status === "revoked") continue;
+    if (!lastsLongEnough) {
+      if (i.status !== "prepared" && b.status === "onchain") for (const k of existingKey(i)) renewable.add(k);
+      continue;
+    }
     if (i.status === "prepared") {
       if (b.status !== "prepared" || !b.actionId) continue;
       if (!actionLive.has(b.actionId)) {
@@ -215,7 +225,7 @@ async function livePeople(d: Deps, typeId: Hex, validUntil: bigint): Promise<Set
     }
     for (const k of existingKey(i)) live.add(k);
   }
-  return live;
+  return { live, renewable };
 }
 
 // ── prepare a batch ───────────────────────────────────────────────────────────
@@ -269,13 +279,19 @@ export async function prepareBatch(
     for (const o of await d.store.ownersOf(org.accountId)) all.push({ kind: "account", wallet: o.wallet });
   }
   // Duplicates within the call collapse here too (buildBatch does it again), so `skipped` counts people.
+  // Name-only contacts get a key of their own: never merged, never "already invited".
   const unique = new Map<string, RecipientInput>();
-  for (const r of all) if (!unique.has(recipientKey(r))) unique.set(recipientKey(r), r);
+  all.forEach((r, idx) => {
+    const k = recipientKey(r) ?? `row:${idx}`;
+    if (!unique.has(k)) unique.set(k, r);
+  });
   if (unique.size === 0) return bad("Die Liste ist leer.");
   if (unique.size > MAX_BATCH_RECIPIENTS) return bad(`Höchstens ${MAX_BATCH_RECIPIENTS} Personen auf einmal.`);
 
-  const live = await livePeople(d, typeIdLc, validUntil);
-  const included = [...unique.entries()].filter(([k]) => !live.has(k)).map(([, r]) => r);
+  const { live, renewable } = await livePeople(d, typeIdLc, validUntil);
+  const includedKeys = [...unique.keys()].filter((k) => !live.has(k));
+  const included = includedKeys.map((k) => unique.get(k)!);
+  const renewals = includedKeys.filter((k) => renewable.has(k)).length;
   const skipped = unique.size - included.length;
   if (included.length === 0) {
     return fail(409, "NOTHING_TO_ISSUE", "Alle ausgewählten Personen haben schon eine gültige Einladung für diesen Ausweis.");
@@ -310,6 +326,7 @@ export async function prepareBatch(
     validUntil === 0n ? "Unbefristet gültig" : `Gültig bis ${formatDay(validUntil)}`,
     `${counts.app} in der App, ${counts.link} per Link`,
   ];
+  if (renewals > 0) lines.push(`davon ${renewals} Verlängerungen`);
   if (skipped > 0) lines.push(`${skipped} übersprungen (haben schon eine gültige Einladung)`);
   if (steps.length > 1) lines.push("Mitglieder dieser Organisation sind nur privat sichtbar.");
 

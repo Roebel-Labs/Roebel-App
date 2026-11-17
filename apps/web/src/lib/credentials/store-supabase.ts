@@ -238,16 +238,22 @@ export class SupabaseCredentialStore implements CredentialStore {
   // ── users ───────────────────────────────────────────────────────────────────
   // Same query as the member invite screen (lib/supabase-member-management.ts searchUsersForInvite),
   // with the service role and the LIKE wildcards in the query escaped.
+  // Matches the shown name: display_name or username (two queries, so the query text never enters
+  // a PostgREST or-filter), merged by wallet, at most `limit`.
   async searchUsers(query: string, limit: number) {
     const escaped = query.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-    const r = await this.db
-      .from("users")
-      .select("wallet_address, display_name, username, profile_picture_url")
-      .not("username", "is", null)
-      .ilike("username", `%${escaped}%`)
-      .limit(limit);
-    check("searchUsers", r);
-    return ((r.data ?? []) as Row[]).map(toUser);
+    const byWallet = new Map<string, UserRow>();
+    for (const column of ["display_name", "username"] as const) {
+      const r = await this.db
+        .from("users")
+        .select("wallet_address, display_name, username, profile_picture_url")
+        .not(column, "is", null)
+        .ilike(column, `%${escaped}%`)
+        .limit(limit);
+      check("searchUsers", r);
+      for (const u of ((r.data ?? []) as Row[]).map(toUser)) if (u.displayName && !byWallet.has(u.wallet)) byWallet.set(u.wallet, u);
+    }
+    return [...byWallet.values()].slice(0, limit);
   }
   async usersByWallets(wallets: readonly string[]) {
     const out: UserRow[] = [];

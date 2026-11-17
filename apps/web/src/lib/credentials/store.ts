@@ -136,7 +136,14 @@ export type NewInvitation = Omit<InvitationRow, "createdAt" | "status" | "claime
 export type NewBatch = Omit<BatchRow, "createdAt" | "chainBatchId" | "status"> & Partial<Pick<BatchRow, "status">>;
 
 /** An app user (public.users) as the people search shows it. */
-export type UserRow = { wallet: string; displayName: string; avatarUrl: string | null };
+export type UserRow = {
+  wallet: string;
+  /** display_name, else username. */
+  displayName: string;
+  avatarUrl: string | null;
+  /** In-memory store only: the username, when it differs from the display name. */
+  username?: string | null;
+};
 
 export type DelegateRow = { typeId: Hex; delegate: string; label: string | null; active: boolean };
 export type PresentationRow = { codeHash: string; payload: Record<string, unknown>; expiresAt: string };
@@ -167,7 +174,7 @@ export interface CredentialStore {
   setMembersPublic(accountId: string, value: boolean | null): Promise<void>;
 
   // users (read): the member invite screen's name search, and names for account recipients
-  /** Users whose display name contains `query` (case-insensitive), at most `limit`. */
+  /** Users whose shown name (display_name, else username) contains `query`, case-insensitive; at most `limit`. */
   searchUsers(query: string, limit: number): Promise<UserRow[]>;
   usersByWallets(wallets: readonly string[]): Promise<UserRow[]>;
 
@@ -299,11 +306,15 @@ export class InMemoryCredentialStore implements CredentialStore {
   // ── users ───────────────────────────────────────────────────────────────────
   async searchUsers(query: string, limit: number) {
     const q = query.toLowerCase();
-    return this.users.filter((u) => u.displayName.toLowerCase().includes(q)).slice(0, limit).map((u) => ({ ...u }));
+    // Same fields as the Supabase store: display name or username.
+    return this.users
+      .filter((u) => u.displayName.toLowerCase().includes(q) || (u.username ?? "").toLowerCase().includes(q))
+      .slice(0, limit)
+      .map(({ wallet, displayName, avatarUrl }) => ({ wallet, displayName, avatarUrl }));
   }
   async usersByWallets(wallets: readonly string[]) {
     const set = new Set(wallets.map((w) => w.toLowerCase()));
-    return this.users.filter((u) => set.has(u.wallet)).map((u) => ({ ...u }));
+    return this.users.filter((u) => set.has(u.wallet)).map(({ wallet, displayName, avatarUrl }) => ({ wallet, displayName, avatarUrl }));
   }
 
   // ── types ───────────────────────────────────────────────────────────────────
