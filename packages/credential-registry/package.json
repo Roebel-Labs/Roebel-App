@@ -1,0 +1,27 @@
+{
+  "name": "@netizen-labs/credential-registry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Credential register encodings: type ids, leaf hash, Merkle tree and claim-key signature, mirrored byte for byte by CredentialRegistry.sol.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "vector": "tsx scripts/make-vector.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@netizen-labs/protocol": "workspace:*",
+    "viem": "^2.47.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
