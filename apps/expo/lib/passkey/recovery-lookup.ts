@@ -22,7 +22,14 @@
  * Every chain access goes through `LookupChain`; `createLookupChain` wires a viem client.
  */
 import { getAddress, isAddressEqual, parseAbiItem, type Address, type Hex } from 'viem';
-import { CITIZEN_NFT_V2 } from './constants';
+import {
+  CITIZEN_NFT_V2,
+  SAFE_4337_MODULE,
+  SAFE_FALLBACK_HANDLER_SLOT,
+  SAFE_L2_SINGLETON,
+  SAFE_PROXY_RUNTIME_CODE,
+  SOCIAL_RECOVERY_MODULE,
+} from './constants';
 import { legacyAccountReadAbi } from './legacy-handover';
 import {
   CITIZEN_NFT_V2_FROM_BLOCK,
@@ -46,12 +53,24 @@ export type LookupChain = {
   hasCode: (a: Address) => Promise<boolean>;
   /**
    * Safe `AddedOwner(owner)` events naming `owner`, from any emitter: scanned backward from the
-   * tip to PASSKEY_EPOCH_BLOCK, stopping at the first window batch with a hit.
+   * tip to PASSKEY_EPOCH_BLOCK, stopping after the first window batch for which `stop(logsSoFar)`
+   * holds (default: any hit).
    */
-  ownerLogsFor: (owner: Address) => Promise<Array<{ emitter: Address; blockNumber: bigint }>>;
+  ownerLogsFor: (
+    owner: Address,
+    stop?: (logsSoFar: OwnerLog[]) => boolean | Promise<boolean>,
+  ) => Promise<OwnerLog[]>;
   /** Safe.getOwners() right now. */
   readOwners: (safe: Address) => Promise<Address[]>;
+  /**
+   * `a` has the shape of an app passkey Safe: canonical SafeProxy 1.4.1 runtime, singleton =
+   * SafeL2 1.4.1, fallback handler = Safe4337Module, modules exactly {Safe4337Module,
+   * SocialRecoveryModule}. A transport error throws.
+   */
+  isPasskeySafe: (a: Address) => Promise<boolean>;
 };
+
+export type OwnerLog = { emitter: Address; blockNumber: bigint };
 
 export type MintRequest = {
   requestId: bigint;
@@ -114,30 +133,66 @@ export async function findLinkedLegacies(safe: Address, chain: LookupChain): Pro
   return checks.filter((c): c is Address => !!c);
 }
 
+/** viem error names that mean "this contract answered, and it is not a Safe" (revert / no data). */
+const NOT_A_SAFE_ERRORS = new Set(['ContractFunctionRevertedError', 'ContractFunctionZeroDataError']);
+
+/** True when `e` (or an error in its cause chain) is a contract revert / empty return, not a transport failure. */
+export function isContractRevert(e: unknown): boolean {
+  for (let cur: unknown = e, depth = 0; cur && depth < 10; cur = (cur as { cause?: unknown }).cause, depth++) {
+    if (NOT_A_SAFE_ERRORS.has((cur as { name?: string }).name ?? '')) return true;
+  }
+  return false;
+}
+
+/** A revert means "not a Safe" → `fallback`; any other error (transport, timeout) is rethrown. */
+async function unlessReverted<T>(p: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    if (isContractRevert(e)) return fallback;
+    throw e;
+  }
+}
+
 /**
- * The Safes whose owners are exactly `[owner]` right now, newest AddedOwner log first,
- * de-duplicated. A recovery to a new passkey keeps the Safe's address but installs the per-key
- * signer as its only owner, so this finds a recovered Safe from its new key. A stale log (the
- * owner changed again) and an emitter whose owners cannot be read are dropped.
+ * The app passkey Safes whose owners are exactly `[owner]` right now, newest AddedOwner log
+ * first, de-duplicated. A recovery to a new passkey keeps the Safe's address but installs the
+ * per-key signer as its only owner, so this finds a recovered Safe from its new key.
+ *
+ * AddedOwner is matched by topic only, so anyone can emit one naming a public signer address.
+ * Every emitter is therefore shape-checked (`isPasskeySafe`) and owner-checked, and the backward
+ * scan stops only once a log yields a Safe that passes, so a newer junk log cannot hide the real
+ * one. A stale log (owner changed again) or a reverting emitter is dropped; a transport error
+ * throws (the caller must not fall back to another Safe on a flaky RPC).
  */
 export async function findSafesByOwner(
   owner: Address,
-  chain: Pick<LookupChain, 'ownerLogsFor' | 'readOwners'>,
+  chain: Pick<LookupChain, 'ownerLogsFor' | 'readOwners' | 'isPasskeySafe'>,
 ): Promise<Address[]> {
-  const logs = [...(await chain.ownerLogsFor(owner))].sort((a, b) =>
-    a.blockNumber === b.blockNumber ? 0 : a.blockNumber > b.blockNumber ? -1 : 1,
+  const verdicts = new Map<string, Promise<boolean>>();
+  const passes = (emitter: Address): Promise<boolean> => {
+    const key = emitter.toLowerCase();
+    let v = verdicts.get(key);
+    if (!v) {
+      v = (async () => {
+        if (!(await unlessReverted(chain.isPasskeySafe(emitter), false))) return false;
+        const owners = await unlessReverted(chain.readOwners(emitter), [] as Address[]);
+        return owners.length === 1 && isAddressEqual(owners[0], owner);
+      })();
+      verdicts.set(key, v);
+    }
+    return v;
+  };
+  const logs = await chain.ownerLogsFor(owner, async (found) =>
+    (await Promise.all(found.map((l) => passes(getAddress(l.emitter))))).some(Boolean),
   );
+  const sorted = [...logs].sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber > b.blockNumber ? -1 : 1));
   const emitters: Address[] = [];
-  for (const l of logs) {
+  for (const l of sorted) {
     const e = getAddress(l.emitter);
     if (!emitters.some((x) => isAddressEqual(x, e))) emitters.push(e);
   }
-  const checks = await Promise.all(
-    emitters.map(async (e) => {
-      const owners = await safely(chain.readOwners(e), [] as Address[]);
-      return owners.length === 1 && isAddressEqual(owners[0], owner) ? e : null;
-    }),
-  );
+  const checks = await Promise.all(emitters.map(async (e) => ((await passes(e)) ? e : null)));
   return checks.filter((c): c is Address => !!c);
 }
 
@@ -216,7 +271,23 @@ export const requestApprovedEvent = parseAbiItem(
 export const safeAddedOwnerEvent = parseAbiItem('event AddedOwner(address indexed owner)');
 const safeOwnersAbi = [
   { type: 'function', name: 'getOwners', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address[]' }] },
+  {
+    type: 'function',
+    name: 'getModulesPaginated',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'start', type: 'address' },
+      { name: 'pageSize', type: 'uint256' },
+    ],
+    outputs: [
+      { name: 'array', type: 'address[]' },
+      { name: 'next', type: 'address' },
+    ],
+  },
 ] as const;
+/** Safe ModuleManager / OwnerManager linked-list sentinel. */
+const SAFE_SENTINEL: Address = '0x0000000000000000000000000000000000000001';
+const sameAddressWord = (word: Hex | undefined, a: Address) => !!word && word !== '0x' && BigInt(word) === BigInt(a);
 const citizenRequestAbi = [
   { type: 'function', name: 'requestCount', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
   {
@@ -244,6 +315,7 @@ export type LookupClient = {
   getBlock: () => Promise<{ number: bigint; timestamp: bigint }>;
   getLogs: (args: any) => Promise<RawLog[]>;
   getCode: (args: { address: Address }) => Promise<Hex | undefined>;
+  getStorageAt: (args: { address: Address; slot: Hex }) => Promise<Hex | undefined>;
   readContract: (args: any) => Promise<any>;
 };
 
@@ -292,16 +364,37 @@ export function createLookupChain(
       const code = await client.getCode({ address: a });
       return !!code && code !== '0x';
     },
-    async ownerLogsFor(owner) {
+    async ownerLogsFor(owner, stop) {
+      const toOwnerLog = (l: RawLog): OwnerLog => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n });
       const logs = await scanLogs(
         await windowsTo(passkeyFrom, true),
         (w: BlockWindow) => client.getLogs({ event: safeAddedOwnerEvent, args: { owner }, ...w }),
-        { stop: (found) => found.length > 0 },
+        { stop: (found) => (stop ? stop(found.map(toOwnerLog)) : found.length > 0) },
       );
-      return logs.map((l) => ({ emitter: getAddress(l.address), blockNumber: l.blockNumber ?? 0n }));
+      return logs.map(toOwnerLog);
     },
     async readOwners(safe) {
       return [...((await client.readContract({ address: safe, abi: safeOwnersAbi, functionName: 'getOwners' })) as readonly Address[])];
+    },
+    async isPasskeySafe(a) {
+      const code = await client.getCode({ address: a });
+      if (!code || code.toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) return false;
+      const [singleton, fallback] = await Promise.all([
+        client.getStorageAt({ address: a, slot: '0x0' }),
+        client.getStorageAt({ address: a, slot: SAFE_FALLBACK_HANDLER_SLOT }),
+      ]);
+      if (!sameAddressWord(singleton, SAFE_L2_SINGLETON) || !sameAddressWord(fallback, SAFE_4337_MODULE)) return false;
+      const [modules, next] = (await client.readContract({
+        address: a,
+        abi: safeOwnersAbi,
+        functionName: 'getModulesPaginated',
+        args: [SAFE_SENTINEL, 10n],
+      })) as readonly [readonly Address[], Address];
+      return (
+        isAddressEqual(next, SAFE_SENTINEL) &&
+        modules.length === 2 &&
+        [SAFE_4337_MODULE, SOCIAL_RECOVERY_MODULE].every((m) => modules.some((x) => isAddressEqual(x, m)))
+      );
     },
     async findMintRequest(citizen) {
       const count = BigInt(await client.readContract({ address: citizenNft, abi: citizenRequestAbi, functionName: 'requestCount' }));

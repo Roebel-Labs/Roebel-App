@@ -1,4 +1,11 @@
-import { getAddress, type Address } from 'viem';
+import { getAddress, pad, type Address, type Hex } from 'viem';
+import {
+  SAFE_4337_MODULE,
+  SAFE_FALLBACK_HANDLER_SLOT,
+  SAFE_L2_SINGLETON,
+  SAFE_PROXY_RUNTIME_CODE,
+  SOCIAL_RECOVERY_MODULE,
+} from '../constants';
 import { blockWindows, scanLogs } from '../log-scan';
 import {
   createLookupChain,
@@ -7,6 +14,7 @@ import {
   findLinkedSafes,
   findRecoverableAccounts,
   findSafesByOwner,
+  isContractRevert,
   resolveGuardianAddress,
   suggestDefaultGuardians,
   type AdminLog,
@@ -49,6 +57,7 @@ function fakeChain(p: {
     hasCode: jest.fn(async (a: Address) => (p.code ?? []).includes(a)),
     ownerLogsFor: jest.fn(async () => []),
     readOwners: jest.fn(async () => []),
+    isPasskeySafe: jest.fn(async () => false),
   };
 }
 
@@ -184,11 +193,12 @@ describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
         { emitter: B, blockNumber: 7n },
       ],
       readOwners: async (s: Address) => (s === B ? [OWNER] : [OTHER]),
+      isPasskeySafe: async () => true,
     };
     expect(await findSafesByOwner(OWNER, chain)).toEqual([B]);
   });
 
-  it('newest first, de-duplicated; a co-owned Safe and an unreadable emitter are dropped', async () => {
+  it('newest first, de-duplicated; a co-owned Safe and a reverting emitter are dropped', async () => {
     const chain = {
       ownerLogsFor: async () => [
         { emitter: A, blockNumber: 5n },
@@ -199,11 +209,184 @@ describe('findSafesByOwner (a recovered Safe from its new owner)', () => {
       ],
       readOwners: async (s: Address) => {
         if (s === C) return [OWNER, OTHER];
-        if (s === SAFE) throw new Error('not a Safe');
+        if (s === SAFE) throw reverted();
         return [OWNER];
       },
+      isPasskeySafe: async () => true,
     };
     expect(await findSafesByOwner(OWNER, chain)).toEqual([B, A]);
+  });
+
+  it('a fake that fails the shape check is ignored and does not cause ambiguity', async () => {
+    const FAKE = addr(0xfa);
+    const chain = {
+      ownerLogsFor: async () => [
+        { emitter: FAKE, blockNumber: 9n },
+        { emitter: B, blockNumber: 7n },
+      ],
+      readOwners: jest.fn(async () => [OWNER]), // the fake also claims the owner
+      isPasskeySafe: async (s: Address) => s === B,
+    };
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([B]);
+    expect(chain.readOwners).not.toHaveBeenCalledWith(FAKE);
+  });
+
+  it('a transport error on the owner read is rethrown, never swallowed', async () => {
+    const chain = {
+      ownerLogsFor: async () => [{ emitter: B, blockNumber: 7n }],
+      readOwners: async () => {
+        throw new Error('HTTP request failed: timeout');
+      },
+      isPasskeySafe: async () => true,
+    };
+    await expect(findSafesByOwner(OWNER, chain)).rejects.toThrow('timeout');
+  });
+
+  it('a transport error on the shape check is rethrown; a revert there means "not a Safe"', async () => {
+    const logs = async () => [{ emitter: B, blockNumber: 7n }];
+    await expect(
+      findSafesByOwner(OWNER, {
+        ownerLogsFor: logs,
+        readOwners: async () => [OWNER],
+        isPasskeySafe: async () => {
+          throw new Error('fetch failed');
+        },
+      }),
+    ).rejects.toThrow('fetch failed');
+    expect(
+      await findSafesByOwner(OWNER, {
+        ownerLogsFor: logs,
+        readOwners: async () => [OWNER],
+        isPasskeySafe: async () => {
+          throw reverted();
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  it('isContractRevert recognises viem revert / zero-data errors anywhere in the cause chain', () => {
+    expect(isContractRevert(reverted())).toBe(true);
+    expect(isContractRevert(Object.assign(new Error('x'), { name: 'ContractFunctionZeroDataError' }))).toBe(true);
+    expect(isContractRevert(new Error('HTTP request failed'))).toBe(false);
+    expect(isContractRevert(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe(false);
+  });
+});
+
+/** The shape of a viem read revert: ContractFunctionExecutionError caused by ContractFunctionRevertedError. */
+function reverted(): Error {
+  return Object.assign(new Error('The contract function "getOwners" reverted.'), {
+    name: 'ContractFunctionExecutionError',
+    cause: Object.assign(new Error('execution reverted'), { name: 'ContractFunctionRevertedError' }),
+  });
+}
+
+/**
+ * A viem-like client over a tiny fake chain: `safes` look like app passkey Safes (proxy runtime,
+ * singleton, fallback handler, the two modules); `contracts` have other code; `owners` per address;
+ * `logs` = AddedOwner hits (emitter, block).
+ */
+function shapeClient(p: {
+  tip: bigint;
+  safes: Address[];
+  contracts?: Address[];
+  owners: Record<string, Address[]>;
+  logs: Array<{ emitter: Address; block: bigint }>;
+  modules?: Address[];
+}) {
+  const word = (a: Address): Hex => pad(a, { size: 32 });
+  const isSafe = (a: Address) => p.safes.includes(a);
+  return {
+    getBlockNumber: jest.fn(async () => p.tip),
+    getBlock: jest.fn(),
+    getLogs: jest.fn(async (a: any) =>
+      p.logs
+        .filter((l) => l.block >= a.fromBlock && l.block <= a.toBlock)
+        .map((l, i) => ({ address: l.emitter, blockNumber: l.block, logIndex: i, args: { owner: a.args.owner } })),
+    ),
+    getCode: jest.fn(async ({ address }: { address: Address }) =>
+      isSafe(address) ? SAFE_PROXY_RUNTIME_CODE : (p.contracts ?? []).includes(address) ? ('0x6080604052' as Hex) : undefined,
+    ),
+    getStorageAt: jest.fn(async ({ address, slot }: { address: Address; slot: Hex }) => {
+      if (!isSafe(address)) return '0x' as Hex;
+      if (BigInt(slot) === 0n) return word(SAFE_L2_SINGLETON);
+      if (slot === SAFE_FALLBACK_HANDLER_SLOT) return word(SAFE_4337_MODULE);
+      return '0x' as Hex;
+    }),
+    readContract: jest.fn(async (a: any) => {
+      if (a.functionName === 'getOwners') {
+        if (!p.owners[a.address]) throw reverted();
+        return p.owners[a.address];
+      }
+      if (a.functionName === 'getModulesPaginated') {
+        return [p.modules ?? [SOCIAL_RECOVERY_MODULE, SAFE_4337_MODULE], addr(1)];
+      }
+      throw new Error(`unexpected ${a.functionName}`);
+    }),
+  };
+}
+
+describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is attacker-writable)', () => {
+  const OWNER = addr(0x0e);
+  const REAL = addr(0x5e);
+  const FAKE = addr(0xfa);
+  const FAKE_SAFE = addr(0xfb);
+
+  it('a fake emitter in a newer window does not hide the real Safe', async () => {
+    const client = shapeClient({
+      tip: 1_000n,
+      safes: [REAL],
+      contracts: [FAKE],
+      owners: { [REAL]: [OWNER], [FAKE]: [OWNER] },
+      logs: [
+        { emitter: FAKE, block: 990n }, // newest window
+        { emitter: REAL, block: 300n }, // far older: a later batch
+      ],
+    });
+    const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([REAL]);
+    // the scan went past the first batch (which only held the fake) down to the real Safe's window
+    expect(client.getLogs.mock.calls.some(([a]: any) => a.fromBlock <= 300n && 300n <= a.toBlock)).toBe(true);
+  });
+
+  it('a fake in the same batch is ignored and does not make it ambiguous', async () => {
+    const client = shapeClient({
+      tip: 1_000n,
+      safes: [REAL],
+      contracts: [FAKE],
+      owners: { [REAL]: [OWNER], [FAKE]: [OWNER] },
+      logs: [
+        { emitter: FAKE, block: 995n },
+        { emitter: REAL, block: 960n },
+      ],
+    });
+    const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });
+    expect(await findSafesByOwner(OWNER, chain)).toEqual([REAL]);
+    expect(client.getLogs).toHaveBeenCalledTimes(4); // one batch, then stop
+  });
+
+  it('isPasskeySafe: proxy runtime + SafeL2 singleton + 4337 fallback handler + exactly the two modules', async () => {
+    const good = shapeClient({ tip: 0n, safes: [REAL], contracts: [FAKE], owners: {}, logs: [] });
+    const chain = createLookupChain(good as any, { readGuardians: async () => [] });
+    expect(await chain.isPasskeySafe(REAL)).toBe(true);
+    expect(await chain.isPasskeySafe(FAKE)).toBe(false); // other code
+    expect(await chain.isPasskeySafe(addr(0x99))).toBe(false); // no code
+    const extraModule = shapeClient({
+      tip: 0n,
+      safes: [FAKE_SAFE],
+      owners: {},
+      logs: [],
+      modules: [SOCIAL_RECOVERY_MODULE, SAFE_4337_MODULE, addr(0xbad)],
+    });
+    expect(await createLookupChain(extraModule as any, { readGuardians: async () => [] }).isPasskeySafe(FAKE_SAFE)).toBe(false);
+    const otherSingleton = shapeClient({ tip: 0n, safes: [FAKE_SAFE], owners: {}, logs: [] });
+    otherSingleton.getStorageAt.mockImplementation(async () => pad(addr(0x51), { size: 32 }));
+    expect(await createLookupChain(otherSingleton as any, { readGuardians: async () => [] }).isPasskeySafe(FAKE_SAFE)).toBe(false);
+  });
+
+  it('SAFE_PROXY_RUNTIME_CODE is the 171-byte SafeProxy 1.4.1 runtime', () => {
+    expect((SAFE_PROXY_RUNTIME_CODE.length - 2) / 2).toBe(0xab);
+    expect(SAFE_PROXY_RUNTIME_CODE.startsWith('0x608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e')).toBe(true);
+    expect(SAFE_PROXY_RUNTIME_CODE.endsWith('64736f6c63430007060033')).toBe(true);
   });
 });
 
@@ -223,6 +406,7 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
       getBlock: jest.fn(),
       getLogs: jest.fn(),
       getCode: jest.fn(),
+      getStorageAt: jest.fn(),
       readContract: jest.fn(async (a: any) => (a.functionName === 'requestCount' ? 4n : requests[String(a.args[0])])),
     };
     const chain = createLookupChain(client, { readGuardians: async () => [] });
@@ -246,6 +430,7 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
         return hits.map((h, i) => ({ address: addr(1), blockNumber: h.block, logIndex: i, args: { requestId: 7n, ...h } }));
       }),
       getCode: jest.fn(),
+      getStorageAt: jest.fn(),
       readContract: jest.fn(),
     };
     const chain = createLookupChain(client, { readGuardians: async () => [], range: 50n, citizenFromBlock: 0n });
@@ -273,6 +458,7 @@ describe('createLookupChain (view calls + chunked getLogs over a viem-like clien
           : [];
       }),
       getCode: jest.fn(),
+      getStorageAt: jest.fn(),
       readContract: jest.fn(async (a: any) => (a.functionName === 'getOwners' && a.address === SAFE ? [OWNER] : [])),
     };
     const chain = createLookupChain(client as any, { readGuardians: async () => [], range: 50n, passkeyFromBlock: 0n });

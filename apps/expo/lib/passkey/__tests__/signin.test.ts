@@ -3,6 +3,7 @@ jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: je
 import { getAddress, isAddressEqual, type Address, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
 import { MIGRATION_STORE_KEY, loadMigrationRecord } from '../migration';
+import { findSafesByOwner } from '../recovery-lookup';
 import { predictSafeAddress } from '../safe-address';
 import { PASSKEY_SESSION_KEY, loadPasskeySession } from '../session';
 import {
@@ -136,6 +137,35 @@ describe('resolveCredentialKey (credential → key → Safe)', () => {
     };
     await expect(resolveCredentialKey(disc(`0x${'08'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
       'passt zu mehreren Konten',
+    );
+  });
+
+  it('several valid Safes for the signer: the single one with history wins', async () => {
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: async () => [LEGACY2, RECOVERED],
+      isKnownAccount: async (a) => isAddressEqual(a, RECOVERED),
+    };
+    const key = await resolveCredentialKey(disc(`0x${'0a'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() });
+    expect(key).toMatchObject({ safe: RECOVERED, owner: SIGNER, ownerType: 'webauthnSigner' });
+  });
+
+  it('a transport error on the recovered Safe\'s getOwners stops the sign-in (no fallback to the throwaway Safe)', async () => {
+    const lookup = {
+      ownerLogsFor: async () => [{ emitter: RECOVERED, blockNumber: 1n }],
+      isPasskeySafe: async () => true,
+      readOwners: async () => {
+        throw new Error('HTTP request failed: timeout');
+      },
+    };
+    const chain: KeyChain = {
+      ...knownChain({ hasCode: [safeOf(pk), SIGNER] }),
+      getSigner: signerOfPk,
+      findSafesByOwner: (o) => findSafesByOwner(o, lookup),
+    };
+    await expect(resolveCredentialKey(disc(`0x${'0b'.repeat(32)}`), { local: [], chain, signAgain: jest.fn() })).rejects.toThrow(
+      PasskeySignInError,
     );
   });
 

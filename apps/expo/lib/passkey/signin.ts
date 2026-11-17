@@ -106,10 +106,20 @@ export class PasskeySignInError extends Error {
 const AMBIGUOUS_MESSAGE = 'Dieser Passkey passt zu mehreren Konten. Bitte wende dich an den Support.';
 const LOOKUP_FAILED_MESSAGE = 'Dein Konto konnte gerade nicht geprüft werden. Bitte versuche es gleich noch einmal.';
 
+/** A Safe with history beyond its code: linked to a legacy account, or has a users row. */
+async function hasHistory(safe: Address, chain: KeyChain): Promise<boolean> {
+  const [legacies, row] = await Promise.all([
+    chain.findLinkedLegacies(safe),
+    chain.isKnownAccount ? chain.isKnownAccount(safe) : Promise.resolve(false),
+  ]);
+  return legacies.length > 0 || row;
+}
+
 /**
  * Candidate keys whose per-key signer owns a Safe (a Safe recovered to this passkey keeps its
  * address, so the key no longer derives it). A signer without code never ran `createSigner` →
- * no log scan. A failed read stops the sign-in: falling through could pick the throwaway
+ * no log scan. Several valid Safes for one signer → the single one with history wins, else it
+ * is ambiguous. A failed read stops the sign-in: falling through could pick the throwaway
  * SharedSigner Safe the recovery phone deployed for the same key (wrong account).
  */
 async function recoveredSafeKeys(keys: P256Point[], chain: KeyChain): Promise<ResolvedKey[]> {
@@ -121,6 +131,11 @@ async function recoveredSafeKeys(keys: P256Point[], chain: KeyChain): Promise<Re
       signer = getAddress(await chain.getSigner(k.x, k.y));
       if (!(await chain.hasCode(signer))) continue;
       safes = await chain.findSafesByOwner(signer);
+      if (safes.length > 1) {
+        const withHistory: Address[] = [];
+        for (const s of safes) if (await hasHistory(s, chain)) withHistory.push(s);
+        if (withHistory.length === 1) safes = withHistory;
+      }
     } catch {
       throw new PasskeySignInError(LOOKUP_FAILED_MESSAGE);
     }
