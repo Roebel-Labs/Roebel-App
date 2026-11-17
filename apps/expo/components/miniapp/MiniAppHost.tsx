@@ -47,6 +47,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fontFamily } from '@/constants/theme';
+import { previewBannerText } from '@/lib/miniapp-permissions';
 import { CloseIcon, ShareIcon } from '@/components/miniapp/hostIcons';
 import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 
@@ -714,6 +715,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           </Pressable>
         </View>
 
+        {app.preview ? (
+          <Text style={styles.previewBanner}>{previewBannerText(app.permissions)}</Text>
+        ) : null}
+
         {/* WebView sheet — rounded top corners on the dark stage */}
         <View style={[styles.webWrap, { backgroundColor: colors.background }]}>
           <WebView
@@ -847,6 +852,14 @@ const SHEET_RADIUS = 24;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: CHROME_BG },
+  previewBanner: {
+    color: CHROME_TEXT,
+    opacity: 0.7,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
   header: {
     height: 56,
     flexDirection: 'row',
