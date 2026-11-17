@@ -2,8 +2,8 @@
  * NSP-14 org Safes — pure calldata builders and planners (no I/O).
  *
  * An org becomes a Safe 1.4.1 whose owners are the org's `owner` rows; the Safe
- * then registers in the OrgRegistry and carries the org's admin/member roles
- * onchain. Every Safe transaction here is executed by ONE owner as msg.sender
+ * then registers in the OrgRegistry and carries the org's admin roles
+ * onchain (ordinary members are not written; they live in the credential register). Every Safe transaction here is executed by ONE owner as msg.sender
  * with a pre-validated signature (v=1), so the owner's own smart account (thirdweb
  * or passkey-wrapped) just sends a normal call — no off-chain Safe signatures,
  * no ERC-1271. Threshold stays 1, matching how the app lets any owner act alone.
@@ -286,8 +286,10 @@ export type SyncPlan = {
 
 /**
  * Database → chain. Owners in the database become Safe owners; admins become
- * registry roles (ordinary members are NOT written; see below); a role left on an owner or on someone no longer in the
- * org is cleared. Safe owners are never REMOVED here — that only happens when a
+ * registry roles. Ordinary members are never written (they live in the credential
+ * register): an existing chain `member` is kept while still in the org, anything
+ * else stays `none`. A role left on an owner, on someone no longer in the org, or an
+ * admin role on a database member is cleared. Safe owners are never REMOVED here — that only happens when a
  * person leaves (see leaveSafeCall), so a sync can never lock anyone out.
  */
 export function planSync(state: OrgChainState, members: readonly DbMember[]): SyncPlan {

@@ -265,7 +265,7 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
           <View style={[styles.leaveBox, { borderTopColor: colors.border }]}>
             <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
               {blocker === 'no_other_owner'
-                ? 'Zum Übergeben muss eine weitere Person Inhaber sein und im Safe stehen. Lade sie unter „Mitglieder“ als Inhaber ein und übertrage danach.'
+                ? 'Zum Übergeben muss eine weitere Person Inhaber sein und im Safe stehen. Lade sie unter „Mitglieder“ als Inhaber ein und gleiche danach ab.'
                 : blocker === 'not_in_sync'
                   ? 'Gleiche zuerst Inhaber:innen und Admins ab, dann kannst du übergeben.'
                   : 'Du kannst die Organisation jetzt übergeben: Du wirst aus dem Safe entfernt und verlässt die Organisation.'}

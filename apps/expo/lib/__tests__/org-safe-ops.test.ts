@@ -105,6 +105,11 @@ describe('sync plan', () => {
     expect(planSync(state({ roles: { [C.toLowerCase()]: 'admin' } }), []).setRoles).toEqual([{ account: C, role: 'none' }]);
   });
 
+  it('a database member whose chain role is admin is cleared to none', () => {
+    const plan = planSync(state({ roles: { [C.toLowerCase()]: 'admin' } }), [{ wallet_address: C, role: 'member' }]);
+    expect(plan.setRoles).toEqual([{ account: C, role: 'none' }]);
+  });
+
   it('an org whose only difference is members is in sync', () => {
     expect(isInSync(planSync(state(), [{ wallet_address: D, role: 'member' }]))).toBe(true);
   });
