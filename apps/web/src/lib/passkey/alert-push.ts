@@ -7,7 +7,11 @@
  * email and the in-app banner (plan open question 3).
  *
  * Sends through the Expo push API in chunks of 100, as app/actions/push-notifications.ts does.
- * `send` throws when no message was accepted, so the caller releases its claim and retries.
+ * `send` throws, so the caller releases its claim and retries the whole push next run, when no
+ * message was accepted OR any chunk / ticket failed for a reason other than DeviceNotRegistered
+ * (HTTP error, network error, an error ticket). A retry may reach a device that already got the
+ * alert a second time; missing a recovery alert is worse than a duplicate. DeviceNotRegistered
+ * tokens are deactivated and do not count as a failure.
  * No log line carries a token or an address.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -44,11 +48,11 @@ type Ticket = { status?: string; details?: { error?: string } };
 export function createSupabaseAlertPush(db: SupabaseClient, fetchImpl: typeof fetch = fetch): AlertPush {
   return {
     async tokensFor(wallet) {
-      // ilike without wildcards = case-insensitive equality (an address has no `%` or `_`).
+      // The app writes wallet_address lowercase (lib/supabase-notifications.ts registerPushToken).
       const r = await db
         .from("push_tokens")
         .select("expo_push_token")
-        .ilike("wallet_address", wallet.toLowerCase())
+        .eq("wallet_address", wallet.toLowerCase())
         .eq("is_active", true);
       if (r.error) throw new AlertPushError("tokensFor");
       const rows = (r.data ?? []) as { expo_push_token: string | null }[];
@@ -57,6 +61,7 @@ export function createSupabaseAlertPush(db: SupabaseClient, fetchImpl: typeof fe
 
     async send(tokens, message) {
       let accepted = 0;
+      let failed = false;
       const dead: string[] = [];
       for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
         const batch = tokens.slice(i, i + BATCH_SIZE).map((to) => ({
@@ -74,21 +79,26 @@ export function createSupabaseAlertPush(db: SupabaseClient, fetchImpl: typeof fe
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify(batch),
           });
-          if (!res.ok) continue;
+          if (!res.ok) {
+            failed = true;
+            continue;
+          }
           const tickets = (((await res.json()) as { data?: Ticket[] }).data ?? []) as Ticket[];
+          if (tickets.length < batch.length) failed = true;
           tickets.forEach((t, j) => {
             if (t.status === "ok") accepted++;
             else if (t.details?.error === "DeviceNotRegistered" && batch[j]) dead.push(batch[j].to);
+            else failed = true;
           });
         } catch {
-          // counted as not accepted
+          failed = true;
         }
       }
       if (dead.length > 0) {
         // Best effort: the next run then sees no device instead of retrying a dead token.
         await Promise.resolve(db.from("push_tokens").update({ is_active: false }).in("expo_push_token", dead)).catch(() => undefined);
       }
-      if (accepted === 0) throw new AlertPushError("send");
+      if (accepted === 0 || failed) throw new AlertPushError("send");
     },
   };
 }

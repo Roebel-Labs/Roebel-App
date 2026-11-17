@@ -20,7 +20,7 @@ import { fontFamily } from '@/constants/theme';
 import { encodeCancelRecovery, readRecoveryRequest, type RecoveryRequest } from '@/lib/passkey/guardians';
 import { isPasskeyWallet, passkeySessionOf } from '@/lib/passkey/active';
 import type { PasskeySession } from '@/lib/passkey/session';
-import { sessionOwnerState } from '@/lib/passkey/session-health';
+import { confirmedSessionOwnerState, createOwnerSeenStore } from '@/lib/passkey/session-health';
 import { isSafeDeployed } from '@/lib/passkey/userop';
 import { loadMigrationRecord, type MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
@@ -143,11 +143,16 @@ const sessionHealthDeps = {
   isDeployed: (safe: PasskeySession['safe']) => isSafeDeployed(safe),
   readOwners: readSafeOwners,
   readRequest: (safe: PasskeySession['safe']) => readRecoveryRequest(safe),
+  seen: createOwnerSeenStore(secureKeyValueStorage),
+  wait: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 };
 
 /**
  * Blocking notice when the active passkey session's owner is no longer an owner of its Safe.
- * Checked on mount, on every session change and whenever the app comes to the foreground.
+ * Checked on mount, on every session change and whenever the app comes to the foreground. A
+ * single read never shows it: the session must have been seen as an owner before, and a second
+ * read ~45 s later must agree (confirmedSessionOwnerState), so a lagging RPC node cannot sign
+ * anyone out.
  * "Verstanden" disconnects the passkey wallet: the existing logout path, which deletes only
  * `passkey_session_v1` (signin-runtime.ts createPasskeyWallet).
  */
@@ -163,17 +168,23 @@ function ReplacedSessionNotice() {
   // The session (safe:owner) confirmed as replaced; a different session never shows the notice.
   const [replacedKey, setReplacedKey] = useState<string | null>(null);
   const currentKey = useRef<string | null>(null);
+  const checking = useRef<string | null>(null); // the key whose check is running
 
   useEffect(() => {
     currentKey.current = key;
     if (!safe || !owner || !key) return;
     const check = () => {
-      sessionOwnerState({ safe, owner }, sessionHealthDeps)
+      if (checking.current === key) return;
+      checking.current = key;
+      confirmedSessionOwnerState({ safe, owner }, sessionHealthDeps)
         .then((state) => {
           // Only a confirmed replacement of THIS session counts; 'unknown' never logs anyone out.
           if (state === 'replaced' && currentKey.current === key) setReplacedKey(key);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          if (checking.current === key) checking.current = null;
+        });
     };
     check();
     const sub = AppState.addEventListener('change', (s) => {

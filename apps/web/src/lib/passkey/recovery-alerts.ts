@@ -48,7 +48,10 @@ export type RecoveryAlertResult = {
   sent: number;
   /** Push alerts sent (one per event, however many devices). */
   pushed: number;
-  /** noContact: email channel on, no verified address; noDevice: push channel on, no active device. */
+  /**
+   * noContact: email channel on, no verified address; noDevice: push channel on, no active device;
+   * alreadySent: counted PER CHANNEL (an event whose email and push were both sent before adds 2).
+   */
   skipped: { noContact: number; noDevice: number; alreadySent: number; windowOver: number };
   failed: number;
 };

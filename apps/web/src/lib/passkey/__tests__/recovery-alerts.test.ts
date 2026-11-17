@@ -312,14 +312,14 @@ function fakeDb(rows: { expo_push_token: string }[], fail = false) {
       calls.push({ op, args });
       return q;
     };
-    for (const op of ["select", "ilike", "eq", "update", "in"]) q[op] = chain(op);
+    for (const op of ["select", "eq", "update", "in"]) q[op] = chain(op);
     q.then = (resolve: (v: unknown) => void) => resolve(fail ? { data: null, error: { code: "x" } } : { data: rows, error: null });
     return q;
   };
   return { calls, db: { from: (t: string) => (calls.push({ op: "from", args: [t] }), builder()) } };
 }
 
-test("supabase push: active tokens of the wallet (case-insensitive), sent in chunks of 100", async () => {
+test("supabase push: active tokens of the wallet (lowercased), sent in chunks of 100", async () => {
   const rows = Array.from({ length: 150 }, (_, i) => ({ expo_push_token: `ExponentPushToken[${i}]` }));
   const { db, calls } = fakeDb(rows);
   const bodies: unknown[][] = [];
@@ -332,7 +332,7 @@ test("supabase push: active tokens of the wallet (case-insensitive), sent in chu
   const tokens = await push.tokensFor("0xABCDEFabcdef0000000000000000000000000000");
   assert.equal(tokens.length, 150);
   assert.ok(calls.some((c) => c.op === "from" && c.args[0] === "push_tokens"));
-  assert.ok(calls.some((c) => c.op === "ilike" && c.args[0] === "wallet_address" && c.args[1] === "0xabcdefabcdef0000000000000000000000000000"));
+  assert.ok(calls.some((c) => c.op === "eq" && c.args[0] === "wallet_address" && c.args[1] === "0xabcdefabcdef0000000000000000000000000000"));
   assert.ok(calls.some((c) => c.op === "eq" && c.args[0] === "is_active" && c.args[1] === true));
   await push.send(tokens, recoveryAlertPush(LATER));
   assert.deepEqual(bodies.map((b) => b.length), [100, 50]);
@@ -350,6 +350,33 @@ test("supabase push: an HTTP error or no accepted ticket throws; dead tokens are
   );
   await assert.rejects(dead.send(["ExponentPushToken[dead]"], recoveryAlertPush(LATER)));
   assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[dead]"));
+  // One chunk fine, the other an HTTP error: the whole push is retried (claim released).
+  let call = 0;
+  const partial = createSupabaseAlertPush(
+    db as never,
+    (async (_u: string, init: { body: string }) => {
+      const batch = JSON.parse(init.body) as unknown[];
+      if (call++ === 1) return new Response("no", { status: 502 });
+      return new Response(JSON.stringify({ data: batch.map(() => ({ status: "ok" })) }), { status: 200 });
+    }) as unknown as typeof fetch,
+  );
+  const many = Array.from({ length: 150 }, (_, i) => `ExponentPushToken[${i}]`);
+  await assert.rejects(partial.send(many, recoveryAlertPush(LATER)));
+  // An error ticket other than DeviceNotRegistered next to an accepted one also throws.
+  const mixed = createSupabaseAlertPush(
+    db as never,
+    (async () =>
+      new Response(JSON.stringify({ data: [{ status: "ok" }, { status: "error", details: { error: "MessageRateExceeded" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await assert.rejects(mixed.send(["ExponentPushToken[a]", "ExponentPushToken[b]"], recoveryAlertPush(LATER)));
+  // Accepted + DeviceNotRegistered only: sent, the dead token deactivated, no throw.
+  const okDead = createSupabaseAlertPush(
+    db as never,
+    (async () =>
+      new Response(JSON.stringify({ data: [{ status: "ok" }, { status: "error", details: { error: "DeviceNotRegistered" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await okDead.send(["ExponentPushToken[a]", "ExponentPushToken[gone]"], recoveryAlertPush(LATER));
+  assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[gone]"));
   const failing = fakeDb([], true);
   await assert.rejects(createSupabaseAlertPush(failing.db as never).tokensFor(WALLET));
 });
