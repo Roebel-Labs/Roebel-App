@@ -26,7 +26,7 @@ import { hashMessage, type Address, type Hex } from 'viem';
 import { PASSKEY_API_URL, SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import { safeMessageHash } from './guardians';
 import type { SafeOwnerType } from './migration';
-import { PhraseCancelledError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
+import { PhraseCancelledError, PhraseMismatchError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
 import { isWordsOwner, WORDS_KEY_PLACEHOLDER } from './session';
 import { sessionSignerFor } from './session-signer';
 import { safeSignatureFromAssertion } from './userop';
@@ -186,6 +186,7 @@ async function signOrCancel(signer: EmailSigner, message: string, deps: EmailDep
     if (e instanceof PasskeyCancelledError || e instanceof PhraseCancelledError) {
       throw new PasskeyEmailError('cancelled', emailErrorMessage('cancelled'));
     }
+    if (e instanceof PhraseMismatchError) throw new PasskeyEmailError('words_unavailable', e.message);
     if (e instanceof PhraseUnavailableError) throw new PasskeyEmailError('words_unavailable', emailErrorMessage('words_unavailable'));
     throw e;
   }

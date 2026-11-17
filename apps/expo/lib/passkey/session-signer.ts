@@ -5,7 +5,8 @@
  *     digest (`safeSignatureFromAssertion`), the vault key = the PRF output of that same assertion;
  *   - words (`ecdsa`, expert path): ONE protected phrase read (device unlock, PHRASE_PROMPT) per
  *     call, then the words' account key 0 signs the raw digest; the vault key comes from the same
- *     read. A phrase whose address 0 is not the session's owner is refused.
+ *     read. A phrase whose address 0 is not the session's owner is refused with PhraseMismatchError
+ *     (German message), announced like a lost phrase so the app asks for this account's words.
  *
  * `signDigest(digest)` returns the Safe's one-owner signature over `digest` exactly as Safe checks
  * it (ERC-1271: digest = safeMessageHash(safe, hash)); `opSigner` signs userOps (userop.ts).
@@ -18,7 +19,7 @@
 import { isAddressEqual, type Address, type Hex } from 'viem';
 import { ecdsaSafeFactoryData, predictEcdsaSafeAddress } from './ecdsa-safe';
 import { emitPhraseUnavailable } from './phrase-events';
-import { PHRASE_PROMPT, PhraseUnavailableError, type PhraseStore } from './phrase-store';
+import { PHRASE_PROMPT, PhraseMismatchError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
 import { predictSafeAddress, safeFactoryData } from './safe-address';
 import { isWordsOwner, requirePasskeyOwner, type PasskeySession } from './session';
 import { ecdsaOpSigner, normalizeEcdsaSignature, passkeyOpSigner, safeSignatureFromAssertion, type SafeOpSigner } from './userop';
@@ -73,7 +74,11 @@ function wordsSigner(session: PasskeySession, deps: SessionSignerDeps): SessionS
     }
     const kit = wordsFromSeed(phrase);
     const account = kit.account(0);
-    if (!isAddressEqual(account.address, owner)) throw new Error('the 12 words on this device do not own this account');
+    if (!isAddressEqual(account.address, owner)) {
+      // Another account's words on this phone: for this session they are gone too (re-entry).
+      emitPhraseUnavailable();
+      throw new PhraseMismatchError();
+    }
     return { account, kit };
   };
   return {

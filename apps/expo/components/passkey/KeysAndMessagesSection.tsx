@@ -58,7 +58,9 @@ export default function KeysAndMessagesSection({ words = false }: { words?: bool
     } catch (e) {
       const name = e instanceof Error ? e.name : '';
       const text =
-        name === 'PhraseUnavailableError'
+        name === 'PhraseMismatchError'
+          ? (e as Error).message
+          : name === 'PhraseUnavailableError'
           ? 'Deine 12 Wörter sind auf diesem Gerät nicht mehr lesbar. Bitte gib sie noch einmal ein.'
           : name === 'PhraseCancelledError'
             ? 'Abgebrochen.'

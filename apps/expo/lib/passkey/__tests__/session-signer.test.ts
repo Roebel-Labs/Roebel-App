@@ -4,7 +4,7 @@ import { getAddress, hexToString, size, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
 import { ecdsaSafeFactoryData, predictEcdsaSafeAddress } from '../ecdsa-safe';
 import { emitPhraseUnavailable, onPhraseUnavailable, PHRASE_REENTRY_ROUTE, REENTRY_COOLDOWN_MS, routeOnPhraseUnavailable } from '../phrase-events';
-import { PHRASE_PROMPT, PhraseCancelledError, PhraseUnavailableError } from '../phrase-store';
+import { PHRASE_MISMATCH_MESSAGE, PHRASE_PROMPT, PhraseCancelledError, PhraseMismatchError, PhraseUnavailableError } from '../phrase-store';
 import { predictSafeAddress, safeFactoryData } from '../safe-address';
 import { WORDS_KEY_PLACEHOLDER, type PasskeySession } from '../session';
 import { sessionSignerFor } from '../session-signer';
@@ -78,6 +78,22 @@ describe('session signer — words (ecdsa)', () => {
     await expect(signer.signDigest(v.erc1271.safeMessageHash as Hex)).rejects.toBeInstanceOf(PhraseUnavailableError);
     off();
     expect(seen).toHaveBeenCalledTimes(2);
+  });
+
+  it('I-3: another account\'s words on this phone: a German PhraseMismatchError, announced for re-entry, every time', async () => {
+    const seen = jest.fn();
+    const off = onPhraseUnavailable(seen);
+    const signer = sessionSignerFor(WORDS_SESSION, { signPasskey: never, getPrf: never, phrase: { read: async () => ABOUT } });
+    const err = await signer.opSigner.signOpHash(v.userOp.safeOpHash as Hex).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PhraseMismatchError);
+    // Handled like a lost phrase everywhere (instanceof PhraseUnavailableError).
+    expect(err).toBeInstanceOf(PhraseUnavailableError);
+    expect((err as Error).message).toBe(PHRASE_MISMATCH_MESSAGE);
+    expect((err as Error).name).toBe('PhraseMismatchError');
+    await expect(signer.signDigest(v.erc1271.safeMessageHash as Hex)).rejects.toBeInstanceOf(PhraseMismatchError);
+    await expect(signer.vaultKey()).rejects.toBeInstanceOf(PhraseMismatchError);
+    off();
+    expect(seen).toHaveBeenCalledTimes(3);
   });
 
   it('a cancelled prompt is re-thrown as is and announces nothing', async () => {

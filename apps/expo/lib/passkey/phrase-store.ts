@@ -40,6 +40,21 @@ export class PhraseUnavailableError extends Error {
   }
 }
 
+export const PHRASE_MISMATCH_MESSAGE =
+  'Die 12 Wörter auf diesem Gerät gehören zu einem anderen Konto. Bitte gib die Wörter dieses Kontos noch einmal ein.';
+
+/**
+ * The stored phrase is readable but derives ANOTHER account than the session's owner (final review
+ * I-3). For this account the words are as good as gone: a subclass of PhraseUnavailableError, so
+ * every handler routes it the same way (announced on phrase-events → enter the words again).
+ */
+export class PhraseMismatchError extends PhraseUnavailableError {
+  constructor(message = PHRASE_MISMATCH_MESSAGE) {
+    super(message);
+    this.name = 'PhraseMismatchError';
+  }
+}
+
 /** The person dismissed the device-unlock prompt. */
 export class PhraseCancelledError extends Error {
   constructor(message = 'device unlock cancelled') {
