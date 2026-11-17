@@ -2172,3 +2172,9 @@ html.mac-inset .rail {
 .ws-avatar.character img {
   transform: none;
 }
+
+/* An own picture is already a square crop: shown whole, centred. */
+.ws-avatar.picture img {
+  transform: none;
+  object-position: 50% 50%;
+}

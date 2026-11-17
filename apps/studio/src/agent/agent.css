@@ -989,3 +989,230 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ---- own pictures ------------------------------------------------------------------------------ */
+
+/* Header and view: an own picture large and rounded (characters keep their transparent figure). */
+.ag-figure.photo {
+  object-fit: cover;
+  border-radius: 24px;
+}
+
+.sc-view-figure.photo {
+  width: min(56vh, 640px);
+  height: min(56vh, 640px);
+  margin-bottom: 0.5em;
+  object-fit: cover;
+  border-radius: 40px;
+}
+
+.sc-view-figure.initial,
+.sc-share-figure.initial {
+  display: grid;
+  place-items: center;
+  width: min(48vh, 520px);
+  height: min(48vh, 520px);
+  margin-bottom: 0.4em;
+  border-radius: 40px;
+  background: rgba(253, 253, 252, 0.55);
+  color: #1a1a16;
+  font: 600 min(24vh, 260px) / 1 var(--font-head);
+}
+
+.sc-share-figure.photo {
+  width: 300px;
+  height: 300px;
+  margin-bottom: 0.4em;
+  object-fit: cover;
+  border-radius: 28px;
+}
+
+.sc-share-figure.initial {
+  width: 300px;
+  height: 300px;
+  font-size: 150px;
+}
+
+/* Picker hero: the uploaded picture where the figure would stand. */
+.cp-photo {
+  position: absolute;
+  right: 48px;
+  top: 50%;
+  width: 210px;
+  height: 210px;
+  transform: translateY(-50%);
+  object-fit: cover;
+  border-radius: 28px;
+  animation: cp-in 0.25s ease;
+}
+
+.cp-photo.empty {
+  display: grid;
+  place-items: center;
+  border: 2px dashed rgba(250, 250, 249, 0.45);
+  color: rgba(250, 250, 249, 0.75);
+}
+
+.cp-name::placeholder {
+  color: rgba(250, 250, 249, 0.45);
+}
+
+.cp-grid.over {
+  outline: 2px dashed var(--w-accent);
+  outline-offset: -10px;
+}
+
+.cp-grid-error {
+  grid-column: 1 / -1;
+}
+
+.cp-tile.cp-own {
+  border: 2px dashed var(--w-line-strong);
+  background: var(--w-control);
+  color: var(--w-text);
+}
+
+.cp-tile.cp-own[aria-checked='true'] {
+  border-style: solid;
+  border-color: var(--w-text);
+}
+
+.cp-tile.cp-own img {
+  object-position: 50% 50%;
+}
+
+.cp-own-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.cp-field + .cp-field {
+  margin-top: 10px;
+}
+
+.cp-crop {
+  align-items: center;
+}
+
+/* Crop: a square frame, drag to move, a zoom slider below. */
+.op-crop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.op-frame {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--w-control);
+  cursor: grab;
+  touch-action: none;
+}
+
+.op-frame:active {
+  cursor: grabbing;
+}
+
+.op-frame.loading {
+  cursor: default;
+}
+
+.op-frame img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.op-zoom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 300px;
+  font-size: 13px;
+}
+
+.op-zoom input {
+  flex: 1;
+  accent-color: var(--w-accent);
+}
+
+.op-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.op-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.op-actions .w-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+}
+
+.op-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(440px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 18px;
+  background: var(--w-card);
+  color: var(--w-text);
+}
+
+.op-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 16px;
+}
+
+.op-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 24px;
+  border: 2px dashed var(--w-line-strong);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.op-drop.over {
+  border-color: var(--w-accent);
+  background: var(--w-raised);
+}
+
+.op-drop .w-btn {
+  height: 38px;
+  margin-top: 6px;
+  padding: 0 16px;
+  border-radius: 8px;
+}

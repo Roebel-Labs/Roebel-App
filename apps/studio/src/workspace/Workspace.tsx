@@ -700,7 +700,7 @@ export function Workspace({ token, onSignOut, footer }: { token: string; onSignO
                           setFilterOpen(false);
                         }}
                       >
-                        {a.id ? <BotAvatar bot={{ id: a.id, name: a.name }} size={18} radius={4} /> : <span className="ws-filter-all" />}
+                        {a.id ? <BotAvatar bot={agents.find((b) => b.id === a.id) ?? { id: a.id, name: a.name }} size={18} radius={4} /> : <span className="ws-filter-all" />}
                         <span>{a.name}</span>
                       </button>
                     ))}

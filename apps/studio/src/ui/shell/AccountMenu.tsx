@@ -26,7 +26,7 @@ export function AccountMenu() {
   const [token, setToken] = useState<string | null>(null);
   const agent = useAgent(token);
   // Signed out: back to the Ortis icon.
-  useAgentAppIcon(agent.status === 'ready' ? agent.data.agent.characterId : null, agent.status === 'ready' || agent.status === 'unavailable' || !signedIn);
+  useAgentAppIcon(agent.status === 'ready' ? agent.data.agent : null, agent.status === 'ready' || agent.status === 'unavailable' || !signedIn);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = async () => {

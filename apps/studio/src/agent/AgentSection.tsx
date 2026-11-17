@@ -1,10 +1,11 @@
-// "Assistent": the agents page. The person's agents (default assistant + illustrated character agents), the
-// selected one's profile (Ansehen / Teilen / Ändern), and for the main assistant its name, mailbox, phones,
+// "Assistent": the agents page. The person's agents (default assistant, illustrated character agents and agents
+// with an own picture), the selected one's profile (Ansehen / Teilen / Ändern / Bild ändern), and for the main
+// assistant its name, mailbox, phones,
 // personality and tools. Not a rail
 // item; opened from the agent card on Start and from the account menu.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import qrcode from 'qrcode-generator';
-import { locale, t } from '../i18n';
+import { locale, t, tx } from '../i18n';
 import meckyUrl from '../assets/mecky-welcome.png';
 import { Confirm, LoadError, Modal, SignedOutHint, Toggle, useSessionToken } from '../persona/common';
 import { fmtDate, friendlyError } from '../persona/format';
@@ -12,22 +13,24 @@ import { hintSkillsTab } from '../persona/intent';
 import '../persona/persona.css';
 import { Busy, SkLines, SkRows, Skeleton } from '../ui/Skeleton';
 import { Tip } from '../ui/Tooltip';
-import { IconCheck, IconCopy, IconPlus, IconRefresh, IconShare, IconSms, IconView, IconWhatsapp } from '../ui/shell/line-icons';
+import { IconCheck, IconCopy, IconImage, IconPlus, IconRefresh, IconShare, IconSms, IconView, IconWhatsapp } from '../ui/shell/line-icons';
 import type { Section } from '../ui/shell/nav';
 import {
-  confirmAgentEmailCode, createAgentChannel, createCharacterAgent, deleteAgentChannel, deleteCharacterAgent, fetchMe, patchAgent, patchCharacterAgent, requestAgentEmailCode,
+  confirmAgentEmailCode, createAgentChannel, createCharacterAgent, deleteAgentChannel, deleteCharacterAgent, fetchMe, patchAgent, patchCharacterAgent, requestAgentEmailCode, uploadAgentAvatar,
   type Agent, type AgentChannel, type AgentLinkCode, type AgentPatch, type AgentPersonality, type AgentResponse, type AgentSummary,
 } from '../workspace/api';
 import { BotAvatar, botInitial, isMecky } from '../workspace/BotAvatar';
-import { AgentView, ShareDialog } from './AgentShowcase';
+import { AgentView, ShareDialog, canShare } from './AgentShowcase';
 import { CharacterPicker, type PickerResult } from './CharacterPicker';
-import { CHARACTERS, characterById, roleLine } from './characters';
+import { CHARACTERS, agentPicture, characterById, roleLine } from './characters';
+import { PictureDialog } from './OwnPicture';
 import { firstName } from '../workspace/thread-list';
 import { CHANNEL_LABEL, cleanAlias, isExpired, newChannel, splitAddress, toolLabel } from './agent-format';
 import { loadAgent, setAgentData, useAgent } from './agent-store';
 import './agent.css';
 
 const MAX_INSTRUCTIONS = 4000;
+const MAX_ROLE = 120;
 
 async function copyText(value: string): Promise<boolean> {
   try {
@@ -114,7 +117,7 @@ function AgentSkeleton() {
   );
 }
 
-type Overlay = { kind: 'view' | 'share' } | { kind: 'pick'; mode: 'add' | 'change' } | { kind: 'remove' } | null;
+type Overlay = { kind: 'view' | 'share' | 'picture' } | { kind: 'pick'; mode: 'add' | 'change' } | { kind: 'remove' } | null;
 
 function AgentPage({ token, data, owner, onNavigate }: { token: string; data: AgentResponse; owner: string | null; onNavigate: (s: Section) => void }) {
   const agent = data.agent;
@@ -122,7 +125,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
   // Older servers send no list: the main assistant is the only agent.
   const agents: AgentSummary[] = data.agents?.length
     ? data.agents
-    : [{ botId: agent.botId, name: agent.name, characterId: agent.characterId ?? null, role: agent.description, isMain: true, isPreset: agent.isPreset ?? true, personality: agent.personality, since: agent.since }];
+    : [{ botId: agent.botId, name: agent.name, characterId: agent.characterId ?? null, imageUrl: agent.imageUrl ?? null, role: agent.description, isMain: true, isPreset: agent.isPreset ?? true, personality: agent.personality, since: agent.since }];
   const canAdd = Boolean(data.agents);
   const [selectedId, setSelectedId] = useState<string>(agent.botId);
   const selected = agents.find((a) => a.botId === selectedId) ?? agents.find((a) => a.isMain) ?? agents[0];
@@ -164,16 +167,34 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
   const character = characterById(selected.characterId);
   const isMain = selected.isMain;
   const name = isMain ? agent.name : selected.name;
-  const showcase = { name, character };
+  const picture = agentPicture({ imageUrl: selected.imageUrl, characterId: selected.characterId, mecky: selected.isPreset || isMecky({ id: selected.botId, name: agent.defaultName }) });
+  const showcase = { name, picture };
+  // An own agent without a character: an own picture, or an older bot that still shows its initial.
+  const custom = !selected.isPreset && !character;
   const phone = agent.phone.sms.number || agent.phone.whatsapp.number;
   const mainName = agents.find((a) => a.isMain)?.name ?? agent.name;
-  const word = character?.feminine ? 'Agentin' : character ? 'Agent' : 'Assistent';
+  const word = character?.feminine ? 'Agentin' : character || custom ? 'Agent' : 'Assistent';
+  const uploadPicture = (jpeg: Blob) =>
+    uploadAgentAvatar(token, jpeg).then(
+      (r) => r.url,
+      (e) => {
+        throw new Error(friendlyError(e));
+      },
+    );
 
   const onPicked = async (r: PickerResult): Promise<string | null> => {
     if (overlay?.kind !== 'pick') return null;
     let failed: string | null;
     if (overlay.mode === 'change' && !selected.isPreset) {
-      failed = await run('pick', () => patchCharacterAgent(token, selected.botId, { character: r.character, name: r.name, personality: r.personality }));
+      failed = await run('pick', () =>
+        patchCharacterAgent(
+          token,
+          selected.botId,
+          r.kind === 'own'
+            ? { imageUrl: r.imageUrl, name: r.name, role: r.role, instructions: r.instructions, personality: r.personality }
+            : { character: r.character, name: r.name, personality: r.personality },
+        ),
+      );
       // The main assistant's personality lives on the profile.
       if (!failed && isMain && r.personality !== agent.personality) failed = await save('personality', { personality: r.personality });
     } else {
@@ -181,7 +202,12 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
       const main = overlay.mode === 'change' && isMain;
       let created: string | undefined;
       failed = await run('pick', async () => {
-        const res = await createCharacterAgent(token, { character: r.character, name: r.name, personality: r.personality, main });
+        const res = await createCharacterAgent(
+          token,
+          r.kind === 'own'
+            ? { imageUrl: r.imageUrl, name: r.name, role: r.role || undefined, instructions: r.instructions || undefined, personality: r.personality, main }
+            : { character: r.character, name: r.name, personality: r.personality, main },
+        );
         created = res.createdId;
         return res;
       });
@@ -197,9 +223,11 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
         <nav className="ag-roster" aria-label={t('Deine Agenten')}>
           {agents.map((a) => {
             const c = characterById(a.characterId);
+            // The main assistant's name may be the person's own; Mecky is recognised by the default name.
+            const avatarName = a.isMain ? agent.defaultName : a.name;
             return (
               <button key={a.botId} className="ag-roster-item" aria-current={a.botId === selected.botId} onClick={() => setSelectedId(a.botId)}>
-                <BotAvatar bot={{ id: a.botId, name: a.name, avatar: c ? { character: c.id } : null }} size={40} radius={10} />
+                <BotAvatar bot={{ id: a.botId, name: avatarName, avatar: { character: c?.id ?? null, imageUrl: a.imageUrl ?? null } }} size={40} radius={10} />
                 <span className="ag-roster-text">
                   <strong>{a.isMain ? agent.name : a.name}</strong>
                   <span className="w-muted">{a.isMain ? t('Hauptassistent') : c ? roleLine(c) : a.role}</span>
@@ -214,7 +242,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
               </span>
               <span className="ag-roster-text">
                 <strong>{t('Agent hinzufügen')}</strong>
-                <span className="w-muted">{t('{n} Figuren', { n: CHARACTERS.length })}</span>
+                <span className="w-muted">{t('{n} Figuren oder dein eigenes Bild', { n: CHARACTERS.length })}</span>
               </span>
             </button>
           )}
@@ -222,20 +250,12 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
       )}
 
       <header className="ag-head">
-        {character ? (
-          <img className="ag-figure" src={character.figure} alt="" draggable={false} />
-        ) : selected.isPreset || isMecky({ id: selected.botId, name: agent.defaultName }) ? (
-          <img className="ag-figure" src={meckyUrl} alt="" draggable={false} />
-        ) : (
-          <span className="ag-figure initial" aria-hidden="true">
-            {botInitial(name)}
-          </span>
-        )}
+        <HeadFigure picture={picture} name={name} />
         <div className="ag-head-text">
           <h1 className="ag-name">{name}</h1>
           {isMain && (agent.mail.address || phone) && <span className="ag-address">{[agent.mail.address, phone].filter(Boolean).join(' • ')}</span>}
           <span className="w-muted">
-            {character ? `${roleLine(character)} · ` : ''}
+            {character ? `${roleLine(character)} · ` : custom && selected.role.trim() ? `${selected.role.trim()} · ` : ''}
             {t(word)}
             {owner ? ` ${t('von {owner}', { owner })}` : ''}
             {fmtDate(selected.since) ? ` ${t('seit {date}', { date: fmtDate(selected.since) })}` : ''}
@@ -244,12 +264,29 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
             <button className="w-btn" onClick={() => setOverlay({ kind: 'view' })}>
               <IconView size={16} /> {t('Ansehen')}
             </button>
-            <button className="w-btn" onClick={() => setOverlay({ kind: 'share' })}>
-              <IconShare size={16} /> {t('Teilen')}
-            </button>
-            {canAdd && (
+            {canShare(showcase) && (
+              <button className="w-btn" onClick={() => setOverlay({ kind: 'share' })}>
+                <IconShare size={16} /> {t('Teilen')}
+              </button>
+            )}
+            {canAdd && custom && (
+              <>
+                <button className="w-btn" onClick={() => setOverlay({ kind: 'picture' })}>
+                  <IconImage size={16} /> {t('Bild ändern')}
+                </button>
+                <button className="w-btn" onClick={() => setOverlay({ kind: 'pick', mode: 'change' })}>
+                  <IconRefresh size={16} /> {t('Figur wählen')}
+                </button>
+              </>
+            )}
+            {canAdd && !custom && (
               <button className="w-btn" onClick={() => setOverlay({ kind: 'pick', mode: 'change' })}>
                 <IconRefresh size={16} /> {t('Ändern')}
+              </button>
+            )}
+            {canAdd && !selected.isPreset && character && (
+              <button className="w-btn" onClick={() => setOverlay({ kind: 'picture' })}>
+                <IconImage size={16} /> {t('Eigenes Bild verwenden')}
               </button>
             )}
           </div>
@@ -264,6 +301,8 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
             <NameField agent={agent} busy={saving === 'name'} onSave={(n) => saveOrShow('name', { name: n })} />
             <MailBlock token={token} agent={agent} saving={saving} save={save} onError={setError} />
           </section>
+
+          {custom && <PurposeCard key={selected.botId} agent={selected} saving={saving} run={run} token={token} onError={setError} />}
 
           <PhoneCard token={token} agent={agent} onError={setError} />
 
@@ -335,6 +374,7 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
               </button>
             </div>
           </section>
+          {custom && <PurposeCard key={selected.botId} agent={selected} saving={saving} run={run} token={token} onError={setError} />}
           <section className="ag-card">
             <h2>{t('Persönlichkeit')}</h2>
             <PersonalityPresets
@@ -347,17 +387,30 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
         </>
       )}
 
-      {overlay?.kind === 'view' && <AgentView agent={showcase} onClose={() => setOverlay(null)} onShare={() => setOverlay({ kind: 'share' })} />}
+      {overlay?.kind === 'view' && <AgentView agent={showcase} onClose={() => setOverlay(null)} onShare={canShare(showcase) ? () => setOverlay({ kind: 'share' }) : undefined} />}
+      {overlay?.kind === 'picture' && (
+        <PictureDialog
+          title={custom ? t('Bild von {name} ändern', { name }) : t('Eigenes Bild für {name}', { name })}
+          upload={uploadPicture}
+          onClose={() => setOverlay(null)}
+          onDone={async (imageUrl) => {
+            const failed = await run('picture', () => patchCharacterAgent(token, selected.botId, { imageUrl }));
+            if (!failed) setOverlay(null);
+            return failed;
+          }}
+        />
+      )}
       {overlay?.kind === 'share' && <ShareDialog agent={showcase} onClose={() => setOverlay(null)} />}
       {overlay?.kind === 'pick' && (
         <CharacterPicker
           initialCharacter={overlay.mode === 'change' ? selected.characterId : null}
-          initialName={overlay.mode === 'change' && character ? name : undefined}
+          initialName={overlay.mode === 'change' && !selected.isPreset ? name : undefined}
           initialPersonality={overlay.mode === 'change' ? selected.personality : undefined}
           personalities={personalities}
           mailAddress={overlay.mode === 'change' && isMain ? agent.mail.address : null}
           ownerEmail={agent.mail.ownerVerified ? agent.mail.ownerEmail : null}
           confirmVerb={overlay.mode === 'add' ? 'Hinzufügen' : 'Bestätigen'}
+          uploadPicture={uploadPicture}
           onClose={() => setOverlay(null)}
           onConfirm={onPicked}
         />
@@ -379,6 +432,71 @@ function AgentPage({ token, data, owner, onNavigate }: { token: string; data: Ag
         />
       )}
     </>
+  );
+}
+
+/** The big picture in the header, by the picture rule; an own picture that fails to load shows the initial. */
+function HeadFigure({ picture, name }: { picture: ReturnType<typeof agentPicture>; name: string }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  if (picture.kind === 'character') return <img className="ag-figure" src={picture.character.figure} alt="" draggable={false} />;
+  if (picture.kind === 'mecky') return <img className="ag-figure" src={meckyUrl} alt="" draggable={false} />;
+  if (picture.kind === 'image' && broken !== picture.url) return <img className="ag-figure photo" src={picture.url} alt="" draggable={false} onError={() => setBroken(picture.url)} />;
+  return (
+    <span className="ag-figure initial" aria-hidden="true">
+      {botInitial(name)}
+    </span>
+  );
+}
+
+/** Own agents without a character: what it is for (one line, saves on blur) and how it should work. */
+function PurposeCard({ token, agent, saving, run, onError }: {
+  token: string;
+  agent: AgentSummary;
+  saving: string | null;
+  run: (key: string, req: () => Promise<AgentResponse>) => Promise<string | null>;
+  onError: (m: string | null) => void;
+}) {
+  const saved = agent.instructions ?? '';
+  const [draft, setDraft] = useState(saved);
+  useEffect(() => setDraft(saved), [saved]);
+  const dirty = draft.trim() !== saved.trim();
+  const patch = (key: string, p: { role?: string; instructions?: string }) => void run(key, () => patchCharacterAgent(token, agent.botId, p)).then(onError);
+  return (
+    <section className="ag-card">
+      <h2>{tx('role', 'Aufgabe')}</h2>
+      <h3>{t('Wofür ist dein Agent da?')}</h3>
+      <BlurInput
+        value={agent.role}
+        placeholder={t('z. B. Hilft mir mit dem Verein und seinen Terminen')}
+        maxLength={MAX_ROLE}
+        ariaLabel={t('Wofür ist dein Agent da?')}
+        disabled={saving === 'agent-role'}
+        onSave={(role) => patch('agent-role', { role })}
+      />
+      {agent.instructions !== null && agent.instructions !== undefined && (
+        <>
+          <h3>{t('Wie soll er arbeiten?')}</h3>
+          <p className="ag-hint">{t('Optional. Ton, Vorlieben, was er lassen soll.')}</p>
+          <textarea
+            className="ag-input ag-textarea"
+            rows={6}
+            value={draft}
+            maxLength={MAX_INSTRUCTIONS}
+            aria-label={t('Wie soll er arbeiten?')}
+            placeholder={t('z. B. Antworte kurz und freundlich. Frag nach, bevor du etwas verschickst.')}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="ag-save">
+            <span className="w-muted">
+              {t('{n} / {max} Zeichen', { n: draft.length.toLocaleString(locale()), max: MAX_INSTRUCTIONS.toLocaleString(locale()) })}
+            </span>
+            <button className="w-btn green" disabled={saving === 'agent-instructions' || !dirty} onClick={() => patch('agent-instructions', { instructions: draft.trim() })}>
+              {saving === 'agent-instructions' ? t('Speichere …') : t('Speichern')}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

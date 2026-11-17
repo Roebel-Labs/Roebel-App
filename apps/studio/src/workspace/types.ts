@@ -30,6 +30,8 @@ export interface BotAvatarSpec {
   eyes: string;
   /** Illustrated agent character (src/agent/characters.ts). */
   character?: string;
+  /** Own picture or house artwork (preset bots); only set when there is no character. */
+  imageUrl?: string;
 }
 
 export interface ChatBot {

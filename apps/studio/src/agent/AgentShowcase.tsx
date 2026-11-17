@@ -6,16 +6,25 @@ import logoUrl from '../assets/logo.svg';
 import meckyUrl from '../assets/mecky-welcome.png';
 import { openExternal } from '../persona/common';
 import { IconCheck, IconClose, IconCopy, IconDownload, IconLinkedin, IconShare, IconWhatsapp, IconX } from '../ui/shell/line-icons';
-import { MECKY_COLOR, shareUrl, type Character } from './characters';
+import { botInitial } from '../workspace/BotAvatar';
+import { MECKY_COLOR, PICTURE_COLOR, shareUrl, type AgentPicture, type Character } from './characters';
 
 export interface ShowcaseAgent {
   name: string;
-  character: Character | null;
+  /** By the picture rule (agentPicture). */
+  picture: AgentPicture;
 }
 
-const colorOf = (a: ShowcaseAgent) => a.character?.color ?? MECKY_COLOR;
+const characterOf = (a: ShowcaseAgent): Character | null => (a.picture.kind === 'character' ? a.picture.character : null);
+const colorOf = (a: ShowcaseAgent) => characterOf(a)?.color ?? (a.picture.kind === 'mecky' ? MECKY_COLOR : PICTURE_COLOR);
 const ORTIS_URL = 'https://www.roebel.app/studio';
-const linkOf = (a: ShowcaseAgent) => (a.character ? shareUrl(a.character, a.name) : ORTIS_URL);
+const linkOf = (a: ShowcaseAgent) => {
+  const c = characterOf(a);
+  return c ? shareUrl(c, a.name) : ORTIS_URL;
+};
+
+/** The public share page exists for characters; Mecky shares the Ortis page. Own pictures are not shared. */
+export const canShare = (a: ShowcaseAgent) => a.picture.kind === 'character' || a.picture.kind === 'mecky';
 
 function useEscape(onClose: () => void) {
   useEffect(() => {
@@ -34,21 +43,34 @@ function Stamp() {
   );
 }
 
-/** Large picture: the website's 1600 px figure, the bundled one until it has loaded (or when offline). */
+/**
+ * Large picture: a character's 1600 px figure from the website (the bundled one until it has loaded, or when
+ * offline), Mecky's figure, an own picture large and rounded, or the initial on a tile.
+ */
 function Figure({ agent, className }: { agent: ShowcaseAgent; className: string }) {
-  const small = agent.character?.figure ?? meckyUrl;
+  const character = characterOf(agent);
+  const small = character?.figure ?? meckyUrl;
   const [src, setSrc] = useState(small);
+  const [broken, setBroken] = useState(false);
   useEffect(() => {
     setSrc(small);
-    if (!agent.character) return;
+    if (!character) return;
     const img = new Image();
-    img.onload = () => setSrc(agent.character!.large);
-    img.src = agent.character.large;
-  }, [agent.character, small]);
+    img.onload = () => setSrc(character.large);
+    img.src = character.large;
+  }, [character, small]);
+  useEffect(() => setBroken(false), [agent.picture]);
+  if (agent.picture.kind === 'image' && !broken) return <img className={`${className} photo`} src={agent.picture.url} alt="" draggable={false} onError={() => setBroken(true)} />;
+  if (agent.picture.kind === 'initial' || agent.picture.kind === 'image')
+    return (
+      <span className={`${className} initial`} aria-hidden="true">
+        {botInitial(agent.name)}
+      </span>
+    );
   return <img className={className} src={src} alt="" draggable={false} />;
 }
 
-export function AgentView({ agent, onClose, onShare }: { agent: ShowcaseAgent; onClose: () => void; onShare: () => void }) {
+export function AgentView({ agent, onClose, onShare }: { agent: ShowcaseAgent; onClose: () => void; onShare?: () => void }) {
   useEscape(onClose);
   return (
     <div className="sc-view" role="dialog" aria-label={agent.name} style={{ background: colorOf(agent) }}>
@@ -58,9 +80,11 @@ export function AgentView({ agent, onClose, onShare }: { agent: ShowcaseAgent; o
         <h1 className="sc-view-name">{agent.name}</h1>
       </div>
       <div className="sc-view-actions">
-        <button className="sc-pill" onClick={onShare}>
-          <IconShare size={17} /> {t('Teilen')}
-        </button>
+        {onShare && (
+          <button className="sc-pill" onClick={onShare}>
+            <IconShare size={17} /> {t('Teilen')}
+          </button>
+        )}
         <button className="sc-round" aria-label={t('Schließen')} onClick={onClose}>
           <IconClose size={18} />
         </button>
@@ -72,7 +96,7 @@ export function AgentView({ agent, onClose, onShare }: { agent: ShowcaseAgent; o
 /** Draws the share card (1200×1500) for "Herunterladen"; uses the bundled figure so the canvas stays clean. */
 async function cardPng(agent: ShowcaseAgent): Promise<Blob | null> {
   const img = new Image();
-  img.src = agent.character?.figure ?? meckyUrl;
+  img.src = characterOf(agent)?.figure ?? meckyUrl;
   await img.decode().catch(() => {});
   const W = 1200, H = 1500;
   const canvas = document.createElement('canvas');

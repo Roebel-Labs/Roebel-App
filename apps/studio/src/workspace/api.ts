@@ -347,6 +347,8 @@ export interface Agent {
   description: string;
   /** Illustrated character of the main assistant; null for Mecky (older servers omit it). */
   characterId?: string | null;
+  /** Own picture (or house artwork of a preset) when there is no character; older servers omit it. */
+  imageUrl?: string | null;
   isPreset?: boolean;
   since: string;
   personality: string;
@@ -368,7 +370,11 @@ export interface AgentSummary {
   botId: string;
   name: string;
   characterId: string | null;
+  /** Own picture or house artwork; older servers omit it. */
+  imageUrl?: string | null;
   role: string;
+  /** How the agent should work: own bots only (null for presets); older servers omit it. */
+  instructions?: string | null;
   isMain: boolean;
   isPreset: boolean;
   personality: string;
@@ -399,10 +405,18 @@ export interface AgentLinkCode {
 }
 export const fetchAgent = (token: string) => call<AgentResponse>('/api/chat/agent', { token });
 export const patchAgent = (token: string, patch: AgentPatch) => call<AgentResponse>('/api/chat/agent', { token, method: 'PATCH', json: patch });
-export const createCharacterAgent = (token: string, input: { character: string; name?: string; personality?: string; main?: boolean }) =>
-  call<AgentResponse>('/api/chat/agent/agents', { token, json: input });
-export const patchCharacterAgent = (token: string, id: string, patch: { name?: string; character?: string; personality?: string }) =>
+/** A new agent: an illustrated character, or an own picture (url from uploadAgentAvatar) with name and role. */
+export type NewAgentInput =
+  | { character: string; name?: string; personality?: string; main?: boolean }
+  | { imageUrl: string; name: string; role?: string; instructions?: string; personality?: string; main?: boolean };
+/** imageUrl switches to an own picture (the character goes), character switches back; role is for own pictures. */
+export type AgentBotPatch = Partial<{ name: string; character: string; imageUrl: string; role: string; instructions: string; personality: string }>;
+export const createCharacterAgent = (token: string, input: NewAgentInput) => call<AgentResponse>('/api/chat/agent/agents', { token, json: input });
+export const patchCharacterAgent = (token: string, id: string, patch: AgentBotPatch) =>
   call<AgentResponse>(`/api/chat/agent/agents/${enc(id)}`, { token, method: 'PATCH', json: patch });
+/** Own agent picture (JPEG/PNG/WebP, ≤ 4 MB, ≥ 96 px; Studio sends a 512² JPEG). */
+export const uploadAgentAvatar = (token: string, blob: Blob) =>
+  upload<{ url: string; width: number; height: number }>('/api/chat/agent/avatar', token, 'file', blob, blob.type === 'image/png' ? 'agent.png' : 'agent.jpg');
 export const deleteCharacterAgent = (token: string, id: string) => call<AgentResponse>(`/api/chat/agent/agents/${enc(id)}`, { token, method: 'DELETE' });
 export const createAgentChannel = (token: string, kind: 'sms' | 'whatsapp') => call<AgentLinkCode>('/api/chat/agent/channels', { token, json: { kind } });
 export const deleteAgentChannel = (token: string, id: string) => call<{ ok: boolean }>(`/api/chat/agent/channels?id=${enc(id)}`, { token, method: 'DELETE' });

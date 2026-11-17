@@ -99,3 +99,38 @@ export function shareUrl(c: Character, name: string): string {
 
 /** Mecky's colour on the share and view screens (the default assistant has no character). */
 export const MECKY_COLOR = '#BFD6EC';
+
+/**
+ * House artwork on the website (`https://www.roebel.app/agents/<id>/tile.webp`, carried by preset bots): the
+ * character it belongs to, 'mecky', or null for any other picture (an own upload).
+ */
+export function houseArt(url: string | null | undefined): Character | 'mecky' | null {
+  const m = /^https:\/\/(?:www\.)?roebel\.app\/agents\/([a-z0-9-]+)\//i.exec(url ?? '');
+  if (!m) return null;
+  const id = m[1].toLowerCase();
+  return id === 'mecky' ? 'mecky' : characterById(id);
+}
+
+/** What an agent looks like, by the picture rule: own picture → character → Mecky → initial. */
+export type AgentPicture =
+  | { kind: 'image'; url: string }
+  | { kind: 'character'; character: Character }
+  | { kind: 'mecky' }
+  | { kind: 'initial' };
+
+/**
+ * The picture rule for any bot: `imageUrl` → the character → Mecky's picture for Mecky → the initial. House
+ * artwork of a preset resolves to the bundled art (works offline, no second download).
+ */
+export function agentPicture(a: { imageUrl?: string | null; characterId?: string | null; mecky?: boolean }): AgentPicture {
+  const house = houseArt(a.imageUrl);
+  if (house === 'mecky') return { kind: 'mecky' };
+  if (house) return { kind: 'character', character: house };
+  if (a.imageUrl) return { kind: 'image', url: a.imageUrl };
+  const c = characterById(a.characterId);
+  if (c) return { kind: 'character', character: c };
+  return a.mecky ? { kind: 'mecky' } : { kind: 'initial' };
+}
+
+/** Background behind an own picture on the view and share screens (warm stone, like the interface). */
+export const PICTURE_COLOR = '#E4E1DA';
