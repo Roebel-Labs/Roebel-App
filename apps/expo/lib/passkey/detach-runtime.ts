@@ -11,7 +11,7 @@ import { secureKeyValueStorage } from './migration-runtime';
 import { markSponsoredOpSucceeded, runDetach, type DetachResult } from './detach';
 import { backupKeysForSession, deviceSecretSources, readBackupStatus } from './derived-keys-runtime';
 import type { KeyBackupSlot } from './key-backup';
-import type { PasskeySession } from './session';
+import { isWordsOwner, requirePasskeyOwner, type PasskeySession } from './session';
 import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type PasskeyUserOpArgs } from './userop';
 
 const gnosisClient = createPublicClient({ transport: http(DEFAULT_GNOSIS_RPC_URL, { timeout: 15_000, retryCount: 1 }) });
@@ -29,17 +29,19 @@ export const readIsAdmin = (legacy: Address, signer: Address) =>
 /**
  * The passkey session to act with from Settings: the active adapter session, or — under a
  * thirdweb session — one built from this device's migration record (identity = the legacy account).
+ * A words (ecdsa) session or record is not a passkey: null (these screens are passkey-only).
  */
 export async function actingPasskeySession(activeSession: PasskeySession | null, identity: Address | undefined): Promise<PasskeySession | null> {
-  if (activeSession) return activeSession;
+  if (activeSession) return isWordsOwner(activeSession) ? null : activeSession;
   const rec: MigrationRecord | null = await loadMigrationRecord(secureKeyValueStorage).catch(() => null);
-  if (!rec || rec.status !== 'done') return null;
+  if (!rec || rec.status !== 'done' || isWordsOwner(rec)) return null;
   const legacy = rec.legacy ?? identity;
   if (!legacy) return null;
   return { credentialId: rec.credentialId, x: rec.x, y: rec.y, safe: rec.safe, identity: legacy, ownerType: rec.ownerType, owner: rec.owner };
 }
 
 function sendAs(session: PasskeySession) {
+  requirePasskeyOwner(session);
   return async (args: Pick<PasskeyUserOpArgs, 'legacy' | 'calls'>) => {
     const res = await sendPasskeyUserOp({
       credentialId: session.credentialId,

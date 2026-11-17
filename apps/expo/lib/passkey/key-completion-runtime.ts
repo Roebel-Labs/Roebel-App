@@ -25,7 +25,7 @@ import { completeKeyBackup, type CompletionResult, type ThirdwebKeySource } from
 import { deriveMaciSlotFromThirdweb } from './maci-key-resolver';
 import type { KeyBackupSlot } from './key-backup';
 import { unwrapSecret, wrapSecret } from './prf-vault';
-import type { PasskeySession } from './session';
+import { requirePasskeyOwner, type PasskeySession } from './session';
 import { getPrfSecret } from './webauthn';
 
 const enc = new TextEncoder();
@@ -143,6 +143,7 @@ export async function completeKeysForSession(
   session: PasskeySession,
   opts: { activeAccount?: unknown; thirdwebAccount?: Account | null } = {},
 ): Promise<CompletionResult> {
+  requirePasskeyOwner(session); // passkey PRF + thirdweb re-derivation: never a words session
   return completeKeyBackup({
     identity: session.identity,
     remote: keyBackupFor(session),

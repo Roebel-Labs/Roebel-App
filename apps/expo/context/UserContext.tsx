@@ -14,6 +14,8 @@ import { consumeWelcomeDeferral } from '@/lib/onboarding-deferral';
 import { logActivity } from '@/lib/supabase-activity';
 import { loadCachedUser, saveCachedUser } from '@/lib/user-cache';
 import { useWalletBoot } from '@/context/WalletBootContext';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { isWordsOwner } from '@/lib/passkey/session';
 import type { UserRecord, UserTier } from '@/lib/types';
 
 const TIER_LABELS: Record<UserTier, string> = {
@@ -121,8 +123,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } else if (wallet && wallet.id === 'adapter') {
           // Passkey session (lib/passkey/signin-runtime.ts). upsertUser only sets
           // auth_provider on rows that have none, so a migrated account keeps its
-          // original provider; a passkey-only account is created with 'passkey'.
-          authProvider = 'passkey';
+          // original provider; a passkey-only account is created with 'passkey',
+          // a 12-word (expert path) account with 'words'.
+          authProvider = isWordsOwner(passkeySessionOf<{ credentialId: string; safe: string; identity: string; ownerType?: string }>(account))
+            ? 'words'
+            : 'passkey';
         }
 
         const userRecord = await upsertUser(account!.address, email, authProvider, account!);

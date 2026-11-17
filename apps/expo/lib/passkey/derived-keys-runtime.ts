@@ -32,7 +32,7 @@ import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
 import { identityKind, type PasskeySession } from './session';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
-import { isSafeDeployed, sendPasskeyUserOp } from './userop';
+import { isSafeDeployed, sendSafeUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
 import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
 import { resolveIdentity } from './signin';
@@ -51,7 +51,7 @@ import { secureKeyValueStorage } from './migration-runtime';
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
   isSafeDeployed: (safe) => isSafeDeployed(safe),
-  sendUserOp: (args) => sendPasskeyUserOp(args),
+  sendUserOp: (args) => sendSafeUserOp(args),
 };
 
 const storage = {

@@ -339,3 +339,51 @@ describe('signInFromMigrationRecord (settings → Mit Passkey anmelden)', () => 
     expect(sessionStorage.m.size).toBe(0);
   });
 });
+
+describe('passkey-only paths refuse a words (ecdsa) record', () => {
+  const WORDS_REC = {
+    credentialId: '',
+    x: `0x${'00'.repeat(32)}`,
+    y: `0x${'00'.repeat(32)}`,
+    safe: getAddress('0xcb7AF8976B81Cd123D59ccdeb5c3419c35a06441'),
+    ownerType: 'ecdsa',
+    owner: getAddress('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'),
+    status: 'done',
+  };
+
+  it('settings → Mit Passkey anmelden never turns a words record into a session', async () => {
+    const pk = newTestPasskey();
+    const { deps, migrationStorage, sessionStorage } = signInDeps(pk);
+    migrationStorage.m.set(MIGRATION_STORE_KEY, JSON.stringify(WORDS_REC));
+    expect((await signInFromMigrationRecord(deps)).status).toBe('error');
+    expect(sessionStorage.m.size).toBe(0);
+  });
+
+  it('a passkey sign-up on a phone with a words record replaces the record with the passkey one', async () => {
+    const pk = newTestPasskey();
+    const { deps, migrationStorage } = signInDeps(pk);
+    migrationStorage.m.set(MIGRATION_STORE_KEY, JSON.stringify(WORDS_REC));
+    const res = await signUpWithPasskey('Anna', deps);
+    expect(res.status).toBe('signedIn');
+    expect(await loadMigrationRecord(migrationStorage)).toMatchObject({ ownerType: 'sharedSigner', safe: safeOf(pk) });
+  });
+
+  it('resolveCredentialKey never matches a words record (it has no credential)', async () => {
+    const pk = newTestPasskey();
+    const assertion = { ...assertionFor(pk, `0x${'01'.repeat(32)}`), credentialId: '', userHandle: null };
+    const chain: KeyChain = {
+      hasCode: async () => false,
+      findLinkedLegacies: async () => [],
+      isKnownAccount: async () => false,
+      ...noSigner,
+    };
+    await expect(
+      resolveCredentialKey(assertion, { local: [WORDS_REC as never], chain, signAgain: async () => assertionFor(pk, `0x${'02'.repeat(32)}`) }),
+    ).resolves.not.toMatchObject({ safe: WORDS_REC.safe });
+  });
+
+  it('the native passkey sheet is never opened for an empty credential', async () => {
+    const { signWithPasskey } = require('../webauthn');
+    await expect(signWithPasskey('', `0x${'01'.repeat(32)}`)).rejects.toThrow('passkey record required');
+  });
+});

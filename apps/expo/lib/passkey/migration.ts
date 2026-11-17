@@ -34,6 +34,7 @@ import {
 } from './legacy-handover';
 import { buildCreateLegacyAccountCall } from './migration-v3';
 import { predictSafeAddress } from './safe-address';
+import { hasValidKeyFields } from './session';
 import type { PasskeyUserOpArgs, SponsoredCall } from './userop';
 import type { PasskeyCredential } from './webauthn';
 
@@ -57,10 +58,12 @@ export type MigrationStep =
 export type RewrapStatus = 'done' | 'skipped';
 
 /**
- * How the passkey signs for the Safe: through the SafeWebAuthnSharedSigner (a Safe created with
- * this passkey) or through its own SafeWebAuthnSignerFactory signer (a Safe recovered to it).
+ * Who signs for the Safe: a passkey through the SafeWebAuthnSharedSigner (a Safe created with
+ * this passkey) or through its own SafeWebAuthnSignerFactory signer (a Safe recovered to it); or,
+ * on the expert path, `ecdsa` = the 12 words' account key as the Safe's single plain owner (then
+ * `owner` = that address, `credentialId: ''`, `x`/`y` = WORDS_KEY_PLACEHOLDER).
  */
-export type SafeOwnerType = 'sharedSigner' | 'webauthnSigner';
+export type SafeOwnerType = 'sharedSigner' | 'webauthnSigner' | 'ecdsa';
 
 export type MigrationRecord = {
   credentialId: string;
@@ -118,7 +121,10 @@ export async function loadMigrationRecord(storage: KeyValueStorage): Promise<Mig
   if (!raw) return null;
   try {
     const rec = JSON.parse(raw) as Partial<MigrationRecord>;
-    if (!rec?.credentialId || !rec.x || !rec.y || !rec.safe) return null;
+    if (!rec) return null;
+    // A words record: exactly the placeholder key, an empty credential and its ECDSA owner.
+    if (rec.ownerType === 'ecdsa') return hasValidKeyFields(rec) && rec.safe && rec.owner ? (rec as MigrationRecord) : null;
+    if (!rec.credentialId || !rec.x || !rec.y || !rec.safe) return null;
     // Records from before owner persistence were all created with the SharedSigner.
     if (rec.ownerType !== 'webauthnSigner') {
       return { ...rec, ownerType: 'sharedSigner', owner: SAFE_WEBAUTHN_SHARED_SIGNER } as MigrationRecord;

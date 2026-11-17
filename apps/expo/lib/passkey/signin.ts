@@ -160,7 +160,8 @@ export async function resolveCredentialKey(
     signAgain: (credentialId: string) => Promise<PasskeyAssertion>;
   },
 ): Promise<ResolvedKey> {
-  const rec = deps.local.find((r) => r && r.credentialId === assertion.credentialId);
+  // A words (ecdsa) record has no credential: it is never a passkey's key.
+  const rec = deps.local.find((r) => r && r.ownerType !== 'ecdsa' && !!r.credentialId && r.credentialId === assertion.credentialId);
   if (rec) return { x: rec.x, y: rec.y, safe: getAddress(rec.safe), owner: getAddress(rec.owner), ownerType: rec.ownerType };
 
   const first = candidateKeys(assertion);
@@ -228,9 +229,10 @@ async function finish(key: ResolvedKey, credentialId: string, deps: SignInDeps):
   };
   await savePasskeySession(deps.sessionStorage, session);
   // A device that signs in with a synced passkey gets the migration record too (guardians,
-  // email, recovery screens read it). An existing record is never overwritten.
+  // email, recovery screens read it). An existing passkey record is never overwritten; a words
+  // (ecdsa) record is re-derivable from its phrase and is replaced, like in ensureStandalonePasskey.
   const existing = await loadMigrationRecord(deps.migrationStorage).catch(() => null);
-  if (!existing) {
+  if (!existing || existing.ownerType === 'ecdsa') {
     const rec: MigrationRecord = {
       credentialId,
       x: key.x,
@@ -309,7 +311,8 @@ export async function signInFromMigrationRecord(
 ): Promise<SignInResult> {
   try {
     const rec = await loadMigrationRecord(deps.migrationStorage);
-    if (!rec) return { status: 'error', message: 'Auf diesem Gerät ist noch kein Passkey eingerichtet.' };
+    // A words (ecdsa) record is not a passkey: this switch is passkey-only.
+    if (!rec || rec.ownerType === 'ecdsa') return { status: 'error', message: 'Auf diesem Gerät ist noch kein Passkey eingerichtet.' };
     const key: ResolvedKey = { x: rec.x, y: rec.y, safe: getAddress(rec.safe), owner: rec.owner, ownerType: rec.ownerType };
     const resolved = await resolveIdentity(key.safe, deps.identityChain);
     if (rec.legacy && resolved.kind === 'safe') {
