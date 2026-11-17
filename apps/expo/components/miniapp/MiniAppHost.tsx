@@ -89,6 +89,8 @@ import {
   hasMiniAppApi,
   miniAppApiBase,
 } from '@/lib/miniapp-api';
+import { createMiniAppTokenCache, requestMiniAppUserToken } from '@/lib/miniapp-token';
+import { canSignSilently } from '@/lib/passkey/api-session-runtime';
 
 const HEARTBEAT_MS = 25_000;
 /** Failsafe: reveal the WebView if the app never calls actions.ready(). */
@@ -433,9 +435,42 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     setConfirmBusy(false);
   }, [confirm]);
 
+  // --- mini-app user token ---------------------------------------------------
+  // Fetched lazily by the handlers that need it (never on open, so opening an app never
+  // prompts). One cache per host, cleared when the account changes. Failures resolve to null
+  // and back off 60 s; the call then goes out wallet-only, as before.
+  // The cache is created on first use (inside a handler, never during render) and reads the
+  // current account through a ref updated after each render.
+  const tokenAccountRef = useRef(account);
+  const tokenCacheRef = useRef<ReturnType<typeof createMiniAppTokenCache> | null>(null);
+  useEffect(() => {
+    tokenAccountRef.current = account;
+  }, [account]);
+  useEffect(() => {
+    tokenCacheRef.current?.clear();
+  }, [walletLc]);
+  // `silent`: reads an app may fire on load (balance, user data, auth.getToken) only fetch a
+  // token when that needs no fingerprint (thirdweb, or a passkey session with its API session
+  // token); otherwise they go out wallet-only. Writes may ask once (then back off 60 s).
+  const getUserToken = useCallback(async (opts?: { silent?: boolean }): Promise<string | null> => {
+    // The dev preview never requests a token.
+    if (app.id === 'dev-preview' || !walletLc || !hasMiniAppApi()) return null;
+    if (opts?.silent && !(await canSignSilently(tokenAccountRef.current))) return null;
+    if (tokenCacheRef.current == null) {
+      tokenCacheRef.current = createMiniAppTokenCache({
+        request: async (appRef) => {
+          const acc = tokenAccountRef.current;
+          return acc ? requestMiniAppUserToken(acc, appRef) : null;
+        },
+      });
+    }
+    return tokenCacheRef.current.get(app.id, walletLc);
+  }, [app.id, walletLc]);
+
   // --- host handlers --------------------------------------------------------
   const handlers = useMemo<HostHandlers>(() => {
     const apiId = { miniAppId: app.id, slug: app.slug, wallet: walletLc };
+    const userApiId = async (opts?: { silent?: boolean }) => ({ ...apiId, token: await getUserToken(opts) });
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: () => setSplashVisible(false),
@@ -480,7 +515,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
 
       getMuenzenBalance: async () => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiGetMuenzenBalance(apiId);
+        return apiGetMuenzenBalance(await userApiId({ silent: true }));
       },
       grantReward: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
@@ -496,7 +531,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           replayKey: c.replayKey + 1,
         }));
         try {
-          const res = await apiGrantReward(apiId, p);
+          const res = await apiGrantReward(await userApiId(), p);
           if (res.granted) {
             track('reward_granted', { amount: p.amount, reason: p.reason });
             const granted = Number(res.amount ?? p.amount ?? 1) || 1;
@@ -514,7 +549,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       notificationsSend: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiSendNotification(apiId, p);
+        return apiSendNotification(await userApiId(), p);
       },
 
       // v0.3 mini-app datastore ("Mini-CMS"): app content + per-user state.
@@ -528,16 +563,21 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       dataUserGet: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiDataUserGet(apiId, p.key);
+        return apiDataUserGet(await userApiId({ silent: true }), p.key);
       },
       dataUserSet: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        return apiDataUserSet(apiId, p.key, p.value);
+        return apiDataUserSet(await userApiId(), p.key, p.value);
+      },
+
+      authGetToken: async () => {
+        const t = await getUserToken({ silent: true });
+        return t ? { token: t } : null;
       },
 
       track: ({ event, props }) => track(event, props),
     };
-  }, [app.id, app.slug, walletLc, onClose, buildContext, account, walletRequest, track]);
+  }, [app.id, app.slug, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken]);
 
   // --- construct/refresh the bridge ----------------------------------------
   useEffect(() => {

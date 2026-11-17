@@ -20,7 +20,9 @@ export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'spon
 /** Live room session (apps/web /api/live); signed under LIVE_SCOPE, returns a short-lived chat/vote token. */
 export const LIVE_SCOPE = 'roebel-live-v1';
 export type LiveAction = 'live_session';
-export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction;
+/** Mini-app user token (apps/web /api/mini-apps/token); signed under MINIAPP_SCOPE (lib/miniapp-token.ts). */
+export type MiniAppAction = 'user_token';
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction;
 
 export interface SigningAccount {
   address: string;
@@ -65,7 +67,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 }
 
 /** Runs `task` after every earlier signature finished; a failure or timeout never blocks the queue. */
-function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
+export function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
   const run = signQueue.then(task);
   signQueue = run.catch(() => undefined);
   return run;

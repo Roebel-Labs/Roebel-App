@@ -48,11 +48,16 @@ function unsupported(): never {
   };
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+/** `Authorization: Bearer <mini-app user token>` when the host holds one, else nothing. */
+function authHeaders(token?: string | null): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function post<T>(path: string, body: unknown, token?: string | null): Promise<T> {
   if (!API_BASE) unsupported();
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
     body: JSON.stringify(body),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
@@ -65,10 +70,12 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-async function get<T>(path: string, query: Record<string, string>): Promise<T> {
+async function get<T>(path: string, query: Record<string, string>, token?: string | null): Promise<T> {
   if (!API_BASE) unsupported();
   const qs = new URLSearchParams(query).toString();
-  const res = await fetch(`${API_BASE}${path}?${qs}`);
+  const res = token
+    ? await fetch(`${API_BASE}${path}?${qs}`, { headers: authHeaders(token) })
+    : await fetch(`${API_BASE}${path}?${qs}`);
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     throw {
@@ -83,6 +90,11 @@ export interface MiniAppApiIdentity {
   miniAppId: string;
   slug: string;
   wallet: string | null;
+  /**
+   * Short-lived mini-app user token (lib/miniapp-token.ts). Sent as `Authorization: Bearer`
+   * on the user-scoped calls; the wallet is still sent for older web deploys.
+   */
+  token?: string | null;
 }
 
 export async function apiGetMuenzenBalance(
@@ -92,7 +104,7 @@ export async function apiGetMuenzenBalance(
     miniAppId: id.miniAppId,
     slug: id.slug,
     wallet: id.wallet ?? '',
-  });
+  }, id.token);
 }
 
 export async function apiGrantReward(
@@ -109,7 +121,7 @@ export async function apiGrantReward(
     amount: p.amount,
     reason: p.reason,
     idempotencyKey: p.idempotencyKey,
-  });
+  }, id.token);
 }
 
 export async function apiSendNotification(
@@ -123,7 +135,7 @@ export async function apiSendNotification(
     title: p.title,
     body: p.body,
     targetUrl: p.targetUrl,
-  });
+  }, id.token);
 }
 
 // ── v0.3 mini-app datastore ("Mini-CMS") ─────────────────────────────────────
@@ -162,7 +174,7 @@ export async function apiDataUserGet(
     scope: 'user',
     wallet: id.wallet,
     key,
-  });
+  }, id.token);
 }
 
 export async function apiDataUserSet(
@@ -177,5 +189,5 @@ export async function apiDataUserSet(
     wallet: id.wallet,
     key,
     value,
-  });
+  }, id.token);
 }
