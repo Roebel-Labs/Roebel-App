@@ -77,3 +77,10 @@ test("reader.getType maps the struct and returns null for an unknown type", asyn
   });
   assert.equal(await missing.getType(T1), null);
 });
+
+test("reader.loadRegister rejects a non-positive chunk", async () => {
+  const { client } = fake({});
+  const r = createCredentialRegistryReader({ client, address: ADDR });
+  await assert.rejects(() => r.loadRegister(0n, { chunk: 0n, toBlock: 10n }), /chunk/);
+  await assert.rejects(() => r.loadRegister(0n, { chunk: -5n, toBlock: 10n }), /chunk/);
+});

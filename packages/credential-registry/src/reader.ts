@@ -103,6 +103,7 @@ export function createCredentialRegistryReader({
 
     async loadRegister(fromBlock, opts = {}) {
       const chunk = opts.chunk ?? 50_000n;
+      if (chunk <= 0n) throw new Error("loadRegister: chunk must be > 0");
       const head = opts.toBlock ?? (await client.getBlockNumber());
       const logs: RegisterLog[] = [];
       const events = CREDENTIAL_REGISTRY_ABI.filter(

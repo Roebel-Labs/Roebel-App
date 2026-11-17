@@ -112,7 +112,7 @@ export function stepsConfirmedBy(steps: readonly RegisterStep[], registry: Addre
   { ok: true; batchIds: Record<string /* root */, bigint> } | { ok: false; missing: number /* index of the first unconfirmed step */ };
 ```
 
-`stepsConfirmedBy` matches, in order and only among logs emitted by `registry`: `createType` → `TypeCreated` with the expected type id; `updateType` → `TypeConfigured`; `retireType` → `TypeRetired`; `setDelegate` → `DelegateSet` (delegate, allowed); `setOrgPrivateOnly` → `OrgPrivateOnlySet(orgId, privateOnly)`; `addBatch` → `BatchAdded` with the same `typeId` and `root`; `revokeLeaves` → one `LeafRevoked` per leaf; `revokeBatch` → `BatchRevoked`.
+`stepsConfirmedBy` matches, in order and only among logs emitted by `registry`: `createType` → `TypeCreated` with the expected type id; `updateType` → `TypeConfigured`; `retireType` → `TypeRetired`; `setDelegate` → `DelegateSet` (delegate, allowed); `setOrgPrivateOnly` → `OrgPrivateOnlySet(orgId, privateOnly)`; `addBatch` → `BatchAdded` with the same `typeId` and `root`; `revokeLeaves` → one `LeafRevoked` per newly revoked leaf (already-revoked leaves and duplicates in the array emit nothing); `revokeBatch` → `BatchRevoked`.
 
 - [ ] **Step 1: Write the failing tests**
 

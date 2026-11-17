@@ -60,7 +60,11 @@ test("replay rebuilds types, config updates, delegates, recognition and retireme
   assert.equal(t.recognised, true);
   assert.equal(t.retired, true);
   assert.ok(s.privateOnlyOrgs.has(ORG));
-  replayRegisterEvents([log("OrgPrivateOnlySet", { orgId: ORG, privateOnly: false, by: ISSUER })]);
+  const off = replayRegisterEvents([
+    log("OrgPrivateOnlySet", { orgId: ORG, privateOnly: true, by: ISSUER }),
+    log("OrgPrivateOnlySet", { orgId: ORG, privateOnly: false, by: ISSUER }),
+  ]);
+  assert.ok(!off.privateOnlyOrgs.has(ORG));
 });
 
 test("replay rebuilds holdings: claim, renewal, renounce, prune, leaf revocation", () => {

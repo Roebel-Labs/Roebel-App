@@ -60,10 +60,11 @@ Every PoC stays in the suite as a regression test. A fixed finding asserts the s
 Pass 2 confirmed that the interface block of the plan matched the code. The changes above are behavioural (no signature, event or error changed, so the ABI, `sync-abi` and the vector are unchanged). The plan's interface comments and "Rules the code must follow" were updated for the same-Safe rule, the seal clearing on rebind, the `setRecognised` activity check and the try/catch in `canManage`.
 
 ### Residual of the P2-01 fix
-The rule identifies an org by its Safe. If an org is revoked in the new registry and the **same Safe** registers the id again before a keeper rebinds, the old types come back under it. This is the same entity (the same Safe), but it slips past a revocation in the new registry. Mitigated operationally by rebinding immediately after `applySources`. A contract option for a later version is to require the new registry's `registeredAt` to be at or before the `applySources` time.
+The rule identifies an org by its Safe. If an org is revoked in the new registry and the **same Safe** registers the id again before a keeper rebinds, the old types come back under it. This is the same entity (the same Safe), but it slips past a revocation in the new registry. Mitigated operationally by rebinding immediately after `applySources`. Chained-swap variant: if the type is never rebound to B, an org with the same Safe is revoked in B, and the same Safe is present in C, B's revocation is skipped; keepers rebind immediately after each swap. A contract option for a later version is to require the new registry's `registeredAt` to be at or before the `applySources` time.
 
 ## Known limits by design
 
+- **A `SourcesProposed` proposal never expires.** The owner should `cancelSources` stale proposals; watchers must treat any pending proposal as live.
 - **A private claim-key leaf is a bearer document until it is claimed.** Whoever holds the paper key can claim it. After the claim it is bound to the claimant, but a private "Vorzeigen" via `checkLeaf` is only safe when the verifier checks `boundTo` and control of the key (P1-19).
 - **An org learns by elimination who accepted privately.** The issuer knows every leaf; accepted minus public claims = private holders.
 - **The count of a batch is public**, and it is self-declared (P1-16). Proof length leaks roughly log2 of the tree size.
