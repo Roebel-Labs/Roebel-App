@@ -264,10 +264,14 @@ export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResul
     // extra fingerprint, so the copy is left to "Schlüssel sichern" / key completion. A stale copy
     // (under earlier words, or a tombstone) needs a `replace` proof: also left to "Schlüssel
     // sichern", which replaces all stale copies in one write. Resolving a key never costs an extra fingerprint.
-    if (d.wordsVaultKey && prf && d.remote?.writeWithoutPrompt) {
+    if (d.wordsVaultKey && prf && d.remote) {
       try {
+        // Always: planning resolves the vault key, which also syncs the words pool to this phone.
         const plan = await planWordsCopies(d, read, prf, [{ slot: d.slot, secret }]);
-        if (plan.on && Object.keys(plan.fresh).length > 0) await d.remote.writeWithoutPrompt(plan.fresh);
+        // Only the write is gated on a promptless (cached-token) path.
+        if (plan.on && Object.keys(plan.fresh).length > 0 && d.remote.writeWithoutPrompt) {
+          await d.remote.writeWithoutPrompt(plan.fresh);
+        }
       } catch {
         // Best effort: the key is restored either way.
       }

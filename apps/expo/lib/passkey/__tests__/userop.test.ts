@@ -667,6 +667,16 @@ describe('ECDSA signer (expert path) vs the fork vector', () => {
     await expect(s.signOpHash(eu.safeOpHash as Hex)).rejects.toThrow(/65 bytes/);
   });
 
+  it('ecdsaOpSigner normalises a y-parity v (0/1 → 27/28) and refuses any other v', async () => {
+    const rs = (eu.ownerSignature as string).slice(0, -2); // vector v = 0x1b (27)
+    const withV = (v: string) => ecdsaOpSigner(ecdsaVector.owner, async () => `${rs}${v}` as Hex).signOpHash(eu.safeOpHash as Hex);
+    expect(await withV('00')).toBe(eu.userOpSignature);
+    expect(await withV('1b')).toBe(eu.userOpSignature);
+    expect((await withV('01')).slice(-2)).toBe('1c');
+    expect((await withV('1c')).slice(-2)).toBe('1c');
+    for (const bad of ['02', '1a', '1d', '1f', '20', 'ff']) await expect(withV(bad)).rejects.toThrow(/v = 27 or 28/);
+  });
+
   it('sendSafeUserOp with an ECDSA signer: deploy op carries the ECDSA factoryData and the body names ecdsaOwner, no x/y', async () => {
     const digests: Hex[] = [];
     const signer = ecdsaOpSigner(ecdsaVector.owner, async (d) => {

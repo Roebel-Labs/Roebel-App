@@ -1,7 +1,7 @@
 /**
  * useGuardianManager: the threshold every change asks for (W2 rules: never silently lower what is
  * on chain) and the words pool rule (I1: guardians this phone cannot classify block changes;
- * N2: only with the 'words' surface open and words seen on this phone).
+ * N2: only while the 'words' surface is open).
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -17,9 +17,11 @@ const W0 = getAddress('0x4444444444444444444444444444444444444440');
 const mockChain: { guardians: Address[]; threshold: number } = { guardians: [], threshold: 0 };
 const mockSent: SponsoredCall[][] = [];
 const mockNames = new Map<string, string>();
-/** This phone's key-value storage (words pool, pending marker, seen flag) and the 'words' gate. */
+/** This phone's key-value storage (words pool, none record) and the 'words' gate. */
 const mockKv = new Map<string, string>();
 let mockSurfaceOpen = false;
+/** Which words-view path the hook took: the runtime's wordsPoolView, or its in-hook fallback (gate read). */
+const mockPath = { runtime: 0, fallbackGate: 0 };
 const mockSuggested: { guardian: Address; approver: Address }[] = [];
 
 jest.mock('thirdweb/react', () => ({ useActiveAccount: () => undefined }));
@@ -34,7 +36,12 @@ jest.mock('@/lib/passkey/migration-runtime', () => ({
     return mockStorage();
   },
 }));
-jest.mock('@/lib/passkey/gate', () => ({ isPasskeySurfaceAllowed: async () => mockSurfaceOpen }));
+jest.mock('@/lib/passkey/gate', () => ({
+  isPasskeySurfaceAllowed: async () => {
+    mockPath.fallbackGate++;
+    return mockSurfaceOpen;
+  },
+}));
 jest.mock('@/components/passkey/PasskeyUi', () => ({
   friendlyError: (e: unknown, fallback?: string) => (e instanceof Error ? e.message : fallback ?? null),
 }));
@@ -43,11 +50,13 @@ jest.mock('@/lib/passkey/recovery-lookup', () => ({ suggestDefaultGuardians: asy
 // The runtime view = the real currentWordsPool on this phone's storage and gate, without a token read
 // (the hook falls back to the same call when the runtime cannot be loaded).
 jest.mock('@/lib/passkey/words-setup-runtime', () => ({
-  wordsPoolView: async (guardians: Address[]) =>
-    jest.requireActual('@/lib/passkey/words-setup').currentWordsPool(guardians, {
+  wordsPoolView: async (guardians: Address[]) => {
+    mockPath.runtime++;
+    return jest.requireActual('@/lib/passkey/words-setup').currentWordsPool(guardians, {
       storage: mockStorage(),
       wordsSurfaceOpen: async () => mockSurfaceOpen,
-    }),
+    });
+  },
 }));
 jest.mock('@/lib/passkey/guardians-runtime', () => ({
   isAttester: async () => false,
@@ -107,6 +116,8 @@ beforeEach(() => {
   mockSuggested.length = 0;
   mockKv.clear();
   mockSurfaceOpen = false;
+  mockPath.runtime = 0;
+  mockPath.fallbackGate = 0;
 });
 
 /** An outdated local pool (none of it on chain): words were seen on this phone, the pool cannot classify. */
@@ -189,7 +200,7 @@ describe('useGuardianManager', () => {
     expect(m.current().notice).toEqual({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
   });
 
-  describe('N2: the refusal needs the words surface open AND words seen on this phone', () => {
+  describe('N2 (refined): the refusal needs the words surface open', () => {
     const tryAdd = async () => {
       mockChain.guardians = [P1, W0];
       mockChain.threshold = 1;
@@ -201,7 +212,7 @@ describe('useGuardianManager', () => {
       return m;
     };
 
-    it('surface closed + unknown (words seen, no token): every guardian is a person, changes go through', async () => {
+    it('surface closed + an unclassifiable guardian: every guardian is a person, changes go through', async () => {
       mockSurfaceOpen = false;
       wordsSeenHere();
       const m = await tryAdd();
@@ -209,20 +220,22 @@ describe('useGuardianManager', () => {
       expect(mockSent).toEqual([expected([P1, W0, P2], managerThreshold.add(1, 3))]);
     });
 
-    it('surface open + nothing seen: changes go through', async () => {
+    it('surface open + no promptless answer: refused with the German hint, even with nothing seen here', async () => {
       mockSurfaceOpen = true;
-      const m = await tryAdd();
-      expect(m.current().wordsUnloaded).toBe(false);
-      expect(mockSent).toHaveLength(1);
-    });
-
-    it('surface open + words seen + unknown: still refused with the German hint', async () => {
-      mockSurfaceOpen = true;
-      wordsSeenHere();
       const m = await tryAdd();
       expect(m.current().wordsUnloaded).toBe(true);
       expect(mockSent).toHaveLength(0);
       expect(m.current().notice).toEqual({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
+    });
+
+    it('M-4: the hook reads the view through exactly one path, and that path consults the words gate', async () => {
+      mockSurfaceOpen = false;
+      mockChain.guardians = [P1, W0];
+      mockChain.threshold = 1;
+      await mount(); // one load
+      // jest cannot run the hook's dynamic import() of the runtime, so the in-hook fallback ran;
+      // it is the same currentWordsPool call with the real gate (wordsPoolView is tested directly in words-setup-runtime.test.ts).
+      expect(mockPath).toEqual({ runtime: 0, fallbackGate: 1 });
     });
   });
 

@@ -179,8 +179,20 @@ describe('resolvePasskeySecret', () => {
     // A remote without a promptless write never gets the (b') copy either.
     const legacy = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' }, { prf: PRF });
     delete legacy.remote.writeWithoutPrompt;
-    expect((await resolvePasskeySecret(deps({ remote: legacy.remote, wordsVaultKey: async () => VAULT }).d)).source).toBe('backup');
+    const syncLegacy = jest.fn(async () => VAULT);
+    expect((await resolvePasskeySecret(deps({ remote: legacy.remote, wordsVaultKey: syncLegacy }).d)).source).toBe('backup');
     expect(legacy.remote.write).not.toHaveBeenCalled();
+    // M-1: the words vault (key + pool) is still synced from the read; only the write is gated.
+    expect(syncLegacy).toHaveBeenCalledWith({ prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+  });
+
+  it("(b') M-1: without a token the words vault (key + pool) is still synced from the read; only the write is skipped", async () => {
+    const blob = await wrapSecret(PRF, MACI_WRAP_LABEL, bytes('K'));
+    const noToken = fakeRemote({ maci: blob, wvk: 'pkv1:wvk-blob' }, { prf: PRF, noToken: true });
+    const sync = jest.fn(async () => VAULT);
+    expect((await resolvePasskeySecret(deps({ remote: noToken.remote, wordsVaultKey: sync }).d)).source).toBe('backup');
+    expect(sync).toHaveBeenCalledWith({ prf: PRF, wvkBlob: 'pkv1:wvk-blob' });
+    expect(noToken.writes).toEqual([]);
   });
 
   it("(b') N1 with the real client: session.get would sign a new session → nothing is signed and nothing is written", async () => {

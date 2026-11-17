@@ -603,12 +603,21 @@ export function ecdsaOpSigner(owner: Address, signDigest: (digest: Hex) => Promi
     predicted: predictEcdsaSafeAddress(ecdsaOwner),
     factoryData: ecdsaSafeFactoryData(ecdsaOwner),
     dummySignature: encodeUserOpSignature(0, 0, `0x${'ff'.repeat(65)}`),
-    signOpHash: async (hash) => {
-      const sig = await signDigest(hash);
-      if (size(sig) !== 65) throw new Error('an ECDSA owner signature must be 65 bytes');
-      return encodeUserOpSignature(0, 0, sig);
-    },
+    signOpHash: async (hash) => encodeUserOpSignature(0, 0, normalizeEcdsaSignature(await signDigest(hash))),
   };
+}
+
+/**
+ * A 65-byte r ++ s ++ v ECDSA signature as the Safe's ECDSA owner check needs it: v = 27/28. A
+ * signer returning v = 0/1 (y-parity) is normalised (+27); any other v, or another length, is refused
+ * (Safe would read v > 30 as eth_sign and v = 0/1 as contract / approved-hash signatures).
+ */
+export function normalizeEcdsaSignature(sig: Hex): Hex {
+  if (size(sig) !== 65) throw new Error('an ECDSA owner signature must be 65 bytes');
+  let v = parseInt(sig.slice(-2), 16);
+  if (v < 27) v += 27;
+  if (v !== 27 && v !== 28) throw new Error('an ECDSA owner signature needs v = 27 or 28');
+  return `${sig.slice(0, -2)}${v.toString(16)}`.toLowerCase() as Hex;
 }
 
 export type SafeUserOpArgs = {
