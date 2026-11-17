@@ -38,6 +38,9 @@ export const V3_ATTESTER = "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7" as Hex;
 const word = (a: Hex) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}` as Hex;
 const k = (...parts: Array<string | bigint>) => parts.map((p) => String(p).toLowerCase()).join(":");
 
+/** The `webauthnSigners` key for the WebAuthn signer of `key` (production verifiers). */
+export const signerKey = (key: { x: Hex; y: Hex }) => k(BigInt(key.x), BigInt(key.y), WEBAUTHN_VERIFIERS);
+
 export interface FakeWorld {
   codes: Map<string, Hex>;
   storage: Map<string, Hex>;

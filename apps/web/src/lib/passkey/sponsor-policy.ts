@@ -49,6 +49,9 @@
  *  C. recovery (no `legacy`): the op helps recover `wallet`, a citizen identity
  *     (citizen(wallet), or `recoveryLegacy` is a citizen thirdweb account with
  *     isAdmin(recoveryLegacy, wallet)) that has at least one guardian.
+ *     A non-citizen wallet is still recoverable as a guest when it has the
+ *     deployed sovereign passkey-Safe shape (checkDeployedSafeShape) and at
+ *     least one guardian -> { mode "recovery", guest: true }.
  *     The sender may be ANY genuine passkey Safe (family guardians and the
  *     recovering person's fresh Safe are not citizens). Budget key = wallet.
  *
@@ -58,7 +61,8 @@
  *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
  *       safeFactoryData(x, y) byte-for-byte, sender == predictSafeAddress(x, y);
  *     - deployed: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1, fallback
- *       handler + enabled module Safe4337Module, getOwners() == [owner] where
+ *       handler + enabled modules Safe4337Module and SocialRecoveryModule,
+ *       getOwners() == [owner] where
  *       owner is the SharedSigner configured with (x, y) for this Safe or
  *       SafeWebAuthnSignerFactory.getSigner(x, y, verifiers) (recovered Safe).
  *  3. callData = Safe4337Module.executeUserOp[WithErrorString], value 0, one
@@ -703,23 +707,42 @@ async function isCitizen(account: Hex, v3: V3Config, chain: ChainReader): Promis
   return read(() => chain.hasCitizenNFT(citizenV3, account));
 }
 
-/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
-async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
-  const code = await read(() => chain.getCode(sender));
+/** The deployed Safe has the sovereign passkey-Safe shape; on success also yields its single owner. */
+async function deployedSafeShape(safe: Hex, chain: ChainReader): Promise<{ ok: true; owner: Hex } | { ok: false; reason: string }> {
+  const code = await read(() => chain.getCode(safe));
   if ((code ?? "0x").toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) {
     return deny("sender is not a passkey Safe (not a SafeProxy 1.4.1)");
   }
-  const [singleton, handler, moduleOn, owners] = await Promise.all([
-    read(() => chain.getStorageAt(sender, SLOT_0)),
-    read(() => chain.getStorageAt(sender, FALLBACK_HANDLER_SLOT)),
-    read(() => chain.isModuleEnabled(sender, PASSKEY_SAFE.safe4337Module)),
-    read(() => chain.getOwners(sender)),
+  const [singleton, handler, moduleOn, srmOn, owners] = await Promise.all([
+    read(() => chain.getStorageAt(safe, SLOT_0)),
+    read(() => chain.getStorageAt(safe, FALLBACK_HANDLER_SLOT)),
+    read(() => chain.isModuleEnabled(safe, PASSKEY_SAFE.safe4337Module)),
+    read(() => chain.isModuleEnabled(safe, PASSKEY_SAFE.socialRecoveryModule)),
+    read(() => chain.getOwners(safe)),
   ]);
   if (!wordIsAddress(singleton, PASSKEY_SAFE.singletonL2)) return deny("sender singleton is not Safe L2 1.4.1");
   if (!wordIsAddress(handler, PASSKEY_SAFE.safe4337Module)) return deny("sender fallback handler is not Safe4337Module");
   if (moduleOn !== true) return deny("Safe4337Module is not an enabled module of the sender");
+  if (srmOn !== true) return deny("SocialRecoveryModule is not an enabled module of the sender");
   if (owners.length !== 1) return deny("sender must have exactly one owner");
-  const owner = owners[0];
+  return { ok: true, owner: owners[0] };
+}
+
+/**
+ * A deployed sovereign passkey Safe: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1,
+ * fallback handler Safe4337Module, Safe4337Module and SocialRecoveryModule enabled,
+ * exactly one owner. Says nothing about WHICH key owns it.
+ */
+export async function checkDeployedSafeShape(safe: Hex, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(safe, chain);
+  return shape.ok ? PASS : shape;
+}
+
+/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
+async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(sender, chain);
+  if (!shape.ok) return shape;
+  const owner = shape.owner;
   const x = BigInt(ctx.x);
   const y = BigInt(ctx.y);
 
@@ -910,7 +933,7 @@ async function evaluateSafeEveryday(
   return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "citizen" };
 }
 
-/** Mode C: help recover `wallet`, a citizen identity with guardians. */
+/** Mode C: help recover `wallet`, a citizen identity (or, as a guest, a sovereign passkey Safe) with guardians. */
 async function evaluateRecoveryMode(
   op: SponsorUserOp,
   ctx: SponsorContext,
@@ -938,7 +961,13 @@ async function evaluateRecoveryMode(
       walletIsCitizen = linked === true && citizen;
     }
   }
-  if (!walletIsCitizen) return deny("the wallet being recovered is not a citizen identity");
+  // Not a citizen: still recoverable as a guest when the wallet is a sovereign passkey Safe.
+  let guest = false;
+  if (!walletIsCitizen) {
+    const shape = await checkDeployedSafeShape(wallet, chain);
+    if (!shape.ok) return deny(`the wallet being recovered is not a citizen identity nor a sovereign Safe (${shape.reason})`);
+    guest = true;
+  }
   const guardians = await read(() => chain.guardiansCount(wallet));
   if (guardians <= 0n) return deny("the wallet being recovered has no guardians");
 
@@ -960,7 +989,7 @@ async function evaluateRecoveryMode(
     const guardian = await read(() => chain.isGuardian(wallet, op.sender));
     if (!guardian) return deny("sender is not a guardian of the wallet");
   }
-  return { ok: true, mode: "recovery", budgetKey: wallet };
+  return guest ? { ok: true, mode: "recovery", budgetKey: wallet, guest: true } : { ok: true, mode: "recovery", budgetKey: wallet };
 }
 
 /** Every multiConfirmRecovery / executeRecovery in the op sets newOwners == [signer]. */

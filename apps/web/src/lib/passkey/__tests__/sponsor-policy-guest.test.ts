@@ -10,7 +10,18 @@ import { encodeFunctionData, type Hex } from "viem";
 import { ADDRESSES, evaluateSponsorPolicy, type SponsorContext } from "../sponsor-policy";
 import { EVERYDAY_CONTRACTS as C, citizenNftAbi, hubAbi, nameRegistryAbi } from "../everyday-allowlist";
 import { predictSafeAddress } from "../safe-address";
-import { GUARDIAN, KEY, LEGACY, RECIPIENT, SAFE, fakeChain } from "./fake-chain";
+import {
+  GUARDIAN,
+  KEY,
+  LEGACY,
+  RECIPIENT,
+  RECOVERED_SIGNER,
+  SAFE,
+  fakeChain,
+  makePasskeySafe,
+  signerKey,
+  type FakeWorld,
+} from "./fake-chain";
 import { NOW, deployOp, op, outer, srm, viaMultiSend } from "./policy-helpers";
 
 const NO_LEGACY: SponsorContext = { ...KEY, nowSeconds: NOW };
@@ -120,4 +131,92 @@ test("an arbitrary sender that is not a genuine passkey Safe gets nothing", asyn
   assert.equal(r.ok, false);
   const e = await evaluateSponsorPolicy(op(outer(C.circlesHub, personalMint), { sender: RECIPIENT }), NO_LEGACY, fakeChain());
   assert.equal(e.ok, false);
+});
+
+// ---- recovering a guest Safe (mode C without citizenship) ----
+
+const WALLET = "0x9999999999999999999999999999999999999999" as Hex;
+const OTHER_KEY = { x: `0x${"cc".repeat(32)}` as Hex, y: `0x${"dd".repeat(32)}` as Hex };
+const guestWallet = (w: FakeWorld) => {
+  makePasskeySafe(w, WALLET, OTHER_KEY);
+  w.guardians.set(WALLET.toLowerCase(), new Set([SAFE.toLowerCase()]));
+  w.webauthnSigners.set(signerKey(KEY), RECOVERED_SIGNER);
+};
+
+test("recovering a guest Safe: confirmRecovery by a guardian Safe is sponsored as a guest", async () => {
+  const confirm = encodeFunctionData({ abi: srm, functionName: "confirmRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n, false] });
+  const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, confirm)), NO_LEGACY, fakeChain(guestWallet));
+  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: WALLET, guest: true });
+});
+
+test("recovering a guest Safe: executeRecovery to the submitter's own signer", async () => {
+  const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
+  const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(guestWallet));
+  assert.ok(r.ok && r.guest === true, JSON.stringify(r));
+});
+
+test("a wallet that is not a sovereign Safe, or has no guardian, is refused", async () => {
+  const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [RECIPIENT, [RECOVERED_SIGNER], 1n] });
+  assert.equal((await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(guestWallet))).ok, false);
+  const noGuardian = (w: FakeWorld) => {
+    guestWallet(w);
+    w.guardians.delete(WALLET.toLowerCase());
+  };
+  const exec2 = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
+  assert.equal((await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec2)), NO_LEGACY, fakeChain(noGuardian))).ok, false);
+});
+
+test("recovering a guest Safe: the other recovery rules still hold", async () => {
+  // executeRecovery to someone else's signer.
+  const toOther = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [GUARDIAN], 1n] });
+  const a = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, toOther)), NO_LEGACY, fakeChain(guestWallet));
+  assert.ok(!a.ok && /own passkey signer/.test(a.reason), JSON.stringify(a));
+  // confirmRecovery by a Safe that is not a guardian of the wallet.
+  const confirm = encodeFunctionData({ abi: srm, functionName: "confirmRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n, false] });
+  const notGuardian = (w: FakeWorld) => {
+    guestWallet(w);
+    w.guardians.set(WALLET.toLowerCase(), new Set([GUARDIAN.toLowerCase()]));
+  };
+  const b = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, confirm)), NO_LEGACY, fakeChain(notGuardian));
+  assert.ok(!b.ok && /not a guardian/.test(b.reason), JSON.stringify(b));
+  // finalizeRecovery before the delay is over.
+  const finalize = encodeFunctionData({ abi: srm, functionName: "finalizeRecovery", args: [WALLET] });
+  const pending = (w: FakeWorld) => {
+    guestWallet(w);
+    w.recoveryRequests.set(WALLET.toLowerCase(), { executeAfter: BigInt(NOW + 60), newThreshold: 1n, newOwners: [RECOVERED_SIGNER] });
+  };
+  const c = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, finalize)), NO_LEGACY, fakeChain(pending));
+  assert.ok(!c.ok && /still pending/.test(c.reason), JSON.stringify(c));
+  const due = (w: FakeWorld) => {
+    guestWallet(w);
+    w.recoveryRequests.set(WALLET.toLowerCase(), { executeAfter: BigInt(NOW - 60), newThreshold: 1n, newOwners: [RECOVERED_SIGNER] });
+  };
+  const d = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, finalize)), NO_LEGACY, fakeChain(due));
+  assert.deepEqual(d, { ok: true, mode: "recovery", budgetKey: WALLET, guest: true });
+});
+
+test("recovering a guest Safe: a wallet without the recovery module, or with two owners, is refused", async () => {
+  const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
+  const noSrm = (w: FakeWorld) => {
+    guestWallet(w);
+    w.modules.delete(`${WALLET.toLowerCase()}:${ADDRESSES.socialRecoveryModule.toLowerCase()}`);
+  };
+  const a = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(noSrm));
+  assert.ok(!a.ok && /SocialRecoveryModule/.test(a.reason), JSON.stringify(a));
+  const twoOwners = (w: FakeWorld) => {
+    guestWallet(w);
+    w.owners.set(WALLET.toLowerCase(), [RECIPIENT, GUARDIAN]);
+  };
+  const b = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(twoOwners));
+  assert.ok(!b.ok && /exactly one owner/.test(b.reason), JSON.stringify(b));
+});
+
+test("recovering a citizen Safe carries no guest flag", async () => {
+  const exec = encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] });
+  const citizenWallet = (w: FakeWorld) => {
+    guestWallet(w);
+    w.citizens.add(WALLET.toLowerCase());
+  };
+  const r = await evaluateSponsorPolicy(op(outer(ADDRESSES.socialRecoveryModule, exec)), NO_LEGACY, fakeChain(citizenWallet));
+  assert.deepEqual(r, { ok: true, mode: "recovery", budgetKey: WALLET });
 });
