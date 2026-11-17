@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-17-credential-register-design.md` (sections 5.1, 5.2, 5.9, 8). Read it first. Pattern to copy: `contracts/governor-contract/contracts/verification-system/OrgRegistry.sol`, `contracts/governor-contract/test/OrgRegistry.test.js`, `packages/org-registry/`.
 
-**Plan series:** 1 contract (this) → 2 backend → 3 Expo → 4 dashboard and badges → 5 Studio. Plans 2 to 5 consume the names fixed here; changing an interface below means changing them.
+**Plan series:** 1 contract (this) → 2 backend → 3 Expo → 4 dashboard and badges → 3b mobile experience (runs after 4) → 5 Studio → 6 zero-knowledge groups. Plans 2 to 6 consume the names fixed here; changing an interface below means changing them.
 
 
 > **Owner decision update 2026-11-17 (overrides item 1 below and every "private-only" rule in this plan):**
@@ -26,7 +26,7 @@
 
 These are the five items of spec section 9, treated as decided. **If the owner overrules one, stop and re-plan the named tasks.**
 
-1. **Public or private per person**, with party-like orgs private-only for ordinary members. → Task 3 (`claim`, `publicClaim`, `orgPrivateOnly`), plans 2 and 3.
+1. **Public or private per person, the org decides whether members may be public** (updated 2026-11-17, see the note above): each holder switches any time (`claim` / `renounce`); per org the switch "Mitglieder dürfen öffentlich sichtbar sein" is the on-chain flag `orgPrivateOnly` (true = switch off). → Task 2 (`setOrgPrivateOnly`), Task 3 (`claim`, `renounce`), plans 2 and 3. Zero-knowledge proofs: plan 6.
 2. **Guest is a self-claimed token** in the community namespace. → Task 2 (reserved types), Task 3 (`selfClaim`), plan 3.
 3. **Citizen and Attester are shown through the register, not re-minted.** → Task 2 (`External` policy).
 4. **Badges arrive when the organiser issues them**; instant only when the org appoints the node key as delegate. → Task 2 (`setDelegate`), plan 4.
@@ -38,7 +38,8 @@ Tasks are written against the default. Each is a contract decision that cannot b
 
 1. **Safe owners may act directly.** Spec 5.1 names "the org's Safe, or an account with the `Admin` role". An org's owners are the Safe's owners and hold no `Admin` role (`apps/expo/lib/org-safe/ops.ts` `planSync` clears it), so by the letter an owner would have to wrap every call in a Safe transaction, and an owner of a Safe with threshold 2 could not issue at all while an admin could. *Default: authority = the Safe itself, or `OrgRegistry.isOrgOwner`, or `Role.Admin`. This gives an owner nothing an admin does not already have.*
 2. **OrgRegistry is a settable pointer too.** The spec asks for settable NFT pointers because OrgRegistry's immutable `attesters` forces its redeploy at the v3 cutover. That same redeploy would orphan this contract. *Default: all three sources (CitizenNFT, AttesterNFT, OrgRegistry) change together through propose → wait `SOURCES_DELAY` = 2 days → apply.* Caveat written into the NatSpec: a type remembers the org generation it was created under, so a new OrgRegistry must carry the same generation numbers or the org's types go dark.
-3. **Who may switch an org to private-only, and back.** *Decided (see update note): on and off by the org's authority; on only by an attester; both by the contract owner.* The app sets it for `fraktion` and `stadt` orgs (plan 2).
+3. **Who may switch an org to private-only, and back.** *Decided (see update note): `orgPrivateOnly` true and false by the org's authority; true only by an attester (protection); both by the contract owner.* The node sets it to true for `fraktion` and `stadt` orgs before their first membership type (plan 2); their admins can open it later.
+6. **Closing an org that already has public members.** *Default: `setOrgPrivateOnly(orgId, true)` blocks new public claims of its `Membership` types and burns nothing: existing public holdings keep counting until each holder renounces (the app asks them to, plan 2 Task 6 and plan 3). Alternative: let anyone `prune` public memberships of a closed org, which takes the decision away from the holder.*
 4. **Guest stays after citizenship.** A guest who becomes a citizen keeps the Guest token unless they renounce it. *Default: keep; the app hides the Gastkarte for citizens as today.*
 5. **Recognised flag on the reserved types.** *Default: not set at deploy; the owner sets it per type.*
 
@@ -116,7 +117,7 @@ function createType(bytes32 orgId, bytes32 localId, Kind kind, ClaimPolicy polic
 function updateType(bytes32 typeId, TypeConfig calldata cfg) external;
 function retireType(bytes32 typeId) external;                              // irreversible
 function setDelegate(bytes32 typeId, address delegate, bool allowed) external;
-function setOrgPrivateOnly(bytes32 orgId, bool privateOnly) external;      // see open question 3
+function setOrgPrivateOnly(bytes32 orgId, bool privateOnly) external;      // true = "Mitglieder dürfen öffentlich sichtbar sein" off; see Authority
 function setRecognised(bytes32 typeId, bool recognised) external;          // onlyOwner
 
 // issuing — org authority or a delegate of the type
@@ -215,12 +216,16 @@ error SourcesNotReady(uint64 eta);
 - **Tree:** leaves sorted ascending by hash; each layer pairs neighbours with the commutative hash `keccak256(min(a,b) ‖ max(a,b))`; an unpaired last node moves up unchanged; a single leaf is its own root with an empty proof. Verified on chain with `MerkleProof.verifyCalldata(proof, root, leaf)`.
 - **Claim-key signature:** EIP-712, domain `{name: "CredentialRegistry", version: "1", chainId, verifyingContract}`, primary type `Claim(uint64 batchId,bytes32 leaf,address account)`, 65-byte ECDSA signature by the claim key, recovered with `ECDSA.recover` and compared with `leaf.subject`. `account` is the claiming account, which must also be `msg.sender`.
 
+### Forward compatibility with zero-knowledge proofs (plan 6)
+
+Plan 6 (`2026-11-17-credreg-6-zk.md`) adds one anonymous Semaphore group per credential type in a **separate** contract, `CredentialGroups`, that reads this contract. It needs from here only `holds`, `isTypeActive`, `typeExists`, `getType` and `canManage`, all in the interface above. The Semaphore identity is not part of the leaf and is never written into this contract, so neither the leaf encoding nor the type ids change. **Plan 6 needs no redeployment of `CredentialRegistry`.** Do not add a commitment field to `Leaf` "for later": it would make every issued leaf name a Semaphore identity at issue time, which the issuer cannot know.
+
 ### Authority
 
 - `canManage(orgId, a)`: for `COMMUNITY`, `a == owner()`. Otherwise the org must be registered in OrgRegistry, and `a` is its Safe, or `isOrgOwner(orgId, a)`, or `roleOf(orgId, a) == Admin`.
 - Type creation, edits, retirement, delegates: `canManage(type.orgId, msg.sender)` and, for existing types, `isTypeActive`.
 - `addBatch`, `revokeBatch`, `revokeLeaves`: `canIssue(typeId, msg.sender)`. Authority is checked when the call is made; a batch outlives its issuer's role and is removed with `revokeBatch`.
-- `setOrgPrivateOnly(orgId, true)`: `canManage(orgId, msg.sender)` or `attesterNFT.hasAttesterNFT(msg.sender)`. `false`: `owner()` only. Not allowed for `COMMUNITY` (`NotAuthorised`).
+- `setOrgPrivateOnly(orgId, true)`: `canManage(orgId, msg.sender)`, `attesterNFT.hasAttesterNFT(msg.sender)` or `owner()`. `setOrgPrivateOnly(orgId, false)`: `canManage(orgId, msg.sender)` or `owner()`; an attester cannot. Not allowed for `COMMUNITY` (`NotAuthorised`). The flag only gates new public claims of `Membership` types; it never burns (open question 6). Offices (`Role`) and badges are not affected.
 - `External` types (Citizen, Attester): `holds` returns `citizenNFT.hasCitizenNFT(account)` / `attesterNFT.hasAttesterNFT(account)`. `updateType` by the owner changes their metadata; `retireType`, `setDelegate`, `addBatch`, `selfClaim`, `renounce`, `prune` revert `ExternalType` (no batch can exist for them, so `claim` cannot reach one). `createType` with `External` reverts `WrongPolicy`.
 
 ### Rules the code must follow (each has a test)
@@ -328,7 +333,7 @@ git push -u origin feat/credreg-1-contract
 | reserved types | owner `updateType(CITIZEN_TYPE, …)` passes; `retireType(CITIZEN_TYPE)` and `setDelegate(CITIZEN_TYPE, …)` revert `ExternalType` |
 | delegates | authority `setDelegate` emits `DelegateSet`; `canIssue(typeId, delegate)` true, `canManage(ORG_A, delegate)` false; a delegate cannot appoint delegates |
 | recognised is owner-only | emits `TypeRecognised`; `orgOwner` reverts `OwnableUnauthorizedAccount` |
-| private-only switch | org authority and an attester can set it on (`OrgPrivateOnlySet(ORG_A, true, caller)`); both revert `NotAuthorised` turning it off; the owner turns it off; `setOrgPrivateOnly(COMMUNITY, true)` reverts `NotAuthorised` |
+| members-public switch | org authority, an attester and the owner can set `true` (`OrgPrivateOnlySet(ORG_A, true, caller)`); org authority and owner can set `false`; an attester setting `false` and a stranger setting either revert `NotAuthorised`; `setOrgPrivateOnly(COMMUNITY, true)` reverts `NotAuthorised` |
 | org revocation deactivates its types | after `revokeOrg`, `isTypeActive` false and `canManage(ORG_A, orgOwner)` false |
 | a re-registered org does not revive old types | after `reRegisterOrg`, the old type stays inactive; `updateType` on it reverts `TypeInactive`; a new `localId` works and stores `orgGeneration` 1 |
 | holds for Citizen and Attester follows the NFTs | `identity.setCitizen(alice, true)` → `holds(CITIZEN_TYPE, alice)` true and `balanceOf(alice, uint256(CITIZEN_TYPE))` 1; false and 0 after `setCitizen(alice, false)` |
@@ -380,7 +385,9 @@ Storage to add: `Batch[] _batches` (index 0 unused, so ids start at 1), `mapping
 | wrong proof | reverts `InvalidProof`; unknown batch reverts `UnknownBatch` |
 | renewal replaces the holding | batch 2 holds a leaf for `bob` with a later `validUntil`; after claiming it `holdingOf(bob)` = `{2, later, …}`, balance 1, `supply` unchanged |
 | an expired leaf cannot be claimed | after `time.increaseTo(validUntil + 1)` reverts `LeafExpired`; at exactly `validUntil` it passes |
-| private-only types and orgs | `publicClaim: false` → `claim` reverts `PublicClaimDisabled`, `checkLeaf` returns `(Valid, 0x0)`; `setOrgPrivateOnly(ORG_A, true)` blocks a `Membership` type but not a `Role` or `Badge` type of the same org |
+| private-only types and orgs | `publicClaim: false` → `claim` reverts `PublicClaimDisabled`, `checkLeaf` returns `(Valid, 0x0)`; `setOrgPrivateOnly(ORG_A, true)` blocks a `Membership` type but not a `Role` or `Badge` type of the same org; after `setOrgPrivateOnly(ORG_A, false)` the same claim passes |
+| closing an org keeps existing public members | `alice` claims publicly, then `setOrgPrivateOnly(ORG_A, true)`: `holds(alice)` stays true, `prune` reverts `StillValid`, `bob`'s claim reverts `PublicClaimDisabled`; `alice` renounces and cannot claim back publicly while closed; `checkLeaf` for her leaf stays `Valid` |
+| switching public → private → public | `alice` claims, renounces, claims again with the same leaf: balance 1, one `Renounced`, two mints in total, `supply` 1 |
 | claim window | before `claimStart` and after `claimEnd` reverts `ClaimWindowClosed`; inside passes |
 | supply cap | cap 1: second claimer reverts `SupplyCapReached`; after the first renounces the second passes |
 | mint calls no receiver hook | a contract account without `onERC1155Received` claims its account leaf successfully (add `contract CredMockPlainAccount { function exec(address target, bytes calldata data) external returns (bytes memory) }` to the mocks file: forwards the call, bubbles the revert, implements no receiver interface) |
@@ -418,7 +425,7 @@ Storage to add: `Batch[] _batches` (index 0 unused, so ids start at 1), `mapping
 
 - [ ] **Step 2: Run** `npx hardhat test test/CredentialRegistry.claims.test.js` — Expected: FAIL.
 - [ ] **Step 3: Implement.** Follow "Rules the code must follow" literally, including the order of checks in `claim` (tests depend on which error wins). `checkLeaf` runs the same checks but returns a status instead of reverting, and ignores `publicClaim`, the private-only switch, the claim window and the cap (those limit minting, not validity).
-- [ ] **Step 4: Run** both CredentialRegistry test files — Expected: PASS (18 + 33 tests). Hardhat refuses to deploy bytecode over 24576 bytes, so a passing run also proves the size limit; if it fails for size, move the `checkLeaf` body and the type-activity check into internal functions shared with `claim` before considering a library.
+- [ ] **Step 4: Run** both CredentialRegistry test files — Expected: PASS (18 + 35 tests). Hardhat refuses to deploy bytecode over 24576 bytes, so a passing run also proves the size limit; if it fails for size, move the `checkLeaf` body and the type-activity check into internal functions shared with `claim` before considering a library.
 - [ ] **Step 5: Commit** — `feat(contracts): CredentialRegistry batches, claiming, revocation and soulbound rules`.
 
 ---
