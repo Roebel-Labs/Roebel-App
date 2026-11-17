@@ -23,6 +23,10 @@ export type SponsoringAction = "sponsoring_checkout" | "sponsoring_mine" | "spon
 export const LIVE_SCOPE = "roebel-live-v1" as const;
 export type LiveAction = "live_session";
 
+/** Mini-app user tokens (host asks the server for a short-lived token); own scope like the others. */
+export const MINIAPP_SCOPE = "roebel-miniapp-v1" as const;
+export type MiniAppAction = "user_token";
+
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
   | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order";
