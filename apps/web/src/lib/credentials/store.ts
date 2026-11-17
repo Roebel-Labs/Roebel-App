@@ -171,7 +171,11 @@ export interface CredentialStore {
   rolesForWallet(wallet: string): Promise<{ accountId: string; role: OwnerRole }[]>;
   /** Every account_owners row of the org (all roles). */
   ownersOf(accountId: string): Promise<{ wallet: string; role: OwnerRole }[]>;
-  setMembersPublic(accountId: string, value: boolean | null): Promise<void>;
+  /**
+   * With `unlessAlready`, a compare-and-set: applies only while the column is not already `value`
+   * (null counts as different). Returns whether the row changed.
+   */
+  setMembersPublic(accountId: string, value: boolean | null, opts?: { unlessAlready?: boolean }): Promise<boolean>;
 
   // users (read): the member invite screen's name search, and names for account recipients
   /** Users whose shown name (display_name, else username) contains `query`, case-insensitive; at most `limit`. */
@@ -298,9 +302,12 @@ export class InMemoryCredentialStore implements CredentialStore {
   async ownersOf(accountId: string) {
     return this.owners.filter((o) => o.accountId === accountId).map((o) => ({ wallet: o.wallet, role: o.role }));
   }
-  async setMembersPublic(accountId: string, value: boolean | null) {
+  async setMembersPublic(accountId: string, value: boolean | null, opts: { unlessAlready?: boolean } = {}) {
     const a = this.accounts.get(accountId);
-    if (a) a.membersPublicColumn = value;
+    if (!a) return false;
+    if (opts.unlessAlready && a.membersPublicColumn === value) return false;
+    a.membersPublicColumn = value;
+    return true;
   }
 
   // ── users ───────────────────────────────────────────────────────────────────

@@ -231,8 +231,14 @@ export class SupabaseCredentialStore implements CredentialStore {
     check("ownersOf", r);
     return ((r.data ?? []) as Row[]).map((x) => ({ wallet: String(x.wallet_address).toLowerCase(), role: x.role as OwnerRole }));
   }
-  async setMembersPublic(accountId: string, value: boolean | null) {
-    check("setMembersPublic", await this.db.from("accounts").update({ credentials_members_public: value }).eq("id", accountId));
+  async setMembersPublic(accountId: string, value: boolean | null, opts: { unlessAlready?: boolean } = {}) {
+    let q = this.db.from("accounts").update({ credentials_members_public: value }).eq("id", accountId);
+    // "is distinct from value": null or the other boolean.
+    if (opts.unlessAlready && value !== null) q = q.or(`credentials_members_public.is.null,credentials_members_public.eq.${!value}`);
+    else if (opts.unlessAlready) q = q.not("credentials_members_public", "is", null);
+    const r = await q.select("id");
+    check("setMembersPublic", r);
+    return ((r.data ?? []) as Row[]).length > 0;
   }
 
   // ── users ───────────────────────────────────────────────────────────────────
