@@ -18,8 +18,8 @@ import { handleSponsorRequest } from "@/lib/passkey/sponsor-handler";
  * lib/passkey/sponsor-handler.ts for the request/response contract.
  *
  * BUDGET: PASSKEY_SPONSOR_BUDGET_STORE=supabase uses the shared Postgres
- * budget (atomic RPC passkey_sponsor_reserve, migration
- * 20260927_passkey_sponsor_budget.sql). Unset = the in-memory budget, which is
+ * budget (atomic RPC passkey_sponsor_reserve_v2, migrations
+ * 20260927_passkey_sponsor_budget.sql + 20261117a_passkey_sponsor_guest_cap.sql). Unset = the in-memory budget, which is
  * PREVIEW-ONLY: it resets on every cold start and is per serverless instance,
  * so the real ceiling is caps x instances.
  *
@@ -31,8 +31,9 @@ import { handleSponsorRequest } from "@/lib/passkey/sponsor-handler";
  *   PASSKEY_SPONSOR_DAILY_WEI        (optional; per identity per UTC day, default 0.01 xDAI;
  *                                     identity = legacy account, citizen Safe, or the wallet being recovered)
  *   PASSKEY_SPONSOR_GLOBAL_DAILY_WEI (optional; all accounts per UTC day, default 0.05 xDAI)
- *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI (optional; everyday mode, non-citizen tier, default 0.002 xDAI)
- *   PASSKEY_SPONSOR_BUDGET_STORE=supabase (optional; needs the migration + SUPABASE_SERVICE_ROLE_KEY)
+ *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI (optional; per guest (non-citizen) Safe, default 0.002 xDAI)
+ *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI (optional; all guest Safes together per UTC day, default 0.02 xDAI)
+ *   PASSKEY_SPONSOR_BUDGET_STORE=supabase (optional; needs both migrations + SUPABASE_SERVICE_ROLE_KEY)
  *   PASSKEY_CITIZEN_NFT_V3=0x…       (optional; CitizenNFTv3 - citizen check + moveTo target; unset = v3 off)
  *   PASSKEY_ATTESTER_NFT_V3=0x…      (optional; AttesterNFTv3 - moveTo target)
  *   GNOSIS_RPC_URL=…                 (optional; default https://gnosis-rpc.publicnode.com)

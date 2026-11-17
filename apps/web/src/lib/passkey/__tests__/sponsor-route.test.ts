@@ -8,10 +8,29 @@ import { encodeFunctionData, parseAbi, recoverTypedDataAddress, type Hex } from 
 import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
 import { parseSponsorUserOp, toPackedUserOperation, type ChainReader } from "../sponsor-policy";
 import { PRODUCTION_SPONSOR_SIGNERS, handleSponsorRequest } from "../sponsor-handler";
-import type { SponsorBudget } from "../sponsor-budget";
+import {
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
+  DEFAULT_ONBOARDING_DAILY_WEI,
+  GUEST_GROUP_KEY,
+  InMemorySponsorBudget,
+  type ReserveLimits,
+  type SponsorBudget,
+} from "../sponsor-budget";
 import { hashStableFields, requiredPrefund, voucherTypedData } from "../voucher";
 import { safeFactoryData, PASSKEY_SAFE } from "../safe-address";
-import { GOOD_SIG, KEY, LEGACY, SAFE, V3_CITIZEN, brokenChain, fakeChain } from "./fake-chain";
+import {
+  GOOD_SIG,
+  GUARDIAN,
+  KEY,
+  LEGACY,
+  RECOVERED_SIGNER,
+  SAFE,
+  V3_CITIZEN,
+  brokenChain,
+  fakeChain,
+  makePasskeySafe,
+  signerKey,
+} from "./fake-chain";
 
 // Anvil/Hardhat well-known test key #0 - publicly known, test-only.
 const TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -30,15 +49,17 @@ const erc20 = parseAbi(["function transfer(address to, uint256 amount)"]);
 
 class RecordingBudget implements SponsorBudget {
   calls: Array<{ key: string; cost: bigint }> = [];
+  limits: Array<ReserveLimits | undefined> = [];
   constructor(private allow = true) {}
-  async reserve(key: string, cost: bigint) {
+  async reserve(key: string, cost: bigint, limits?: ReserveLimits) {
     this.calls.push({ key, cost });
+    this.limits.push(limits);
     return this.allow;
   }
 }
 
 let chain: ChainReader = fakeChain();
-let budget = new RecordingBudget();
+let budget: SponsorBudget & { calls: Array<{ key: string; cost: bigint }> } = new RecordingBudget();
 const POST = (r: Request) => handleSponsorRequest(r, { chain, budget });
 
 const executeCall = encodeFunctionData({
@@ -348,4 +369,133 @@ test("a family guardian's confirmRecovery (no legacy) is billed to the wallet be
   const res = await POST(req(body(userOp(confirmCall), { legacy: undefined })));
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   assert.equal(budget.calls[0].key, WALLET.toLowerCase());
+});
+
+// ---- the global guest cap ----
+
+const srmGuest = parseAbi([
+  "function addGuardianWithThreshold(address guardian, uint256 threshold)",
+  "function confirmRecovery(address wallet, address[] newOwners, uint256 newThreshold, bool execute)",
+]);
+/** A non-citizen passkey Safe adding a guardian: the guest guardian-management result (mode safe, no tier). */
+const addGuardianCall = encodeFunctionData({
+  abi: safe4337,
+  functionName: "executeUserOp",
+  args: [
+    PASSKEY_SAFE.socialRecoveryModule,
+    0n,
+    encodeFunctionData({ abi: srmGuest, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }),
+    0,
+  ],
+});
+const guestBody = () => body(userOp(addGuardianCall), { legacy: undefined });
+const guestLimits = { perKeyDailyWei: DEFAULT_ONBOARDING_DAILY_WEI, group: { key: GUEST_GROUP_KEY, dailyWei: DEFAULT_GUEST_GLOBAL_DAILY_WEI } };
+
+test("a guest Safe adding a guardian is reserved with the onboarding key cap and the guest group", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const res = await POST(req(guestBody()));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls, [{ key: SAFE.toLowerCase(), cost: requiredPrefund(toPackedUserOperation(parseSponsorUserOp(userOp(addGuardianCall)))) }]);
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI sets the guest group cap (malformed = default)", async () => {
+  enable();
+  try {
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "123";
+    let recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 123n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "lots";
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+});
+
+test("a guest recovery (wallet without citizenship) is reserved against the guest group too", async () => {
+  enable();
+  const WALLET = "0x9999999999999999999999999999999999999999" as Hex;
+  const OTHER_KEY = { x: `0x${"cc".repeat(32)}` as Hex, y: `0x${"dd".repeat(32)}` as Hex };
+  chain = fakeChain((w) => {
+    makePasskeySafe(w, WALLET, OTHER_KEY);
+    w.guardians.set(WALLET.toLowerCase(), new Set([SAFE.toLowerCase()]));
+    w.webauthnSigners.set(signerKey(KEY), RECOVERED_SIGNER);
+  });
+  const recording = new RecordingBudget();
+  budget = recording;
+  const confirm = encodeFunctionData({
+    abi: safe4337,
+    functionName: "executeUserOp",
+    args: [
+      PASSKEY_SAFE.socialRecoveryModule,
+      0n,
+      encodeFunctionData({ abi: srmGuest, functionName: "confirmRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n, false] }),
+      0,
+    ],
+  });
+  const res = await POST(req(body(userOp(confirm), { legacy: undefined })));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal(recording.calls[0].key, WALLET.toLowerCase());
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("a citizen op carries no guest limits (unchanged)", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const res = await POST(req(body()));
+  assert.equal(res.status, 200);
+  assert.deepEqual(recording.limits, [undefined]);
+  // A citizen Safe managing its guardians is not a guest either.
+  chain = fakeChain((w) => w.citizens.add(SAFE.toLowerCase()));
+  const r2 = await POST(req(guestBody()));
+  assert.equal(r2.status, 200);
+  assert.deepEqual(recording.limits, [undefined, undefined]);
+});
+
+test("a guest whose reservation is refused gets 429 budget_exhausted, a throwing budget 503", async () => {
+  enable();
+  budget = new RecordingBudget(false);
+  let res = await POST(req(guestBody()));
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), { error: "budget_exhausted" });
+  budget = {
+    calls: [],
+    async reserve() {
+      throw new Error("db down");
+    },
+  };
+  const { result } = await captureErrors(() => POST(req(guestBody())));
+  res = result;
+  assert.equal(res.status, 503);
+});
+
+test("the guest cap reached stops guests only: a citizen's op in the same second still passes", async () => {
+  enable();
+  const cost = requiredPrefund(toPackedUserOperation(parseSponsorUserOp(userOp(addGuardianCall))));
+  process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI = (cost * 10n).toString();
+  process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = cost.toString(); // room for exactly one guest op
+  try {
+    const now = Date.now();
+    budget = Object.assign(new InMemorySponsorBudget({ perKeyDailyWei: cost * 100n, globalDailyWei: cost * 100n, now: () => now }), {
+      calls: [],
+    });
+    assert.equal((await POST(req(guestBody()))).status, 200);
+    const second = await POST(req(guestBody()));
+    assert.equal(second.status, 429);
+    assert.deepEqual(await second.json(), { error: "budget_exhausted" });
+    // Same clock reading: the citizen's op is not touched by the guest total.
+    const citizen = await POST(req(body()));
+    assert.equal(citizen.status, 200, JSON.stringify(await citizen.clone().json()));
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI;
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
 });

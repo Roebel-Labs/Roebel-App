@@ -9,22 +9,32 @@
  *
  * Two stores:
  *  - `SupabaseSponsorBudget` (env PASSKEY_SPONSOR_BUDGET_STORE=supabase): one
- *    atomic RPC `passkey_sponsor_reserve` (migration
- *    supabase/migrations/20260927_passkey_sponsor_budget.sql, NOT applied yet)
- *    that row-locks the UTC day's global row and the key's row, checks both
- *    caps and adds the cost in one transaction. Shared across serverless
+ *    atomic RPC `passkey_sponsor_reserve_v2` (migrations
+ *    supabase/migrations/20260927_passkey_sponsor_budget.sql +
+ *    20261117a_passkey_sponsor_guest_cap.sql, NOT applied yet) that row-locks
+ *    the UTC day's global row, the group row (guests) and the key's row, checks
+ *    every cap and adds the cost in one transaction. Shared across serverless
  *    instances and cold starts. Errors throw, so the handler fails closed (503).
  *  - `InMemorySponsorBudget` (default): PREVIEW-ONLY, it lives in one serverless
  *    instance's memory, so a cold start resets it and parallel instances each
  *    get their own allowance.
  *
- * A caller may pass a TIGHTER per-key cap for one reservation (the everyday
- * mode's non-citizen tier); the effective key cap is min(store cap, tier cap).
+ * A caller may pass a TIGHTER per-key cap for one reservation (a guest
+ * account); the effective key cap is min(store cap, tier cap).
+ *
+ * A caller may also name a GROUP with its own daily cap: every guest Safe's
+ * reservation is counted against the shared `guests` total as well, so the
+ * guests together can never spend more than that cap in a UTC day, however
+ * many Safes they create. A reservation with a group is counted against the
+ * key, the group and the global total at once; any cap reached = refused and
+ * nothing counted. Reservations without a group (citizens) never touch it.
  */
 
 export interface ReserveLimits {
   /** Tighter per-key daily cap for this reservation; never loosens the store's cap. */
   perKeyDailyWei?: bigint;
+  /** A shared daily total this reservation also counts against (the guest cap). */
+  group?: { key: string; dailyWei: bigint };
 }
 
 export interface SponsorBudget {
@@ -40,8 +50,13 @@ export const DEFAULT_PER_KEY_DAILY_WEI = 10n ** 16n;
 /** 0.05 xDAI across all accounts per UTC day. */
 export const DEFAULT_GLOBAL_DAILY_WEI = 5n * 10n ** 16n;
 
-/** 0.002 xDAI per NON-citizen passkey Safe per UTC day (everyday mode, onboarding tier). */
+/** 0.002 xDAI per guest (NON-citizen) account per UTC day: every guest result, any mode. */
 export const DEFAULT_ONBOARDING_DAILY_WEI = 2n * 10n ** 15n;
+
+/** The one group the database accepts: every guest (non-citizen) Safe together. */
+export const GUEST_GROUP_KEY = "guests";
+/** 0.02 xDAI across ALL guest Safes per UTC day. */
+export const DEFAULT_GUEST_GLOBAL_DAILY_WEI = 2n * 10n ** 16n;
 
 const DAY_MS = 86_400_000;
 
@@ -49,6 +64,7 @@ export class InMemorySponsorBudget implements SponsorBudget {
   private day = -1;
   private global = 0n;
   private perKey = new Map<string, bigint>();
+  private perGroup = new Map<string, bigint>();
   private readonly perKeyDailyWei: bigint;
   private readonly globalDailyWei: bigint;
   private readonly now: () => number;
@@ -66,19 +82,25 @@ export class InMemorySponsorBudget implements SponsorBudget {
       this.day = day;
       this.global = 0n;
       this.perKey.clear();
+      this.perGroup.clear();
     }
     const k = key.toLowerCase();
     const spent = this.perKey.get(k) ?? 0n;
     if (spent + costWei > minCap(this.perKeyDailyWei, limits)) return false;
     if (this.global + costWei > this.globalDailyWei) return false;
+    const group = limits?.group;
+    const groupSpent = group ? (this.perGroup.get(group.key) ?? 0n) : 0n;
+    if (group && groupSpent + costWei > group.dailyWei) return false;
+    // All checks passed: count everywhere (no await between check and add).
     this.perKey.set(k, spent + costWei);
     this.global += costWei;
+    if (group) this.perGroup.set(group.key, groupSpent + costWei);
     return true;
   }
 }
 
 /** Name of the atomic reserve function (security definer, service role only). */
-export const SPONSOR_RESERVE_RPC = "passkey_sponsor_reserve";
+export const SPONSOR_RESERVE_RPC = "passkey_sponsor_reserve_v2";
 
 /** The slice of a SupabaseClient this store needs (service-role client). */
 export interface SponsorBudgetRpcClient {
@@ -112,6 +134,8 @@ export class SupabaseSponsorBudget implements SponsorBudget {
       p_cost_wei: costWei.toString(),
       p_key_cap_wei: minCap(this.perKeyDailyWei, limits).toString(),
       p_global_cap_wei: this.globalDailyWei.toString(),
+      p_group_key: limits?.group?.key ?? null,
+      p_group_cap_wei: limits?.group ? limits.group.dailyWei.toString() : null,
     });
     if (r.error) throw new SponsorBudgetStoreError();
     return r.data === true;

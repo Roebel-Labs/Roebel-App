@@ -28,8 +28,10 @@
  *   PASSKEY_PAYMASTER_ADDRESS  the DEDICATED preview paymaster; required, no default
  *   PASSKEY_CITIZEN_NFT_V3     optional; CitizenNFTv3 (citizen check + moveTo target). Unset = v3 off
  *   PASSKEY_ATTESTER_NFT_V3    optional; AttesterNFTv3 (moveTo target). Unset = attester moveTo off
- *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per NON-citizen Safe per UTC day (everyday
- *                              onboarding tier), default 0.002 xDAI; never above the per-identity cap
+ *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per guest (NON-citizen) account per UTC day
+ *                              (every guest result), default 0.002 xDAI; never above the per-identity cap
+ *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI optional; ALL guest (non-citizen) Safes together per
+ *                              UTC day, default 0.02 xDAI
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -45,7 +47,14 @@ import {
   type ChainReader,
   type V3Config,
 } from "./sponsor-policy";
-import { DEFAULT_ONBOARDING_DAILY_WEI, weiFromEnv, type ReserveLimits, type SponsorBudget } from "./sponsor-budget";
+import {
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
+  DEFAULT_ONBOARDING_DAILY_WEI,
+  GUEST_GROUP_KEY,
+  weiFromEnv,
+  type ReserveLimits,
+  type SponsorBudget,
+} from "./sponsor-budget";
 import { issueSponsorship, requiredPrefund } from "./voucher";
 
 const CHAIN_ID = 100;
@@ -133,8 +142,17 @@ export async function handleSponsorRequest(
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
     budgetKey = verdict.budgetKey;
-    if (verdict.tier === "onboarding") {
-      limits = { perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI) };
+    // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe)
+    // gets the onboarding per-account cap AND counts against the one shared guest total.
+    // Citizen results carry no `guest` and keep the ordinary caps.
+    if (verdict.guest) {
+      limits = {
+        perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI),
+        group: {
+          key: GUEST_GROUP_KEY,
+          dailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI, DEFAULT_GUEST_GLOBAL_DAILY_WEI),
+        },
+      };
     }
   } catch (err) {
     // Fail closed: no chain facts, no voucher.
