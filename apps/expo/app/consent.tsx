@@ -25,7 +25,7 @@ import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
 import { useWalletBoot } from '@/context/WalletBootContext';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 
 /** The gate check must never hold the first-launch screen: a slow answer counts as closed. */
 const GATE_WAIT_MS = 2_000;
@@ -46,7 +46,7 @@ export default function ConsentModalScreen() {
   const { autoConnectFinished } = useWalletBoot();
   const passkeyWelcome = useRef<Promise<boolean> | null>(null);
   useEffect(() => {
-    passkeyWelcome.current = isPasskeyPreviewAllowed().catch(() => false);
+    passkeyWelcome.current = isPasskeySurfaceAllowed('signup').catch(() => false);
   }, []);
 
   const leave = async () => {

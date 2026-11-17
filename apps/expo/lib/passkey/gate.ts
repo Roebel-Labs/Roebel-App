@@ -1,10 +1,11 @@
 /**
  * Fence for every passkey surface (sign-in option, settings, recovery links, first-launch welcome).
  *
- * Open when the `passkey_accounts_enabled` app setting is 'true' AND one of:
+ * Per surface (signup / migration / detach / words). Open when the `passkey_accounts_enabled` app setting is 'true' AND one of:
  *   - a dev build (__DEV__);
  *   - a non-production update channel (preview, staging, …);
- *   - the production channel, but ONLY when `passkey_accounts_enabled_production` is 'true' too AND
+ *   - the production channel, but ONLY when the `signup` production flag (and, for any other surface, that
+ *     surface's own production flag, see SURFACE_PRODUCTION_FLAG) is 'true' AND
  *     the running binary supports passkeys (runtimeVersion ≥ 3.8.0: the 3.7.0 store binary lacks the
  *     `webcredentials:id.ortis.app` association, so a passkey could never be created or used there).
  *
@@ -13,7 +14,7 @@
  * channel stays closed.
  */
 import * as Updates from 'expo-updates';
-import { fetchPasskeyAccountsEnabled, fetchPasskeyAccountsEnabledProduction } from '@/lib/supabase-app-settings';
+import { fetchPasskeyFlags } from '@/lib/supabase-app-settings';
 
 /** First runtime (= app version, runtimeVersion policy appVersion) whose binary carries the passkey entitlements. */
 export const PASSKEY_MIN_RUNTIME = '3.8.0';
@@ -34,19 +35,34 @@ export function runtimeSupportsPasskeys(runtimeVersion: string | null | undefine
   return true;
 }
 
-export function passkeyPreviewAllowed(p: {
+export type PasskeySurface = 'signup' | 'migration' | 'detach' | 'words';
+
+/** app_settings key that opens each surface on the production channel. */
+export const SURFACE_PRODUCTION_FLAG: Record<PasskeySurface, string> = {
+  signup: 'passkey_accounts_enabled_production',
+  migration: 'passkey_migration_enabled_production',
+  detach: 'passkey_detach_enabled_production',
+  words: 'passkey_words_enabled_production',
+};
+
+export function passkeySurfaceAllowed(p: {
+  surface: PasskeySurface;
+  /** `passkey_accounts_enabled` (global kill switch). */
   flag: boolean;
   channel: string | null | undefined;
   dev: boolean;
-  /** `passkey_accounts_enabled_production`; missing = off. */
-  productionFlag?: boolean;
+  /** Per-surface production flags; missing = off. */
+  productionFlags?: Partial<Record<PasskeySurface, boolean>>;
   runtimeVersion?: string | null;
 }): boolean {
   if (!p.flag) return false;
   if (p.dev) return true;
   if (!p.channel) return false;
   if (p.channel !== 'production') return true;
-  return !!p.productionFlag && runtimeSupportsPasskeys(p.runtimeVersion);
+  if (!runtimeSupportsPasskeys(p.runtimeVersion)) return false;
+  const flags = p.productionFlags ?? {};
+  if (!flags.signup) return false;
+  return p.surface === 'signup' ? true : !!flags[p.surface];
 }
 
 function readChannel(): string | null {
@@ -65,7 +81,7 @@ function readRuntimeVersion(): string | null {
   }
 }
 
-export async function isPasskeyPreviewAllowed(): Promise<boolean> {
+export async function isPasskeySurfaceAllowed(surface: PasskeySurface): Promise<boolean> {
   const channel = readChannel();
   const runtimeVersion = readRuntimeVersion();
   const dev = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -75,19 +91,17 @@ export async function isPasskeyPreviewAllowed(): Promise<boolean> {
     if (!channel) return false;
     if (channel === 'production' && !runtimeSupportsPasskeys(runtimeVersion)) return false;
   }
-  const isProduction = !dev && channel === 'production';
-  let flag = false;
-  let productionFlag = false;
+  let flags: Record<string, boolean> = {};
   try {
-    [flag, productionFlag] = await Promise.all([
-      fetchPasskeyAccountsEnabled(),
-      isProduction ? fetchPasskeyAccountsEnabledProduction() : Promise.resolve(false),
-    ]);
+    flags = await fetchPasskeyFlags();
   } catch {
-    flag = false;
-    productionFlag = false;
+    return false;
   }
-  return passkeyPreviewAllowed({ flag, channel, dev, productionFlag, runtimeVersion });
+  const productionFlags: Partial<Record<PasskeySurface, boolean>> = {};
+  for (const k of Object.keys(SURFACE_PRODUCTION_FLAG) as PasskeySurface[]) {
+    productionFlags[k] = !!flags[SURFACE_PRODUCTION_FLAG[k]];
+  }
+  return passkeySurfaceAllowed({ surface, flag: !!flags.passkey_accounts_enabled, channel, dev, productionFlags, runtimeVersion });
 }
 
 /**

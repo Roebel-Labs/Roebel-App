@@ -6,7 +6,7 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
 const mockGate = jest.fn(async () => false);
-jest.mock('@/lib/passkey/gate', () => ({ isPasskeyPreviewAllowed: () => mockGate() }));
+jest.mock('@/lib/passkey/gate', () => ({ isPasskeySurfaceAllowed: () => mockGate() }));
 jest.mock('thirdweb/react', () => {
   const { Text } = require('react-native');
   return {

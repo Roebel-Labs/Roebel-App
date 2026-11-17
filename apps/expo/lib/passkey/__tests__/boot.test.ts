@@ -1,6 +1,6 @@
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
 jest.mock('expo-updates', () => ({ channel: 'preview' }));
-jest.mock('@/lib/supabase-app-settings', () => ({ fetchPasskeyAccountsEnabled: jest.fn(async () => false) }));
+jest.mock('@/lib/supabase-app-settings', () => ({ fetchPasskeyFlags: jest.fn(async () => ({})) }));
 
 import { getAddress, type Hex } from 'viem';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';

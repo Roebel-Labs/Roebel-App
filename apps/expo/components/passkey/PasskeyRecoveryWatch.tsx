@@ -1,13 +1,13 @@
 /**
  * Root-layout mount point for the "someone is recovering your account" banner.
  *
- * Production safety: this file imports only the gate. `isPasskeyPreviewAllowed()` returns false on
+ * Production safety: this file imports only the gate. `isPasskeySurfaceAllowed('signup')` returns false on
  * the production channel without any network or storage access; only when the gate is open is the
  * banner module (viem clients, Supabase, SecureStore) required, and it then renders only if this
  * device holds a connected passkey record.
  */
 import React, { useEffect, useState } from 'react';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 
 type WatchComponent = React.ComponentType<Record<string, never>>;
 
@@ -15,7 +15,7 @@ export default function PasskeyRecoveryWatch() {
   const [Watch, setWatch] = useState<WatchComponent | null>(null);
   useEffect(() => {
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    isPasskeySurfaceAllowed('signup')
       .catch(() => false)
       .then((ok) => {
         if (!ok || cancelled) return;

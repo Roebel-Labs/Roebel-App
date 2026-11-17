@@ -16,7 +16,7 @@ import PasskeySessionSwitch from '@/components/passkey/PasskeySessionSwitch';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import {
   loadMigrationRecord,
   runPasskeyMigration,
@@ -25,6 +25,9 @@ import {
   type RewrapStatus,
 } from '@/lib/passkey/migration';
 import { createMigrationDeps, secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
+
+// Temporary alias; Task 7 removes it.
+const isPasskeyPreviewAllowed = () => isPasskeySurfaceAllowed('signup');
 
 type Notice = { tone: 'info' | 'error' | 'success'; text: string } | null;
 

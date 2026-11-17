@@ -8,18 +8,18 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed, type PasskeySurface } from '@/lib/passkey/gate';
 
 /**
  * The preview fence for deep-linked passkey screens: null while checking, false = closed (the
  * screen is replaced by home, so production users never see anything).
  */
-export function usePasskeyGate(redirectHome = true): boolean | null {
+export function usePasskeyGate(surface: PasskeySurface = 'signup', redirectHome = true): boolean | null {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    isPasskeySurfaceAllowed(surface)
       .catch(() => false)
       .then((ok) => {
         if (cancelled) return;
@@ -29,7 +29,7 @@ export function usePasskeyGate(redirectHome = true): boolean | null {
     return () => {
       cancelled = true;
     };
-  }, [router, redirectHome]);
+  }, [router, surface, redirectHome]);
   return allowed;
 }
 

@@ -7,7 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 
 export default function PasskeyEntryLinks({ onNavigate, light = false }: { onNavigate?: () => void; light?: boolean }) {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function PasskeyEntryLinks({ onNavigate, light = false }: { onNav
 
   useEffect(() => {
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    isPasskeySurfaceAllowed('signup')
       .catch(() => false)
       .then((ok) => {
         if (!cancelled) setAllowed(ok);

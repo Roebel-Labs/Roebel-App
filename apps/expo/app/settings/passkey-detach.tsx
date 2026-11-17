@@ -18,7 +18,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useXmtp } from '@/context/XmtpContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import {
   DETACH_CONFIRM_WORD,
@@ -78,7 +78,7 @@ export default function PasskeyDetachScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ok = await isPasskeyPreviewAllowed().catch(() => false);
+      const ok = await isPasskeySurfaceAllowed('detach').catch(() => false);
       if (cancelled) return;
       setAllowed(ok);
       if (!ok) return;

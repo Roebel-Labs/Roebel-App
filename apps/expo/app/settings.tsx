@@ -12,7 +12,7 @@ import type { PreferredRole } from '@/context/WelcomeWizardContext';
 import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 import * as Updates from 'expo-updates';
 import BottomDrawer from '@/components/BottomDrawer';
@@ -20,6 +20,9 @@ import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { THEME_OPTIONS } from '@/constants/theme-options';
+
+// Temporary alias; Task 7 removes it.
+const isPasskeyPreviewAllowed = () => isPasskeySurfaceAllowed('signup');
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
