@@ -32,11 +32,14 @@ async function adoptGoogleAddress(wallet: string, profile: AgentProfileRow): Pro
   }
 }
 
-/** One entry per agent: the default assistant plus every own bot that is an illustrated character. */
+/**
+ * One entry per agent: the default assistant plus every own bot (illustrated character, own picture, or an
+ * older bot without either, which the person can now give a picture).
+ */
 async function agentList(wallet: string, main: store.BotRow, profile: AgentProfileRow) {
   const own = await store.db().from("chat_bots").select("*").eq("owner_wallet", wallet).eq("is_preset", false).order("created_at");
   if (own.error) throw new Error(`[chat/agent] own bots: ${own.error.message}`);
-  const rows = (own.data as store.BotRow[]).filter((b) => characterById(store.normalizeAvatar(b.avatar).character));
+  const rows = own.data as store.BotRow[];
   const fallback = main.is_preset ? main : await agentBot(null);
   const all = [fallback, ...rows.filter((b) => b.id !== fallback.id)];
   if (!all.some((b) => b.id === main.id)) all.push(main);
@@ -46,7 +49,10 @@ async function agentList(wallet: string, main: store.BotRow, profile: AgentProfi
     const isMain = b.id === main.id;
     return {
       botId: b.id, name: isMain ? profile.name || b.name : b.name, characterId: character?.id ?? null,
+      imageUrl: avatar.imageUrl ?? null,
       role: character ? characterRoleLine(character) : b.description, isMain, isPreset: b.is_preset,
+      // Own agents only: what the person told it (presets keep their instructions private).
+      instructions: b.is_preset ? null : b.instructions ?? "",
       personality: isMain ? profile.personality : avatar.personality ?? character?.personality ?? "standard",
       since: isMain ? profile.created_at : b.created_at,
     };
@@ -56,12 +62,13 @@ async function agentList(wallet: string, main: store.BotRow, profile: AgentProfi
 export async function agentView(wallet: string) {
   const profile = await adoptGoogleAddress(wallet, await getAgentProfile(wallet));
   const [bot, channels] = await Promise.all([agentBot(profile), listChannels(wallet)]);
-  const character = characterById(store.normalizeAvatar(bot.avatar).character);
+  const mainAvatar = store.normalizeAvatar(bot.avatar);
+  const character = characterById(mainAvatar.character);
   return {
     agents: await agentList(wallet, bot, profile),
     agent: {
       botId: bot.id, name: profile.name || bot.name, defaultName: character?.name ?? bot.name, description: character ? characterRoleLine(character) : bot.description,
-      characterId: character?.id ?? null, isPreset: bot.is_preset, since: profile.created_at,
+      characterId: character?.id ?? null, imageUrl: mainAvatar.imageUrl ?? null, isPreset: bot.is_preset, since: profile.created_at,
       personality: profile.personality, customInstructions: profile.custom_instructions, spokenName: profile.spoken_name,
       tools: bot.tools ?? [],
       mail: {

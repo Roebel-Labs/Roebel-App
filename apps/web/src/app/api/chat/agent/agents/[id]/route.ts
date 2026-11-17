@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PERSONALITY_KEYS, characterById, characterRoleLine } from "@/lib/chat/agent/characters";
 import { agentBot, findProfile, setMainAgent } from "@/lib/chat/agent/profile";
+import { isAllowedAvatarUrl } from "@/lib/chat/agent/avatar-image";
 import { agentView } from "@/lib/chat/agent/view";
 import * as store from "@/lib/chat/store";
 import { badRequest, handleError, notFound, readJson, requireWallet, unauthorized } from "../../../_lib/http";
@@ -15,9 +16,14 @@ async function ownAgent(wallet: string, id: string): Promise<store.BotRow | null
   return row && !row.is_preset && row.owner_wallet === wallet ? row : null;
 }
 
+const ROLE_MAX = 120;
+const INSTRUCTIONS_MAX = 4000;
+
 /**
- * PATCH /api/chat/agent/agents/:id — {name?, character?, personality?}. A new character keeps a name the person
- * chose; a name that was the old character's default follows the new one.
+ * PATCH /api/chat/agent/agents/:id — {name?, character?, imageUrl?, role?, instructions?, personality?}.
+ * A new character keeps a name the person chose; a name that was the old character's default follows the new
+ * one. imageUrl switches the agent to an own picture (the character goes); character switches back.
+ * role and instructions are for agents with an own picture (a character brings its own role).
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const wallet = await requireWallet(request);
@@ -36,9 +42,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const next = characterById(input.character);
       if (!next) return badRequest("Diese Figur gibt es nicht.");
       if (!before || row.name === before.name) name = next.name;
-      patch.avatar = { ...avatar, character: next.id, color: next.color };
+      const { imageUrl: _dropped, ...rest } = avatar;
+      patch.avatar = { ...rest, character: next.id, color: next.color };
       patch.description = characterRoleLine(next);
     }
+    if (input.imageUrl !== undefined) {
+      if (!isAllowedAvatarUrl(input.imageUrl, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")) return badRequest("Dieses Bild kann ich nicht verwenden. Lade es bitte neu hoch.");
+      const { character: _dropped, ...rest } = patch.avatar ?? avatar;
+      patch.avatar = { ...rest, imageUrl: input.imageUrl };
+      // The character's role line no longer fits; keep a role the person wrote.
+      if (before && row.description === characterRoleLine(before)) patch.description = "";
+    }
+    const hasCharacter = Boolean((patch.avatar ?? avatar).character);
+    if (typeof input.role === "string" && !hasCharacter) patch.description = input.role.trim().slice(0, ROLE_MAX);
+    if (typeof input.instructions === "string") patch.instructions = input.instructions.trim().slice(0, INSTRUCTIONS_MAX);
     if (typeof input.name === "string") {
       const fallback = characterById(patch.avatar?.character ?? avatar.character)?.name ?? row.name;
       name = input.name.trim().slice(0, 30) || fallback;

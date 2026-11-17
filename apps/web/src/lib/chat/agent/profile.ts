@@ -5,6 +5,7 @@ import type { BotRow } from "../store";
 import { workBot } from "../persona/catalog";
 import { normalizeAvatar } from "../store";
 import { characterById, characterPrompt } from "./characters";
+import { customAgentPrompt } from "./avatar-image";
 
 export interface Personality { key: string; title: string; description: string; prompt: string }
 
@@ -149,6 +150,7 @@ export async function agentOverlay(wallet: string, bot: BotRow, channel?: Channe
     const avatar = normalizeAvatar(bot.avatar);
     const character = characterById(avatar.character);
     if (character) blocks.push(characterPrompt(character, name));
+    else if (avatar.imageUrl && !bot.is_preset) blocks.push(customAgentPrompt(name, bot.description ?? ""));
     else if (isMain && profile?.name) blocks.push(`Der Mensch hat dir den Namen „${profile.name}“ gegeben. So heißt du für ihn.`);
     // The main assistant follows the profile; other character agents carry their own preset.
     const personality = isMain ? profile?.personality : avatar.personality;

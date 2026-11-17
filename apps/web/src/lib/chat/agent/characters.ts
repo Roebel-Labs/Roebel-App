@@ -50,6 +50,8 @@ export function characterPrompt(c: AgentCharacter, name: string): string {
 
 /** Public artwork paths, relative to the site origin. */
 export const characterArt = (id: string) => ({
+  /** 512² head and shoulders on the character's colour, the avatar everywhere in the apps. */
+  tile: `/agents/${id}/tile.webp`,
   full: `/agents/${id}/full.webp`,
   mail: `/agents/${id}/mail.png`,
   card: `/agents/${id}/card.png`,

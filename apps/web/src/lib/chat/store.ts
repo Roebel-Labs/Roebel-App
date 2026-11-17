@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "../supabase/admin";
 import { BOT_EYES, BOT_SHAPES } from "./types";
 import { PERSONALITY_KEYS, characterById } from "./agent/characters";
+import { isAllowedAvatarUrl } from "./agent/avatar-image";
 import type {
   BotAvatarSpec, ChatBot, ChatMessage, ChatPart, ChatRoutine, ChatThread, ChatTier, RoutineSchedule,
 } from "./types";
@@ -89,6 +90,8 @@ export function normalizeAvatar(input: unknown): BotAvatarSpec {
   const out: BotAvatarSpec = { shape, color, eyes };
   if (characterById(a.character)) out.character = a.character as string;
   if (PERSONALITY_KEYS.includes(a.personality as never)) out.personality = a.personality as string;
+  // A character brings its own artwork; an image only counts for agents without one.
+  if (!out.character && isAllowedAvatarUrl(a.imageUrl, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")) out.imageUrl = a.imageUrl;
   return out;
 }
 
