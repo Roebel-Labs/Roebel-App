@@ -220,7 +220,8 @@ serve(async (req: Request) => {
     //    delete manually before the user row goes. Source: information_schema
     //    sweep on 2026-05-22; extended 2026-07-31 from the migrations that
     //    landed since (nostr identity bridge, workspace, muenzen tips, mecky
-    //    conversations/outreach). `nostr_identities` is the wallet↔npub
+    //    conversations/outreach; credential_invitations + credential_actions are
+    //    swept separately in 3a). `nostr_identities` is the wallet↔npub
     //    bridge — deleting it is what makes the on-chain/Nostr trail
     //    effectively anonymous (EDPB 02/2025 §103) and drops the npub from
     //    the relay allow-list on the next sync pass. Rows whose stored case
@@ -264,6 +265,33 @@ serve(async (req: Request) => {
         // but surface real failures so we can debug.
         console.error(`Failed to clear ${table}.${column}:`, error.message);
       }
+    }
+
+    // 3a. Credential register (plan credreg-2): erase the person from the
+    //     invitation mirror. The row stays so the organisation's count is right.
+    //     `credential_actions` rows still awaiting confirmation are deleted.
+    //     The migration may not be applied yet, so a missing table must not
+    //     fail the deletion; log without PII.
+    {
+      const { error: invErr } = await db
+        .from('credential_invitations')
+        .update({
+          display_name: null,
+          contact_email: null,
+          claim_key_enc: null,
+          token_enc: null,
+          token_hash: null,
+          proof: [],
+          salt: '',
+        })
+        .eq('recipient_wallet', claimedWallet);
+      if (invErr) console.error('credential_invitations sweep failed:', invErr.code ?? 'unknown');
+      const { error: actErr } = await db
+        .from('credential_actions')
+        .delete()
+        .eq('prepared_by', claimedWallet)
+        .eq('status', 'awaiting_confirmation');
+      if (actErr) console.error('credential_actions sweep failed:', actErr.code ?? 'unknown');
     }
 
     // 3b. Detach instead of delete: content that legitimately outlives its
