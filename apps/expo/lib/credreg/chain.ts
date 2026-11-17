@@ -2,8 +2,8 @@
  * Credential register — chain reads (Gnosis). The registry address comes only from this app's
  * own constants, never from a server response. Encodings live in @netizen-labs/credential-registry.
  */
-import { createCredentialRegistryReader, type CredentialRegistryReader } from '@netizen-labs/credential-registry';
-import { createPublicClient, http, type Address, type PublicClient } from 'viem';
+import { CREDENTIAL_REGISTRY_ABI, createCredentialRegistryReader, type CredentialRegistryReader } from '@netizen-labs/credential-registry';
+import { createPublicClient, http, type Address, type Hex, type PublicClient } from 'viem';
 import { gnosis } from 'viem/chains';
 import { credentialRegistryGnosisAddress } from '@/constants/gnosis';
 
@@ -15,13 +15,31 @@ export const REGISTRY = credentialRegistryGnosisAddress as Address;
 let client: PublicClient | null = null;
 let reader: CredentialRegistryReader | null = null;
 
+function publicClient(): PublicClient {
+  client = client ?? (createPublicClient({ chain: gnosis, transport: http(RPC) }) as PublicClient);
+  return client;
+}
+
 /** One reader per app session, created on first use (no RPC client while the gate is closed). */
 export function registryReader(): CredentialRegistryReader {
   if (!reader) {
-    client = client ?? (createPublicClient({ chain: gnosis, transport: http(RPC) }) as PublicClient);
-    reader = createCredentialRegistryReader({ client, address: REGISTRY });
+    reader = createCredentialRegistryReader({ client: publicClient(), address: REGISTRY });
   }
   return reader;
+}
+
+/**
+ * The account's on-chain holding of a type (`holdingOf`): which batch and leaf it came from.
+ * batchId 0 and a zero leaf = nothing held (or self-claimed). Throws on RPC failure.
+ */
+export async function readHolding(typeId: Hex, account: Address): Promise<{ batchId: bigint; leaf: Hex }> {
+  const h = (await publicClient().readContract({
+    address: REGISTRY,
+    abi: CREDENTIAL_REGISTRY_ABI,
+    functionName: 'holdingOf',
+    args: [typeId, account],
+  })) as { batchId: bigint; leaf: Hex };
+  return { batchId: BigInt(h.batchId), leaf: h.leaf };
 }
 
 export type TypeMetadata = {

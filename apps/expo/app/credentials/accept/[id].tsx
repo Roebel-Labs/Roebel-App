@@ -105,6 +105,11 @@ export default function AcceptCredentialScreen() {
     setBusy(null);
     if (!result.ok) {
       setError(result.message);
+      if (result.code === 'NOT_PUBLIC') {
+        // The org closed public membership meanwhile: the screen now offers the private way.
+        setLoad((l) => (l.inv ? { ...l, inv: { ...l.inv, type: { ...l.inv.type, publicClaimAllowed: false } } } : l));
+        setChoice(null);
+      }
       return;
     }
     forgetInvitation(inv.id);

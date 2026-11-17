@@ -5,8 +5,8 @@ jest.mock('@/constants/gnosis', () => ({ credentialRegistryGnosisAddress: '0x' +
 jest.mock('@/lib/org-safe/send', () => ({ sendOrgCalls: jest.fn() }));
 jest.mock('thirdweb/react', () => ({ useActiveAccount: () => undefined }));
 
-import { claimCall, renounceCall } from '@netizen-labs/credential-registry';
-import type { Hex } from 'viem';
+import { claimCall, leafHash, renounceCall } from '@netizen-labs/credential-registry';
+import { getAddress, type Hex } from 'viem';
 import type { HeldCredential } from '../held';
 import type { InvitationView } from '../types';
 import { acceptInvitation, acceptOptions, makePrivate, makePublic, type AcceptDeps } from '../accept';
@@ -49,7 +49,7 @@ function deps(over: Partial<AcceptDeps> = {}): AcceptDeps & { send: jest.Mock; r
     send: jest.fn(async () => {}),
     respond: jest.fn(async () => ({ ok: true, data: null })),
     fetchMine: jest.fn(async () => ({ ok: true, data: [] })),
-    holds: jest.fn(async () => false),
+    holding: jest.fn(async () => null),
     configured: () => true,
     nowSec: () => 1_800_000_000,
     ...over,
@@ -107,7 +107,7 @@ describe('acceptInvitation', () => {
     const i = inv();
     expect(await acceptInvitation(account, i, 'private', d)).toEqual({ ok: true });
     expect(d.send).not.toHaveBeenCalled();
-    expect(d.holds).not.toHaveBeenCalled();
+    expect(d.holding).not.toHaveBeenCalled();
     expect(d.respond).toHaveBeenCalledWith(account, i.id, 'accept');
   });
 
@@ -166,11 +166,61 @@ describe('acceptInvitation', () => {
     expect(d2.send).not.toHaveBeenCalled();
   });
 
-  it('an account that already holds the type publicly is not asked to claim again', async () => {
-    const d = deps({ holds: jest.fn(async () => true) });
-    expect(await acceptInvitation(account, inv(), 'public', d)).toEqual({ ok: true });
+  const chainLeaf = (i: InvitationView) => leafHash({ ...i.claim.leaf, validUntil: BigInt(i.claim.leaf.validUntil) });
+
+  it('an account whose on-chain holding is already this invitation is not asked to claim again', async () => {
+    const i = inv();
+    const d = deps({ holding: jest.fn(async () => ({ batchId: 3n, leaf: chainLeaf(i) })) });
+    expect(await acceptInvitation(account, i, 'public', d)).toEqual({ ok: true });
     expect(d.send).not.toHaveBeenCalled();
-    expect(d.respond).toHaveBeenCalledWith(account, inv().id, 'accept');
+    expect(d.respond).toHaveBeenCalledWith(account, i.id, 'accept');
+  });
+
+  it('a renewed invitation of a type already held publicly is claimed (the claim renews the holding)', async () => {
+    const renewed = inv({ claim: { ...inv().claim, batchId: '9', leaf: { ...inv().claim.leaf, salt: tid(98), validUntil: '1900000000' } } });
+    const old = inv();
+    const d = deps({ holding: jest.fn(async () => ({ batchId: 3n, leaf: chainLeaf(old) })) });
+    expect(await acceptInvitation(account, renewed, 'public', d)).toEqual({ ok: true });
+    expect(d.send).toHaveBeenCalledTimes(1);
+    expect(d.send.mock.calls[0][1]).toEqual([expectedClaim(renewed)]);
+    // Same leaf in another batch is not the same holding either.
+    const d2 = deps({ holding: jest.fn(async () => ({ batchId: 4n, leaf: chainLeaf(old) })) });
+    await acceptInvitation(account, old, 'public', d2);
+    expect(d2.send).toHaveBeenCalledTimes(1);
+    // A failed holding read claims anyway.
+    const d3 = deps({ holding: jest.fn(async () => { throw new Error('rpc'); }) });
+    await acceptInvitation(account, old, 'public', d3);
+    expect(d3.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('an account leaf for another account is refused before anything is sent', async () => {
+    const other = inv({ claim: { ...inv().claim, leaf: { ...inv().claim.leaf, subject: ('0x' + '33'.repeat(20)) as any } } });
+    const d = deps();
+    const r = await acceptInvitation(account, other, 'public', d);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).not.toMatch(/0x[0-9a-fA-F]{6,}/);
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.respond).not.toHaveBeenCalled();
+    // Case does not matter (checksummed subject, lower-case account).
+    const upper = inv({ claim: { ...inv().claim, leaf: { ...inv().claim.leaf, subject: getAddress(ADDR) } } });
+    expect(getAddress(ADDR)).not.toBe(ADDR);
+    const d2 = deps();
+    expect(await acceptInvitation(account, upper, 'public', d2)).toEqual({ ok: true });
+  });
+
+  it('a failed claim re-checks the org: members now private → NOT_PUBLIC, so the screen offers private', async () => {
+    const i = inv();
+    const closed = inv({}, { publicClaimAllowed: false });
+    const d = deps({
+      send: jest.fn(async () => {
+        throw new Error('reverted');
+      }),
+      fetchMine: jest.fn(async () => ({ ok: true, data: [closed] })),
+    });
+    const r = await acceptInvitation(account, i, 'public', d);
+    expect(r).toEqual({ ok: false, message: expect.stringMatching(/nicht mehr öffentlich/), code: 'NOT_PUBLIC' });
+    expect(d.fetchMine).toHaveBeenCalledTimes(1);
+    expect(d.respond).not.toHaveBeenCalled();
   });
 
   it('a revoked or expired invitation is refused', async () => {
