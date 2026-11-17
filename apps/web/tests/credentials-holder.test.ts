@@ -300,3 +300,19 @@ test("a pairing session is refused for mine, redeem, respond and present_create,
     assert.equal(r.ok, true, action);
   }
 });
+
+test("redeem of a prepared invitation of an on-chain batch marks it invited and drops the mail address", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{}]);
+  const id = b.invitations[0].id;
+  await w.store.updateInvitation(id, { status: "prepared", contactEmail: "b@example.org" });
+  const v = ok(await redeem(w.d, caller(ALICE, "redeem"), { token: b.invitations[0].token! }));
+  assert.equal(v.state, "invited");
+  const row = await w.store.getInvitation(id);
+  assert.equal(row!.status, "invited");
+  assert.equal(row!.contactEmail, null);
+  assert.equal(row!.invitedAt, new Date(T0).toISOString());
+  const [m] = ok(await mine(w.d, caller(ALICE)));
+  assert.equal(m.id, id);
+  ok(await respond(w.d, caller(ALICE, "respond"), { invitationId: id, decision: "accept" }));
+});

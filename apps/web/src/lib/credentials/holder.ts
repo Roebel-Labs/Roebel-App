@@ -187,7 +187,17 @@ export async function redeem(d: HolderDeps, c: Caller, p: { token: string }): Pr
   }
   if (inv.recipientWallet !== wallet) return ALREADY_REDEEMED;
 
-  const view = await toView(d, viewContext(d), inv.status === "prepared" ? { ...inv, status: "invited" } : inv, batch, wallet);
+  if (inv.status === "prepared") {
+    // The batch is on chain but delivery has not run yet: the link reached its person anyway, so the
+    // invitation is delivered (mine / respond agree) and no mail is needed any more.
+    await d.store.updateInvitation(inv.id, { status: "invited", invitedAt: new Date(d.now()).toISOString(), contactEmail: null }, { statuses: ["prepared"] });
+    const fresh = await d.store.getInvitation(inv.id);
+    if (!fresh) return LINK_INVALID;
+    if (fresh.status === "revoked") return REVOKED;
+    inv = fresh;
+  }
+
+  const view = await toView(d, viewContext(d), inv, batch, wallet);
   if (!view) return LINK_INVALID;
   return ok(view);
 }

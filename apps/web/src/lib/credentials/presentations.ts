@@ -5,6 +5,7 @@
 // present_create is app only; present_resolve also accepts a pairing session.
 // Relative imports only: loaded by `npx tsx --test`.
 import { createHash, randomInt } from "node:crypto";
+import { leafHash, recoverClaimSigner, verifyProof } from "@netizen-labs/credential-registry";
 import { isAddress, type Address, type Hex } from "viem";
 import type { Fail, Result } from "./actions";
 import type { Caller } from "./caller";
@@ -32,6 +33,8 @@ export type Presentation = {
 
 export type PresentationDeps = {
   store: CredentialStore;
+  /** The register the claim signatures of claim-key leaves are bound to (chain 100). */
+  registry: Address;
   now: () => number;
   /** Defaults to verifyWalletSignature (EOA, ERC-1271/6492 smart accounts, passkey Safes). */
   verifySignature?: (wallet: string, message: string, signature: string) => Promise<boolean>;
@@ -42,6 +45,8 @@ const fail = (status: number, code: string, message: string): Fail => ({ ok: fal
 const bad = (message: string) => fail(400, "BAD_REQUEST", message);
 const GONE = fail(404, "NOT_FOUND", "Dieser Code ist abgelaufen oder ungültig.");
 const NOT_YOURS = fail(403, "FORBIDDEN", "Du kannst nur deinen eigenen Ausweis vorzeigen.");
+const PROOF_INVALID = fail(400, "PROOF_INVALID", "Dieser Nachweis passt nicht zu deinem Konto.");
+const PROOF_NOT_LIVE = fail(410, "PROOF_NOT_LIVE", "Dieser Ausweis ist nicht mehr gültig.");
 
 const BYTES32 = /^0x[0-9a-fA-F]{64}$/;
 const HEX = /^0x[0-9a-fA-F]*$/;
@@ -126,10 +131,47 @@ export async function createPresentation(d: PresentationDeps, c: Caller, p: Pres
   if (nowSec - parsed.issuedAtSec > SHOW_TTL_SECONDS || parsed.issuedAtSec - nowSec > CLOCK_SKEW_SECONDS) {
     return fail(400, "STALE", "Bitte zeige den Ausweis noch einmal neu vor.");
   }
+  if (parsed.private) {
+    const bad = await checkPrivatePart(d, parsed.private, parsed.account, nowMs);
+    if (bad) return bad;
+  }
   const code = generatePresentationCode();
   const expiresAt = new Date(nowMs + SHOW_TTL_SECONDS * 1000).toISOString();
   await d.store.putPresentation({ codeHash: sha256Hex(code), payload: parsed as unknown as Record<string, unknown>, expiresAt });
   return ok({ code, expiresAt });
+}
+
+/**
+ * The private part is not covered by showMessage, so the server vouches for it here: the leaf must
+ * belong to the presenter (account leaf: subject = presenter; claim-key leaf: a claim signature of
+ * the one-time key for the presenter), the proof must lead to the mirrored root of an on-chain batch
+ * of that type, and the mirror must not know the leaf as revoked or expired.
+ */
+async function checkPrivatePart(d: PresentationDeps, q: NonNullable<Presentation["private"]>, account: Address, nowMs: number): Promise<Fail | null> {
+  const leaf = { kind: q.leaf.kind, typeId: q.leaf.typeId, subject: q.leaf.subject, validUntil: BigInt(q.leaf.validUntil), salt: q.leaf.salt };
+  const hash = leafHash(leaf).toLowerCase() as Hex;
+  if (leaf.kind === "account") {
+    if (leaf.subject.toLowerCase() !== account.toLowerCase()) return PROOF_INVALID;
+  } else {
+    if (!q.claimSignature) return PROOF_INVALID;
+    let signer: string;
+    try {
+      signer = await recoverClaimSigner({ chainId: 100, registry: d.registry, batchId: BigInt(q.batchId), leaf: hash, account, signature: q.claimSignature });
+    } catch {
+      return PROOF_INVALID;
+    }
+    if (signer.toLowerCase() !== leaf.subject.toLowerCase()) return PROOF_INVALID;
+  }
+  const batch = await d.store.getBatchByChainId(q.batchId);
+  if (!batch || batch.typeId.toLowerCase() !== leaf.typeId) return PROOF_INVALID;
+  if (!verifyProof(batch.root, hash, q.proof)) return PROOF_INVALID;
+  if (batch.status === "revoked") return PROOF_NOT_LIVE;
+  if (batch.status !== "onchain") return PROOF_INVALID;
+  const [row] = await d.store.listInvitations({ batchId: batch.id, leafHash: hash });
+  if (!row) return PROOF_INVALID;
+  if (row.status === "revoked") return PROOF_NOT_LIVE;
+  if (q.leaf.validUntil !== "0" && Number(q.leaf.validUntil) < Math.floor(nowMs / 1000)) return PROOF_NOT_LIVE;
+  return null;
 }
 
 async function defaultVerify(wallet: string, message: string, signature: string): Promise<boolean> {

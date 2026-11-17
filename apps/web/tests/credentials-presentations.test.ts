@@ -15,7 +15,10 @@ import {
 } from "../src/lib/credentials/presentations";
 import { CODE_ALPHABET } from "../src/lib/chat/pairing";
 import type { Caller } from "../src/lib/credentials/caller";
-import { recoverMessageAddress } from "viem";
+import { keccak256, recoverMessageAddress, toHex } from "viem";
+import { buildTree, leafHash, signClaim, type Leaf } from "@netizen-labs/credential-registry";
+
+const REGISTRY = "0x00000000000000000000000000000000000000c1" as Address;
 
 const TYPE = `0x${"ab".repeat(32)}` as Hex;
 const T0 = Date.parse("2026-11-17T10:00:00Z");
@@ -30,6 +33,7 @@ function world() {
   let now = T0;
   const d: PresentationDeps = {
     store,
+    registry: REGISTRY,
     now: () => now,
     verifySignature: async (wallet, message, signature) => {
       try {
@@ -117,4 +121,78 @@ test("a presentation older than 300 s is gone", async () => {
   // a presentation issued long ago is refused at create time
   const stale = await createPresentation(w.d, caller(HOLDER, "present_create"), await presentation(T0 / 1000 - 400));
   assert.equal(stale.ok, false);
+});
+
+// ── the private part ─────────────────────────────────────────────────────────
+
+const claimKey = generatePrivateKey();
+const CLAIM_SUBJECT = privateKeyToAccount(claimKey).address.toLowerCase() as Address;
+const OTHER_WALLET = "0x00000000000000000000000000000000000000b3" as Address;
+
+async function privateWorld() {
+  const w = world();
+  const leaves: Record<"mine" | "other" | "claim", Leaf> = {
+    mine: { kind: "account", typeId: TYPE, subject: HOLDER, validUntil: 0n, salt: keccak256(toHex("s1")) },
+    other: { kind: "account", typeId: TYPE, subject: OTHER_WALLET, validUntil: 0n, salt: keccak256(toHex("s2")) },
+    claim: { kind: "claimKey", typeId: TYPE, subject: CLAIM_SUBJECT, validUntil: 0n, salt: keccak256(toHex("s3")) },
+  };
+  const hashes = Object.fromEntries(Object.entries(leaves).map(([k, l]) => [k, leafHash(l).toLowerCase() as Hex])) as Record<keyof typeof leaves, Hex>;
+  const tree = buildTree(Object.values(hashes));
+  const batchId = "55555555-5555-4555-8555-000000000001";
+  await w.store.insertBatchWithInvitations(
+    { id: batchId, actionId: null, typeId: TYPE, root: tree.root, count: 3, source: "people" },
+    (Object.keys(leaves) as (keyof typeof leaves)[]).map((k, i) => ({
+      id: `55555555-5555-4555-8555-00000000010${i}`, typeId: TYPE, leafKind: leaves[k].kind === "account" ? "account" : "claim_key",
+      subject: leaves[k].subject, validUntil: "0", salt: leaves[k].salt, leafHash: hashes[k], proof: tree.proofOf(hashes[k]),
+      claimKeyEnc: null, tokenHash: null, tokenEnc: null, recipientWallet: null, displayName: null, contactEmail: null, status: "invited" as const,
+    })),
+  );
+  await w.store.updateBatch(batchId, { status: "onchain", chainBatchId: "9" });
+  const part = async (k: keyof typeof leaves, account: Address = HOLDER) => ({
+    batchId: "9",
+    leaf: { kind: leaves[k].kind, typeId: TYPE, subject: leaves[k].subject, validUntil: "0", salt: leaves[k].salt },
+    proof: tree.proofOf(hashes[k]),
+    claimSignature: leaves[k].kind === "claimKey" ? await signClaim(claimKey, { chainId: 100, registry: REGISTRY, batchId: 9n, leaf: hashes[k], account }) : null,
+  });
+  return { ...w, part, hashes, batchId };
+}
+
+test("a private part with the presenter's own account leaf and proof is accepted", async () => {
+  const w = await privateWorld();
+  const r = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: await w.part("mine") });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const c = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: await w.part("claim") });
+  assert.equal(c.ok, true, JSON.stringify(c));
+});
+
+test("a foreign account leaf is refused", async () => {
+  const w = await privateWorld();
+  const r = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: await w.part("other") });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "PROOF_INVALID");
+});
+
+test("a claim-key leaf with a signature copied from another account is refused", async () => {
+  const w = await privateWorld();
+  const copied = await w.part("claim", OTHER_WALLET);
+  const r = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: copied });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "PROOF_INVALID");
+  const none = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: { ...copied, claimSignature: null } });
+  assert.equal(none.ok, false);
+});
+
+test("a bad proof, an unknown batch or a revoked leaf is refused", async () => {
+  const w = await privateWorld();
+  const good = await w.part("mine");
+  const badProof = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: { ...good, proof: [keccak256(toHex("x"))] } });
+  assert.equal(badProof.ok, false);
+  if (!badProof.ok) assert.equal(badProof.code, "PROOF_INVALID");
+  const unknown = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: { ...good, batchId: "10" } });
+  assert.equal(unknown.ok, false);
+  await w.store.updateInvitations({ batchId: w.batchId, leafHash: w.hashes.mine }, { status: "revoked" });
+  const revoked = await createPresentation(w.d, caller(HOLDER, "present_create"), { ...(await presentation()), private: good });
+  assert.equal(revoked.ok, false);
+  if (!revoked.ok) assert.equal(revoked.status, 410);
+  assert.equal(w.store.presentations.size, 0);
 });
