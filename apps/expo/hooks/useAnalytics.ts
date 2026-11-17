@@ -86,6 +86,9 @@ function getScreenNameFromPath(pathname: string, segments: string[]): string {
         return param === 'index' ? 'Movies' : 'Movie Detail';
       case 'verification':
         return `Verification: ${param}`;
+      case 'invite':
+        // The path carries a one-time token: never use it as a screen name.
+        return param === 'ausweis' ? 'Credential Invite' : 'Invite';
     }
   }
 

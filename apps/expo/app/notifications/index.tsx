@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { routeForNotification } from '@/lib/navigation/notificationRoute';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import InviteNotificationCard from '@/components/InviteNotificationCard';
 import ActivityRow from '@/components/ActivityRow';
@@ -176,6 +177,14 @@ export default function NotificationsInboxScreen() {
         // Weekly follower digest (follower_digest) for org owners/admins.
         if (typeof data.accountId === 'string') router.push(`/account/${data.accountId}` as any);
         break;
+      case 'credential_invite':
+      case 'credential_action':
+      case 'credential_letters': {
+        // Same mapping as a push tap (ids validated there).
+        const route = routeForNotification(data);
+        if (route) router.push(route as any);
+        break;
+      }
       // org_invite is actioned via the in-app InviteNotificationCard in the
       // same inbox; tapping the push entry has no separate destination.
       default:

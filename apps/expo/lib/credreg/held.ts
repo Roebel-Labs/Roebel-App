@@ -277,6 +277,13 @@ export async function loadPublicHeld(
 
 // ── hook ─────────────────────────────────────────────────────────────────────
 
+/** Every mounted useHeld reloads when a screen changed what the person holds (accept, make public…). */
+const changeListeners = new Set<() => void>();
+
+export function announceHeldChanged(): void {
+  changeListeners.forEach((l) => l());
+}
+
 type HookState = { owner: string; held: HeldCredential[]; pending: InvitationView[] };
 /** `pending` absent = keep what is shown (the cache holds no invitations). */
 type HookUpdate = { owner: string; held: HeldCredential[]; pending?: InvitationView[] };
@@ -325,6 +332,16 @@ export function useHeld(): { held: HeldCredential[]; pending: InvitationView[]; 
   }, [load]);
 
   const refresh = useCallback(() => load((u) => setState((prev) => merge(prev, u))).catch(() => undefined), [load]);
+
+  useEffect(() => {
+    const listener = () => {
+      void refresh();
+    };
+    changeListeners.add(listener);
+    return () => {
+      changeListeners.delete(listener);
+    };
+  }, [refresh]);
 
   // A closed gate or another signed-in account never sees a previous list.
   const mine = open && state?.owner === address ? state : null;

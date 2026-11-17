@@ -15,6 +15,7 @@ import { Events, track } from '@/lib/analytics';
 import type { CredentialKind } from '@/lib/credentials';
 import type { RegisterCard } from '@/lib/credreg/model';
 import { makePrivate } from '@/lib/credreg/visibility';
+import { makePublic } from '@/lib/credreg/accept';
 import { useProfileCredentials } from '@/hooks/useProfileCredentials';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
@@ -165,6 +166,29 @@ export default function ProfileScreen() {
     await creds.refresh();
   };
 
+  const makeCardPublic = async (card: RegisterCard) => {
+    if (!account || cardBusy || !card.typeId) return;
+    const typeKey = card.typeId.toLowerCase();
+    const held = creds.held.find((h) => h.typeId.toLowerCase() === typeKey);
+    if (!held) return;
+    setCardBusy(true);
+    setCardError(null);
+    // Refuses expired cards and orgs that keep members private; the proof comes fresh from the server.
+    const result = await makePublic(account, held);
+    setCardBusy(false);
+    if (!result.ok) {
+      setCardError(result.message);
+      return;
+    }
+    dismissPushedCard();
+    setDetailCard(null);
+    await creds.refresh();
+  };
+  const openPending = () => {
+    const only = creds.pending.length === 1 ? creds.pending[0] : null;
+    router.push((only ? `/credentials/accept/${only.id}` : '/credentials') as any);
+  };
+
   const muenzenSlot =
     mint.state === 'hidden' ? null : (
       <MuenzenButton
@@ -237,6 +261,17 @@ export default function ProfileScreen() {
             ) : (
               <>
                 {creds.loader}
+                {creds.open && creds.pending.length > 0 && (
+                  <Pressable
+                    onPress={openPending}
+                    style={[styles.pendingRow, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Neuer Ausweis wartet auf dich"
+                  >
+                    <Text style={[styles.pendingText, { color: colors.primary }]}>Neuer Ausweis wartet auf dich</Text>
+                    <Text style={[styles.pendingAction, { color: colors.primary }]}>Ansehen</Text>
+                  </Pressable>
+                )}
                 <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
                 <ProfileSheet>
                   <IdentityRow
@@ -294,6 +329,7 @@ export default function ProfileScreen() {
             onClose={closeCard}
             onShow={showCard}
             onMakePrivate={makeCardPrivate}
+            onMakePublic={makeCardPublic}
             busy={cardBusy}
             error={cardError}
           />
@@ -321,6 +357,20 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  pendingText: { fontSize: 15, fontFamily: 'MonaSans-SemiBold', flexShrink: 1 },
+  pendingAction: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   container: { flex: 1 },
   content: { flex: 1 },
   navOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0 },
