@@ -12,7 +12,7 @@ import type { PreferredRole } from '@/context/WelcomeWizardContext';
 import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
-import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { useSettingsKind } from '@/components/passkey/useSettingsKind';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 import * as Updates from 'expo-updates';
 import BottomDrawer from '@/components/BottomDrawer';
@@ -21,8 +21,6 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { THEME_OPTIONS } from '@/constants/theme-options';
 
-// Temporary alias; Task 7 removes it.
-const isPasskeyPreviewAllowed = () => isPasskeySurfaceAllowed('signup');
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
@@ -125,19 +123,9 @@ export default function SettingsScreen() {
     };
   }, []);
 
-  // Preview-only (flag + non-production channel): passkey sovereign accounts, tranche 1.
-  const [showPasskey, setShowPasskey] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    isPasskeyPreviewAllowed()
-      .then((ok) => {
-        if (!cancelled) setShowPasskey(ok);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Passkey settings row: which screen (if any) applies to this device (lib/passkey/settings-kind.ts).
+  const { kind: passkeyKind } = useSettingsKind();
+  const showPasskey = passkeyKind === 'sovereign' || passkeyKind === 'migration';
 
   const canRequestAttester = hasCitizenNFT && !hasAttesterNFT;
   const currentRoleLabel =
@@ -304,7 +292,9 @@ export default function SettingsScreen() {
                   Passkey & Wiederherstellung
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
-                  Vorschau: Passkey als zusätzlichen Verwalter deines Kontos einrichten.
+                  {passkeyKind === 'sovereign'
+                    ? 'Dein unabhängiges Konto absichern.'
+                    : 'Passkey als zusätzlichen Verwalter deines Kontos einrichten.'}
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
