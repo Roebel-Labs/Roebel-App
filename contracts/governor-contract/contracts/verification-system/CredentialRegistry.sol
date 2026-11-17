@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 interface ICredCitizenSource {
     function hasCitizenNFT(address account) external view returns (bool);
@@ -124,6 +126,11 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     /// @notice true = the org's Membership types can only be proven privately, never claimed publicly.
     mapping(bytes32 => bool) public orgPrivateOnly;
 
+    Batch[] private _batches; // index 0 unused: batch ids start at 1
+    mapping(bytes32 => mapping(address => Holding)) private _holdings;
+    mapping(uint64 => mapping(bytes32 => bool)) private _leafRevoked;
+    mapping(uint64 => mapping(bytes32 => address)) private _leafBoundTo;
+
     event TypeCreated(bytes32 indexed typeId, bytes32 indexed orgId, bytes32 localId, Kind kind, ClaimPolicy policy, uint64 orgGeneration);
     event TypeConfigured(bytes32 indexed typeId, TypeConfig config);
     event TypeRetired(bytes32 indexed typeId);
@@ -179,6 +186,7 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         string[3] memory reservedURIs
     ) ERC1155("") Ownable(initialOwner) EIP712("CredentialRegistry", "1") {
         _setSources(citizenNFT_, attesterNFT_, orgRegistry_);
+        _batches.push();
 
         TypeConfig memory c;
         c.publicClaim = true; // External types are public by nature (the NFT is public); nothing is minted
@@ -254,35 +262,116 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     }
 
     // ---------------------------------------------------------------------
-    // Issuing and holding — implemented in the next slice
+    // Issuing — org authority or a delegate of the type
     // ---------------------------------------------------------------------
 
-    function addBatch(bytes32, bytes32, uint32) external pure returns (uint64) {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Publishes a Merkle root of salted leaves. Only the root and the count are public.
+    function addBatch(bytes32 typeId, bytes32 root, uint32 count) external returns (uint64 batchId) {
+        CredentialType storage t = _requireType(typeId);
+        if (t.policy == ClaimPolicy.External) revert ExternalType(typeId);
+        if (t.policy != ClaimPolicy.IssuerBatch) revert WrongPolicy(typeId);
+        _requireActiveAndIssuer(typeId);
+        if (root == bytes32(0) || count == 0) revert EmptyBatch();
+        batchId = uint64(_batches.length);
+        _batches.push(Batch(typeId, root, msg.sender, count, uint64(block.timestamp), false));
+        emit BatchAdded(batchId, typeId, msg.sender, root, count);
     }
 
-    function revokeBatch(uint64) external pure {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Stops every holding from this batch at once; no transaction per holder.
+    function revokeBatch(uint64 batchId) external {
+        Batch storage b = _requireBatch(batchId);
+        _requireActiveAndIssuer(b.typeId);
+        if (b.revoked) revert BatchIsRevoked(batchId);
+        b.revoked = true;
+        emit BatchRevoked(batchId);
     }
 
-    function revokeLeaves(uint64, bytes32[] calldata) external pure {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Revokes single leaves of a batch; a claimed leaf that is its holder's
+    ///         current holding is burned. Already revoked leaves are skipped.
+    function revokeLeaves(uint64 batchId, bytes32[] calldata leaves) external {
+        Batch storage b = _requireBatch(batchId);
+        bytes32 typeId = b.typeId;
+        _requireActiveAndIssuer(typeId);
+        for (uint256 i = 0; i < leaves.length; i++) {
+            bytes32 h = leaves[i];
+            if (_leafRevoked[batchId][h]) continue;
+            _leafRevoked[batchId][h] = true;
+            emit LeafRevoked(batchId, h);
+            address account = _leafBoundTo[batchId][h];
+            if (account == address(0)) continue;
+            Holding storage hold = _holdings[typeId][account];
+            if (hold.batchId == batchId && hold.leaf == h && _rawBalance(typeId, account) == 1) _burn(typeId, account);
+        }
     }
 
-    function claim(uint64, Leaf calldata, bytes32[] calldata, bytes calldata) external pure {
-        revert("CredentialRegistry: not implemented");
+    // ---------------------------------------------------------------------
+    // Holders
+    // ---------------------------------------------------------------------
+
+    /// @notice Claims a leaf publicly. An Account leaf is claimed by its subject; a
+    ///         ClaimKey leaf by whoever holds the key (EIP-712 signature over
+    ///         batchId, leaf and msg.sender), after which it stays bound to that account.
+    ///         Claiming while holding replaces the holding (renewal) without a second mint.
+    function claim(uint64 batchId, Leaf calldata leaf, bytes32[] calldata proof, bytes calldata claimSignature)
+        external
+    {
+        Batch storage b = _requireBatch(batchId);
+        bytes32 typeId = b.typeId;
+        if (!isTypeActive(typeId)) revert TypeInactive(typeId);
+        if (leaf.typeId != typeId) revert LeafTypeMismatch();
+        CredentialType storage t = _types[typeId];
+        _requireMintable(typeId, t);
+        if (b.revoked) revert BatchIsRevoked(batchId);
+        bytes32 h = leafHash(leaf);
+        if (!MerkleProof.verifyCalldata(proof, b.root, h)) revert InvalidProof();
+        if (_leafRevoked[batchId][h]) revert LeafIsRevoked(h);
+        if (leaf.validUntil != 0 && block.timestamp > leaf.validUntil) revert LeafExpired(h);
+
+        address bound = _leafBoundTo[batchId][h];
+        if (leaf.kind == LeafKind.Account) {
+            if (msg.sender != leaf.subject) revert NotLeafSubject(msg.sender);
+        } else if (bound == address(0)) {
+            (address signer, ECDSA.RecoverError err,) =
+                ECDSA.tryRecover(claimDigest(batchId, h, msg.sender), claimSignature);
+            if (err != ECDSA.RecoverError.NoError || signer != leaf.subject) revert BadClaimSignature();
+        } else if (bound != msg.sender) {
+            revert LeafBoundToOther(h);
+        }
+        if (bound != msg.sender) _leafBoundTo[batchId][h] = msg.sender;
+
+        _hold(typeId, t, Holding(batchId, leaf.validUntil, uint64(block.timestamp), h));
+        emit Claimed(typeId, msg.sender, batchId, h, leaf.validUntil);
     }
 
-    function selfClaim(bytes32) external pure {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Claims a SelfClaim type (e.g. Guest). A stale holding is refreshed without a second mint.
+    function selfClaim(bytes32 typeId) external {
+        CredentialType storage t = _requireType(typeId);
+        if (t.policy == ClaimPolicy.External) revert ExternalType(typeId);
+        if (t.policy != ClaimPolicy.SelfClaim) revert WrongPolicy(typeId);
+        if (!isTypeActive(typeId)) revert TypeInactive(typeId);
+        _requireMintable(typeId, t);
+        if (holds(typeId, msg.sender)) revert AlreadyHeld(typeId, msg.sender);
+        uint64 validity = t.config.defaultValidity;
+        uint64 validUntil = validity == 0 ? 0 : uint64(block.timestamp) + validity;
+        _hold(typeId, t, Holding(0, validUntil, uint64(block.timestamp), bytes32(0)));
+        emit SelfClaimed(typeId, msg.sender, validUntil);
     }
 
-    function renounce(bytes32) external pure {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Burns the caller's holding (even a stale one). A claim-key leaf stays
+    ///         bound to the caller, and the leaf remains valid for private proofs.
+    function renounce(bytes32 typeId) external {
+        _requireBurnable(typeId, msg.sender);
+        _burn(typeId, msg.sender);
+        emit Renounced(typeId, msg.sender);
     }
 
-    function prune(bytes32, address) external pure {
-        revert("CredentialRegistry: not implemented");
+    /// @notice Anyone may burn a holding that no longer counts (expired, revoked,
+    ///         retired type or dead org), which also frees a capped slot.
+    function prune(bytes32 typeId, address account) external {
+        _requireBurnable(typeId, account);
+        if (holds(typeId, account)) revert StillValid(typeId, account);
+        _burn(typeId, account);
+        emit Pruned(typeId, account);
     }
 
     // ---------------------------------------------------------------------
@@ -327,23 +416,46 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     function holds(bytes32 typeId, address account) public view returns (bool) {
         if (typeId == CITIZEN_TYPE) return ICredCitizenSource(citizenNFT).hasCitizenNFT(account);
         if (typeId == ATTESTER_TYPE) return ICredAttesterSource(attesterNFT).hasAttesterNFT(account);
-        return ERC1155.balanceOf(account, uint256(typeId)) == 1 && isTypeActive(typeId);
+        if (_rawBalance(typeId, account) == 0 || !isTypeActive(typeId)) return false;
+        Holding storage h = _holdings[typeId][account];
+        if (h.validUntil != 0 && block.timestamp > h.validUntil) return false;
+        if (h.batchId == 0) return true;
+        return !_batches[h.batchId].revoked && !_leafRevoked[h.batchId][h.leaf];
     }
 
-    function checkLeaf(uint64, Leaf calldata, bytes32[] calldata) external pure returns (LeafStatus, address) {
-        revert("CredentialRegistry: not implemented");
+    /// @notice The validity of a leaf, without minting. Never reverts. Ignores
+    ///         publicClaim, the private-only switch, the claim window and the cap
+    ///         (they limit minting, not validity). Membership in the batch is checked
+    ///         first, so a leaf that is not in the batch is always Invalid.
+    function checkLeaf(uint64 batchId, Leaf calldata leaf, bytes32[] calldata proof)
+        external
+        view
+        returns (LeafStatus status, address boundTo)
+    {
+        if (batchId == 0 || batchId >= _batches.length) return (LeafStatus.Invalid, address(0));
+        Batch storage b = _batches[batchId];
+        bytes32 h = leafHash(leaf);
+        if (leaf.typeId != b.typeId || !MerkleProof.verifyCalldata(proof, b.root, h)) {
+            return (LeafStatus.Invalid, address(0));
+        }
+        boundTo = _leafBoundTo[batchId][h];
+        if (!isTypeActive(b.typeId)) status = LeafStatus.Inactive;
+        else if (b.revoked || _leafRevoked[batchId][h]) status = LeafStatus.Revoked;
+        else if (leaf.validUntil != 0 && block.timestamp > leaf.validUntil) status = LeafStatus.Expired;
+        else status = LeafStatus.Valid;
     }
 
     function getType(bytes32 typeId) external view returns (CredentialType memory) {
         return _requireType(typeId);
     }
 
-    function getBatch(uint64 batchId) external pure returns (Batch memory) {
-        revert UnknownBatch(batchId);
+    function getBatch(uint64 batchId) external view returns (Batch memory) {
+        return _requireBatch(batchId);
     }
 
-    function holdingOf(bytes32, address) external pure returns (Holding memory h) {
-        return h;
+    /// @notice The raw holding record (empty when nothing is held); see holds() for validity.
+    function holdingOf(bytes32 typeId, address account) external view returns (Holding memory) {
+        return _holdings[typeId][account];
     }
 
     function typeExists(bytes32 typeId) external view returns (bool) {
@@ -380,16 +492,16 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
         return _delegates[typeId][account];
     }
 
-    function leafRevoked(uint64, bytes32) external pure returns (bool) {
-        return false;
+    function leafRevoked(uint64 batchId, bytes32 leaf) external view returns (bool) {
+        return _leafRevoked[batchId][leaf];
     }
 
-    function leafBoundTo(uint64, bytes32) external pure returns (address) {
-        return address(0);
+    function leafBoundTo(uint64 batchId, bytes32 leaf) external view returns (address) {
+        return _leafBoundTo[batchId][leaf];
     }
 
-    function batchCount() external pure returns (uint64) {
-        return 0;
+    function batchCount() external view returns (uint64) {
+        return uint64(_batches.length - 1);
     }
 
     function pendingSources()
@@ -458,6 +570,7 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     function _createReserved(bytes32 typeId, string memory name, Kind kind, ClaimPolicy policy, TypeConfig memory cfg)
         private
     {
+        if (bytes(cfg.metadataURI).length > MAX_URI_BYTES) revert UriTooLong();
         bytes32 localId = keccak256(bytes(string.concat("netizen:credential-type:v1:", name)));
         // The constants must match the documented derivation.
         assert(typeIdOf(COMMUNITY, localId) == typeId);
@@ -496,6 +609,62 @@ contract CredentialRegistry is ERC1155, Ownable2Step, EIP712 {
     function _requireActiveAndManager(bytes32 typeId, CredentialType storage t) internal view {
         if (!isTypeActive(typeId)) revert TypeInactive(typeId);
         if (!canManage(t.orgId, msg.sender)) revert NotAuthorised(msg.sender);
+    }
+
+    /// @dev Like _requireActiveAndManager, for issuing: a delegate counts too.
+    function _requireActiveAndIssuer(bytes32 typeId) internal view {
+        if (!isTypeActive(typeId)) revert TypeInactive(typeId);
+        if (!canIssue(typeId, msg.sender)) revert NotAuthorised(msg.sender);
+    }
+
+    function _requireBatch(uint64 batchId) internal view returns (Batch storage) {
+        if (batchId == 0 || batchId >= _batches.length) revert UnknownBatch(batchId);
+        return _batches[batchId];
+    }
+
+    /// @dev publicClaim, the org's private-only switch (Membership only) and the claim window.
+    ///      These gate new public claims only; they never affect existing holdings.
+    function _requireMintable(bytes32 typeId, CredentialType storage t) internal view {
+        if (!t.config.publicClaim || (t.kind == Kind.Membership && orgPrivateOnly[t.orgId])) {
+            revert PublicClaimDisabled(typeId);
+        }
+        uint64 start = t.config.claimStart;
+        uint64 end = t.config.claimEnd;
+        if ((start != 0 && block.timestamp < start) || (end != 0 && block.timestamp > end)) {
+            revert ClaimWindowClosed(typeId);
+        }
+    }
+
+    function _requireBurnable(bytes32 typeId, address account) internal view {
+        if (_requireType(typeId).policy == ClaimPolicy.External) revert ExternalType(typeId);
+        if (_rawBalance(typeId, account) == 0) revert NotHeld(typeId, account);
+    }
+
+    /// @dev Writes msg.sender's holding and mints (cap-checked) when nothing is held yet.
+    function _hold(bytes32 typeId, CredentialType storage t, Holding memory h) private {
+        _holdings[typeId][msg.sender] = h;
+        if (_rawBalance(typeId, msg.sender) == 0) {
+            uint32 cap = t.config.supplyCap;
+            if (cap != 0 && t.supply >= cap) revert SupplyCapReached(typeId);
+            t.supply++;
+            _update(address(0), msg.sender, _single(typeId), _single(bytes32(uint256(1))));
+        }
+    }
+
+    /// @dev Burns a raw holding and clears its record; a claim-key binding is kept.
+    function _burn(bytes32 typeId, address account) private {
+        _types[typeId].supply--;
+        delete _holdings[typeId][account];
+        _update(account, address(0), _single(typeId), _single(bytes32(uint256(1))));
+    }
+
+    function _rawBalance(bytes32 typeId, address account) private view returns (uint256) {
+        return ERC1155.balanceOf(account, uint256(typeId));
+    }
+
+    function _single(bytes32 v) private pure returns (uint256[] memory a) {
+        a = new uint256[](1);
+        a[0] = uint256(v);
     }
 
     function _validateConfig(TypeConfig calldata cfg) internal pure {

@@ -20,3 +20,16 @@ contract CredMockIdentity {
         else attesterCount--;
     }
 }
+
+/// @dev A contract account that implements no receiver interface (no onERC1155Received).
+contract CredMockPlainAccount {
+    function exec(address target, bytes calldata data) external returns (bytes memory) {
+        (bool ok, bytes memory ret) = target.call(data);
+        if (!ok) {
+            assembly {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+        return ret;
+    }
+}

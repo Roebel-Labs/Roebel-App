@@ -1,4 +1,5 @@
 const { ethers } = require("hardhat");
+const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 // NSP-14 canonical id: keccak256("netizen:org:v1:" + lowercase uuid).
 const orgIdOf = (uuid) => ethers.id(`netizen:org:v1:${uuid.toLowerCase()}`);
@@ -105,8 +106,120 @@ async function deployRegister() {
   return ctx;
 }
 
+// ---------------------------------------------------------------------------
+// Leaves, trees and claim signatures — written in plain JS with ethers on
+// purpose: a third implementation next to the viem package and Solidity.
+// ---------------------------------------------------------------------------
+
+const LeafKind = { Account: 0n, ClaimKey: 1n };
+const LeafStatus = { Invalid: 0n, Valid: 1n, Expired: 2n, Revoked: 3n, Inactive: 4n };
+
+/** A leaf with a fresh random salt unless one is given. */
+function leaf(kind, typeId_, subject, validUntil = 0n, salt = ethers.hexlify(ethers.randomBytes(32))) {
+  return { kind: BigInt(kind), typeId: typeId_, subject, validUntil: BigInt(validUntil), salt };
+}
+
+/** keccak256(bytes.concat(keccak256(abi.encode(uint8 kind, typeId, subject, validUntil, salt)))). */
+function hashLeaf(l) {
+  const inner = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ["uint8", "bytes32", "address", "uint64", "bytes32"],
+      [l.kind, l.typeId, l.subject, l.validUntil, l.salt],
+    ),
+  );
+  return ethers.keccak256(inner);
+}
+
+const hashPair = (a, b) => (BigInt(a) < BigInt(b) ? ethers.keccak256(ethers.concat([a, b])) : ethers.keccak256(ethers.concat([b, a])));
+
+/**
+ * Sorted-leaf Merkle tree with commutative pair hashing; an unpaired last node
+ * moves up unchanged; a single leaf is its own root with an empty proof.
+ */
+function tree(leaves) {
+  if (leaves.length === 0) throw new Error("tree: no leaves");
+  const layer0 = leaves.map(hashLeaf).sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0));
+  const layers = [layer0];
+  while (layers[layers.length - 1].length > 1) {
+    const cur = layers[layers.length - 1];
+    const next = [];
+    for (let i = 0; i < cur.length; i += 2) next.push(i + 1 < cur.length ? hashPair(cur[i], cur[i + 1]) : cur[i]);
+    layers.push(next);
+  }
+  const root = layers[layers.length - 1][0];
+  function proof(l) {
+    let idx = layer0.indexOf(hashLeaf(l));
+    if (idx < 0) throw new Error("tree: leaf not in tree");
+    const out = [];
+    for (let d = 0; d < layers.length - 1; d++) {
+      const sib = idx ^ 1;
+      if (sib < layers[d].length) out.push(layers[d][sib]);
+      idx >>= 1;
+    }
+    return out;
+  }
+  return { root, proof, layers };
+}
+
+/** EIP-712 Claim signature by a claim key, binding `leafHash` in `batchId` to `account`. */
+async function signClaim(wallet, registry, batchId, leafHash, account) {
+  const { chainId } = await ethers.provider.getNetwork();
+  const domain = { name: "CredentialRegistry", version: "1", chainId, verifyingContract: await registry.getAddress() };
+  const types = { Claim: [
+    { name: "batchId", type: "uint64" },
+    { name: "leaf", type: "bytes32" },
+    { name: "account", type: "address" },
+  ] };
+  return wallet.signTypedData(domain, types, { batchId, leaf: leafHash, account });
+}
+
+/** The Safe creates a type in ORG_A (default Membership / IssuerBatch). */
+async function createOrgType(ctx, opts = {}) {
+  const orgId = opts.orgId ?? ORG_A;
+  const safe = opts.safe ?? ctx.safe;
+  const local = LOCAL(opts.name ?? "issued");
+  await asSafe(safe, ctx.orgOwner, ctx.registry, "createType", [
+    orgId, local, opts.kind ?? Kind.Membership, opts.policy ?? Policy.IssuerBatch, opts.config ?? cfg(),
+  ]);
+  return typeId(orgId, local);
+}
+
+/** The Safe publishes a batch of `leaves` for `typeId_`; returns { batchId, t }. */
+async function addBatchOf(ctx, typeId_, leaves, safe = ctx.safe) {
+  const t = tree(leaves);
+  await asSafe(safe, ctx.orgOwner, ctx.registry, "addBatch", [typeId_, t.root, leaves.length]);
+  return { batchId: await ctx.registry.batchCount(), t };
+}
+
+/**
+ * One Membership type in ORG_A and one batch with an account leaf for alice, an
+ * account leaf for bob valid for 30 days and a claim-key leaf.
+ */
+async function issued(ctx, opts = {}) {
+  const tId = await createOrgType(ctx, opts);
+  const keyWallet = ethers.Wallet.createRandom();
+  const now = BigInt(await time.latest());
+  const leaves = {
+    alice: leaf(LeafKind.Account, tId, ctx.alice.address),
+    bob: leaf(LeafKind.Account, tId, ctx.bob.address, now + BigInt(30 * DAY)),
+    key: leaf(LeafKind.ClaimKey, tId, keyWallet.address),
+  };
+  const { batchId, t } = await addBatchOf(ctx, tId, [leaves.alice, leaves.bob, leaves.key]);
+  return { typeId: tId, batchId, leaves, keyWallet, t };
+}
+
+/** Registers ORG_B to safe2 and gives it a type and a batch of its own. */
+async function withOrgB(ctx) {
+  await registerOrg(ctx, ORG_B, ctx.safe2);
+  const tId = await createOrgType(ctx, { orgId: ORG_B, safe: ctx.safe2, name: "org-b" });
+  const leaves = { alice: leaf(LeafKind.Account, tId, ctx.alice.address) };
+  const { batchId, t } = await addBatchOf(ctx, tId, [leaves.alice], ctx.safe2);
+  return { typeId: tId, batchId, leaves, t };
+}
+
 module.exports = {
   ORG_A, ORG_B, COMMUNITY, CITIZEN_TYPE, ATTESTER_TYPE, GUEST_TYPE, RESERVED_URIS,
-  Kind, Policy, OrgRole, DAY, APPROVAL, REJECTION, REVOCATION,
+  Kind, Policy, OrgRole, LeafKind, LeafStatus, DAY, APPROVAL, REJECTION, REVOCATION,
   orgIdOf, LOCAL, typeId, cfg, asSafe, registerOrg, revokeOrg, reRegisterOrg, deployRegister,
+  leaf, hashLeaf, tree, signClaim, createOrgType, addBatchOf, issued, withOrgB,
 };
