@@ -6,7 +6,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionData, parseAbi, recoverTypedDataAddress, type Hex } from "viem";
 import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
-import { parseSponsorUserOp, toPackedUserOperation, type ChainReader } from "../sponsor-policy";
+import {
+  ADDRESSES,
+  CAPS,
+  evaluateSponsorPolicy,
+  parseSponsorUserOp,
+  toPackedUserOperation,
+  type ChainReader,
+} from "../sponsor-policy";
+import { EVERYDAY_CONTRACTS, citizenNftAbi, hubAbi } from "../everyday-allowlist";
+import { predictSafeAddress } from "../safe-address";
+import { NOW, deployOp, op as policyOp, outer, srm as srmHelpers, viaMultiSend } from "./policy-helpers";
 import { PRODUCTION_SPONSOR_SIGNERS, handleSponsorRequest } from "../sponsor-handler";
 import {
   DEFAULT_GUEST_GLOBAL_DAILY_WEI,
@@ -497,5 +507,39 @@ test("the guest cap reached stops guests only: a citizen's op in the same second
   } finally {
     delete process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI;
     delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+});
+
+// ---- owner numbers: what typical guest ops reserve ----
+
+test("prints the prefund of typical guest ops", async () => {
+  const fresh = { x: `0x${"aa".repeat(32)}` as Hex, y: `0x${"bb".repeat(32)}` as Hex };
+  const freshSafe = predictSafeAddress(fresh);
+  const signUpCalls = viaMultiSend([
+    { to: ADDRESSES.socialRecoveryModule, data: encodeFunctionData({ abi: srmHelpers, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }) },
+    { to: EVERYDAY_CONTRACTS.citizenNft, data: encodeFunctionData({ abi: citizenNftAbi, functionName: "createAttestationRequest", args: ["Max, Röbel"] }) },
+  ]);
+  const mintCall = outer(EVERYDAY_CONTRACTS.circlesHub, encodeFunctionData({ abi: hubAbi, functionName: "personalMint" }));
+  for (const gwei of [1_500_000_000n, 3_000_000_000n]) {
+    // (a) the first op: deploy + guardian + citizenship request. op()'s gas limits, but the
+    //     deployment needs verification gas, so verificationGasLimit sits at the sponsor's cap
+    //     (CAPS.verificationGasLimit = 1M): the most a deploy op can reserve.
+    const a = deployOp(fresh, freshSafe, signUpCalls, { maxFeePerGas: gwei, verificationGasLimit: CAPS.verificationGasLimit });
+    // (b) a deployed Safe's daily personalMint with op()'s gas limits as they are.
+    const b = policyOp(mintCall, { maxFeePerGas: gwei });
+    // Both are real guest ops the policy sponsors.
+    const va = await evaluateSponsorPolicy(a, { ...fresh, nowSeconds: NOW }, fakeChain());
+    const vb = await evaluateSponsorPolicy(b, { ...KEY, nowSeconds: NOW }, fakeChain());
+    assert.ok(va.ok && va.guest === true, JSON.stringify(va));
+    assert.ok(vb.ok && vb.guest === true, JSON.stringify(vb));
+    const pa = requiredPrefund(toPackedUserOperation(a));
+    const pb = requiredPrefund(toPackedUserOperation(b));
+    assert.ok(pa > 0n && pb > 0n);
+    assert.ok(pb < pa, `${pb} < ${pa}`);
+    const xdai = (w: bigint) => (Number(w) / 1e18).toFixed(6);
+    console.log(
+      `[guest prefund @ ${Number(gwei) / 1e9} gwei] (a) deploy+guardian+citizenship ${pa} wei = ${xdai(pa)} xDAI; ` +
+        `(b) personalMint ${pb} wei = ${xdai(pb)} xDAI`,
+    );
   }
 });
