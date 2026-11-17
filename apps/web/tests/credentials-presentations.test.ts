@@ -196,3 +196,12 @@ test("a bad proof, an unknown batch or a revoked leaf is refused", async () => {
   if (!revoked.ok) assert.equal(revoked.status, 410);
   assert.equal(w.store.presentations.size, 0);
 });
+
+test("purgeExpiredPresentations deletes only rows whose time ran out", async () => {
+  const store = new InMemoryCredentialStore();
+  const now = Date.parse("2026-11-17T10:00:00Z");
+  await store.putPresentation({ codeHash: "old", payload: {}, expiresAt: new Date(now - 1000).toISOString() });
+  await store.putPresentation({ codeHash: "live", payload: {}, expiresAt: new Date(now + 60_000).toISOString() });
+  assert.equal(await store.purgeExpiredPresentations(now), 1);
+  assert.deepEqual([...store.presentations.keys()], ["live"]);
+});

@@ -504,6 +504,11 @@ export class SupabaseCredentialStore implements CredentialStore {
   async deletePresentation(codeHash: string) {
     check("deletePresentation", await this.db.from(T.presentations).delete().eq("code_hash", codeHash));
   }
+  async purgeExpiredPresentations(nowMs = Date.now()) {
+    const r = await this.db.from(T.presentations).delete().lt("expires_at", new Date(nowMs).toISOString()).select("code_hash");
+    check("purgeExpiredPresentations", r);
+    return (r.data ?? []).length;
+  }
 
   // ── sync state ──────────────────────────────────────────────────────────────
   async syncCursor(): Promise<SyncState | null> {

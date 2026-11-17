@@ -235,6 +235,8 @@ export interface CredentialStore {
   /** Reads and deletes in one go; null when absent or expired. */
   takePresentation(codeHash: string, nowMs?: number): Promise<PresentationRow | null>;
   deletePresentation(codeHash: string): Promise<void>;
+  /** Deletes every presentation whose time ran out (`expires_at < now`); returns how many. Called by the sync cron. */
+  purgeExpiredPresentations(nowMs?: number): Promise<number>;
 
   // credential_sync_state
   syncCursor(): Promise<SyncState | null>;
@@ -526,6 +528,16 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   async deletePresentation(codeHash: string) {
     this.presentations.delete(codeHash);
+  }
+  async purgeExpiredPresentations(nowMs = Date.now()) {
+    let n = 0;
+    for (const [k, p] of this.presentations) {
+      if (Date.parse(p.expiresAt) < nowMs) {
+        this.presentations.delete(k);
+        n++;
+      }
+    }
+    return n;
   }
 
   // ── sync state ──────────────────────────────────────────────────────────────
