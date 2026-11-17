@@ -14,6 +14,7 @@ import type { Account } from 'thirdweb/wallets';
 import type { Address, Hex } from 'viem';
 import { orgIdFromUuid } from '@/lib/org-safe/ops';
 import { sendOrgCallsKeepingHash } from '@/lib/org-safe/send';
+import { classifySendError } from '@/lib/org-safe/send-errors';
 import type { ApiResult, SigningAccount } from '@/lib/signed-request';
 import { reportSubmitted } from './api';
 import { REGISTRY, readBatchType, readTypeOrg, registryReader } from './chain';
@@ -255,8 +256,11 @@ const defaultDeps: ConfirmDeps = {
 
 export type ConfirmResult =
   | { ok: true; status: 'done' | 'submitted' }
-  /** `sent`: the operation went out; never send again, only report this hash again. */
-  | { ok: false; message: string; sent?: { txHash: Hex } };
+  /**
+   * `sent`: the operation went out; never send again, only report this hash again.
+   * `locked`: it may have gone out without a hash; never send again, check the overview.
+   */
+  | { ok: false; message: string; sent?: { txHash: Hex }; locked?: true };
 
 /** Can the caller do every step on chain? Throws on RPC failure. */
 async function mayDoAll(steps: readonly RegisterStep[], who: Address, d: ConfirmDeps): Promise<boolean> {
@@ -307,16 +311,15 @@ async function mayDoAll(steps: readonly RegisterStep[], who: Address, d: Confirm
   return true;
 }
 
-/** Only the wallet's own "user rejected" (EIP-1193 4001 / viem UserRejectedRequestError), also when wrapped. */
-function isUserRejection(err: unknown): boolean {
-  let e: unknown = err;
-  for (let depth = 0; depth < 5 && e && typeof e === 'object'; depth++) {
-    const x = e as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown };
-    if (x.code === 4001 || x.name === 'UserRejectedRequestError') return true;
-    if (typeof x.message === 'string' && /\buser (rejected|denied)\b/i.test(x.message)) return true;
-    e = x.cause;
-  }
-  return false;
+// Actions whose operation may be on its way (send outcome unknown): never sent again from this
+// app session. The server settles them from the chain; the overview shows the result.
+const possiblySent = new Set<string>();
+export function isPossiblySent(actionId: string): boolean {
+  return possiblySent.has(actionId);
+}
+/** Tests only. */
+export function __resetPossiblySent(): void {
+  possiblySent.clear();
 }
 
 /** Reports a sent operation; a network failure is tried once more. */
@@ -341,6 +344,7 @@ export async function reportSent(
 export async function confirmAction(account: Account, action: PhoneAction, deps?: Partial<ConfirmDeps>): Promise<ConfirmResult> {
   const d: ConfirmDeps = { ...defaultDeps, ...deps };
   if (!d.configured()) return { ok: false, message: NOT_CONFIGURED };
+  if (possiblySent.has(action.id)) return { ok: false, message: NO_RECEIPT, locked: true };
   if (action.status !== 'awaiting_confirmation') {
     return { ok: false, message: action.status === 'expired' ? SUBMITTED_COPY.ACTION_EXPIRED : SUBMITTED_COPY.ACTION_NOT_PENDING };
   }
@@ -376,9 +380,18 @@ export async function confirmAction(account: Account, action: PhoneAction, deps?
   try {
     sent = await d.send(account, encodeSteps(steps, REGISTRY));
   } catch (err) {
-    return { ok: false, message: isUserRejection(err) ? CANCELLED : FAILED };
+    const outcome = classifySendError(err);
+    if (outcome === 'rejected') return { ok: false, message: CANCELLED };
+    if (outcome === 'not_sent') return { ok: false, message: FAILED };
+    if (outcome === 'reverted') return { ok: false, message: SUBMITTED_COPY.TX_REVERTED };
+    // Possibly on its way without a hash (receipt timeout, network failure): never send again.
+    possiblySent.add(action.id);
+    return { ok: false, message: NO_RECEIPT, locked: true };
   }
-  if (!sent) return { ok: false, message: NO_RECEIPT };
+  if (!sent) {
+    possiblySent.add(action.id);
+    return { ok: false, message: NO_RECEIPT, locked: true };
+  }
   // Out on the chain: from here on only the report may be repeated, never the send.
   return reportSent(d.apiAccount ?? account, action.id, sent.txHash, d.report);
 }
@@ -444,6 +457,7 @@ export function reviewAction(
   else if (action.status === 'expired' || (Number.isFinite(Date.parse(action.expiresAt)) && Date.parse(action.expiresAt) <= nowMs)) {
     problem = SUBMITTED_COPY.ACTION_EXPIRED;
   } else if (action.status !== 'awaiting_confirmation') problem = SUBMITTED_COPY.ACTION_NOT_PENDING;
+  else if (possiblySent.has(action.id)) problem = NO_RECEIPT;
   return { lines, counts, problem, hasBatch };
 }
 

@@ -22,6 +22,7 @@ import {
   confirmAction,
   delegateAccounts,
   expectedDelegateFor,
+  isPossiblySent,
   preparedLabel,
   reportSent,
   resolveActionOrg,
@@ -67,6 +68,8 @@ export default function ApproveActionScreen() {
   const [sent, setSent] = useState<Hex | null>(null);
   const [done, setDone] = useState<'done' | 'submitted' | 'cancelled' | null>(null);
   const inFlight = useRef(false);
+  // The operation may be on its way without a hash: no second send from this screen.
+  const [locked, setLocked] = useState(false);
   const key = `${id}:${account?.address ?? ''}:${reloadKey}`;
 
   useEffect(() => {
@@ -228,6 +231,7 @@ export default function ApproveActionScreen() {
       else {
         setError(r.message);
         if (r.sent) setSent(r.sent.txHash);
+        if (r.locked) setLocked(true);
       }
     } finally {
       inFlight.current = false;
@@ -266,7 +270,7 @@ export default function ApproveActionScreen() {
   };
 
   const prepared = preparedLabel(current.via);
-  const canConfirm = review.problem === null && !sent;
+  const canConfirm = review.problem === null && !sent && !locked;
 
   return (
     <CredentialScreenFrame title={title}>
@@ -314,7 +318,7 @@ export default function ApproveActionScreen() {
               {busy === 'confirm' ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[frameStyles.primaryText, { color: colors.onPrimary }]}>Bestätigen</Text>}
             </Pressable>
           ) : null}
-          {!sent && action.status === 'awaiting_confirmation' ? (
+          {!sent && !locked && action.status === 'awaiting_confirmation' && !isPossiblySent(action.id) ? (
             <Pressable onPress={discard} disabled={busy !== null} style={styles.discard} accessibilityRole="button" accessibilityLabel="Verwerfen">
               {busy === 'cancel' ? (
                 <ActivityIndicator color={colors.textSecondary} />

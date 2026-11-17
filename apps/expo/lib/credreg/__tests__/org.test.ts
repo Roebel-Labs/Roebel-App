@@ -14,7 +14,9 @@ import {
   checkSummary,
   confirmAction,
   describeSteps,
+  __resetPossiblySent,
   germanDateToIso,
+  isPossiblySent,
   resolveActionOrg,
   reviewAction,
   safeServerText,
@@ -71,6 +73,8 @@ function deps(over: Partial<ConfirmDeps> = {}): ConfirmDeps {
     ...over,
   };
 }
+
+beforeEach(() => __resetPossiblySent());
 
 describe('describeSteps', () => {
   it('describeSteps names every step kind in German from the steps alone', () => {
@@ -380,5 +384,67 @@ describe('safeServerText', () => {
   it('drops a title that carries an address', () => {
     expect(safeServerText('Feuerwehr', 'x')).toBe('Feuerwehr');
     expect(safeServerText('An 0x' + 'ab'.repeat(20), 'Eine Aktion')).toBe('Eine Aktion');
+  });
+});
+
+describe('confirmAction: possibly sent without a hash', () => {
+  const timeout = () =>
+    new Error('Timeout waiting for userOp to be mined on chain 100 with UserOp hash: 0x' + 'ab'.repeat(32));
+
+  it('a thirdweb userOp timeout locks the action: no second send, the overview message, nothing reported', async () => {
+    const send = jest.fn(async () => Promise.reject(timeout()));
+    const d = deps({ send });
+    const a = action();
+    const r = await confirmAction(account, a, d);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.locked).toBe(true);
+      expect(r.sent).toBeUndefined();
+      expect(r.message).toMatch(/Übersicht/);
+      expect(r.message).not.toMatch(HEX_ADDRESS);
+    }
+    expect(isPossiblySent(a.id)).toBe(true);
+    expect(d.report).not.toHaveBeenCalled();
+
+    const again = await confirmAction(account, a, d);
+    expect(again.ok).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(reviewAction(a, typeNamesFrom([])).problem).toMatch(/Übersicht/);
+  });
+
+  it('the passkey receipt timeout and a network failure lock too', async () => {
+    for (const err of [new Error('timed out waiting for the userOp receipt'), new TypeError('Network request failed')]) {
+      __resetPossiblySent();
+      const send = jest.fn(async () => Promise.reject(err));
+      const r = await confirmAction(account, action(), deps({ send }));
+      expect(r.ok === false && r.locked).toBe(true);
+    }
+  });
+
+  it('a send that returned no hash locks as well', async () => {
+    const r = await confirmAction(account, action(), deps({ send: jest.fn(async () => null) }));
+    expect(r.ok === false && r.locked).toBe(true);
+  });
+
+  it('a refusal before submission or a user rejection does not lock, so the person may try again', async () => {
+    const refusals = [
+      new Error('eth_estimateUserOperationGas error: {"message":"AA21 didn\'t pay prefund"}\nStatus: 200\nCode: UNKNOWN'),
+      new Error('Paymaster error: 403 - forbidden'),
+      new Error('eth_sendUserOperation: AA25 invalid account nonce'),
+      Object.assign(new Error('The operation either timed out or was not allowed.'), { name: 'NotAllowedError' }),
+      Object.assign(new Error('rejected'), { code: 4001 }),
+      new Error('UserOp failed at txHash: 0x' + 'cd'.repeat(32)),
+    ];
+    for (const err of refusals) {
+      __resetPossiblySent();
+      const a = action();
+      const r = await confirmAction(account, a, deps({ send: jest.fn(async () => Promise.reject(err)) }));
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.locked).toBeUndefined();
+        expect(r.message).not.toMatch(HEX_ADDRESS);
+      }
+      expect(isPossiblySent(a.id)).toBe(false);
+    }
   });
 });

@@ -9,6 +9,7 @@ import { gnosis } from 'viem/chains';
 import { credentialRegistryDeployBlock } from '@/constants/gnosis';
 import { supabase } from '@/lib/supabase';
 import { REGISTRY } from './chain';
+import { safeServerText } from './org';
 
 const RPC = process.env.EXPO_PUBLIC_GNOSIS_LOGS_RPC_URL || 'https://rpc.gnosischain.com';
 const CHUNK = 50_000n;
@@ -68,7 +69,7 @@ export async function nameAccounts(addresses: readonly Address[]): Promise<Deleg
       .in('wallet_address', addresses.map((a) => a.toLowerCase()))
       .abortSignal(controller.signal);
     for (const r of (data as { wallet_address: string; username: string | null; display_name: string | null }[] | null) ?? []) {
-      const n = r.display_name?.trim() || r.username?.trim();
+      const n = safeServerText(r.display_name?.trim() || r.username?.trim(), '');
       if (n) names.set(r.wallet_address.toLowerCase(), n);
     }
   } catch {
