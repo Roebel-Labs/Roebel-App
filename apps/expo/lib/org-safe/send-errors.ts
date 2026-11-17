@@ -10,7 +10,7 @@
  *
  * - rejected: the person declined in the wallet / passkey prompt. Nothing was sent.
  * - not_sent: refused before eth_sendUserOperation was accepted (gas estimate, simulation,
- *   paymaster / sponsor refusal, bundler answered with an error, local configuration).
+ *   paymaster / sponsor refusal, bundler refusal with Status 200 or 4xx, local configuration).
  * - reverted: mined and failed. Nothing changed on chain.
  * - unknown: anything else (receipt timeout, network failure, unparseable answer). Possibly sent.
  */
@@ -21,8 +21,9 @@ const NOT_SENT = [
   /thirdweb_getUserOperationGasPrice/,
   /zk_paymasterData/,
   /Paymaster error/,
-  // thirdweb: "eth_sendUserOperation error: …"; passkey: "eth_sendUserOperation: …" — the bundler answered with a refusal.
-  /eth_sendUserOperation(:| error)/,
+  // passkey: "eth_sendUserOperation: …" is a JSON-RPC error on a 2xx answer (non-2xx throws "HTTP <n>" first).
+  // The thirdweb form "eth_sendUserOperation error: …" is judged by its Status line in submissionStatus().
+  /eth_sendUserOperation: /,
   /\bAA[1-5]\d\b/,
   /exceeds the sponsor caps/,
   /is not configured/,
@@ -60,10 +61,28 @@ export function isUserRejection(err: unknown): boolean {
   );
 }
 
+/**
+ * thirdweb's sendBundlerRequest throws "eth_sendUserOperation error: <msg>\nStatus: <n>\nCode: …"
+ * on any non-ok answer or JSON-RPC error. Only Status 200 (a JSON-RPC refusal) or 4xx is a
+ * processed refusal; a 5xx (or no readable Status) may come after the bundler accepted the
+ * operation, so it is possibly sent. Gas estimation / paymaster calls stay not_sent regardless
+ * of status: nothing is submitted before eth_sendUserOperation.
+ */
+function submissionStatus(message: string): SendOutcome | null {
+  if (!/eth_sendUserOperation error/.test(message)) return null;
+  const status = /\nStatus: (\d{3})\b/.exec(message);
+  if (!status) return 'unknown';
+  const n = Number(status[1]);
+  return n === 200 || (n >= 400 && n < 500) ? 'not_sent' : 'unknown';
+}
+
 export function classifySendError(err: unknown): SendOutcome {
   if (isUserRejection(err)) return 'rejected';
   const messages = chain(err).map((x) => x.message);
   if (messages.some((m) => REVERTED.some((r) => r.test(m)))) return 'reverted';
+  // The submission call decides alone: an AA code inside a 5xx body does not make it not_sent.
+  const submission = messages.map(submissionStatus).filter((x): x is SendOutcome => x !== null);
+  if (submission.length) return submission.includes('unknown') ? 'unknown' : 'not_sent';
   if (messages.some((m) => NOT_SENT.some((r) => r.test(m)))) return 'not_sent';
   return 'unknown';
 }
