@@ -224,7 +224,10 @@ down, `start` answers 503 `store_unavailable` and sends nothing. The consent pro
 on purpose (DSGVO). A Safe can join Circles (fork proof `contracts/passkey-accounts/test/SafeCircles.t.sol`).
 
 **Owner gates** (Max): merge after review; apply the six sponsor/key/email/session/guest-cap/rate-limit migrations in
-order via the Supabase MCP; Vercel production env (dedicated production paymaster, `PASSKEY_SPONSOR_*` budgets incl. the
+order via the Supabase MCP; for the recovery words also apply `20261117c_passkey_key_backup_words_slots.sql` **before
+opening the `words` surface** (without it the server refuses the `_w` / `wvk` slots, so no words copy is stored) and
+`20261117d_passkey_alert_channels.sql` **before deploying the web code** (without it every recovery alert, email
+included, fails to claim); Vercel production env (dedicated production paymaster, `PASSKEY_SPONSOR_*` budgets incl. the
 onboarding cap above, `PASSKEY_SPONSOR_BUDGET_STORE=supabase`, `PASSKEY_RATE_LIMIT_STORE=supabase`, email/session/key
 backup flags, `CRON_SECRET`); deploy `ortis-id`; redeploy the four edge functions; privacy text for the optional
 warning email; EAS preview update and a device pass; do not go to production before the logout-after-update fix is
@@ -255,15 +258,25 @@ the key at `m/44'/60'/0'/0/i` of the phrase.
    Labels: `roebel/maci-keypair/v1` (maci), `roebel/nostr-secret/v1` (nostr), `roebel/commitment-salt/v1` (salt).
 4. `wvk` is the vault key itself wrapped under the passkey PRF with label `roebel/words-vault-key/v1`; plaintext =
    32 key bytes, optionally followed by the 5 pool addresses (20 bytes each). "Words off" is written as
-   `pkv1:words-off-000...0` into `wvk` and every `_w` slot (the backup API has no delete).
+   `pkv1:words-off-000...0` into `wvk` and every `_w` slot (the backup API has no delete). A setup whose passkey
+   has no PRF writes `pkv1:words-nowvk-000...0` into `wvk` instead ("words on, vault key not readable here"): other
+   phones read it like off for the vault key, and a phone without the pool refuses to change the words around it.
+
+**Which pool is current.** A phone's own pool counts only while at least one of its addresses is a guardian on
+chain; otherwise the server's `wvk` decides. The guardian list reads it without a prompt (session token); a phone
+that cannot tell whether unnamed guardians are words shows one entry "Wiederherstellungswörter (nicht geladen)" and
+refuses guardian changes until "Angaben laden" on the words screen (one fingerprint) has loaded the pool.
 
 **Derivation paths.** Guardian/approval keys `m/44'/60'/0'/0/i`; vault key source `m/44'/60'/0'/1/0`. The seed runs
 once per call (pbkdf2-sha512, 2048 rounds) through `wordsFromSeed`.
 
 **Alert channels.** The recovery-alert cron claims each alert per (wallet, recovery nonce, channel): `email` (needs a
 verified warning email) and `push` (`PASSKEY_PUSH_ALERTS_ENABLED=1`; devices from `push_tokens` by the Safe address).
-A cancelled recovery moves the nonce, so a second attempt alerts again. Migration `20261117d_passkey_alert_channels.sql`
-(not applied). The in-app banner is unchanged.
+A cancelled recovery moves the nonce, so a second attempt alerts again. A push counts as sent when any device accepted
+it; a push that keeps failing is given up after 3 runs per nonce (the email still goes out). Migration
+`20261117d_passkey_alert_channels.sql` (not applied) adds the `channel` column and makes it part of the key: **the
+code always writes `channel`, so EMAIL alerts fail too (every claim errors) until 20261117d is applied** — apply it
+before (or together with) deploying this branch's web code. The in-app banner is unchanged.
 
 **Way-back rule** (`apps/expo/lib/passkey/way-back.ts`; applies as soon as sign-up is open, NOT behind the `words`
 surface). Before the citizenship request (`app/verification/request-citizen/form.tsx` and the auto-request in
