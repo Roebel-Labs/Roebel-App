@@ -33,6 +33,17 @@ import { describeCompletion } from '@/lib/passkey/key-completion';
 import type { Account } from 'thirdweb/wallets';
 import ThirdwebConfirm from '@/components/passkey/ThirdwebConfirm';
 import type { PasskeySession } from '@/lib/passkey/session';
+import { loadWordsPool, splitGuardians } from '@/lib/passkey/words-guardians';
+
+/** Checklist item 2 counts people only: recovery words are never a Vertrauensperson. */
+async function peopleCounts(safe: Address): Promise<{ count: number; threshold: number }> {
+  const [{ readGuardianState }, { secureKeyValueStorage }] = await Promise.all([
+    import('@/lib/passkey/guardians-runtime'),
+    import('@/lib/passkey/migration-runtime'),
+  ]);
+  const [state, pool] = await Promise.all([readGuardianState(safe), loadWordsPool(secureKeyValueStorage).catch(() => null)]);
+  return { count: splitGuardians(state.guardians, pool).people.length, threshold: state.threshold };
+}
 
 type Busy = ChecklistId | 'detach' | null;
 
@@ -63,10 +74,9 @@ export default function PasskeyDetachScreen() {
   const admin = wallet && wallet.id === 'inApp' ? wallet.getAdminAccount?.() : undefined;
 
   const refresh = useCallback(async (s: PasskeySession) => {
-    const rt = await import('@/lib/passkey/detach-runtime');
     const { isPasskeySafeLinkedToInbox } = await import('@/lib/xmtp/client');
     const [g, x] = await Promise.all([
-      rt.guardianCounts(s.safe).catch(() => null),
+      peopleCounts(s.safe).catch(() => null),
       isPasskeySafeLinkedToInbox(s).catch(() => null),
     ]);
     setGuardians(g);

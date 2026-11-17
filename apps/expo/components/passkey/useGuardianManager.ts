@@ -2,6 +2,9 @@
  * State + actions of "Vertrauenspersonen" for this device's passkey Safe. Every change is ONE
  * sponsored userOp from the Safe (mode "legacy" while citizenship sits on the legacy account,
  * "safe" after the v3 move) signed with one fingerprint.
+ *
+ * Every change goes through `planGuardianSet` with an explicit threshold, so when recovery words
+ * are on, the number of word guardians follows the threshold in the same op.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Address } from 'viem';
@@ -9,12 +12,13 @@ import type { MigrationRecord } from '@/lib/passkey/migration';
 import type { IdentityMode } from '@/lib/passkey/guardian-plan';
 import {
   allGuardiansAreAttesters,
+  clampThreshold,
   defaultThreshold,
+  isValidThreshold,
   pendingSuggestions,
-  planAddGuardians,
-  planChangeThreshold,
-  planRemoveGuardian,
 } from '@/lib/passkey/guardian-plan';
+import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
+import { loadWordsPool, planGuardianSet, splitGuardians, type WordsPool } from '@/lib/passkey/words-guardians';
 import type { Person } from '@/lib/passkey/people';
 import { helperDisplay, planAddRecoveryHelper, type HelperMeta } from '@/lib/passkey/recovery-helper';
 import type { HelperLogin } from '@/lib/passkey/recovery-helper-runtime';
@@ -37,6 +41,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
   const [loading, setLoading] = useState(true);
   const [guardians, setGuardians] = useState<Address[]>([]);
   const [threshold, setThreshold] = useState(0);
+  const [pool, setPool] = useState<WordsPool | null>(null);
   const [mode, setMode] = useState<IdentityMode | null>(null);
   const [people, setPeople] = useState<Map<string, Person>>(new Map());
   const [attesters, setAttesters] = useState<Set<string>>(new Set());
@@ -57,23 +62,26 @@ export function useGuardianManager(record: MigrationRecord | null) {
     if (!record) return;
     setLoading(true);
     try {
-      const [state, identity] = await Promise.all([
+      const [state, identity, wordsPool] = await Promise.all([
         readGuardianState(record.safe),
         readIdentityMode(record).catch(() => null),
+        loadWordsPool(secureKeyValueStorage).catch(() => null),
       ]);
+      // Word guardians are never resolved or shown as people.
+      const peopleOnChain = splitGuardians(state.guardians, wordsPool).people;
       // The suggestion needs the legacy account the citizen was attested on.
       const sugg = record.legacy
         ? await suggestDefaultGuardians({ citizen: record.legacy, wallet: record.safe }, lookupChain).catch(
             () => [] as SuggestedGuardian[],
           )
         : [];
-      const addresses = [...state.guardians, ...sugg.map((s) => s.guardian), ...sugg.map((s) => s.approver)];
+      const addresses = [...peopleOnChain, ...sugg.map((s) => s.guardian), ...sugg.map((s) => s.approver)];
       const [resolved, helperMetas] = await Promise.all([
         resolvePeopleNow(addresses),
         import('@/lib/passkey/recovery-helper-runtime').then((rt) => rt.loadHelpers()).catch(() => ({}) as Record<string, HelperMeta>),
       ]);
       // A recovery helper is shown as "Google-Konto (Helfer)" etc., never by address.
-      for (const g of state.guardians) {
+      for (const g of peopleOnChain) {
         const meta = helperMetas[g.toLowerCase()];
         if (meta) {
           resolved.set(g.toLowerCase(), { address: g, name: helperDisplay(meta).name, known: true, avatarUrl: null, profileWallet: null });
@@ -90,7 +98,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
       const attesterFlags = new Set<string>();
       for (const s of sugg) attesterFlags.add(s.guardian.toLowerCase());
       await Promise.all(
-        state.guardians.map(async (g) => {
+        peopleOnChain.map(async (g) => {
           const profile = resolved.get(g.toLowerCase())?.profileWallet;
           const checks = [isAttester(g), ...(profile && profile.toLowerCase() !== g.toLowerCase() ? [isAttester(profile)] : [])];
           if ((await Promise.all(checks)).some(Boolean)) attesterFlags.add(g.toLowerCase());
@@ -99,6 +107,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
       if (!alive.current) return;
       setGuardians(state.guardians);
       setThreshold(state.threshold);
+      setPool(wordsPool);
       setMode(identity);
       setSuggested(sugg);
       setPeople(resolved);
@@ -140,6 +149,33 @@ export function useGuardianManager(record: MigrationRecord | null) {
     [record, mode, load],
   );
 
+  const { people: peopleGuardians, words: wordGuardians } = splitGuardians(guardians, pool);
+
+  /**
+   * The calls for "these people, this threshold" with words kept as they are (on stays on and
+   * follows the threshold). Shows the refusal as a notice and returns null when it cannot be planned.
+   */
+  const planSet = useCallback(
+    (nextPeople: readonly Address[], nextThreshold: number): SponsoredCall[] | null => {
+      if (!record) return null;
+      try {
+        return planGuardianSet({
+          wallet: record.safe,
+          current: guardians,
+          pool,
+          people: nextPeople,
+          words: wordGuardians.length > 0,
+          threshold: nextThreshold,
+          currentThreshold: threshold,
+        }).calls;
+      } catch (e) {
+        setNotice({ tone: 'warning', text: e instanceof Error ? e.message : 'Das geht gerade nicht.' });
+        return null;
+      }
+    },
+    [record, guardians, pool, wordGuardians.length, threshold],
+  );
+
   const exclude: Address[] = record ? [record.safe, ...(record.legacy ? [record.legacy] : [])] : [];
   const pending = pendingSuggestions({ suggested: suggested.map((s) => s.guardian), current: guardians, exclude });
 
@@ -149,22 +185,25 @@ export function useGuardianManager(record: MigrationRecord | null) {
       const p = people.get(s.guardian.toLowerCase());
       if (p?.known) await saveLabel(s.guardian, p.name).catch(() => undefined);
     }
-    const plan = planAddGuardians({ wallet: record.safe, current: guardians, currentThreshold: threshold, add: pending, threshold: 2 });
-    return run('suggestion', plan.calls, 'Vorschlag übernommen.');
-  }, [record, suggested, people, guardians, threshold, pending, run]);
+    const calls = planSet([...peopleGuardians, ...pending], 2);
+    return calls ? run('suggestion', calls, 'Vorschlag übernommen.') : false;
+  }, [record, suggested, people, peopleGuardians, pending, planSet, run]);
 
   const addGuardian = useCallback(
     async (address: Address, name: string) => {
       if (!record) return false;
       await saveLabel(address, name).catch(() => undefined);
-      const plan = planAddGuardians({ wallet: record.safe, current: guardians, currentThreshold: threshold, add: [address] });
-      if (plan.calls.length === 0) {
+      const already =
+        address.toLowerCase() === record.safe.toLowerCase() || guardians.some((g) => g.toLowerCase() === address.toLowerCase());
+      if (already) {
         setNotice({ tone: 'info', text: `${name} ist schon dabei.` });
         return false;
       }
-      return run('add', plan.calls, `${name} ist jetzt deine Vertrauensperson.`);
+      const nextPeople = [...peopleGuardians, address];
+      const calls = planSet(nextPeople, Math.max(threshold, defaultThreshold(nextPeople.length)));
+      return calls ? run('add', calls, `${name} ist jetzt deine Vertrauensperson.`) : false;
     },
-    [record, guardians, threshold, run],
+    [record, guardians, peopleGuardians, threshold, planSet, run],
   );
 
   /**
@@ -222,28 +261,43 @@ export function useGuardianManager(record: MigrationRecord | null) {
       }
       await rt.saveHelper(plan.helper, session.meta).catch(() => undefined);
       setBusy(null);
-      return run('helper', plan.calls, `${helperDisplay(session.meta).name} hilft dir jetzt beim Wiederherstellen.`);
+      // Same threshold rule as planAddRecoveryHelper, counted over people only.
+      const helperThreshold = peopleGuardians.length === 0 ? 1 : clampThreshold(threshold, peopleGuardians.length + 1);
+      const calls = planSet([...peopleGuardians, plan.helper], helperThreshold);
+      return calls ? run('helper', calls, `${helperDisplay(session.meta).name} hilft dir jetzt beim Wiederherstellen.`) : false;
     },
-    [record, mode, guardians, threshold, run],
+    [record, mode, guardians, peopleGuardians, threshold, planSet, run],
   );
 
   const removeGuardian = useCallback(
     async (address: Address) => {
       const name = people.get(address.toLowerCase())?.name ?? 'Die Person';
-      const { call } = planRemoveGuardian({ current: guardians, currentThreshold: threshold, guardian: address });
-      return run('remove', [call], `${name} ist keine Vertrauensperson mehr.`);
+      const nextPeople = peopleGuardians.filter((g) => g.toLowerCase() !== address.toLowerCase());
+      const calls = planSet(nextPeople, clampThreshold(threshold, nextPeople.length));
+      return calls ? run('remove', calls, `${name} ist keine Vertrauensperson mehr.`) : false;
     },
-    [guardians, threshold, people, run],
+    [peopleGuardians, threshold, people, planSet, run],
   );
 
   const changeThreshold = useCallback(
-    async (next: number) => run('threshold', [planChangeThreshold(guardians.length, next)], 'Gespeichert.'),
-    [guardians.length, run],
+    async (next: number) => {
+      if (!isValidThreshold(next, peopleGuardians.length)) {
+        setNotice({ tone: 'warning', text: `Wähle eine Zahl zwischen 1 und ${peopleGuardians.length}.` });
+        return false;
+      }
+      const calls = planSet(peopleGuardians, next);
+      return calls ? run('threshold', calls, 'Gespeichert.') : false;
+    },
+    [peopleGuardians, planSet, run],
   );
 
   return {
     loading,
     guardians,
+    /** The people among the guardians (what the list shows and the threshold counts). */
+    peopleGuardians,
+    /** The word guardians on chain (shown as one entry "Wiederherstellungswörter"). */
+    wordGuardians,
     threshold,
     mode,
     people,
@@ -253,8 +307,8 @@ export function useGuardianManager(record: MigrationRecord | null) {
     setNotice,
     helpers,
     exclude: [...exclude, ...guardians],
-    allAttesters: allGuardiansAreAttesters(guardians, (g) => attesters.has(g.toLowerCase())),
-    suggestedThreshold: defaultThreshold(guardians.length + pending.length),
+    allAttesters: allGuardiansAreAttesters(peopleGuardians, (g) => attesters.has(g.toLowerCase())),
+    suggestedThreshold: defaultThreshold(peopleGuardians.length + pending.length),
     reload: load,
     adoptSuggestion,
     addGuardian,
