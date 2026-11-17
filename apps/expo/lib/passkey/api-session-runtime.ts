@@ -43,6 +43,36 @@ export function signedOrSession<R>(
 }
 
 /**
+ * A request that must never prompt (background reads): a passkey session uses only its
+ * EXISTING valid session token (never mints a new session, never signs per request); without
+ * one, or when the server refuses it or ignores tokens, `withoutToken` runs instead.
+ * Non-passkey accounts are not handled here (their signatures are silent anyway).
+ */
+export function existingSessionOnly<R>(
+  account: SessionSigner,
+  p: {
+    kind: 'web' | 'edge';
+    endpoint: string;
+    withToken: (headers: Record<string, string>) => Promise<TokenAttempt<R>>;
+    withoutToken: () => Promise<R>;
+  },
+): Promise<R> {
+  const neverSign: SessionSigner = {
+    address: account.address,
+    signMessage: () => Promise.reject(new Error('silent request must not sign')),
+  };
+  return runWithApiSession({
+    manager: { get: (a) => passkeyApiSession.peek(a.address), invalidate: (t) => passkeyApiSession.invalidate(t) },
+    account: neverSign,
+    unsupported,
+    kind: p.kind,
+    endpoint: p.endpoint,
+    withToken: p.withToken,
+    withSignature: p.withoutToken,
+  });
+}
+
+/**
  * Background work (polling, focus reloads): may this account sign right now WITHOUT a prompt?
  * thirdweb: always. Passkey: only with a cached session token.
  */

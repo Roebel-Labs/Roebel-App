@@ -89,7 +89,11 @@ import {
   hasMiniAppApi,
   miniAppApiBase,
 } from '@/lib/miniapp-api';
-import { createMiniAppTokenCache, requestMiniAppUserToken } from '@/lib/miniapp-token';
+import {
+  createMiniAppTokenCache,
+  requestMiniAppUserToken,
+  resolveMiniAppUserToken,
+} from '@/lib/miniapp-token';
 import { canSignSilently } from '@/lib/passkey/api-session-runtime';
 
 const HEARTBEAT_MS = 25_000;
@@ -449,22 +453,26 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   useEffect(() => {
     tokenCacheRef.current?.clear();
   }, [walletLc]);
-  // `silent`: reads an app may fire on load (balance, user data, auth.getToken) only fetch a
-  // token when that needs no fingerprint (thirdweb, or a passkey session with its API session
-  // token); otherwise they go out wallet-only. Writes may ask once (then back off 60 s).
+  // `silent`: reads an app may fire on load (balance, user data, auth.getToken) never prompt:
+  // a cached token, else a thirdweb signature (silent) or a passkey session's EXISTING API
+  // session token; otherwise they go out wallet-only. Writes may ask once (then back off 60 s).
   const getUserToken = useCallback(async (opts?: { silent?: boolean }): Promise<string | null> => {
-    // The dev preview never requests a token.
-    if (app.id === 'dev-preview' || !walletLc || !hasMiniAppApi()) return null;
-    if (opts?.silent && !(await canSignSilently(tokenAccountRef.current))) return null;
     if (tokenCacheRef.current == null) {
       tokenCacheRef.current = createMiniAppTokenCache({
-        request: async (appRef) => {
+        request: async (appRef, ctx) => {
           const acc = tokenAccountRef.current;
-          return acc ? requestMiniAppUserToken(acc, appRef) : null;
+          return acc ? requestMiniAppUserToken(acc, appRef, ctx) : null;
         },
       });
     }
-    return tokenCacheRef.current.get(app.id, walletLc);
+    return resolveMiniAppUserToken({
+      appId: app.id,
+      wallet: walletLc,
+      hasApi: hasMiniAppApi(),
+      silent: !!opts?.silent,
+      cache: tokenCacheRef.current,
+      canSignSilently: () => canSignSilently(tokenAccountRef.current),
+    });
   }, [app.id, walletLc]);
 
   // --- host handlers --------------------------------------------------------
