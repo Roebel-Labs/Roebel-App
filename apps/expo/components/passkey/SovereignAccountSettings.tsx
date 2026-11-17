@@ -2,6 +2,10 @@
  * Settings of an independent account (a passkey-only person, no thirdweb login behind it): the
  * recovery banner, guardians, the account code / restore links, the warning email, and the keys
  * and messages section. No migration steps, no session switch, no detach row.
+ *
+ * A 12-word session (expert path): the lede reads "Dein Konto mit 12 Wörtern", the row "Meine 12
+ * Wörter" opens settings/my-words (while the 'words' surface is open), and plan 2's recovery-words
+ * entry is hidden — the 12 words ARE the key here, there are no separate recovery words.
  */
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -13,7 +17,8 @@ import { fontFamily } from '@/constants/theme';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import type { MigrationRecord } from '@/lib/passkey/migration';
 import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
-import type { PasskeySession } from '@/lib/passkey/session';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { ensureSovereignRecord } from '@/lib/passkey/sovereign-record';
 import EmailRow from '@/components/passkey/EmailRow';
 import GuardiansSection from '@/components/passkey/GuardiansSection';
@@ -30,6 +35,21 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
   const [record, setRecord] = useState<MigrationRecord | null>(initialRecord);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const wordsSession = isWordsOwner(passkeySessionOf<PasskeySession>(account));
+  const [wordsOpen, setWordsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!wordsSession) return;
+    let cancelled = false;
+    isPasskeySurfaceAllowed('words')
+      .catch(() => false)
+      .then((ok) => {
+        if (!cancelled) setWordsOpen(ok);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wordsSession]);
 
   useEffect(() => {
     if (record) return;
@@ -71,15 +91,22 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <RecoveryBanner record={record} />
 
-      <Text style={[styles.lede, { color: colors.textPrimary }]}>Dein unabhängiges Konto</Text>
+      <Text style={[styles.lede, { color: colors.textPrimary }]}>{wordsSession ? 'Dein Konto mit 12 Wörtern' : 'Dein unabhängiges Konto'}</Text>
       <Text style={[styles.subLede, { color: colors.textSecondary }]}>
         Nur du hast den Schlüssel. Richte einen Weg zurück ein, falls du dein Handy verlierst.
       </Text>
 
       <Text style={[passkeyStyles.sectionHeading, { color: colors.textSecondary }]}>WIEDERHERSTELLUNG</Text>
+      {wordsSession && wordsOpen ? (
+        <Card>
+          <Pressable onPress={() => router.push('/settings/my-words' as any)} accessibilityRole="button" style={styles.link}>
+            <Text style={[passkeyStyles.label, { color: colors.primary }]}>Meine 12 Wörter</Text>
+          </Pressable>
+        </Card>
+      ) : null}
       <GuardiansSection record={record} />
       <PendingWordsRestore safe={record.safe} />
-      <RecoveryWordsEntry safe={record.safe} />
+      {wordsSession ? null : <RecoveryWordsEntry safe={record.safe} />}
       <Card>
         <Pressable onPress={() => router.push('/passkey/code' as any)} accessibilityRole="button" style={styles.link}>
           <Text style={[passkeyStyles.label, { color: colors.primary }]}>Mein Konto-Code</Text>
@@ -97,7 +124,7 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
       <EmailRow />
 
       <Text style={[passkeyStyles.sectionHeading, { color: colors.textSecondary }]}>SCHLÜSSEL & NACHRICHTEN</Text>
-      <KeysAndMessagesSection />
+      <KeysAndMessagesSection words={wordsSession} />
     </ScrollView>
   );
 }

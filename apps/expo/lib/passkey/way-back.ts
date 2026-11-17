@@ -11,7 +11,7 @@
  */
 import type { Address } from 'viem';
 import { passkeySessionOf } from './active';
-import { identityKind, type PasskeySession } from './session';
+import { identityKind, isWordsOwner, type PasskeySession } from './session';
 // words-split, not words-guardians: the latter pulls in guardians.ts → userop/webauthn natives.
 import { splitGuardians, type WordsPool } from './words-split';
 
@@ -33,6 +33,8 @@ export const WAY_BACK_REASON =
 export const WAY_BACK_OFFLINE_MESSAGE = 'Keine Verbindung. Bitte versuche es erneut.';
 export const ADD_PERSON_OPTION = { label: 'Vertrauensperson hinzufügen', route: '/settings/passkey' } as const;
 export const SET_UP_WORDS_OPTION = { label: 'Wiederherstellungswörter einrichten', route: '/settings/recovery-words' } as const;
+/** Expert account: confirming the 12 words (Settings → my-words) is the quickest way back. */
+export const CONFIRM_WORDS_OPTION = { label: 'Wörter bestätigen', route: '/settings/my-words' } as const;
 
 /** provider = Google, Apple or email login (a passkey session on a legacy identity counts too). */
 export function hasWayBack(kind: AccountKind, f: WayBackFacts): boolean {
@@ -48,6 +50,7 @@ export function hasWayBack(kind: AccountKind, f: WayBackFacts): boolean {
 
 /** The quickest thing the person can do now. */
 export function fastestWayBack(kind: AccountKind, wordsSurfaceOpen: boolean): { label: string; route: string } {
+  if (kind === 'words') return { ...CONFIRM_WORDS_OPTION };
   if (kind === 'passkey' && wordsSurfaceOpen) return { ...SET_UP_WORDS_OPTION };
   return { ...ADD_PERSON_OPTION };
 }
@@ -55,6 +58,8 @@ export function fastestWayBack(kind: AccountKind, wordsSurfaceOpen: boolean): { 
 export type WayBackDeps = {
   readState: (safe: Address) => Promise<{ guardians: Address[]; threshold: number }>;
   loadPool: () => Promise<WordsPool | null>;
+  /** Expert account: the stored 12 words were confirmed (phrase-store `isConfirmed`, no prompt). */
+  phraseConfirmed?: () => Promise<boolean>;
 };
 
 export type WayBackResult = { kind: AccountKind; ok: boolean } | { kind: AccountKind; ok: null };
@@ -67,6 +72,18 @@ export type WayBackResult = { kind: AccountKind; ok: boolean } | { kind: Account
 export async function readWayBack(account: unknown, deps: WayBackDeps): Promise<WayBackResult> {
   const session = passkeySessionOf<PasskeySession>(account);
   if (!session || identityKind(session) === 'legacy') return { kind: 'provider', ok: true };
+  if (isWordsOwner(session)) {
+    try {
+      // A words account has no recovery-words pool: every guardian is a person.
+      const [state, confirmed] = await Promise.all([
+        deps.readState(session.safe),
+        deps.phraseConfirmed ? deps.phraseConfirmed() : Promise.resolve(false),
+      ]);
+      return { kind: 'words', ok: hasWayBack('words', { people: state.guardians.length, wordsOn: false, phraseConfirmed: confirmed }) };
+    } catch {
+      return { kind: 'words', ok: null };
+    }
+  }
   try {
     const [state, pool] = await Promise.all([deps.readState(session.safe), deps.loadPool().catch(() => null)]);
     const { people, words } = splitGuardians(state.guardians, pool);
@@ -92,10 +109,11 @@ export async function checkWayBack(account: unknown, loadRuntime: () => Promise<
   try {
     rt = await loadRuntime();
   } catch {
-    return { ok: null, kind: 'passkey', option: fastestWayBack('passkey', false) };
+    const kind: AccountKind = isWordsOwner(session) ? 'words' : 'passkey';
+    return { ok: null, kind, option: fastestWayBack(kind, false) };
   }
   const r = await readWayBack(account, rt);
   // Only look at the gate when the sheet can show up.
-  const wordsOpen = r.ok === false ? await rt.wordsSurfaceOpen().catch(() => false) : false;
+  const wordsOpen = r.ok === false && r.kind === 'passkey' ? await rt.wordsSurfaceOpen().catch(() => false) : false;
   return { ok: r.ok, kind: r.kind, option: fastestWayBack(r.kind, wordsOpen) };
 }

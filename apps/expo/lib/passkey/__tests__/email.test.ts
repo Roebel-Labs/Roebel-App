@@ -248,4 +248,24 @@ describe('12-word account (ecdsa): the Safe proves itself with its ECDSA owner',
     expect(emailErrorMessage('words_unavailable')).toMatch(/12 Wörter/);
     expect(f).not.toHaveBeenCalled();
   });
+
+  it('server refusals of a words account never mention a passkey (bad_proof, safe_not_deployed)', async () => {
+    const read = jest.fn(async (_reason: string) => ev.phrase);
+    const { f } = fakeFetch([
+      { status: 401, body: { error: 'bad_proof' } },
+      { status: 409, body: { error: 'safe_not_deployed' } },
+      { status: 409, body: { error: 'safe_not_deployed' } },
+    ]);
+    const d = { fetch: f, apiUrl: 'https://preview.example', sign: never, nowSec: () => 1_790_000_000, phrase: { read } };
+    const bad = requestEmailCode(WORDS_SIGNER, 'max@example.de', d);
+    await expect(bad).rejects.toMatchObject({ code: 'bad_proof' });
+    await expect(bad).rejects.not.toMatchObject({ message: expect.stringMatching(/Passkey/) });
+    const notDeployed = requestEmailCode(WORDS_SIGNER, 'max@example.de', d);
+    await expect(notDeployed).rejects.toMatchObject({ code: 'safe_not_deployed', message: emailErrorMessage('safe_not_deployed', 'words') });
+    await expect(removeWarningEmail(WORDS_SIGNER, d)).rejects.toMatchObject({ code: 'safe_not_deployed' });
+    expect(emailErrorMessage('safe_not_deployed', 'words')).not.toMatch(/Passkey/);
+    expect(emailErrorMessage('bad_proof', 'words')).not.toMatch(/Passkey/);
+    // The passkey wording stays for passkey accounts.
+    expect(emailErrorMessage('bad_proof')).toMatch(/Passkey/);
+  });
 });

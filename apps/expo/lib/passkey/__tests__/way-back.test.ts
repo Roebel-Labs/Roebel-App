@@ -45,8 +45,9 @@ describe('fastestWayBack', () => {
     expect(fastestWayBack('passkey', false).route).toBe('/settings/passkey');
     expect(fastestWayBack('passkey', false).label).toBe('Vertrauensperson hinzufügen');
   });
-  it('an expert account is pointed at people', () => {
-    expect(fastestWayBack('words', true).route).toBe('/settings/passkey');
+  it('an expert account is pointed at confirming its words', () => {
+    expect(fastestWayBack('words', true)).toEqual({ label: 'Wörter bestätigen', route: '/settings/my-words' });
+    expect(fastestWayBack('words', false)).toEqual({ label: 'Wörter bestätigen', route: '/settings/my-words' });
   });
 });
 
@@ -74,6 +75,36 @@ describe('readWayBack', () => {
   it('a failed pool read does not hide a real person', async () => {
     const r = await readWayBack(passkeyAccount, { readState: async () => ({ guardians: [PERSON as `0x${string}`], threshold: 1 }), loadPool: async () => { throw new Error('store'); } });
     expect(r).toEqual({ kind: 'passkey', ok: true });
+  });
+});
+
+describe('readWayBack: a 12-word account', () => {
+  const OWNER = '0x5555555555555555555555555555555555555555';
+  const wordsAccount = { [PASSKEY_SESSION_PROP]: { credentialId: '', safe: SAFE, identity: SAFE, ownerType: 'ecdsa', owner: OWNER } };
+  const wordsDeps = (guardians: string[], confirmed: boolean): WayBackDeps => ({
+    ...deps(guardians),
+    phraseConfirmed: jest.fn(async () => confirmed),
+  });
+
+  it('unconfirmed words and no person: no way back, and the fastest option is confirming the words', async () => {
+    const d = wordsDeps([], false);
+    expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: false });
+    const rt: WayBackRuntime = { ...d, wordsSurfaceOpen: async () => true };
+    expect(await checkWayBack(wordsAccount, async () => rt)).toEqual({
+      ok: false,
+      kind: 'words',
+      option: { label: 'Wörter bestätigen', route: '/settings/my-words' },
+    });
+  });
+  it('confirmed words are a way back', async () => {
+    expect(await readWayBack(wordsAccount, wordsDeps([], true))).toEqual({ kind: 'words', ok: true });
+  });
+  it('one person is a way back even with unconfirmed words', async () => {
+    expect(await readWayBack(wordsAccount, wordsDeps([PERSON], false))).toEqual({ kind: 'words', ok: true });
+  });
+  it('an unreadable confirmed flag is "unknown", never "ok"', async () => {
+    const d: WayBackDeps = { ...deps([]), phraseConfirmed: async () => { throw new Error('store'); } };
+    expect(await readWayBack(wordsAccount, d)).toEqual({ kind: 'words', ok: null });
   });
 });
 

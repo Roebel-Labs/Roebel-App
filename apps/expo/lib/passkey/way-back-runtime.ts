@@ -7,9 +7,11 @@ import { isPasskeySurfaceAllowed } from './gate';
 import { readGuardianState, recoveryStorage } from './guardians-runtime';
 import type { WayBackRuntime } from './way-back';
 import { loadWordsPool } from './words-guardians';
+import { phraseStore } from './phrase-store-runtime';
 
 export const wayBackRuntime: WayBackRuntime = {
   readState: readGuardianState,
   loadPool: () => loadWordsPool(recoveryStorage),
   wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words'),
+  phraseConfirmed: () => phraseStore.isConfirmed(),
 };

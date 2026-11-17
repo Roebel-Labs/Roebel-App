@@ -10,12 +10,14 @@ import LoginDrawer from '@/components/LoginDrawer';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 import { deferWelcomeWizard } from '@/lib/onboarding-deferral';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 
 /**
  * Welcome screen.
  *  - Logged in (pushed by UserContext for a row without onboarding): "Loslegen" into the wizard.
  *  - Logged out (first launch while the passkey gate is open, see app/consent.tsx): the passkey
- *    "Unabhängiges Konto" comes FIRST, then the thirdweb login and "Erst mal umsehen". A new
+ *    "Unabhängiges Konto" comes FIRST (with the 12-word link under it while the 'words' surface
+ *    is open), then the thirdweb login and "Erst mal umsehen". A new
  *    passkey account lands in the app right away; the wizard steps wait on the profile card.
  */
 export default function WelcomeIntroScreen() {
@@ -30,6 +32,20 @@ export default function WelcomeIntroScreen() {
   const skipNameStep = user?.auth_provider === 'apple';
 
   const loggedOut = !account;
+  // Expert path ("Ohne Apple- oder Google-Schlüsselbund"): only while the 'words' surface is open.
+  const [wordsOpen, setWordsOpen] = useState(false);
+  useEffect(() => {
+    if (!loggedOut) return;
+    let cancelled = false;
+    isPasskeySurfaceAllowed('words')
+      .catch(() => false)
+      .then((ok) => {
+        if (!cancelled) setWordsOpen(ok);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedOut]);
   // welcome is a full-screen modal over home: leaving it returns to home.
   const leave = () => {
     if (router.canGoBack()) router.back();
@@ -85,6 +101,18 @@ export default function WelcomeIntroScreen() {
                   if (kind === 'signUp') deferWelcomeWizard(session.identity);
                 }}
               />
+
+              {wordsOpen ? (
+                <Pressable
+                  onPress={() => router.push('/passkey/words-signup' as any)}
+                  style={[styles.textButton, styles.wordsLink]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.wordsLinkLabel, { color: colors.primary }]}>
+                    Ohne Apple- oder Google-Schlüsselbund: mit 12 Wörtern
+                  </Text>
+                </Pressable>
+              ) : null}
 
               <Pressable
                 onPress={() => setLoginOpen(true)}
@@ -219,6 +247,17 @@ const styles = StyleSheet.create({
   textButtonLabel: {
     fontFamily: 'Inter-Medium',
     fontSize: 15,
+    textDecorationLine: 'underline',
+  },
+  wordsLink: {
+    marginTop: 0,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+  wordsLinkLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+    textAlign: 'center',
     textDecorationLine: 'underline',
   },
 });

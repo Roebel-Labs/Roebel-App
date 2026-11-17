@@ -139,14 +139,20 @@ const MESSAGES: Record<string, string> = {
   cancelled: 'Abgebrochen.',
   words_unavailable: 'Deine 12 Wörter sind auf diesem Gerät nicht mehr lesbar. Bitte gib sie noch einmal ein.',
 };
+/** A 12-word account has no passkey: the codes whose passkey wording would be wrong for it. */
+const WORDS_MESSAGES: Record<string, string> = {
+  bad_proof: 'Die Bestätigung hat nicht geklappt. Bitte versuche es erneut.',
+  safe_not_deployed: 'Dein Konto ist noch nicht vollständig eingerichtet. Bitte versuche es später erneut.',
+};
 const GENERIC = 'Etwas ist schiefgelaufen. Bitte versuche es erneut.';
 
-export function emailErrorMessage(code: string): string {
-  return MESSAGES[code] ?? GENERIC;
+/** `owner: 'words'` = the signer is a 12-word account (neutral wording, never "Passkey"). */
+export function emailErrorMessage(code: string, owner?: 'words'): string {
+  return (owner === 'words' ? WORDS_MESSAGES[code] : undefined) ?? MESSAGES[code] ?? GENERIC;
 }
 
 /** RN fetch never times out on its own: every call gets an AbortController deadline. */
-async function call(path: string, body: unknown, deps: EmailDeps): Promise<any> {
+async function call(path: string, body: unknown, deps: EmailDeps, owner?: 'words'): Promise<any> {
   const base = deps.apiUrl ?? PASSKEY_API_URL;
   if (!base) throw new PasskeyEmailError('disabled', emailErrorMessage('disabled'));
   const f = deps.fetch ?? (fetch as unknown as NonNullable<EmailDeps['fetch']>);
@@ -168,7 +174,7 @@ async function call(path: string, body: unknown, deps: EmailDeps): Promise<any> 
   const json = await res.json().catch(() => null);
   if (!res.ok) {
     const code = typeof json?.error === 'string' ? json.error : `http_${res.status}`;
-    throw new PasskeyEmailError(code, emailErrorMessage(code));
+    throw new PasskeyEmailError(code, emailErrorMessage(code, owner));
   }
   return json;
 }
@@ -185,6 +191,8 @@ async function signOrCancel(signer: EmailSigner, message: string, deps: EmailDep
   }
 }
 
+const ownerOf = (signer: EmailSigner): 'words' | undefined => (isWordsOwner(signer) ? 'words' : undefined);
+
 const nowSec = (deps: EmailDeps) => (deps.nowSec ? deps.nowSec() : Math.floor(Date.now() / 1000));
 
 /** Signs the add-proof (passkey, or the 12 words after the device unlock) and asks the server to mail a 6-digit code. */
@@ -197,7 +205,7 @@ export async function requestEmailCode(
   if (!email) throw new PasskeyEmailError('invalid_email', emailErrorMessage('invalid_email'));
   const timestamp = nowSec(deps);
   const signature = await signOrCancel(signer, buildEmailProofMessage({ action: 'add', safe: signer.safe, email, timestamp }), deps);
-  const res = await call('/api/passkey/email/start', { safe: signer.safe, email, proof: { timestamp, signature } }, deps);
+  const res = await call('/api/passkey/email/start', { safe: signer.safe, email, proof: { timestamp, signature } }, deps, ownerOf(signer));
   return { email, expiresAt: Number(res?.expiresAt) || timestamp + 600 };
 }
 
@@ -210,7 +218,7 @@ export async function confirmEmailCode(safe: Address, rawCode: string, deps: Ema
 export async function removeWarningEmail(signer: EmailSigner, deps: EmailDeps = {}): Promise<void> {
   const timestamp = nowSec(deps);
   const signature = await signOrCancel(signer, buildEmailProofMessage({ action: 'remove', safe: signer.safe, timestamp }), deps);
-  await call('/api/passkey/email/remove', { safe: signer.safe, proof: { timestamp, signature } }, deps);
+  await call('/api/passkey/email/remove', { safe: signer.safe, proof: { timestamp, signature } }, deps, ownerOf(signer));
 }
 
 // ---------------------------------------------------------------------------

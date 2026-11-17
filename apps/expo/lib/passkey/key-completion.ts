@@ -183,3 +183,16 @@ export function describeCompletion(r: CompletionResult): { tone: 'info' | 'error
   }
   return { tone: 'success', text: `Gesichert: ${slotNames(r.backedUp)}. Nur dein Passkey kann sie entsperren.` };
 }
+
+/** German status line for "Schlüssel sichern" on a 12-word account (no passkey, no thirdweb step). */
+export function describeWordsBackup(r: BackupReport): { tone: 'info' | 'error' | 'success'; text: string } {
+  if (r.status === 'disabled') return { tone: 'info', text: 'Die Schlüssel-Sicherung ist noch nicht freigeschaltet.' };
+  if (r.conflicts.length > 0) {
+    return {
+      tone: 'error',
+      text: `Auf dem Server liegt bereits ein anderer ${slotNames(r.conflicts)}. Er wurde nicht überschrieben – bitte melde dich bei uns.`,
+    };
+  }
+  if (r.saved.length === 0) return { tone: 'info', text: 'Auf diesem Gerät gibt es noch keine Schlüssel zum Sichern.' };
+  return { tone: 'success', text: `Gesichert: ${slotNames(r.saved)}. Entsperren kann sie nur, wer deine 12 Wörter hat.` };
+}
