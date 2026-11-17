@@ -19,13 +19,13 @@ function tableUnder(md: string, heading: string): string[][] {
       rows.push(line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map((c) => c.trim()));
     } else if (inTable) break;
   }
-  // header row and the separator row are not body rows
-  return rows.slice(2);
+  return rows;
 }
 
 describe('sovereignty ledger', () => {
   it.each(['Passkey', '12 Wörter', 'Google, Apple oder E-Mail'])('has all nine rows for %s, none empty', (p) => {
-    const rows = tableUnder(ledger, `## ${p}`);
+    const [header, , ...rows] = tableUnder(ledger, `## ${p}`);
+    expect(header).toEqual(['Row', 'Depends on', 'If that party disappears', 'If that party turns hostile']);
     expect(rows.map((r) => r[0])).toEqual(ROWS);
     for (const r of rows) {
       expect(r).toHaveLength(4);
