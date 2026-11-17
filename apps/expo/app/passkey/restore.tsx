@@ -7,13 +7,17 @@
  * Or, when the 'words' surface is open, "Mit 12 Wörtern": the words find the account and sign as
  * guardians on this phone → the same 3-day delay (the owner is warned and can cancel) → finish →
  * the keys come back from their words copies.
+ * An EXPERT account (its owner is a plain key: no contract code, or a 7702 designator — E9) is
+ * recovered to NEW 12 words instead of a passkey (words surface open): the words are shown and
+ * confirmed (no skip) before the guardians' code appears; keys wrapped under the old words do not
+ * come back (said under the code); `done` opens the account with the new words.
  * All logic is in lib/passkey/recovery-flow.ts; the state is persisted, so leaving is safe.
  */
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useActiveWallet } from 'thirdweb/react';
+import { useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
 import { getAddress, type Address } from 'viem';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
@@ -26,7 +30,11 @@ import { buildRecoverLink } from '@/lib/passkey/deeplinks';
 import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { profileName } from '@/lib/passkey/people';
 import WordsInput from '@/components/passkey/WordsInput';
-import { wordsFromSeed, type WordsKit } from '@/lib/passkey/words';
+import WordsConfirm from '@/components/passkey/WordsConfirm';
+import WordsGrid from '@/components/passkey/WordsGrid';
+import { PHRASE_PROMPT } from '@/lib/passkey/phrase-store';
+import { phraseStore } from '@/lib/passkey/phrase-store-runtime';
+import { pickConfirmPositions, wordsFromSeed, type WordsKit } from '@/lib/passkey/words';
 import {
   NO_WORDS_ACCOUNT_MESSAGE,
   WORDS_RESTORE_NO_VAULT_KEY_MESSAGE,
@@ -36,12 +44,14 @@ import {
   type WordsWallet,
 } from '@/lib/passkey/words-recovery';
 import {
+  abandonRecovery,
   clearRecoveryState,
   executeRecoveryStep,
   finalizeRecoveryStep,
   formatRemaining,
   loadRecoveryState,
   pollRecovery,
+  recoveryWordsStatus,
   resumeRecovery,
   startRecovery,
   startWordsRecovery,
@@ -51,6 +61,7 @@ import { findRecoverableAccounts, type RecoveryCandidate } from '@/lib/passkey/r
 import {
   createRecoveryDeps,
   lookupChain,
+  readRecoveryOwnerKind,
   recoveryStorage,
   resolvePeopleNow,
   searchPeopleByName,
@@ -60,11 +71,16 @@ import {
 
 const deps = createRecoveryDeps();
 
-type Found = { name: string; candidates: RecoveryCandidate[] };
+type OwnerKind = 'passkey' | 'ecdsa';
+type Found = { name: string; candidates: RecoveryCandidate[]; kind: OwnerKind };
+
+/** Open question 4 (plan 3): what a recovery to new words does not bring back. */
+const OLD_KEYS_NOTE = 'Abstimmungs- und Nachrichtenschlüssel, die mit den alten Wörtern gesichert waren, kommen nicht zurück.';
 
 export default function RestoreAccountScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const setActiveWallet = useSetActiveWallet();
   // An existing account, or a recovery already in progress, keeps this screen with sign-up closed.
   const allowed = usePasskeyGate('signup', true, 'account-or-recovery');
   const [state, setState] = useState<RecoveryState | null | undefined>(undefined);
@@ -75,6 +91,9 @@ export default function RestoreAccountScreen() {
   // Which way back the person picked (before anything is persisted); null = not chosen yet.
   const [method, setMethod] = useState<'guardians' | 'words' | null>(null);
   const [wordsAllowed, setWordsAllowed] = useState(false);
+  // Expert recovery: the new words, held only here and only right after `startRecovery`.
+  const [newPhrase, setNewPhrase] = useState<string | null>(null);
+  const [wordsStatus, setWordsStatus] = useState<'confirmed' | 'unconfirmed' | 'missing' | null>(null);
 
   useEffect(() => {
     if (!allowed) return;
@@ -132,10 +151,38 @@ export default function RestoreAccountScreen() {
   }, []);
 
   const startOver = useCallback(async () => {
-    await clearRecoveryState(recoveryStorage).catch(() => undefined);
+    await abandonRecovery(stateRef.current ?? null, deps).catch(() => undefined);
     setState(null);
     setMethod(null);
+    setNewPhrase(null);
+    setWordsStatus(null);
   }, []);
+
+  // Expert recovery: are the new words on this phone confirmed (else show them first)?
+  const expertWaiting = state?.ownerKind === 'ecdsa' && state.step === 'waitingForGuardians';
+  const expertSigner = expertWaiting ? state?.signer : undefined;
+  useEffect(() => {
+    if (!expertWaiting || !stateRef.current) return;
+    let cancelled = false;
+    recoveryWordsStatus(stateRef.current, phraseStore)
+      .catch(() => 'missing' as const)
+      .then((st) => !cancelled && setWordsStatus(st));
+    return () => {
+      cancelled = true;
+    };
+  }, [expertWaiting, expertSigner]);
+
+  const openRecovered = useCallback(async () => {
+    await clearRecoveryState(recoveryStorage).catch(() => undefined);
+    const rt = await import('@/lib/passkey/signin-runtime');
+    const session = await rt.loadStoredPasskeySession().catch(() => null);
+    if (router.canDismiss()) router.dismissAll();
+    router.replace('/' as any);
+    if (!session) return;
+    await rt
+      .activatePasskeySession(session, setActiveWallet)
+      .catch(() => Alert.alert('Anmeldung nicht abgeschlossen', 'Dein Konto ist gespeichert. Starte die App neu, dann bist du angemeldet.'));
+  }, [router, setActiveWallet]);
 
   const startWords = useCallback(async (w: WordsWallet, name: string, phrase: string, kit: WordsKit) => {
     setBusy(true);
@@ -173,16 +220,42 @@ export default function RestoreAccountScreen() {
         ) : picking ? (
           <FindAccount
             notice={state?.message ?? null}
-            onChosen={async (name, c) => {
+            wordsAllowed={wordsAllowed}
+            onChosen={async (name, c, ownerKind) => {
               setBusy(true);
               try {
-                setState(await startRecovery({ wallet: c.wallet, name, recoveryLegacy: c.recoveryLegacy }, deps));
+                const r = await startRecovery({ wallet: c.wallet, name, recoveryLegacy: c.recoveryLegacy, ownerKind }, deps);
+                setNewPhrase(r.phrase ?? null);
+                setWordsStatus(r.phrase ? 'unconfirmed' : null);
+                setState(r.state);
               } finally {
                 setBusy(false);
               }
             }}
             busy={busy}
           />
+        ) : expertWaiting && wordsStatus !== 'confirmed' ? (
+          wordsStatus === null ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : wordsStatus === 'missing' ? (
+            <>
+              <Notice
+                tone="warning"
+                text="Die neuen Wörter für diese Wiederherstellung sind nicht mehr auf diesem Handy. Beginne bitte neu."
+              />
+              <BigButton label="Neu beginnen" onPress={startOver} />
+            </>
+          ) : (
+            <NewWords
+              phrase={newPhrase}
+              onDrop={() => setNewPhrase(null)}
+              onConfirmed={() => {
+                setNewPhrase(null);
+                setWordsStatus('confirmed');
+              }}
+              onStartOver={startOver}
+            />
+          )
         ) : state.step === 'waitingForGuardians' && state.signer ? (
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Zeig diesen Code deinen Vertrauenspersonen</Text>
@@ -199,6 +272,7 @@ export default function RestoreAccountScreen() {
               }
               shareMessage={`${state.name} möchte das Konto wiederherstellen. Bitte nur bestätigen, wenn du sicher bist, dass es wirklich ${state.name} ist:`}
             />
+            {state.ownerKind === 'ecdsa' ? <Notice tone="info" text={OLD_KEYS_NOTE} /> : null}
             {state.message ? <Notice tone="warning" text={state.message} /> : null}
             <HelperConfirm wallet={state.wallet} signer={state.signer} onConfirmed={() => tick().catch(() => undefined)} />
             <Pressable onPress={startOver} accessibilityRole="button" style={styles.textButton}>
@@ -209,8 +283,9 @@ export default function RestoreAccountScreen() {
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Genug Vertrauenspersonen haben bestätigt.</Text>
             <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
-              Jetzt startest du die Wiederherstellung mit deinem Fingerabdruck. Danach dauert es 3 Tage, bis dein Konto wieder da
-              ist. So kann niemand heimlich dein Konto übernehmen.
+              {state.ownerKind === 'ecdsa'
+                ? 'Jetzt startest du die Wiederherstellung mit deiner Gerätesperre. Danach dauert es 3 Tage, bis dein Konto wieder da ist. So kann niemand heimlich dein Konto übernehmen.'
+                : 'Jetzt startest du die Wiederherstellung mit deinem Fingerabdruck. Danach dauert es 3 Tage, bis dein Konto wieder da ist. So kann niemand heimlich dein Konto übernehmen.'}
             </Text>
             {state.message ? <Notice tone="warning" text={state.message} /> : null}
             <BigButton label="Wiederherstellung starten" busy={busy} onPress={() => act((s) => executeRecoveryStep(s, deps))} />
@@ -231,15 +306,23 @@ export default function RestoreAccountScreen() {
         ) : state.step === 'finalizing' ? (
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Es ist so weit.</Text>
-            <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>Hol dein Konto mit deinem Fingerabdruck zurück.</Text>
+            <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
+              {state.ownerKind === 'ecdsa' ? 'Hol dein Konto mit deiner Gerätesperre zurück.' : 'Hol dein Konto mit deinem Fingerabdruck zurück.'}
+            </Text>
             {state.message ? <Notice tone="warning" text={state.message} /> : null}
             <BigButton label="Konto zurückholen" busy={busy} onPress={() => act((s) => finalizeRecoveryStep(s, deps))} />
           </>
         ) : state.step === 'done' ? (
           <>
             <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Dein Konto ist wieder da.</Text>
-            <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>Ab jetzt meldest du dich mit deinem Fingerabdruck an.</Text>
-            {state.method === 'words' ? (
+            <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
+              {state.ownerKind === 'ecdsa'
+                ? 'Ab jetzt gehört es zu deinen neuen 12 Wörtern.'
+                : 'Ab jetzt meldest du dich mit deinem Fingerabdruck an.'}
+            </Text>
+            {state.ownerKind === 'ecdsa' ? (
+              <BigButton label="Weiter" onPress={openRecovered} />
+            ) : state.method === 'words' ? (
               <WordsKeyRestore
                 wallet={state.wallet}
                 done={state}
@@ -349,6 +432,99 @@ function HelperConfirm({ wallet, signer, onConfirmed }: { wallet: Address; signe
         )
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * Expert recovery: the NEW 12 words, shown and confirmed (no skip) before the guardians' code
+ * appears. Right after the start they are in memory; after leaving the app they are read again
+ * behind the device unlock. They are dropped from memory when the app goes to the background.
+ */
+function NewWords({
+  phrase,
+  onDrop,
+  onConfirmed,
+  onStartOver,
+}: {
+  phrase: string | null;
+  onDrop: () => void;
+  onConfirmed: () => void;
+  onStartOver: () => void;
+}) {
+  const { colors } = useTheme();
+  const [shown, setShown] = useState<string | null>(phrase);
+  const [step, setStep] = useState<'show' | 'confirm'>('show');
+  const [positions] = useState(() => pickConfirmPositions());
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [covered, setCovered] = useState(false);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (a) => {
+      setCovered(a === 'inactive');
+      if (a !== 'background') return;
+      setShown(null);
+      setStep('show');
+      onDrop();
+    });
+    return () => sub.remove();
+  }, [onDrop]);
+
+  const reveal = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      setShown(await phraseStore.read(PHRASE_PROMPT));
+    } catch (e) {
+      const name = (e as { name?: string } | null)?.name;
+      if (name !== 'PhraseCancelledError') setNotice('Die Wörter konnten nicht geöffnet werden. Bitte versuche es erneut.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmed = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await phraseStore.markConfirmed();
+      setShown(null);
+      onConfirmed();
+    } catch {
+      setNotice('Das hat nicht geklappt. Bitte versuche es erneut.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Text style={[passkeyStyles.lede, { color: colors.textPrimary }]}>Deine neuen 12 Wörter</Text>
+      <Text style={[passkeyStyles.body, { color: colors.textSecondary }]}>
+        Mit diesen Wörtern gehört dir dein Konto nach der Wiederherstellung. Schreib sie auf Papier, in dieser Reihenfolge.
+      </Text>
+      {!shown ? (
+        <BigButton label="Wörter anzeigen" busy={busy} onPress={reveal} />
+      ) : step === 'show' ? (
+        <>
+          <WordsGrid words={shown.split(' ')} />
+          <BigButton label="Ich habe sie aufgeschrieben" onPress={() => setStep('confirm')} />
+        </>
+      ) : (
+        <>
+          <WordsConfirm phrase={shown} positions={positions} onConfirmed={confirmed} busy={busy} />
+          <BigButton label="Wörter noch einmal ansehen" kind="secondary" onPress={() => setStep('show')} />
+        </>
+      )}
+      <Notice tone="info" text={OLD_KEYS_NOTE} />
+      {notice ? <Notice tone="warning" text={notice} /> : null}
+      <Pressable onPress={onStartOver} accessibilityRole="button" style={styles.textButton}>
+        <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Abbrechen und neu beginnen</Text>
+      </Pressable>
+      {covered && shown ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} pointerEvents="none" />
+      ) : null}
+    </>
   );
 }
 
@@ -552,10 +728,13 @@ function FindAccount({
   onChosen,
   busy,
   notice,
+  wordsAllowed,
 }: {
-  onChosen: (name: string, c: RecoveryCandidate) => void;
+  onChosen: (name: string, c: RecoveryCandidate, ownerKind: OwnerKind) => void;
   busy: boolean;
   notice: string | null;
+  /** The 'words' surface is open: an expert account is recovered to new words (else to a passkey). */
+  wordsAllowed: boolean;
 }) {
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
@@ -593,7 +772,9 @@ function FindAccount({
         setHint(`Für ${name} sind keine Vertrauenspersonen eingerichtet. Dann geht die Wiederherstellung leider nicht.`);
         return;
       }
-      setFound({ name, candidates });
+      // The newest candidate is recovered; its owner decides passkey vs new words (E9).
+      const kind: OwnerKind = wordsAllowed ? await readRecoveryOwnerKind(candidates[candidates.length - 1].wallet) : 'passkey';
+      setFound({ name, candidates, kind });
     } catch (e) {
       setHint(friendlyError(e, 'Keine Verbindung. Bitte versuche es erneut.'));
     } finally {
@@ -608,8 +789,9 @@ function FindAccount({
           <Initials name={found.name} size={72} />
           <Text style={[passkeyStyles.lede, { color: colors.textPrimary, textAlign: 'center' }]}>{found.name}</Text>
           <Text style={[passkeyStyles.body, { color: colors.textSecondary, textAlign: 'center' }]}>
-            Wir richten jetzt deinen Fingerabdruck auf diesem Handy ein. Danach bestätigen deine Vertrauenspersonen, dass du es
-            bist.
+            {found.kind === 'ecdsa'
+              ? 'Du bekommst jetzt neue 12 Wörter für dein Konto. Danach bestätigen deine Vertrauenspersonen, dass du es bist.'
+              : 'Wir richten jetzt deinen Fingerabdruck auf diesem Handy ein. Danach bestätigen deine Vertrauenspersonen, dass du es bist.'}
           </Text>
         </Card>
         {found.candidates.length > 1 ? (
@@ -620,7 +802,7 @@ function FindAccount({
           busy={busy}
           onPress={() => {
             const c = found.candidates[found.candidates.length - 1];
-            if (c) onChosen(found.name, c);
+            if (c) onChosen(found.name, c, found.kind);
           }}
         />
         <Pressable onPress={() => setFound(null)} accessibilityRole="button" style={styles.textButton}>

@@ -288,6 +288,61 @@ no request. A failed chain read = "Keine Verbindung. Bitte versuche es erneut." 
 "ok"). In the welcome wizard the screen is replaced afterwards, so it saves the draft and shows the reason as a
 snackbar instead of the sheet.
 
+## Expert path: 12 words as the main key (2026-11-17)
+
+Plan 3 of the sovereign sign-up project (branch `feat/sovsignup-3-expert-path`, everything behind the `words`
+surface; a flag flip never logs a words session out). An independent account whose ONLY key is 12 BIP-39 words
+(English list) — no passkey, no cloud keychain. Not to be confused with the Wiederherstellungswörter above (those
+are guardians of a passkey account; these are the owner).
+
+**Setup (fork-proven, `contracts/passkey-accounts/test/EcdsaSafe.t.sol`, vector `ecdsa-safe-vector.json`).** The
+account key is the private key at `m/44'/60'/0'/0/0` of the phrase (works in any wallet tool). The Safe is a SafeL2
+1.4.1 proxy, `createProxyWithNonce(SafeL2, setup, 0)` with `setup(owners = [account key], threshold 1, to =
+SafeModuleSetup, data = enableModules([Safe4337Module, SocialRecoveryModule]), fallbackHandler = Safe4337Module)`,
+same modules and factory as the passkey Safe, only the owner differs. Every signature is a plain 65-byte ECDSA
+signature (v 27/28) by that key. Address: `predictEcdsaSafeAddress(owner)` (Expo `ecdsa-safe.ts`, web
+`safe-address.ts`, both pinned by the vector). Counterfactual until its first op, which deploys it.
+
+**Owner type.** Record (`passkey_migration_v1`) and session (`passkey_session_v1`) carry `ownerType: 'ecdsa'`,
+`owner` = the account key's address, `credentialId: ''` and `x = y = WORDS_KEY_PLACEHOLDER` (32 zero bytes). An
+expert account has no legacy thirdweb account: identity = the Safe. `users.auth_provider = 'words'`.
+
+**Where the phrase lives.** Only in SecureStore on this device (`phrase-store.ts`): `words_phrase_v1`, written with
+`requireAuthentication` (Face ID / fingerprint on every read) and `WHEN_UNLOCKED_THIS_DEVICE_ONLY` (never in iCloud
+Keychain, a backup or another device). Never sent, never logged. An unprotected marker
+`words_phrase_present_v1` holds only the public address 0 (so checks and app start never prompt), and
+`words_phrase_confirmed_v1` says the person proved they wrote the words down (reset on every write / remove). A
+biometric change invalidates the item: the person stays signed in and is asked for the words again
+(`/settings/my-words?reenter=1`). The unconfirmed words of another account are never overwritten (E4).
+
+**Sponsor proof.** The request body carries `ecdsaOwner` instead of `x, y` (exactly one of the two). Deploy op:
+`factoryData` must be the expert Safe deployment for `ecdsaOwner` byte-for-byte and `sender ==
+predictEcdsaSafeAddress(ecdsaOwner)`. Deployed: the sovereign shape AND `getOwners() == [ecdsaOwner]`. Both: the
+owner has no code or only an EIP-7702 designator (`0xef0100` ++ 20 bytes) — any other code is refused. No `legacy`
+with `ecdsaOwner`; `createSigner` is refused; in recovery mode the new owner must be `ecdsaOwner` itself. Same
+strictness as the passkey Safe (`apps/web/src/lib/passkey/sponsor-policy.ts`).
+
+**Device-unlock rule.** Every signature (userOp, ERC-1271 message, key backup) reads the phrase once behind the
+device unlock (`Bestätige, dass du es bist`) — one prompt per action, never more than the passkey path. Showing the
+words and changing recovery settings always need the unlock. Restoring the session at app start never prompts and
+never reads the phrase.
+
+**Guardian recovery of an expert account ends in a NEW phrase** (`recovery-flow.ts`, `ownerKind: 'ecdsa'`).
+`restore.tsx` reads the wallet's owner: no code or a 7702 designator = expert account (E9; with the `words` surface
+closed it is recovered to a passkey instead, which the sponsor also allows). The phone generates new 12 words and
+stores them (E4 applies); they are shown and confirmed (no skip) before the guardians' code appears, whose `signer`
+is the new address 0 (guardian link and confirm screen unchanged). After the guardians confirmed, this phone's
+fresh expert Safe (`predictEcdsaSafeAddress(newOwner)`) sends ONE op `[executeRecovery(wallet, [newOwner], 1)]`
+(no createSigner; deploys it), then after the 3-day wait `[finalizeRecovery(wallet)]` — fork-proven in
+`EcdsaSafe.t.sol::test_freshExpertSafeRecoversExpertAccount`. `done` saves a words record AND session for the OLD
+wallet address (`safe = identity = wallet`, `owner = newOwner`). "Abbrechen und neu beginnen" before the words were
+confirmed deletes them (the guardians never saw their address).
+- Comes back: the account (same address: citizenship, Münzen, profile, guardians) and its signatures.
+- Does NOT come back: the voting key, Nostr key and commitment salt wrapped under the OLD words (open question 4,
+  accepted; the screen says „Abstimmungs- und Nachrichtenschlüssel, die mit den alten Wörtern gesichert waren,
+  kommen nicht zurück."). The old words stop working the moment `finalizeRecovery` lands.
+- Signing in with the new words on another phone finds the OLD Safe (`findSafesByOwner`), not the fresh one.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.

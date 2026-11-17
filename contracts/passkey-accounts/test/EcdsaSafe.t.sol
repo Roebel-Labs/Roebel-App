@@ -198,6 +198,73 @@ contract EcdsaSafeTest is PasskeySafeBase {
         entryPoint.handleOps(ops, payable(bundler));
     }
 
+    /// Guardian recovery of an expert account to a NEW phrase, the way the app does it (Task 9):
+    /// a guardian confirms on chain (no execute); the recovering phone's FRESH expert Safe (owner =
+    /// the new phrase's key 0, counterfactual, no deposit of its own) sends ONE sponsored op that
+    /// deploys it and calls executeRecovery; after the delay the same Safe sends finalizeRecovery.
+    /// The old address stays the account; the new key operates it, the old key no longer does.
+    function test_freshExpertSafeRecoversExpertAccount() public {
+        _deploy();
+        uint256 guardianKey = vm.deriveKey(PHRASE, 1);
+        address guardian = vm.addr(guardianKey);
+        _handleOp(
+            _followUp(
+                safe,
+                ownerKey,
+                _executeUserOpCallData(
+                    SOCIAL_RECOVERY, 0, abi.encodeCall(ISocialRecoveryModule.addGuardianWithThreshold, (guardian, 1))
+                )
+            )
+        );
+
+        // The new phrase (another mnemonic) → its key 0 and its counterfactual expert Safe.
+        uint256 newKey = vm.deriveKey("legal winner thank year wave sausage worth useful legal winner thank yellow", 0);
+        address newEoa = vm.addr(newKey);
+        bytes memory freshInit = _ecdsaSafeInitializer(newEoa);
+        address fresh = _predictSafe(freshInit, SAFE_SALT_NONCE);
+        assertEq(fresh.code.length, 0, "fresh expert Safe is counterfactual");
+
+        address[] memory newOwners = new address[](1);
+        newOwners[0] = newEoa;
+        vm.prank(guardian);
+        srm.confirmRecovery(safe, newOwners, 1, false);
+        assertEq(srm.getRecoveryRequest(safe).executeAfter, 0, "confirm alone starts nothing");
+
+        // ONE op from the fresh Safe: deploy + executeRecovery(wallet, [newEoa], 1).
+        PackedUserOperation memory op = _buildOp(
+            fresh,
+            0,
+            _safeInitCode(freshInit, SAFE_SALT_NONCE),
+            _executeUserOpCallData(
+                SOCIAL_RECOVERY, 0, abi.encodeCall(ISocialRecoveryModule.executeRecovery, (safe, newOwners, 1))
+            )
+        );
+        _sponsor(op);
+        _signEcdsa(op, newKey);
+        _handleOp(op);
+        assertGt(fresh.code.length, 0, "fresh Safe deployed by the same op");
+        assertEq(srm.getRecoveryRequest(safe).executeAfter, uint64(block.timestamp + RECOVERY_PERIOD), "3-day wait");
+        assertEq(ISafe(safe).getOwners()[0], owner, "not instant");
+
+        // After the delay the fresh Safe finalizes (one more op, signed by the new words).
+        vm.warp(block.timestamp + RECOVERY_PERIOD + 1);
+        _handleOp(_followUp(fresh, newKey, _executeUserOpCallData(SOCIAL_RECOVERY, 0, abi.encodeCall(ISocialRecoveryModule.finalizeRecovery, (safe)))));
+        address[] memory owners = ISafe(safe).getOwners();
+        assertEq(owners.length, 1);
+        assertEq(owners[0], newEoa, "the old address now belongs to the new words");
+
+        // The new words operate the OLD address; the old words fail with AA24.
+        uint256 before_ = SINK.balance;
+        _handleOp(_followUp(safe, newKey, _executeUserOpCallData(SINK, 1, "")));
+        assertEq(SINK.balance, before_ + 1);
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = _followUp(safe, ownerKey, _executeUserOpCallData(SINK, 1, ""));
+        address bundler = makeAddr("bundler");
+        vm.prank(bundler, bundler);
+        vm.expectRevert(abi.encodeWithSignature("FailedOp(uint256,string)", 0, "AA24 signature error"));
+        entryPoint.handleOps(ops, payable(bundler));
+    }
+
     function test_writeVector() public {
         // Fixed userOp: deploy + 1 wei to SINK, stub paymasterAndData (paymaster ++ gas limits ++ 320 zero bytes).
         PackedUserOperation memory op =

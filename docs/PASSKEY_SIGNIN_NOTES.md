@@ -37,6 +37,7 @@ contract between the app (`apps/expo/lib/passkey/`) and the verifiers and sponso
 | Migrated (Safe = co-admin of the thirdweb account) | the **legacy** thirdweb account | `AdminUpdated(signer = Safe)` emitters, re-checked with `isAdmin` (`recovery-lookup.findLinkedLegacies`). With several, the one holding CitizenNFTv2 wins. |
 | Passkey-only | the **Safe** | no linked legacy |
 | After the v3 `moveTo` | the **Safe** | the Safe holds CitizenNFTv3 (only when `EXPO_PUBLIC_PASSKEY_CITIZEN_NFT_V3` is set) |
+| Expert path (12 words, `ownerType: 'ecdsa'`) | the **expert Safe** (single owner = the words' key `m/44'/60'/0'/0/0`) | `findSafesByOwner(address 0)` (app-shaped Safe with that single owner; after a guardian recovery the OLD address), else `predictEcdsaSafeAddress(address 0)` for never-used words. Never a legacy account. |
 
 ## 2. Signatures (what verifiers receive)
 
@@ -54,6 +55,12 @@ contract between the app (`apps/expo/lib/passkey/`) and the verifiers and sponso
 | Safe (deployed) | plain Safe contract signature | standard: `client.verifyHash({ address: safe, hash, signature })` on Gnosis (ERC-1271) |
 | Safe (counterfactual, before its first on-chain action) | ERC-6492 wrapper: factory `SafeProxyFactory 0x4e1DCf7A…`, calldata `createProxyWithNonce(singleton, initializer, 0)` | standard viem universal verification (ERC-6492) |
 | legacy thirdweb account | **Safe-admin envelope** `SAFE_ADMIN_SIGNATURE_MAGIC ++ abi.encode(address safe, bytes safeSignature)`, MAGIC = `keccak256("roebel.safe-admin-signature.v1")` = `0xc147971c4ed41e39ec9a286f1686117a7a3e33a2a5a6bcd0ec1881c11ac60de5` | rule (b) of `apps/web/src/lib/auth/account-signature-core.ts`: `safeSignature` valid for `safe` over the same hash AND `legacy.isAdmin(safe)` on Gnosis |
+
+| Expert Safe (12 words, deployed) | plain Safe signature: ONE 65-byte ECDSA signature (r ++ s ++ v, v 27/28) by the words' key over `safeMessageHash(safe, hash)` | standard ERC-1271 on Gnosis (fork-proven, `EcdsaSafe.t.sol::test_erc1271`) |
+| Expert Safe (counterfactual) | ERC-6492 wrapper around it: factory `SafeProxyFactory`, calldata = the expert Safe deployment (`ecdsaSafeFactoryData`) | standard viem universal verification (ERC-6492) |
+
+Expert-path signatures come from `session-signer.ts` (`sessionSignerFor`): one device-unlock read of the phrase
+per signature instead of a WebAuthn assertion; the envelope, the 6492 wrapping and the verifiers are unchanged.
 
 The legacy thirdweb `Account.isValidSignature` is ECDSA-only, so it can never validate a Safe signature. Every
 verifier that authenticates a migrated person therefore needs rule (b). The app's encoder is pinned to the server's
@@ -176,6 +183,21 @@ done.
 - The thirdweb login is **not** signed out and stays an admin until the "thirdweb trennen" step (§8g, §9), the only
   place that builds an `isAdmin: 2` request.
 
+**12 words (expert path, `words` surface; `words-account.ts`, screens `passkey/words-signup.tsx`,
+`passkey/words-signin.tsx`):**
+- *Konto erstellen:* new phrase (16 bytes of secure randomness) → stored behind the device unlock → record +
+  session for the counterfactual expert Safe → the words are shown ONCE and confirmed (three of them; "Später"
+  skips; the citizenship request then needs the confirmation or one guardian). Leaving on that screen loses nothing: Settings →
+  "Meine 12 Wörter" shows them again after the unlock.
+- *Mit 12 Wörtern anmelden:* typed words → address 0 → the Safe it owns on chain (a recovered account keeps its
+  OLD address), else the Safe the words derive (never-used words open their own, empty account). Recovery words of
+  a passkey account (plan 2's pool) are sent to "Konto wiederherstellen" instead (E5); words that both own a Safe
+  and are recovery words get the support message. The words are stored and marked confirmed.
+- *Gespeichertes Konto auf diesem Gerät öffnen:* the stored words, one device unlock, same lookup, nothing stored
+  again.
+- *Konto wiederherstellen* of an expert account (guardians): ends in NEW words (PASSKEY_ACCOUNTS_STATE.md, "Expert
+  path").
+
 ### userHandle — deviation from the brief
 
 The brief asked for `userHandle = Safe address` at creation. That is impossible: the Safe address derives from the
@@ -188,7 +210,10 @@ device without the record uses public-key recovery instead (above).
 1. `passkeyChannelAllowed()` is synchronous, with no network and no storage. It is false on the `production`
    channel, and false in release builds without a channel. **Production therefore skips step 2 entirely and boots
    exactly as before.**
-2. If a `passkey_session_v1` exists, activate the adapter wallet (no biometric prompt) and stop.
+2. If a `passkey_session_v1` exists, activate the adapter wallet (no biometric prompt) and stop. A words session
+   (`ownerType: 'ecdsa'`) boots the same way: the session needs no secret and the phrase is NOT read at boot; it
+   is read (one device unlock) only when the first signature is needed. If the system invalidated it (biometrics
+   changed), the person stays signed in and is sent to re-enter the words.
 3. Otherwise, or if step 2 throws, run the **unchanged** thirdweb loop (`wallet.autoConnect({ client })` per
    `wallets`, then `setActiveWallet`).
    Sources are ordered `SessionSource`s (`lib/passkey/boot.ts`, `passkeySessionSource`). **A failed sovereign boot is

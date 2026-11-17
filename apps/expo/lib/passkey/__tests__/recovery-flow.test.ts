@@ -8,25 +8,33 @@ import { SAFE_WEBAUTHN_SIGNER_FACTORY, SOCIAL_RECOVERY_MODULE } from '../constan
 import { predictSafeAddress } from '../safe-address';
 import {
   RECOVERY_STORE_KEY,
+  abandonRecovery,
   executeRecoveryStep,
   finalizeRecoveryStep,
   formatRemaining,
   isForeignRecoveryPending,
   loadRecoveryState,
+  ownerKindForCode,
   pollRecovery,
+  recoveryWordsStatus,
   resumeRecovery,
   startRecovery,
   startWordsRecovery,
   type RecoveryDeps,
   type RecoveryState,
 } from '../recovery-flow';
-import type { PasskeyUserOpArgs } from '../userop';
+import type { SafeUserOpArgs } from '../userop';
+import { createPhraseStore, PHRASE_OVERWRITE_MESSAGE, type SecureStoreLike } from '../phrase-store';
+import { loadPasskeySession, PASSKEY_SESSION_KEY, WORDS_KEY_PLACEHOLDER } from '../session';
+import { predictEcdsaSafeAddress } from '../ecdsa-safe';
 import vector from './passkey-safe-vector.json';
 import wordsVector from './words-recovery-vector.json';
 import { deriveWordAddresses, wordsVaultKey } from '../words';
 import { NO_WORDS_ACCOUNT_MESSAGE } from '../words-recovery';
-import { encodeCreateSigner, recoveryApprovalTypedData } from '../guardians';
-import { recoverTypedDataAddress } from 'viem';
+import { encodeCreateSigner, encodeExecuteRecovery, encodeFinalizeRecovery, recoveryApprovalTypedData } from '../guardians';
+import { recoverAddress, recoverTypedDataAddress } from 'viem';
+import { NO_BIOMETRICS_MESSAGE } from '../phrase-store';
+import { onPhraseUnavailable } from '../phrase-events';
 
 const x = vector.x as Hex;
 const y = vector.y as Hex;
@@ -36,6 +44,27 @@ const SIGNER = getAddress('0x3333333333333333333333333333333333333333');
 const OTHER = getAddress('0x4444444444444444444444444444444444444444');
 const OLD_OWNER = getAddress('0x94a4F6affBd8975951142c3999aEAB7ecee555c2');
 const NOW = 1_800_000_000;
+
+/** expo-secure-store in memory (no prompts): enough for the phrase store's write / read / flags. */
+function memSecure(o: { canBio?: boolean; readThrows?: string } = {}) {
+  const m = new Map<string, string>();
+  const secure = {
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: jest.fn(async (k: string, opts?: { requireAuthentication?: boolean }) => {
+      if (opts?.requireAuthentication && o.readThrows) throw new Error(o.readThrows);
+      return m.get(k) ?? null;
+    }),
+    setItemAsync: jest.fn(async (k: string, v: string) => void m.set(k, v)),
+    deleteItemAsync: jest.fn(async (k: string) => void m.delete(k)),
+    canUseBiometricAuthentication: () => o.canBio ?? true,
+  };
+  return { m, secure, store: createPhraseStore(secure as unknown as SecureStoreLike) };
+}
+
+const hex = (h: string) => Uint8Array.from(Buffer.from(h, 'hex'));
+/** The phrase of entropy 0x7f × 16 (BIP-39 test vector). */
+const LEGAL = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const JUNK = 'test test test test test test test test test test test junk';
 
 const noRequest: RecoveryRequest = { guardiansApprovalCount: 0n, newThreshold: 0n, executeAfter: 0n, newOwners: [] };
 
@@ -51,7 +80,9 @@ function memStorage(init: Record<string, string> = {}) {
 
 function makeDeps(over: Partial<RecoveryDeps> = {}) {
   const storage = memStorage();
-  const sent: PasskeyUserOpArgs[] = [];
+  const sessionStorage = memStorage();
+  const phrase = memSecure();
+  const sent: SafeUserOpArgs[] = [];
   let request: RecoveryRequest = noRequest;
   let owners: Address[] = [OLD_OWNER];
   let approvals = 0n;
@@ -64,16 +95,21 @@ function makeDeps(over: Partial<RecoveryDeps> = {}) {
     readRequest: jest.fn(async () => request),
     readOwners: jest.fn(async () => owners),
     isSafeDeployed: jest.fn(async () => false),
-    sendPasskeyUserOp: jest.fn(async (a: PasskeyUserOpArgs) => {
+    sendUserOp: jest.fn(async (a: SafeUserOpArgs) => {
       sent.push(a);
       return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
     }),
+    signPasskey: jest.fn(async () => Promise.reject(new Error('no passkey prompt in these tests'))),
+    phrase: phrase.store,
+    sessionStorage,
     now: () => NOW,
     ...over,
   };
   return {
     deps,
     storage,
+    sessionStorage,
+    secure: phrase,
     sent,
     setRequest: (r: RecoveryRequest) => (request = r),
     setOwners: (o: Address[]) => (owners = o),
@@ -84,7 +120,7 @@ function makeDeps(over: Partial<RecoveryDeps> = {}) {
 const srmFn = (data: Hex) => decodeFunctionData({ abi: socialRecoveryAbi, data });
 
 async function waiting(h: ReturnType<typeof makeDeps>): Promise<RecoveryState> {
-  return startRecovery({ wallet: WALLET, name: 'Erna', recoveryLegacy: LEGACY }, h.deps);
+  return (await startRecovery({ wallet: WALLET, name: 'Erna', recoveryLegacy: LEGACY }, h.deps)).state;
 }
 
 describe('startRecovery', () => {
@@ -146,7 +182,7 @@ describe('waitingForGuardians', () => {
     const p = await pollRecovery(s, h.deps);
     expect(p.step).toBe('executing');
 
-    h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
+    h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
       h.sent.push(a);
       h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: BigInt(NOW + 259200), newOwners: [SIGNER] });
       return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
@@ -155,6 +191,8 @@ describe('waitingForGuardians', () => {
     expect(e.step).toBe('waitingDelay');
     expect(e.executeAfter).toBe(NOW + 259200);
     const op = h.sent[0];
+    expect(op.signer.proof).toEqual({ x, y });
+    expect(op.signer.predicted).toBe(predictSafeAddress({ x, y }));
     expect(op.legacy).toBeUndefined();
     expect(op.recoveryLegacy).toBe(LEGACY);
     expect(op.sender).toBeUndefined(); // the predicted passkey Safe of (x, y)
@@ -185,7 +223,7 @@ describe('waitingForGuardians', () => {
   });
 
   it('a cancelled fingerprint during execute keeps executing (retry possible)', async () => {
-    const h = makeDeps({ sendPasskeyUserOp: jest.fn(async () => Promise.reject(new PasskeyCancelledError())) });
+    const h = makeDeps({ sendUserOp: jest.fn(async () => Promise.reject(new PasskeyCancelledError())) });
     const s = { ...(await waiting(h)), step: 'executing' as const };
     const e = await executeRecoveryStep(s, h.deps);
     expect(e.step).toBe('executing');
@@ -216,7 +254,7 @@ describe('waitingDelay → finalize', () => {
     expect(p.step).toBe('waitingDelay');
     const f = await finalizeRecoveryStep({ ...p, step: 'finalizing' }, h.deps);
     expect(f.step).toBe('waitingDelay');
-    expect(h.deps.sendPasskeyUserOp).not.toHaveBeenCalled();
+    expect(h.deps.sendUserOp).not.toHaveBeenCalled();
   });
 
   it('after the delay: finalizing → finalizeRecovery op → recovered record saved → done', async () => {
@@ -311,7 +349,7 @@ describe('startWordsRecovery', () => {
     const h = makeDeps();
     let nonce = 0n;
     const saveVaultKey = jest.fn(async (_k: Hex, _w: Address) => undefined);
-    h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
+    h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
       h.sent.push(a);
       h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: DELAY, newOwners: [SIGNER] });
       return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
@@ -340,6 +378,7 @@ describe('startWordsRecovery', () => {
     const op = h.sent[0];
     expect(op.deployed).toBe(false);
     expect(op.sender).toBeUndefined();
+    expect(op.signer.proof).toEqual({ x, y });
     expect(op.calls).toHaveLength(2);
     expect(op.calls[0]).toEqual(encodeCreateSigner(x, y));
     expect(op.calls[1].to).toBe(SOCIAL_RECOVERY_MODULE);
@@ -364,7 +403,7 @@ describe('startWordsRecovery', () => {
     const h = wordsDeps();
     await start(h);
     expect(h.saveVaultKey).toHaveBeenCalledWith(wordsVaultKey(PHRASE), WALLET);
-    expect(h.saveVaultKey.mock.invocationCallOrder[0]).toBeLessThan((h.deps.sendPasskeyUserOp as jest.Mock).mock.invocationCallOrder[0]);
+    expect(h.saveVaultKey.mock.invocationCallOrder[0]).toBeLessThan((h.deps.sendUserOp as jest.Mock).mock.invocationCallOrder[0]);
     const persisted = h.storage.map.get(RECOVERY_STORE_KEY)!;
     expect(persisted).toBeTruthy();
     for (const w of PHRASE.split(' ')) expect(persisted).not.toContain(w);
@@ -430,21 +469,21 @@ describe('startWordsRecovery', () => {
     expect(wordsDone.mock.calls[0][0]).toMatchObject({ wallet: WALLET, method: 'words', wordsPool: POOL, signer: SIGNER });
 
     const g = makeDeps({ wordsDone });
-    const gs = await startRecovery({ wallet: WALLET, name: 'Erna' }, g.deps);
+    const { state: gs } = await startRecovery({ wallet: WALLET, name: 'Erna' }, g.deps);
     await finalizeRecoveryStep({ ...gs, step: 'finalizing', executeAfter: NOW - 1 }, g.deps);
     expect(wordsDone).toHaveBeenCalledTimes(1);
   });
 
   it('a failed op keeps the passkey; after resume the words are asked again and the same passkey is reused', async () => {
     const h = wordsDeps();
-    h.deps.sendPasskeyUserOp = jest.fn(async () => Promise.reject(new Error('bundler down')));
+    h.deps.sendUserOp = jest.fn(async () => Promise.reject(new Error('bundler down')));
     const s = await start(h);
     expect(s.step).toBe('error');
     const persisted = (await loadRecoveryState(h.storage))!;
     const r = await resumeRecovery(persisted, h.deps);
     expect(r.step).toBe('idle');
     expect(r.method).toBe('words');
-    h.deps.sendPasskeyUserOp = jest.fn(async (a: PasskeyUserOpArgs) => {
+    h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
       h.sent.push(a);
       h.setRequest({ guardiansApprovalCount: 2n, newThreshold: 1n, executeAfter: DELAY, newOwners: [SIGNER] });
       return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
@@ -453,5 +492,186 @@ describe('startWordsRecovery', () => {
     expect(ok.step).toBe('waitingDelay');
     expect(h.deps.createPasskey).toHaveBeenCalledTimes(1);
     expect(ok.credentialId).toBe('cred-1');
+  });
+});
+
+
+describe('expert account (ownerKind ecdsa): guardians recover it to NEW 12 words', () => {
+  const NEW_OWNER = deriveWordAddresses(LEGAL, 1)[0];
+  const NEW_SAFE = predictEcdsaSafeAddress(NEW_OWNER);
+  const OP_HASH = `0x${'11'.repeat(32)}` as Hex;
+
+  /** Deps whose sendUserOp also signs (so the device unlock + the words' key really run). */
+  function expertDeps(over: Partial<RecoveryDeps> = {}) {
+    const h = makeDeps({ random: () => hex('7f'.repeat(16)), ...over });
+    const sigs: Hex[] = [];
+    h.deps.sendUserOp = jest.fn(async (a: SafeUserOpArgs) => {
+      sigs.push(await a.signer.signOpHash(OP_HASH));
+      h.sent.push(a);
+      return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
+    });
+    return { ...h, sigs };
+  }
+
+  const startExpert = (h: ReturnType<typeof expertDeps>) =>
+    startRecovery({ wallet: WALLET, name: 'Anna', ownerKind: 'ecdsa' }, h.deps);
+
+  it('start generates and stores a new phrase, no passkey; the state holds no word', async () => {
+    const h = expertDeps();
+    const { state, phrase } = await startExpert(h);
+    expect(phrase).toBe(LEGAL);
+    expect(state).toMatchObject({ step: 'waitingForGuardians', ownerKind: 'ecdsa', signer: NEW_OWNER, newSafe: NEW_SAFE });
+    expect(state.credentialId).toBeUndefined();
+    expect(h.deps.createPasskey).not.toHaveBeenCalled();
+    expect(h.deps.getSigner).not.toHaveBeenCalled();
+    expect(await loadRecoveryState(h.storage)).toEqual(state);
+    const persisted = h.storage.map.get(RECOVERY_STORE_KEY)!;
+    for (const w of LEGAL.split(' ')) expect(persisted).not.toContain(w);
+    // Stored behind the device unlock, not yet confirmed.
+    expect(await h.deps.phrase.storedOwner()).toBe(NEW_OWNER);
+    expect(await h.deps.phrase.read('x')).toBe(LEGAL);
+    expect(await h.deps.phrase.isConfirmed()).toBe(false);
+    expect(await recoveryWordsStatus(state, h.deps.phrase)).toBe('unconfirmed');
+  });
+
+  it("E4: the unconfirmed words of another account on this phone are never replaced", async () => {
+    const h = expertDeps();
+    await h.deps.phrase.write(JUNK);
+    const { state, phrase } = await startExpert(h);
+    expect(phrase).toBeUndefined();
+    expect(state.step).toBe('idle');
+    expect(state.message).toBe(PHRASE_OVERWRITE_MESSAGE);
+    expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+    expect(await h.deps.phrase.read('x')).toBe(JUNK);
+  });
+
+  it('a phone without biometrics: says so, stores and persists nothing', async () => {
+    const noBio = memSecure({ canBio: false });
+    const h = expertDeps({ phrase: noBio.store });
+    const { state, phrase } = await startExpert(h);
+    expect(phrase).toBeUndefined();
+    expect(state.message).toBe(NO_BIOMETRICS_MESSAGE);
+    expect(noBio.m.size).toBe(0);
+    expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+  });
+
+  it('the execute op is ONE call from the fresh expert Safe, signed by the new words', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
+    expect(h.deps.sendUserOp).toHaveBeenCalledTimes(1);
+    const args = (h.deps.sendUserOp as jest.Mock).mock.calls[0][0] as SafeUserOpArgs;
+    expect(args.calls).toEqual([encodeExecuteRecovery(WALLET, [NEW_OWNER], 1)]);
+    expect(args.signer.proof).toEqual({ ecdsaOwner: NEW_OWNER });
+    expect(args.signer.predicted).toBe(NEW_SAFE);
+    expect(args.sender).toBeUndefined();
+    expect(args.deployed).toBe(false);
+    expect(args.legacy).toBeUndefined();
+    // The userOp signature = validity window ++ the new words' key 0 over the op hash.
+    const sig = h.sigs[0];
+    expect(await recoverAddress({ hash: OP_HASH, signature: `0x${sig.slice(2 + 24)}` })).toBe(NEW_OWNER);
+    expect(s.step).toBe('waitingDelay');
+  });
+
+  it('a dismissed device unlock during execute keeps executing (retry possible)', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    h.secure.secure.getItemAsync.mockImplementation(async (k: string, opts?: { requireAuthentication?: boolean }) => {
+      if (opts?.requireAuthentication) throw new Error('User canceled the authentication');
+      return h.secure.m.get(k) ?? null;
+    });
+    const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
+    expect(s.step).toBe('executing');
+    expect(s.message).toMatch(/Abgebrochen/);
+  });
+
+  it('new words made unreadable (biometrics changed): says so, stays executing, no app-wide re-entry route', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    h.secure.m.delete('words_phrase_v1'); // the system invalidated the protected item: it reads back as null
+    const heard = jest.fn();
+    const off = onPhraseUnavailable(heard);
+    try {
+      const s = await executeRecoveryStep({ ...state, step: 'executing' }, h.deps);
+      expect(s.step).toBe('executing');
+      expect(s.message).toMatch(/gesperrt/);
+      expect(heard).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it('finalize saves a words record AND session on the OLD Safe address', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    const f = await finalizeRecoveryStep({ ...state, step: 'finalizing', executeAfter: NOW - 1 }, h.deps);
+    expect(f.step).toBe('done');
+    const args = (h.deps.sendUserOp as jest.Mock).mock.calls[0][0] as SafeUserOpArgs;
+    expect(args.calls).toEqual([encodeFinalizeRecovery(WALLET)]);
+    expect(args.deployed).toBe(true);
+    expect(args.signer.proof).toEqual({ ecdsaOwner: NEW_OWNER });
+    expect(await loadPasskeySession(h.sessionStorage)).toMatchObject({
+      safe: WALLET,
+      identity: WALLET,
+      owner: NEW_OWNER,
+      ownerType: 'ecdsa',
+      credentialId: '',
+      x: WORDS_KEY_PLACEHOLDER,
+      y: WORDS_KEY_PLACEHOLDER,
+    });
+    expect(await loadMigrationRecord(h.storage)).toMatchObject({ safe: WALLET, owner: NEW_OWNER, ownerType: 'ecdsa', status: 'done' });
+    expect(h.storage.map.has(MIGRATION_STORE_KEY)).toBe(true);
+  });
+
+  it('someone else finalized: the poll ends in done with the words session', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    h.setOwners([NEW_OWNER]);
+    const p = await pollRecovery({ ...state, step: 'waitingDelay', executeAfter: NOW - 1 }, h.deps);
+    expect(p.step).toBe('done');
+    expect(h.deps.sendUserOp).not.toHaveBeenCalled();
+    expect((await loadPasskeySession(h.sessionStorage))?.owner).toBe(NEW_OWNER);
+    expect(h.sessionStorage.map.has(PASSKEY_SESSION_KEY)).toBe(true);
+  });
+
+  it('resume after an error goes back to waiting (no passkey needed)', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    expect((await resumeRecovery({ ...state, step: 'error' }, h.deps)).step).toBe('waitingForGuardians');
+    expect((await resumeRecovery({ ...state, step: 'error', executeAfter: NOW + 5 }, h.deps)).step).toBe('waitingDelay');
+  });
+
+  it('abandoning before the words were confirmed removes them; confirmed words stay', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    await abandonRecovery(state, h.deps);
+    expect(await h.deps.phrase.has()).toBe(false);
+    expect(h.storage.map.has(RECOVERY_STORE_KEY)).toBe(false);
+
+    // A new attempt is not blocked (E4) and, once confirmed, its words survive "neu beginnen".
+    const again = await startExpert(h);
+    expect(again.phrase).toBe(LEGAL);
+    await h.deps.phrase.markConfirmed();
+    expect(await recoveryWordsStatus(again.state, h.deps.phrase)).toBe('confirmed');
+    await abandonRecovery(again.state, h.deps);
+    expect(await h.deps.phrase.storedOwner()).toBe(NEW_OWNER);
+  });
+
+  it('words replaced by another account are reported as missing; a passkey recovery is always confirmed', async () => {
+    const h = expertDeps();
+    const { state } = await startExpert(h);
+    await h.deps.phrase.markConfirmed();
+    await h.deps.phrase.write(JUNK);
+    expect(await recoveryWordsStatus(state, h.deps.phrase)).toBe('missing');
+    const g = makeDeps();
+    expect(await recoveryWordsStatus(await waiting(g), g.deps.phrase)).toBe('confirmed');
+  });
+
+  it('ownerKindForCode: no code or a 7702 designator = expert owner (E9); other code = passkey', () => {
+    expect(ownerKindForCode(undefined)).toBe('ecdsa');
+    expect(ownerKindForCode('0x')).toBe('ecdsa');
+    expect(ownerKindForCode(`0xef0100${'ab'.repeat(20)}` as Hex)).toBe('ecdsa');
+    expect(ownerKindForCode(`0xef0100${'ab'.repeat(21)}` as Hex)).toBe('passkey');
+    expect(ownerKindForCode('0x6080604052' as Hex)).toBe('passkey');
   });
 });

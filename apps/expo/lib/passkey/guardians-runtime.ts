@@ -20,7 +20,7 @@ import { parseV3Config, readIdentityTokens } from './migration-v3';
 import type { MigrationRecord } from './migration';
 import { secureKeyValueStorage } from './migration-runtime';
 import { resolvePeople, withLabel, type Person, type ProfileRow } from './people';
-import type { RecoveryStorage, WordsRecoveryDeps } from './recovery-flow';
+import { ownerKindForCode, type RecoveryStorage, type WordsRecoveryDeps } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
 import { phraseStore } from './phrase-store-runtime';
 import { isWordsOwner } from './session';
@@ -29,13 +29,13 @@ import {
   DEFAULT_GNOSIS_RPC_URL,
   isSafeDeployed,
   passkeyOpSigner,
-  sendPasskeyUserOp,
   sendSafeUserOp,
   type SafeOpSigner,
   type SponsoredCall,
   type UserOpDeps,
 } from './userop';
 import { createPasskey, signWithPasskey, type PasskeyAssertion } from './webauthn';
+import { randomBytes } from './random';
 import { markWordsRecoveryDone, savePendingVaultKey, type WordsLookupChain } from './words-recovery';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
@@ -258,6 +258,17 @@ export const wordsLookupChain: WordsLookupChain = {
   linkedLegacies: (w) => findLinkedLegacies(w, lookupChain),
 };
 
+/**
+ * What a recovery of `wallet` installs (E9): its single owner without contract code, or with an
+ * EIP-7702 designator, is a plain key → an expert account, recovered to new 12 words. Read
+ * errors propagate (never guess the kind).
+ */
+export async function readRecoveryOwnerKind(wallet: Address): Promise<'passkey' | 'ecdsa'> {
+  const owners = await readSafeOwners(wallet);
+  if (owners.length !== 1) return 'passkey';
+  return ownerKindForCode(await readClient.getCode({ address: owners[0] }));
+}
+
 /** Deps for both recovery methods (the words path also reads guardians + nonce and keeps the vault key). */
 export function createRecoveryDeps(): WordsRecoveryDeps {
   return {
@@ -269,7 +280,12 @@ export function createRecoveryDeps(): WordsRecoveryDeps {
     readRequest: (w) => readRecoveryRequest(w),
     readOwners: readSafeOwners,
     isSafeDeployed: (s) => isSafeDeployed(s),
-    sendPasskeyUserOp: (a) => sendPasskeyUserOp(a),
+    sendUserOp: (a) => sendSafeUserOp(a),
+    signPasskey: signWithPasskey,
+    phrase: phraseStore,
+    random: randomBytes,
+    // The session slot signin-runtime reads (not imported: signin-runtime imports this module).
+    sessionStorage: { setItem: (key, value) => SecureStore.setItemAsync(key, value) },
     readGuardians: (w) => readGuardians(w),
     readNonce: (w) => readRecoveryNonce(w),
     saveVaultKey: async (k, wallet) => {

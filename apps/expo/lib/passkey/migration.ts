@@ -140,14 +140,24 @@ async function saveRecord(storage: KeyValueStorage, rec: MigrationRecord): Promi
 }
 
 /**
- * Persists a Safe recovered to this device's passkey (after `finalizeRecovery`): the address is the
- * OLD Safe, the owner is `readWebAuthnSigner(x, y)`. Replaces any record on this device.
+ * Persists a Safe recovered to this device (after `finalizeRecovery`): the address is the OLD Safe,
+ * the owner is `readWebAuthnSigner(x, y)` of the new passkey, or for an expert account
+ * (`ownerType: 'ecdsa'`) address 0 of the new 12 words (`credentialId: ''`, x/y =
+ * WORDS_KEY_PLACEHOLDER). Replaces any record on this device.
  */
 export async function saveRecoveredRecord(
   storage: KeyValueStorage,
-  rec: { credentialId: string; x: Hex; y: Hex; safe: Address; owner: Address; legacy?: Address },
+  rec: {
+    credentialId: string;
+    x: Hex;
+    y: Hex;
+    safe: Address;
+    owner: Address;
+    legacy?: Address;
+    ownerType?: 'webauthnSigner' | 'ecdsa';
+  },
 ): Promise<MigrationRecord> {
-  const full: MigrationRecord = { ...rec, ownerType: 'webauthnSigner', status: 'done', txHash: null };
+  const full: MigrationRecord = { ...rec, ownerType: rec.ownerType ?? 'webauthnSigner', status: 'done', txHash: null };
   await saveRecord(storage, full);
   return full;
 }
