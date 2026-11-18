@@ -15,6 +15,7 @@ import { getApiBaseUrl, type ApiResult, type SigningAccount } from '@/lib/signed
 import { fetchMineFull } from './api';
 import { registryReader } from './chain';
 import { credentialsConfigured, useCredentialsGate } from './gate';
+import { readCollectQueue } from './collect-queue';
 import { readyClaimCalls, rememberReady, settleArrivedBadges } from './pending';
 import type { CredentialKind, InvitationView, MineResult, PendingBadge } from './types';
 
@@ -33,6 +34,10 @@ export type HeldCredential = {
   benefits?: string[];
   /** The org lets members show this type publicly. Absent = unknown (treated as allowed). */
   publicAllowed?: boolean;
+  /** Event badges: the event (collection year groups, "Ansehen" from the stamp moment). */
+  eventId?: string;
+  eventTitle?: string;
+  eventDate?: string;
 };
 
 type Reader = Pick<CredentialRegistryReader, 'holdsMany'>;
@@ -80,6 +85,9 @@ function cacheEntry(v: unknown): HeldCredential | null {
     invitationId: e.invitationId as string | null,
     ...(Array.isArray(e.benefits) ? { benefits: e.benefits.filter((b): b is string => typeof b === 'string') } : {}),
     ...(typeof e.publicAllowed === 'boolean' ? { publicAllowed: e.publicAllowed } : {}),
+    ...(typeof e.eventId === 'string' ? { eventId: e.eventId } : {}),
+    ...(typeof e.eventTitle === 'string' ? { eventTitle: e.eventTitle } : {}),
+    ...(typeof e.eventDate === 'string' ? { eventDate: e.eventDate } : {}),
     claim: null, // never stored: proofs and claim signatures come only from the server
   };
 }
@@ -187,6 +195,9 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
         claim: i.claim,
         benefits: Array.isArray(i.type.benefits) ? i.type.benefits : [],
         publicAllowed: i.type.publicClaimAllowed !== false,
+        ...(i.type.eventId ? { eventId: i.type.eventId } : {}),
+        ...(i.type.eventTitle ? { eventTitle: i.type.eventTitle } : {}),
+        ...(i.type.eventDate ? { eventDate: i.type.eventDate } : {}),
       };
     });
   if (onChain) await writeCache(account.address, held);
@@ -310,9 +321,9 @@ export function announceHeldChanged(): void {
   changeListeners.forEach((l) => l());
 }
 
-type HookState = { owner: string; held: HeldCredential[]; pending: InvitationView[]; pendingBadges: PendingBadge[]; readyClaims: number };
+type HookState = { owner: string; held: HeldCredential[]; pending: InvitationView[]; pendingBadges: PendingBadge[]; readyClaims: number; queued: string[] };
 /** `pending` absent = keep what is shown (the cache holds no invitations). */
-type HookUpdate = { owner: string; held: HeldCredential[]; pending?: InvitationView[]; pendingBadges?: PendingBadge[]; readyClaims?: number };
+type HookUpdate = { owner: string; held: HeldCredential[]; pending?: InvitationView[]; pendingBadges?: PendingBadge[]; readyClaims?: number; queued?: string[] };
 
 const merge = (prev: HookState | null, u: HookUpdate): HookState => {
   const same = prev?.owner === u.owner;
@@ -322,6 +333,7 @@ const merge = (prev: HookState | null, u: HookUpdate): HookState => {
     pending: u.pending ?? (same ? prev.pending : []),
     pendingBadges: u.pendingBadges ?? (same ? prev.pendingBadges : []),
     readyClaims: u.readyClaims ?? (same ? prev.readyClaims : 0),
+    queued: u.queued ?? (same ? prev.queued : []),
   };
 };
 
@@ -329,14 +341,15 @@ const merge = (prev: HookState | null, u: HookUpdate): HookState => {
  * loadHolder, then arrived badges are settled by the person's stored wish (pending.ts) and, when
  * that changed anything, loaded once more. Never throws past loadHolder's own behaviour.
  */
-async function loadAndSettle(account: SigningAccount): Promise<HolderState & { readyClaims: number }> {
+async function loadAndSettle(account: SigningAccount): Promise<HolderState & { readyClaims: number; queued: string[] }> {
   let r = await loadHolder(account);
   if (!r.fromCache && r.pending.some((i) => i.type.kind === 'badge')) {
     const settled = await settleArrivedBadges(account, r.pending).catch(() => ({ acceptedPrivately: 0, ready: [] }));
     if (settled.acceptedPrivately + settled.ready.length > 0) r = await loadHolder(account);
   }
   const readyClaims = r.fromCache ? 0 : (await readyClaimCalls(account.address).catch(() => [])).length;
-  return { ...r, readyClaims };
+  const queued = (await readCollectQueue(account.address)).map((e) => e.eventId);
+  return { ...r, readyClaims, queued };
 }
 
 /** The signed-in person's credentials. Does nothing while the gate is closed or loading. */
@@ -347,6 +360,8 @@ export function useHeld(): {
   pendingBadges: PendingBadge[];
   /** How many accepted public badges wait for their claim (the collection banner). */
   readyClaims: number;
+  /** Ids of event QR scans waiting offline. */
+  queued: string[];
   refresh(): Promise<void>;
   loading: boolean;
 } {
@@ -370,8 +385,8 @@ export function useHeld(): {
         .then((r) =>
           onUpdate(
             r.fromCache
-              ? { owner, held: r.held }
-              : { owner, held: r.held, pending: r.pending, pendingBadges: r.pendingBadges, readyClaims: r.readyClaims },
+              ? { owner, held: r.held, queued: r.queued }
+              : { owner, held: r.held, pending: r.pending, pendingBadges: r.pendingBadges, readyClaims: r.readyClaims, queued: r.queued },
           ),
         )
         .finally(() => setLoadingFor((cur) => (cur === owner ? null : cur)));
@@ -410,6 +425,7 @@ export function useHeld(): {
     pending: mine?.pending ?? [],
     pendingBadges: mine?.pendingBadges ?? [],
     readyClaims: mine?.readyClaims ?? 0,
+    queued: mine?.queued ?? [],
     refresh,
     loading: open && loadingFor === address,
   };

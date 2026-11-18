@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { claimReward, rewardAmountToMuenzen, type ClaimResult, type RewardAction } from '@/lib/rewards-claim';
 import { supabase } from '@/lib/supabase';
 import { fetchPublicEventBadge } from './api';
+import { formatEventDate } from './collect-format';
 import { enqueueCollect, isNetworkFailure } from './collect-queue';
 import { isCredentialsAllowed } from './gate';
 import type { PublicEventBadge } from './types';
@@ -27,6 +28,8 @@ export type CollectState =
   | { kind: 'error'; message: string };
 
 export type MomentAction = 'ansehen' | 'teilen' | 'weiter' | 'anmelden' | 'erneut';
+
+export { formatEventDate };
 
 export const MOMENT_ACTION_LABELS: Record<MomentAction, string> = {
   ansehen: 'Ansehen',
@@ -59,16 +62,6 @@ export function stateFromClaim(r: ClaimResult, badge: BadgeInfo | null): Collect
     default:
       return { kind: 'error', message: r.reason || GENERIC_ERROR };
   }
-}
-
-const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-
-/** "2026-12-05" → "5. Dezember 2026"; anything else unchanged. */
-export function formatEventDate(date: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date ?? '');
-  if (!m) return date ?? '';
-  const month = MONTHS[Number(m[2]) - 1];
-  return month ? `${Number(m[3])}. ${month} ${m[1]}` : date;
 }
 
 const badgeLines = (b: BadgeInfo | null) => (b ? [b.eventTitle, formatEventDate(b.eventDate)].filter(Boolean) : []);

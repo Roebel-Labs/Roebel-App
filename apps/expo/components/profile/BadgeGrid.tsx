@@ -1,11 +1,22 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import type { RegisterCard } from '@/lib/credreg/model';
+import StampCard from '@/components/credentials/StampCard';
+import { formatEventDate } from '@/lib/credreg/collect-format';
+import { groupBadgesByYear, type BadgeTile, type RegisterCard } from '@/lib/credreg/model';
+import type { PendingBadge } from '@/lib/credreg/types';
 
 type Props = {
   badges: RegisterCard[];
   onPress: (card: RegisterCard) => void;
+  /** Own profile: attended events whose badge has not been issued yet ("wird eingetragen"). */
+  pending?: PendingBadge[];
+  /** Own profile: ids of scans waiting offline ("wird gesammelt"). */
+  queued?: string[];
+  /** A pending or queued tile was pressed (collected tiles go to `onPress`). */
+  onPressTile?: (tile: BadgeTile) => void;
+  /** Own profile: show the "collect your first" explanation instead of nothing. */
+  emptyState?: boolean;
   /** Horizontal padding the grid applies itself (the profile sheet has none, so 16). */
   inset?: number;
   /** Horizontal padding the parent already applies on each side. */
@@ -15,11 +26,23 @@ type Props = {
 const COLUMNS = 3;
 const GAP = 12;
 
-/** "Abzeichen": three columns of square tiles, title under each. Nothing for an empty list. */
-export default function BadgeGrid({ badges, onPress, inset = 16, parentInset = 0 }: Props) {
+export const BADGE_EMPTY_TEXT =
+  'Noch keine Abzeichen. Scanne bei einer Veranstaltung den QR-Code am Eingang, dann landet dein erstes Abzeichen hier.';
+
+const tileLabel = (t: BadgeTile) =>
+  [t.title, t.state === 'pending' ? 'wird eingetragen' : t.state === 'queued' ? 'wird gesammelt' : null, t.card?.state === 'expired' ? 'Abgelaufen' : null]
+    .filter(Boolean)
+    .join(', ');
+
+/**
+ * "Abzeichen" (spec 5.6b): stamp tiles in three columns, one sub-heading per year (newest first).
+ * Empty: nothing on another person's profile, an explanation on the own one.
+ */
+export default function BadgeGrid({ badges, onPress, pending = [], queued = [], onPressTile, emptyState = false, inset = 16, parentInset = 0 }: Props) {
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
-  if (badges.length === 0) return null;
+  const groups = groupBadgesByYear(badges, pending, queued);
+  if (groups.length === 0 && !emptyState) return null;
   const tile = Math.floor((screenWidth - (inset + parentInset) * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
 
   return (
@@ -27,49 +50,37 @@ export default function BadgeGrid({ badges, onPress, inset = 16, parentInset = 0
       <Text style={[styles.heading, { color: colors.textPrimary }]} accessibilityRole="header">
         Abzeichen
       </Text>
-      <View style={styles.grid}>
-        {badges.map((badge) => (
-          <Pressable
-            key={badge.key}
-            onPress={() => onPress(badge)}
-            accessibilityRole="button"
-            accessibilityLabel={badge.state === 'expired' ? `${badge.title}, Abgelaufen` : badge.title}
-            style={[styles.cell, { width: tile }]}
-          >
-            <View
-              style={[
-                styles.tile,
-                { width: tile, height: tile, backgroundColor: colors.surfaceSecondary },
-                badge.state === 'expired' && styles.dimmed,
-              ]}
-            >
-              {badge.imageUrl ? (
-                <Image source={{ uri: badge.imageUrl }} style={{ width: tile, height: tile }} resizeMode="cover" />
-              ) : (
-                <RibbonMark size={Math.round(tile * 0.42)} color={colors.primary} />
-              )}
+      {groups.length === 0 ? (
+        <View style={[styles.empty, { borderColor: colors.border }]}>
+          <View style={[styles.emptyStamp, { borderColor: colors.border }]} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{BADGE_EMPTY_TEXT}</Text>
+        </View>
+      ) : (
+        groups.map((g) => (
+          <View key={g.year} style={styles.group}>
+            <Text style={[styles.year, { color: colors.textSecondary }]}>{String(g.year)}</Text>
+            <View style={styles.grid}>
+              {g.items.map((t) => (
+                <Pressable
+                  key={t.key}
+                  onPress={() => (t.card ? onPress(t.card) : onPressTile?.(t))}
+                  accessibilityRole="button"
+                  accessibilityLabel={tileLabel(t)}
+                  style={[{ width: tile }, t.card?.state === 'expired' && styles.dimmed]}
+                >
+                  <StampCard
+                    imageUrl={t.imageUrl}
+                    title={t.title}
+                    subtitle={t.date ? formatEventDate(t.date) : ''}
+                    state={t.state}
+                    size="tile"
+                  />
+                </Pressable>
+              ))}
             </View>
-            <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-              {badge.title}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** The neutral default badge: a medal disc with two ribbon tails, drawn with views. */
-function RibbonMark({ size, color }: { size: number; color: string }) {
-  const tailW = Math.round(size * 0.28);
-  const tailH = Math.round(size * 0.5);
-  return (
-    <View style={{ width: size, height: size + tailH * 0.6, alignItems: 'center' }}>
-      <View style={[styles.tails, { top: size * 0.6 }]}>
-        <View style={{ width: tailW, height: tailH, backgroundColor: color, opacity: 0.7, transform: [{ rotate: '18deg' }] }} />
-        <View style={{ width: tailW, height: tailH, backgroundColor: color, opacity: 0.7, transform: [{ rotate: '-18deg' }] }} />
-      </View>
-      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+          </View>
+        ))
+      )}
     </View>
   );
 }
@@ -83,32 +94,43 @@ const styles = StyleSheet.create({
     fontFamily: 'MonaSansSemiCondensed-Bold',
     marginBottom: 12,
   },
+  group: {
+    marginBottom: 16,
+  },
+  year: {
+    fontSize: 13,
+    fontFamily: 'MonaSans-SemiBold',
+    marginBottom: 8,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     columnGap: GAP,
-    rowGap: 16,
-  },
-  cell: {
-    gap: 6,
-  },
-  tile: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    rowGap: 12,
   },
   dimmed: {
     opacity: 0.45,
   },
-  title: {
-    fontSize: 13,
-    fontFamily: 'MonaSans-Medium',
-    textAlign: 'center',
-  },
-  tails: {
-    position: 'absolute',
+  empty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
-    gap: 2,
+    alignItems: 'center',
+    gap: 14,
+  },
+  emptyStamp: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  emptyText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'MonaSans-Regular',
+    lineHeight: 20,
   },
 });

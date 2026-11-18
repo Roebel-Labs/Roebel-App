@@ -14,7 +14,7 @@ import type { Caller } from "./caller";
 import { badgeTypeOf } from "./event-badges";
 import type { NodeRegistryReader } from "./rights";
 import { openSecret } from "./secrets";
-import type { AccountRow, BatchRow, CredentialStore, InvitationRow, TypeRow } from "./store";
+import type { AccountRow, BatchRow, CredentialStore, EventRow, InvitationRow, TypeRow } from "./store";
 import type { CredentialAction } from "../signed-request/message";
 
 /** The actions of POST /api/credentials/me. holdings and present_resolve also accept a pairing session. */
@@ -48,6 +48,9 @@ export type InvitationView = {
     benefits: string[];
     /** The event of an event badge (the app keys the person's public/private wish by it). */
     eventId: string | null;
+    /** Its title and day ("YYYY-MM-DD"): the collection groups badges by year. */
+    eventTitle: string | null;
+    eventDate: string | null;
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
@@ -107,6 +110,7 @@ function viewContext(d: HolderDeps) {
   const types = new Map<string, Promise<TypeRow | null>>();
   const accounts = new Map<string, Promise<AccountRow | null>>();
   const privateOnly = new Map<string, Promise<boolean>>();
+  const events = new Map<string, Promise<EventRow | null>>();
   const memo = <T>(m: Map<string, Promise<T>>, k: string, f: () => Promise<T>) => {
     if (!m.has(k)) m.set(k, f());
     return m.get(k)!;
@@ -115,6 +119,7 @@ function viewContext(d: HolderDeps) {
     batch: (id: string) => memo(batches, id, () => d.store.getBatch(id)),
     type: (id: Hex) => memo(types, id.toLowerCase(), () => d.store.getType(id)),
     account: (id: string) => memo(accounts, id, () => d.store.getAccount(id)),
+    event: (id: string) => memo(events, id, () => d.store.getEvent(id)),
     // Read from the chain at request time: an org that was just opened is open right away.
     privateOnly: (orgId: Hex) => memo(privateOnly, orgId.toLowerCase(), () => d.reader.orgPrivateOnly(orgId)),
   };
@@ -135,6 +140,7 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
   if (!type || !type.kind) return null;
   const account = type.accountId ? await ctx.account(type.accountId) : null;
   const privateOnly = type.kind === "membership" ? await ctx.privateOnly(type.orgId) : false;
+  const event = type.eventId ? await ctx.event(type.eventId) : null;
   const revoked = inv.status === "revoked" || batch.status === "revoked";
   return {
     id: inv.id,
@@ -149,6 +155,8 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
       publicClaimAllowed: type.publicClaim && !privateOnly,
       benefits: type.benefits,
       eventId: type.eventId ?? null,
+      eventTitle: event?.title ?? null,
+      eventDate: event?.date ?? null,
     },
     org: account ? { accountId: account.id, name: account.name, avatarUrl: account.avatarUrl } : null,
     validUntil: isoOfSeconds(inv.validUntil),

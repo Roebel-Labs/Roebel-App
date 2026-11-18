@@ -2,12 +2,11 @@
  * A badge as a stamp on a card (spec 5.6b visual language): round stamp art inside a card frame,
  * never a "token". Without art a neutral ink stamp is drawn with views. `pending` = the organiser
  * has not issued it yet ("wird eingetragen"); `queued` = scanned offline ("wird gesammelt").
- * StampMoment passes animated styles for the stamp layer and the ink ring.
+ * StampMoment passes an animated layer component (Animated.View) with styles for the stamp and
+ * the ink ring; the card itself loads no animation module, so grids and sheets stay light.
  */
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
-import { Image } from 'expo-image';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 
@@ -27,8 +26,8 @@ export const STAMP_CHIPS: Record<Exclude<StampState, 'collected'>, string> = {
 };
 
 const SIZES = {
-  tile: { card: 0, stamp: 76, title: 13, subtitle: 11, pad: 10 },
-  hero: { card: 0, stamp: 168, title: 20, subtitle: 14, pad: 20 },
+  tile: { stamp: 64, title: 13, subtitle: 11, pad: 10 },
+  hero: { stamp: 168, title: 20, subtitle: 14, pad: 20 },
 } as const;
 
 export default function StampCard({
@@ -39,7 +38,8 @@ export default function StampCard({
   size,
   stampStyle,
   inkStyle,
-}: StampCardProps & { stampStyle?: object; inkStyle?: object }) {
+  Layer = View,
+}: StampCardProps & { stampStyle?: object; inkStyle?: object; Layer?: React.ComponentType<{ style?: unknown; children?: React.ReactNode }> }) {
   const { colors } = useTheme();
   const s = SIZES[size];
   const faded = state !== 'collected';
@@ -52,20 +52,22 @@ export default function StampCard({
       accessibilityLabel={[title, subtitle, chip].filter(Boolean).join(', ')}
     >
       <View style={{ width: ring, height: ring, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View
+        <Layer
           style={[styles.ink, { width: ring, height: ring, borderRadius: ring / 2, borderColor: colors.primary, opacity: faded ? 0.35 : 1 }, inkStyle]}
         />
-        <Animated.View style={[{ width: s.stamp, height: s.stamp, opacity: faded ? 0.55 : 1 }, stampStyle]}>
+        <Layer style={[{ width: s.stamp, height: s.stamp, opacity: faded ? 0.55 : 1 }, stampStyle]}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={{ width: s.stamp, height: s.stamp, borderRadius: s.stamp / 2 }} contentFit="cover" />
+            <Image source={{ uri: imageUrl }} style={{ width: s.stamp, height: s.stamp, borderRadius: s.stamp / 2 }} resizeMode="cover" />
           ) : (
             <DefaultStamp size={s.stamp} color={colors.primary} />
           )}
-        </Animated.View>
+        </Layer>
       </View>
-      <Text style={[styles.title, { fontSize: s.title, color: colors.textPrimary }]} numberOfLines={2}>
-        {title}
-      </Text>
+      {title ? (
+        <Text style={[styles.title, { fontSize: s.title, color: colors.textPrimary }]} numberOfLines={2}>
+          {title}
+        </Text>
+      ) : null}
       {subtitle ? (
         <Text style={[styles.subtitle, { fontSize: s.subtitle, color: colors.textSecondary }]} numberOfLines={1}>
           {subtitle}

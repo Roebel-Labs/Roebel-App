@@ -6,6 +6,7 @@
  */
 import React, { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
@@ -37,7 +38,7 @@ export default function StampMoment({ stamp, headline, lines, muenzen, actions, 
     <SafeAreaView style={[styles.root, { backgroundColor: colors.primary }]} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
         <View style={styles.stampWrap}>
-          <StampCard {...stamp} stampStyle={cardStyle} inkStyle={inkStyle} />
+          <StampCard {...stamp} stampStyle={cardStyle} inkStyle={inkStyle} Layer={Animated.View as never} />
         </View>
         <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={[styles.headline, { color: fg }]}>
           {headline}

@@ -110,4 +110,6 @@ test("an attendee who already has an invitation is not pending; refunded tickets
   assert.equal(r.invitations[0].type.typeId, w.fest.typeId);
   // The app keys the person's public/private wish by the event.
   assert.equal(r.invitations[0].type.eventId, FEST);
+  assert.equal(r.invitations[0].type.eventTitle, "Sommerfest");
+  assert.equal(r.invitations[0].type.eventDate, "2026-12-05");
 });
