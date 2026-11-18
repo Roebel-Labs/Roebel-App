@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { createWebMiniAppHost, type WebMiniAppHost } from "@/lib/miniapp-host";
 import { fetchUserTokenWithAccount, invalidateUserToken } from "@/lib/miniapp/clientToken";
 import type { MiniAppRow } from "@/lib/miniapp/types";
-import { previewCredentials } from "@/lib/miniapp/identityReview";
+import { previewCredentials, previewWalletOverrides } from "@/lib/miniapp/identityReview";
 import type { MiniAppIdentityRequest, MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
 import { credentialMatches, type HostHandlers } from "@netizen-labs/miniapp-sdk/host";
 
@@ -102,6 +102,8 @@ export function Playground({
         credentialsList: async () => creds,
         credentialsHas: async ({ type }) => holds(type),
         credentialsRequest: async ({ types }) => ({ granted: (types ?? []).filter(holds) }),
+        // "Adresse freigeben" off: no wallet account, signing refused (as in the app).
+        ...previewWalletOverrides(grantAddress && identity.address),
       };
     }
 

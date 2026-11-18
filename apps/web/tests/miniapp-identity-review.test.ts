@@ -6,6 +6,7 @@ import {
   identityFromManifest,
   needsIdentityReview,
   previewCredentials,
+  previewWalletOverrides,
 } from "../src/lib/miniapp/identityReview";
 
 const T = "type:0x" + "ab".repeat(32);
@@ -68,4 +69,14 @@ test("the reviewer preview only shows toggled types the manifest requests", () =
   assert.deepEqual(previewCredentials(identity, { citizen: false, attester: true }), []);
   const c = previewCredentials(identity, { citizen: true, attester: false })[0];
   assert.deepEqual(c, { type: "citizen", kind: "builtin", name: "Bürger:in", validUntil: null, recognised: true });
+});
+
+test("the Playground hides the wallet when the address is not shared", async () => {
+  const o = previewWalletOverrides(false);
+  assert.equal(await o.walletGetAccount?.(), null);
+  await assert.rejects(Promise.resolve().then(() => o.walletRequest?.({ method: "eth_accounts" })), (e: { code?: string }) => e.code === "unauthorized");
+});
+
+test("the Playground keeps the real wallet handlers when the address is shared", () => {
+  assert.deepEqual(previewWalletOverrides(true), {});
 });

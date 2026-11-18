@@ -2,7 +2,7 @@
 // What a version-2 manifest asks to know about a person, laid out for the admin review and
 // the reviewer Playground. Pure and client-safe: no server imports, no chain access.
 import type { Credential, MiniAppIdentityRequest } from "@netizen-labs/miniapp-sdk";
-import type { ConsentKey } from "@netizen-labs/miniapp-sdk/host";
+import type { ConsentKey, HostHandlers } from "@netizen-labs/miniapp-sdk/host";
 
 /** Display names of the built-in credential types (shared with credentialSource.ts). */
 export const BUILTIN_CREDENTIAL_NAMES: Record<"citizen" | "attester" | "guest", string> = {
@@ -93,3 +93,17 @@ export function previewCredentials(
 /** The review route's refusal when an approval lacks the identity confirmation. */
 export const IDENTITY_REVIEW_MESSAGE =
   "Bitte bestätige, dass die angefragten Daten zu dem passen, was die App tut.";
+
+/**
+ * Playground (version 2): without "Adresse freigeben" the app gets no wallet, like in the Röbel
+ * app (no account, signing calls refused). With the address shared, the real handlers stay.
+ */
+export function previewWalletOverrides(addressShared: boolean): Partial<HostHandlers> {
+  if (addressShared) return {};
+  return {
+    walletGetAccount: () => null,
+    walletRequest: () => {
+      throw { code: "unauthorized", message: "Die Kontoadresse ist für diese Mini-App nicht freigegeben." };
+    },
+  };
+}
