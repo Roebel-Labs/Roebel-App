@@ -27,7 +27,35 @@ const chain = gnosis;
 /** Host chain the smart account signs on (Gnosis, chainId 100). */
 export const HOST_CHAIN_ID = chain.id;
 
-export type BridgeErrorLike = { code: string; message: string };
+export type BridgeErrorLike = { code: string; message: string; rpcCode?: number };
+
+/** The standard EIP-1193 "unrecognized chain" error: the host only runs on Gnosis. */
+export function unsupportedChain(): BridgeErrorLike & { rpcCode: 4902 } {
+  return { code: 'unsupported', message: 'Diese Mini-App läuft nur auf der Gnosis Chain.', rpcCode: 4902 };
+}
+
+/**
+ * Throws `unsupportedChain()` unless `chainId` names the host chain (100). `undefined` means
+ * "not specified" and is accepted; `100`, `'0x64'` and `'100'` are the accepted spellings.
+ */
+export function assertHostChain(chainId: unknown): void {
+  if (chainId === undefined) return;
+  if (chainId === HOST_CHAIN_ID) return;
+  if (typeof chainId === 'string') {
+    const s = chainId.trim().toLowerCase();
+    if (s === `0x${HOST_CHAIN_ID.toString(16)}` || s === String(HOST_CHAIN_ID)) return;
+  }
+  throw unsupportedChain();
+}
+
+/** The `chainId` of a `wallet_switchEthereumChain` / `wallet_addEthereumChain` request. */
+function requestedChain(params: unknown[]): unknown {
+  const p = params[0];
+  if (!p || typeof p !== 'object' || !('chainId' in p)) {
+    throw invalidParams('chainId fehlt.');
+  }
+  return (p as { chainId: unknown }).chainId;
+}
 
 export function userRejected(): BridgeErrorLike {
   return { code: 'user_rejected', message: 'Nutzer hat die Aktion abgelehnt.' };
@@ -100,6 +128,7 @@ interface RawTx {
   value?: string;
   data?: string;
   gas?: string;
+  chainId?: unknown;
 }
 
 export interface ParsedRequest {
@@ -204,9 +233,14 @@ export async function handleReadOnly(
     case 'eth_requestAccounts':
       return account?.address ? [account.address] : [];
     case 'wallet_switchEthereumChain':
-    case 'wallet_addEthereumChain':
-      // Single-chain host; treat as no-op success.
+    case 'wallet_addEthereumChain': {
+      // Single-chain host: "switching" to Gnosis is a no-op, any other chain is refused
+      // with the standard error instead of pretending to switch.
+      const chainId = requestedChain(params);
+      if (chainId === undefined) throw invalidParams('chainId fehlt.');
+      assertHostChain(chainId);
       return null;
+    }
     default:
       throw unsupported(method);
   }
@@ -224,6 +258,7 @@ export async function executeSigning(
 ): Promise<unknown> {
   if (method === 'eth_sendTransaction') {
     const tx = (params[0] ?? {}) as RawTx;
+    assertHostChain(tx.chainId);
     if (!tx.to && !tx.data) throw invalidParams('Transaktion braucht `to` oder `data`.');
     const transaction = prepareTransaction({
       client,
