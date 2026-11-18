@@ -4,8 +4,7 @@
 import { NextRequest } from "next/server";
 import type { Address, Hex } from "viem";
 import { failResponse, jsonFail, jsonOk } from "@/lib/signed-request/verify";
-import type { CredentialAction } from "@/lib/signed-request/message";
-import { authenticateCaller } from "@/lib/credentials/caller";
+import { authenticateCaller, ORG_ACTIONS } from "@/lib/credentials/caller";
 import {
   listActions,
   listOrgs,
@@ -16,8 +15,8 @@ import {
   viaOf,
   type Result,
 } from "@/lib/credentials/actions";
-import { prepareBatch, prepareRevocation, type RecipientInput } from "@/lib/credentials/batch";
-import { listPeople, parsePeopleCsv, searchPeople } from "@/lib/credentials/people";
+import { prepareBatch, prepareRevocation, previewPeople, type BatchInput, type RecipientInput } from "@/lib/credentials/batch";
+import { listPeople, searchPeople } from "@/lib/credentials/people";
 import { credentialDeps } from "@/lib/credentials/runtime";
 import { prepareLetters } from "@/lib/credentials/delivery";
 import { renderLetters } from "@/lib/credentials/letters";
@@ -25,22 +24,19 @@ import { renderLetters } from "@/lib/credentials/letters";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ACTIONS: readonly CredentialAction[] = [
-  "types_list",
-  "type_prepare",
-  "delegate_prepare",
-  "members_public_prepare",
-  "orgs_list",
-  "actions_list",
-  "people_list",
-  "people_search",
-  "batch_prepare",
-  "revoke_prepare",
-  "letters",
-];
-
-/** Upper bound for a pasted list (2000 people fit comfortably). */
-const MAX_CSV_CHARS = 512 * 1024;
+/** The shared input of people_preview and batch_prepare (the csv is parsed and validated by lib/credentials/batch). */
+function batchInput(p: Record<string, unknown>): BatchInput {
+  return {
+    accountId: String(p.accountId ?? ""),
+    typeId: p.typeId as BatchInput["typeId"],
+    recipients: p.recipients as RecipientInput[] | undefined,
+    csv: p.csv as string | undefined,
+    fromMemberList: p.fromMemberList === true,
+    validUntil: p.validUntil as string | undefined,
+    source: p.source as BatchInput["source"],
+    dropRejected: p.dropRejected === true,
+  };
+}
 
 function respond<T>(r: Result<T>) {
   return r.ok ? jsonOk(r.data) : jsonFail(r.status, r.code, r.message);
@@ -50,7 +46,7 @@ export async function POST(request: NextRequest) {
   const d = credentialDeps();
   if (!d) return jsonFail(503, "NOT_CONFIGURED", "Das Ausweis-Register ist auf diesem Knoten nicht eingerichtet.");
   const body = await request.json().catch(() => null);
-  const c = await authenticateCaller(request, body, ACTIONS);
+  const c = await authenticateCaller(request, body, ORG_ACTIONS);
   if (!c.ok) return failResponse(c);
   const p = c.payload;
   const via = viaOf(c, p.client);
@@ -98,24 +94,10 @@ export async function POST(request: NextRequest) {
         return respond(await listPeople(d, c, { accountId: String(p.accountId ?? ""), typeId: p.typeId as Hex }));
       case "people_search":
         return respond(await searchPeople(d, c, { accountId: String(p.accountId ?? ""), query: String(p.query ?? "") }));
-      case "batch_prepare": {
-        let recipients = p.recipients as RecipientInput[] | undefined;
-        if (typeof p.csv === "string") {
-          if (p.csv.length > MAX_CSV_CHARS) return jsonFail(400, "BAD_REQUEST", "Die Liste ist zu groß.");
-          // Validated (with row numbers) by prepareBatch.
-          recipients = [...(Array.isArray(recipients) ? recipients : []), ...(parsePeopleCsv(p.csv) as RecipientInput[])];
-        }
-        return respond(
-          await prepareBatch(d, c, {
-            accountId: String(p.accountId ?? ""),
-            typeId: p.typeId as Hex,
-            recipients,
-            fromMemberList: p.fromMemberList === true,
-            validUntil: p.validUntil as string | undefined,
-            source: p.source as "people" | "member_list" | "event" | undefined,
-          }),
-        );
-      }
+      case "people_preview":
+        return respond(await previewPeople(d, c, batchInput(p)));
+      case "batch_prepare":
+        return respond(await prepareBatch(d, c, batchInput(p)));
       case "revoke_prepare":
         return respond(
           await prepareRevocation(d, c, {
