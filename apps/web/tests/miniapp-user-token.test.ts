@@ -76,6 +76,13 @@ test("a token from an unknown issuer is refused", async () => {
   assert.deepEqual(r, { ok: false, code: "wrong_issuer" });
 });
 
+test("an issuer differing only by a trailing slash still verifies (MINIAPP_ISSUER_URL vs roebel-id ISSUER_URL)", async () => {
+  const slashed = await localTokenIssuer({ issuer: `${ISS}/`, privateJwk });
+  assert.equal((await verify(await slashed.sign(claims))).ok, true);
+  assert.equal((await verify(await issuer.sign(claims), { issuers: [`${ISS}//`] })).ok, true);
+  assert.deepEqual(await verify(await issuer.sign(claims), { issuers: [`${ISS}/x`] }), { ok: false, code: "wrong_issuer" });
+});
+
 test("alg none and HS256 are refused", async () => {
   const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const body = b64({ iss: ISS, aud: "miniapp:demo", sub: W, app: APP, v: 1, iat: 1000, exp: 1600 });

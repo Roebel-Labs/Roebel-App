@@ -87,6 +87,21 @@ export async function localTokenIssuer(p: { issuer: string; privateJwk: PrivateJ
   };
 }
 
+/**
+ * Every accepted issuer with and without a trailing slash: the node's MINIAPP_ISSUER_URL and the
+ * identity service's ISSUER_URL (apps/roebel-id config.issuer, the `iss` it signs with) must name
+ * the same URL; a trailing slash on either side is the one difference tolerated.
+ */
+function issuerVariants(issuers: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const i of issuers) {
+    const bare = i.replace(/\/+$/, "");
+    out.add(bare);
+    out.add(`${bare}/`);
+  }
+  return [...out];
+}
+
 export async function verifyUserToken(
   token: string,
   p: { keys: TokenKeyResolver; issuers: readonly string[]; audience: string; nowSec?: number },
@@ -95,7 +110,7 @@ export async function verifyUserToken(
     const { payload } = await jwtVerify(token, p.keys as never, {
       algorithms: ["ES256", "RS256"],
       typ: MINIAPP_TOKEN_TYP,
-      issuer: [...p.issuers],
+      issuer: issuerVariants(p.issuers),
       audience: p.audience,
       clockTolerance: MINIAPP_TOKEN_CLOCK_TOLERANCE_SEC,
       ...(p.nowSec !== undefined ? { currentDate: new Date(p.nowSec * 1000) } : {}),
@@ -224,6 +239,9 @@ export interface TokenKeysDeps {
  *   (`<issuer>/jwks`, oidc-provider's default `jwks_uri`).
  * - issuers: both.
  * null when neither is configured.
+ *
+ * MINIAPP_ISSUER_URL must equal the identity service's ISSUER_URL (the `iss` it signs with); only
+ * a trailing slash may differ (verifyUserToken accepts both forms).
  */
 export function tokenKeysFromEnv(
   env: Record<string, string | undefined> = process.env,
