@@ -3,7 +3,9 @@
  * and the pure consent logic around it.
  *
  * - `fetchIdentityState` / `saveIdentityGrant` are signed requests under MINIAPP_SCOPE, built like
- *   the token request (lib/miniapp-token.ts): a passkey session uses its API session token, a
+ *   the token request (lib/miniapp-token.ts). `fetchIdentityState` is a read (open, refresh,
+ *   detail page) and never prompts: a passkey session uses only its existing API session token,
+ *   else null. `saveIdentityGrant` is user-triggered and may sign a new passkey session; a
  *   thirdweb session signs silently. Every failure resolves to `null`; they never throw.
  * - `buildConsentItems` / `grantFromChoices` turn the manifest's `identity` section and the node's
  *   state into the consent sheet's rows and back into a grant.
@@ -14,7 +16,8 @@ import type { Credential, MiniAppContext } from '@netizen-labs/miniapp-sdk';
 import type { ConsentKey } from '@netizen-labs/miniapp-sdk/host';
 import { miniAppApiBase } from './miniapp-api';
 import { buildSignedMessage, enqueueSignature, signQueued, REQUEST_TIMEOUT_MS, type MiniAppAction } from './signed-request';
-import { signedOrSession } from './passkey/api-session-runtime';
+import { existingSessionOnly, signedOrSession } from './passkey/api-session-runtime';
+import { passkeySessionOf } from './passkey/active';
 import type { SessionSigner } from './passkey/api-session';
 import type { MiniApp } from './miniapps';
 
@@ -67,9 +70,11 @@ function parseState(json: unknown): IdentityState | null {
   };
 }
 
-async function post(body: unknown, headers: Record<string, string>): Promise<IdentityState | null> {
+type Attempt = { status: number; code?: string; value: IdentityState | null };
+
+async function post(body: unknown, headers: Record<string, string>): Promise<Attempt> {
   const base = miniAppApiBase();
-  if (!base) return null;
+  if (!base) return { status: 0, value: null };
   // RN fetch has no timeout of its own.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -80,10 +85,12 @@ async function post(body: unknown, headers: Record<string, string>): Promise<Ide
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    if (!res.ok) return null;
-    return parseState(await res.json().catch(() => null));
+    const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const status = res.status ?? 0;
+    if (!res.ok) return { status, code: typeof json?.code === 'string' ? json.code : undefined, value: null };
+    return { status, value: parseState(json) };
   } catch {
-    return null;
+    return { status: 0, value: null };
   } finally {
     clearTimeout(timer);
   }
@@ -93,17 +100,27 @@ async function identityRequest(
   account: SessionSigner,
   action: MiniAppAction,
   payload: Record<string, unknown>,
+  opts: { silent: boolean },
 ): Promise<IdentityState | null> {
   const wallet = account.address.toLowerCase();
   const withToken = (headers: Record<string, string>) =>
     post({ scope: MINIAPP_SCOPE, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
-  const withSignature = async (): Promise<IdentityState | null> => {
-    const timestampSec = Math.floor(Date.now() / 1000);
-    const message = await buildSignedMessage(action, wallet, timestampSec, payload, MINIAPP_SCOPE);
-    const signature = await signQueued(account, message);
-    return post({ scope: MINIAPP_SCOPE, action, wallet, timestampSec, payload, signature }, {});
-  };
   try {
+    if (opts.silent && passkeySessionOf(account)) {
+      // A read on a passkey session: the existing session token or nothing. Never a fingerprint.
+      return await existingSessionOnly<IdentityState | null>(account, {
+        kind: 'web',
+        endpoint: `web:${PATH}`,
+        withToken,
+        withoutToken: async () => null,
+      });
+    }
+    const withSignature = async (): Promise<IdentityState | null> => {
+      const timestampSec = Math.floor(Date.now() / 1000);
+      const message = await buildSignedMessage(action, wallet, timestampSec, payload, MINIAPP_SCOPE);
+      const signature = await signQueued(account, message);
+      return (await post({ scope: MINIAPP_SCOPE, action, wallet, timestampSec, payload, signature }, {})).value;
+    };
     const queued: SessionSigner = { ...account, signMessage: (args) => enqueueSignature(() => account.signMessage(args)) };
     return await signedOrSession<IdentityState | null>(queued, { kind: 'web', endpoint: `web:${PATH}`, withToken, withSignature });
   } catch {
@@ -113,7 +130,7 @@ async function identityRequest(
 
 /** The person's identity state for `appRef` (id or slug). Never throws; `null` on any failure. */
 export function fetchIdentityState(account: SessionSigner, appRef: string): Promise<IdentityState | null> {
-  return identityRequest(account, 'identity_get', { app: appRef });
+  return identityRequest(account, 'identity_get', { app: appRef }, { silent: true });
 }
 
 /** Store a grant (the node clamps it to the manifest) and return the new state. Never throws. */
@@ -122,7 +139,7 @@ export function saveIdentityGrant(
   appRef: string,
   grant: IdentityGrant,
 ): Promise<IdentityState | null> {
-  return identityRequest(account, 'identity_set', { app: appRef, grant });
+  return identityRequest(account, 'identity_set', { app: appRef, grant }, { silent: false });
 }
 
 export interface ConsentItem {

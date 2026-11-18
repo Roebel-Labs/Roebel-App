@@ -14,6 +14,7 @@ import {
   shapeUser,
   type IdentityState,
 } from '../miniapp-identity';
+import { PASSKEY_API_SESSION_KEY } from '../passkey/api-session';
 
 const mockMem = new Map<string, string>();
 jest.mock('@/lib/storage/secureStorage', () => ({
@@ -154,6 +155,57 @@ describe('identity requests', () => {
     const grant = { profile: true, address: false, credentials: [], asked: ['profile'] };
     expect(await saveIdentityGrant(account(), 'demo', grant)).toBeNull();
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ action: 'identity_set', payload: { app: 'demo', grant } });
+  });
+
+  describe('passkey account', () => {
+    const W = ADDR.toLowerCase();
+    const passkeyAccount = () => ({ ...account(), __passkeySession: { credentialId: 'c', safe: '0x1', identity: W } });
+    const storeSessionToken = () =>
+      mockMem.set(PASSKEY_API_SESSION_KEY, JSON.stringify({
+        deviceId: 'dev0123456789abcdef', identity: W, token: 'pst1.t.m', jti: 'j', expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      }));
+    beforeEach(() => mockMem.clear());
+
+    it('identity_get with a session token returns the parsed state (session headers, no prompt)', async () => {
+      storeSessionToken();
+      const a = passkeyAccount();
+      const fetchMock = jest.fn(async (_u: string, init: { headers: Record<string, string>; body: string }) => {
+        expect(init.headers.Authorization).toBe('Bearer pst1.t.m');
+        expect(JSON.parse(init.body).signature).toBeUndefined();
+        return { ok: true, status: 200, json: async () => state };
+      });
+      (global as any).fetch = fetchMock;
+      expect(await fetchIdentityState(a, 'demo')).toEqual(state);
+      expect(a.signMessage).not.toHaveBeenCalled();
+    });
+
+    it('identity_set with a session token returns the parsed state', async () => {
+      storeSessionToken();
+      const a = passkeyAccount();
+      (global as any).fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => state }));
+      const grant = { profile: true, address: false, credentials: [], asked: ['profile'] };
+      expect(await saveIdentityGrant(a, 'demo', grant)).toEqual(state);
+      expect(a.signMessage).not.toHaveBeenCalled();
+    });
+
+    it('identity_get without a session never signs and sends nothing', async () => {
+      const a = passkeyAccount();
+      const fetchMock = jest.fn();
+      (global as any).fetch = fetchMock;
+      expect(await fetchIdentityState(a, 'demo')).toBeNull();
+      expect(a.signMessage).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('identity_get with a rejected session token never signs', async () => {
+      storeSessionToken();
+      const a = passkeyAccount();
+      const fetchMock = jest.fn(async () => ({ ok: false, status: 401, json: async () => ({ code: 'SESSION_INVALID' }) }));
+      (global as any).fetch = fetchMock;
+      expect(await fetchIdentityState(a, 'demo')).toBeNull();
+      expect(a.signMessage).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
