@@ -42,6 +42,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
+import { sendTransaction } from 'thirdweb';
 import { useActiveAccount } from 'thirdweb/react';
 
 import { useTheme } from '@/context/ThemeContext';
@@ -109,7 +110,9 @@ import {
   userRejected,
 } from '@/lib/miniapp-wallet';
 import { createRpcProxy } from '@/lib/miniapp-rpc';
-import { addressesIn, cachedName, prefetchNames } from '@/lib/miniapp-names';
+import { addressesIn, cachedName, orgNameForSafe, prefetchNames } from '@/lib/miniapp-names';
+import { buildPayConfirm, preparePay } from '@/lib/miniapp-pay';
+import { getRoebelTalerBalance, prepareSendRoebelTaler } from '@/lib/roebel-taler';
 import { buildTransactionConfirm } from '@/lib/miniapp-confirm';
 import { parseSendCalls, preflightCalls } from '@/lib/miniapp-calls';
 import { assertHostChain } from '@/lib/miniapp-chain';
@@ -874,6 +877,44 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         });
       });
     };
+    // roebel.pay: Röbel Münzen to a person or org account known in Röbel, after the native sheet.
+    // The memo is shown on the sheet only (never on chain, never logged, never returned).
+    const pay = async (p: unknown): Promise<{ txHash: string }> => {
+      if (isV2) await settled();
+      if (!walletAllowed(app, identityRef.current)) throw ADDRESS_NOT_GRANTED;
+      const acc = account;
+      if (!acc) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
+      const prepared = await preparePay(p, {
+        self: acc.address,
+        personName: async (a) => {
+          await prefetchNames([a]);
+          return cachedName(a);
+        },
+        orgName: orgNameForSafe,
+        // The transfer moves the Röbel Münzen group token, so that is the balance that counts.
+        balance: getRoebelTalerBalance,
+      });
+      const request = buildPayConfirm(app.name, prepared);
+      return new Promise<{ txHash: string }>((resolve, reject) => {
+        setConfirm({
+          request,
+          method: 'roebel.pay',
+          params: [],
+          // Same account the host signs with; on an independent account this is the everyday
+          // Circles transfer the sponsor already accepts (no mini-app id attached).
+          run: async () => {
+            const { transactionHash } = await sendTransaction({
+              account: acc,
+              transaction: prepareSendRoebelTaler(acc.address, prepared.to, prepared.units),
+            });
+            track('pay', { amount: prepared.amount });
+            return { txHash: transactionHash };
+          },
+          resolve: resolve as (v: unknown) => void,
+          reject,
+        });
+      });
+    };
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: () => setSplashVisible(false),
@@ -982,6 +1023,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           },
 
       authSignIn,
+      pay: (p) => pay(p),
 
       credentialsList: isV2 ? v2Only.credentialsList : v1Credentials.credentialsList,
       credentialsHas: isV2 ? v2Only.credentialsHas : v1Credentials.credentialsHas,
