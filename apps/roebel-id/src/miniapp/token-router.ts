@@ -24,12 +24,25 @@ function sameSecret(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb)
 }
 
+// The node (apps/web userToken.ts) and mini-app servers verify RS256 / ES256 only, so a key with
+// any other algorithm is skipped rather than signing tokens nobody can verify.
+const VERIFIABLE_ALGS = new Set(['RS256', 'ES256'])
+
 function defaultAlg(jwk: Record<string, unknown>): string | undefined {
   if (typeof jwk.alg === 'string') return jwk.alg
   if (jwk.kty === 'RSA') return 'RS256'
   if (jwk.kty === 'EC' && jwk.crv === 'P-256') return 'ES256'
-  if (jwk.kty === 'EC' && jwk.crv === 'P-384') return 'ES384'
-  if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return 'EdDSA'
+  return undefined
+}
+
+/** The first signing key with a verifiable algorithm (RS256 / ES256), or undefined. */
+function pickSigningKey(keys: object[]): { jwk: Record<string, unknown>; alg: string } | undefined {
+  for (const k of keys) {
+    const jwk = k as Record<string, unknown>
+    if (jwk.use !== undefined && jwk.use !== 'sig') continue
+    const alg = defaultAlg(jwk)
+    if (alg && VERIFIABLE_ALGS.has(alg)) return { jwk, alg }
+  }
   return undefined
 }
 
@@ -51,10 +64,9 @@ export function createMiniAppTokenRouter(deps: {
 
   const getSigner = () =>
     (signer ??= (async () => {
-      const jwk = deps.jwks.keys[0] as Record<string, unknown> | undefined
-      if (!jwk) return null
-      const alg = defaultAlg(jwk)
-      if (!alg) return null
+      const picked = pickSigningKey(deps.jwks.keys)
+      if (!picked) return null
+      const { jwk, alg } = picked
       const key = await importJWK(jwk as unknown as JWK, alg)
       return { key, alg, ...(typeof jwk.kid === 'string' ? { kid: jwk.kid } : {}) }
     })().catch((e) => {
@@ -99,7 +111,7 @@ export function createMiniAppTokenRouter(deps: {
 
         const s = await getSigner()
         if (!s) {
-          res.status(503).json({ error: 'no_signing_key' })
+          res.status(503).json({ error: 'no_signing_key', message: 'no RS256 or ES256 signing key in the JWKS' })
           return
         }
         // Only the known claims; iss/iat/jti from the caller are ignored.

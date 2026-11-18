@@ -108,4 +108,31 @@ describe('POST /internal/miniapp-token', () => {
     expect(typeof payload.jti).toBe('string')
     expect(decodeProtectedHeader(r.body.token).typ).toBe('miniapp+jwt')
   })
+
+  it('signs with the first RS256/ES256 key, skipping keys the node cannot verify', async () => {
+    const ed = await generateKeyPair('EdDSA', { extractable: true })
+    const es = await generateKeyPair('ES256', { extractable: true })
+    const mixed = {
+      keys: [
+        { ...(await exportJWK(ed.privateKey)), kid: 'ed-1' },
+        { ...(await exportJWK(es.privateKey)), kid: 'es-1' },
+      ],
+    }
+    const a = createApp({ miniappTokenRouter: createMiniAppTokenRouter({ issuer: ISSUER, secret: SECRET, jwks: mixed, now: () => NOW }) })
+    const r = await post(a, { claims: { aud: 'miniapp:demo', sub: 'nz_x', app: APP, v: 1 }, exp: NOW + 600 })
+    expect(r.status).toBe(200)
+    const { protectedHeader } = await jwtVerify(r.body.token, es.publicKey, { currentDate: new Date(NOW * 1000) })
+    expect(protectedHeader.alg).toBe('ES256')
+    expect(protectedHeader.kid).toBe('es-1')
+  })
+
+  it('answers 503 with a clear error when no RS256/ES256 key is configured', async () => {
+    const ed = await generateKeyPair('EdDSA', { extractable: true })
+    const only = { keys: [{ ...(await exportJWK(ed.privateKey)), kid: 'ed-1' }] }
+    const a = createApp({ miniappTokenRouter: createMiniAppTokenRouter({ issuer: ISSUER, secret: SECRET, jwks: only, now: () => NOW }) })
+    const r = await post(a, { claims: { aud: 'miniapp:demo', sub: 'nz_x', app: APP, v: 1 }, exp: NOW + 600 })
+    expect(r.status).toBe(503)
+    expect(r.body.error).toBe('no_signing_key')
+    expect(r.body.message).toMatch(/RS256|ES256/)
+  })
 })
