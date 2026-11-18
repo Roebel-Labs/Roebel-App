@@ -5,7 +5,12 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rcrcBalance } from "@/lib/muenzen/gnosis";
 import { attoToNumber } from "@/lib/muenzen/constants";
-import { validateManifest, DEFAULT_PRIMARY_COLOR } from "./manifest";
+import {
+  isMissingIdentityColumnError,
+  manifestStoreFields,
+  validateManifest,
+  withoutIdentityColumns,
+} from "./manifest";
 import { issueMuenzenOnChain } from "./muenzen";
 import {
   MiniAppError,
@@ -24,6 +29,21 @@ import {
   type ReviewDecision,
   type SubmitAppInput,
 } from "./types";
+
+/**
+ * Run a mini_apps insert/update whose patch includes the identity columns; if the identity
+ * migration is not applied yet, retry once without them (the app then reads as version 1).
+ */
+export async function withIdentityColumnFallback<T>(
+  patch: Record<string, unknown>,
+  run: (
+    p: Record<string, unknown>,
+  ) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
+  const first = await run(patch);
+  if (!isMissingIdentityColumnError(first.error)) return first;
+  return run(withoutIdentityColumns(patch));
+}
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -158,26 +178,17 @@ export async function submitApp(input: SubmitAppInput): Promise<MiniAppRow> {
     throw new MiniAppError("conflict", `Der slug "${manifest.slug}" ist bereits vergeben.`);
   }
 
-  const { data: app, error } = await supabase
-    .from("mini_apps")
-    .insert({
+  const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(
+    {
+      ...manifestStoreFields(manifest),
       developer_id: input.developerId,
       slug: manifest.slug,
-      name: manifest.name,
-      icon_url: manifest.iconUrl || null,
-      home_url: manifest.homeUrl,
-      description: manifest.description || null,
-      category: manifest.category,
-      tags: manifest.tags,
-      screenshots: manifest.screenshots,
-      permissions: manifest.permissions,
-      primary_color: manifest.primaryColor ?? DEFAULT_PRIMARY_COLOR,
       status: "pending",
       source: input.source ?? "external",
       reward_budget: 0,
-    })
-    .select("*")
-    .single();
+    },
+    (row) => supabase.from("mini_apps").insert(row).select("*").single(),
+  );
   if (error) throw new MiniAppError("internal", error.message);
 
   await createVersion((app as MiniAppRow).id, {
@@ -227,25 +238,17 @@ export async function updateAppManifest(
   // Icon/previews are managed in the "Bilder" section (upload + KI). A
   // manifest edit that omits them keeps the stored images instead of
   // clobbering them — clearing happens über die Bilder-Sektion.
-  const { data: updated, error } = await supabase
-    .from("mini_apps")
-    .update({
+  const { data: updated, error } = await withIdentityColumnFallback<MiniAppRow>(
+    {
+      ...manifestStoreFields(m),
       slug: m.slug,
-      name: m.name,
       icon_url: m.iconUrl || app.icon_url,
-      home_url: m.homeUrl,
-      description: m.description || null,
-      category: m.category,
-      tags: m.tags,
-      screenshots: m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
-      permissions: m.permissions,
-      primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
+      screenshots: m.screenshots && m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
       ...(opts?.keepStatus ? {} : { status: "pending" as const }),
       updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select("*")
-    .single();
+    },
+    (patch) => supabase.from("mini_apps").update(patch).eq("id", id).select("*").single(),
+  );
   if (error) throw new MiniAppError("internal", error.message);
 
   await createVersion(id, {
@@ -391,25 +394,11 @@ export async function reviewApp(
   // Indexed apps: store fields only change on approval of a version (spec §5).
   const patch: Record<string, unknown> = { pending_update: false };
   if (decision === "approve" && app.source === "indexed" && pending?.manifest) {
-    const m = validateManifest(pending.manifest);
-    Object.assign(patch, {
-      name: m.name,
-      icon_url: m.iconUrl || null,
-      home_url: m.homeUrl,
-      description: m.description || null,
-      category: m.category,
-      tags: m.tags,
-      screenshots: m.screenshots,
-      permissions: m.permissions,
-      primary_color: m.primaryColor,
-    });
+    Object.assign(patch, manifestStoreFields(validateManifest(pending.manifest)));
   }
-  const { data: final, error: finErr } = await supabase
-    .from("mini_apps")
-    .update(patch)
-    .eq("id", id)
-    .select("*")
-    .single();
+  const { data: final, error: finErr } = await withIdentityColumnFallback<MiniAppRow>(patch, (p) =>
+    supabase.from("mini_apps").update(p).eq("id", id).select("*").single(),
+  );
   if (finErr) throw new MiniAppError("internal", finErr.message);
   return final as MiniAppRow;
 }

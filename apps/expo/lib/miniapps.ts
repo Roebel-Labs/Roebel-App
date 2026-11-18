@@ -12,7 +12,9 @@
  */
 import { supabase } from '@/lib/supabase';
 import type {
+  CredentialRequest,
   MiniAppCategory,
+  MiniAppIdentityRequest,
   MiniAppPermission,
 } from '@netizen-labs/miniapp-sdk';
 
@@ -38,6 +40,10 @@ export interface MiniApp {
   authorName: string | null;
   /** Developer preview (settings → dev mini app): permissions are simulated. */
   preview?: boolean;
+  /** Manifest version; 1 when the row predates the identity migration. */
+  manifestVersion: 1 | 2;
+  /** The version-2 `identity` section; always null for version 1. */
+  identity: MiniAppIdentityRequest | null;
 }
 
 /** Raw shape of a `mini_apps` row (only the columns we select). */
@@ -57,6 +63,9 @@ interface MiniAppRow {
   feature_image_url: string | null;
   created_at: string | null;
   status: string;
+  /** Absent until the identity migration is applied. */
+  manifest_version?: string | null;
+  identity?: unknown;
   developers?: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
@@ -101,7 +110,23 @@ function resolveAuthorName(dev: MiniAppRow['developers']): string | null {
   return row?.display_name ?? null;
 }
 
-function mapRow(row: MiniAppRow): MiniApp {
+function coerceIdentity(raw: unknown): MiniAppIdentityRequest | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const credentials: CredentialRequest[] = Array.isArray(r.credentials)
+    ? r.credentials.filter(
+        (c): c is CredentialRequest =>
+          !!c &&
+          typeof c === 'object' &&
+          typeof (c as CredentialRequest).type === 'string' &&
+          typeof (c as CredentialRequest).reason === 'string',
+      ).map((c) => ({ type: c.type, reason: c.reason }))
+    : [];
+  return { profile: r.profile === true, address: r.address === true, credentials };
+}
+
+export function mapMiniAppRow(row: MiniAppRow): MiniApp {
+  const manifestVersion: 1 | 2 = row.manifest_version === '2' ? 2 : 1;
   return {
     id: row.id,
     slug: row.slug,
@@ -118,27 +143,38 @@ function mapRow(row: MiniAppRow): MiniApp {
     featureImageUrl: row.feature_image_url,
     createdAt: row.created_at ?? '',
     authorName: resolveAuthorName(row.developers),
+    manifestVersion,
+    identity: manifestVersion === 2 ? coerceIdentity(row.identity) : null,
   };
 }
 
-const SELECT_COLUMNS =
+const LEGACY_SELECT_COLUMNS =
   'id, slug, name, icon_url, home_url, description, category, tags, screenshots, permissions, primary_color, featured, feature_image_url, created_at, status, developers(display_name)';
+const SELECT_COLUMNS = `${LEGACY_SELECT_COLUMNS}, manifest_version, identity`;
+
+/** PostgREST "column does not exist": the identity migration is not applied yet. */
+function isMissingColumn(error: { code?: string } | null): boolean {
+  return error?.code === '42703';
+}
 
 /** Fetch every live mini app (featured first, then newest). Returns [] on error. */
 export async function fetchLiveMiniApps(): Promise<MiniApp[]> {
   try {
-    const { data, error } = await supabase
-      .from('mini_apps')
-      .select(SELECT_COLUMNS)
-      .eq('status', 'live')
-      .order('featured', { ascending: false })
-      .order('created_at', { ascending: false });
+    const query = (columns: string) =>
+      supabase
+        .from('mini_apps')
+        .select(columns)
+        .eq('status', 'live')
+        .order('featured', { ascending: false })
+        .order('created_at', { ascending: false });
+    let { data, error } = await query(SELECT_COLUMNS);
+    if (isMissingColumn(error)) ({ data, error } = await query(LEGACY_SELECT_COLUMNS));
 
     if (error) {
       console.warn('[miniapps] fetchLiveMiniApps failed:', error.message);
       return [];
     }
-    return ((data ?? []) as unknown as MiniAppRow[]).map(mapRow);
+    return ((data ?? []) as unknown as MiniAppRow[]).map(mapMiniAppRow);
   } catch (e) {
     console.warn('[miniapps] fetchLiveMiniApps threw:', e);
     return [];
@@ -148,18 +184,16 @@ export async function fetchLiveMiniApps(): Promise<MiniApp[]> {
 /** Fetch a single live mini app by slug. Returns null if not found / not live. */
 export async function fetchMiniAppBySlug(slug: string): Promise<MiniApp | null> {
   try {
-    const { data, error } = await supabase
-      .from('mini_apps')
-      .select(SELECT_COLUMNS)
-      .eq('slug', slug)
-      .eq('status', 'live')
-      .maybeSingle();
+    const query = (columns: string) =>
+      supabase.from('mini_apps').select(columns).eq('slug', slug).eq('status', 'live').maybeSingle();
+    let { data, error } = await query(SELECT_COLUMNS);
+    if (isMissingColumn(error)) ({ data, error } = await query(LEGACY_SELECT_COLUMNS));
 
     if (error) {
       console.warn('[miniapps] fetchMiniAppBySlug failed:', error.message);
       return null;
     }
-    return data ? mapRow(data as unknown as MiniAppRow) : null;
+    return data ? mapMiniAppRow(data as unknown as MiniAppRow) : null;
   } catch (e) {
     console.warn('[miniapps] fetchMiniAppBySlug threw:', e);
     return null;

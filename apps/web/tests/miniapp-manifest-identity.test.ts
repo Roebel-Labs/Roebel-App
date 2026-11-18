@@ -1,7 +1,13 @@
 // apps/web/tests/miniapp-manifest-identity.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MANIFEST_VERSIONS, manifestStoreFields, validateManifest } from "../src/lib/miniapp/manifest";
+import {
+  MANIFEST_VERSIONS,
+  isMissingIdentityColumnError,
+  manifestStoreFields,
+  withoutIdentityColumns,
+  validateManifest,
+} from "../src/lib/miniapp/manifest";
 
 const base = {
   slug: "abstimmung",
@@ -120,4 +126,24 @@ test("manifestStoreFields carries version and identity", () => {
   assert.deepEqual(v2.identity, identity);
 
   assert.equal(manifestStoreFields(validateManifest({ ...base, version: "2" })).identity, null);
+});
+
+test("a write before the identity migration can drop the two new columns", () => {
+  const f = manifestStoreFields(validateManifest({ ...base, version: "2", identity: { profile: true } }));
+  const legacy = withoutIdentityColumns({ ...f, status: "pending" });
+  assert.equal("manifest_version" in legacy, false);
+  assert.equal("identity" in legacy, false);
+  assert.equal(legacy.name, "Abstimmung");
+  assert.equal(legacy.status, "pending");
+});
+
+test("only a missing manifest_version/identity column counts as the pre-migration error", () => {
+  assert.equal(
+    isMissingIdentityColumnError({ code: "PGRST204", message: "Could not find the 'identity' column of 'mini_apps' in the schema cache" }),
+    true,
+  );
+  assert.equal(isMissingIdentityColumnError({ code: "42703", message: 'column "manifest_version" does not exist' }), true);
+  assert.equal(isMissingIdentityColumnError({ code: "PGRST204", message: "Could not find the 'foo' column" }), false);
+  assert.equal(isMissingIdentityColumnError({ code: "23505", message: "identity duplicate" }), false);
+  assert.equal(isMissingIdentityColumnError(null), false);
 });

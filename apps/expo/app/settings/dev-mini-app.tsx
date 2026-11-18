@@ -40,6 +40,8 @@ function devApp(url: string): MiniApp {
     createdAt: new Date().toISOString(),
     authorName: null,
     preview: true,
+    manifestVersion: 1,
+    identity: null,
   };
 }
 

@@ -221,3 +221,25 @@ export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown>
     identity: version === "2" ? (m.identity ?? null) : null,
   };
 }
+
+const IDENTITY_COLUMNS = ["manifest_version", "identity"] as const;
+
+/**
+ * True when a mini_apps write failed only because the identity migration
+ * (20261117ma_mini_app_identity.sql) is not applied yet: PostgREST reports an unknown
+ * column as PGRST204 (schema cache) or Postgres 42703.
+ */
+export function isMissingIdentityColumnError(
+  err: { code?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!err || (err.code !== "PGRST204" && err.code !== "42703")) return false;
+  const msg = err.message ?? "";
+  return IDENTITY_COLUMNS.some((c) => msg.includes(c));
+}
+
+/** The same patch without the two identity columns, for the pre-migration retry. */
+export function withoutIdentityColumns<T extends Record<string, unknown>>(patch: T): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...patch };
+  for (const c of IDENTITY_COLUMNS) delete out[c];
+  return out;
+}

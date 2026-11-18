@@ -7,6 +7,7 @@
 // The AI-builder agent (D) imports from here — keep the exports stable.
 import type {
   MiniAppCategory,
+  MiniAppIdentityRequest,
   MiniAppManifest,
   MiniAppPermission,
   MiniAppStatus,
@@ -62,6 +63,10 @@ export interface MiniAppRow {
   index_error?: string | null;
   /** A live app has a newer pending version awaiting review. */
   pending_update?: boolean;
+  /** Manifest version; absent until the identity migration is applied (= "1"). */
+  manifest_version?: "1" | "2";
+  /** The version-2 `identity` section; null for version 1. */
+  identity?: MiniAppIdentityRequest | null;
 }
 
 export interface MiniAppVersionRow {
