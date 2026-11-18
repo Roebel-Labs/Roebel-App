@@ -78,6 +78,11 @@ domain equals `domain`, chain id 100, the nonce (when given), `Issued At` not ol
 `maxAgeSec` (default 300), the address line equals `address`, then `verifyAccountSignature`.
 Extra error codes: `wrong_domain`, `wrong_chain`, `wrong_nonce`.
 
+**Always pass a nonce.** Issue a fresh random nonce per sign-in on your server, hand it to
+`sdk.auth.signIn({ nonce })`, and pass it here once (then discard it). Without `nonce`, a token
+that leaked (logs, a proxy, another tab) can be replayed against your server until `Issued At`
+is `maxAgeSec` old (default 300 s).
+
 ## `verifyAccountSignature({ address, signature, message | typedData | hash })`
 
 ```ts
