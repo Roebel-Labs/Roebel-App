@@ -66,9 +66,16 @@ export function typeFormToPayload(f: TypeForm, accountId: string, op: 'create' |
     benefits: f.benefits.map((b) => b.trim()).filter(Boolean),
     supplyCap: f.supplyCap.trim() === '' ? 0 : Number(f.supplyCap.trim()),
   };
-  if (f.imageUrl) p.imageUrl = f.imageUrl;
-  if (f.claimStart) p.claimStart = f.claimStart;
-  if (f.claimEnd) p.claimEnd = f.claimEnd;
+  if (op === 'update') {
+    // The server keeps a field that is left out; an empty string clears it.
+    p.imageUrl = f.imageUrl ?? '';
+    p.claimStart = f.claimStart;
+    p.claimEnd = f.claimEnd;
+  } else {
+    if (f.imageUrl) p.imageUrl = f.imageUrl;
+    if (f.claimStart) p.claimStart = f.claimStart;
+    if (f.claimEnd) p.claimEnd = f.claimEnd;
+  }
   if (op === 'create') {
     p.kind = f.kind;
     if (f.template !== 'eigener') p.template = f.template;

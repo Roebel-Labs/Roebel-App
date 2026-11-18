@@ -107,7 +107,6 @@ const en: Record<string, string> = {
   'Wartet auf Bestätigung': 'Waiting for confirmation',
   'Widerrufen: {n} Ausweise': 'Revoked: {n} credentials',
   '{i} eingeladen · {c} angenommen · {r} widerrufen': '{i} invited · {c} accepted · {r} revoked',
-  'Fehlgeschlagen: {reason}': 'Failed: {reason}',
   'Wird eingetragen': 'Being entered',
   'cred|Verlauf': 'History',
   'cred|Verworfen': 'Discarded',

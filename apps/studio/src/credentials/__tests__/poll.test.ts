@@ -81,9 +81,21 @@ describe('statusLine', () => {
     expect(statusLine({ status: 'awaiting_confirmation', error: null })).toBe('Wartet auf Bestätigung');
     expect(statusLine({ status: 'submitted', error: null })).toBe('Wird eingetragen');
     expect(statusLine({ status: 'done', error: null })).toBe('Erledigt');
-    expect(statusLine({ status: 'failed', error: 'Abgelehnt.' })).toBe('Fehlgeschlagen: Abgelehnt.');
+    // Server errors are internal English ('transaction reverted'): never shown to the user.
+    expect(statusLine({ status: 'failed', error: 'transaction reverted' })).toBe('Fehlgeschlagen');
     expect(statusLine({ status: 'failed', error: null })).toBe('Fehlgeschlagen');
     expect(statusLine({ status: 'expired', error: null })).toBe('Abgelaufen');
     expect(statusLine({ status: 'cancelled', error: null })).toBe('Verworfen');
+  });
+});
+
+describe('standalonePending', () => {
+  it('shows the own pending card only while the action is not in the list yet', async () => {
+    const { standalonePending } = await import('../poll');
+    expect(standalonePending(null, [])).toBe(false);
+    expect(standalonePending('a', [])).toBe(true);
+    expect(standalonePending('a', [action('a', 'awaiting_confirmation')])).toBe(false);
+    // Once confirmed, the history row shows the final state: no second card.
+    expect(standalonePending('a', [action('a', 'done')])).toBe(false);
   });
 });

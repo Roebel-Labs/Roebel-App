@@ -52,10 +52,16 @@ export function statusLine(a: Pick<ActionView, 'status' | 'error'>): string {
     case 'done':
       return t('Erledigt');
     case 'failed':
-      return a.error ? t('Fehlgeschlagen: {reason}', { reason: a.error }) : t('Fehlgeschlagen');
+      // a.error holds the server's internal (English) reason: not shown.
+      return t('Fehlgeschlagen');
     case 'expired':
       return t('Abgelaufen');
     case 'cancelled':
       return tx('cred', 'Verworfen');
   }
+}
+
+/** A just-prepared action gets its own card only until the action list knows it (then the list shows it). */
+export function standalonePending(pendingId: string | null, actions: Pick<ActionView, 'id'>[]): boolean {
+  return !!pendingId && !actions.some((a) => a.id === pendingId);
 }

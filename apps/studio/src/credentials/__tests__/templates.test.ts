@@ -33,4 +33,9 @@ describe('credential type templates', () => {
     expect('kind' in upd).toBe(false);
     expect('template' in upd).toBe(false);
   });
+
+  it('an update clears image and dates the admin emptied (server keeps a field that is left out)', () => {
+    const upd = typeFormToPayload({ ...base(), imageUrl: null, claimStart: '', claimEnd: '' }, 'acc', 'update', '0xabc');
+    expect(upd).toMatchObject({ imageUrl: '', claimStart: '', claimEnd: '' });
+  });
 });

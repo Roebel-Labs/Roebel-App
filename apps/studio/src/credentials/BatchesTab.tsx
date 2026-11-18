@@ -6,7 +6,7 @@ import { Confirm } from '../persona/common';
 import { SkCards } from '../ui/Skeleton';
 import { downloadLetters, fetchActions, isSessionError, prepareRevocation } from './api';
 import { PendingCard } from './PendingCard';
-import { isOpenAction, statusLine, watchActions } from './poll';
+import { isOpenAction, standalonePending, statusLine, watchActions } from './poll';
 import { saveBlob } from './save-file';
 import type { TabContext } from './tabs';
 import type { ActionView, BatchView } from './types';
@@ -70,7 +70,7 @@ export function BatchesTab({ ctx }: { ctx: TabContext }) {
 
   return (
     <div>
-      {pending && !open.some((a) => a.id === pending) && <PendingCard ctx={ctx} actionId={pending} onClose={() => setPending(null)} />}
+      {standalonePending(pending, actions) && pending && <PendingCard ctx={ctx} actionId={pending} onClose={() => setPending(null)} />}
       {open.length > 0 && (
         <>
           <h2 className="pz-h3">{t('Wartet auf Bestätigung')}</h2>
