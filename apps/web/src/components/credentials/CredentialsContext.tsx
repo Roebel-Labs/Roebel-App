@@ -29,3 +29,22 @@ export function useCredentials(): CredentialsCtx {
   if (!v) throw new Error("useCredentials outside the credentials layout");
   return v;
 }
+
+/** types_list row (server: TypeView in lib/credentials/actions.ts). */
+export type CredentialTypeView = {
+  typeId: string;
+  name: string;
+  kind: "role" | "membership" | "badge" | null;
+  description: string | null;
+  imageUrl: string | null;
+  benefits: string[];
+  template: string | null;
+  publicClaim: boolean;
+  supplyCap: number;
+  claimStart: string | null;
+  claimEnd: string | null;
+  recognised: boolean;
+  retired: boolean;
+  chainStatus: "draft" | "onchain";
+  counts?: { accepted: number; open: number };
+};

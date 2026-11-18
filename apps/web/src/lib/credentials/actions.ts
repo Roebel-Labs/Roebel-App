@@ -86,6 +86,8 @@ export type TypeView = {
   recognised: boolean;
   retired: boolean;
   chainStatus: TypeRow["chainStatus"];
+  /** Invitations on chain: accepted, and still open (invited, not yet answered). */
+  counts: { accepted: number; open: number };
 };
 
 // ── results ───────────────────────────────────────────────────────────────────
@@ -365,7 +367,7 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
       wallet: c.wallet,
       via,
       steps: [{ fn: "retireType", typeId: t.typeId }],
-      summary: { title: `Ausweis „${t.name}“ nicht mehr ausgeben`, lines: ["Bestehende Ausweise bleiben gültig."], orgName: org.name },
+      summary: { title: `Ausweis „${t.name}“ nicht mehr ausgeben`, lines: ["Alle Ausweise dieses Typs verlieren sofort ihre Gültigkeit. Das kann nicht rückgängig gemacht werden."], orgName: org.name },
     });
     return ok({ actionId, typeId: t.typeId });
   }
@@ -509,6 +511,11 @@ export async function listTypesForOrg(d: Deps, c: Caller, accountId: string): Pr
   const org = await orgFor(d, accountId, c.wallet);
   if (isFail(org)) return org;
   const rows = await d.store.listTypes({ accountId: org.accountId });
+  const counts = new Map<string, { accepted: number; open: number }>();
+  for (const t of rows) {
+    const invs = await d.store.listInvitations({ typeId: t.typeId, statuses: ["invited", "accepted"] });
+    counts.set(t.typeId, { accepted: invs.filter((i) => i.status === "accepted").length, open: invs.filter((i) => i.status === "invited").length });
+  }
   return ok(
     rows
       .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
@@ -527,6 +534,7 @@ export async function listTypesForOrg(d: Deps, c: Caller, accountId: string): Pr
         recognised: t.recognised,
         retired: t.retired,
         chainStatus: t.chainStatus,
+        counts: counts.get(t.typeId) ?? { accepted: 0, open: 0 },
       })),
   );
 }
