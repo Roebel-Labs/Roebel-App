@@ -29,7 +29,7 @@ import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import EventBadgeSetupSection from '@/components/credentials/EventBadgeSetupSection';
 import { useCredentialsGate } from '@/lib/credreg/gate';
 import { fetchEventBadge, setupEventBadge } from '@/lib/credreg/api';
-import { badgeSetupPayload, SETUP_LABELS, type BadgeSetupForm } from '@/lib/credreg/event-page';
+import { afterBadgeSetup, badgeOffWarning, badgeSetupPayload, SETUP_LABELS, type BadgeSetupForm } from '@/lib/credreg/event-page';
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -68,6 +68,8 @@ export default function EditEventScreen() {
   const [badgeForm, setBadgeForm] = useState<BadgeSetupForm>({ enabled: false, name: '', artUrl: null, limit: '' });
   const [badgeInitiallyOn, setBadgeInitiallyOn] = useState(false);
   const [badgeLoaded, setBadgeLoaded] = useState(false);
+  const [badgeChain, setBadgeChain] = useState<{ chain: 'draft' | 'onchain' } | null>(null);
+  const [eventAccountId, setEventAccountId] = useState<string | null>(null);
   useEffect(() => {
     if (!badgeSectionVisible || !account || !id || badgeLoaded) return;
     let alive = true;
@@ -77,6 +79,7 @@ export default function EditEventScreen() {
       const b = r.data.badge;
       if (!b) return;
       setBadgeInitiallyOn(true);
+      setBadgeChain({ chain: b.chain });
       setBadgeForm({
         enabled: true,
         name: b.name,
@@ -119,6 +122,7 @@ export default function EditEventScreen() {
       setWebsiteUrl(event.website_url ?? '');
       setTicketPrice(event.ticket_price != null ? String(event.ticket_price) : '');
       setImageUrl(event.image_url);
+      setEventAccountId(event.account_id ?? null);
 
       // Fetch role + stats
       if (account?.address && event.account_id) {
@@ -199,6 +203,13 @@ export default function EditEventScreen() {
     if (sendBadge && badge.ok && account) {
       const r = await setupEventBadge(account, badge.payload);
       if (!r.ok) Alert.alert('Abzeichen', SETUP_LABELS.saveFailed);
+      const approve = afterBadgeSetup(r, eventAccountId ?? '');
+      if (approve) {
+        setSaving(false);
+        showSnackbar({ message: 'Änderungen gespeichert — bitte das Beenden des Abzeichens bestätigen', duration: 4000 });
+        router.replace(approve as never);
+        return;
+      }
     }
     setSaving(false);
 
@@ -207,7 +218,20 @@ export default function EditEventScreen() {
       duration: 4000,
     });
     router.back();
-  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice, badgeSectionVisible, badgeLoaded, badgeForm, badgeInitiallyOn, imageUrl, account]);
+  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice, badgeSectionVisible, badgeLoaded, badgeForm, badgeInitiallyOn, imageUrl, account, badgeChain, eventAccountId]);
+
+  // Switching off a badge that is in the register retires it: say so before saving.
+  const onSavePress = useCallback(() => {
+    const warning = badgeSectionVisible && badgeLoaded && badgeInitiallyOn ? badgeOffWarning(badgeChain, badgeForm) : null;
+    if (!warning) {
+      void handleSave();
+      return;
+    }
+    Alert.alert('Abzeichen beenden?', warning, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Beenden', style: 'destructive', onPress: () => void handleSave() },
+    ]);
+  }, [badgeSectionVisible, badgeLoaded, badgeInitiallyOn, badgeChain, badgeForm, handleSave]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -452,7 +476,7 @@ export default function EditEventScreen() {
           {editable && (
             <View style={styles.actions}>
               <Pressable
-                onPress={handleSave}
+                onPress={onSavePress}
                 disabled={saving}
                 style={({ pressed }) => [
                   styles.saveBtn,

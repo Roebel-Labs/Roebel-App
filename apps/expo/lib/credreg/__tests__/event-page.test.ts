@@ -6,7 +6,7 @@ jest.mock('@/lib/org-safe/send', () => ({ sendOrgCalls: jest.fn() }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
 import type { EventBadgeGetResult, PublicEventBadge } from '../types';
-import { ATTENDEE_LABELS, attendeeBadgeState, badgeSetupPayload, defaultBadgeName, organiserBadgeView, ORGANISER_LABELS } from '../event-page';
+import { afterBadgeSetup, ATTENDEE_LABELS, attendeeBadgeState, badgeOffWarning, badgeSetupPayload, defaultBadgeName, organiserBadgeView, ORGANISER_LABELS } from '../event-page';
 import { eventBadgeRow } from '../org';
 import { assertCleanCopy } from '../copy';
 
@@ -81,5 +81,20 @@ describe('event page badge', () => {
       ok: false,
       message: 'Die Anzahl muss eine ganze Zahl zwischen 1 und 100000 sein.',
     });
+  });
+
+  it('switching off a badge that is in the register warns first and opens the approve screen', () => {
+    const on = { enabled: true, name: '', artUrl: null, limit: '' };
+    const off = { ...on, enabled: false };
+    expect(badgeOffWarning({ chain: 'onchain' }, off)).toMatch(/verlieren sofort ihre Gültigkeit/);
+    expect(badgeOffWarning({ chain: 'draft' }, off)).toBeNull();
+    expect(badgeOffWarning({ chain: 'onchain' }, on)).toBeNull();
+    expect(badgeOffWarning(null, off)).toBeNull();
+    expect(afterBadgeSetup({ ok: true, data: { typeId: '0x1', actionId: 'a-1' } }, 'org-1')).toEqual({
+      pathname: '/org/credentials/approve/[id]',
+      params: { id: 'a-1', org: 'org-1' },
+    });
+    expect(afterBadgeSetup({ ok: true, data: { typeId: '0x1' } }, 'org-1')).toBeNull();
+    expect(afterBadgeSetup({ ok: false, code: 'X', message: 'm' } as never, 'org-1')).toBeNull();
   });
 });

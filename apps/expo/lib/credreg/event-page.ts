@@ -87,3 +87,20 @@ export function badgeSetupPayload(
     payload: { eventId: ev.eventId, enabled: true, name, ...(imageUrl ? { imageUrl } : {}), ...(supplyCap ? { supplyCap } : {}) },
   };
 }
+
+/** Shown before switching off a badge that is already in the register (it retires the type). */
+export const BADGE_OFF_WARNING =
+  'Alle Abzeichen dieser Veranstaltung verlieren sofort ihre Gültigkeit. Das kann nicht rückgängig gemacht werden. Du bestätigst es gleich in der Freigabe.';
+
+export function badgeOffWarning(loaded: { chain: 'draft' | 'onchain' } | null, f: BadgeSetupForm): string | null {
+  return loaded?.chain === 'onchain' && !f.enabled ? BADGE_OFF_WARNING : null;
+}
+
+/** After event_badge_setup: an action to confirm (retiring an on-chain badge) opens the approve screen. */
+export function afterBadgeSetup(
+  r: { ok: true; data: { typeId: string | null; actionId?: string } } | { ok: false },
+  orgAccountId: string,
+): { pathname: '/org/credentials/approve/[id]'; params: { id: string; org: string } } | null {
+  if (!r.ok || !r.data.actionId) return null;
+  return { pathname: '/org/credentials/approve/[id]', params: { id: r.data.actionId, org: orgAccountId } };
+}
