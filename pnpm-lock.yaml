@@ -1186,6 +1186,25 @@ importers:
         specifier: ^5.7.0
         version: 5.8.3
 
+  packages/miniapp-verify:
+    dependencies:
+      jose:
+        specifier: ^5.9.6
+        version: 5.10.0
+    devDependencies:
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@5.8.3)(yaml@2.8.3)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.8.3
+      viem:
+        specifier: ^2.47.6
+        version: 2.53.1(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)(zod@4.3.6)
+
   packages/nostr:
     dependencies:
       '@noble/ciphers':

@@ -1,0 +1,54 @@
+{
+  "name": "@netizen-labs/miniapp-verify",
+  "version": "0.1.0",
+  "description": "Server-side verification for Netizen mini apps: user tokens, account signatures, sign-in tokens and on-chain credential reads.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "prepack": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
+    }
+  },
+  "keywords": ["mini-app", "netizen", "jwt", "siwe", "erc-1271", "verify"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Roebel-Labs/Roebel-App",
+    "directory": "packages/miniapp-verify"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0",
+    "viem": "^2.47.6"
+  }
+}
