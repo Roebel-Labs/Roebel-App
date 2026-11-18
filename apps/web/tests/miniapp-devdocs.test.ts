@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { getDocsSection } from "../src/lib/miniapp/devdocs";
+import { WELL_KNOWN_PATH } from "../src/lib/miniapp/manifestFile";
 
 test("docs explain the user token and the deprecation", () => {
   const sdk = getDocsSection("sdk");
@@ -17,4 +19,41 @@ test("the MCP section says only nz_ API keys are accepted", () => {
   const all = getDocsSection("all");
   assert.match(all, /only `nz_` API keys/i);
   assert.doesNotMatch(all, /Fallback during rollout/);
+});
+
+// Drift: the docs must follow the code (MCP tools, SDK version, manifest path, handshake).
+test("every MCP tool is documented", () => {
+  const src = readFileSync(new URL("../src/app/api/[transport]/route.ts", import.meta.url), "utf8");
+  const tools = [...src.matchAll(/server\.tool\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(tools.length >= 15);
+  const docs = getDocsSection("all");
+  for (const t of tools) assert.ok(docs.includes(t), `tool ${t} missing from the docs`);
+});
+
+test("the docs name the SDK version the package has", () => {
+  const { version } = JSON.parse(
+    readFileSync(new URL("../../../packages/miniapp-sdk/package.json", import.meta.url), "utf8"),
+  );
+  assert.ok(getDocsSection("sdk").includes(`miniapp-sdk-${version}.mjs`));
+});
+
+test("the docs name the manifest path the indexer reads", () =>
+  assert.ok(getDocsSection("publish").includes(WELL_KNOWN_PATH)));
+
+test("the README states the real handshake time", () => {
+  const readme = readFileSync(new URL("../../../packages/miniapp-sdk/README.md", import.meta.url), "utf8");
+  assert.doesNotMatch(readme, /1\.5\s?s/);
+  assert.match(readme, /2\s?s/);
+  assert.doesNotMatch(readme, /miniapp-sdk-0\.2\.0/);
+  assert.doesNotMatch(getDocsSection("all"), /1\.5\s?s/);
+});
+
+test("the docs list every event, credentialsChanged included", () => {
+  const sdk = getDocsSection("sdk");
+  for (const e of ["walletChanged", "back", "visibilityChanged", "themeChanged", "credentialsChanged"]) assert.ok(sdk.includes(e), e);
+});
+
+test("DESIGN.md points to the manifest file, not netizen.manifest.ts", () => {
+  const design = readFileSync(new URL("../../../packages/miniapp-sdk/DESIGN.md", import.meta.url), "utf8");
+  assert.ok(design.includes(WELL_KNOWN_PATH));
 });

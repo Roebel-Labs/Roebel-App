@@ -35,8 +35,10 @@ Full SDK reference: ${base}/mini-apps/llms-full.txt
 is valid for 10 minutes and for this app only. A server that calls
 ${base}/api/mini-apps/rewards, /data (user scope), /notifications or
 /muenzen-balance must send it as \`Authorization: Bearer <token>\`. A wallet
-address alone will stop working. Verifying the token on your own server arrives
-with SDK 0.4.0.
+address alone will stop working. Verify it on your own server with
+\`verifyUserToken\` from \`@netizen-labs/miniapp-verify\`. \`auth.getToken\`,
+\`auth.signIn\` and \`roebel.pay\` work in the Röbel app from version 3.10.0;
+ask \`sdk.supports()\` first.
 
 ## 2. Allow embedding
 The app runs inside an iframe/WebView. Do not send \`X-Frame-Options: DENY|SAMEORIGIN\`,
