@@ -96,6 +96,16 @@ export const prepareBatch = (
   p: { accountId: string; typeId: Hex; recipients?: RecipientInput[]; fromMemberList?: boolean; validUntil?: string; source?: 'people' | 'member_list' | 'event' },
 ) => credApi<BatchPrepared>(a, 'org', 'batch_prepare', p);
 
+/** "Für neues Jahr erneuern": every accepted, unrevoked holder of the type gets the new date. */
+export const prepareRenewal = (a: SigningAccount, p: { accountId: string; renewTypeId: Hex; validUntil: string }) =>
+  credApi<BatchPrepared>(a, 'org', 'batch_prepare', { ...p, typeId: p.renewTypeId });
+
+/** "Neuer Ausweis-Typ" from a template (type_prepare op create). */
+export const prepareTypeCreate = (
+  a: SigningAccount,
+  p: { accountId: string; op: 'create'; template: string; kind: string; name: string; description: string; benefits: string[]; supplyCap: number },
+) => credApi<{ actionId: string | null }>(a, 'org', 'type_prepare', { ...p, client: 'app' });
+
 export const prepareRevocation = (a: SigningAccount, p: { accountId: string; invitationIds?: string[]; batchId?: string }) =>
   credApi<ActionPrepared>(a, 'org', 'revoke_prepare', p);
 

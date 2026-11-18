@@ -50,6 +50,7 @@ import { fetchOrgListings } from '@/lib/supabase-marketplace';
 import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articles';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
+import { useCredentialsGate } from '@/lib/credreg/gate';
 import { hasMenuPrice, isRestaurantOpen } from '@/lib/utils';
 import {
   subTypeFeatures,
@@ -291,6 +292,7 @@ function PublicAccountScreenInner() {
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+  const credentialsGate = useCredentialsGate();
   // Max keeps owner/admin rights on many orgs to manage them, but should not
   // be presented as part of their team on the public org page.
   const visibleMembers = useMemo(
@@ -351,7 +353,7 @@ function PublicAccountScreenInner() {
   const supportsOpeningHours = subTypeFeatures(account.sub_type).openingHours;
 
   const goToOwnerScreen = async (
-    pathname: '/org/settings' | '/org/opening-hours' | '/edit-org',
+    pathname: '/org/settings' | '/org/opening-hours' | '/edit-org' | '/org/credentials',
   ) => {
     try {
       await switchAccount(account.id);
@@ -507,6 +509,16 @@ function PublicAccountScreenInner() {
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kontakt</Text>
           <Pressable onPress={handleContactPress} accessibilityRole="link">
             <Text style={[styles.linkText, { color: colors.primary }]}>{account.contact_email}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Owners/admins: entry to "Mitglieder & Ausweise" (credential register) */}
+      {canEdit && credentialsGate === true ? (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Pressable onPress={() => goToOwnerScreen('/org/credentials')} accessibilityRole="button" accessibilityLabel="Mitglieder & Ausweise">
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder & Ausweise</Text>
+            <Text style={[styles.membersCount, { color: colors.primary }]}>Verwalten</Text>
           </Pressable>
         </View>
       ) : null}

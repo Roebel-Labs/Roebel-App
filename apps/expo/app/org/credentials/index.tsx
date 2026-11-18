@@ -1,27 +1,20 @@
 /**
- * "Ausweise" of the active org: actions waiting for this phone's confirmation, the switch
- * "Mitglieder dürfen öffentlich sichtbar sein", the org's types with counts and, per type, the
- * people with "Widerrufen". Every change is prepared on the server and confirmed on the approve
- * screen. Never shows a wallet address.
+ * Start of "Mitglieder & Ausweise" for the active org: actions waiting for this phone's
+ * confirmation, the switch "Mitglieder dürfen öffentlich sichtbar sein", door-scanner accounts,
+ * and the org's types with counts; a type opens its member list (members.tsx: filters, search,
+ * revoke, renew). Every change is prepared on the server and confirmed on the approve screen.
+ * Never shows a wallet address.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { CredentialScreenFrame, CredentialStatus, formatValidity } from '@/components/credentials/CredentialScreenFrame';
+import { CredentialScreenFrame, CredentialStatus } from '@/components/credentials/CredentialScreenFrame';
 import { OrgChainNotice, useCredOrg } from '@/components/credentials/OrgCredentialParts';
-import { fetchActions, fetchPeople, fetchTypes, prepareMembersPublic, prepareRevocation } from '@/lib/credreg/api';
+import { fetchActions, fetchPeople, fetchTypes, prepareMembersPublic } from '@/lib/credreg/api';
 import { preparedLabel, safeServerText, submittedMessage } from '@/lib/credreg/org';
-import type { ActionView, PersonRow, PersonState, TypeView } from '@/lib/credreg/types';
-
-const STATE_LABEL: Record<PersonState, string> = {
-  eingeladen: 'Offen',
-  angenommen: 'Angenommen',
-  abgelehnt: 'Abgelehnt',
-  widerrufen: 'Widerrufen',
-  abgelaufen: 'Abgelaufen',
-};
+import type { ActionView, PersonRow, TypeView } from '@/lib/credreg/types';
 
 const WAITING_FALLBACK = 'Eine Aktion wartet auf deine Bestätigung';
 
@@ -42,7 +35,6 @@ export default function OrgCredentialsScreen() {
   const ready = org?.onChain === 'ready';
   const [reloadKey, setReloadKey] = useState(0);
   const [data, setData] = useState<Data | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // Synchronous guard: a double tap must never start two requests (state updates are async).
   const inFlight = useRef(false);
@@ -111,30 +103,7 @@ export default function OrgCredentialsScreen() {
     }
   };
 
-  const revoke = (type: TypeView, row: PersonRow) => {
-    if (inFlight.current || !account || !accountId || busy) return;
-    Alert.alert('Ausweis widerrufen?', `${row.displayName} verliert „${type.name}“ sofort. Das lässt sich nicht rückgängig machen.`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Widerrufen',
-        style: 'destructive',
-        onPress: async () => {
-          if (inFlight.current) return;
-          inFlight.current = true;
-          setBusy(row.id);
-          setError(null);
-          try {
-            prepared(await prepareRevocation(account, { accountId, invitationIds: [row.id] }));
-          } finally {
-            inFlight.current = false;
-            setBusy(null);
-          }
-        },
-      },
-    ]);
-  };
-
-  const title = 'Ausweise';
+  const title = 'Mitglieder & Ausweise';
   if (state.status === 'loading') {
     return (
       <CredentialScreenFrame title={title}>
@@ -258,6 +227,12 @@ export default function OrgCredentialsScreen() {
         >
           <Text style={[styles.primaryText, { color: colors.onPrimary }]}>Ausweis ausstellen</Text>
         </Pressable>
+        <Pressable onPress={() => router.push('/org/credentials/members' as any)} style={[styles.secondary, { borderColor: colors.primary }]} accessibilityRole="button">
+          <Text style={[styles.link, { color: colors.primary }]}>Mitglieder & Ausweise</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push('/org/credentials/types-new' as any)} style={styles.textLink} accessibilityRole="button">
+          <Text style={[styles.link, { color: colors.primary }]}>Neuer Ausweis-Typ</Text>
+        </Pressable>
         <Pressable onPress={() => router.push('/org/credentials/delegates' as any)} style={styles.textLink} accessibilityRole="button">
           <Text style={[styles.link, { color: colors.primary }]}>Türscanner-Konten</Text>
         </Pressable>
@@ -266,22 +241,20 @@ export default function OrgCredentialsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Ausweis-Typen</Text>
           {current.types.length === 0 ? (
             <Text style={[styles.meta, { color: colors.textSecondary }]}>
-              Noch keine Ausweis-Typen. Lege sie im Dashboard am Computer an.
+              Noch keine Ausweis-Typen. Lege mit „Neuer Ausweis-Typ“ den ersten an.
             </Text>
           ) : null}
           {current.types.map((t) => {
             const people = current.people[t.typeId];
             const accepted = people?.filter((p) => p.state === 'angenommen').length ?? 0;
             const pending = people?.filter((p) => p.state === 'eingeladen').length ?? 0;
-            const expanded = open === t.typeId;
             return (
               <View key={t.typeId} style={[styles.typeCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
                 <Pressable
-                  onPress={() => setOpen(expanded ? null : t.typeId)}
+                  onPress={() => router.push({ pathname: '/org/credentials/members', params: { type: t.typeId } } as any)}
                   disabled={t.chainStatus !== 'onchain'}
                   style={styles.typeHead}
                   accessibilityRole="button"
-                  accessibilityState={{ expanded }}
                   accessibilityLabel={t.name}
                 >
                   <View style={styles.rowBody}>
@@ -296,40 +269,8 @@ export default function OrgCredentialsScreen() {
                             : 'Personen konnten nicht geladen werden'}
                     </Text>
                   </View>
-                  {t.chainStatus === 'onchain' ? (
-                    <Text style={[styles.link, { color: colors.primary }]}>{expanded ? 'Schließen' : 'Personen'}</Text>
-                  ) : null}
+                  {t.chainStatus === 'onchain' ? <Text style={[styles.link, { color: colors.primary }]}>Personen</Text> : null}
                 </Pressable>
-                {expanded && people
-                  ? people.length === 0
-                    ? <Text style={[styles.meta, { color: colors.textSecondary }]}>Noch niemand.</Text>
-                    : people.map((p) => (
-                        <View key={p.id} style={[styles.person, { borderTopColor: colors.borderSecondary }]}>
-                          <View style={styles.rowBody}>
-                            <Text style={[styles.personName, { color: colors.textPrimary }]}>{p.displayName}</Text>
-                            <Text style={[styles.meta, { color: colors.textSecondary }]}>
-                              {STATE_LABEL[p.state]}
-                              {p.state === 'angenommen' ? (p.public ? ' · Öffentlich' : ' · Privat') : ''}
-                              {p.state === 'angenommen' || p.state === 'eingeladen' ? ` · ${formatValidity(p.validUntil)}` : ''}
-                            </Text>
-                          </View>
-                          {p.state === 'angenommen' || p.state === 'eingeladen' ? (
-                            busy === p.id ? (
-                              <ActivityIndicator color={colors.error} />
-                            ) : (
-                              <Pressable
-                                onPress={() => revoke(t, p)}
-                                disabled={busy !== null}
-                                accessibilityRole="button"
-                                accessibilityLabel={`${t.name} für ${p.displayName} widerrufen`}
-                              >
-                                <Text style={[styles.link, { color: colors.error }]}>Widerrufen</Text>
-                              </Pressable>
-                            )
-                          ) : null}
-                        </View>
-                      ))
-                  : null}
               </View>
             );
           })}
@@ -356,8 +297,7 @@ const styles = StyleSheet.create({
   primary: { paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   primaryText: { fontSize: 16, fontFamily: fontFamily.semiBold },
   textLink: { alignItems: 'center', paddingVertical: 4 },
+  secondary: { paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
   typeCard: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 4 },
   typeHead: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
-  person: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 12 },
-  personName: { fontSize: 15, fontFamily: fontFamily.regular },
 });
