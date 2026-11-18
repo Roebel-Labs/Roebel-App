@@ -3,10 +3,13 @@
 // (`invalid_params`). The API submit route and the AI-builder publish route both
 // call `validateManifest` before persisting.
 import type {
+  CredentialRequest,
   MiniAppCategory,
+  MiniAppIdentityRequest,
   MiniAppManifest,
   MiniAppPermission,
 } from "@netizen-labs/miniapp-sdk";
+import { parseCredentialRef } from "@netizen-labs/miniapp-sdk/host";
 import { MiniAppError } from "./types";
 
 export const CATEGORIES: MiniAppCategory[] = [
@@ -31,6 +34,15 @@ export const PERMISSIONS: MiniAppPermission[] = [
 
 export const DEFAULT_PRIMARY_COLOR = "#00498B";
 
+/** Supported manifest versions. "1" = today's behaviour; "2" adds the `identity` section. */
+export const MANIFEST_VERSIONS = ["1", "2"] as const;
+export type ManifestVersion = (typeof MANIFEST_VERSIONS)[number];
+
+const MAX_IDENTITY_CREDENTIALS = 12;
+const MAX_REASON_LENGTH = 120;
+const IDENTITY_KEYS = ["profile", "address", "credentials"];
+const CREDENTIAL_KEYS = ["type", "reason"];
+
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -48,6 +60,60 @@ function isHttpsUrl(v: unknown): v is string {
   }
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function validateIdentity(input: unknown): MiniAppIdentityRequest {
+  if (!isPlainObject(input)) fail("identity muss ein Objekt sein.");
+  for (const key of Object.keys(input)) {
+    if (!IDENTITY_KEYS.includes(key)) {
+      fail(`identity.${key} ist unbekannt (erlaubt: ${IDENTITY_KEYS.join(", ")}).`);
+    }
+  }
+  const flag = (key: "profile" | "address"): boolean => {
+    const v = input[key];
+    if (v === undefined) return false;
+    if (typeof v !== "boolean") fail(`identity.${key} muss true oder false sein.`);
+    return v;
+  };
+  const profile = flag("profile");
+  const address = flag("address");
+
+  const raw = input.credentials ?? [];
+  if (!Array.isArray(raw)) fail("identity.credentials muss eine Liste sein.");
+  if (raw.length > MAX_IDENTITY_CREDENTIALS) {
+    fail(`identity.credentials: höchstens ${MAX_IDENTITY_CREDENTIALS} Nachweise erlaubt.`);
+  }
+  const seen = new Set<string>();
+  const credentials: CredentialRequest[] = raw.map((entry, i) => {
+    if (!isPlainObject(entry)) fail(`identity.credentials[${i}] muss ein Objekt mit type und reason sein.`);
+    for (const key of Object.keys(entry)) {
+      if (!CREDENTIAL_KEYS.includes(key)) {
+        fail(`identity.credentials[${i}].${key} ist unbekannt (erlaubt: ${CREDENTIAL_KEYS.join(", ")}).`);
+      }
+    }
+    const parsed = typeof entry.type === "string" ? parseCredentialRef(entry.type) : null;
+    if (!parsed) {
+      fail(
+        `identity.credentials[${i}].type "${String(entry.type ?? "")}" ist unbekannt ` +
+          '(erlaubt: citizen, attester, guest, "type:0x…" oder "org:<id>").',
+      );
+    }
+    const type =
+      parsed.kind === "builtin" ? parsed.name : parsed.kind === "type" ? `type:${parsed.typeId}` : `org:${parsed.org}`;
+    if (seen.has(type)) fail(`identity.credentials: "${type}" ist doppelt.`);
+    seen.add(type);
+    const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+    if (!reason || reason.length > MAX_REASON_LENGTH) {
+      fail(`identity.credentials[${i}].reason muss 1–${MAX_REASON_LENGTH} Zeichen lang sein.`);
+    }
+    return { type, reason };
+  });
+
+  return { profile, address, credentials };
+}
+
 /**
  * Validate + normalize a manifest. Throws MiniAppError('invalid_params') with a
  * German-friendly message on the first problem found.
@@ -55,6 +121,14 @@ function isHttpsUrl(v: unknown): v is string {
 export function validateManifest(input: unknown): MiniAppManifest {
   if (!input || typeof input !== "object") fail("Manifest fehlt oder ist ungültig.");
   const m = input as Record<string, unknown>;
+
+  const version = String(m.version ?? "1");
+  if (!(MANIFEST_VERSIONS as readonly string[]).includes(version)) {
+    fail(`miniapp.version "${version}" wird nicht unterstützt (erlaubt: ${MANIFEST_VERSIONS.join(", ")}).`);
+  }
+  const hasIdentity = m.identity !== undefined && m.identity !== null;
+  if (version === "1" && hasIdentity) fail('identity braucht miniapp.version "2".');
+  const identity = version === "2" && hasIdentity ? validateIdentity(m.identity) : undefined;
 
   const slug = String(m.slug ?? "").trim().toLowerCase();
   if (!SLUG_RE.test(slug)) {
@@ -121,5 +195,29 @@ export function validateManifest(input: unknown): MiniAppManifest {
     screenshots,
     permissions,
     primaryColor,
+    // Version 1 output stays byte-identical to before (no version/identity keys): the
+    // indexer hashes it, and a new key would flag every live app for re-review.
+    ...(version === "2" ? { version: "2" as const, ...(identity ? { identity } : {}) } : {}),
+  };
+}
+
+/**
+ * The `mini_apps` column patch for a validated manifest — used by every write path.
+ * `manifest_version` and `identity` are the version-2 columns (identity null for version 1).
+ */
+export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown> {
+  const version: ManifestVersion = m.version === "2" ? "2" : "1";
+  return {
+    name: m.name,
+    icon_url: m.iconUrl || null,
+    home_url: m.homeUrl,
+    description: m.description || null,
+    category: m.category,
+    tags: m.tags,
+    screenshots: m.screenshots ?? [],
+    permissions: m.permissions,
+    primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
+    manifest_version: version,
+    identity: version === "2" ? (m.identity ?? null) : null,
   };
 }
