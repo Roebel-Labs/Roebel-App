@@ -211,3 +211,10 @@ test("a reward outcome drops txRef for a pseudonym token (the tx hash would reve
     remainingBudget: 9,
   });
 });
+
+test("resolveTokenWallet scopes the pseudonym lookup to the token's app", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  const seen: unknown[][] = [];
+  await resolveTokenWallet(claims, { walletOf: async (...args) => (seen.push(args), WALLET) });
+  assert.deepEqual(seen, [[PSEUDO, APP_ID]]);
+});

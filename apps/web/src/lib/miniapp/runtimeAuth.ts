@@ -41,7 +41,7 @@ export interface RuntimeAuthDeps {
   verify(token: string, audience: string): Promise<VerifyTokenResult>;
   requireToken: boolean;
   /** The wallet behind a version-2 pseudonym (`mini_app_subjects`); absent = none resolve. */
-  walletOf?(subject: string): Promise<string | null>;
+  walletOf?(subject: string, appId: string): Promise<string | null>;
   onLegacy?(info: LegacyCallInfo): void;
 }
 
@@ -81,13 +81,13 @@ export function bearerToken(authorization: string | null | undefined): string | 
  */
 export async function resolveTokenWallet(
   claims: MiniAppTokenClaims,
-  deps: { walletOf(subject: string): Promise<string | null> },
+  deps: { walletOf(subject: string, appId: string): Promise<string | null> },
 ): Promise<string> {
   if (claims.addr !== undefined) {
     if (!WALLET_RE.test(claims.addr)) throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
     return claims.addr.toLowerCase();
   }
-  const wallet = claims.sub ? await deps.walletOf(claims.sub) : null;
+  const wallet = claims.sub ? await deps.walletOf(claims.sub, claims.app) : null;
   if (!wallet || !WALLET_RE.test(wallet)) throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
   return wallet.toLowerCase();
 }
@@ -114,7 +114,7 @@ export async function resolveRuntimeUser(
       throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
     }
     const walletOf = deps.walletOf;
-    const lookup = walletOf ? { walletOf: (s: string) => walletOf(s) } : NO_SUBJECTS;
+    const lookup = walletOf ? { walletOf: (s: string, a: string) => walletOf(s, a) } : NO_SUBJECTS;
     const wallet = await resolveTokenWallet(v.claims, lookup);
     return v.claims.addr === undefined ? { wallet, via: "token", pseudonymous: true } : { wallet, via: "token" };
   }
@@ -142,7 +142,7 @@ export async function resolveRuntimeUser(
 export function runtimeAuthDeps(): RuntimeAuthDeps {
   return {
     requireToken: process.env.MINIAPP_REQUIRE_USER_TOKEN === "1",
-    async walletOf(subject) {
+    async walletOf(subject, appId) {
       const [{ subjectSecretFromEnv }, { supabaseGrantStore }, { createAdminClient }] = await Promise.all([
         import("./subject"),
         import("./grants"),
@@ -150,7 +150,7 @@ export function runtimeAuthDeps(): RuntimeAuthDeps {
       ]);
       const secret = subjectSecretFromEnv();
       if (!secret) return null;
-      return supabaseGrantStore(createAdminClient(), secret).walletOf(subject);
+      return supabaseGrantStore(createAdminClient(), secret).walletOf(subject, appId);
     },
     async verify(token, audience) {
       const k = tokenKeysFromEnv();

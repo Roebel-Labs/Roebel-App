@@ -51,7 +51,8 @@ export interface GrantStore {
   put(appId: string, wallet: string, g: GrantRow): Promise<void>;
   /** Derives the pseudonym and upserts the `mini_app_subjects` row. */
   subject(appId: string, wallet: string): Promise<string>;
-  walletOf(subject: string): Promise<string | null>;
+  /** The wallet behind `subject`; with `appId`, only a subject of that app resolves. */
+  walletOf(subject: string, appId?: string): Promise<string | null>;
 }
 
 /** Service-role store over `mini_app_grants` / `mini_app_subjects`. Errors throw. */
@@ -97,8 +98,11 @@ export function supabaseGrantStore(db: SupabaseClient, secret: string): GrantSto
       if (error) throw new Error(`mini_app_subjects write failed: ${error.message}`);
       return subject;
     },
-    async walletOf(subject) {
-      const { data, error } = await db.from("mini_app_subjects").select("wallet").eq("subject", subject).maybeSingle();
+    async walletOf(subject, appId) {
+      let q = db.from("mini_app_subjects").select("wallet").eq("subject", subject);
+      // Defence in depth: the token's app must own the pseudonym (subjects are unique anyway).
+      if (appId !== undefined) q = q.eq("mini_app_id", appId);
+      const { data, error } = await q.maybeSingle();
       if (error) throw new Error(`mini_app_subjects read failed: ${error.message}`);
       return typeof data?.wallet === "string" ? data.wallet : null;
     },

@@ -1,7 +1,7 @@
 // apps/web/tests/miniapp-grants.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EMPTY_GRANT, clampGrant } from "../src/lib/miniapp/grants";
+import { EMPTY_GRANT, clampGrant, supabaseGrantStore } from "../src/lib/miniapp/grants";
 
 const T = "type:0x" + "ab".repeat(32);
 
@@ -43,4 +43,20 @@ test("duplicates collapse and refs are matched case-insensitively", () => {
   );
   assert.deepEqual(g.credentials, [T]);
   assert.deepEqual(g.asked, [`cred:${T}`]);
+});
+
+test("walletOf looks the pseudonym up within the app only", async () => {
+  const eqs: [string, string][] = [];
+  const q = {
+    select: () => q,
+    eq: (col: string, val: string) => {
+      eqs.push([col, val]);
+      return q;
+    },
+    maybeSingle: async () => ({ data: { wallet: "0xabc" }, error: null }),
+  };
+  const db = { from: (t: string) => (assert.equal(t, "mini_app_subjects"), q) };
+  const store = supabaseGrantStore(db as never, "s".repeat(32));
+  assert.equal(await store.walletOf("nz_x", "app-1"), "0xabc");
+  assert.deepEqual(eqs, [["subject", "nz_x"], ["mini_app_id", "app-1"]]);
 });
