@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -22,6 +23,7 @@ import {
   Landmark,
   Briefcase,
   Image as ImageIcon,
+  BadgeCheck,
 } from "lucide-react";
 import {
   subTypeFeatures,
@@ -37,6 +39,18 @@ interface OrgSidebarProps {
 export function OrgSidebar({ account }: OrgSidebarProps) {
   const pathname = usePathname();
   const features = subTypeFeatures(account.sub_type);
+  // The credential register is a node-wide switch (app_settings + registry config).
+  const [credentialsEnabled, setCredentialsEnabled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/credentials/status")
+      .then((r) => r.json())
+      .then((s) => alive && setCredentialsEnabled(s?.enabled === true && s?.configured === true))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   type Item = {
     name: string;
@@ -87,6 +101,12 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       href: "/dashboard/members",
       icon: <Users className="h-4 w-4" />,
       visible: features.members,
+    },
+    {
+      name: "Ausweise",
+      href: "/dashboard/credentials",
+      icon: <BadgeCheck className="h-4 w-4" />,
+      visible: features.credentials && credentialsEnabled,
     },
     {
       name: "Öffnungszeiten",

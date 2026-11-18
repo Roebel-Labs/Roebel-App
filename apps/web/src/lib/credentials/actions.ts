@@ -535,7 +535,7 @@ export async function getActionForPhone(
   d: Deps,
   c: Caller,
   actionId: string,
-): Promise<Result<{ id: string; status: string; steps: RegisterStep[]; summary: ActionSummary; registry: Address; expiresAt: string }>> {
+): Promise<Result<{ id: string; status: string; steps: RegisterStep[]; summary: ActionSummary; registry: Address; expiresAt: string; error: string | null }>> {
   const found = await actionFor(d, c, actionId);
   if (isFail(found)) return found;
   if (found.org) {
@@ -544,7 +544,8 @@ export async function getActionForPhone(
     if (r === "no_chain_authority") return NO_CHAIN_AUTHORITY;
   }
   const a = await expireIfDue(d, found.action);
-  return ok({ id: a.id, status: a.status, steps: a.steps, summary: a.summary as ActionSummary, registry: d.registry, expiresAt: a.expiresAt });
+  // `error` lets the dashboard's live panel say why a confirmation failed.
+  return ok({ id: a.id, status: a.status, steps: a.steps, summary: a.summary as ActionSummary, registry: d.registry, expiresAt: a.expiresAt, error: a.error });
 }
 
 export async function listActions(d: Deps, c: Caller, accountId: string): Promise<Result<ActionView[]>> {
