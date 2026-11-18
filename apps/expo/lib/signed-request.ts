@@ -21,7 +21,7 @@ export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'spon
 export const LIVE_SCOPE = 'roebel-live-v1';
 export type LiveAction = 'live_session';
 /** Mini-app user token (apps/web /api/mini-apps/token); signed under MINIAPP_SCOPE (lib/miniapp-token.ts). */
-export type MiniAppAction = 'user_token' | 'identity_get' | 'identity_set';
+export type MiniAppAction = 'user_token' | 'identity_get' | 'identity_set' | 'org_binding_list' | 'org_binding_decide';
 /** Credential register (apps/web/src/lib/signed-request/message.ts); signed under CREDENTIALS_SCOPE. */
 export const CREDENTIALS_SCOPE = 'roebel-credentials-v1';
 export type CredentialAction =

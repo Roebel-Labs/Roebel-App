@@ -266,6 +266,31 @@ export async function fetchLiveMiniApps(): Promise<MiniApp[]> {
   }
 }
 
+/**
+ * Live mini apps whose org confirmed them (org page rail). Returns [] on error, and [] while the
+ * audience/org migration is not applied (the binding columns do not exist yet).
+ */
+export async function fetchMiniAppsOfOrg(accountId: string): Promise<MiniApp[]> {
+  try {
+    const { data, error } = await supabase
+      .from('mini_apps')
+      .select(SELECT_COLUMNS)
+      .eq('status', 'live')
+      .eq('org_account_id', accountId.toLowerCase())
+      .eq('org_binding', 'confirmed')
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) {
+      if (!isMissingColumn(error)) console.warn('[miniapps] fetchMiniAppsOfOrg failed:', error.message);
+      return [];
+    }
+    return ((data ?? []) as unknown as MiniAppRow[]).map(mapMiniAppRow);
+  } catch (e) {
+    console.warn('[miniapps] fetchMiniAppsOfOrg threw:', e);
+    return [];
+  }
+}
+
 /** Fetch a single live mini app by slug. Returns null if not found / not live. */
 export async function fetchMiniAppBySlug(slug: string): Promise<MiniApp | null> {
   try {

@@ -13,7 +13,8 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function OrgSettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount } = useAccount();
+  const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount, roleInActiveAccount } = useAccount();
+  const canManage = roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin';
   const account = useActiveAccount();
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -94,6 +95,25 @@ export default function OrgSettingsScreen() {
               ]}
             >
               <Text style={styles.primaryButtonText}>Zahlungen öffnen</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {canManage && (
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mini-Apps</Text>
+            <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
+              {'Mini-Apps, die sagen, dass sie zu euch gehören, bestätigen oder ablehnen.'}
+            </Text>
+            <Pressable
+              onPress={() => router.push('/org/mini-apps' as any)}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Mini-Apps verwalten</Text>
             </Pressable>
           </View>
         )}
