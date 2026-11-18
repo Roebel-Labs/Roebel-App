@@ -10,13 +10,13 @@ import { shortcutHint, type ShortcutId } from './shortcuts';
 const SECTION_KEYS: Partial<Record<Section, ShortcutId>> = { home: 'goHome', foryou: 'goForYou', skills: 'goSkills', wiki: 'goWiki', library: 'goLibrary' };
 
 /** Left navigation rail. The livestream icon carries a red dot while the program is on air or recording. */
-export function Rail({ section, onSelect, onSearch }: { section: AppSection; onSelect: (s: Section) => void; onSearch: () => void }) {
+export function Rail({ section, onSelect, onSearch, hidden = [] }: { section: AppSection; onSelect: (s: Section) => void; onSearch: () => void; hidden?: readonly Section[] }) {
   const air = useOnAir();
   const live = air.phase !== 'off';
   return (
     <nav className="rail" aria-label={t('Bereiche')}>
       <div className="rail-items" role="tablist" aria-orientation="vertical">
-        {SECTIONS.map((s) => {
+        {SECTIONS.filter((s) => !hidden.includes(s.id)).map((s) => {
           const Icon = SECTION_ICONS[s.id];
           return (
             <Tip key={s.id} label={s.soon ? t('{label} (bald)', { label: t(s.label) }) : t(s.label)} keys={SECTION_KEYS[s.id] && shortcutHint(SECTION_KEYS[s.id]!)} side="right">

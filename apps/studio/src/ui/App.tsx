@@ -27,6 +27,8 @@ import { WikiSection } from '../persona/WikiSection';
 import { LibrarySection } from '../persona/LibrarySection';
 import { loadSection, saveSection, visibleLiveTab, type AppSection, type LiveTab, type Section } from './shell/nav';
 import { AgentSection } from '../agent/AgentSection';
+import { CredentialsSection } from '../credentials/CredentialsSection';
+import { useCredentialsAvailable } from '../credentials/useCredentialsAvailable';
 import { Rail } from './shell/Rail';
 import { Toolbar } from './shell/Toolbar';
 import { emitCommand, onDesktopCommand, type DesktopCommand } from '../workspace/desktop';
@@ -425,6 +427,7 @@ function Shell() {
   // Cameras and microphones may open only in the livestream section (or while on air).
   // For capture and the show runtime the assistant page counts as the workspace.
   const railSection: Section = section === 'agent' ? 'home' : section;
+  const credentialsAvailable = useCredentialsAvailable();
   useEffect(() => setCaptureSection(railSection), [railSection]);
   useShowRuntime(visibleLiveTab(railSection, tab));
   useSponsorRuntime();
@@ -446,7 +449,7 @@ function Shell() {
     <div className="app shell">
       <Toolbar section={section} onSection={setSection} nav={{ canBack: history.at > 0, canForward: history.at < history.items.length - 1, back: () => step(-1), forward: () => step(1) }} />
       <div className="shell-body">
-        <Rail section={section} onSelect={setSection} onSearch={search} />
+        <Rail section={section} onSelect={setSection} onSearch={search} hidden={credentialsAvailable || section === 'credentials' ? [] : ['credentials']} />
         <div className={`shell-card ${section === 'live' && !isWebBuild() ? 'live-mode' : 'ws-mode'}`}>
           {/* Broadcast alarms stay visible in every section. */}
           <RecordingBanner />
@@ -502,6 +505,7 @@ function Shell() {
           {section === 'wiki' && <WikiSection />}
           {section === 'library' && <LibrarySection />}
           {section === 'apps' && <AppsSection />}
+          {section === 'credentials' && <CredentialsSection />}
           {section === 'agent' && <AgentSection onNavigate={setSection} />}
           {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
           {((section === 'live' && !isWebBuild()) || air.phase !== 'off') && <HealthBar />}
