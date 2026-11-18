@@ -123,6 +123,9 @@ test("a missing contracts column is retried without contracts only; identity col
     "contracts",
     "audience",
     "org_account_id",
+    "org_binding",
+    "org_binding_decided_at",
+    "org_binding_decided_by",
   ]);
   assert.deepEqual(missingNewColumns({ code: "PGRST204", message: "Could not find the 'foo' column" }), []);
   assert.deepEqual(missingNewColumns(null), []);

@@ -9,14 +9,17 @@ import { fetchManifestJson, isBlockedIp, wellKnownUrlFor } from "./safeFetch";
 import { pickSlug, planIndex, type IndexPlan } from "./indexPlan";
 import { createVersion, getOrCreateDeveloper, withIdentityColumnFallback } from "./data";
 import { manifestStoreFields } from "./manifest";
+import { bindingPatch } from "./orgBinding";
 import { MiniAppError, type MiniAppRow } from "./types";
 
 function db() {
   return createAdminClient();
 }
 
-function storeFields(p: ParsedManifestFile) {
-  return manifestStoreFields(p.manifest);
+/** Store columns of a parsed manifest plus the org binding change against `prev` (null = new app). */
+function storeFields(p: ParsedManifestFile, prev: MiniAppRow | null) {
+  const fields = manifestStoreFields(p.manifest);
+  return { ...fields, ...bindingPatch(prev, fields) };
 }
 
 async function hostIsPublic(host: string): Promise<boolean> {
@@ -170,7 +173,7 @@ export async function indexOrigin(
     const dev = await getOrCreateDeveloper(parsed.owner);
     const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(
       {
-        ...storeFields(parsed),
+        ...storeFields(parsed, null),
         developer_id: dev.id,
         slug,
         status: "pending",
@@ -203,7 +206,7 @@ export async function indexOrigin(
   const base = { last_indexed_at: now, index_error: null, manifest_url: url };
   let patch: Record<string, unknown> = base;
   if (plan.kind === "update-direct") {
-    patch = { ...base, ...storeFields(parsed), status: "pending", updated_at: now };
+    patch = { ...base, ...storeFields(parsed, found.row), status: "pending", updated_at: now };
     await addVersion(found.existing.id, parsed, found.existing.slug, hash);
   } else if (plan.kind === "stage-version") {
     patch = plan.markPendingUpdate ? { ...base, pending_update: true } : base;

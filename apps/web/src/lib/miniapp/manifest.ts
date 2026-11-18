@@ -303,7 +303,13 @@ const IDENTITY_COLUMNS = ["manifest_version", "identity"] as const;
 /** Added by 20261117mb_mini_app_contracts_gas.sql (after the identity migration). */
 const CONTRACTS_COLUMNS = ["contracts"] as const;
 /** Added by 20261117mc_mini_app_audience_org.sql (after the contracts migration). */
-const AUDIENCE_COLUMNS = ["audience", "org_account_id"] as const;
+const AUDIENCE_COLUMNS = [
+  "audience",
+  "org_account_id",
+  "org_binding",
+  "org_binding_decided_at",
+  "org_binding_decided_by",
+] as const;
 const NEW_COLUMNS = [...IDENTITY_COLUMNS, ...CONTRACTS_COLUMNS, ...AUDIENCE_COLUMNS] as const;
 
 /**
@@ -333,6 +339,7 @@ export function missingNewColumns(
   const msg = err.message ?? "";
   if (IDENTITY_COLUMNS.some((c) => msg.includes(c))) return [...NEW_COLUMNS];
   if (CONTRACTS_COLUMNS.some((c) => msg.includes(c))) return [...CONTRACTS_COLUMNS];
+  // "org_binding" also matches "org_binding_decided_*"; any of them means the whole set is missing.
   if (AUDIENCE_COLUMNS.some((c) => msg.includes(c))) return [...AUDIENCE_COLUMNS];
   return [];
 }

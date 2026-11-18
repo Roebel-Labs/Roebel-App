@@ -48,6 +48,13 @@ import type { MiniAppIdentityRequest } from "@netizen-labs/miniapp-sdk";
 import { formatEther } from "viem";
 
 /** wei (numeric column → string or number) → xDAI for display. */
+const ORG_BINDING_LABEL: Record<string, string> = {
+  none: "keine Zuordnung",
+  requested: "wartet auf Bestätigung durch den Verein",
+  confirmed: "vom Verein bestätigt",
+  rejected: "vom Verein abgelehnt",
+};
+
 function xdai(wei: string | number | null | undefined): string {
   try {
     return formatEther(BigInt(String(wei ?? 0)));
@@ -114,6 +121,7 @@ export default function MiniAppAdminDetail({
   const { data, loading, error, refresh } = useMiniAppApi<{
     app: MiniAppRow;
     versions: MiniAppVersionRow[];
+    orgName?: string | null;
   }>(`${id}`);
 
   const app = data?.app;
@@ -220,6 +228,29 @@ export default function MiniAppAdminDetail({
               <span>{"Die App fragt nur ab, was sie für ihre Funktion braucht."}</span>
             </label>
           )}
+        </DetailCard>
+      )}
+
+      {(app.audience || app.org_account_id) && (
+        <DetailCard title="Zielgruppe & Verein">
+          <dl className="space-y-2 text-sm">
+            {app.audience && (
+              <div>
+                <dt className="font-medium">
+                  {app.audience.mode === "required" ? "Nur für (Pflicht)" : "Empfohlen für"}
+                </dt>
+                <dd className="break-words text-muted-foreground">{app.audience.anyOf.join(", ")}</dd>
+              </div>
+            )}
+            {app.org_account_id && (
+              <div>
+                <dt className="font-medium">Verein</dt>
+                <dd className="text-muted-foreground">
+                  {data?.orgName ?? "Unbekanntes Konto"} · {ORG_BINDING_LABEL[app.org_binding ?? "none"]}
+                </dd>
+              </div>
+            )}
+          </dl>
         </DetailCard>
       )}
 

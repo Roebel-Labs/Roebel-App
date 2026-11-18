@@ -12,6 +12,7 @@ import {
   withoutColumns,
 } from "./manifest";
 import { issueMuenzenOnChain } from "./muenzen";
+import { bindingPatch, type OrgBinding } from "./orgBinding";
 import { sponsorRules, xdaiToWei } from "./contracts";
 import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
 import { IDENTITY_REVIEW_MESSAGE, needsIdentityReview } from "./identityReview";
@@ -192,9 +193,11 @@ export async function submitApp(input: SubmitAppInput): Promise<MiniAppRow> {
     throw new MiniAppError("conflict", `Der slug "${manifest.slug}" ist bereits vergeben.`);
   }
 
+  const fields = manifestStoreFields(manifest);
   const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(
     {
-      ...manifestStoreFields(manifest),
+      ...fields,
+      ...bindingPatch(null, fields),
       developer_id: input.developerId,
       slug: manifest.slug,
       status: "pending",
@@ -252,9 +255,12 @@ export async function updateAppManifest(
   // Icon/previews are managed in the "Bilder" section (upload + KI). A
   // manifest edit that omits them keeps the stored images instead of
   // clobbering them — clearing happens über die Bilder-Sektion.
+  const fields = manifestStoreFields(m);
   const { data: updated, error } = await withIdentityColumnFallback<MiniAppRow>(
     {
-      ...manifestStoreFields(m),
+      ...fields,
+      // A changed org asks the new org again; the same org keeps its decision.
+      ...bindingPatch(app, fields),
       slug: m.slug,
       icon_url: m.iconUrl || app.icon_url,
       screenshots: m.screenshots && m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
@@ -416,7 +422,8 @@ export async function reviewApp(
   // Indexed apps: store fields only change on approval of a version (spec §5).
   const patch: Record<string, unknown> = { pending_update: false };
   if (decision === "approve" && app.source === "indexed" && pending?.manifest) {
-    Object.assign(patch, manifestStoreFields(validateManifest(pending.manifest)));
+    const fields = manifestStoreFields(validateManifest(pending.manifest));
+    Object.assign(patch, fields, bindingPatch(app, fields));
   }
   const { data: final, error: finErr } = await withIdentityColumnFallback<MiniAppRow>(patch, (p) =>
     supabase.from("mini_apps").update(p).eq("id", id).select("*").single(),
@@ -967,4 +974,39 @@ export async function queryAppRankings(windowDays = 7): Promise<AppRankings> {
     .sort((x, y) => y.users - x.users || y.opens - x.opens || x.name.localeCompare(y.name));
 
   return { apps: rows, windowDays, generatedAt: now };
+}
+
+// ── Org binding ─────────────────────────────────────────────────────────────
+
+/**
+ * Live or pending apps that name `accountId` as their org and have a binding to decide or
+ * already decided. Only the columns the org's screen shows — never a developer wallet.
+ */
+export async function listOrgBindingApps(
+  accountId: string,
+): Promise<{ id: string; slug: string; name: string; icon_url: string | null; org_binding: string }[]> {
+  const { data, error } = await db()
+    .from("mini_apps")
+    .select("id, slug, name, icon_url, org_binding")
+    .eq("org_account_id", accountId)
+    .in("status", ["live", "pending"])
+    .neq("org_binding", "none")
+    .order("created_at", { ascending: false });
+  if (error) throw new MiniAppError("internal", error.message);
+  return (data ?? []) as { id: string; slug: string; name: string; icon_url: string | null; org_binding: string }[];
+}
+
+/** Record the org's decision; `by` is the role that decided ("owner" / "admin"), never a wallet. */
+export async function setOrgBinding(id: string, binding: OrgBinding, by: string): Promise<void> {
+  const { error } = await db()
+    .from("mini_apps")
+    .update({ org_binding: binding, org_binding_decided_at: new Date().toISOString(), org_binding_decided_by: by })
+    .eq("id", id);
+  if (error) throw new MiniAppError("internal", error.message);
+}
+
+/** An account's display name (orgs are public), or null. */
+export async function getAccountName(accountId: string): Promise<string | null> {
+  const { data } = await db().from("accounts").select("name").eq("id", accountId).maybeSingle();
+  return ((data as { name?: string | null } | null)?.name ?? null) || null;
 }

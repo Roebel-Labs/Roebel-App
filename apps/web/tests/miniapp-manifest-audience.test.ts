@@ -80,9 +80,11 @@ test("manifestStoreFields maps audience and org_account_id, null when absent", (
 
 test("a missing audience column drops only the audience columns", () => {
   const drop = missingNewColumns({ code: "PGRST204", message: "Could not find the 'org_account_id' column of 'mini_apps'" });
-  assert.deepEqual(drop.sort(), ["audience", "org_account_id"]);
+  const all = ["audience", "org_account_id", "org_binding", "org_binding_decided_at", "org_binding_decided_by"].sort();
+  assert.deepEqual(drop.sort(), all);
   const drop2 = missingNewColumns({ code: "42703", message: 'column "audience" of relation "mini_apps" does not exist' });
-  assert.deepEqual(drop2.sort(), ["audience", "org_account_id"]);
+  assert.deepEqual(drop2.sort(), all);
+  assert.deepEqual(missingNewColumns({ code: "PGRST204", message: "Could not find the 'org_binding' column" }).sort(), all);
 });
 
 test("a missing identity column drops every new column, the audience ones too", () => {
