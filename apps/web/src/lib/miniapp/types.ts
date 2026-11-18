@@ -6,6 +6,7 @@
 //
 // The AI-builder agent (D) imports from here — keep the exports stable.
 import type {
+  DeclaredContract,
   MiniAppCategory,
   MiniAppIdentityRequest,
   MiniAppManifest,
@@ -67,6 +68,12 @@ export interface MiniAppRow {
   manifest_version?: "1" | "2";
   /** The version-2 `identity` section; null for version 1. */
   identity?: MiniAppIdentityRequest | null;
+  /** Version-2 `contracts` declaration; absent until the contracts migration is applied. */
+  contracts?: DeclaredContract[];
+  /** Gas budget for sponsored calls, granted at review (wei, numeric → string or number). */
+  gas_budget_wei?: string | number;
+  /** Gas reserved so far against that budget (wei). */
+  gas_spent_wei?: string | number;
 }
 
 export interface MiniAppVersionRow {

@@ -13,6 +13,7 @@
 import { supabase } from '@/lib/supabase';
 import type {
   CredentialRequest,
+  DeclaredContract,
   MiniAppCategory,
   MiniAppIdentityRequest,
   MiniAppPermission,
@@ -44,6 +45,8 @@ export interface MiniApp {
   manifestVersion: 1 | 2;
   /** The version-2 `identity` section; always null for version 1. */
   identity: MiniAppIdentityRequest | null;
+  /** The version-2 `contracts` declaration (labels for the confirm sheet); [] for version 1. */
+  contracts: DeclaredContract[];
 }
 
 /** Raw shape of a `mini_apps` row (only the columns we select). */
@@ -66,6 +69,8 @@ interface MiniAppRow {
   /** Absent until the identity migration is applied. */
   manifest_version?: string | null;
   identity?: unknown;
+  /** Absent until the contracts migration is applied. */
+  contracts?: unknown;
   developers?: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
@@ -125,6 +130,27 @@ function coerceIdentity(raw: unknown): MiniAppIdentityRequest | null {
   return { profile: r.profile === true, address: r.address === true, credentials };
 }
 
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+function coerceContracts(raw: unknown): DeclaredContract[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (c): c is DeclaredContract =>
+        !!c &&
+        typeof c === 'object' &&
+        typeof (c as DeclaredContract).address === 'string' &&
+        ADDRESS_RE.test((c as DeclaredContract).address) &&
+        typeof (c as DeclaredContract).label === 'string' &&
+        Array.isArray((c as DeclaredContract).functions),
+    )
+    .map((c) => ({
+      address: c.address.toLowerCase(),
+      label: c.label,
+      functions: c.functions.filter((f): f is string => typeof f === 'string'),
+    }));
+}
+
 export function mapMiniAppRow(row: MiniAppRow): MiniApp {
   const manifestVersion: 1 | 2 = row.manifest_version === '2' ? 2 : 1;
   return {
@@ -145,16 +171,33 @@ export function mapMiniAppRow(row: MiniAppRow): MiniApp {
     authorName: resolveAuthorName(row.developers),
     manifestVersion,
     identity: manifestVersion === 2 ? coerceIdentity(row.identity) : null,
+    contracts: manifestVersion === 2 ? coerceContracts(row.contracts) : [],
   };
 }
 
 const LEGACY_SELECT_COLUMNS =
   'id, slug, name, icon_url, home_url, description, category, tags, screenshots, permissions, primary_color, featured, feature_image_url, created_at, status, developers(display_name)';
-const SELECT_COLUMNS = `${LEGACY_SELECT_COLUMNS}, manifest_version, identity`;
+const IDENTITY_SELECT_COLUMNS = `${LEGACY_SELECT_COLUMNS}, manifest_version, identity`;
+const SELECT_COLUMNS = `${IDENTITY_SELECT_COLUMNS}, contracts`;
+/** Tried in order while a column is missing (contracts migration, then identity migration). */
+const SELECT_FALLBACKS = [SELECT_COLUMNS, IDENTITY_SELECT_COLUMNS, LEGACY_SELECT_COLUMNS];
 
-/** PostgREST "column does not exist": the identity migration is not applied yet. */
+/** PostgREST "column does not exist": a migration is not applied yet. */
 function isMissingColumn(error: { code?: string } | null): boolean {
   return error?.code === '42703';
+}
+
+type SelectResult = { data: unknown; error: { code?: string; message: string } | null };
+
+/** Run `query` with the full column list, falling back to older lists on a missing column. */
+export async function selectWithColumnFallback(
+  query: (columns: string) => PromiseLike<SelectResult>,
+): Promise<SelectResult> {
+  let result = await query(SELECT_FALLBACKS[0]);
+  for (let i = 1; i < SELECT_FALLBACKS.length && isMissingColumn(result.error); i++) {
+    result = await query(SELECT_FALLBACKS[i]);
+  }
+  return result;
 }
 
 /** Fetch every live mini app (featured first, then newest). Returns [] on error. */
@@ -167,8 +210,7 @@ export async function fetchLiveMiniApps(): Promise<MiniApp[]> {
         .eq('status', 'live')
         .order('featured', { ascending: false })
         .order('created_at', { ascending: false });
-    let { data, error } = await query(SELECT_COLUMNS);
-    if (isMissingColumn(error)) ({ data, error } = await query(LEGACY_SELECT_COLUMNS));
+    const { data, error } = await selectWithColumnFallback(query);
 
     if (error) {
       console.warn('[miniapps] fetchLiveMiniApps failed:', error.message);
@@ -186,8 +228,7 @@ export async function fetchMiniAppBySlug(slug: string): Promise<MiniApp | null> 
   try {
     const query = (columns: string) =>
       supabase.from('mini_apps').select(columns).eq('slug', slug).eq('status', 'live').maybeSingle();
-    let { data, error } = await query(SELECT_COLUMNS);
-    if (isMissingColumn(error)) ({ data, error } = await query(LEGACY_SELECT_COLUMNS));
+    const { data, error } = await selectWithColumnFallback(query);
 
     if (error) {
       console.warn('[miniapps] fetchMiniAppBySlug failed:', error.message);

@@ -10,6 +10,7 @@ import type {
   MiniAppPermission,
 } from "@netizen-labs/miniapp-sdk";
 import { parseCredentialRef } from "@netizen-labs/miniapp-sdk/host";
+import { validateContracts } from "./contracts";
 import { MiniAppError } from "./types";
 
 export const CATEGORIES: MiniAppCategory[] = [
@@ -129,6 +130,9 @@ export function validateManifest(input: unknown): MiniAppManifest {
   const hasIdentity = m.identity !== undefined && m.identity !== null;
   if (version === "1" && hasIdentity) fail('identity braucht miniapp.version "2".');
   const identity = version === "2" && hasIdentity ? validateIdentity(m.identity) : undefined;
+  const hasContracts = m.contracts !== undefined && m.contracts !== null;
+  if (version === "1" && hasContracts) fail('contracts braucht miniapp.version "2".');
+  const contracts = version === "2" && hasContracts ? validateContracts(m.contracts) : undefined;
 
   const slug = String(m.slug ?? "").trim().toLowerCase();
   if (!SLUG_RE.test(slug)) {
@@ -197,13 +201,16 @@ export function validateManifest(input: unknown): MiniAppManifest {
     primaryColor,
     // Version 1 output stays byte-identical to before (no version/identity keys): the
     // indexer hashes it, and a new key would flag every live app for re-review.
-    ...(version === "2" ? { version: "2" as const, ...(identity ? { identity } : {}) } : {}),
+    ...(version === "2"
+      ? { version: "2" as const, ...(identity ? { identity } : {}), ...(contracts ? { contracts } : {}) }
+      : {}),
   };
 }
 
 /**
  * The `mini_apps` column patch for a validated manifest — used by every write path.
- * `manifest_version` and `identity` are the version-2 columns (identity null for version 1).
+ * `manifest_version` and `identity` are the version-2 columns (identity null for version 1);
+ * `contracts` is always a list (empty for version 1 or no declaration).
  */
 export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown> {
   const version: ManifestVersion = m.version === "2" ? "2" : "1";
@@ -219,10 +226,14 @@ export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown>
     primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
     manifest_version: version,
     identity: version === "2" ? (m.identity ?? null) : null,
+    contracts: version === "2" ? (m.contracts ?? []) : [],
   };
 }
 
 const IDENTITY_COLUMNS = ["manifest_version", "identity"] as const;
+/** Added by 20261117mb_mini_app_contracts_gas.sql (after the identity migration). */
+const CONTRACTS_COLUMNS = ["contracts"] as const;
+const NEW_COLUMNS = [...IDENTITY_COLUMNS, ...CONTRACTS_COLUMNS] as const;
 
 /**
  * True when a mini_apps write failed only because the identity migration
@@ -237,9 +248,30 @@ export function isMissingIdentityColumnError(
   return IDENTITY_COLUMNS.some((c) => msg.includes(c));
 }
 
-/** The same patch without the two identity columns, for the pre-migration retry. */
-export function withoutIdentityColumns<T extends Record<string, unknown>>(patch: T): Record<string, unknown> {
+/**
+ * Which new columns to drop after a failed write: none unless the error is an unknown
+ * column (PGRST204 / 42703) naming one of them. A missing identity column means neither
+ * migration is applied (drop all three); a missing `contracts` column only the contracts
+ * migration (drop just that one, keep the identity columns).
+ */
+export function missingNewColumns(
+  err: { code?: string | null; message?: string | null } | null | undefined,
+): string[] {
+  if (!err || (err.code !== "PGRST204" && err.code !== "42703")) return [];
+  const msg = err.message ?? "";
+  if (IDENTITY_COLUMNS.some((c) => msg.includes(c))) return [...NEW_COLUMNS];
+  if (CONTRACTS_COLUMNS.some((c) => msg.includes(c))) return [...CONTRACTS_COLUMNS];
+  return [];
+}
+
+/** The same patch without the given columns. */
+export function withoutColumns<T extends Record<string, unknown>>(patch: T, columns: readonly string[]): Record<string, unknown> {
   const out: Record<string, unknown> = { ...patch };
-  for (const c of IDENTITY_COLUMNS) delete out[c];
+  for (const c of columns) delete out[c];
   return out;
+}
+
+/** The same patch without the new columns (identity + contracts), for the pre-migration retry. */
+export function withoutIdentityColumns<T extends Record<string, unknown>>(patch: T): Record<string, unknown> {
+  return withoutColumns(patch, NEW_COLUMNS);
 }

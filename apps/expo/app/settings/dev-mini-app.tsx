@@ -42,6 +42,7 @@ function devApp(url: string): MiniApp {
     preview: true,
     manifestVersion: 1,
     identity: null,
+    contracts: [],
   };
 }
 
