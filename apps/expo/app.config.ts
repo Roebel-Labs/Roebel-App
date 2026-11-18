@@ -37,7 +37,7 @@ const config: ExpoConfig = {
   // background audio (livestream PiP, Hören on the lock screen). 3.8.0 only ever
   // shipped as preview builds without WebRTC, so JS that imports
   // @livekit/react-native must never be published to runtime 3.8.0 or 3.7.0.
-  version: '3.9.0',
+  version: '3.10.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -220,7 +220,7 @@ const config: ExpoConfig = {
     // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
     // builds sharing one number, and App Store Connect rejects duplicates.
     // Last submitted: 34 (v3.7.0). 35/40 = 3.8.0 preview builds only, never submitted.
-    buildNumber: '36',
+    buildNumber: '37',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -241,7 +241,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 41,
+    versionCode: 42,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
