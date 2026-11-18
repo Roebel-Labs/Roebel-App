@@ -38,6 +38,20 @@ export function walletAllowed(app: Pick<MiniApp, 'manifestVersion'>, state: Iden
   return state?.granted.address === true;
 }
 
+/**
+ * A reward result as the app may see it: without the wallet (version 2, no address grant) the
+ * on-chain `txRef` is dropped, since a lookup of the tx hash would reveal the recipient wallet.
+ */
+export function rewardForApp<T extends { txRef?: string }>(
+  app: Pick<MiniApp, 'manifestVersion'>,
+  state: IdentityState | null,
+  res: T,
+): T {
+  if (walletAllowed(app, state) || !('txRef' in res)) return res;
+  const { txRef: _txRef, ...rest } = res;
+  return rest as T;
+}
+
 /** The error a signing call gets when the address is not shared with a version-2 app. */
 export const ADDRESS_NOT_GRANTED = {
   code: 'unauthorized',

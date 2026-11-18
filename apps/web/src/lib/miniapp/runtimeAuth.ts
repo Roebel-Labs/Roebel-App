@@ -21,7 +21,21 @@ import {
 
 export type RuntimeRoute = "rewards" | "data" | "notifications" | "muenzen-balance";
 
-export type RuntimeUser = { wallet: string; via: "token" | "legacy" };
+/**
+ * `pseudonymous`: the token carried no address grant (a version-2 app knows the person only by
+ * the per-app `nz_…` subject). Responses must then not carry anything that links to the wallet.
+ */
+export type RuntimeUser = { wallet: string; via: "token" | "legacy"; pseudonymous?: true };
+
+/**
+ * A runtime response as the app may see it: for a pseudonymous user the on-chain `txRef` is
+ * dropped (a lookup of the tx hash would reveal the recipient wallet).
+ */
+export function forRuntimeUser<T extends { txRef?: string }>(outcome: T, user: RuntimeUser): T {
+  if (!user.pseudonymous || !("txRef" in outcome)) return outcome;
+  const { txRef: _txRef, ...rest } = outcome;
+  return rest as T;
+}
 
 export interface RuntimeAuthDeps {
   verify(token: string, audience: string): Promise<VerifyTokenResult>;
@@ -101,7 +115,8 @@ export async function resolveRuntimeUser(
     }
     const walletOf = deps.walletOf;
     const lookup = walletOf ? { walletOf: (s: string) => walletOf(s) } : NO_SUBJECTS;
-    return { wallet: await resolveTokenWallet(v.claims, lookup), via: "token" };
+    const wallet = await resolveTokenWallet(v.claims, lookup);
+    return v.claims.addr === undefined ? { wallet, via: "token", pseudonymous: true } : { wallet, via: "token" };
   }
 
   if (deps.requireToken) throw new MiniAppError("unauthorized", MISSING_TOKEN_MESSAGE);

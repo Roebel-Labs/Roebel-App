@@ -94,6 +94,7 @@ import {
 import {
   ADDRESS_NOT_GRANTED,
   createIdentityGate,
+  rewardForApp,
   walletAllowed,
   type IdentityGate,
 } from '@/lib/miniapp-identity-gate';
@@ -938,7 +939,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             // explains it (the bridge result/error carries the code).
             setRewardShow((c) => ({ ...c, visible: false, loading: false }));
           }
-          return res;
+          return rewardForApp(app, identityRef.current, res);
         } catch (e) {
           setRewardShow((c) => ({ ...c, visible: false, loading: false }));
           throw e;

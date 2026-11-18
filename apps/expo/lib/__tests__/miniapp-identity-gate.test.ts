@@ -1,7 +1,7 @@
 /**
  * Identity gate: version-2 apps wait for the consent decision; the wallet only with the address grant.
  */
-import { createIdentityGate, walletAllowed } from '../miniapp-identity-gate';
+import { createIdentityGate, rewardForApp, walletAllowed } from '../miniapp-identity-gate';
 import type { IdentityState } from '../miniapp-identity';
 
 const state: IdentityState = {
@@ -37,4 +37,18 @@ describe('createIdentityGate', () => {
     expect(resolved).toBe(1);
     expect(gate.isSettled()).toBe(true);
   });
+});
+
+describe('rewardForApp', () => {
+  const res = { granted: true, amount: 1, txRef: '0xabc', remainingBudget: 4 };
+  it('version 2 without the address grant never sees the tx hash', () =>
+    expect(rewardForApp({ manifestVersion: 2 }, { ...state, granted: { ...state.granted, address: false } }, res)).toEqual({
+      granted: true,
+      amount: 1,
+      remainingBudget: 4,
+    }));
+  it('version 2 without a state never sees the tx hash', () =>
+    expect(rewardForApp({ manifestVersion: 2 }, null, res)).not.toHaveProperty('txRef'));
+  it('version 2 with the address grant keeps it', () => expect(rewardForApp({ manifestVersion: 2 }, state, res)).toEqual(res));
+  it('version 1 keeps it', () => expect(rewardForApp({ manifestVersion: 1 }, null, res)).toEqual(res));
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { exportJWK, generateKeyPair } from "jose";
 import { localTokenIssuer, tokenKeysFromEnv, verifyUserToken, type TokenIssuer, type TokenKeyResolver } from "../src/lib/miniapp/userToken";
-import { hostLabel, resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
+import { forRuntimeUser, hostLabel, resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "../src/lib/miniapp/types";
 
 const ISS = "https://www.roebel.app";
@@ -194,5 +194,20 @@ test("a pseudonym token resolves through the store in resolveRuntimeUser", async
     { authorization: `Bearer ${t}`, app, claimedWallet: OTHER, route: "data" },
     deps({ walletOf: async (s) => (s === PSEUDO ? WALLET : null) }),
   );
-  assert.deepEqual(u, { wallet: WALLET, via: "token" });
+  assert.deepEqual(u, { wallet: WALLET, via: "token", pseudonymous: true });
+});
+
+test("a reward outcome keeps txRef for an address token and a legacy call", () => {
+  const outcome = { granted: true, amount: 1, txRef: "0xabc", remainingBudget: 9 };
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "token" }), outcome);
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "legacy" }), outcome);
+});
+
+test("a reward outcome drops txRef for a pseudonym token (the tx hash would reveal the wallet)", () => {
+  const outcome = { granted: true, amount: 1, txRef: "0xabc", remainingBudget: 9 };
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "token", pseudonymous: true }), {
+    granted: true,
+    amount: 1,
+    remainingBudget: 9,
+  });
 });
