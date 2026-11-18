@@ -40,12 +40,15 @@ export function CredentialsSection() {
   const [error, setError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('types');
+  /** An error of a tab action: shown above the tab, which keeps its input. */
+  const [notice, setNotice] = useState<string | null>(null);
   const { signedOut, token } = session;
 
+  // A lost session (401) shows the sign-in hint; the pending actions stay on the server.
   const onError = useCallback(
     (e: unknown) => {
       if (isSessionError(e)) signedOut();
-      else setError((e as Error).message);
+      else setNotice((e as Error).message);
     },
     [signedOut],
   );
@@ -59,9 +62,10 @@ export function CredentialsSection() {
       setOrgs(o);
       setOrgId((cur) => (cur && o.some((x) => x.accountId === cur) ? cur : (o[0]?.accountId ?? null)));
     } catch (e) {
-      onError(e);
+      if (isSessionError(e)) signedOut();
+      else setError((e as Error).message);
     }
-  }, [token, onError]);
+  }, [token, signedOut]);
 
   useEffect(() => {
     void load();
@@ -70,7 +74,7 @@ export function CredentialsSection() {
   const org = orgs?.find((o) => o.accountId === orgId) ?? null;
   const picker =
     orgs && orgs.length > 1 ? (
-      <select className="pz-select" aria-label={t('Organisation')} value={orgId ?? ''} onChange={(e) => setOrgId(e.target.value)}>
+      <select className="pz-select" aria-label={t('Organisation')} value={orgId ?? ''} onChange={(e) => (setOrgId(e.target.value), setNotice(null))}>
         {orgs.map((o) => (
           <option key={o.accountId} value={o.accountId}>
             {o.name}
@@ -88,11 +92,23 @@ export function CredentialsSection() {
   else if (org.onChain !== 'ready') body = <NotReady org={org} />;
   else {
     const ctx: TabContext = { token: token!, org, onError, reloadOrgs: () => void load() };
-    body = <CredTab key={`${org.accountId}:${tab}`} tab={tab} ctx={ctx} />;
+    body = (
+      <>
+        {notice && (
+          <div className="cr-notice ws-error" role="alert">
+            <span>{notice}</span>
+            <button className="w-btn ghost" onClick={() => setNotice(null)}>
+              {t('Schließen')}
+            </button>
+          </div>
+        )}
+        <CredTab key={`${org.accountId}:${tab}`} tab={tab} ctx={ctx} />
+      </>
+    );
   }
 
   return (
-    <Frame title={t('Ausweise')} nav={TABS.map((x) => ({ id: x.id, label: t(x.label) }))} active={tab} onSelect={(id) => setTab(id as Tab)} actions={picker} wide>
+    <Frame title={t('Ausweise')} nav={TABS.map((x) => ({ id: x.id, label: t(x.label) }))} active={tab} onSelect={(id) => (setTab(id as Tab), setNotice(null))} actions={picker} wide>
       {body}
     </Frame>
   );

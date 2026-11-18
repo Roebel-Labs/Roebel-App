@@ -38,25 +38,25 @@ describe('credentials API client', () => {
 
   it('maps 401 to code session, 403 APP_ONLY to the app-only message, a network error to code network', async () => {
     mockFetch(() => json(401, { ok: false, code: 'UNAUTHORIZED', message: 'Sitzung ungültig.' }));
-    const e401 = await credCall('org', 'orgs_list', {}, 't').catch((e) => e);
+    const e401 = (await credCall('org', 'orgs_list', {}, 't').catch((e: unknown) => e)) as CredentialsApiError;
     expect(e401).toBeInstanceOf(CredentialsApiError);
     expect(e401.status).toBe(401);
     expect(e401.code).toBe('session');
 
     mockFetch(() => json(403, { ok: false, code: 'APP_ONLY', message: 'irgendwas' }));
-    const e403 = await credCall('me', 'mine', {}, 't').catch((e) => e);
+    const e403 = (await credCall('me', 'mine', {}, 't').catch((e: unknown) => e)) as CredentialsApiError;
     expect(e403.code).toBe('APP_ONLY');
     expect(e403.message).toBe('Das geht nur in der Röbel App.');
 
     mockFetch(() => json(409, { ok: false, code: 'ORG_NOT_ON_CHAIN', message: 'Diese Organisation ist noch nicht im öffentlichen Register eingetragen.' }));
-    const e409 = await credCall('org', 'type_prepare', {}, 't').catch((e) => e);
+    const e409 = (await credCall('org', 'type_prepare', {}, 't').catch((e: unknown) => e)) as CredentialsApiError;
     expect(e409.code).toBe('ORG_NOT_ON_CHAIN');
     expect(e409.message).toBe('Diese Organisation ist noch nicht im öffentlichen Register eingetragen.');
 
     vi.stubGlobal('fetch', async () => {
       throw new TypeError('Failed to fetch');
     });
-    const eNet = await credCall('org', 'orgs_list', {}, 't').catch((e) => e);
+    const eNet = (await credCall('org', 'orgs_list', {}, 't').catch((e: unknown) => e)) as CredentialsApiError;
     expect(eNet.code).toBe('network');
     expect(eNet.message).toBe('Server nicht erreichbar. Internetverbindung prüfen.');
   });

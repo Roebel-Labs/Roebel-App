@@ -111,6 +111,26 @@ const en: Record<string, string> = {
   'Wird eingetragen': 'Being entered',
   'cred|Verlauf': 'History',
   'cred|Verworfen': 'Discarded',
+  // Task 5: events, delegates, members switch
+  'Dafür darf der Röbel-Server dieses Abzeichen in eurem Namen ausstellen, sonst nichts. Ihr könnt das jederzeit beenden.':
+    'For this the Röbel server may issue this badge on your behalf, nothing else. You can stop it at any time.',
+  'Noch keine Veranstaltung deiner Organisation.': 'No event of your organisation yet.',
+  'Sofort vergeben, während die Veranstaltung läuft': 'Award at once while the event is running',
+  'Aus: Mitgliedschaften können nur privat gehalten werden. Ämter bleiben immer öffentlich.': 'Off: memberships can only be held privately. Offices always stay public.',
+  Berechtigen: 'Authorise',
+  'Berechtigte Konten': 'Authorised accounts',
+  'Diese Konten dürfen einen Ausweis-Typ in eurem Namen ausstellen, zum Beispiel ein Türscanner bei einer Veranstaltung.':
+    'These accounts may issue a credential type on your behalf, for example a door scanner at an event.',
+  Entziehen: 'Withdraw',
+  'Mitglied suchen': 'Search for a member',
+  'Mitglieder dürfen öffentlich sichtbar sein': 'Members may be publicly visible',
+  'Noch kein Konto berechtigt.': 'No account authorised yet.',
+  'Türscanner-Konto berechtigen': 'Authorise a door scanner account',
+  'Unbekanntes Konto': 'Unknown account',
+  'Abzeichen für Teilnehmende einrichten': 'Set up a badge for attendees',
+  'Abzeichen vergeben ({n})': 'Award badges ({n})',
+  'Alle haben ihr Abzeichen': 'Everyone has their badge',
+  '{a} Teilnehmende · {i} eingeladen · {c} angenommen': '{a} attendees · {i} invited · {c} accepted',
 };
 
 export default en;
