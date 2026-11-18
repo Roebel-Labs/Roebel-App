@@ -12,9 +12,13 @@ import { cn } from "@/lib/utils";
 import { createWebMiniAppHost, type WebMiniAppHost } from "@/lib/miniapp-host";
 import { fetchUserTokenWithAccount, invalidateUserToken } from "@/lib/miniapp/clientToken";
 import type { MiniAppRow } from "@/lib/miniapp/types";
-import type { MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
+import { previewCredentials } from "@/lib/miniapp/identityReview";
+import type { MiniAppIdentityRequest, MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
+import { credentialMatches, type HostHandlers } from "@netizen-labs/miniapp-sdk/host";
 
 const GNOSIS_CHAIN_ID = 100;
+/** Stand-in for the per-app pseudonym a version-2 app sees when the address is not granted. */
+const PREVIEW_SUBJECT = "nz_playground-preview";
 
 interface CallLogEntry {
   method: string;
@@ -22,7 +26,16 @@ interface CallLogEntry {
   at: number;
 }
 
-export function Playground({ app, html }: { app: MiniAppRow; html?: string | null }) {
+export function Playground({
+  app,
+  html,
+  identity: identityProp,
+}: {
+  app: MiniAppRow;
+  html?: string | null;
+  /** The version-2 identity section to preview (e.g. a pending version's); defaults to the row's. */
+  identity?: MiniAppIdentityRequest | null;
+}) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hostRef = useRef<WebMiniAppHost | null>(null);
   const account = useActiveAccount();
@@ -32,6 +45,13 @@ export function Playground({ app, html }: { app: MiniAppRow; html?: string | nul
   const [enforcePermissions, setEnforcePermissions] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [mockCitizen, setMockCitizen] = useState(true);
+  // Version 2: what the reviewer pretends to have granted (no server call).
+  const [mockAttester, setMockAttester] = useState(false);
+  const [grantAddress, setGrantAddress] = useState(false);
+  const [grantName, setGrantName] = useState(false);
+  const identity =
+    identityProp !== undefined ? identityProp : app.manifest_version === "2" ? (app.identity ?? null) : null;
+  const identityKey = identity ? JSON.stringify(identity) : "";
 
   // Direct-HTML mode: render the stored version document (srcDoc) instead of
   // fetching home_url — independent of DNS/wildcard-domain wiring and of the
@@ -63,8 +83,31 @@ export function Playground({ app, html }: { app: MiniAppRow; html?: string | nul
       ? { address: account.address, chainId: GNOSIS_CHAIN_ID }
       : null;
 
+    // Version 2: credentials and context follow the reviewer's grant toggles.
+    let overrides: Partial<HostHandlers> | undefined;
+    if (identity) {
+      const creds = previewCredentials(identity, { citizen: mockCitizen, attester: mockAttester });
+      const holds = (type: string) => creds.some((c) => credentialMatches(type, c));
+      overrides = {
+        getContext: () => ({
+          user: {
+            id: grantAddress && identity.address && account?.address ? account.address.toLowerCase() : PREVIEW_SUBJECT,
+            ...(grantName && identity.profile ? { displayName: "Prüfer:in" } : {}),
+            isCitizen: holds("citizen"),
+          },
+          host: { name: "Röbel (Web)", platform: "web", version: "1.0.0" },
+          safeAreaInsets: { top: 0, bottom: 0, left: 0, right: 0 },
+          launch: { entry: "playground", referrer: "web" },
+        }),
+        credentialsList: async () => creds,
+        credentialsHas: async ({ type }) => holds(type),
+        credentialsRequest: async ({ types }) => ({ granted: (types ?? []).filter(holds) }),
+      };
+    }
+
     const host = createWebMiniAppHost({
       iframe,
+      overrides,
       app: {
         id: app.id,
         slug: app.slug,
@@ -102,7 +145,19 @@ export function Playground({ app, html }: { app: MiniAppRow; html?: string | nul
     };
     // reloadKey forces a rebuild after an iframe reload
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.id, app.home_url, useSrcDoc, enforcePermissions, mockCitizen, account?.address, reloadKey]);
+  }, [
+    app.id,
+    app.home_url,
+    useSrcDoc,
+    enforcePermissions,
+    mockCitizen,
+    mockAttester,
+    grantAddress,
+    grantName,
+    identityKey,
+    account?.address,
+    reloadKey,
+  ]);
 
   const reload = () => setReloadKey((k) => k + 1);
 
@@ -186,15 +241,40 @@ export function Playground({ app, html }: { app: MiniAppRow; html?: string | nul
                 className="h-4 w-4"
               />
             </label>
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Kontext-Nutzer:in ist Bürger:in</span>
-              <input
-                type="checkbox"
-                checked={mockCitizen}
-                onChange={(e) => setMockCitizen(e.target.checked)}
-                className="h-4 w-4"
-              />
-            </label>
+            {identity ? (
+              <div className="space-y-2 rounded-md border border-border p-2.5">
+                <p className="text-xs font-medium">{"Freigaben (Vorschau, Manifest-Version 2)"}</p>
+                {[
+                  { label: "Bürger:in", checked: mockCitizen, set: setMockCitizen },
+                  { label: "Bescheiniger:in", checked: mockAttester, set: setMockAttester },
+                  { label: "Adresse freigeben", checked: grantAddress, set: setGrantAddress },
+                  { label: "Name freigeben", checked: grantName, set: setGrantName },
+                ].map((t) => (
+                  <label key={t.label} className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">{t.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={t.checked}
+                      onChange={(e) => t.set(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                  </label>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  {"Nur angefragte Nachweise werden an die App gegeben. Es wird nichts gespeichert."}
+                </p>
+              </div>
+            ) : (
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Kontext-Nutzer:in ist Bürger:in</span>
+                <input
+                  type="checkbox"
+                  checked={mockCitizen}
+                  onChange={(e) => setMockCitizen(e.target.checked)}
+                  className="h-4 w-4"
+                />
+              </label>
+            )}
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Verbundene Wallet</span>
               <span className="font-mono text-xs">

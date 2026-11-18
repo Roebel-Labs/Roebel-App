@@ -12,6 +12,7 @@ import {
   withoutIdentityColumns,
 } from "./manifest";
 import { issueMuenzenOnChain } from "./muenzen";
+import { IDENTITY_REVIEW_MESSAGE, needsIdentityReview } from "./identityReview";
 import {
   MiniAppError,
   type AnalyticsRange,
@@ -313,22 +314,30 @@ export async function reviewApp(
   decision: ReviewDecision,
   notes: string | null,
   reviewerId: string,
+  opts: { identityReviewed?: boolean } = {},
 ): Promise<MiniAppRow> {
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
   const supabase = db();
   // Indexed apps: validate the pending manifest BEFORE any write so a bad
   // manifest fails without side effects.
-  if (decision === "approve" && app.source === "indexed") {
-    const { data: pre } = await supabase
-      .from("mini_app_versions")
-      .select("manifest")
-      .eq("mini_app_id", id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (pre?.manifest) validateManifest(pre.manifest);
+  if (decision === "approve") {
+    let identity = app.manifest_version === "2" ? (app.identity ?? null) : null;
+    if (app.source === "indexed") {
+      const { data: pre } = await supabase
+        .from("mini_app_versions")
+        .select("manifest")
+        .eq("mini_app_id", id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (pre?.manifest) identity = validateManifest(pre.manifest).identity ?? null;
+    }
+    // Address or credentials requested: the reviewer must confirm they fit what the app does.
+    if (needsIdentityReview(identity) && opts.identityReviewed !== true) {
+      throw new MiniAppError("invalid_params", IDENTITY_REVIEW_MESSAGE);
+    }
   }
   // Rejecting a staged update on a live app keeps it live (no transient unlisting).
   const nextStatus: MiniAppStatus =

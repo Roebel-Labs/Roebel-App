@@ -8,6 +8,7 @@
 import { createPublicClient, http, parseAbi, type Address } from "viem";
 import { gnosis } from "viem/chains";
 import { parseCredentialRef } from "@netizen-labs/miniapp-sdk/host";
+import { BUILTIN_CREDENTIAL_NAMES } from "./identityReview";
 
 /** A credential the account holds (only ever for refs that were asked about). */
 export interface CredentialAnswer {
@@ -49,11 +50,7 @@ export interface BuiltinChain {
 
 type Builtin = "citizen" | "attester" | "guest";
 
-const BUILTIN_NAMES: Record<Builtin, string> = {
-  citizen: "Bürger:in",
-  attester: "Bescheiniger:in",
-  guest: "Gast",
-};
+const BUILTIN_NAMES: Record<Builtin, string> = BUILTIN_CREDENTIAL_NAMES;
 
 function builtinOf(ref: string): Builtin | null {
   const p = parseCredentialRef(ref);

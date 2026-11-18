@@ -38,6 +38,12 @@ import { Playground } from "@/components/mini-apps/Playground";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import type { MiniAppRow, MiniAppVersionRow } from "@/lib/miniapp/types";
 import { timeAgo } from "@/components/admin/muenzen/format";
+import {
+  identityFromManifest,
+  identityReviewItems,
+  needsIdentityReview,
+} from "@/lib/miniapp/identityReview";
+import type { MiniAppIdentityRequest } from "@netizen-labs/miniapp-sdk";
 
 // Manifest keys (camelCase, as stored on a version) <-> live row columns.
 const DIFF_FIELDS: { label: string; key: string; col: keyof MiniAppRow }[] = [
@@ -71,6 +77,21 @@ function pendingDiff(app: MiniAppRow, versions: MiniAppVersionRow[]) {
   });
 }
 
+/**
+ * The identity section under review (`next`) and the one that is live now (`live`). A pending
+ * version is reviewed against the row when the app is live; otherwise everything is new.
+ */
+function identityUnderReview(app: MiniAppRow, versions: MiniAppVersionRow[]) {
+  const rowIdentity = app.manifest_version === "2" ? (app.identity ?? null) : null;
+  const pending = versions
+    .filter((v) => v.status === "pending")
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  const isLive = app.status === "live" || app.status === "suspended";
+  const live: MiniAppIdentityRequest | null = isLive ? rowIdentity : null;
+  const next: MiniAppIdentityRequest | null = pending ? identityFromManifest(pending.manifest) : rowIdentity;
+  return { live, next };
+}
+
 const nf = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 
 export default function MiniAppAdminDetail({
@@ -92,6 +113,7 @@ export default function MiniAppAdminDetail({
   const [actionError, setActionError] = useState<string | null>(null);
   const [editingManifest, setEditingManifest] = useState(false);
   const [ownerWallet, setOwnerWallet] = useState("");
+  const [identityReviewed, setIdentityReviewed] = useState(false);
 
   async function act(label: string, fn: () => Promise<unknown>, successMessage?: string) {
     setBusy(label);
@@ -113,6 +135,10 @@ export default function MiniAppAdminDetail({
   if (loading || !app) {
     return <div className="h-40 animate-pulse rounded-[10px] border border-border bg-muted/40" />;
   }
+
+  const identity = identityUnderReview(app, data?.versions ?? []);
+  const identityItems = identityReviewItems(identity.live, identity.next);
+  const identityNeedsConfirm = needsIdentityReview(identity.next);
 
   return (
     <div className="space-y-6">
@@ -156,6 +182,35 @@ export default function MiniAppAdminDetail({
         </DetailCard>
       )}
 
+      {identityItems.length > 0 && (
+        <DetailCard title="Identität & Nachweise">
+          <ul className="space-y-2 text-sm">
+            {identityItems.map((item) => (
+              <li key={item.key} className="break-words">
+                <span className="font-medium">{item.label}</span>
+                {item.isNew && (
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    neu
+                  </span>
+                )}
+                {item.reason && <p className="text-xs text-muted-foreground">{item.reason}</p>}
+              </li>
+            ))}
+          </ul>
+          {identityNeedsConfirm && (
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={identityReviewed}
+                onChange={(e) => setIdentityReviewed(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>{"Die App fragt nur ab, was sie für ihre Funktion braucht."}</span>
+            </label>
+          )}
+        </DetailCard>
+      )}
+
       {/* Review actions */}
       <div className="grid gap-4 lg:grid-cols-3">
         <DetailCard title="Freigabe">
@@ -170,12 +225,17 @@ export default function MiniAppAdminDetail({
             <Button
               size="sm"
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              disabled={busy != null}
+              disabled={busy != null || (identityNeedsConfirm && !identityReviewed)}
               onClick={() =>
                 act(
                   "approve",
                   () =>
-                    miniAppWrite("review", "POST", { id: app.id, decision: "approve", notes }),
+                    miniAppWrite("review", "POST", {
+                      id: app.id,
+                      decision: "approve",
+                      notes,
+                      identityReviewed,
+                    }),
                   `"${app.name}" freigegeben — die App ist jetzt live.`,
                 )
               }
@@ -424,6 +484,7 @@ export default function MiniAppAdminDetail({
         <Playground
           app={app}
           html={data?.versions?.find((v) => typeof v.html === "string" && v.html)?.html ?? null}
+          identity={identity.next}
         />
       </div>
 

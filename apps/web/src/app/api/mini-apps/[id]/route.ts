@@ -74,7 +74,9 @@ export async function PATCH(
     }
     if (typeof body.review_notes === "string" || body.decision) {
       if (body.decision === "approve" || body.decision === "reject") {
-        result = await reviewApp(app.id, body.decision, body.review_notes ?? null, reviewer);
+        result = await reviewApp(app.id, body.decision, body.review_notes ?? null, reviewer, {
+          identityReviewed: body.identityReviewed === true,
+        });
       }
     }
     if (typeof body.status === "string") {

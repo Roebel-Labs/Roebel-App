@@ -1,5 +1,7 @@
 // POST /api/mini-apps/review — admin approves/rejects/resets an app.
-// Body: { id, decision: 'approve'|'reject'|'reset', notes?: string }
+// Body: { id, decision: 'approve'|'reject'|'reset', notes?: string, identityReviewed?: boolean }
+// Approving a version-2 app that requests the address or any credential needs
+// identityReviewed: true (else 400 invalid_params).
 // Approve → status 'live'; reject → 'rejected'; reset → back to 'pending'
 // (re-enters the review queue). Also settles/reopens the latest version.
 import { NextResponse } from "next/server";
@@ -25,7 +27,9 @@ export async function POST(req: Request) {
     }
     const session = await getSession();
     const reviewer = session?.username ?? "admin";
-    const app = await reviewApp(id, decision, body.notes ?? null, reviewer);
+    const app = await reviewApp(id, decision, body.notes ?? null, reviewer, {
+      identityReviewed: body.identityReviewed === true,
+    });
     return NextResponse.json({ app });
   } catch (e) {
     return jsonError(e);
