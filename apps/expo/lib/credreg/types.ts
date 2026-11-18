@@ -132,3 +132,17 @@ export type RecipientInput =
 
 export type BatchPrepared = { actionId: string; batchId: string; counts: { app: number; link: number; skipped: number } };
 export type ActionPrepared = { actionId: string };
+
+// ── event badges (plan credreg-4) ────────────────────────────────────────────
+
+/** event_badge_get answer (server: EventBadgeGetResult in apps/web/src/lib/credentials/event-badges.ts). */
+export type EventBadgeGetResult = {
+  attendees: number;
+  notYetIssued: number;
+  issued: number;
+  accepted: number;
+  badge: { typeId: Hex; name: string; imageUrl: string | null; supplyCap: number; chain: 'draft' | 'onchain'; auto: boolean } | null;
+};
+export type EventBadgePrepared = { actionId: string; typeId: Hex; count: number };
+/** GET /api/credentials/events/<eventId>/badge (public, no names). Unix seconds. */
+export type PublicEventBadge = { name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };

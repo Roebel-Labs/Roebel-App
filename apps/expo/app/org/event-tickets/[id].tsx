@@ -31,6 +31,10 @@ import {
   type OrgOrderView,
 } from '@/lib/tickets';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import { fetchEventBadge } from '@/lib/credreg/api';
+import { eventBadgeRow, issueEventBadge } from '@/lib/credreg/org';
+import type { EventBadgeGetResult } from '@/lib/credreg/types';
 
 interface EditableRow {
   key: string;
@@ -94,8 +98,11 @@ export default function EventTicketsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeAccount } = useAccount();
+  const { activeAccount, roleInActiveAccount } = useAccount();
   const thirdwebAccount = useActiveAccount();
+  const credentialsGate = useCredentialsGate();
+  const [eventBadge, setEventBadge] = useState<EventBadgeGetResult | null>(null);
+  const [badgeBusy, setBadgeBusy] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -159,6 +166,33 @@ export default function EventTicketsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Event badge row: only with the credential gate open and for owners/admins (one signed request).
+  const badgeAllowed = credentialsGate === true && authorized === true && (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin');
+  useEffect(() => {
+    const signer = signerRef.current;
+    if (!badgeAllowed || !id || !signer) return;
+    let alive = true;
+    void fetchEventBadge(signer, id).then((res) => {
+      if (alive && res.ok) setEventBadge(res.data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [badgeAllowed, id, signerAddress]);
+  const badgeRow = badgeAllowed ? eventBadgeRow(eventBadge) : null;
+
+  const onIssueBadge = useCallback(async () => {
+    const signer = signerRef.current;
+    if (!signer || !id || !activeAccount) return;
+    setBadgeBusy(true);
+    try {
+      const r = await issueEventBadge(signer, { eventId: id, orgAccountId: activeAccount.id }, { navigate: (route) => router.push(route as any) });
+      if (!r.ok) Alert.alert('Abzeichen', r.message);
+    } finally {
+      setBadgeBusy(false);
+    }
+  }, [id, activeAccount, router]);
 
   // After a refund: reload the order list only (one signed request).
   const loadOrders = useCallback(async () => {
@@ -316,6 +350,28 @@ export default function EventTicketsScreen() {
             </View>
           )}
 
+          {badgeRow && (
+            <Pressable
+              onPress={onIssueBadge}
+              disabled={badgeRow.disabled || badgeBusy}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.badgeRow,
+                { backgroundColor: colors.surface, borderColor: colors.border, opacity: badgeRow.disabled ? 0.5 : pressed ? 0.85 : 1 },
+              ]}
+            >
+              <View style={styles.badgeRowText}>
+                <Text style={[styles.badgeRowLabel, { color: badgeRow.disabled ? colors.textSecondary : colors.primary }]}>{badgeRow.label}</Text>
+                {eventBadge && (
+                  <Text style={[styles.orderMeta, { color: colors.textTertiary }]}>
+                    {eventBadge.attendees} Teilnehmende · {eventBadge.issued} eingeladen · {eventBadge.accepted} angenommen
+                  </Text>
+                )}
+              </View>
+              {badgeBusy && <ActivityIndicator color={colors.primary} />}
+            </Pressable>
+          )}
+
           {rows.map((row) => (
             <View key={row.key} style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <TextInput
@@ -471,6 +527,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionBody: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  badgeRow: { borderWidth: 1, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  badgeRowText: { flex: 1, gap: 4 },
+  badgeRowLabel: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
   sectionHeading: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-Bold', marginTop: 8 },
   orderRow: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
   orderLine: { fontSize: 13, fontFamily: 'Inter-Medium', lineHeight: 18 },

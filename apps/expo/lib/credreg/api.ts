@@ -4,12 +4,14 @@
  * never throws (network failure = { ok: false, code: 'NETWORK_ERROR' }).
  */
 import type { Hex } from 'viem';
-import { CREDENTIALS_SCOPE, postSigned, type ApiResult, type CredentialAction, type SigningAccount } from '@/lib/signed-request';
+import { CREDENTIALS_SCOPE, getApiBaseUrl, postSigned, type ApiResult, type CredentialAction, type SigningAccount } from '@/lib/signed-request';
 import type {
   ActionPrepared,
   ActionSubmitted,
   ActionView,
   BatchPrepared,
+  EventBadgeGetResult,
+  EventBadgePrepared,
   Holding,
   InvitationView,
   OrgListEntry,
@@ -19,6 +21,7 @@ import type {
   Presentation,
   PresentationCreated,
   PresentationResolved,
+  PublicEventBadge,
   RecipientInput,
   TypeView,
 } from './types';
@@ -82,6 +85,32 @@ export const prepareMembersPublic = (a: SigningAccount, p: { accountId: string; 
   credApi<ActionPrepared>(a, 'org', 'members_public_prepare', p);
 
 export const fetchActions = (a: SigningAccount, accountId: string) => credApi<ActionView[]>(a, 'org', 'actions_list', { accountId });
+
+// ── event badges ──────────────────────────────────────────────────────────────
+
+export const fetchEventBadge = (a: SigningAccount, eventId: string) => credApi<EventBadgeGetResult>(a, 'org', 'event_badge_get', { eventId });
+
+export const prepareEventBadge = (a: SigningAccount, eventId: string) =>
+  credApi<EventBadgePrepared>(a, 'org', 'event_badge_prepare', { eventId, client: 'app' });
+
+/**
+ * The event's badge as anyone may see it (no signature, no names). undefined when it could not
+ * be read (network, timeout), null when the event has no badge. Never throws.
+ */
+export async function fetchPublicEventBadge(eventId: string, timeoutMs = 8000): Promise<PublicEventBadge | null | undefined> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/credentials/events/${encodeURIComponent(eventId)}/badge`, { signal: ctl.signal });
+    if (res.status !== 200) return undefined;
+    const json = (await res.json()) as { badge?: PublicEventBadge | null };
+    return json?.badge ?? null;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ── actions (the phone confirms) ─────────────────────────────────────────────
 

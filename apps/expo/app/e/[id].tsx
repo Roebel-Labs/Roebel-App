@@ -14,6 +14,19 @@ import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { supabase } from '@/lib/supabase';
 import { isOnboarded } from '@/lib/roebel-taler';
 import MuenzenRewardView from '@/components/rewards/MuenzenRewardView';
+import { fetchPublicEventBadge } from '@/lib/credreg/api';
+import { isCredentialsAllowed } from '@/lib/credreg/gate';
+
+const BADGE_HINT = 'Du bekommst ein Abzeichen, sobald der Veranstalter es vergibt.';
+
+/** After an event_attend claim: does the scanned event have a badge? (gate closed or unknown = no). */
+async function eventHasBadge(rewardEventId: string): Promise<boolean> {
+  if (!(await isCredentialsAllowed().catch(() => false))) return false;
+  const { data } = await supabase.from('reward_events').select('event_id').eq('id', rewardEventId).maybeSingle();
+  const eventId = (data as { event_id: string | null } | null)?.event_id;
+  if (!eventId) return false;
+  return !!(await fetchPublicEventBadge(eventId));
+}
 
 type Phase = 'working' | 'done' | 'error';
 
@@ -27,6 +40,7 @@ export default function EventScanScreen() {
   const [msg, setMsg] = useState('');
   // Label shown next to the spinner inside the button while we work.
   const [workLabel, setWorkLabel] = useState('Beleg wird abgeholt…');
+  const [badgeHint, setBadgeHint] = useState(false);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -45,6 +59,7 @@ export default function EventScanScreen() {
           await refresh();
           if (r.status === 'paid') setAmount(rewardAmountToMuenzen(r.amountAtto));
           setMsg('Du bist dabei! Ab jetzt sammelst du stündlich deine eigenen Münzen.');
+          if (r.status === 'paid' || r.status === 'already_claimed') setBadgeHint(await eventHasBadge(id).catch(() => false));
           setPhase('done');
         } else {
           const r = await claimReward(addr, 'event_attend', id);
@@ -69,6 +84,7 @@ export default function EventScanScreen() {
           } else {
             throw new Error(r.reason || 'Konnte nicht eingelöst werden.');
           }
+          if (r.status === 'paid' || r.status === 'already_claimed') setBadgeHint(await eventHasBadge(id).catch(() => false));
           setPhase('done');
         }
       } catch (e: any) {
@@ -102,9 +118,9 @@ export default function EventScanScreen() {
     loadingLabel = [workLabel, 'Einen Moment noch…', 'Fast geschafft…', 'Gleich ist es soweit…'];
   } else if (hasAmount) {
     viewAmount = amount;
-    viewSubtitle = msg;
+    viewSubtitle = badgeHint ? `${msg}\n\n${BADGE_HINT}` : msg;
   } else {
-    viewMessage = msg;
+    viewMessage = badgeHint ? `${msg}\n\n${BADGE_HINT}` : msg;
   }
 
   return (

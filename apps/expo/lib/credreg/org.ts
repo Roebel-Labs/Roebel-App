@@ -17,10 +17,10 @@ import { orgIdFromUuid } from '@/lib/org-safe/ops';
 import { sendOrgCallsKeepingHash } from '@/lib/org-safe/send';
 import { classifySendError } from '@/lib/org-safe/send-errors';
 import type { ApiResult, SigningAccount } from '@/lib/signed-request';
-import { reportSubmitted } from './api';
+import { prepareEventBadge, reportSubmitted } from './api';
 import { REGISTRY, readBatchType, readTypeOrg, registryReader } from './chain';
 import { credentialsConfigured } from './gate';
-import type { ActionSubmitted, ActionSummary, CredentialKind, PhoneAction } from './types';
+import type { ActionSubmitted, ActionSummary, CredentialKind, EventBadgeGetResult, EventBadgePrepared, PhoneAction } from './types';
 
 export const UNKNOWN_TYPE = 'Unbekannter Typ';
 
@@ -555,4 +555,40 @@ export function reviewAction(
 /** Server text for a list row (e.g. an action's title): shown only when it carries no address or hash. */
 export function safeServerText(text: unknown, fallback: string): string {
   return typeof text === 'string' && text.trim().length > 0 && !/0x[0-9a-fA-F]{6,}/.test(text) ? text : fallback;
+}
+
+// ── event badges ──────────────────────────────────────────────────────────────
+
+/** Same wording as the web panel's primary button (apps/web/src/lib/credentials/event-panel.ts). */
+export const EVENT_BADGE_LABELS = {
+  setup: 'Abzeichen für Teilnehmende einrichten',
+  issue: (n: number) => `Abzeichen vergeben (${n})`,
+  allIssued: 'Alle haben ihr Abzeichen',
+  register: 'Abzeichen jetzt anlegen',
+  noAttendees: 'Noch keine Teilnehmenden',
+} as const;
+
+/** The organiser's badge row; null = no row (gate closed, not owner/admin, or not loaded). */
+export function eventBadgeRow(g: EventBadgeGetResult | null): { label: string; disabled: boolean } | null {
+  if (!g) return null;
+  if (!g.badge) return { label: EVENT_BADGE_LABELS.setup, disabled: false };
+  if (g.notYetIssued > 0) return { label: EVENT_BADGE_LABELS.issue(g.notYetIssued), disabled: false };
+  if (g.badge.chain === 'draft') return { label: EVENT_BADGE_LABELS.register, disabled: false };
+  if (g.attendees === 0) return { label: EVENT_BADGE_LABELS.noAttendees, disabled: true };
+  return { label: EVENT_BADGE_LABELS.allIssued, disabled: true };
+}
+
+/** Tap on the badge row: prepare on the server, then open the approve screen with the new action. */
+export async function issueEventBadge(
+  account: SigningAccount,
+  p: { eventId: string; orgAccountId: string },
+  deps: {
+    prepare?: (a: SigningAccount, eventId: string) => Promise<ApiResult<EventBadgePrepared>>;
+    navigate: (route: { pathname: '/org/credentials/approve/[id]'; params: { id: string; org: string } }) => void;
+  },
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await (deps.prepare ?? prepareEventBadge)(account, p.eventId);
+  if (!res.ok) return { ok: false, message: safeServerText(res.message, 'Das hat nicht geklappt. Bitte versuche es gleich noch einmal.') };
+  deps.navigate({ pathname: '/org/credentials/approve/[id]', params: { id: res.data.actionId, org: p.orgAccountId } });
+  return { ok: true };
 }
