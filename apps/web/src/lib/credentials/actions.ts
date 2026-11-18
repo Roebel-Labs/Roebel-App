@@ -135,7 +135,7 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 // ── org access ────────────────────────────────────────────────────────────────
 
-async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
+export async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
   if (typeof accountId !== "string") return NOT_FOUND_ORG;
   const o = await orgContextFor(d.store, accountId, wallet);
   if ("error" in o) return o.error === "FORBIDDEN" ? FORBIDDEN : NOT_FOUND_ORG;
@@ -143,7 +143,7 @@ async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgC
 }
 
 /** Owner/admin in the database AND allowed by the chain. */
-async function readyOrgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
+export async function readyOrgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
   const o = await orgFor(d, accountId, wallet);
   if ("ok" in o) return o;
   const r = await chainReadiness(d.reader, o, wallet as Address);
@@ -299,7 +299,7 @@ function cleanTypeInput(p: TypeInput): Clean | Fail {
 
 const unixSeconds = (iso: string | null | undefined) => (iso ? Math.floor(Date.parse(iso) / 1000) : 0);
 
-function configOf(t: Pick<TypeRow, "typeId" | "defaultValiditySeconds" | "claimStart" | "claimEnd" | "supplyCap" | "publicClaim">): TypeConfigInput {
+export function configOf(t: Pick<TypeRow, "typeId" | "defaultValiditySeconds" | "claimStart" | "claimEnd" | "supplyCap" | "publicClaim">): TypeConfigInput {
   return {
     metadataURI: metadataUrl(t.typeId),
     defaultValidity: t.defaultValiditySeconds,

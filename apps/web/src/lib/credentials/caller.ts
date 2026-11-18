@@ -17,7 +17,7 @@ export type Caller = {
 
 export const APP_ONLY_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "present_create", "action_submitted"];
 
-/** Actions of /api/credentials/org (dashboard, Studio and app). Plan 4 adds the event badge actions. */
+/** Actions of /api/credentials/org (dashboard, Studio and app), including the plan-4 event badge actions. */
 export const ORG_ACTIONS: readonly CredentialAction[] = [
   "types_list",
   "type_prepare",
@@ -32,6 +32,11 @@ export const ORG_ACTIONS: readonly CredentialAction[] = [
   "revoke_prepare",
   "letters",
   "delegates_list",
+  "event_badges_list",
+  "event_badge_setup",
+  "event_badge_get",
+  "event_badge_prepare",
+  "event_badge_auto",
 ];
 
 const PASSKEY_TOKEN_PREFIX = "pst1.";

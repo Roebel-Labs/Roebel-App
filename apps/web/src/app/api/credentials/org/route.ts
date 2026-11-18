@@ -18,6 +18,7 @@ import {
 } from "@/lib/credentials/actions";
 import { prepareBatch, prepareRevocation, previewPeople, type BatchInput, type RecipientInput } from "@/lib/credentials/batch";
 import { listPeople, searchPeople } from "@/lib/credentials/people";
+import { eventBadgeGet, eventBadgesList, prepareEventBadge, prepareEventBadgeAuto, setupEventBadge } from "@/lib/credentials/event-badges";
 import { credentialDeps } from "@/lib/credentials/runtime";
 import { prepareLetters } from "@/lib/credentials/delivery";
 import { renderLetters } from "@/lib/credentials/letters";
@@ -109,6 +110,26 @@ export async function POST(request: NextRequest) {
             batchId: p.batchId as string | undefined,
           }),
         );
+      case "event_badges_list":
+        return respond(await eventBadgesList(d, c, { accountId: String(p.accountId ?? "") }));
+      case "event_badge_get":
+        return respond(await eventBadgeGet(d, c, { eventId: String(p.eventId ?? "") }));
+      case "event_badge_prepare":
+        return respond(
+          await prepareEventBadge(d, c, { eventId: String(p.eventId ?? ""), name: p.name as string | undefined, imageUrl: p.imageUrl as string | undefined }),
+        );
+      case "event_badge_setup":
+        return respond(
+          await setupEventBadge(d, c, {
+            eventId: String(p.eventId ?? ""),
+            enabled: p.enabled as boolean,
+            name: p.name as string | undefined,
+            imageUrl: p.imageUrl as string | undefined,
+            supplyCap: p.supplyCap as number | undefined,
+          }),
+        );
+      case "event_badge_auto":
+        return respond(await prepareEventBadgeAuto(d, c, { eventId: String(p.eventId ?? ""), enabled: p.enabled as boolean }));
       case "letters": {
         // Owner or admin; the PDF holds the personal links of the batch's open claim-key invitations.
         const r = await prepareLetters(d, c, { accountId: String(p.accountId ?? ""), batchId: String(p.batchId ?? "") }, renderLetters);
