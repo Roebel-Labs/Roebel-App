@@ -8,11 +8,9 @@
 // account's owners or guardians. Röbel Münzen payments go through `roebel.pay`.
 import type { DeclaredContract } from "@netizen-labs/miniapp-sdk";
 import { callRules, type CallRule } from "@netizen-labs/miniapp-sdk/host";
-import { isAddress, parseAbiItem, toFunctionSelector, zeroAddress, type AbiFunction, type Hex } from "viem";
+import { isAddress, parseAbiItem, toFunctionSelector, type AbiFunction, type Hex } from "viem";
 import { formatAbiItem } from "viem/utils";
-import { credentialRegistryAddress, EVERYDAY_CONTRACTS, ORG_SAFE } from "../passkey/everyday-allowlist";
-import { PASSKEY_SAFE } from "../passkey/safe-address";
-import { ADDRESSES, CITIZEN_NFT } from "../passkey/sponsor-policy";
+import { MINIAPP_FORBIDDEN_TARGETS, isMiniAppForbiddenTarget } from "../passkey/sponsor-policy";
 import { MiniAppError } from "./types";
 
 export const MAX_CONTRACTS = 8;
@@ -20,26 +18,17 @@ export const MAX_FUNCTIONS = 16;
 const MAX_LABEL_LENGTH = 40;
 const CONTRACT_KEYS = ["address", "label", "functions"];
 
-/** Every address a manifest may not declare (imported, never copied). */
-export const FORBIDDEN_CONTRACTS: readonly Hex[] = Array.from(
-  new Set(
-    [
-      ...Object.values(EVERYDAY_CONTRACTS),
-      ...Object.values(ORG_SAFE).filter((v): v is Hex => typeof v === "string"),
-      ...Object.values(ADDRESSES),
-      ...Object.values(PASSKEY_SAFE),
-      CITIZEN_NFT,
-      zeroAddress,
-    ].map((a) => a.toLowerCase() as Hex),
-  ),
-);
+/**
+ * Every address a manifest may not declare: the sponsor policy's mode-F list (Röbel's
+ * everyday contracts, org-Safe and account infrastructure, CitizenNFTv2, the zero
+ * address), lowercased. Defined in sponsor-policy.ts so the policy and the validator
+ * share it without a circular import.
+ */
+export const FORBIDDEN_CONTRACTS: readonly Hex[] = MINIAPP_FORBIDDEN_TARGETS;
 
 /** True for a forbidden address, including the configured CredentialRegistry. */
 export function isForbiddenContract(address: string): boolean {
-  const a = address.toLowerCase();
-  if (FORBIDDEN_CONTRACTS.includes(a as Hex)) return true;
-  const registry = credentialRegistryAddress();
-  return registry !== null && registry.toLowerCase() === a;
+  return isMiniAppForbiddenTarget(address);
 }
 
 function fail(message: string): never {
