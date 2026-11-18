@@ -210,7 +210,7 @@ export const MINIAPP_FORBIDDEN_TARGETS: readonly Hex[] = Array.from(
   new Set(
     [
       ...Object.values(EVERYDAY_CONTRACTS),
-      ...Object.values(ORG_SAFE).filter((v): v is Hex => typeof v === "string"),
+      ...(Object.values(ORG_SAFE) as Array<string | number>).filter((v): v is Hex => typeof v === "string"),
       ...Object.values(ADDRESSES),
       ...Object.values(PASSKEY_SAFE),
       CITIZEN_NFT,

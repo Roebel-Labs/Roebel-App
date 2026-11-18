@@ -8,7 +8,7 @@
 // account's owners or guardians. Röbel Münzen payments go through `roebel.pay`.
 import type { DeclaredContract } from "@netizen-labs/miniapp-sdk";
 import { callRules, type CallRule } from "@netizen-labs/miniapp-sdk/host";
-import { isAddress, parseAbiItem, toFunctionSelector, type AbiFunction, type Hex } from "viem";
+import { formatEther, isAddress, parseAbiItem, parseEther, toFunctionSelector, type AbiFunction, type Hex } from "viem";
 import { formatAbiItem } from "viem/utils";
 import { MINIAPP_FORBIDDEN_TARGETS, isMiniAppForbiddenTarget } from "../passkey/sponsor-policy";
 import { MiniAppError } from "./types";
@@ -102,4 +102,51 @@ export function validateContracts(input: unknown): DeclaredContract[] {
 /** The shared call rules for a validated declaration (viem's selector function). */
 export function rulesFor(contracts: DeclaredContract[]): CallRule[] {
   return callRules(contracts, (sig) => toFunctionSelector(`function ${sig}`));
+}
+
+/**
+ * The sponsor rules of a stored `mini_apps` row: only a LIVE app with manifest_version '2'
+ * and at least one declared contract that still validates; else null. `gasBudgetWei` is the
+ * budget granted at review (0 when the column is missing).
+ */
+export function sponsorRules(row: {
+  status?: string | null;
+  manifest_version?: string | null;
+  contracts?: unknown;
+  gas_budget_wei?: string | number | null;
+}): { rules: CallRule[]; gasBudgetWei: bigint } | null {
+  if (row.status !== "live" || row.manifest_version !== "2") return null;
+  if (!Array.isArray(row.contracts) || row.contracts.length === 0) return null;
+  let contracts: DeclaredContract[];
+  try {
+    contracts = validateContracts(row.contracts);
+  } catch {
+    return null;
+  }
+  let gasBudgetWei = 0n;
+  try {
+    const raw = row.gas_budget_wei;
+    if (raw !== null && raw !== undefined && /^[0-9]+$/.test(String(raw))) gasBudgetWei = BigInt(String(raw));
+  } catch {
+    gasBudgetWei = 0n;
+  }
+  return { rules: rulesFor(contracts), gasBudgetWei };
+}
+
+/** Admin input "0.05" (or "0,05") xDAI → wei. Throws MiniAppError('invalid_params'). */
+export function xdaiToWei(input: string): bigint {
+  const s = String(input ?? "").trim().replace(",", ".");
+  if (!/^[0-9]{1,6}(\.[0-9]{1,18})?$/.test(s)) {
+    fail("Gas-Budget muss eine Zahl in xDAI sein (höchstens 18 Nachkommastellen, unter 1.000.000).");
+  }
+  return parseEther(s);
+}
+
+/** wei (bigint or decimal string) → xDAI string for display. */
+export function weiToXdai(wei: bigint | string | number | null | undefined): string {
+  try {
+    return formatEther(BigInt(String(wei ?? 0)));
+  } catch {
+    return "0";
+  }
 }

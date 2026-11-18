@@ -11,6 +11,7 @@ import {
   Star,
   Coins,
   ExternalLink,
+  Fuel,
   Pencil,
   RotateCcw,
 } from "lucide-react";
@@ -44,6 +45,16 @@ import {
   needsIdentityReview,
 } from "@/lib/miniapp/identityReview";
 import type { MiniAppIdentityRequest } from "@netizen-labs/miniapp-sdk";
+import { formatEther } from "viem";
+
+/** wei (numeric column → string or number) → xDAI for display. */
+function xdai(wei: string | number | null | undefined): string {
+  try {
+    return formatEther(BigInt(String(wei ?? 0)));
+  } catch {
+    return "0";
+  }
+}
 
 // Manifest keys (camelCase, as stored on a version) <-> live row columns.
 const DIFF_FIELDS: { label: string; key: string; col: keyof MiniAppRow }[] = [
@@ -109,6 +120,7 @@ export default function MiniAppAdminDetail({
 
   const [notes, setNotes] = useState("");
   const [budget, setBudget] = useState("");
+  const [gasBudget, setGasBudget] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editingManifest, setEditingManifest] = useState(false);
@@ -317,6 +329,57 @@ export default function MiniAppAdminDetail({
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Nicht freigegebene Apps haben Budget 0 → jede Belohnung wird abgelehnt.
+          </p>
+        </DetailCard>
+
+        <DetailCard title="Gas-Budget">
+          {(app.contracts ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Keine Verträge angemeldet. Nur Manifest-Version 2 kann Verträge für gasfreie Aufrufe anmelden.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {(app.contracts ?? []).map((c) => (
+                <li key={c.address} className="rounded-md border p-2 text-sm">
+                  <div className="font-medium">{c.label}</div>
+                  <div className="font-mono text-xs text-muted-foreground" title={c.address}>
+                    {c.address}
+                  </div>
+                  <div className="mt-1 font-mono text-xs">{c.functions.join(", ")}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <InfoRow label="Budget">{xdai(app.gas_budget_wei)} xDAI</InfoRow>
+          <InfoRow label="Verbraucht">{xdai(app.gas_spent_wei)} xDAI</InfoRow>
+          <div className="mt-2 flex gap-2">
+            <Input
+              inputMode="decimal"
+              placeholder="Neues Budget in xDAI"
+              value={gasBudget}
+              onChange={(e) => setGasBudget(e.target.value)}
+              className="h-9 text-sm"
+            />
+            <Button
+              size="sm"
+              disabled={busy != null || gasBudget.trim() === ""}
+              onClick={() =>
+                act(
+                  "gas-budget",
+                  async () => {
+                    await miniAppWrite("gas-budget", "PATCH", { id: app.id, budgetXdai: gasBudget.trim() });
+                    setGasBudget("");
+                  },
+                  `Gas-Budget auf ${gasBudget.trim()} xDAI gesetzt.`,
+                )
+              }
+            >
+              <Fuel className="mr-1 h-4 w-4" /> Setzen
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Bezahlt gasfreie Aufrufe genau dieser Funktionen. Neue Apps haben 0 → nichts wird übernommen. Gezählt wird
+            der reservierte Höchstbetrag je Vorgang, das Budget sinkt also schneller als der echte Verbrauch.
           </p>
         </DetailCard>
 

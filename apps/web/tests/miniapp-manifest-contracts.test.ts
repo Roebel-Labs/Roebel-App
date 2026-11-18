@@ -6,7 +6,10 @@ import {
   MAX_CONTRACTS,
   MAX_FUNCTIONS,
   rulesFor,
+  sponsorRules,
   validateContracts,
+  weiToXdai,
+  xdaiToWei,
 } from "../src/lib/miniapp/contracts";
 import {
   manifestStoreFields,
@@ -125,4 +128,36 @@ test("a missing contracts column is retried without contracts only; identity col
   const out = withoutColumns(f, ["contracts"]);
   assert.equal("contracts" in out, false);
   assert.equal(out.manifest_version, "2");
+});
+
+test("sponsorRules: only a live version-2 row with declared contracts is sponsorable", () => {
+  const contracts = [{ address: A1, label: "Buch", functions: ["checkIn(uint256)"] }];
+  const live = { status: "live", manifest_version: "2", contracts, gas_budget_wei: "1000" };
+  const r = sponsorRules(live);
+  assert.ok(r);
+  assert.equal(r.rules[0].address, A1);
+  assert.equal(r.gasBudgetWei, 1000n);
+  assert.equal(sponsorRules({ ...live, status: "pending" }), null);
+  assert.equal(sponsorRules({ ...live, manifest_version: "1" }), null);
+  assert.equal(sponsorRules({ ...live, contracts: [] }), null);
+  assert.equal(sponsorRules({ ...live, contracts: undefined }), null);
+  // A stored row that no longer validates (e.g. a now-forbidden address) is not sponsorable.
+  assert.equal(sponsorRules({ ...live, contracts: [{ address: FORBIDDEN_CONTRACTS[0], label: "x", functions: ["f()"] }] }), null);
+  assert.equal(sponsorRules({ ...live, gas_budget_wei: undefined })?.gasBudgetWei, 0n);
+});
+
+test("xdaiToWei parses a decimal xDAI amount and refuses anything else", () => {
+  assert.equal(xdaiToWei("0.05"), 5n * 10n ** 16n);
+  assert.equal(xdaiToWei("1"), 10n ** 18n);
+  assert.equal(xdaiToWei(" 0,5 "), 5n * 10n ** 17n);
+  assert.equal(xdaiToWei("0"), 0n);
+  for (const bad of ["", "-1", "abc", "1e3", "0.0000000000000000001", "1000001"]) {
+    assert.throws(() => xdaiToWei(bad), bad);
+  }
+});
+
+test("weiToXdai formats wei for the admin card", () => {
+  assert.equal(weiToXdai(5n * 10n ** 16n), "0.05");
+  assert.equal(weiToXdai(0n), "0");
+  assert.equal(weiToXdai("1000000000000000000"), "1");
 });

@@ -29,6 +29,9 @@ import {
 import { hashStableFields, requiredPrefund, voucherTypedData } from "../voucher";
 import { ecdsaSafeFactoryData, safeFactoryData, PASSKEY_SAFE } from "../safe-address";
 import ecdsaVector from "./ecdsa-safe-vector.json";
+import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
+import { rulesFor } from "../../miniapp/contracts";
+import { InMemoryMiniAppGasBudget, type GasVerdict, type MiniAppGasBudget } from "../miniapp-gas-budget";
 import {
   GOOD_SIG,
   GUARDIAN,
@@ -639,4 +642,92 @@ test("expert path: both proofs or a malformed owner are a bad request; legacy wi
   const res = await POST(req(ecdsaBody(uo, { legacy: LEGACY })));
   assert.equal(res.status, 403);
   assert.match((await res.json()).reason, /an expert-path Safe cannot drive a legacy account/);
+});
+
+// ---- sponsor mode "miniapp": the mini-app gas budget, never the citizens' budget ----
+
+const MINI_TARGET = "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a" as Hex;
+const MINI_APP_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3399";
+const miniRules = rulesFor([{ address: MINI_TARGET, label: "Trainingsbuch", functions: ["checkIn(uint256)"] }]);
+const miniCheckIn = encodeFunctionData({ abi: parseAbi(["function checkIn(uint256)"]), functionName: "checkIn", args: [1n] });
+const miniBody = () => body(userOp(outer(MINI_TARGET, miniCheckIn)), { legacy: undefined, miniApp: MINI_APP_ID });
+
+class RecordingGas implements MiniAppGasBudget {
+  calls: Array<{ id: string; person: string; cost: bigint }> = [];
+  constructor(private inner: MiniAppGasBudget | GasVerdict = "ok") {}
+  async reserve(id: string, person: string, cost: bigint): Promise<GasVerdict> {
+    this.calls.push({ id, person, cost });
+    return typeof this.inner === "string" ? this.inner : this.inner.reserve(id, person, cost);
+  }
+}
+
+const miniDeps = (gas: MiniAppGasBudget, rules: CallRule[] | null = miniRules) => ({
+  rules: async (id: string) => (id === MINI_APP_ID ? rules : null),
+  budget: gas,
+});
+
+test("a mini-app op charges the mini-app budget and leaves the citizens' budget untouched", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  const gas = new RecordingGas();
+  const res = await handleSponsorRequest(req(miniBody()), { chain, budget: recording, miniApps: miniDeps(gas) });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.ok((await res.json()).paymasterAndData);
+  assert.equal(recording.calls.length, 0);
+  assert.equal(gas.calls.length, 1);
+  assert.equal(gas.calls[0].id, MINI_APP_ID);
+  assert.equal(gas.calls[0].person, SAFE.toLowerCase());
+  assert.ok(gas.calls[0].cost > 0n);
+});
+
+test("an exhausted mini-app budget answers 429 with scope app; an everyday op in the same run still gets a voucher", async () => {
+  enable();
+  const citizens = new RecordingBudget();
+  const gas = new RecordingGas(new InMemoryMiniAppGasBudget({ appBudgetWei: () => 0n }));
+  const deps = { chain, budget: citizens, miniApps: miniDeps(gas) };
+  const mini = await handleSponsorRequest(req(miniBody()), deps);
+  assert.equal(mini.status, 429);
+  assert.deepEqual(await mini.json(), { error: "budget_exhausted", scope: "app" });
+  const everyday = await handleSponsorRequest(req(body()), deps);
+  assert.equal(everyday.status, 200, JSON.stringify(await everyday.clone().json()));
+  assert.equal(citizens.calls.length, 1);
+  assert.equal(gas.calls.length, 1);
+});
+
+test("person and global verdicts map to their scopes", async () => {
+  enable();
+  for (const [verdict, scope] of [["person_budget", "person"], ["global_budget", "global"]] as const) {
+    const res = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(new RecordingGas(verdict)) });
+    assert.equal(res.status, 429);
+    assert.deepEqual(await res.json(), { error: "budget_exhausted", scope });
+  }
+});
+
+test("a mini app without approved contracts is 403", async () => {
+  enable();
+  const gas = new RecordingGas();
+  const noRules = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(gas, null) });
+  assert.equal(noRules.status, 403);
+  assert.deepEqual(await noRules.json(), { error: "not_sponsorable", reason: "mini app has no approved contracts" });
+  const noDeps = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget() });
+  assert.equal(noDeps.status, 403);
+  assert.equal(gas.calls.length, 0);
+});
+
+test("an undeclared call under a mini app is 403 and charges nothing", async () => {
+  enable();
+  const citizens = new RecordingBudget();
+  const gas = new RecordingGas();
+  const res = await handleSponsorRequest(req(body(userOp(), { miniApp: MINI_APP_ID })), { chain, budget: citizens, miniApps: miniDeps(gas) });
+  assert.equal(res.status, 403);
+  assert.equal(citizens.calls.length + gas.calls.length, 0);
+});
+
+test("a throwing mini-app gas store fails closed with 503", async () => {
+  enable();
+  const broken: MiniAppGasBudget = { reserve: async () => { throw new Error("db down"); } };
+  const { result } = await captureErrors(() =>
+    handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(broken) }),
+  );
+  assert.equal(result.status, 503);
 });

@@ -12,6 +12,8 @@ import {
   withoutColumns,
 } from "./manifest";
 import { issueMuenzenOnChain } from "./muenzen";
+import { sponsorRules, xdaiToWei } from "./contracts";
+import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
 import { IDENTITY_REVIEW_MESSAGE, needsIdentityReview } from "./identityReview";
 import {
   MiniAppError,
@@ -433,6 +435,46 @@ export async function setRewardBudget(id: string, budget: number): Promise<MiniA
     .single();
   if (error) throw new MiniAppError("internal", error.message);
   return data as MiniAppRow;
+}
+
+/**
+ * Admin: grant a mini app's gas budget for sponsored calls (input in xDAI, stored in wei).
+ * Needs the contracts migration (20261117mb); before it the update fails with a clear message.
+ */
+export async function setGasBudget(id: string, budgetXdai: string): Promise<MiniAppRow> {
+  const wei = xdaiToWei(budgetXdai);
+  const { data, error } = await db()
+    .from("mini_apps")
+    .update({ gas_budget_wei: wei.toString(), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") {
+      throw new MiniAppError("internal", "Gas-Budget braucht die Migration 20261117mb_mini_app_contracts_gas.sql.");
+    }
+    throw new MiniAppError("internal", error.message);
+  }
+  return data as MiniAppRow;
+}
+
+/**
+ * Sponsor route: the call rules and granted gas budget of a LIVE version-2 app with
+ * declared contracts, else null (also null before the contracts migration).
+ */
+export async function getSponsorableMiniApp(
+  id: string,
+): Promise<{ rules: CallRule[]; gasBudgetWei: bigint } | null> {
+  const { data, error } = await db()
+    .from("mini_apps")
+    .select("id, status, manifest_version, contracts, gas_budget_wei")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") return null;
+    throw new MiniAppError("internal", error.message);
+  }
+  return data ? sponsorRules(data as Parameters<typeof sponsorRules>[0]) : null;
 }
 
 export async function toggleFeatured(id: string, featured: boolean): Promise<MiniAppRow> {
