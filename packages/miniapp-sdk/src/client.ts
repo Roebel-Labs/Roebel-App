@@ -88,8 +88,11 @@ export function createClient(): NetizenSDK {
       onChange: (cb) => bridge.on('credentialsChanged', (data) => cb(data as Credential[])),
     },
 
-    // Completed in the next step (host method list); until then let the call decide.
-    supports: () => true,
+    // Mock mode answers every method locally; an old host (no list) lets the call decide.
+    supports: (method) => {
+      const methods = bridge.hostMethods();
+      return methods === null || methods.includes(method);
+    },
 
     hostEnvironment: () => getHostEnvironment(),
     isMockMode: () => bridge.getMode() === 'mock',

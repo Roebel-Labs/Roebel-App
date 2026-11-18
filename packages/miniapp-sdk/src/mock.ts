@@ -13,11 +13,15 @@
  *     account: { address: '0x00000000000000000000000000000000000000ff', chainId: 100 },
  *     balance: { balance: '42', decimals: 18, symbol: 'RÖ' },
  *     rewards: true, // grantReward resolves granted:true (demo happy path)
+ *     credentials: [{ type: 'citizen', kind: 'builtin', name: 'Bürger:in', recognised: true }],
+ *     token: 'eyJ…', // auth.getToken resolves { token }
  *   }
  */
+import { credentialMatches } from './credential-ref';
 import type {
   BridgeError,
   BridgeMethod,
+  Credential,
   GrantRewardParams,
   MiniAppContext,
   MuenzenBalance,
@@ -64,6 +68,18 @@ function mockAccount(): WalletAccount | null {
 
 function mockBalance(): MuenzenBalance {
   return getMockConfig().balance ?? { balance: '12', decimals: 18, symbol: 'RÖ' };
+}
+
+function mockCredentials(): Credential[] {
+  return (
+    getMockConfig().credentials ?? [
+      { type: 'citizen', kind: 'builtin', name: 'Bürger:in', recognised: true },
+    ]
+  );
+}
+
+function mockHolds(pattern: string): boolean {
+  return mockCredentials().some((held) => credentialMatches(pattern, held));
 }
 
 function err(code: BridgeError['code'], message: string): BridgeError {
@@ -130,8 +146,10 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
           );
       }
     }
-    case 'auth.getToken':
-      return Promise.resolve(null);
+    case 'auth.getToken': {
+      const token = getMockConfig().token;
+      return Promise.resolve(token ? { token } : null);
+    }
     case 'auth.signIn':
       return Promise.reject(err('unsupported', 'Mock-Modus: Anmeldung braucht den Röbel-Host'));
     case 'roebel.getMuenzenBalance':
@@ -171,6 +189,17 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
       const p = (params ?? {}) as { key?: string; value?: unknown };
       if (p.key) mockUserData.set(p.key, p.value ?? null);
       return Promise.resolve({ ok: true });
+    }
+    case 'credentials.list':
+      return Promise.resolve(mockCredentials());
+    case 'credentials.has': {
+      const type = (params as { type?: unknown } | undefined)?.type;
+      return Promise.resolve(typeof type === 'string' && mockHolds(type));
+    }
+    case 'credentials.request': {
+      const types = (params as { types?: unknown } | undefined)?.types;
+      const list = Array.isArray(types) ? types.filter((t): t is string => typeof t === 'string') : [];
+      return Promise.resolve({ granted: list.filter(mockHolds) });
     }
     case 'analytics.track':
       return Promise.resolve(undefined);
