@@ -32,9 +32,41 @@ default payment provider for Ortis; Stripe stays as a second rail for accounts t
 | In person | Tap to Pay on iPhone in DE (Mollie app, since 2024-11); Mollie terminals; Terminal API (`method: pointofsale`) | mollie.com |
 | Multi-seller checkout | Connect for Marketplaces: split payments / routing | docs.mollie.com |
 
-Open checks before live: Mollie hosting location (EU company is not automatically EU-only infrastructure);
-whether application fees are reversed on refunds; whether `applicationFee` is allowed on Subscriptions via OAuth;
-Mollie partner-programme revenue share; webhook signing (classic webhooks are unsigned → we always fetch back).
+### 2.1 Research + test-key probe (2026-11-18)
+
+Live probe with the platform test API key:
+- Payments API works: test payment `tr_…` created, hosted checkout returned. Customers API works.
+- Activated methods on the profile: only `creditcard` + `ideal`. Apple Pay, Google Pay, PayPal, direct debit must be
+  enabled in the dashboard. **Wero is not in `/v2/methods/all`.**
+- Payment Links fail ("no payment methods enabled for this profile") until methods are enabled.
+- `applicationFee` with an API key → 422 "Application fees are only allowed for OAuth payments" (expected).
+
+Settled by docs (docs.mollie.com):
+- **Application fees are non-refundable:** a refund comes from the merchant's balance, the platform keeps its fee.
+  Decide whether Ortis voluntarily credits the fee back on refunds (fairness for Vereine). Chargeback handling of the
+  fee unconfirmed.
+- `applicationFee` works on Payments API, Payment Links (OAuth + `profileId`) and **Subscriptions** (charged on every
+  payment) → M4 is unblocked. Orders API is deprecated (fee capped 10 % / €2) → don't use it.
+- OAuth: access token 60 min, refresh token persistent, auth code valid 30 s. **Adding scopes later forces every
+  merchant to re-authorize → request the full set on day one:** `payments.*`, `refunds.*`, `onboarding.*`,
+  `profiles.*`, `organizations.read`, `clients.write`, `payment-links.*`, `customers.*`, `mandates.*`,
+  `subscriptions.*`, `terminals.*`, `balances.read`, `settlements.read`, `invoices.read`.
+- Client Links pre-fill owner name/email, org name, address, registration number, VAT number (VIES-checked), legal
+  entity; link valid 30 days. Onboarding API: `needs-data` / `in-review` / `completed` with `canReceivePayments` and
+  `canReceiveSettlements` → payments can start before payouts are released; show both states in the UI.
+- **Signed webhooks exist** ("next-gen", `X-Mollie-Signature` HMAC-SHA256, max 3 live subscriptions per org;
+  refunds/chargebacks events still beta). Keep the fetch-back pattern for payments; optional signature check.
+- Balance transfers (dashboard "Partners → Balance transfers") are only for merchant-consented fees owed to the
+  platform (e.g. monthly SaaS fee), €1,000/month cap, must be enabled by Mollie — never for forwarding shopper money.
+- Wero: Mollie page says "coming soon", ecommerce H2 2026 → drop from M1 method list. giropay is dead (since
+  2024-06-30). Google Pay is still beta on hosted checkout.
+- Data: Mollie states storage on Dutch servers; check the subprocessor list (reported Google Cloud) for the DPIA.
+- DE pricing confirmed on mollie.com/de/pricing: Klarna 2.99 % + €0.35, bank transfer €0.25, Pay by Bank
+  0.45 % + €0.25; card / SEPA / PayPal as in the table above.
+
+Still open: whether Connect must be requested or is on by default for our account; whether the full OAuth +
+Client Link flow runs in test mode before our own KYB; partner-programme revenue share (apply via
+mollie.com/contact/connect); application fees on terminal payments.
 
 ## 3. Design
 
@@ -74,7 +106,7 @@ existing Stripe account keep Stripe until they switch.
 - **Checkout:** Payments API with the org's OAuth token, `profileId`, `applicationFee`
   (`STRIPE_PLATFORM_FEE_*` renamed to `PLATFORM_FEE_BPS` / `PLATFORM_FEE_FIXED_CENTS`, same 2 % + €0.10),
   `redirectUrl` = existing return pages, `webhookUrl` = `/api/webhooks/mollie`, `metadata.kind` + order id,
-  `expiresAt` for the 35-min hold. Methods for instant fulfilment: creditcard, applepay, googlepay, paypal, wero.
+  `expiresAt` for the 35-min hold. Methods for instant fulfilment: creditcard, applepay, googlepay, paypal (wero once Mollie ships it in DE).
   SEPA direct debit only for recurring (async).
 - **Webhook:** Mollie posts only `id` → we look up which order/account owns it, fetch the payment with that org's
   token, settle by status, bound to account + order + amount (same rules as `webhooks/stripe-connect`),
