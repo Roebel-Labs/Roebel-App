@@ -21,6 +21,7 @@ import {
   SDK_REFERENCE,
   SDK_VERSION,
 } from "./ai/htmlPrompt";
+import { DOCS_CHAPTERS, type DocsChapterId } from "./devdocs-chapters";
 import { WELL_KNOWN_PATH } from "./manifestFile";
 import { MINI_APPS_SITE_DOMAIN } from "./siteDomain";
 
@@ -165,7 +166,13 @@ const PUBLISH_API = `## Publishing API (what the dashboard/MCP call for you)
 - Categories: community | governance | finance | utility | games | education | news | culture | environment
 - Permissions (request only what you use): wallet | rewards | notifications | circles | share`;
 
-export type DocsSection = "sdk" | "design" | "screens" | "copy" | "publish" | "all";
+export type DocsSection = "sdk" | "design" | "screens" | "copy" | "publish" | DocsChapterId | "all";
+
+/** Every section the MCP get_docs tool accepts, "all" last. */
+export const DOCS_SECTIONS = ["sdk", "screens", "design", "copy", "publish", ...DOCS_CHAPTERS.map((c) => c.id), "all"] as [
+  DocsSection,
+  ...DocsSection[],
+];
 
 export function getDocsSection(section: DocsSection): string {
   switch (section) {
@@ -181,11 +188,23 @@ export function getDocsSection(section: DocsSection): string {
       return `${PUBLISH_API}\n\n${SINGLE_FILE_GUIDE}`;
     case "all":
       return buildLlmsFullTxt();
+    default:
+      return DOCS_CHAPTERS.find((c) => c.id === section)?.text ?? "";
   }
 }
 
 export function buildLlmsFullTxt(): string {
-  return [INTRO, SDK_REFERENCE, USER_TOKEN, SCREEN_RULES, DESIGN_SYSTEM, COPY_RULES, SINGLE_FILE_GUIDE, PUBLISH_API].join(
+  return [
+    INTRO,
+    SDK_REFERENCE,
+    USER_TOKEN,
+    ...DOCS_CHAPTERS.map((c) => c.text),
+    SCREEN_RULES,
+    DESIGN_SYSTEM,
+    COPY_RULES,
+    SINGLE_FILE_GUIDE,
+    PUBLISH_API,
+  ].join(
     "\n\n---\n\n",
   );
 }
@@ -203,6 +222,10 @@ export function buildLlmsIndexTxt(): string {
 - [Full developer guide](${DOCS_BASE_URL}/mini-apps/llms-full.txt): everything —
   SDK reference, bridge, screens contract, design system, copy rules,
   single-file boilerplate, publishing API, MCP server.
+
+## Chapters (all part of llms-full.txt; MCP get_docs {section})
+
+${DOCS_CHAPTERS.map((c) => `- ${c.id}: ${c.summary}`).join("\n")}
 
 ## Tools
 

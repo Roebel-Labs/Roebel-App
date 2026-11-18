@@ -86,6 +86,16 @@ run `pnpm --filter @netizen-labs/miniapp-sdk release`: one build feeds npm (dist
 `publishConfig`) and the checked-in CDN copies (`apps/web/public/sdk/miniapp-sdk*.mjs`).
 `release:check` runs the same agreement check without publishing.
 
+## Guides
+
+The full developer guide is https://www.roebel.app/mini-apps/llms-full.txt (index:
+`/mini-apps/llms.txt`; the MCP tool `get_docs` serves each chapter). Chapters for 0.4.0:
+`identity` (manifest version 2, consent, pseudonym), `verify` (`verifyUserToken`,
+`verifySignIn` from `@netizen-labs/miniapp-verify`), `credentials` (`sdk.credentials.*`,
+`holdsCredential`), `wallet` (provider methods, limits, error codes, `roebel.pay`, events),
+`gasless` (declared contracts, gas budget), `issuer` (badges through an org delegate key; needs
+the credential register) and `store` (`audience`, `org`).
+
 ## Host usage (Expo / web)
 
 ```ts

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { getDocsSection } from "../src/lib/miniapp/devdocs";
+import { buildLlmsIndexTxt, getDocsSection } from "../src/lib/miniapp/devdocs";
 import { WELL_KNOWN_PATH } from "../src/lib/miniapp/manifestFile";
 
 test("docs explain the user token and the deprecation", () => {
@@ -57,3 +57,41 @@ test("DESIGN.md points to the manifest file, not netizen.manifest.ts", () => {
   const design = readFileSync(new URL("../../../packages/miniapp-sdk/DESIGN.md", import.meta.url), "utf8");
   assert.ok(design.includes(WELL_KNOWN_PATH));
 });
+
+// SDK 0.4.0 chapters: one source (devdocs.ts) for the site, llms.txt, llms-full.txt and the MCP.
+for (const s of ["identity", "verify", "credentials", "wallet", "gasless", "issuer", "store"] as const)
+  test(`section ${s} exists and is part of all`, () => {
+    const t = getDocsSection(s);
+    assert.ok(t.length > 400);
+    assert.ok(getDocsSection("all").includes(t.slice(0, 80)));
+  });
+
+test("the SDK calls of 0.4.0 are documented", () => {
+  const all = getDocsSection("all");
+  for (const c of [
+    "sdk.credentials.list",
+    "sdk.credentials.has",
+    "sdk.credentials.request",
+    "sdk.credentials.onChange",
+    "sdk.auth.getToken",
+    "sdk.auth.signIn",
+    "sdk.roebel.pay",
+    "sdk.supports",
+    "wallet_sendCalls",
+    "eth_getLogs",
+    "verifyUserToken",
+    "verifySignIn",
+    "holdsCredential",
+    "handlesBack",
+  ])
+    assert.ok(all.includes(c), `${c} missing`);
+});
+
+test("llms.txt lists every section", () => {
+  const index = buildLlmsIndexTxt();
+  for (const s of ["identity", "verify", "credentials", "wallet", "gasless", "issuer", "store"])
+    assert.match(index, new RegExp(`^- ${s}: `, "m"));
+});
+
+test("the issuer chapter says it needs the credential register", () =>
+  assert.match(getDocsSection("issuer"), /credential register/i));

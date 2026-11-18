@@ -77,6 +77,34 @@ For Next.js, Vite and Lovable that means the file \`public/.well-known/roebel-mi
 - \`iconUrl\`: square PNG, ideally 1024×1024.
 - Optional \`slug\` (a–z, 0–9, "-"); otherwise one is derived from the name.
 
+Version 2 (identity, gasless contracts, audience, org; details: ${base}/mini-apps/llms-full.txt):
+\`\`\`json
+{
+  "owner": "0x…",
+  "miniapp": {
+    "version": "2",
+    "name": "Vereinsheim",
+    "homeUrl": "https://<your-app-domain>/",
+    "iconUrl": "https://<your-app-domain>/icon.png",
+    "description": "Trainingszeiten und Check-in für Mitglieder.",
+    "category": "community",
+    "tags": ["verein"],
+    "screenshots": [],
+    "permissions": ["wallet"],
+    "primaryColor": "#00498B",
+    "identity": {
+      "profile": true,
+      "address": false,
+      "credentials": [{ "type": "org:3f2504e0-4f89-41d3-9a0c-0305e82c3301", "reason": "Nur Mitglieder sehen den Trainingsplan." }]
+    },
+    "contracts": [{ "address": "0x1111111111111111111111111111111111111111", "label": "Check-in", "functions": ["checkIn(uint256)"] }],
+    "audience": { "mode": "required", "anyOf": ["org:3f2504e0-4f89-41d3-9a0c-0305e82c3301"] },
+    "org": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+  }
+}
+\`\`\`
+The org confirms \`org\` in the app; a lock is a courtesy, so check credentials on your server.
+
 ## 5. Validate, then register
 \`\`\`bash
 curl -s "${base}/api/mini-apps/validate?url=https://<your-app-domain>"

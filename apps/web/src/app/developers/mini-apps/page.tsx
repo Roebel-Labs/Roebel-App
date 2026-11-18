@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Blocks, Bot, FileCode2, Globe, Link2, Sparkles, TerminalSquare } from "lucide-react";
 import { DOCS_BASE_URL, MCP_TOOLS } from "@/lib/miniapp/devdocs";
+import { DOCS_CHAPTERS } from "@/lib/miniapp/devdocs-chapters";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
 import { LOVABLE_PROMPT } from "@/lib/miniapp/buildSnippets";
 
@@ -168,6 +169,23 @@ Röbel Mini-App als einzelne HTML-Datei: [DEINE IDEE]`}</Code>
               SDK-Modul für Single-File-Apps:{" "}
               <span className="break-all font-mono text-xs">{SDK_ESM_URL}</span>
             </li>
+          </ul>
+        </Door>
+
+        <Door icon={FileCode2} title="Kapitel für SDK 0.4.0">
+          <p>
+            Alle Kapitel stehen in{" "}
+            <a href="/mini-apps/llms-full.txt" className="font-mono text-primary hover:underline">
+              llms-full.txt
+            </a>{" "}
+            und einzeln über das MCP-Werkzeug <span className="font-mono text-xs">get_docs</span>:
+          </p>
+          <ul className="list-inside list-disc space-y-1">
+            {DOCS_CHAPTERS.map((c) => (
+              <li key={c.id}>
+                <span className="font-mono text-xs">{c.id}</span> — {c.summary}
+              </li>
+            ))}
           </ul>
         </Door>
       </div>
