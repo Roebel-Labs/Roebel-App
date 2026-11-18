@@ -6,6 +6,9 @@ import {
   buildConsentItems,
   fetchIdentityState,
   grantFromChoices,
+  grantWithItem,
+  grantWithdrawAll,
+  isGranted,
   saveIdentityGrant,
   shapeUser,
   type IdentityState,
@@ -90,6 +93,22 @@ describe('grantFromChoices', () => {
   it('declining everything grants nothing but records the asked keys', () => {
     const g = grantFromChoices(app, state, ['profile', 'cred:attester'], new Set());
     expect(g).toEqual({ profile: false, address: false, credentials: [], asked: ['profile', 'cred:attester'] });
+  });
+});
+
+describe('withdrawal on the detail page', () => {
+  const granted: IdentityState = { ...state, asked: ['profile', 'cred:citizen'], granted: { profile: true, address: false, credentials: ['citizen'] } };
+  it('switches one item and keeps the rest', () => {
+    expect(grantWithItem(granted, 'cred:citizen', false)).toEqual({ profile: true, address: false, credentials: [], asked: ['profile', 'cred:citizen'] });
+    expect(grantWithItem(granted, 'address', true)).toEqual({ profile: true, address: true, credentials: ['citizen'], asked: ['profile', 'cred:citizen', 'address'] });
+  });
+  it('withdraws everything but keeps the asked keys', () => {
+    expect(grantWithdrawAll(granted)).toEqual({ profile: false, address: false, credentials: [], asked: ['profile', 'cred:citizen'] });
+  });
+  it('reads the current grant per key', () => {
+    expect(isGranted(granted, 'profile')).toBe(true);
+    expect(isGranted(granted, 'cred:citizen')).toBe(true);
+    expect(isGranted(granted, 'address')).toBe(false);
   });
 });
 

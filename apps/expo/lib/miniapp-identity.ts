@@ -216,3 +216,26 @@ export function shapeUser(
   }
   return out;
 }
+
+/** The current grant with one item switched (detail page "Zugriff"); the key counts as asked. */
+export function grantWithItem(state: IdentityState, key: ConsentKey, value: boolean): IdentityGrant {
+  const g = state.granted;
+  const asked = state.asked.includes(key) ? [...state.asked] : [...state.asked, key];
+  if (key === 'profile') return { profile: value, address: g.address, credentials: [...g.credentials], asked };
+  if (key === 'address') return { profile: g.profile, address: value, credentials: [...g.credentials], asked };
+  const ref = key.slice('cred:'.length);
+  const rest = g.credentials.filter((c) => c !== ref);
+  return { profile: g.profile, address: g.address, credentials: value ? [...rest, ref] : rest, asked };
+}
+
+/** Everything withdrawn; what was asked stays asked (no new sheet on the next open). */
+export function grantWithdrawAll(state: IdentityState): IdentityGrant {
+  return { profile: false, address: false, credentials: [], asked: [...state.asked] };
+}
+
+/** Whether `key` is granted in `state`. */
+export function isGranted(state: IdentityState, key: ConsentKey): boolean {
+  if (key === 'profile') return state.granted.profile;
+  if (key === 'address') return state.granted.address;
+  return state.granted.credentials.includes(key.slice('cred:'.length));
+}

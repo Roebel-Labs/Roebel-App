@@ -14,6 +14,7 @@ import {
   FlatList,
   ActivityIndicator,
   StatusBar,
+  Switch,
   Share,
   Platform,
   Linking,
@@ -44,12 +45,103 @@ import {
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { PERMISSION_LABELS } from '@/lib/miniapp-permissions';
+import { useActiveAccount } from 'thirdweb/react';
+import { consentKeys, type ConsentKey } from '@netizen-labs/miniapp-sdk/host';
+import { useInstalledMiniApps } from '@/lib/miniapp-installs';
+import {
+  buildConsentItems,
+  fetchIdentityState,
+  grantWithItem,
+  grantWithdrawAll,
+  isGranted,
+  saveIdentityGrant,
+  type IdentityGrant,
+  type IdentityState,
+} from '@/lib/miniapp-identity';
 
 /** Dark stage behind the sheet — same chrome as the MiniAppHost. */
 const CHROME_BG = '#0F1013';
 const CHROME_TEXT = '#FFFFFF';
 const SHEET_RADIUS = 24;
 const BTN_RADIUS = 10;
+
+/**
+ * "Zugriff": for a version-2 app the person has opened before, every requested item with its
+ * current grant. Each switch (and "Alles entziehen") stores the new grant on the node at once.
+ */
+function MiniAppAccessSection({ app, reloadKey }: { app: MiniApp; reloadKey: boolean }) {
+  const { colors } = useTheme();
+  const account = useActiveAccount();
+  const { isInstalled } = useInstalledMiniApps();
+  const [state, setState] = useState<IdentityState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const opened = isInstalled(app.slug);
+  const isV2 = app.manifestVersion === 2 && !app.preview;
+  const wallet = account?.address?.toLowerCase() ?? null;
+
+  useEffect(() => {
+    // Reload after the host closes (reloadKey flips back to false): the sheet may have changed it.
+    if (!isV2 || !opened || !account || reloadKey) return;
+    let cancelled = false;
+    void fetchIdentityState(account, app.id).then((s) => {
+      if (!cancelled) setState(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per account, not per account object
+  }, [isV2, opened, wallet, app.id, reloadKey]);
+
+  const save = useCallback(
+    async (grant: IdentityGrant) => {
+      if (!account) return;
+      setBusy(true);
+      try {
+        const saved = await saveIdentityGrant(account, app.id, grant);
+        if (saved) setState(saved);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [account, app.id],
+  );
+
+  if (!isV2 || !state || state.asked.length === 0) return null;
+  const items = buildConsentItems(app, state, consentKeys(app.identity ?? undefined));
+  if (items.length === 0) return null;
+  const anyGranted = items.some((i) => isGranted(state, i.key));
+
+  return (
+    <View style={styles.block}>
+      <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>Zugriff</Text>
+      {items.map((item) => (
+        <View key={item.key} style={styles.accessRow}>
+          <View style={styles.accessText}>
+            <Text style={[styles.accessTitle, { color: colors.textPrimary }]}>{item.title}</Text>
+            <Text style={[styles.permText, { color: colors.textSecondary }]}>{item.detail}</Text>
+          </View>
+          <Switch
+            value={isGranted(state, item.key)}
+            disabled={busy}
+            onValueChange={(v) => void save(grantWithItem(state, item.key as ConsentKey, v))}
+            trackColor={{ true: colors.primary, false: colors.surfaceSecondary }}
+            accessibilityLabel={item.title}
+          />
+        </View>
+      ))}
+      {anyGranted ? (
+        <Pressable
+          onPress={() => void save(grantWithdrawAll(state))}
+          disabled={busy}
+          hitSlop={8}
+          style={({ pressed }) => [styles.accessRevoke, (pressed || busy) && { opacity: 0.6 }]}
+        >
+          <Text style={[styles.accessRevokeText, { color: colors.primary }]}>Alles entziehen</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
 
 export default function MiniAppDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -307,6 +399,9 @@ export default function MiniAppDetailScreen() {
                 </View>
               )}
 
+              {/* Zugriff (version 2): what this app may know, withdrawable */}
+              <MiniAppAccessSection app={app} reloadKey={hostVisible} />
+
               {/* Links */}
               <View style={styles.block}>
                 <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>Links</Text>
@@ -495,6 +590,11 @@ const styles = StyleSheet.create({
   permRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
   permDot: { width: 6, height: 6, borderRadius: 3 },
   permText: { fontFamily: fontFamily.regular, fontSize: 14 },
+  accessRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  accessText: { flex: 1, gap: 2 },
+  accessTitle: { fontFamily: fontFamily.semiBold, fontSize: 15 },
+  accessRevoke: { alignSelf: 'flex-start', paddingVertical: 8, marginTop: 4 },
+  accessRevokeText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   linksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   linkChip: {
     flexDirection: 'row',
