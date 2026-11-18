@@ -46,6 +46,8 @@ export type InvitationView = {
     recognised: boolean;
     publicClaimAllowed: boolean;
     benefits: string[];
+    /** The event of an event badge (the app keys the person's public/private wish by it). */
+    eventId: string | null;
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
@@ -146,6 +148,7 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
       recognised: type.recognised,
       publicClaimAllowed: type.publicClaim && !privateOnly,
       benefits: type.benefits,
+      eventId: type.eventId ?? null,
     },
     org: account ? { accountId: account.id, name: account.name, avatarUrl: account.avatarUrl } : null,
     validUntil: isoOfSeconds(inv.validUntil),

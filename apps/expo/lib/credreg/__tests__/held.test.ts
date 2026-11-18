@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RESERVED_TYPE_IDS } from '@netizen-labs/credential-registry';
 import type { Hex } from 'viem';
 import type { InvitationView } from '../types';
+import { rememberedReady } from '../pending';
 import { __resetPublicDirectory, clearHeld, heldCacheKey, loadHeld, loadHolder, loadPublicHeld, type HeldDeps } from '../held';
 
 const ADDR = '0x' + 'AB'.repeat(20);
@@ -195,5 +196,24 @@ describe('loadPublicHeld', () => {
     const reader = jest.fn();
     expect(await loadPublicHeld(ADDR as any, { reader, configured: () => false })).toEqual([]);
     expect(reader).not.toHaveBeenCalled();
+  });
+});
+
+describe('waiting badges in loadHolder', () => {
+  it('passes the pending badges through and remembers accepted badges not yet held as ready', async () => {
+    const badge = (id: string, typeId: Hex, state: InvitationView['state']) =>
+      inv(id, typeId, { state, type: { ...inv(id, typeId).type, kind: 'badge', eventId: 'ev-' + id } });
+    const pendingBadge = { eventId: 'ev-x', eventTitle: 'Fest', eventDate: '2026-12-05', orgName: null, typeId: null, name: 'Dabei', imageUrl: null, state: 'waiting_for_issue' as const };
+    const { d } = deps({
+      fetchMine: jest.fn(async () => ({
+        ok: true as const,
+        data: { invitations: [badge('p', tid(1), 'accepted'), badge('q', tid(2), 'accepted'), badge('r', tid(3), 'invited')], pendingBadges: [pendingBadge] },
+      })) as any,
+    });
+    const r = await loadHolder(account, d);
+    expect(r.pendingBadges).toEqual([pendingBadge]);
+    // tid(1) is held on chain (public already); tid(2) accepted privately so far: ready.
+    expect(r.ready.map((i) => i.id)).toEqual(['q']);
+    expect(rememberedReady(ADDR).map((i) => i.id)).toEqual(['q']);
   });
 });

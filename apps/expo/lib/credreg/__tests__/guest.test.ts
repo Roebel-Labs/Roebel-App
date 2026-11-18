@@ -19,7 +19,9 @@ import {
   __resetGuestCacheForTests,
   guestCallIfNeeded,
   guestSkipKey,
+  piggybackSkipKey,
   sendWithGuestClaim,
+  sendWithPiggyback,
   withGuestClaim,
   type GuestDeps,
 } from '../guest';
@@ -262,5 +264,49 @@ describe('withGuestClaim (custom senders)', () => {
     const run = jest.fn(async () => 'ok');
     await withGuestClaim({ address: ADDR, isCitizen: false }, run, deps({ configured: () => false }));
     expect(run.mock.calls).toEqual([[null]]);
+  });
+});
+
+describe('sendWithPiggyback', () => {
+  const CLAIM_A = { to: REG, data: '0xaaaa' as Hex };
+  const CLAIM_B = { to: REG, data: '0xbbbb' as Hex };
+
+  it('sendWithPiggyback orders Guest, ready claims, then the real calls in one operation', async () => {
+    const d = { ...deps(), readyClaims: jest.fn(async () => [CLAIM_A, CLAIM_B]) };
+    await expect(sendWithPiggyback(account, [REAL], { isCitizen: false }, d)).resolves.toBe(HASH);
+    expect(d.sendKeepingHash).toHaveBeenCalledTimes(1);
+    expect(d.sendKeepingHash).toHaveBeenCalledWith(account, [GUEST, CLAIM_A, CLAIM_B, REAL]);
+    expect(d.send).not.toHaveBeenCalled();
+    // A claim that is also one of the real calls (accepting that badge now) is not sent twice.
+    const d2 = { ...deps(), readyClaims: jest.fn(async () => [CLAIM_A, CLAIM_B]) };
+    await sendWithPiggyback(account, [CLAIM_A], { isCitizen: true }, d2);
+    expect(d2.sendKeepingHash).toHaveBeenCalledWith(account, [CLAIM_B, CLAIM_A]);
+    // Nothing ready: exactly sendWithGuestClaim.
+    const d3 = { ...deps({ allowed: async () => false }), readyClaims: jest.fn(async () => []) };
+    await sendWithPiggyback(account, [REAL], { isCitizen: false }, d3);
+    expect(d3.send).toHaveBeenCalledWith(account, [REAL]);
+  });
+
+  it('a failing piggyback falls back to the real calls alone and skips claims for 24 hours', async () => {
+    const d = { ...deps({ sendKeepingHash: jest.fn(async () => Promise.reject(SPONSOR_REFUSED)) }), readyClaims: jest.fn(async () => [CLAIM_A]) };
+    await expect(sendWithPiggyback(account, [REAL], { isCitizen: true }, d)).resolves.toBe(HASH);
+    expect(d.send).toHaveBeenCalledTimes(1);
+    expect(d.send).toHaveBeenCalledWith(account, [REAL]);
+    expect(storage.map.has(piggybackSkipKey(ADDR))).toBe(true);
+    // Within 24 hours no claim rides along (and none is even looked up).
+    clock += 23 * 3600_000;
+    await sendWithPiggyback(account, [REAL], { isCitizen: true }, d);
+    expect(d.readyClaims).toHaveBeenCalledTimes(1);
+    expect(d.send).toHaveBeenLastCalledWith(account, [REAL]);
+    clock += 2 * 3600_000;
+    d.sendKeepingHash.mockImplementation(async () => ({ txHash: HASH, confirmed: true }));
+    await sendWithPiggyback(account, [REAL], { isCitizen: true }, d);
+    expect(d.sendKeepingHash).toHaveBeenLastCalledWith(account, [CLAIM_A, REAL]);
+  });
+
+  it('a piggyback operation that may have gone out is never sent again', async () => {
+    const d = { ...deps({ sendKeepingHash: jest.fn(async () => Promise.reject(THIRDWEB_TIMEOUT)) }), readyClaims: jest.fn(async () => [CLAIM_A]) };
+    await expect(sendWithPiggyback(account, [REAL], { isCitizen: true }, d)).rejects.toBe(THIRDWEB_TIMEOUT);
+    expect(d.send).not.toHaveBeenCalled();
   });
 });

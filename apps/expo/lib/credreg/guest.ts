@@ -22,6 +22,7 @@ import { classifySendError } from '@/lib/org-safe/send-errors';
 import type { Call } from '@/lib/org-safe/ops';
 import { REGISTRY, registryReader } from './chain';
 import { credentialsConfigured, isCredentialsAllowed } from './gate';
+import { MAX_PIGGYBACK_CLAIMS, readyClaimCalls } from './pending';
 
 export type { Call };
 
@@ -175,9 +176,9 @@ export async function withGuestClaim<T>(
 /**
  * sendOrgCalls with the Guest call first when needed (one operation). Resolves with the hash once
  * the receipt is there; null when there was nothing to send. Without a Guest call this is exactly
- * `sendOrgCalls(account, calls)`.
+ * `sendOrgCalls(account, calls)`. Callers use sendWithGuestClaim / sendWithPiggyback below.
  */
-export async function sendWithGuestClaim(
+async function sendGuestOnly(
   account: Account,
   calls: readonly Call[],
   p: { isCitizen: CitizenCheck },
@@ -198,3 +199,89 @@ export async function sendWithGuestClaim(
     d,
   );
 }
+
+// ── waiting badge claims that ride along ─────────────────────────────────────
+
+export type PiggybackDeps = GuestDeps & {
+  /** Claim calls of accepted public badges not yet held (pending.ts readyClaimCalls). */
+  readyClaims: (address: string) => Promise<Call[]>;
+};
+
+export const piggybackSkipKey = (address: string) => `credreg:piggyback-skip:${address.toLowerCase()}`;
+
+const sameCall = (a: Call, b: Call) => a.to.toLowerCase() === b.to.toLowerCase() && a.data.toLowerCase() === b.data.toLowerCase();
+
+async function piggybackSkipped(address: string, d: GuestDeps): Promise<boolean> {
+  try {
+    const raw = await d.storage.getItem(piggybackSkipKey(address));
+    const at = raw ? Number(raw) : NaN;
+    return Number.isFinite(at) && d.now() - at < GUEST_SKIP_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * sendWithGuestClaim plus up to five waiting badge claims (spec 5.6b: the stamp needs no prompt of
+ * its own; it rides the next sponsored operation). One operation: Guest, the ready claims, then the
+ * real calls. When it fails before submission or reverts (atomic: nothing happened), the real
+ * calls are sent once more alone and the ride-along claims (and Guest, if it was in) are skipped
+ * for 24 hours. An operation that may have gone out is never sent again. Nothing ready → exactly
+ * sendWithGuestClaim.
+ */
+export async function sendWithPiggyback(
+  account: Account,
+  calls: readonly Call[],
+  p: { isCitizen: CitizenCheck },
+  deps: Partial<PiggybackDeps> = {},
+): Promise<Hex | null> {
+  const d: PiggybackDeps = { ...defaultDeps, readyClaims: (a) => readyClaimCalls(a), ...deps };
+  if (calls.length === 0) return null;
+  const address = account.address as Address;
+  let extras: Call[] = [];
+  if (!(await piggybackSkipped(address, d))) {
+    try {
+      extras = (await d.readyClaims(address)).filter((x) => !calls.some((c) => sameCall(c, x))).slice(0, MAX_PIGGYBACK_CLAIMS);
+    } catch {
+      extras = [];
+    }
+  }
+  if (extras.length === 0) return sendGuestOnly(account, calls, p, d);
+
+  const guest = await guestCallIfNeeded({ address, isCitizen: p.isCitizen }, d);
+  const key = address.toLowerCase();
+  try {
+    const sent = await d.sendKeepingHash(account, [...(guest ? [guest] : []), ...extras, ...calls]);
+    if (!sent) return null;
+    // Out, but the receipt is unknown: sending again could do the real action twice.
+    if (!sent.confirmed) throw new AlreadySent(new Error('receipt not confirmed'));
+    if (guest) heldCache.set(key, true);
+    return sent.txHash;
+  } catch (e) {
+    const original = e instanceof AlreadySent ? e.original : e;
+    if (!safeToResend(e)) throw original;
+    if (guest) {
+      // Belt and braces (as withGuestClaim): Guest held now means the operation landed after all.
+      let heldNow: boolean;
+      try {
+        heldNow = await d.holds(RESERVED_TYPE_IDS.guest, address);
+      } catch {
+        throw original;
+      }
+      if (heldNow) {
+        heldCache.set(key, true);
+        throw original;
+      }
+      await rememberSkip(address, d);
+    }
+    try {
+      await d.storage.setItem(piggybackSkipKey(address), String(d.now()));
+    } catch {
+      // best effort
+    }
+  }
+  return d.send(account, calls);
+}
+
+/** The older name, kept for its callers: every Guest-carrying send now also carries ready claims. */
+export const sendWithGuestClaim = sendWithPiggyback;

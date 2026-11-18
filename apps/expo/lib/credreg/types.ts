@@ -25,6 +25,8 @@ export type InvitationView = {
     recognised: boolean;
     publicClaimAllowed: boolean;
     benefits: string[];
+    /** The event of an event badge; absent from older servers. */
+    eventId?: string | null;
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
