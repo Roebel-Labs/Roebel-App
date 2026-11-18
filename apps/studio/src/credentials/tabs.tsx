@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import type { OrgListItem } from './types';
 import { TypesTab } from './TypesTab';
 import { PeopleTab } from './PeopleTab';
+import { BatchesTab } from './BatchesTab';
 
 export interface TabContext {
   token: string;
@@ -15,5 +16,6 @@ export interface TabContext {
 export function CredTab({ tab, ctx }: { tab: string; ctx: TabContext }) {
   if (tab === 'types') return <TypesTab ctx={ctx} />;
   if (tab === 'people') return <PeopleTab ctx={ctx} />;
+  if (tab === 'batches') return <BatchesTab ctx={ctx} />;
   return <div className="pz-state w-muted">{t('Kommt bald.')} ({tab})</div>;
 }

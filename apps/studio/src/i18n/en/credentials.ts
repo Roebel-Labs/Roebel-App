@@ -98,6 +98,19 @@ const en: Record<string, string> = {
   Angenommen: 'Accepted',
   'credstate|Widerrufen': 'Revoked',
   'credstate|Abgelehnt': 'Declined',
+  // Task 4: batches and confirmation
+  'Alle {n} Ausweise dieser Ausstellung verlieren nach deiner Bestätigung auf dem Handy ihre Gültigkeit.':
+    'All {n} credentials of this issuance lose their validity once you confirm on your phone.',
+  'Briefe herunterladen (PDF)': 'Download letters (PDF)',
+  'Ganze Ausstellung widerrufen': 'Revoke the whole issuance',
+  'Noch keine Ausstellung.': 'No issuance yet.',
+  'Wartet auf Bestätigung': 'Waiting for confirmation',
+  'Widerrufen: {n} Ausweise': 'Revoked: {n} credentials',
+  '{i} eingeladen · {c} angenommen · {r} widerrufen': '{i} invited · {c} accepted · {r} revoked',
+  'Fehlgeschlagen: {reason}': 'Failed: {reason}',
+  'Wird eingetragen': 'Being entered',
+  'cred|Verlauf': 'History',
+  'cred|Verworfen': 'Discarded',
 };
 
 export default en;
