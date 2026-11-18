@@ -31,6 +31,7 @@ export const ORG_ACTIONS: readonly CredentialAction[] = [
   "batch_prepare",
   "revoke_prepare",
   "letters",
+  "delegates_list",
 ];
 
 const PASSKEY_TOKEN_PREFIX = "pst1.";

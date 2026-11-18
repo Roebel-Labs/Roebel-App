@@ -29,7 +29,8 @@ export type CredentialAction =
   | 'delegate_prepare' | 'members_public_prepare' | 'orgs_list' | 'actions_list' | 'action_get' | 'action_submitted'
   | 'action_cancel' | 'letters' | 'mine' | 'redeem' | 'respond' | 'holdings' | 'present_create' | 'present_resolve'
   | 'people_preview' | 'event_badges_list' | 'event_badge_setup' | 'event_badge_get' | 'event_badge_prepare'
-  | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status';
+  | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status'
+  | 'delegates_list';
 export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {

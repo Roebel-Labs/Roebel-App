@@ -7,6 +7,7 @@ import { failResponse, jsonFail, jsonOk } from "@/lib/signed-request/verify";
 import { authenticateCaller, ORG_ACTIONS } from "@/lib/credentials/caller";
 import {
   listActions,
+  listDelegatesForOrg,
   listOrgs,
   listTypesForOrg,
   prepareDelegateAction,
@@ -88,6 +89,8 @@ export async function POST(request: NextRequest) {
             via,
           }),
         );
+      case "delegates_list":
+        return respond(await listDelegatesForOrg(d, c, { accountId: String(p.accountId ?? "") }));
       case "members_public_prepare":
         return respond(await prepareMembersPublicAction(d, c, { accountId: String(p.accountId ?? ""), membersPublic: p.membersPublic as boolean, via }));
       case "people_list":

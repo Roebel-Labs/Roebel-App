@@ -59,7 +59,26 @@ export type ActionView = {
   error: string | null;
   createdAt: string;
   expiresAt: string;
+  /** The batches this action carries (addBatch steps), with their invitation counts. */
+  batches: BatchView[];
 };
+
+export type BatchView = {
+  id: string;
+  actionId: string | null;
+  typeId: Hex;
+  count: number;
+  status: string;
+  /** Delivered invitations (every status but `prepared`). */
+  invited: number;
+  accepted: number;
+  revoked: number;
+  /** Claim-key invitations still waiting for their personal link (letters can be printed). */
+  hasOpenLinks: boolean;
+  createdAt: string;
+};
+
+export type DelegateListRow = { typeId: Hex; typeName: string; delegate: string; label: string | null; displayName: string | null };
 
 export type OrgListEntry = {
   accountId: string;
@@ -575,9 +594,62 @@ export async function listActions(d: Deps, c: Caller, accountId: string): Promis
       error: a.error,
       createdAt: a.createdAt,
       expiresAt: a.expiresAt,
+      batches: await batchViews(d, a.id),
     });
   }
   return ok(out);
+}
+
+async function batchViews(d: Deps, actionId: string): Promise<BatchView[]> {
+  const out: BatchView[] = [];
+  for (const b of await d.store.listBatches({ actionId })) {
+    const invs = await d.store.listInvitations({ batchId: b.id });
+    out.push({
+      id: b.id,
+      actionId: b.actionId,
+      typeId: b.typeId,
+      count: b.count,
+      status: b.status,
+      invited: invs.filter((i) => i.status !== "prepared").length,
+      accepted: invs.filter((i) => i.status === "accepted").length,
+      revoked: invs.filter((i) => i.status === "revoked").length,
+      // Same rule as people.ts hasLink: an unclaimed claim-key invitation whose link is still sealed here.
+      hasOpenLinks: invs.some((i) => i.status === "invited" && i.leafKind === "claim_key" && i.tokenEnc !== null && i.recipientWallet === null),
+      createdAt: b.createdAt,
+    });
+  }
+  return out;
+}
+
+/**
+ * delegates_list: the active delegates of the org's types and the org's members (the picker of
+ * "Türscanner-Konto berechtigen"). Addresses are returned for the next delegate_prepare only; the
+ * dashboard shows display names and labels.
+ */
+export async function listDelegatesForOrg(
+  d: Deps,
+  c: Caller,
+  p: { accountId: string },
+): Promise<Result<{ delegates: DelegateListRow[]; members: { wallet: string; displayName: string }[] }>> {
+  const org = await orgFor(d, p?.accountId, c.wallet);
+  if (isFail(org)) return org;
+  const types = await d.store.listTypes({ accountId: org.accountId, includeRetired: false });
+  const rows: Omit<DelegateListRow, "displayName">[] = [];
+  for (const t of types) {
+    for (const x of await d.store.listDelegates(t.typeId)) {
+      if (x.active) rows.push({ typeId: t.typeId, typeName: t.name, delegate: x.delegate, label: x.label });
+    }
+  }
+  const owners = await d.store.ownersOf(org.accountId);
+  const wallets = [...new Set([...rows.map((r) => r.delegate), ...owners.map((o) => o.wallet)])];
+  const names = new Map((wallets.length ? await d.store.usersByWallets(wallets) : []).map((u) => [u.wallet.toLowerCase(), u.displayName]));
+  return ok({
+    delegates: rows.map((r) => ({ ...r, displayName: names.get(r.delegate.toLowerCase()) ?? null })),
+    members: owners
+      .map((o) => ({ wallet: o.wallet, displayName: names.get(o.wallet.toLowerCase()) ?? "" }))
+      .filter((m) => m.displayName !== "")
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "de")),
+  });
 }
 
 // ── confirm / cancel ──────────────────────────────────────────────────────────
