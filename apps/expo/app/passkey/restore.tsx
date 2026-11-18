@@ -374,7 +374,7 @@ export default function RestoreAccountScreen() {
             </Text>
             {state.ownerKind === 'ecdsa' ? (
               <>
-                {openFailed ? <Notice tone="error" text="Das hat nicht geklappt. Bitte tippe noch einmal auf „Weiter"." /> : null}
+                {openFailed ? <Notice tone="error" text="Das hat nicht geklappt. Bitte tippe noch einmal auf „Weiter“." /> : null}
                 <BigButton label="Weiter" onPress={openRecovered} />
               </>
             ) : state.method === 'words' ? (
