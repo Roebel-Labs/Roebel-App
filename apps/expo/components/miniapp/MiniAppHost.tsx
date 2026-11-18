@@ -106,6 +106,7 @@ import {
   userRejected,
 } from '@/lib/miniapp-wallet';
 import { createRpcProxy } from '@/lib/miniapp-rpc';
+import { addressesIn, cachedName, prefetchNames } from '@/lib/miniapp-names';
 import { GNOSIS_READ_RPC } from '@/constants/gnosis';
 import {
   apiDataGet,
@@ -598,7 +599,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
       }
 
-      const request = buildConfirmRequest(app.name, method, params, account.address);
+      // Names for every address in the request first: the sheet never shows an address.
+      await prefetchNames(addressesIn(params));
+      const request = buildConfirmRequest(app, method, params, cachedName);
       if (!request) throw { code: 'unsupported', message: `Methode "${method}".` };
 
       // Show the sheet and wait for the user.

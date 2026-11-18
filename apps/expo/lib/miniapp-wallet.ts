@@ -18,6 +18,13 @@ import { client } from '@/constants/thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
 import { PROXIED_METHODS, type RpcProxy } from '@/lib/miniapp-rpc';
+import {
+  buildMessageConfirm,
+  buildTransactionConfirm,
+  buildTypedDataConfirm,
+  type ConfirmApp,
+  type NameLookup,
+} from '@/lib/miniapp-confirm';
 
 // Mini apps operate on Gnosis — Röbel-Münzen (Circles v2), identity, and
 // governance all live on Gnosis (chainId 100). The active thirdweb smart
@@ -77,47 +84,19 @@ export function isSigningMethod(method: string): boolean {
   return classifyWalletMethod(method) === 'sign';
 }
 
-// --- shortening / formatting -----------------------------------------------
-
-export function shortAddress(addr?: string | null): string {
-  if (!addr) return 'unbekannt';
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+// --- formatting -------------------------------------------------------------
 
 function toBigIntSafe(v: unknown): bigint {
   if (typeof v === 'bigint') return v;
   if (typeof v === 'number') return BigInt(Math.trunc(v));
   if (typeof v === 'string' && v.length) {
     try {
-      return v.startsWith('0x') ? BigInt(v) : BigInt(v);
+      return BigInt(v);
     } catch {
       return 0n;
     }
   }
   return 0n;
-}
-
-/** Format a wei bigint into a short human ETH/xDAI string. */
-function formatWei(wei: bigint): string {
-  if (wei === 0n) return '0';
-  const whole = wei / 10n ** 18n;
-  const frac = (wei % 10n ** 18n).toString().padStart(18, '0').slice(0, 4).replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : `${whole}`;
-}
-
-function decodeUtf8Maybe(hexOrText: string): string {
-  if (typeof hexOrText !== 'string') return String(hexOrText);
-  if (!hexOrText.startsWith('0x')) return hexOrText;
-  try {
-    const bytes = hexOrText.slice(2).match(/.{1,2}/g) ?? [];
-    const decoded = bytes.map((b) => String.fromCharCode(parseInt(b, 16))).join('');
-    // Heuristic: if it's mostly printable, show the decoded text.
-    // eslint-disable-next-line no-control-regex
-    if (/^[\x09\x0A\x0D\x20-\x7E -￿]*$/.test(decoded)) return decoded;
-  } catch {
-    /* fall through */
-  }
-  return hexOrText;
 }
 
 // --- request parsing --------------------------------------------------------
@@ -143,66 +122,27 @@ export function normalizeParams(params: unknown[] | object | undefined): unknown
 }
 
 /**
- * Build the confirm-sheet payload for a signing request. Returns null for
- * non-signing methods.
+ * Build the confirm-sheet payload for a signing request (miniapp-confirm.ts decides what it
+ * says; no row ever shows an address). Returns null for non-signing methods. `names` resolves
+ * addresses to display names; the host prefetches them before calling this.
  */
 export function buildConfirmRequest(
-  appName: string,
+  app: ConfirmApp,
   method: string,
   params: unknown[],
-  selfAddress: string | undefined,
+  names: NameLookup,
 ): WalletConfirmRequest | null {
   if (method === 'eth_sendTransaction') {
     const tx = (params[0] ?? {}) as RawTx;
-    const value = toBigIntSafe(tx.value);
-    const rows: WalletConfirmRequest['rows'] = [
-      { label: 'Empfänger', value: shortAddress(tx.to), mono: true },
-    ];
-    if (value > 0n) {
-      rows.push({ label: 'Betrag', value: `${formatWei(value)}` });
-    }
-    if (tx.data && tx.data !== '0x') {
-      rows.push({ label: 'Aktion', value: 'Vertrags-Interaktion' });
-    }
-    return {
-      kind: 'transaction',
-      title: 'Transaktion bestätigen',
-      appName,
-      rows,
-      raw: tx.data && tx.data !== '0x' ? tx.data : undefined,
-    };
+    return buildTransactionConfirm(app, [{ to: tx.to, data: tx.data, value: tx.value }], names);
   }
-
   if (method === 'personal_sign' || method === 'eth_sign') {
     // personal_sign: [message, address]; eth_sign: [address, message]
-    const msg =
-      method === 'personal_sign' ? (params[0] as string) : (params[1] as string);
-    return {
-      kind: 'personal_sign',
-      title: 'Nachricht signieren',
-      appName,
-      rows: [{ label: 'Nachricht', value: decodeUtf8Maybe(msg ?? '') }],
-    };
+    return buildMessageConfirm(app, method === 'personal_sign' ? params[0] : params[1], names);
   }
-
   if (method.startsWith('eth_signTypedData')) {
-    const typed = params[1] ?? params[0];
-    let summary = '';
-    try {
-      const obj = typeof typed === 'string' ? JSON.parse(typed) : typed;
-      summary = obj?.primaryType ? `Typ: ${obj.primaryType}` : 'Strukturierte Daten';
-    } catch {
-      summary = 'Strukturierte Daten';
-    }
-    return {
-      kind: 'typed_data',
-      title: 'Daten signieren',
-      appName,
-      rows: [{ label: 'Inhalt', value: summary }],
-      raw: typeof typed === 'string' ? typed : JSON.stringify(typed, null, 2),
-    };
+    return buildTypedDataConfirm(app, params, names);
   }
-
   return null;
 }
 
