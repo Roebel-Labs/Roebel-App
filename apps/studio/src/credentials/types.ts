@@ -22,14 +22,14 @@ export interface OrgListItem {
   onChain: OnChain;
 }
 
-/** A delegate of a type, by display name (plan 4 Task 4 `delegateRows` input); never shown as an address. */
-export interface DelegateRow {
-  delegate: string;
-  label: string | null;
-  displayName: string | null;
+/** delegates_list: active delegates of the org's types and the org's members (the picker). The
+ * addresses are only sent back with delegate_prepare, never shown. */
+export interface DelegatesData {
+  delegates: { typeId: string; typeName: string; delegate: string; label: string | null; displayName: string | null }[];
+  members: { wallet: string; displayName: string }[];
 }
 
-/** types_list (plan 2 `TypeView`); counts and delegates are the plan-4 additions and may be absent. */
+/** types_list (plan 2 `TypeView`); counts are the plan-4 addition and may be absent. */
 export interface TypeRow {
   typeId: string;
   name: string;
@@ -46,7 +46,6 @@ export interface TypeRow {
   retired: boolean;
   chainStatus: 'draft' | 'onchain';
   counts?: { accepted: number; open: number };
-  delegates?: DelegateRow[];
 }
 
 export type PersonState = 'eingeladen' | 'angenommen' | 'abgelehnt' | 'widerrufen' | 'abgelaufen';
@@ -59,13 +58,6 @@ export interface PersonRow {
   public: boolean;
   validUntil: string | null;
   hasLink: boolean;
-}
-
-/** people_search (plan 2): app users by display name. The wallet is only sent back, never shown. */
-export interface PersonHit {
-  wallet: string;
-  displayName: string;
-  avatarUrl: string | null;
 }
 
 export type ActionStatus = 'awaiting_confirmation' | 'submitted' | 'done' | 'failed' | 'cancelled' | 'expired';

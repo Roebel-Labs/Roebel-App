@@ -23,6 +23,9 @@ function primaryOf(e: EventBadgeListItem): EventRow['primary'] {
   if (!e.badge) return { label: t('Abzeichen für Teilnehmende einrichten'), disabled: false };
   const n = Math.max(0, e.attendees - e.issued);
   if (n > 0) return { label: t('Abzeichen vergeben ({n})', { n }), disabled: false };
+  // A draft badge before anyone attended goes into the register alone (event-panel.ts on main).
+  if (e.badge.chain === 'draft') return { label: t('Abzeichen jetzt anlegen'), disabled: false };
+  if (e.attendees === 0) return { label: t('Noch keine Teilnehmenden'), disabled: true };
   return { label: t('Alle haben ihr Abzeichen'), disabled: true };
 }
 

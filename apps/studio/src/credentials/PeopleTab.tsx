@@ -38,7 +38,8 @@ export function PeopleTab({ ctx }: { ctx: TabContext }) {
 
   useEffect(() => {
     fetchTypes(token, org.accountId).then((all) => {
-      const usable = all.filter((x) => !x.retired);
+      // Only confirmed types can carry a batch (the server refuses drafts).
+      const usable = all.filter((x) => !x.retired && x.chainStatus === 'onchain');
       setTypes(usable);
       setTypeId((cur) => cur || usable[0]?.typeId || '');
     }, onError);
@@ -117,7 +118,7 @@ export function PeopleTab({ ctx }: { ctx: TabContext }) {
       return next;
     });
 
-  if (types && types.length === 0) return <div className="pz-state w-muted">{t('Lege zuerst unter Typen einen Ausweis-Typ an.')}</div>;
+  if (types && types.length === 0) return <div className="pz-state w-muted">{t('Lege zuerst unter Typen einen Ausweis-Typ an und bestätige ihn in der Röbel App.')}</div>;
   if (!types) return <SkCards cards={2} height={120} />;
 
   return (
@@ -184,7 +185,7 @@ export function PeopleTab({ ctx }: { ctx: TabContext }) {
 
       <h2 className="pz-h3 pz-sec">{t('Personen mit diesem Ausweis')}</h2>
       <div className="pz-toolbar">
-        <select className="pz-select" aria-label={t('Status')} value={filter} onChange={(e) => setFilter(e.target.value as PersonState | '')}>
+        <select className="pz-select" aria-label={t('Status')} value={filter} onChange={(e) => (setFilter(e.target.value as PersonState | ''), setSelected(new Set()))}>
           <option value="">{t('Alle')}</option>
           {STATES.map((s) => (
             <option key={s} value={s}>

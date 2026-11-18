@@ -44,14 +44,16 @@ export function emptyForm(kind: Kind = 'membership'): TypeForm {
 
 /** German message per field; {} = valid. Same rules and texts as the dashboard. */
 export function validateType(f: TypeForm): Record<string, string> {
+  // Same rules and messages as validateTypeForm in apps/web/src/lib/credentials/type-form.ts.
   const errors: Record<string, string> = {};
   const name = f.name.trim();
   if (name.length < 2 || name.length > 60) errors.name = t('Der Name muss 2 bis 60 Zeichen lang sein.');
-  if (f.description.trim().length > 300) errors.description = t('Die Beschreibung darf höchstens 300 Zeichen lang sein.');
+  if (f.description.length > 300) errors.description = t('Die Beschreibung darf höchstens 300 Zeichen lang sein.');
   const benefits = f.benefits.map((b) => b.trim()).filter(Boolean);
-  if (benefits.length > 6 || benefits.some((b) => b.length > 80)) errors.benefits = t('Höchstens 6 Vorteile mit je bis zu 80 Zeichen.');
+  if (benefits.length > 6) errors.benefits = t('Höchstens {n} Vorteile.', { n: 6 });
+  else if (benefits.some((b) => b.length > 80)) errors.benefits = t('Jeder Vorteil darf höchstens 80 Zeichen lang sein.');
   const cap = f.supplyCap.trim();
-  if (cap !== '' && !(/^\d+$/.test(cap) && Number(cap) >= 1 && Number(cap) <= 100000)) errors.supplyCap = t('Die Höchstzahl muss eine ganze Zahl von 1 bis 100000 sein.');
+  if (cap !== '' && !(/^\d+$/.test(cap) && Number(cap) >= 1 && Number(cap) <= 100000)) errors.supplyCap = t('Die Höchstzahl muss eine ganze Zahl zwischen 1 und 100.000 sein (oder leer).');
   if (f.claimStart && f.claimEnd && Date.parse(f.claimEnd) <= Date.parse(f.claimStart)) errors.claimEnd = t('Das Ende muss nach dem Beginn liegen.');
   return errors;
 }

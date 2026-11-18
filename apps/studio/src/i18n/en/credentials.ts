@@ -48,8 +48,9 @@ const en: Record<string, string> = {
   'Das Ende muss nach dem Beginn liegen.': 'The end must be after the start.',
   'Der Name muss 2 bis 60 Zeichen lang sein.': 'The name must be 2 to 60 characters long.',
   'Die Beschreibung darf höchstens 300 Zeichen lang sein.': 'The description may be at most 300 characters long.',
-  'Die Höchstzahl muss eine ganze Zahl von 1 bis 100000 sein.': 'The maximum must be a whole number from 1 to 100000.',
-  'Höchstens 6 Vorteile mit je bis zu 80 Zeichen.': 'At most 6 benefits of up to 80 characters each.',
+  'Die Höchstzahl muss eine ganze Zahl zwischen 1 und 100.000 sein (oder leer).': 'The maximum must be a whole number between 1 and 100,000 (or empty).',
+  'Höchstens {n} Vorteile.': 'At most {n} benefits.',
+  'Jeder Vorteil darf höchstens 80 Zeichen lang sein.': 'Each benefit may have at most 80 characters.',
   // Template and kind labels (translated where shown)
   Mitglied: 'Member',
   Vorstand: 'Board',
@@ -74,7 +75,7 @@ const en: Record<string, string> = {
   'Alle aktuellen Mitglieder': 'All current members',
   'Ausweis-Typ': 'Credential type',
   'Gültig bis (optional)': 'Valid until (optional)',
-  'Lege zuerst unter Typen einen Ausweis-Typ an.': 'First create a credential type under Types.',
+  'Lege zuerst unter Typen einen Ausweis-Typ an und bestätige ihn in der Röbel App.': 'First create a credential type under Types and confirm it in the Röbel App.',
   'Link oder Brief': 'Link or letter',
   'Name;E-Mail – eine Person je Zeile': 'Name;E-mail – one person per line',
   'Niemand in dieser Ansicht.': 'Nobody in this view.',
@@ -121,7 +122,7 @@ const en: Record<string, string> = {
   'Diese Konten dürfen einen Ausweis-Typ in eurem Namen ausstellen, zum Beispiel ein Türscanner bei einer Veranstaltung.':
     'These accounts may issue a credential type on your behalf, for example a door scanner at an event.',
   Entziehen: 'Withdraw',
-  'Mitglied suchen': 'Search for a member',
+  'Mitglied wählen': 'Choose a member',
   'Mitglieder dürfen öffentlich sichtbar sein': 'Members may be publicly visible',
   'Noch kein Konto berechtigt.': 'No account authorised yet.',
   'Türscanner-Konto berechtigen': 'Authorise a door scanner account',
@@ -129,6 +130,8 @@ const en: Record<string, string> = {
   'Abzeichen für Teilnehmende einrichten': 'Set up a badge for attendees',
   'Abzeichen vergeben ({n})': 'Award badges ({n})',
   'Alle haben ihr Abzeichen': 'Everyone has their badge',
+  'Abzeichen jetzt anlegen': 'Create the badge now',
+  'Noch keine Teilnehmenden': 'No attendees yet',
   '{a} Teilnehmende · {i} eingeladen · {c} angenommen': '{a} attendees · {i} invited · {c} accepted',
 };
 

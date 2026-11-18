@@ -6,10 +6,10 @@ import { apiBase } from '../workspace/session';
 import type {
   ActionView,
   CredentialsStatus,
+  DelegatesData,
   EventBadgeListItem,
   OrgListItem,
   PeopleInput,
-  PersonHit,
   PersonRow,
   PreviewResult,
   TypePreparePayload,
@@ -101,8 +101,6 @@ export const prepareBatch = (token: string, p: PeopleInput) =>
 
 export const fetchPeople = (token: string, accountId: string, typeId: string) => credCall<PersonRow[]>('org', 'people_list', { accountId, typeId }, token);
 
-export const searchPeople = (token: string, accountId: string, query: string) => credCall<PersonHit[]>('org', 'people_search', { accountId, query }, token);
-
 export const prepareRevocation = (token: string, p: { accountId: string; invitationIds?: string[]; batchId?: string }) =>
   credCall<{ actionId: string }>('org', 'revoke_prepare', { ...p }, token);
 
@@ -127,6 +125,8 @@ export const prepareEventBadge = (token: string, eventId: string, p: { name?: st
 
 export const setEventBadgeAuto = (token: string, eventId: string, enabled: boolean) =>
   credCall<{ actionId: string }>('org', 'event_badge_auto', { eventId, enabled }, token);
+
+export const fetchDelegates = (token: string, accountId: string) => credCall<DelegatesData>('org', 'delegates_list', { accountId }, token);
 
 export const prepareDelegate = (token: string, p: { accountId: string; typeId: string; delegate: string; allowed: boolean; label?: string }) =>
   credCall<{ actionId: string }>('org', 'delegate_prepare', { ...p }, token);

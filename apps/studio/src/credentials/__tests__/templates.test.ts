@@ -18,10 +18,11 @@ describe('credential type templates', () => {
   it('validateType returns the German messages of the dashboard', () => {
     expect(validateType({ ...base(), name: '' })).toEqual({ name: 'Der Name muss 2 bis 60 Zeichen lang sein.' });
     expect(validateType({ ...base(), name: 'x'.repeat(61) })).toEqual({ name: 'Der Name muss 2 bis 60 Zeichen lang sein.' });
-    expect(validateType({ ...base(), supplyCap: '0' })).toEqual({ supplyCap: 'Die Höchstzahl muss eine ganze Zahl von 1 bis 100000 sein.' });
+    expect(validateType({ ...base(), supplyCap: '0' })).toEqual({ supplyCap: 'Die Höchstzahl muss eine ganze Zahl zwischen 1 und 100.000 sein (oder leer).' });
     expect(validateType({ ...base(), claimStart: '2026-12-10', claimEnd: '2026-12-01' })).toEqual({ claimEnd: 'Das Ende muss nach dem Beginn liegen.' });
     expect(validateType({ ...base(), description: 'x'.repeat(301) })).toEqual({ description: 'Die Beschreibung darf höchstens 300 Zeichen lang sein.' });
-    expect(validateType({ ...base(), benefits: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).toEqual({ benefits: 'Höchstens 6 Vorteile mit je bis zu 80 Zeichen.' });
+    expect(validateType({ ...base(), benefits: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).toEqual({ benefits: 'Höchstens 6 Vorteile.' });
+    expect(validateType({ ...base(), benefits: ['x'.repeat(81)] })).toEqual({ benefits: 'Jeder Vorteil darf höchstens 80 Zeichen lang sein.' });
   });
 
   it('typeFormToPayload: empty cap and dates are 0 / absent; update omits kind', () => {

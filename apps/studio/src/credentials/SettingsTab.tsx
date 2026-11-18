@@ -4,20 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { Toggle } from '../persona/common';
 import { SkCards } from '../ui/Skeleton';
-import { fetchTypes, prepareDelegate, prepareMembersPublic, searchPeople } from './api';
+import { fetchDelegates, fetchTypes, prepareDelegate, prepareMembersPublic } from './api';
 import { PendingCard } from './PendingCard';
 import type { TabContext } from './tabs';
-import type { PersonHit, TypeRow } from './types';
+import type { DelegatesData, TypeRow } from './types';
 
 export function SettingsTab({ ctx }: { ctx: TabContext }) {
   const { token, org, onError } = ctx;
   const [types, setTypes] = useState<TypeRow[] | null>(null);
+  const [data, setData] = useState<DelegatesData | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [typeId, setTypeId] = useState('');
-  const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<PersonHit[]>([]);
+  const [member, setMember] = useState('');
 
   const load = useCallback(() => {
     fetchTypes(token, org.accountId).then((all) => {
@@ -25,23 +25,16 @@ export function SettingsTab({ ctx }: { ctx: TabContext }) {
       setTypes(usable);
       setTypeId((cur) => cur || usable[0]?.typeId || '');
     }, onError);
+    fetchDelegates(token, org.accountId).then(setData, onError);
   }, [token, org.accountId, onError]);
   useEffect(load, [load]);
-
-  useEffect(() => {
-    if (!adding || query.trim().length < 2) return setHits([]);
-    const timer = setTimeout(() => {
-      searchPeople(token, org.accountId, query.trim()).then(setHits, onError);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [adding, query, token, org.accountId, onError]);
 
   const run = async (fn: () => Promise<{ actionId: string }>) => {
     setBusy(true);
     try {
       setPending((await fn()).actionId);
       setAdding(false);
-      setQuery('');
+      setMember('');
     } catch (e) {
       onError(e);
     } finally {
@@ -49,9 +42,8 @@ export function SettingsTab({ ctx }: { ctx: TabContext }) {
     }
   };
 
-  const delegates = (types ?? []).flatMap((x) =>
-    (x.delegates ?? []).map((d) => ({ typeId: x.typeId, typeName: x.name, delegate: d.delegate, who: d.displayName || d.label || t('Unbekanntes Konto') })),
-  );
+  const delegates = (data?.delegates ?? []).map((d) => ({ ...d, who: d.displayName || d.label || t('Unbekanntes Konto') }));
+  const memberName = data?.members.find((m) => m.wallet === member)?.displayName;
 
   return (
     <div>
@@ -81,8 +73,8 @@ export function SettingsTab({ ctx }: { ctx: TabContext }) {
 
       <h2 className="pz-h3 pz-sec">{t('Berechtigte Konten')}</h2>
       <p className="pz-lead">{t('Diese Konten dürfen einen Ausweis-Typ in eurem Namen ausstellen, zum Beispiel ein Türscanner bei einer Veranstaltung.')}</p>
-      {!types && <SkCards cards={2} height={48} />}
-      {types && delegates.length === 0 && <div className="pz-state w-muted">{t('Noch kein Konto berechtigt.')}</div>}
+      {!data && <SkCards cards={2} height={48} />}
+      {data && delegates.length === 0 && <div className="pz-state w-muted">{t('Noch kein Konto berechtigt.')}</div>}
       {delegates.map((d) => (
         <div key={`${d.typeId}:${d.delegate}`} className="cr-row">
           <div className="cr-row-main">
@@ -115,26 +107,25 @@ export function SettingsTab({ ctx }: { ctx: TabContext }) {
             </select>
           </label>
           <label>
-            {t('Mitglied suchen')}
-            <input value={query} placeholder={t('Name')} onChange={(e) => setQuery(e.target.value)} />
+            {t('Mitglied')}
+            <select className="pz-select" value={member} onChange={(e) => setMember(e.target.value)}>
+              <option value="">{t('Mitglied wählen')}</option>
+              {(data?.members ?? []).map((m) => (
+                <option key={m.wallet} value={m.wallet}>
+                  {m.displayName}
+                </option>
+              ))}
+            </select>
           </label>
-          {hits.map((h) => (
-            <div key={h.wallet} className="cr-row">
-              {h.avatarUrl ? <img className="cr-thumb" src={h.avatarUrl} alt="" /> : <span className="cr-thumb" />}
-              <div className="cr-row-main">
-                <strong className="w-ellipsis">{h.displayName}</strong>
-              </div>
-              <button
-                className="w-btn green"
-                disabled={busy || !typeId}
-                onClick={() => void run(() => prepareDelegate(token, { accountId: org.accountId, typeId, delegate: h.wallet, allowed: true, label: h.displayName }))}
-              >
-                {t('Berechtigen')}
-              </button>
-            </div>
-          ))}
           <div className="cr-actions">
-            <button className="w-btn ghost" onClick={() => (setAdding(false), setQuery(''))}>
+            <button
+              className="w-btn green"
+              disabled={busy || !typeId || !member}
+              onClick={() => void run(() => prepareDelegate(token, { accountId: org.accountId, typeId, delegate: member, allowed: true, label: memberName }))}
+            >
+              {t('Berechtigen')}
+            </button>
+            <button className="w-btn ghost" onClick={() => (setAdding(false), setMember(''))}>
               {t('Abbrechen')}
             </button>
           </div>

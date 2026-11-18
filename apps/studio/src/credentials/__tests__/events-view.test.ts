@@ -44,4 +44,13 @@ describe('eventRows', () => {
     expect(some.primary).toEqual({ label: 'Abzeichen vergeben (8)', disabled: false });
     expect(all.primary).toEqual({ label: 'Alle haben ihr Abzeichen', disabled: true });
   });
+
+  it('offers to register a draft badge and has a quiet state without attendees', () => {
+    const [draft, empty] = eventRows(
+      [ev('a', '2026-11-20', { badge: { ...badge, chain: 'draft' } }), ev('b', '2026-11-21', { badge })],
+      NOW,
+    );
+    expect(draft.primary).toEqual({ label: 'Abzeichen jetzt anlegen', disabled: false });
+    expect(empty.primary).toEqual({ label: 'Noch keine Teilnehmenden', disabled: true });
+  });
 });
