@@ -395,3 +395,26 @@ export async function prepareEventBadgeAuto(d: EventBadgeDeps, c: Caller, p: { e
     via: viaOf(c, c.payload?.client),
   });
 }
+
+// ── public ────────────────────────────────────────────────────────────────────
+
+export type PublicEventBadge = { name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
+
+/**
+ * GET /api/credentials/events/<eventId>/badge: what anyone may see of an event's badge (the event
+ * page before and after). collected = accepted invitations, counted, never named.
+ */
+export async function publicEventBadge(store: CredentialStore, eventId: string): Promise<{ badge: PublicEventBadge | null }> {
+  if (typeof eventId !== "string" || !UUID.test(eventId)) return { badge: null };
+  const event = await store.getEvent(eventId);
+  if (!event?.accountId) return { badge: null };
+  const t = await badgeTypeOf(store, event.accountId, event.id);
+  if (!t) return { badge: null };
+  const w = badgeWindow({ date: event.date, end_date: event.endDate });
+  const unix = (iso: string | null, fallback: number) => (iso && !Number.isNaN(Date.parse(iso)) ? Math.floor(Date.parse(iso) / 1000) : fallback);
+  const accepted = new Set<string>();
+  for (const i of await store.listInvitations({ typeId: t.typeId, statuses: ["accepted"] })) accepted.add(i.recipientWallet ?? i.subject);
+  return {
+    badge: { name: t.name, imageUrl: t.imageUrl, claimStart: unix(t.claimStart, w.claimStart), claimEnd: unix(t.claimEnd, w.claimEnd), collected: accepted.size },
+  };
+}
