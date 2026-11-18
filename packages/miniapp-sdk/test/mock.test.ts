@@ -74,3 +74,26 @@ test('mock: getToken returns the configured token', () =>
     assert.deepEqual(await mockDispatch('auth.getToken', undefined), { token: 'tok' });
     await assert.rejects(mockDispatch('auth.signIn', undefined), { code: 'unsupported' });
   }));
+
+test('mock: switching to another chain is refused with 4902, to 0x64 succeeds', async () => {
+  assert.equal(
+    await mockDispatch('wallet.request', { method: 'wallet_switchEthereumChain', params: [{ chainId: '0x64' }] }),
+    null,
+  );
+  await assert.rejects(
+    mockDispatch('wallet.request', { method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }),
+    { code: 'unsupported', rpcCode: 4902 },
+  );
+});
+
+test('mock: capabilities announce atomic batches on Gnosis, reads need the host', async () => {
+  assert.deepEqual(await mockDispatch('wallet.request', { method: 'wallet_getCapabilities' }), {
+    '0x64': { atomic: { status: 'supported' } },
+  });
+  await assert.rejects(mockDispatch('wallet.request', { method: 'eth_call', params: [] }), (e: unknown) => {
+    const x = e as { code: string; message: string };
+    assert.equal(x.code, 'unsupported');
+    assert.match(x.message, /braucht den Röbel-Host/);
+    return true;
+  });
+});

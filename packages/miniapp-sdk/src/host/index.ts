@@ -21,10 +21,11 @@ import {
   type MuenzenBalance,
   type NetizenEvent,
   type PayParams,
+  type ReadyOptions,
   type WalletAccount,
 } from '../types';
 
-export type { MiniAppContext } from '../types';
+export type { DeclaredContract, MiniAppContext, ReadyOptions } from '../types';
 
 /**
  * Platform capability handlers. Every handler is optional; a missing handler for a called
@@ -32,7 +33,7 @@ export type { MiniAppContext } from '../types';
  */
 export interface HostHandlers {
   hello?(params: { sdkVersion?: string }): Promise<unknown> | unknown;
-  ready?(params: { disableNativeGestures?: boolean }): Promise<void> | void;
+  ready?(params: ReadyOptions): Promise<void> | void;
   close?(): Promise<void> | void;
   openUrl?(p: { url: string }): Promise<void> | void;
   share?(p: { text?: string; url?: string }): Promise<void> | void;
@@ -162,7 +163,7 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
           : res;
       }
       case 'actions.ready':
-        return handlers.ready?.((params ?? {}) as { disableNativeGestures?: boolean });
+        return handlers.ready?.((params ?? {}) as ReadyOptions);
       case 'actions.close':
         return handlers.close?.();
       case 'actions.openUrl':
@@ -307,3 +308,4 @@ export {
   WALLET_SIGN_METHODS,
   type WalletMethodClass,
 } from './wallet-methods';
+export { callRules, findDeclaredCall, type CallRule, type DeclaredCallMatch } from './declared-calls';

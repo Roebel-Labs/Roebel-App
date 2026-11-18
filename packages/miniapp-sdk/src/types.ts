@@ -41,6 +41,9 @@ export type BridgeMessage = BridgeRequest | BridgeResponse | BridgeEventMessage;
 export interface BridgeError {
   code: BridgeErrorCode;
   message: string;
+  /** Optional numeric EIP-1193 / JSON-RPC code the host wants the provider to surface
+   * (e.g. 4902 for an unsupported chain, or the RPC node's own error code). */
+  rpcCode?: number;
 }
 
 export type BridgeErrorCode =
@@ -95,6 +98,16 @@ export type NetizenEvent =
   /** v0.4 — the person's shared credentials changed (grant or withdrawal). Data = `Credential[]`. */
   | 'credentialsChanged';
 
+/** Documented event payloads. */
+export interface NetizenEventPayloads {
+  walletChanged: { address?: string; chainId?: number };
+  /** The person pressed back (only sent when the app called `ready({ handlesBack: true })`). */
+  back: undefined;
+  visibilityChanged: { visible: boolean };
+  themeChanged: { theme: 'light' | 'dark' };
+  credentialsChanged: Credential[];
+}
+
 // ---------------------------------------------------------------------------
 // Domain types
 // ---------------------------------------------------------------------------
@@ -111,6 +124,8 @@ export interface MiniAppContext {
     name: string;
     platform: 'ios' | 'android' | 'web';
     version: string;
+    /** The host's current colour scheme, when it reports one. */
+    theme?: 'light' | 'dark';
   };
   safeAreaInsets: { top: number; bottom: number; left: number; right: number };
   launch: {
@@ -197,6 +212,17 @@ export interface MiniAppManifest {
   version?: '1' | '2';
   /** Version "2" only: what the app may ask the person to share. */
   identity?: MiniAppIdentityRequest;
+  /** Version "2" only: contracts the app calls; reviewed, then sponsored (gasless). */
+  contracts?: DeclaredContract[];
+}
+
+/** One contract a version-2 manifest declares, with the functions the app calls on it. */
+export interface DeclaredContract {
+  address: string;
+  /** Shown on the confirm sheet instead of the address. */
+  label: string;
+  /** Canonical function signatures, e.g. `checkIn(uint256)`. */
+  functions: string[];
 }
 
 /** One credential a version-2 manifest asks for, with the reason shown to the person. */
@@ -263,13 +289,19 @@ export interface NetizenMockConfig {
 // Public SDK surface
 // ---------------------------------------------------------------------------
 
+export interface ReadyOptions {
+  disableNativeGestures?: boolean;
+  /** true → the host sends a `back` event instead of closing the app on back. */
+  handlesBack?: boolean;
+}
+
 export interface NetizenSDK {
   /** Resolves once the bridge handshake with the host completes. */
   isReady: Promise<void>;
 
   actions: {
     /** MANDATORY: dismiss the host splash once your UI is mounted. */
-    ready(opts?: { disableNativeGestures?: boolean }): Promise<void>;
+    ready(opts?: ReadyOptions): Promise<void>;
     close(): Promise<void>;
     openUrl(url: string): Promise<void>;
     share(payload: { text?: string; url?: string }): Promise<void>;

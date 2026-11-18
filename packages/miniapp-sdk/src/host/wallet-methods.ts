@@ -14,6 +14,22 @@ export const WALLET_READ_METHODS: readonly string[] = [
   'eth_requestAccounts',
   'wallet_switchEthereumChain',
   'wallet_addEthereumChain',
+  // Proxied to the community's RPC by the host, with limits (plan 3).
+  'eth_call',
+  'eth_getBalance',
+  'eth_getLogs',
+  'eth_getTransactionReceipt',
+  'eth_getTransactionByHash',
+  'eth_blockNumber',
+  'eth_estimateGas',
+  'eth_gasPrice',
+  'eth_maxPriorityFeePerGas',
+  'eth_getCode',
+  'eth_getTransactionCount',
+  'eth_getBlockByNumber',
+  // EIP-5792: answered by the host itself.
+  'wallet_getCapabilities',
+  'wallet_getCallsStatus',
 ];
 
 /** Each call needs an explicit confirmation from the user. */
@@ -24,6 +40,8 @@ export const WALLET_SIGN_METHODS: readonly string[] = [
   'eth_signTypedData',
   'eth_signTypedData_v3',
   'eth_signTypedData_v4',
+  // EIP-5792: several calls, one confirmation.
+  'wallet_sendCalls',
 ];
 
 export function classifyWalletMethod(method: string): WalletMethodClass {

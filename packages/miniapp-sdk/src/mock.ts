@@ -82,8 +82,8 @@ function mockHolds(pattern: string): boolean {
   return mockCredentials().some((held) => credentialMatches(pattern, held));
 }
 
-function err(code: BridgeError['code'], message: string): BridgeError {
-  return { code, message };
+function err(code: BridgeError['code'], message: string, rpcCode?: number): BridgeError {
+  return rpcCode === undefined ? { code, message } : { code, message, rpcCode };
 }
 
 /** In-memory user-scope store for mock mode (per page load). */
@@ -130,7 +130,7 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
     case 'wallet.getAccount':
       return Promise.resolve(mockAccount());
     case 'wallet.request': {
-      const args = (params ?? {}) as { method?: string };
+      const args = (params ?? {}) as { method?: string; params?: unknown };
       const account = mockAccount();
       switch (args.method) {
         case 'eth_accounts':
@@ -140,6 +140,14 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
           return Promise.resolve(`0x${(account?.chainId ?? 100).toString(16)}`);
         case 'net_version':
           return Promise.resolve(String(account?.chainId ?? 100));
+        case 'wallet_getCapabilities':
+          return Promise.resolve({ '0x64': { atomic: { status: 'supported' } } });
+        case 'wallet_switchEthereumChain': {
+          const first = Array.isArray(args.params) ? (args.params[0] as { chainId?: unknown }) : undefined;
+          const chainId = typeof first?.chainId === 'string' ? first.chainId.toLowerCase() : '';
+          if (chainId === '0x64') return Promise.resolve(null);
+          return Promise.reject(err('unsupported', 'Nur Gnosis (Chain 100) wird unterstützt', 4902));
+        }
         default:
           return Promise.reject(
             err('unsupported', `Mock-Modus: "${args.method ?? 'unknown'}" braucht den Röbel-Host`),

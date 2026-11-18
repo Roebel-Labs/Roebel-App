@@ -15,3 +15,4 @@ export { createClient };
 export { getHostEnvironment, type HostEnvironment } from './env';
 export * from './types';
 export * from './credential-ref';
+export { toProviderError, type ProviderError } from './provider';
