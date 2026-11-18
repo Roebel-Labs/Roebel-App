@@ -112,6 +112,7 @@ import {
 import { createRpcProxy } from '@/lib/miniapp-rpc';
 import { addressesIn, cachedName, orgNameForSafe, prefetchNames } from '@/lib/miniapp-names';
 import { buildPayConfirm, preparePay } from '@/lib/miniapp-pay';
+import { backPress, eventsFor, type HostSignals } from '@/lib/miniapp-host-events';
 import { getRoebelTalerBalance, prepareSendRoebelTaler } from '@/lib/roebel-taler';
 import { buildTransactionConfirm } from '@/lib/miniapp-confirm';
 import { parseSendCalls, preflightCalls } from '@/lib/miniapp-calls';
@@ -184,7 +185,7 @@ type PendingConfirm = {
 };
 
 export default function MiniAppHost({ app, visible, onClose }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const account = useActiveAccount();
   const { user, isCitizen } = useUser();
@@ -228,6 +229,11 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const [notifVisible, setNotifVisible] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
   const notifCheckedRef = useRef(false);
+  // Set by actions.ready({ handlesBack }): Android back then goes to the app. Reset on every open.
+  const handlesBackRef = useRef(false);
+  // Foreground state of the Röbel app, for visibilityChanged.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const signalsRef = useRef<HostSignals | null>(null);
 
   const walletLc = account?.address?.toLowerCase() ?? null;
 
@@ -370,6 +376,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       walletConnectFiredRef.current = false;
       appOpenFiredRef.current = false;
       notifCheckedRef.current = false;
+      handlesBackRef.current = false;
       setNotifVisible(false);
       setSplashVisible(true);
       setLoadError(null);
@@ -582,6 +589,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         name: 'Röbel',
         platform,
         version: Constants.expoConfig?.version ?? '0.0.0',
+        theme: isDark ? 'dark' : 'light',
       },
       safeAreaInsets: {
         // The host header sits below the status bar (SafeAreaView edges=['top'])
@@ -597,7 +605,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       launch: { entry: app.slug, referrer: 'roebel-store' },
     };
-  }, [account?.address, user, isCitizen, insets, app]);
+  }, [account?.address, user, isCitizen, insets, app, isDark]);
 
   // --- wallet request with confirm sheet -----------------------------------
   const walletRequest = useCallback(
@@ -917,7 +925,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     };
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
-      ready: () => setSplashVisible(false),
+      ready: (opts) => {
+        handlesBackRef.current = opts?.handlesBack === true;
+        setSplashVisible(false);
+      },
       close: () => onClose(),
       openUrl: ({ url }) => {
         if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
@@ -1085,6 +1096,25 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     onClose();
   }, [onClose]);
 
+  // Android back: to the app when it said it handles back (it closes itself with
+  // sdk.actions.close()), else close as before. The header ✕ always closes.
+  const handleBack = useCallback(() => {
+    if (backPress(handlesBackRef.current) === 'event') bridgeRef.current?.sendEvent('back');
+    else onClose();
+  }, [onClose]);
+
+  // visibilityChanged / themeChanged from the host signals (open, foreground, theme).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s: AppStateStatus) => setAppActive(s === 'active'));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    const next: HostSignals = { open: visible, appActive, dark: isDark };
+    const events = eventsFor(signalsRef.current, next);
+    signalsRef.current = next;
+    for (const e of events) bridgeRef.current?.sendEvent(e.event, e.data);
+  }, [visible, appActive, isDark]);
+
   // Header share → native share sheet with the mini app's link.
   const handleShare = useCallback(() => {
     const message = `${app.name} – Mini-App in der Röbel App`;
@@ -1101,7 +1131,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       visible={visible}
       animationType="slide"
       presentationStyle="fullScreen"
-      onRequestClose={handleClose}
+      onRequestClose={handleBack}
     >
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={CHROME_BG} />
