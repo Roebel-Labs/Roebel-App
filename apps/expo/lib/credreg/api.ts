@@ -134,6 +134,25 @@ export const setupEventBadge = (
 /** The event's Smart Event QR id (created on first use for a published event). */
 export const ensureEventQr = (a: SigningAccount, eventId: string) => credApi<{ rewardEventId: string }>(a, 'org', 'event_badge_qr', { eventId });
 
+/** After a Smart Event QR scan: its event and public badge (GET /api/credentials/scan/<id>). */
+export type ScanBadge = { eventId: string | null; eventTitle: string | null; eventDate: string | null; badge: PublicEventBadge | null };
+
+/** undefined when it could not be read (network, timeout). Never throws. */
+export async function fetchScanBadge(rewardEventId: string, timeoutMs = 8000): Promise<ScanBadge | undefined> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/credentials/scan/${encodeURIComponent(rewardEventId)}`, { signal: ctl.signal });
+    if (res.status !== 200) return undefined;
+    const json = (await res.json()) as Partial<ScanBadge>;
+    return { eventId: json.eventId ?? null, eventTitle: json.eventTitle ?? null, eventDate: json.eventDate ?? null, badge: json.badge ?? null };
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * The event's badge as anyone may see it (no signature, no names). undefined when it could not
  * be read (network, timeout), null when the event has no badge. Never throws.

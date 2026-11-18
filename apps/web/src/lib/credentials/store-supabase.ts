@@ -609,6 +609,12 @@ export class SupabaseCredentialStore implements CredentialStore {
     }
     return [...out];
   }
+  async eventIdForRewardEvent(rewardEventId: string): Promise<string | null> {
+    const r = await this.db.from("reward_events").select("event_id").eq("id", rewardEventId).maybeSingle();
+    check("eventIdForRewardEvent", r);
+    const id = (r.data as Row | null)?.event_id;
+    return id ? String(id) : null;
+  }
   async rewardEventIdFor(eventId: string): Promise<string | null> {
     const r = await this.db.from("reward_events").select("id").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     check("rewardEventIdFor", r);

@@ -6,12 +6,10 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { claimReward, rewardAmountToMuenzen, type ClaimResult, type RewardAction } from '@/lib/rewards-claim';
-import { supabase } from '@/lib/supabase';
-import { fetchPublicEventBadge } from './api';
+import { fetchScanBadge, type ScanBadge } from './api';
 import { formatEventDate } from './collect-format';
 import { enqueueCollect, isNetworkFailure } from './collect-queue';
 import { isCredentialsAllowed } from './gate';
-import type { PublicEventBadge } from './types';
 
 export type BadgeInfo = { eventId: string; eventTitle: string; eventDate: string; name: string; imageUrl: string | null };
 
@@ -207,34 +205,22 @@ export async function scanGate(deps: { online: () => Promise<boolean>; allowed: 
 
 export type BadgeLookupDeps = {
   gateOpen: () => Promise<boolean>;
-  eventIdFor: (rewardEventId: string) => Promise<string | null>;
-  publicBadge: (eventId: string) => Promise<PublicEventBadge | null | undefined>;
-  eventFor: (eventId: string) => Promise<{ title: string; date: string } | null>;
+  /** Server-side lookup: reward_events is not readable with the app's anon key. */
+  scanBadge: (rewardEventId: string) => Promise<ScanBadge | undefined>;
 };
 
 export const defaultBadgeLookup: BadgeLookupDeps = {
   gateOpen: () => isCredentialsAllowed(),
-  async eventIdFor(rewardEventId) {
-    const { data } = await supabase.from('reward_events').select('event_id').eq('id', rewardEventId).maybeSingle();
-    return (data as { event_id: string | null } | null)?.event_id ?? null;
-  },
-  publicBadge: (eventId) => fetchPublicEventBadge(eventId),
-  async eventFor(eventId) {
-    const { data } = await supabase.from('events').select('title, date').eq('id', eventId).maybeSingle();
-    const row = data as { title: string | null; date: string | null } | null;
-    return row ? { title: row.title ?? '', date: row.date ?? '' } : null;
-  },
+  scanBadge: (rewardEventId) => fetchScanBadge(rewardEventId),
 };
 
 /** The badge of the scanned event, or null (gate closed: nothing is asked at all). */
 export async function badgeForScan(rewardEventId: string, deps: BadgeLookupDeps = defaultBadgeLookup): Promise<BadgeInfo | null> {
   try {
     if (!(await deps.gateOpen())) return null;
-    const eventId = await deps.eventIdFor(rewardEventId);
-    if (!eventId) return null;
-    const [badge, event] = await Promise.all([deps.publicBadge(eventId), deps.eventFor(eventId)]);
-    if (!badge) return null;
-    return { eventId, eventTitle: event?.title ?? '', eventDate: event?.date ?? '', name: badge.name, imageUrl: badge.imageUrl };
+    const scan = await deps.scanBadge(rewardEventId);
+    if (!scan?.eventId || !scan.badge) return null;
+    return { eventId: scan.eventId, eventTitle: scan.eventTitle ?? '', eventDate: scan.eventDate ?? '', name: scan.badge.name, imageUrl: scan.badge.imageUrl };
   } catch {
     return null;
   }

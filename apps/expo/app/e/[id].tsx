@@ -22,7 +22,7 @@ import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { supabase } from '@/lib/supabase';
 import { isOnboarded } from '@/lib/roebel-taler';
 import MuenzenRewardView from '@/components/rewards/MuenzenRewardView';
-import { credApi, fetchPublicEventBadge } from '@/lib/credreg/api';
+import { credApi } from '@/lib/credreg/api';
 import { isCredentialsAllowed, useCredentialsGate } from '@/lib/credreg/gate';
 import StampMoment, { type StampMomentAction } from '@/components/credentials/StampMoment';
 import {
@@ -47,11 +47,8 @@ const BADGE_HINT = 'Du bekommst ein Abzeichen, sobald der Veranstalter es vergib
 
 /** After an event_attend claim: does the scanned event have a badge? (gate closed or unknown = no). */
 async function eventHasBadge(rewardEventId: string): Promise<boolean> {
-  if (!(await isCredentialsAllowed().catch(() => false))) return false;
-  const { data } = await supabase.from('reward_events').select('event_id').eq('id', rewardEventId).maybeSingle();
-  const eventId = (data as { event_id: string | null } | null)?.event_id;
-  if (!eventId) return false;
-  return !!(await fetchPublicEventBadge(eventId));
+  // Resolved by the server: reward_events is not readable with the app's anon key.
+  return !!(await badgeForScan(rewardEventId));
 }
 
 type Phase = 'working' | 'done' | 'error';

@@ -80,3 +80,41 @@ test("event_badge_qr reuses the linked Smart Event QR or creates it for a publis
   assert.equal(stranger.ok, false);
   assert.equal(stranger.ok ? 0 : stranger.status, 403);
 });
+
+test("scan lookup: reward event id → event and its public badge, server-side (reward_events is not readable by the app)", async () => {
+  const { publicScanBadge } = await import("../src/lib/credentials/event-badges");
+  const store = new InMemoryCredentialStore();
+  store.seedAccount({ id: VEREIN, accountType: "organisation", name: "Heimatverein", subType: "verein", avatarUrl: null, membersPublicColumn: null });
+  store.seedOwner(VEREIN, OWNER, "owner");
+  store.seedEvent({ id: EVENT, title: "Sommerfest", date: "2026-12-05", endDate: null, imageUrl: null, accountId: VEREIN, status: "approved" });
+  store.seedEvent({ id: BARE, title: "Ohne", date: "2026-12-06", endDate: null, imageUrl: null, accountId: VEREIN, status: "approved" });
+  store.seedRewardEvent({ id: "aaaaaaaa-2222-4333-8444-555555555555", eventId: EVENT });
+  store.seedRewardEvent({ id: "bbbbbbbb-2222-4333-8444-555555555555", eventId: BARE });
+  store.seedRewardEvent({ id: "cccccccc-2222-4333-8444-555555555555", eventId: null });
+  for (let i = 1; i <= 2; i++) store.seedTicket({ eventId: EVENT, wallet: wallet(i), status: "checked_in" });
+  const d = { store, now: () => Date.parse("2026-12-05T20:00:00Z"), registry: "0x00000000000000000000000000000000000000c1" } as unknown as EventBadgeDeps;
+  const c: Caller = { ok: true, wallet: OWNER, via: "signature", action: "event_badge_setup", payload: {} };
+  const { setupEventBadge } = await import("../src/lib/credentials/event-badges");
+  assert.equal((await setupEventBadge(d, c, { eventId: EVENT, enabled: true })).ok, true);
+
+  const hit = await publicScanBadge(store, "aaaaaaaa-2222-4333-8444-555555555555");
+  assert.equal(hit.eventId, EVENT);
+  assert.equal(hit.eventTitle, "Sommerfest");
+  assert.equal(hit.eventDate, "2026-12-05");
+  assert.equal(hit.badge?.name, "Dabei: Sommerfest");
+  assert.deepEqual(await publicScanBadge(store, "bbbbbbbb-2222-4333-8444-555555555555"), { eventId: BARE, eventTitle: "Ohne", eventDate: "2026-12-06", badge: null });
+  assert.deepEqual(await publicScanBadge(store, "cccccccc-2222-4333-8444-555555555555"), { eventId: null, eventTitle: null, eventDate: null, badge: null });
+  assert.deepEqual(await publicScanBadge(store, "nope"), { eventId: null, eventTitle: null, eventDate: null, badge: null });
+});
+
+test("public badge: a draft badge of an unpublished event is not shown", async () => {
+  const { setupEventBadge } = await import("../src/lib/credentials/event-badges");
+  const store = new InMemoryCredentialStore();
+  store.seedAccount({ id: VEREIN, accountType: "organisation", name: "Heimatverein", subType: "verein", avatarUrl: null, membersPublicColumn: null });
+  store.seedOwner(VEREIN, OWNER, "owner");
+  store.seedEvent({ id: EVENT, title: "Geheim", date: "2026-12-05", endDate: null, imageUrl: null, accountId: VEREIN, status: "pending" });
+  const d = { store, now: () => Date.parse("2026-12-01T10:00:00Z"), registry: "0x00000000000000000000000000000000000000c1" } as unknown as EventBadgeDeps;
+  const c: Caller = { ok: true, wallet: OWNER, via: "signature", action: "event_badge_setup", payload: {} };
+  assert.equal((await setupEventBadge(d, c, { eventId: EVENT, enabled: true })).ok, true);
+  assert.deepEqual(await publicEventBadge(store, EVENT), { badge: null });
+});

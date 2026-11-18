@@ -90,19 +90,27 @@ describe('collect', () => {
   });
 
   it("with the gate closed the screen keeps today's behaviour (no badge request)", async () => {
+    const badge = { typeId: '0x1', name: 'Dabei', imageUrl: null, claimStart: 0, claimEnd: 0, collected: 0 };
     const deps = {
       gateOpen: jest.fn(async () => false),
-      eventIdFor: jest.fn(async () => 'ev-1'),
-      publicBadge: jest.fn(async () => ({ typeId: '0x1', name: 'Dabei', imageUrl: null, claimStart: 0, claimEnd: 0, collected: 0 })),
-      eventFor: jest.fn(async () => ({ title: 'Sommerfest', date: '2026-12-05' })),
+      scanBadge: jest.fn(async () => ({ eventId: 'ev-1', eventTitle: 'Sommerfest', eventDate: '2026-12-05', badge })),
     };
     expect(await badgeForScan('rev-1', deps as never)).toBeNull();
-    expect(deps.eventIdFor).not.toHaveBeenCalled();
-    expect(deps.publicBadge).not.toHaveBeenCalled();
+    expect(deps.scanBadge).not.toHaveBeenCalled();
     deps.gateOpen.mockResolvedValue(true);
     expect(await badgeForScan('rev-1', deps as never)).toEqual({ eventId: 'ev-1', eventTitle: 'Sommerfest', eventDate: '2026-12-05', name: 'Dabei', imageUrl: null });
-    deps.publicBadge.mockResolvedValue(null as never);
+    expect(deps.scanBadge).toHaveBeenCalledWith('rev-1');
+    deps.scanBadge.mockResolvedValue({ eventId: 'ev-1', eventTitle: 'Sommerfest', eventDate: '2026-12-05', badge: null } as never);
     expect(await badgeForScan('rev-1', deps as never)).toBeNull();
+    deps.scanBadge.mockResolvedValue(undefined as never);
+    expect(await badgeForScan('rev-1', deps as never)).toBeNull();
+  });
+
+  it('the scanned event is resolved by the server route, never by reading reward_events directly', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'collect.ts'), 'utf8') as string;
+    const screen = require('fs').readFileSync(require('path').join(__dirname, '..', '..', '..', 'app', 'e', '[id].tsx'), 'utf8') as string;
+    expect(src).not.toMatch(/from\('reward_events'\)/);
+    expect(screen).not.toMatch(/from\('reward_events'\)/);
   });
 
   it('offline at the door the last known gate decides', async () => {

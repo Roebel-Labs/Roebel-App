@@ -432,6 +432,8 @@ export async function publicEventBadge(store: CredentialStore, eventId: string):
   if (typeof eventId !== "string" || !UUID.test(eventId)) return { badge: null };
   const event = await store.getEvent(eventId);
   if (!event?.accountId) return { badge: null };
+  // Unpublished events stay private, their draft badge with them (status absent = not read).
+  if (event.status != null && event.status !== "approved") return { badge: null };
   const t = await badgeTypeOf(store, event.accountId, event.id);
   if (!t) return { badge: null };
   const w = badgeWindow({ date: event.date, end_date: event.endDate });
@@ -441,4 +443,22 @@ export async function publicEventBadge(store: CredentialStore, eventId: string):
   return {
     badge: { typeId: t.typeId, name: t.name, imageUrl: t.imageUrl, claimStart: unix(t.claimStart, w.claimStart), claimEnd: unix(t.claimEnd, w.claimEnd), collected: accepted.size },
   };
+}
+
+export type PublicScanBadge = { eventId: string | null; eventTitle: string | null; eventDate: string | null; badge: PublicEventBadge | null };
+
+/**
+ * GET /api/credentials/scan/<rewardEventId>: what the app needs right after a Smart Event QR scan.
+ * reward_events is not readable with the app's anon key (RLS, no policy), so the lookup from the
+ * QR id to the event happens here. Only public facts: event title and date, and the public badge.
+ */
+export async function publicScanBadge(store: CredentialStore, rewardEventId: string): Promise<PublicScanBadge> {
+  const none: PublicScanBadge = { eventId: null, eventTitle: null, eventDate: null, badge: null };
+  if (typeof rewardEventId !== "string" || !UUID.test(rewardEventId)) return none;
+  const eventId = await store.eventIdForRewardEvent(rewardEventId);
+  if (!eventId) return none;
+  const event = await store.getEvent(eventId);
+  if (!event || (event.status != null && event.status !== "approved")) return none;
+  const { badge } = await publicEventBadge(store, eventId);
+  return { eventId, eventTitle: event.title, eventDate: event.date, badge };
 }

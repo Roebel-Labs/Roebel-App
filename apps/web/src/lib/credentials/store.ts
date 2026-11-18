@@ -286,6 +286,8 @@ export interface CredentialStore {
    * `event_attend` claim on a reward_events row linked to an event), each id once.
    */
   attendedEventIdsForWallet(wallet: string): Promise<string[]>;
+  /** The event a Smart Event QR (reward_events row) belongs to, or null. */
+  eventIdForRewardEvent(rewardEventId: string): Promise<string | null>;
   /** The newest reward_events row linked to the event (its Smart Event QR), or null. */
   rewardEventIdFor(eventId: string): Promise<string | null>;
   /** Inserts the event's Smart Event QR row (reward_events); returns its id. */
@@ -654,6 +656,9 @@ export class InMemoryCredentialStore implements CredentialStore {
       if (ev) out.add(ev);
     }
     return [...out];
+  }
+  async eventIdForRewardEvent(rewardEventId: string) {
+    return this.rewardEvents.find((r) => r.id === rewardEventId)?.eventId ?? null;
   }
   async rewardEventIdFor(eventId: string) {
     const linked = this.rewardEvents.filter((r) => r.eventId === eventId);
