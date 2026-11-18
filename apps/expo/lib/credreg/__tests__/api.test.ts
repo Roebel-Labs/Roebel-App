@@ -4,7 +4,7 @@ jest.mock('expo-crypto', () => ({
     require('node:crypto').createHash('sha256').update(s).digest('hex'),
 }));
 
-import { credApi, fetchMine, reportSubmitted } from '../api';
+import { credApi, fetchMine, fetchMineFull, reportSubmitted } from '../api';
 
 const account = () => ({ address: '0xABC', signMessage: jest.fn(async () => '0x' + 'ab'.repeat(65)) });
 
@@ -45,5 +45,16 @@ describe('credApi', () => {
     const res = await credApi(account(), 'org', 'orgs_list', {});
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe('NETWORK_ERROR');
+  });
+
+  it('fetchMine reads both the old list answer and the new { invitations, pendingBadges } answer', async () => {
+    const inv = { id: 'i1', state: 'invited' };
+    const pending = { eventId: 'e1', eventTitle: 'Fest', eventDate: '2026-12-05', orgName: null, typeId: null, name: 'Dabei', imageUrl: null, state: 'waiting_for_issue' };
+    (global as any).fetch = jest.fn(async () => ({ status: 200, json: async () => ({ ok: true, data: { invitations: [inv], pendingBadges: [pending] } }) }));
+    expect(await fetchMine(account())).toEqual({ ok: true, data: [inv] });
+    expect(await fetchMineFull(account())).toEqual({ ok: true, data: { invitations: [inv], pendingBadges: [pending] } });
+    (global as any).fetch = jest.fn(async () => ({ status: 200, json: async () => ({ ok: true, data: [inv] }) }));
+    expect(await fetchMine(account())).toEqual({ ok: true, data: [inv] });
+    expect(await fetchMineFull(account())).toEqual({ ok: true, data: { invitations: [inv], pendingBadges: [] } });
   });
 });

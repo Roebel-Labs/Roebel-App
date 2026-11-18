@@ -14,6 +14,7 @@ import type {
   EventBadgePrepared,
   Holding,
   InvitationView,
+  MineResult,
   OrgListEntry,
   PersonRow,
   PersonSearchHit,
@@ -44,7 +45,27 @@ export async function credApi<T>(
 
 // ── holder ────────────────────────────────────────────────────────────────────
 
-export const fetchMine = (a: SigningAccount) => credApi<InvitationView[]>(a, 'me', 'mine', {});
+/** Reads both answers of `mine`: the older plain list and `{ invitations, pendingBadges }`. */
+function asMine(data: unknown): MineResult {
+  if (Array.isArray(data)) return { invitations: data as InvitationView[], pendingBadges: [] };
+  const d = (data ?? {}) as Partial<MineResult>;
+  return {
+    invitations: Array.isArray(d.invitations) ? d.invitations : [],
+    pendingBadges: Array.isArray(d.pendingBadges) ? d.pendingBadges : [],
+  };
+}
+
+/** My invitations and the badges still waiting for the organiser. */
+export async function fetchMineFull(a: SigningAccount): Promise<ApiResult<MineResult>> {
+  const res = await credApi<unknown>(a, 'me', 'mine', {});
+  return res.ok ? { ok: true, data: asMine(res.data) } : res;
+}
+
+/** My invitations only. */
+export async function fetchMine(a: SigningAccount): Promise<ApiResult<InvitationView[]>> {
+  const res = await fetchMineFull(a);
+  return res.ok ? { ok: true, data: res.data.invitations } : res;
+}
 
 export const redeemInvitation = (a: SigningAccount, token: string) => credApi<InvitationView>(a, 'me', 'redeem', { token });
 

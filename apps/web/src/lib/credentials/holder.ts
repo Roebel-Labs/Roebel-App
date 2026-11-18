@@ -11,6 +11,7 @@ import { signClaim } from "@netizen-labs/credential-registry";
 import type { Address, Hex } from "viem";
 import type { Fail, Result } from "./actions";
 import type { Caller } from "./caller";
+import { badgeTypeOf } from "./event-badges";
 import type { NodeRegistryReader } from "./rights";
 import { openSecret } from "./secrets";
 import type { AccountRow, BatchRow, CredentialStore, InvitationRow, TypeRow } from "./store";
@@ -55,6 +56,24 @@ export type InvitationView = {
     claimSignature: Hex | null;
   };
 };
+
+/**
+ * An event the caller attended whose badge exists (draft or on chain) but reached the caller as no
+ * invitation yet: the app shows it as a stamp that "wird eingetragen". typeId is null while the
+ * type is still a draft (it has no id in the register yet).
+ */
+export type PendingBadge = {
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  orgName: string | null;
+  typeId: Hex | null;
+  name: string;
+  imageUrl: string | null;
+  state: "waiting_for_issue";
+};
+
+export type MineResult = { invitations: InvitationView[]; pendingBadges: PendingBadge[] };
 
 export type Holding = { typeId: Hex; held: boolean; visibility: "public" | "private" | null; validUntil: string | null };
 
@@ -145,20 +164,44 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
   };
 }
 
-/** Every invitation bound to the caller whose batch is on chain. */
-export async function mine(d: HolderDeps, c: Caller): Promise<Result<InvitationView[]>> {
+/** Every invitation bound to the caller whose batch is on chain, plus the badges still waiting for issue. */
+export async function mine(d: HolderDeps, c: Caller): Promise<Result<MineResult>> {
   const wallet = c.wallet.toLowerCase();
   const ctx = viewContext(d);
-  const rows = await d.store.invitationsForWallet(wallet);
+  const rows = (await d.store.invitationsForWallet(wallet)).filter((inv) => inv.recipientWallet === wallet);
   const views: InvitationView[] = [];
   for (const inv of rows) {
-    if (inv.recipientWallet !== wallet) continue;
     const batch = await ctx.batch(inv.batchId);
     if (!onChain(batch)) continue;
     const v = await toView(d, ctx, inv, batch, wallet);
     if (v) views.push(v);
   }
-  return ok(views);
+  // Any invitation row of the badge type (also one whose batch still waits for the chain) means
+  // the badge is on its way through the normal path, so it is no longer "waiting".
+  const invitedTypes = new Set(rows.map((i) => i.typeId.toLowerCase()));
+  return ok({ invitations: views, pendingBadges: await pendingBadgesFor(d, ctx, wallet, invitedTypes) });
+}
+
+async function pendingBadgesFor(d: HolderDeps, ctx: ViewContext, wallet: string, invitedTypes: Set<string>): Promise<PendingBadge[]> {
+  const out: PendingBadge[] = [];
+  for (const eventId of await d.store.attendedEventIdsForWallet(wallet)) {
+    const event = await d.store.getEvent(eventId);
+    if (!event?.accountId) continue;
+    const t = await badgeTypeOf(d.store, event.accountId, event.id);
+    if (!t || invitedTypes.has(t.typeId.toLowerCase())) continue;
+    const account = await ctx.account(event.accountId);
+    out.push({
+      eventId: event.id,
+      eventTitle: event.title,
+      eventDate: event.date,
+      orgName: account?.name ?? null,
+      typeId: t.chainStatus === "onchain" ? t.typeId : null,
+      name: t.name,
+      imageUrl: t.imageUrl,
+      state: "waiting_for_issue",
+    });
+  }
+  return out.sort((a, b) => b.eventDate.localeCompare(a.eventDate));
 }
 
 /** Binds a claim-key link to the first signed-in account that redeems it. */

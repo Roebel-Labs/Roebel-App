@@ -169,7 +169,7 @@ export type UserRow = {
   /** display_name, else username. */
   displayName: string;
   avatarUrl: string | null;
-  /** In-memory store only: the username, when it differs from the display name. */
+  /** The username (profile link), when set. */
   username?: string | null;
 };
 
@@ -281,6 +281,11 @@ export interface CredentialStore {
   ticketsForEvent(eventId: string): Promise<AttendanceRow[]>;
   /** Every `event_attend` claim whose reference is a reward_events row linked to the event (any status). */
   attendClaimsForEvent(eventId: string): Promise<AttendanceRow[]>;
+  /**
+   * Events the wallet attended (same rule as attendeesOf: a `checked_in` ticket, or a non-rejected
+   * `event_attend` claim on a reward_events row linked to an event), each id once.
+   */
+  attendedEventIdsForWallet(wallet: string): Promise<string[]>;
   /** The newest reward_events row linked to the event (its Smart Event QR), or null. */
   rewardEventIdFor(eventId: string): Promise<string | null>;
   /** Inserts the event's Smart Event QR row (reward_events); returns its id. */
@@ -392,7 +397,7 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   async usersByWallets(wallets: readonly string[]) {
     const set = new Set(wallets.map((w) => w.toLowerCase()));
-    return this.users.filter((u) => set.has(u.wallet)).map(({ wallet, displayName, avatarUrl }) => ({ wallet, displayName, avatarUrl }));
+    return this.users.filter((u) => set.has(u.wallet)).map(({ wallet, displayName, avatarUrl, username }) => ({ wallet, displayName, avatarUrl, username: username ?? null }));
   }
 
   // ── types ───────────────────────────────────────────────────────────────────
@@ -638,6 +643,17 @@ export class InMemoryCredentialStore implements CredentialStore {
   async attendClaimsForEvent(eventId: string) {
     const refs = new Set(this.rewardEvents.filter((r) => r.eventId === eventId).map((r) => r.id));
     return this.rewardClaims.filter((c) => c.action === "event_attend" && refs.has(c.referenceId)).map(({ wallet, status }) => ({ wallet, status }));
+  }
+  async attendedEventIdsForWallet(wallet: string) {
+    const w = wallet.toLowerCase();
+    const out = new Set<string>();
+    for (const t of this.tickets) if (t.wallet.toLowerCase() === w && t.status === "checked_in") out.add(t.eventId);
+    for (const c of this.rewardClaims) {
+      if (c.wallet.toLowerCase() !== w || c.action !== "event_attend" || c.status === "rejected") continue;
+      const ev = this.rewardEvents.find((r) => r.id === c.referenceId)?.eventId;
+      if (ev) out.add(ev);
+    }
+    return [...out];
   }
   async rewardEventIdFor(eventId: string) {
     const linked = this.rewardEvents.filter((r) => r.eventId === eventId);

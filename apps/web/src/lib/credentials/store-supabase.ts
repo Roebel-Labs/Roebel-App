@@ -71,6 +71,7 @@ const toUser = (r: Row): UserRow => ({
   wallet: String(r.wallet_address).toLowerCase(),
   displayName: r.display_name || r.username || "",
   avatarUrl: r.profile_picture_url ?? null,
+  username: r.username ?? null,
 });
 
 const toType = (r: Row): TypeRow => ({
@@ -591,6 +592,23 @@ export class SupabaseCredentialStore implements CredentialStore {
     }
   }
 
+  async attendedEventIdsForWallet(wallet: string): Promise<string[]> {
+    // Wallet columns are not normalised everywhere: ilike on a hex address (no wildcards) matches case-insensitively.
+    const w = wallet.toLowerCase();
+    const out = new Set<string>();
+    const t = await this.db.from("tickets").select("event_id").ilike("holder_wallet", w).eq("status", "checked_in").limit(PAGE);
+    check("attendedEventIdsForWallet", t);
+    for (const x of (t.data ?? []) as Row[]) if (x.event_id) out.add(String(x.event_id));
+    const c = await this.db.from("reward_claims").select("reference_id").ilike("wallet", w).eq("action", "event_attend").neq("status", "rejected").limit(PAGE);
+    check("attendedEventIdsForWallet", c);
+    const refs = [...new Set(((c.data ?? []) as Row[]).map((x) => String(x.reference_id ?? "")).filter(Boolean))];
+    for (let i = 0; i < refs.length; i += 200) {
+      const re = await this.db.from("reward_events").select("event_id").in("id", refs.slice(i, i + 200)).not("event_id", "is", null);
+      check("attendedEventIdsForWallet", re);
+      for (const x of (re.data ?? []) as Row[]) if (x.event_id) out.add(String(x.event_id));
+    }
+    return [...out];
+  }
   async rewardEventIdFor(eventId: string): Promise<string | null> {
     const r = await this.db.from("reward_events").select("id").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     check("rewardEventIdFor", r);

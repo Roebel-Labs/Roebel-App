@@ -144,5 +144,18 @@ export type EventBadgeGetResult = {
   badge: { typeId: Hex; name: string; imageUrl: string | null; supplyCap: number; chain: 'draft' | 'onchain'; auto: boolean } | null;
 };
 export type EventBadgePrepared = { actionId: string; typeId: Hex; count: number };
+/** An attended event whose badge has not reached the person yet (server: PendingBadge in holder.ts). */
+export type PendingBadge = {
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  orgName: string | null;
+  typeId: Hex | null;
+  name: string;
+  imageUrl: string | null;
+  state: 'waiting_for_issue';
+};
+/** `mine` answer. */
+export type MineResult = { invitations: InvitationView[]; pendingBadges: PendingBadge[] };
 /** GET /api/credentials/events/<eventId>/badge (public, no names). Unix seconds. */
 export type PublicEventBadge = { typeId: Hex; name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
