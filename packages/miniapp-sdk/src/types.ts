@@ -79,13 +79,21 @@ export type BridgeMethod =
   | 'data.get'
   | 'data.list'
   | 'data.userGet'
-  | 'data.userSet';
+  | 'data.userSet'
+  // v0.4 — identity and credentials (manifest version "2"). Older hosts answer
+  // `unsupported`; check `sdk.supports(method)` first.
+  | 'credentials.list'
+  | 'credentials.has'
+  | 'credentials.request';
+// reserved: 'credentials.prove' (credreg-6-zk)
 
 export type NetizenEvent =
   | 'walletChanged'
   | 'back'
   | 'visibilityChanged'
-  | 'themeChanged';
+  | 'themeChanged'
+  /** v0.4 — the person's shared credentials changed (grant or withdrawal). Data = `Credential[]`. */
+  | 'credentialsChanged';
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -185,6 +193,39 @@ export interface MiniAppManifest {
   screenshots?: string[];
   permissions: MiniAppPermission[];
   primaryColor?: string;
+  /** Manifest version; absent = "1". */
+  version?: '1' | '2';
+  /** Version "2" only: what the app may ask the person to share. */
+  identity?: MiniAppIdentityRequest;
+}
+
+/** One credential a version-2 manifest asks for, with the reason shown to the person. */
+export interface CredentialRequest {
+  /** Credential reference: `citizen` | `attester` | `guest` | `type:0x…` | `org:<org account id>`. */
+  type: string;
+  reason: string;
+}
+
+/** The `identity` section of a version-2 manifest: what the app may ask the person to share. */
+export interface MiniAppIdentityRequest {
+  profile: boolean;
+  address: boolean;
+  credentials: CredentialRequest[];
+}
+
+/** A credential the person holds and agreed to share with this app. */
+export interface Credential {
+  /** A built-in (`citizen`, `attester`, `guest`) or a `type:0x…` reference. */
+  type: string;
+  kind: 'builtin' | 'role' | 'membership' | 'badge';
+  /** The issuing org's account id, when the credential has one. */
+  org?: string;
+  name: string;
+  imageUrl?: string;
+  /** Unix seconds; null or absent = no expiry. */
+  validUntil?: number | null;
+  /** Whether this community recognises the issuer. */
+  recognised: boolean;
 }
 
 export type MiniAppStatus =
@@ -212,6 +253,10 @@ export interface NetizenMockConfig {
   /** Mock app CONTENT for sdk.data.get/list (key → value). User-scope
    * setUser/getUser use an in-memory map on top. */
   data?: Record<string, unknown>;
+  /** Credentials the mock person holds. Default: one built-in `citizen`. */
+  credentials?: Credential[];
+  /** Token returned by `auth.getToken` in mock mode. Default: none (null). */
+  token?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +285,8 @@ export interface NetizenSDK {
 
   auth: {
     getToken(): Promise<{ token: string } | null>;
-    signIn(): Promise<{ token: string }>;
+    /** `nonce` (optional) is bound into the token so your server can check freshness. */
+    signIn(opts?: { nonce?: string }): Promise<{ token: string }>;
   };
 
   haptics: {
@@ -279,6 +325,26 @@ export interface NetizenSDK {
     getUser(key: string): Promise<{ value: unknown | null; exists: boolean }>;
     setUser(key: string, value: unknown): Promise<{ ok: boolean }>;
   };
+
+  // --- v0.4 additive: identity and credentials (manifest version "2") ------
+
+  /** Credentials the person agreed to share with this app. A private credential
+   * is answered as "holds it" only. Every call can reject on older hosts
+   * (`unsupported`) — check `supports('credentials.list')` first. */
+  // reserved: 'credentials.prove' (credreg-6-zk)
+  credentials: {
+    list(): Promise<Credential[]>;
+    /** `type` is a credential reference; `org:<id>` matches any credential of that org. */
+    has(type: string): Promise<boolean>;
+    /** Ask for more; only types in the app's reviewed manifest can be granted. */
+    request(types: string[]): Promise<{ granted: string[] }>;
+    /** Called with the new list after a grant or a withdrawal. Returns an unsubscribe function. */
+    onChange(cb: (list: Credential[]) => void): () => void;
+  };
+
+  /** Whether the host implements `method`. true in mock mode and on older hosts
+   * that do not announce their methods (let the call decide). */
+  supports(method: BridgeMethod): boolean;
 
   // --- v0.2 additive introspection (no behavior change inside a real host) ---
 

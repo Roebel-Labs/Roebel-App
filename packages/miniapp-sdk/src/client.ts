@@ -5,6 +5,7 @@ import { ClientBridge } from './bridge';
 import { getHostEnvironment } from './env';
 import { createEip1193Provider } from './provider';
 import type {
+  Credential,
   Eip1193Provider,
   GrantRewardParams,
   GrantRewardResult,
@@ -79,6 +80,16 @@ export function createClient(): NetizenSDK {
       getUser: (key) => bridge.request('data.userGet', { key }),
       setUser: (key, value) => bridge.request('data.userSet', { key, value }),
     },
+
+    credentials: {
+      list: () => bridge.request<Credential[]>('credentials.list'),
+      has: (type) => bridge.request<boolean>('credentials.has', { type }),
+      request: (types) => bridge.request<{ granted: string[] }>('credentials.request', { types }),
+      onChange: (cb) => bridge.on('credentialsChanged', (data) => cb(data as Credential[])),
+    },
+
+    // Completed in the next step (host method list); until then let the call decide.
+    supports: () => true,
 
     hostEnvironment: () => getHostEnvironment(),
     isMockMode: () => bridge.getMode() === 'mock',
