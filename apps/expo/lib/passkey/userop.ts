@@ -356,7 +356,11 @@ async function postJson(fetchImpl: FetchLike, url: string, body: unknown, timeou
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       const msg = json && (json.error?.message ?? json.error ?? json.message);
-      throw new Error(`HTTP ${res.status}${msg ? `: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}` : ''}`);
+      // status + body ride along so callers can read a sponsor refusal's reason (e.g. `scope`).
+      throw Object.assign(
+        new Error(`HTTP ${res.status}${msg ? `: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}` : ''}`),
+        { status: res.status, body: json },
+      );
     }
     return json;
   } finally {
@@ -421,12 +425,12 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
 
 /**
  * POST /api/passkey/sponsor body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?,
- * pollId? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
+ * pollId?, miniApp? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
  * owner, never both. Optional identity hints are omitted (not null) when unset.
  */
 export function sponsorRequestBody(
   op: UnpackedUserOp,
-  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId'> & { proof: SafeOpProof },
+  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId' | 'miniApp'> & { proof: SafeOpProof },
 ): Record<string, unknown> {
   return {
     chainId: PASSKEY_CHAIN_ID,
@@ -436,6 +440,8 @@ export function sponsorRequestBody(
     ...(args.recoveryLegacy ? { recoveryLegacy: args.recoveryLegacy } : {}),
     // 0x hex quantity, as the server's parseSponsorRequest expects.
     ...(args.pollId !== undefined ? { pollId: `0x${args.pollId.toString(16)}` } : {}),
+    // Mini-app sends (sponsor mode "miniapp"): the app's uuid.
+    ...(args.miniApp ? { miniApp: args.miniApp } : {}),
   };
 }
 
@@ -642,6 +648,8 @@ export type SafeUserOpArgs = {
   legacy?: Address;
   recoveryLegacy?: Address;
   pollId?: bigint;
+  /** Mini-app sends: the mini app's id (uuid); the sponsor accepts only its declared calls. */
+  miniApp?: string;
 };
 
 /** `sendSafeUserOp` with a passkey signer (`deps.sign`, default the native passkey). */

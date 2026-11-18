@@ -54,6 +54,11 @@ import { useCredentialsGate } from '@/lib/credreg/gate';
 import { fetchOrgPublic } from '@/lib/credreg/api';
 import type { OrgPublicView } from '@/lib/credreg/types';
 import OrgCredentialsPublic, { replacesMemberSection } from '@/components/org/OrgCredentialsPublic';
+import { fetchMiniAppsOfOrg, type MiniApp } from '@/lib/miniapps';
+import { useInstalledMiniApps } from '@/lib/miniapp-installs';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { openDecision } from '@/lib/miniapp-open';
+import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
 import { hasMenuPrice, isRestaurantOpen } from '@/lib/utils';
 import {
   subTypeFeatures,
@@ -208,6 +213,15 @@ function PublicAccountScreenInner() {
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [orgLocation, setOrgLocation] = useState<OrgLocation | null>(null);
+  // Mini apps this org confirmed (lib/miniapp-org-binding.ts); the rail shows only when there are any.
+  const [orgMiniApps, setOrgMiniApps] = useState<MiniApp[]>([]);
+  const { isInstalled: isMiniAppInstalled } = useInstalledMiniApps();
+  const { held: miniAppHeld, ready: miniAppReady } = useMatchCredentials();
+  const isMiniAppLocked = useCallback(
+    (app: MiniApp) => openDecision(app, miniAppHeld, miniAppReady) === 'locked',
+    [miniAppHeld, miniAppReady],
+  );
+  const openOrgMiniApp = useCallback((app: MiniApp) => router.push(`/mini-app/${app.slug}` as any), [router]);
 
   useEffect(() => {
     if (!id) return;
@@ -246,6 +260,9 @@ function PublicAccountScreenInner() {
           resolveOrgLocation(account, members).catch(() => null),
         ]);
         if (cancelled) return;
+        void fetchMiniAppsOfOrg(account.id).then((list) => {
+          if (!cancelled) setOrgMiniApps(list);
+        });
         setPosts(postsRes.data);
         setEvents(eventsRes as EventRecord[]);
         setBlogArticles(blogRes.filter((a) => a.status === 'published'));
@@ -626,6 +643,24 @@ function PublicAccountScreenInner() {
         </View>
         </InlineErrorBoundary>
       ) : null}
+
+      {/* Mini-Apps this org confirmed */}
+      {orgMiniApps.length > 0 && (
+        <InlineErrorBoundary label="org-mini-apps">
+        <View style={[styles.section, styles.sectionFlush, { borderTopColor: colors.border }]}>
+          <View style={[styles.sectionHeaderRow, styles.sectionHeaderInset]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mini-Apps</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{orgMiniApps.length}</Text>
+          </View>
+          <MiniAppColumnRail
+            apps={orgMiniApps}
+            isInstalled={isMiniAppInstalled}
+            isLocked={isMiniAppLocked}
+            onOpen={openOrgMiniApp}
+          />
+        </View>
+        </InlineErrorBoundary>
+      )}
 
       {/* Events */}
       {safeEvents.length > 0 && (
@@ -1331,6 +1366,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  // The mini-app rail brings its own 16px gutter; the header keeps the section's inset.
+  sectionFlush: { paddingHorizontal: 0 },
+  sectionHeaderInset: { paddingHorizontal: 16 },
   sectionHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',

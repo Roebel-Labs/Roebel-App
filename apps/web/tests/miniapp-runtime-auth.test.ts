@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { exportJWK, generateKeyPair } from "jose";
 import { localTokenIssuer, tokenKeysFromEnv, verifyUserToken, type TokenIssuer, type TokenKeyResolver } from "../src/lib/miniapp/userToken";
-import { hostLabel, resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
+import { forRuntimeUser, hostLabel, resolveRuntimeUser, type RuntimeAuthDeps } from "../src/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "../src/lib/miniapp/types";
 
 const ISS = "https://www.roebel.app";
@@ -165,4 +165,56 @@ test("an onLegacy failure never fails the request", async () => {
     onLegacy: () => { throw new Error("log down"); },
   }));
   assert.deepEqual(u, { wallet: WALLET, via: "legacy" });
+});
+
+// ---- Pseudonym resolution (plan miniapp-2, Task 7) ----
+import { resolveTokenWallet } from "../src/lib/miniapp/runtimeAuth";
+
+const PSEUDO = "nz_abcdefghijklmnopqrstuvwxyz0";
+
+test("resolveTokenWallet finds the wallet behind a pseudonym", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  const w = await resolveTokenWallet(claims, { walletOf: async (s) => (s === PSEUDO ? WALLET.toUpperCase().replace("0X", "0x") : null) });
+  assert.equal(w, WALLET);
+});
+
+test("resolveTokenWallet prefers the granted address", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const, addr: WALLET };
+  assert.equal(await resolveTokenWallet(claims, { walletOf: async () => OTHER }), WALLET);
+});
+
+test("an unknown pseudonym is unauthorized", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: "nz_unknownunknownunknownunkno", app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  await assert401(resolveTokenWallet(claims, { walletOf: async () => null }));
+});
+
+test("a pseudonym token resolves through the store in resolveRuntimeUser", async () => {
+  const t = await issuer.sign({ aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW - 10, exp: NOW + 600, jti: "j2", v: 1 });
+  const u = await resolveRuntimeUser(
+    { authorization: `Bearer ${t}`, app, claimedWallet: OTHER, route: "data" },
+    deps({ walletOf: async (s) => (s === PSEUDO ? WALLET : null) }),
+  );
+  assert.deepEqual(u, { wallet: WALLET, via: "token", pseudonymous: true });
+});
+
+test("a reward outcome keeps txRef for an address token and a legacy call", () => {
+  const outcome = { granted: true, amount: 1, txRef: "0xabc", remainingBudget: 9 };
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "token" }), outcome);
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "legacy" }), outcome);
+});
+
+test("a reward outcome drops txRef for a pseudonym token (the tx hash would reveal the wallet)", () => {
+  const outcome = { granted: true, amount: 1, txRef: "0xabc", remainingBudget: 9 };
+  assert.deepEqual(forRuntimeUser(outcome, { wallet: WALLET, via: "token", pseudonymous: true }), {
+    granted: true,
+    amount: 1,
+    remainingBudget: 9,
+  });
+});
+
+test("resolveTokenWallet scopes the pseudonym lookup to the token's app", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  const seen: unknown[][] = [];
+  await resolveTokenWallet(claims, { walletOf: async (...args) => (seen.push(args), WALLET) });
+  assert.deepEqual(seen, [[PSEUDO, APP_ID]]);
 });

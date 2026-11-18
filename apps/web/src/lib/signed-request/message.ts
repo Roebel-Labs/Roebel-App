@@ -25,7 +25,7 @@ export type LiveAction = "live_session";
 
 /** Mini-app user tokens (host asks the server for a short-lived token); own scope like the others. */
 export const MINIAPP_SCOPE = "roebel-miniapp-v1" as const;
-export type MiniAppAction = "user_token";
+export type MiniAppAction = "user_token" | "identity_get" | "identity_set" | "org_binding_list" | "org_binding_decide";
 /** Credential register (apps/web/src/lib/credentials); own scope like sponsoring. Mirrored in
  *  apps/expo/lib/signed-request.ts. `people_preview` and the event/badge actions arrive in plan 4,
  *  the two `zk_*` actions in plan 6. */

@@ -17,6 +17,8 @@ import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
 import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import { MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { openDecision } from '@/lib/miniapp-open';
 
 const GRID_GAP = 12;
 const GRID_COLUMNS = 3;
@@ -29,6 +31,7 @@ export default function MiniAppsEntry() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { isInstalled } = useInstalledMiniApps();
+  const { held, ready } = useMatchCredentials();
   // Installed apps launch straight into the host from the grid.
   const [runningApp, setRunningApp] = useState<MiniApp | null>(null);
   const [hostVisible, setHostVisible] = useState(false);
@@ -42,16 +45,17 @@ export default function MiniAppsEntry() {
 
   const goStore = () => router.push('/mini-apps' as any);
 
+  // A locked (or not yet decided) app goes to its detail page, never the host.
   const openApp = useCallback(
     (app: MiniApp) => {
-      if (isInstalled(app.slug)) {
+      if (isInstalled(app.slug) && openDecision(app, held, ready) === 'open') {
         setRunningApp(app);
         setHostVisible(true);
       } else {
         router.push(`/mini-app/${app.slug}` as any);
       }
     },
-    [isInstalled, router],
+    [isInstalled, router, held, ready],
   );
 
   const closeHost = useCallback(() => setHostVisible(false), []);

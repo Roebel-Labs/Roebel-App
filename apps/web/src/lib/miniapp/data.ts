@@ -5,8 +5,17 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rcrcBalance } from "@/lib/muenzen/gnosis";
 import { attoToNumber } from "@/lib/muenzen/constants";
-import { validateManifest, DEFAULT_PRIMARY_COLOR } from "./manifest";
+import {
+  missingNewColumns,
+  manifestStoreFields,
+  validateManifest,
+  withoutColumns,
+} from "./manifest";
 import { issueMuenzenOnChain } from "./muenzen";
+import { bindingPatch, type OrgBinding } from "./orgBinding";
+import { sponsorRules, xdaiToWei } from "./contracts";
+import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
+import { IDENTITY_REVIEW_MESSAGE, needsIdentityReview } from "./identityReview";
 import {
   MiniAppError,
   type AnalyticsRange,
@@ -24,6 +33,32 @@ import {
   type ReviewDecision,
   type SubmitAppInput,
 } from "./types";
+
+/**
+ * Run a mini_apps insert/update whose patch includes the new manifest columns
+ * (manifest_version, identity, contracts, audience, org_account_id); if a migration is not
+ * applied yet, retry without the missing columns (the app then reads as version 1 / without
+ * contracts / without audience and org).
+ */
+export async function withIdentityColumnFallback<T>(
+  patch: Record<string, unknown>,
+  run: (
+    p: Record<string, unknown>,
+  ) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
+  let current = patch;
+  let result = await run(current);
+  // At most three retries: a missing audience/org column (audience migration not applied),
+  // a missing `contracts` column (contracts migration not applied), then a missing identity
+  // column (none applied).
+  for (let i = 0; i < 3; i++) {
+    const drop = missingNewColumns(result.error).filter((c) => c in current);
+    if (drop.length === 0) return result;
+    current = withoutColumns(current, drop);
+    result = await run(current);
+  }
+  return result;
+}
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -158,26 +193,19 @@ export async function submitApp(input: SubmitAppInput): Promise<MiniAppRow> {
     throw new MiniAppError("conflict", `Der slug "${manifest.slug}" ist bereits vergeben.`);
   }
 
-  const { data: app, error } = await supabase
-    .from("mini_apps")
-    .insert({
+  const fields = manifestStoreFields(manifest);
+  const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(
+    {
+      ...fields,
+      ...bindingPatch(null, fields),
       developer_id: input.developerId,
       slug: manifest.slug,
-      name: manifest.name,
-      icon_url: manifest.iconUrl || null,
-      home_url: manifest.homeUrl,
-      description: manifest.description || null,
-      category: manifest.category,
-      tags: manifest.tags,
-      screenshots: manifest.screenshots,
-      permissions: manifest.permissions,
-      primary_color: manifest.primaryColor ?? DEFAULT_PRIMARY_COLOR,
       status: "pending",
       source: input.source ?? "external",
       reward_budget: 0,
-    })
-    .select("*")
-    .single();
+    },
+    (row) => supabase.from("mini_apps").insert(row).select("*").single(),
+  );
   if (error) throw new MiniAppError("internal", error.message);
 
   await createVersion((app as MiniAppRow).id, {
@@ -227,25 +255,20 @@ export async function updateAppManifest(
   // Icon/previews are managed in the "Bilder" section (upload + KI). A
   // manifest edit that omits them keeps the stored images instead of
   // clobbering them — clearing happens über die Bilder-Sektion.
-  const { data: updated, error } = await supabase
-    .from("mini_apps")
-    .update({
+  const fields = manifestStoreFields(m);
+  const { data: updated, error } = await withIdentityColumnFallback<MiniAppRow>(
+    {
+      ...fields,
+      // A changed org asks the new org again; the same org keeps its decision.
+      ...bindingPatch(app, fields),
       slug: m.slug,
-      name: m.name,
       icon_url: m.iconUrl || app.icon_url,
-      home_url: m.homeUrl,
-      description: m.description || null,
-      category: m.category,
-      tags: m.tags,
-      screenshots: m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
-      permissions: m.permissions,
-      primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
+      screenshots: m.screenshots && m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
       ...(opts?.keepStatus ? {} : { status: "pending" as const }),
       updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select("*")
-    .single();
+    },
+    (patch) => supabase.from("mini_apps").update(patch).eq("id", id).select("*").single(),
+  );
   if (error) throw new MiniAppError("internal", error.message);
 
   await createVersion(id, {
@@ -310,22 +333,30 @@ export async function reviewApp(
   decision: ReviewDecision,
   notes: string | null,
   reviewerId: string,
+  opts: { identityReviewed?: boolean } = {},
 ): Promise<MiniAppRow> {
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
   const supabase = db();
   // Indexed apps: validate the pending manifest BEFORE any write so a bad
   // manifest fails without side effects.
-  if (decision === "approve" && app.source === "indexed") {
-    const { data: pre } = await supabase
-      .from("mini_app_versions")
-      .select("manifest")
-      .eq("mini_app_id", id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (pre?.manifest) validateManifest(pre.manifest);
+  if (decision === "approve") {
+    let identity = app.manifest_version === "2" ? (app.identity ?? null) : null;
+    if (app.source === "indexed") {
+      const { data: pre } = await supabase
+        .from("mini_app_versions")
+        .select("manifest")
+        .eq("mini_app_id", id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (pre?.manifest) identity = validateManifest(pre.manifest).identity ?? null;
+    }
+    // Address or credentials requested: the reviewer must confirm they fit what the app does.
+    if (needsIdentityReview(identity) && opts.identityReviewed !== true) {
+      throw new MiniAppError("invalid_params", IDENTITY_REVIEW_MESSAGE);
+    }
   }
   // Rejecting a staged update on a live app keeps it live (no transient unlisting).
   const nextStatus: MiniAppStatus =
@@ -391,25 +422,12 @@ export async function reviewApp(
   // Indexed apps: store fields only change on approval of a version (spec §5).
   const patch: Record<string, unknown> = { pending_update: false };
   if (decision === "approve" && app.source === "indexed" && pending?.manifest) {
-    const m = validateManifest(pending.manifest);
-    Object.assign(patch, {
-      name: m.name,
-      icon_url: m.iconUrl || null,
-      home_url: m.homeUrl,
-      description: m.description || null,
-      category: m.category,
-      tags: m.tags,
-      screenshots: m.screenshots,
-      permissions: m.permissions,
-      primary_color: m.primaryColor,
-    });
+    const fields = manifestStoreFields(validateManifest(pending.manifest));
+    Object.assign(patch, fields, bindingPatch(app, fields));
   }
-  const { data: final, error: finErr } = await supabase
-    .from("mini_apps")
-    .update(patch)
-    .eq("id", id)
-    .select("*")
-    .single();
+  const { data: final, error: finErr } = await withIdentityColumnFallback<MiniAppRow>(patch, (p) =>
+    supabase.from("mini_apps").update(p).eq("id", id).select("*").single(),
+  );
   if (finErr) throw new MiniAppError("internal", finErr.message);
   return final as MiniAppRow;
 }
@@ -426,6 +444,46 @@ export async function setRewardBudget(id: string, budget: number): Promise<MiniA
     .single();
   if (error) throw new MiniAppError("internal", error.message);
   return data as MiniAppRow;
+}
+
+/**
+ * Admin: grant a mini app's gas budget for sponsored calls (input in xDAI, stored in wei).
+ * Needs the contracts migration (20261117mb); before it the update fails with a clear message.
+ */
+export async function setGasBudget(id: string, budgetXdai: string): Promise<MiniAppRow> {
+  const wei = xdaiToWei(budgetXdai);
+  const { data, error } = await db()
+    .from("mini_apps")
+    .update({ gas_budget_wei: wei.toString(), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") {
+      throw new MiniAppError("internal", "Gas-Budget braucht die Migration 20261117mb_mini_app_contracts_gas.sql.");
+    }
+    throw new MiniAppError("internal", error.message);
+  }
+  return data as MiniAppRow;
+}
+
+/**
+ * Sponsor route: the call rules and granted gas budget of a LIVE version-2 app with
+ * declared contracts, else null (also null before the contracts migration).
+ */
+export async function getSponsorableMiniApp(
+  id: string,
+): Promise<{ rules: CallRule[]; gasBudgetWei: bigint } | null> {
+  const { data, error } = await db()
+    .from("mini_apps")
+    .select("id, status, manifest_version, contracts, gas_budget_wei")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") return null;
+    throw new MiniAppError("internal", error.message);
+  }
+  return data ? sponsorRules(data as Parameters<typeof sponsorRules>[0]) : null;
 }
 
 export async function toggleFeatured(id: string, featured: boolean): Promise<MiniAppRow> {
@@ -916,4 +974,39 @@ export async function queryAppRankings(windowDays = 7): Promise<AppRankings> {
     .sort((x, y) => y.users - x.users || y.opens - x.opens || x.name.localeCompare(y.name));
 
   return { apps: rows, windowDays, generatedAt: now };
+}
+
+// ── Org binding ─────────────────────────────────────────────────────────────
+
+/**
+ * Live or pending apps that name `accountId` as their org and have a binding to decide or
+ * already decided. Only the columns the org's screen shows — never a developer wallet.
+ */
+export async function listOrgBindingApps(
+  accountId: string,
+): Promise<{ id: string; slug: string; name: string; icon_url: string | null; org_binding: string }[]> {
+  const { data, error } = await db()
+    .from("mini_apps")
+    .select("id, slug, name, icon_url, org_binding")
+    .eq("org_account_id", accountId)
+    .in("status", ["live", "pending"])
+    .neq("org_binding", "none")
+    .order("created_at", { ascending: false });
+  if (error) throw new MiniAppError("internal", error.message);
+  return (data ?? []) as { id: string; slug: string; name: string; icon_url: string | null; org_binding: string }[];
+}
+
+/** Record the org's decision; `by` is the role that decided ("owner" / "admin"), never a wallet. */
+export async function setOrgBinding(id: string, binding: OrgBinding, by: string): Promise<void> {
+  const { error } = await db()
+    .from("mini_apps")
+    .update({ org_binding: binding, org_binding_decided_at: new Date().toISOString(), org_binding_decided_by: by })
+    .eq("id", id);
+  if (error) throw new MiniAppError("internal", error.message);
+}
+
+/** An account's display name (orgs are public), or null. */
+export async function getAccountName(accountId: string): Promise<string | null> {
+  const { data } = await db().from("accounts").select("name").eq("id", accountId).maybeSingle();
+  return ((data as { name?: string | null } | null)?.name ?? null) || null;
 }

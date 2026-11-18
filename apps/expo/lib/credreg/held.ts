@@ -234,6 +234,8 @@ type DirectoryEntry = {
   name: string;
   imageUrl: string | null;
   orgName: string | null;
+  /** The issuing org's account id (sent by the directory; absent on older nodes). */
+  orgAccountId?: string | null;
   recognised: boolean;
 };
 
@@ -268,6 +270,20 @@ async function publicDirectory(): Promise<DirectoryEntry[] | null> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * The public type directory (cached, the same request `loadPublicHeld` makes): which org issues
+ * which type. Unsigned and the same for everyone, so reading it says nothing about the person.
+ * null when it cannot be loaded.
+ */
+export async function loadTypeDirectory(): Promise<{ typeId: string; orgAccountId: string | null }[] | null> {
+  const entries = await publicDirectory();
+  if (!entries) return null;
+  return entries.map((t) => ({
+    typeId: t.typeId,
+    orgAccountId: typeof t.orgAccountId === 'string' && t.orgAccountId ? t.orgAccountId : null,
+  }));
 }
 
 /**

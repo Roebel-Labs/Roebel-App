@@ -5,7 +5,7 @@ import { client } from "@/constants/thirdweb";
 export const gnosis = defineChain(100);
 
 // Pinned to a reliable public Gnosis RPC; override via env for staging/prod.
-const GNOSIS_READ_RPC =
+export const GNOSIS_READ_RPC =
 	process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || "https://rpc.gnosischain.com";
 export const gnosisRead = defineChain({ ...gnosis, rpc: GNOSIS_READ_RPC });
 

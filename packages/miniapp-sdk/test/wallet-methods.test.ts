@@ -39,3 +39,25 @@ test('matching is exact (case and prefix)', () => {
   assert.equal(classifyWalletMethod('eth_sign '), 'unsupported');
   assert.equal(classifyWalletMethod('eth_signTypedData_v5'), 'unsupported');
 });
+
+test('the proxied reads are reads, wallet_sendCalls is a signing method', () => {
+  for (const m of [
+    'eth_call',
+    'eth_getBalance',
+    'eth_getLogs',
+    'eth_getTransactionReceipt',
+    'eth_getTransactionByHash',
+    'eth_blockNumber',
+    'eth_estimateGas',
+    'eth_gasPrice',
+    'eth_maxPriorityFeePerGas',
+    'eth_getCode',
+    'eth_getTransactionCount',
+    'eth_getBlockByNumber',
+    'wallet_getCapabilities',
+    'wallet_getCallsStatus',
+  ])
+    assert.equal(classifyWalletMethod(m), 'read', m);
+  assert.equal(classifyWalletMethod('wallet_sendCalls'), 'sign');
+  assert.equal(classifyWalletMethod('eth_sendRawTransaction'), 'unsupported');
+});

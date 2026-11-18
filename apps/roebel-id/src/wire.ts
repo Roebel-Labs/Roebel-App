@@ -12,6 +12,8 @@ import { makeSupabaseAdapterFactory } from './store/supabase-adapter.js'
 import { buildProvider } from './oidc/provider.js'
 import { createInteractionRouter } from './interaction/router.js'
 import { createApp } from './app.js'
+import { loadJwks } from './oidc/jwks.js'
+import { createMiniAppTokenRouter } from './miniapp/token-router.js'
 
 export interface WireOverrides {
   bridge?: AuthBridge
@@ -47,7 +49,12 @@ export function wireApp(config: Config = loadConfig(), overrides: WireOverrides 
 
   // Interaction routes must be mounted before provider.callback() so panva's catch-all OIDC
   // routes never shadow /interaction/*.
-  const app = createApp({ provider, interactionRouter, relyingParties: config.relyingParties })
+  const miniappTokenRouter = createMiniAppTokenRouter({
+    issuer: config.issuer,
+    secret: config.miniappIssuerSecret,
+    jwks: loadJwks(),
+  })
+  const app = createApp({ provider, interactionRouter, relyingParties: config.relyingParties, miniappTokenRouter })
 
   return { app, provider, bridge }
 }

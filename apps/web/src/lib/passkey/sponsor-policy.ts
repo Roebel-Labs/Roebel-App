@@ -46,6 +46,21 @@
  *     >= 1 admin remains. Every other isAdmin != 1 request (inside execute, in a
  *     batch, removing the sender, without guardians) is rejected. Budget key =
  *     legacy.
+ *  F. miniapp (the request names `miniApp`, a reviewed version-2 mini app with
+ *     declared contracts; the route passes its call rules in ctx.miniApp): EVERY
+ *     call of the op is a declared contract + function of that app
+ *     (findDeclaredCall, shared with the hosts' confirm sheet), value 0. Identity =
+ *     the sender Safe (direct calls) or `legacy` (calls wrapped in legacy.execute /
+ *     executeBatch; `legacy` a thirdweb Account proxy and isAdmin(legacy, sender)).
+ *     One undeclared call refuses the whole op, including calls every other mode
+ *     would accept (everyday, guardian management, recovery, handover, detach):
+ *     no mixing. A declared target equal to the sender, `legacy` or any
+ *     MINIAPP_FORBIDDEN_TARGETS address (Röbel's own contracts and the account
+ *     infrastructure) is refused even if the rules carry it. No citizen
+ *     requirement (guests too; the exposure is bounded by the app's gas budget,
+ *     charged by the route to the mini-app counters, never the everyday budget).
+ *     A deploy op is allowed under the factory check. Budget key = the identity.
+ *     Without ctx.miniApp an op is evaluated exactly as in modes A-E.
  *  C. recovery (no `legacy`): the op helps recover `wallet`, a citizen identity
  *     (citizen(wallet), or `recoveryLegacy` is a citizen thirdweb account with
  *     isAdmin(recoveryLegacy, wallet)) that has at least one guardian.
@@ -145,8 +160,10 @@ import {
   recoverTypedDataAddress,
   sliceHex,
   size,
+  zeroAddress,
   type Hex,
 } from "viem";
+import { findDeclaredCall, type CallRule } from "@netizen-labs/miniapp-sdk/host";
 import {
   FALLBACK_HANDLER_SLOT,
   PASSKEY_SAFE,
@@ -158,7 +175,14 @@ import {
   safeFactoryData,
 } from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
-import { classifyEverydayCall, type EverydayTier, type EverydayVerdict } from "./everyday-allowlist";
+import {
+  EVERYDAY_CONTRACTS,
+  ORG_SAFE,
+  classifyEverydayCall,
+  credentialRegistryAddress,
+  type EverydayTier,
+  type EverydayVerdict,
+} from "./everyday-allowlist";
 
 export const ADDRESSES = {
   safe4337Module: PASSKEY_SAFE.safe4337Module,
@@ -175,6 +199,33 @@ export const ADDRESSES = {
 
 /** CitizenNFTv2 on Gnosis (ERC-721, `hasCitizenNFT` mapping). */
 export const CITIZEN_NFT: Hex = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+
+/**
+ * Addresses a mini app may never have sponsored calls to (mode F), lowercased: Röbel's
+ * everyday contracts, the org-Safe infrastructure, every account-infrastructure address
+ * (ADDRESSES, PASSKEY_SAFE), CitizenNFTv2 and the zero address. The manifest validator
+ * (miniapp/contracts.ts, FORBIDDEN_CONTRACTS) uses this same list.
+ */
+export const MINIAPP_FORBIDDEN_TARGETS: readonly Hex[] = Array.from(
+  new Set(
+    [
+      ...Object.values(EVERYDAY_CONTRACTS),
+      ...(Object.values(ORG_SAFE) as Array<string | number>).filter((v): v is Hex => typeof v === "string"),
+      ...Object.values(ADDRESSES),
+      ...Object.values(PASSKEY_SAFE),
+      CITIZEN_NFT,
+      zeroAddress,
+    ].map((a) => a.toLowerCase() as Hex),
+  ),
+);
+
+/** A forbidden mini-app target, including the configured CredentialRegistry. */
+export function isMiniAppForbiddenTarget(address: string): boolean {
+  const a = address.toLowerCase();
+  if (MINIAPP_FORBIDDEN_TARGETS.includes(a as Hex)) return true;
+  const registry = credentialRegistryAddress();
+  return registry !== null && registry.toLowerCase() === a;
+}
 
 /** EIP-1167 minimal proxy to the thirdweb Account impl. Verified 2026-09-26
  * against live accounts from AccountFactory 0x85e2…DF00 getAccounts(0,3). */
@@ -232,9 +283,11 @@ export interface SponsorContext {
   v3?: V3Config;
   /** Everyday mode: the MACI poll id whose Poll the op votes in (MACI.polls(pollId) must equal the target). */
   pollId?: bigint;
+  /** Mode F: the mini app the request names and its declared call rules (live, version 2). */
+  miniApp?: { id: string; rules: CallRule[] };
 }
 
-export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach";
+export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach" | "miniapp";
 
 /** Detach (mode E) needs this many guardians AND this threshold on the sender Safe. */
 export const DETACH_MIN_GUARDIANS = 2n;
@@ -248,6 +301,8 @@ export type PolicyResult =
       tier?: EverydayTier;
       /** Set whenever the budget identity is a non-citizen passkey Safe (a guest): guest budget applies. */
       guest?: true;
+      /** miniapp mode only: the mini app whose gas budget pays. */
+      miniAppId?: string;
     }
   | { ok: false; reason: string };
 
@@ -415,6 +470,19 @@ interface ScanState {
   calls: number;
   /** Detach requests (isAdmin 2) submitted directly to `legacy` (mode E). */
   detaches: Array<{ req: SignerPermissionRequest; signature: Hex }>;
+  /** Mode F: set when the request names a mini app; every call must be one of its rules. */
+  miniApp?: { id: string; rules: CallRule[] };
+}
+
+/** Mode F: one call (direct, or nested in legacy.execute / executeBatch) must be declared. */
+function checkMiniAppCall(to: Hex, value: bigint, data: Hex, st: ScanState): Check {
+  if (value !== 0n) return deny("mini-app call value must be 0");
+  if (isAddressEqual(to, st.sender)) return deny("a mini app may not call the sender account itself");
+  if (st.legacy && isAddressEqual(to, st.legacy)) return deny("a mini app may not call the legacy account itself");
+  if (isMiniAppForbiddenTarget(to)) return deny("a mini app may not call Röbel's own contracts or the account infrastructure");
+  const match = findDeclaredCall(st.miniApp?.rules ?? [], to, data);
+  if (!match) return deny("call is not a declared contract function of this mini app");
+  return PASS;
 }
 
 function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): Check {
@@ -467,6 +535,7 @@ function recordEveryday(v: EverydayVerdict, st: ScanState): Check {
  * SRM.confirmRecovery (the legacy account is a guardian); an everyday
  * allowlisted action (everyday-allowlist.ts). Everything else is refused. */
 function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanState): Check {
+  if (st.miniApp) return checkMiniAppCall(target, value, data, st);
   if (size(data) >= 4) {
     const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
     if (perm?.functionName === "setPermissionsForSigner") {
@@ -555,6 +624,30 @@ function checkSrmCall(data: Hex, st: ScanState): Check {
 function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
   st.calls += 1;
   if (size(data) < 4) return deny("call without a function selector");
+
+  if (st.miniApp) {
+    if (!st.legacy) return checkMiniAppCall(to, 0n, data, st);
+    // Legacy identity: only legacy.execute / executeBatch on the request's legacy, every inner call declared.
+    if (!isAddressEqual(to, st.legacy)) return deny("with a legacy identity, mini-app calls must go through legacy.execute");
+    const d = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
+    if (d?.functionName === "execute") {
+      const r = checkMiniAppCall(d.args[0], d.args[1], d.args[2], st);
+      if (!r.ok) return r;
+    } else if (d?.functionName === "executeBatch") {
+      const [targets, values, datas] = d.args;
+      if (targets.length === 0 || targets.length !== values.length || targets.length !== datas.length) {
+        return deny("executeBatch array length mismatch");
+      }
+      for (let i = 0; i < datas.length; i++) {
+        const r = checkMiniAppCall(targets[i], values[i], datas[i], st);
+        if (!r.ok) return r;
+      }
+    } else {
+      return deny("in miniapp mode only legacy.execute / executeBatch may reach the legacy account");
+    }
+    st.executeNeedsAdmin = true;
+    return PASS;
+  }
 
   if (isAddressEqual(to, ADDRESSES.socialRecoveryModule)) return checkSrmCall(data, st);
 
@@ -1124,6 +1217,30 @@ function forEachCall(callData: Hex, visit: (to: Hex, data: Hex) => void): void {
   for (const tx of decodeMultiSendPacked(ms.args[0]) ?? []) visit(tx.to, tx.data);
 }
 
+/** Mode F: every call was declared (structural pass); bind the sender to the identity. */
+async function evaluateMiniAppMode(
+  op: SponsorUserOp,
+  ctx: SponsorContext,
+  app: { id: string; rules: CallRule[] },
+  st: ScanState,
+  chain: ChainReader,
+): Promise<PolicyResult> {
+  if (st.calls === 0) return deny("a mini-app op needs at least one call");
+  const legacy = ctx.legacy;
+  if (legacy) {
+    const code = await read(() => chain.getCode(legacy));
+    if (!isLegacyProxyCode(code)) return deny(`${legacy} is not a legacy thirdweb account`);
+    const sender = await checkSender(op, ctx, chain);
+    if (!sender.ok) return sender;
+    const isAdmin = await read(() => chain.isAdmin(legacy, op.sender));
+    if (isAdmin !== true) return deny(`sender is not an admin of ${legacy}`);
+    return { ok: true, mode: "miniapp", budgetKey: legacy, miniAppId: app.id };
+  }
+  const sender = await checkSender(op, ctx, chain);
+  if (!sender.ok) return sender;
+  return { ok: true, mode: "miniapp", budgetKey: op.sender, miniAppId: app.id };
+}
+
 /**
  * Resolves to { ok, mode, budgetKey } or { ok: false, reason }. Throws
  * ChainReadError when a chain read fails - the caller must treat that as
@@ -1171,9 +1288,12 @@ export async function evaluateSponsorPolicy(
     createdSafes: [],
     calls: 0,
     detaches: [],
+    miniApp: ctx.miniApp,
   };
   const structural = checkCallData(op.callData, st);
   if (!structural.ok) return structural;
+  // Mode F is decided by the request alone: no other mode is ever tried for it.
+  if (ctx.miniApp) return evaluateMiniAppMode(op, ctx, ctx.miniApp, st, chain);
   if (st.identityOnly && st.recoveryOnly) return deny("identity calls and recovery calls cannot be mixed in one op");
   if (st.detaches.length > 0 && !ctx.legacy) return deny("a detach must name its legacy account");
 
@@ -1267,7 +1387,8 @@ function word32(obj: Record<string, unknown>, key: string): Hex {
 }
 
 /**
- * The full request body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?, pollId? }.
+ * The full request body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?, pollId?, miniApp? }.
+ * `miniApp` is a mini app's uuid (returned lowercased); anything else is refused.
  * Exactly one sender proof: the passkey key (both x and y) or the expert path's `ecdsaOwner`.
  * Throws on malformed input, on both proofs and on neither (the route answers 400).
  */
@@ -1280,6 +1401,7 @@ export function parseSponsorRequest(input: unknown): {
   legacy?: Hex;
   recoveryLegacy?: Hex;
   pollId?: bigint;
+  miniApp?: string;
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
@@ -1296,7 +1418,15 @@ export function parseSponsorRequest(input: unknown): {
     legacy: optionalAddress(o, "legacy"),
     recoveryLegacy: optionalAddress(o, "recoveryLegacy"),
     pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),
+    ...(present("miniApp") ? { miniApp: miniAppId(o.miniApp) } : {}),
   };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function miniAppId(v: unknown): string {
+  if (typeof v !== "string" || !UUID.test(v)) throw new Error("miniApp must be a mini app id (uuid)");
+  return v.toLowerCase();
 }
 
 /** Packs the RPC-shaped op into the fields `hashStableFields` covers. */

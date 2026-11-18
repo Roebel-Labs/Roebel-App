@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { grantReward } from "@/lib/miniapp";
 import { getApp } from "@/lib/miniapp/data";
-import { HOST_HEADER, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
+import { HOST_HEADER, forRuntimeUser, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
 import { MiniAppError } from "@/lib/miniapp/types";
 import { requireAdmin, jsonError, getParam } from "@/lib/miniapp/http";
 
@@ -40,7 +40,8 @@ export async function POST(req: Request) {
       idempotencyKey: String(body.idempotencyKey ?? ""),
       wallet: user.wallet,
     });
-    return NextResponse.json(outcome);
+    // A version-2 app without the address grant never sees the tx hash (it names the wallet).
+    return NextResponse.json(forRuntimeUser(outcome, user));
   } catch (e) {
     return jsonError(e);
   }
