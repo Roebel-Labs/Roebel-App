@@ -7,6 +7,7 @@
 // The AI-builder agent (D) imports from here — keep the exports stable.
 import type {
   DeclaredContract,
+  MiniAppAudience,
   MiniAppCategory,
   MiniAppIdentityRequest,
   MiniAppManifest,
@@ -15,6 +16,7 @@ import type {
 } from "@netizen-labs/miniapp-sdk";
 
 export type {
+  MiniAppAudience,
   MiniAppCategory,
   MiniAppManifest,
   MiniAppPermission,
@@ -74,6 +76,15 @@ export interface MiniAppRow {
   gas_budget_wei?: string | number;
   /** Gas reserved so far against that budget (wei). */
   gas_spent_wei?: string | number;
+  /** Version-2 `audience`; absent until the audience/org migration is applied. */
+  audience?: MiniAppAudience | null;
+  /** The org the manifest names (accounts.id); shown only once `org_binding` is 'confirmed'. */
+  org_account_id?: string | null;
+  /** Whether the org confirmed the claim; absent until the audience/org migration is applied. */
+  org_binding?: "none" | "requested" | "confirmed" | "rejected";
+  org_binding_decided_at?: string | null;
+  /** The role that decided ("owner" / "admin"), never a wallet. */
+  org_binding_decided_by?: string | null;
 }
 
 export interface MiniAppVersionRow {

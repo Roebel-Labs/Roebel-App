@@ -4,6 +4,7 @@
 // call `validateManifest` before persisting.
 import type {
   CredentialRequest,
+  MiniAppAudience,
   MiniAppCategory,
   MiniAppIdentityRequest,
   MiniAppManifest,
@@ -115,6 +116,58 @@ function validateIdentity(input: unknown): MiniAppIdentityRequest {
   return { profile, address, credentials };
 }
 
+const AUDIENCE_KEYS = ["mode", "anyOf"] as const;
+const AUDIENCE_MODES = ["required", "recommended"] as const;
+const MAX_AUDIENCE_REFS = 8;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A parsed credential reference back in its canonical (lowercased) string form. */
+function canonicalRef(s: unknown): string | null {
+  if (typeof s !== "string") return null;
+  const p = parseCredentialRef(s);
+  if (!p) return null;
+  if (p.kind === "builtin") return p.name;
+  if (p.kind === "type") return `type:${p.typeId}`;
+  return `org:${p.org}`;
+}
+
+function validateAudience(input: unknown): MiniAppAudience {
+  if (!isPlainObject(input)) fail("audience muss ein Objekt mit mode und anyOf sein.");
+  for (const key of Object.keys(input)) {
+    if (!(AUDIENCE_KEYS as readonly string[]).includes(key)) {
+      fail(`audience.${key} ist unbekannt (erlaubt: ${AUDIENCE_KEYS.join(", ")}).`);
+    }
+  }
+  const mode = input.mode;
+  if (typeof mode !== "string" || !(AUDIENCE_MODES as readonly string[]).includes(mode)) {
+    fail(`audience.mode muss einer von: ${AUDIENCE_MODES.join(", ")} sein.`);
+  }
+  const raw = input.anyOf;
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_AUDIENCE_REFS) {
+    fail(`audience.anyOf muss eine Liste mit 1–${MAX_AUDIENCE_REFS} Nachweisen sein.`);
+  }
+  const anyOf: string[] = [];
+  raw.forEach((entry, i) => {
+    const ref = canonicalRef(entry);
+    if (!ref) {
+      fail(
+        `audience.anyOf[${i}] "${String(entry)}" ist unbekannt ` +
+          "(erlaubt: citizen, attester, guest, type:0x…, org:<Konto-ID>).",
+      );
+    }
+    if (anyOf.includes(ref)) fail(`audience.anyOf: "${ref}" ist doppelt.`);
+    anyOf.push(ref);
+  });
+  return { mode: mode as MiniAppAudience["mode"], anyOf };
+}
+
+function validateOrg(input: unknown): string {
+  if (typeof input !== "string" || !UUID_RE.test(input.trim())) {
+    fail("org muss die Konto-ID des Vereins sein (eine UUID, wie in /account/<id>).");
+  }
+  return input.trim().toLowerCase();
+}
+
 /**
  * Validate + normalize a manifest. Throws MiniAppError('invalid_params') with a
  * German-friendly message on the first problem found.
@@ -133,6 +186,12 @@ export function validateManifest(input: unknown): MiniAppManifest {
   const hasContracts = m.contracts !== undefined && m.contracts !== null;
   if (version === "1" && hasContracts) fail('contracts braucht miniapp.version "2".');
   const contracts = version === "2" && hasContracts ? validateContracts(m.contracts) : undefined;
+  const hasAudience = m.audience !== undefined && m.audience !== null;
+  if (version === "1" && hasAudience) fail('audience braucht miniapp.version "2".');
+  const audience = version === "2" && hasAudience ? validateAudience(m.audience) : undefined;
+  const hasOrg = m.org !== undefined && m.org !== null;
+  if (version === "1" && hasOrg) fail('org braucht miniapp.version "2".');
+  const org = version === "2" && hasOrg ? validateOrg(m.org) : undefined;
 
   const slug = String(m.slug ?? "").trim().toLowerCase();
   if (!SLUG_RE.test(slug)) {
@@ -202,7 +261,13 @@ export function validateManifest(input: unknown): MiniAppManifest {
     // Version 1 output stays byte-identical to before (no version/identity keys): the
     // indexer hashes it, and a new key would flag every live app for re-review.
     ...(version === "2"
-      ? { version: "2" as const, ...(identity ? { identity } : {}), ...(contracts ? { contracts } : {}) }
+      ? {
+          version: "2" as const,
+          ...(identity ? { identity } : {}),
+          ...(contracts ? { contracts } : {}),
+          ...(audience ? { audience } : {}),
+          ...(org ? { org } : {}),
+        }
       : {}),
   };
 }
@@ -210,7 +275,9 @@ export function validateManifest(input: unknown): MiniAppManifest {
 /**
  * The `mini_apps` column patch for a validated manifest — used by every write path.
  * `manifest_version` and `identity` are the version-2 columns (identity null for version 1);
- * `contracts` is always a list (empty for version 1 or no declaration).
+ * `contracts` is always a list (empty for version 1 or no declaration); `audience` and
+ * `org_account_id` are null unless a version-2 manifest declares them. The org binding
+ * status is not part of this patch (see orgBinding.ts).
  */
 export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown> {
   const version: ManifestVersion = m.version === "2" ? "2" : "1";
@@ -227,13 +294,17 @@ export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown>
     manifest_version: version,
     identity: version === "2" ? (m.identity ?? null) : null,
     contracts: version === "2" ? (m.contracts ?? []) : [],
+    audience: version === "2" ? (m.audience ?? null) : null,
+    org_account_id: version === "2" ? (m.org ?? null) : null,
   };
 }
 
 const IDENTITY_COLUMNS = ["manifest_version", "identity"] as const;
 /** Added by 20261117mb_mini_app_contracts_gas.sql (after the identity migration). */
 const CONTRACTS_COLUMNS = ["contracts"] as const;
-const NEW_COLUMNS = [...IDENTITY_COLUMNS, ...CONTRACTS_COLUMNS] as const;
+/** Added by 20261117mc_mini_app_audience_org.sql (after the contracts migration). */
+const AUDIENCE_COLUMNS = ["audience", "org_account_id"] as const;
+const NEW_COLUMNS = [...IDENTITY_COLUMNS, ...CONTRACTS_COLUMNS, ...AUDIENCE_COLUMNS] as const;
 
 /**
  * True when a mini_apps write failed only because the identity migration
@@ -250,9 +321,10 @@ export function isMissingIdentityColumnError(
 
 /**
  * Which new columns to drop after a failed write: none unless the error is an unknown
- * column (PGRST204 / 42703) naming one of them. A missing identity column means neither
- * migration is applied (drop all three); a missing `contracts` column only the contracts
- * migration (drop just that one, keep the identity columns).
+ * column (PGRST204 / 42703) naming one of them. The migrations apply in order (identity →
+ * contracts → audience/org), so a missing identity column means none is applied (drop all);
+ * a missing `contracts` column drops just that one (a following retry finds the audience
+ * columns if they are missing too); a missing `audience` / `org_account_id` column only those.
  */
 export function missingNewColumns(
   err: { code?: string | null; message?: string | null } | null | undefined,
@@ -261,6 +333,7 @@ export function missingNewColumns(
   const msg = err.message ?? "";
   if (IDENTITY_COLUMNS.some((c) => msg.includes(c))) return [...NEW_COLUMNS];
   if (CONTRACTS_COLUMNS.some((c) => msg.includes(c))) return [...CONTRACTS_COLUMNS];
+  if (AUDIENCE_COLUMNS.some((c) => msg.includes(c))) return [...AUDIENCE_COLUMNS];
   return [];
 }
 
@@ -271,7 +344,7 @@ export function withoutColumns<T extends Record<string, unknown>>(patch: T, colu
   return out;
 }
 
-/** The same patch without the new columns (identity + contracts), for the pre-migration retry. */
+/** The same patch without the new columns (identity + contracts + audience/org), for the pre-migration retry. */
 export function withoutIdentityColumns<T extends Record<string, unknown>>(patch: T): Record<string, unknown> {
   return withoutColumns(patch, NEW_COLUMNS);
 }

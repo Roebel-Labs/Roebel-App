@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   CredentialRequest,
   DeclaredContract,
+  MiniAppAudience,
   MiniAppCategory,
   MiniAppIdentityRequest,
   MiniAppPermission,
@@ -47,6 +48,12 @@ export interface MiniApp {
   identity: MiniAppIdentityRequest | null;
   /** The version-2 `contracts` declaration (labels for the confirm sheet); [] for version 1. */
   contracts: DeclaredContract[];
+  /** The version-2 `audience` (matched on the device); null when absent or version 1. */
+  audience: MiniAppAudience | null;
+  /** The org's account id — only when the org confirmed the binding, else null. */
+  orgAccountId: string | null;
+  /** The confirmed org's name; null unless the binding is confirmed. */
+  orgName: string | null;
 }
 
 /** Raw shape of a `mini_apps` row (only the columns we select). */
@@ -71,6 +78,12 @@ interface MiniAppRow {
   identity?: unknown;
   /** Absent until the contracts migration is applied. */
   contracts?: unknown;
+  /** Absent until the audience/org migration is applied. */
+  audience?: unknown;
+  org_account_id?: string | null;
+  org_binding?: string | null;
+  /** The org's account, embedded through `mini_apps_org_account_id_fkey`. */
+  accounts?: { name: string | null } | { name: string | null }[] | null;
   developers?: { display_name: string | null } | { display_name: string | null }[] | null;
 }
 
@@ -151,8 +164,30 @@ function coerceContracts(raw: unknown): DeclaredContract[] {
     }));
 }
 
+const AUDIENCE_MODES = ['required', 'recommended'] as const;
+
+function coerceAudience(raw: unknown): MiniAppAudience | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (!(AUDIENCE_MODES as readonly unknown[]).includes(r.mode)) return null;
+  if (!Array.isArray(r.anyOf)) return null;
+  const anyOf = r.anyOf.filter((x): x is string => typeof x === 'string');
+  if (anyOf.length === 0) return null;
+  return { mode: r.mode as MiniAppAudience['mode'], anyOf };
+}
+
+/** The org only counts once it confirmed the claim (Review Focus 3). */
+function confirmedOrg(row: MiniAppRow): { orgAccountId: string | null; orgName: string | null } {
+  if (row.org_binding !== 'confirmed' || typeof row.org_account_id !== 'string' || !row.org_account_id) {
+    return { orgAccountId: null, orgName: null };
+  }
+  const acc = Array.isArray(row.accounts) ? row.accounts[0] : row.accounts;
+  return { orgAccountId: row.org_account_id.toLowerCase(), orgName: acc?.name ?? null };
+}
+
 export function mapMiniAppRow(row: MiniAppRow): MiniApp {
   const manifestVersion: 1 | 2 = row.manifest_version === '2' ? 2 : 1;
+  const { orgAccountId, orgName } = confirmedOrg(row);
   return {
     id: row.id,
     slug: row.slug,
@@ -172,19 +207,27 @@ export function mapMiniAppRow(row: MiniAppRow): MiniApp {
     manifestVersion,
     identity: manifestVersion === 2 ? coerceIdentity(row.identity) : null,
     contracts: manifestVersion === 2 ? coerceContracts(row.contracts) : [],
+    audience: manifestVersion === 2 ? coerceAudience(row.audience) : null,
+    orgAccountId,
+    orgName,
   };
 }
 
 const LEGACY_SELECT_COLUMNS =
   'id, slug, name, icon_url, home_url, description, category, tags, screenshots, permissions, primary_color, featured, feature_image_url, created_at, status, developers(display_name)';
 const IDENTITY_SELECT_COLUMNS = `${LEGACY_SELECT_COLUMNS}, manifest_version, identity`;
-const SELECT_COLUMNS = `${IDENTITY_SELECT_COLUMNS}, contracts`;
-/** Tried in order while a column is missing (contracts migration, then identity migration). */
-const SELECT_FALLBACKS = [SELECT_COLUMNS, IDENTITY_SELECT_COLUMNS, LEGACY_SELECT_COLUMNS];
+const CONTRACTS_SELECT_COLUMNS = `${IDENTITY_SELECT_COLUMNS}, contracts`;
+/** The org name is embedded through the named FK (an unhinted embed could hit PGRST201). */
+const SELECT_COLUMNS = `${CONTRACTS_SELECT_COLUMNS}, audience, org_account_id, org_binding, accounts!mini_apps_org_account_id_fkey(name)`;
+/** Tried in order while a column is missing (audience/org, contracts, then identity migration). */
+const SELECT_FALLBACKS = [SELECT_COLUMNS, CONTRACTS_SELECT_COLUMNS, IDENTITY_SELECT_COLUMNS, LEGACY_SELECT_COLUMNS];
 
-/** PostgREST "column does not exist": a migration is not applied yet. */
+/**
+ * A migration is not applied yet: Postgres "column does not exist" (42703), or PostgREST
+ * not finding the `mini_apps_org_account_id_fkey` relationship for the embed (PGRST200).
+ */
 function isMissingColumn(error: { code?: string } | null): boolean {
-  return error?.code === '42703';
+  return error?.code === '42703' || error?.code === 'PGRST200';
 }
 
 type SelectResult = { data: unknown; error: { code?: string; message: string } | null };

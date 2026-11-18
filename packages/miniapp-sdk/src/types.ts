@@ -214,6 +214,21 @@ export interface MiniAppManifest {
   identity?: MiniAppIdentityRequest;
   /** Version "2" only: contracts the app calls; reviewed, then sponsored (gasless). */
   contracts?: DeclaredContract[];
+  /** Version "2" only: whom the app is for (matched on the device against held credentials). */
+  audience?: MiniAppAudience;
+  /** Version "2" only: the org's account id (uuid, as in its page address `/account/<id>`); the org confirms. */
+  org?: string;
+}
+
+/**
+ * The `audience` section of a version-2 manifest. `required` locks the app for everyone who
+ * holds none of `anyOf` (a courtesy on the device, not security: check on your server);
+ * `recommended` only suggests it to those who do.
+ */
+export interface MiniAppAudience {
+  mode: 'required' | 'recommended';
+  /** 1 to 8 credential references (`citizen`, `attester`, `guest`, `type:0x…`, `org:<uuid>`). */
+  anyOf: string[];
 }
 
 /** One contract a version-2 manifest declares, with the functions the app calls on it. */

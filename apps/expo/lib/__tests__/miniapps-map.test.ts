@@ -104,31 +104,94 @@ describe('mapMiniAppRow contracts', () => {
   });
 });
 
+describe('mapMiniAppRow audience and org', () => {
+  const ORG = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('exposes the org only when the binding is confirmed', () => {
+    const r = mapMiniAppRow({ ...row, manifest_version: '2', org_account_id: ORG, org_binding: 'requested', accounts: { name: 'PSV' } });
+    expect(r.orgAccountId).toBeNull();
+    expect(r.orgName).toBeNull();
+    const a = mapMiniAppRow({ ...row, manifest_version: '2', org_account_id: ORG, org_binding: 'confirmed', accounts: { name: 'PSV' } });
+    expect(a.orgAccountId).toBe(ORG);
+    expect(a.orgName).toBe('PSV');
+  });
+
+  it('a rejected binding hides the org too', () => {
+    const r = mapMiniAppRow({ ...row, manifest_version: '2', org_account_id: ORG, org_binding: 'rejected', accounts: [{ name: 'PSV' }] });
+    expect(r.orgAccountId).toBeNull();
+    expect(r.orgName).toBeNull();
+  });
+
+  it('maps a well-formed audience of a version-2 row', () => {
+    const a = mapMiniAppRow({ ...row, manifest_version: '2', audience: { mode: 'required', anyOf: ['citizen', `org:${ORG}`] } });
+    expect(a.audience).toEqual({ mode: 'required', anyOf: ['citizen', `org:${ORG}`] });
+  });
+
+  it('drops a malformed audience and any audience of a version-1 row', () => {
+    expect(mapMiniAppRow({ ...row, manifest_version: '2', audience: { mode: 'sometimes', anyOf: ['citizen'] } }).audience).toBeNull();
+    expect(mapMiniAppRow({ ...row, manifest_version: '2', audience: { mode: 'required', anyOf: [] } }).audience).toBeNull();
+    expect(mapMiniAppRow({ ...row, audience: { mode: 'required', anyOf: ['citizen'] } }).audience).toBeNull();
+  });
+
+  it('a row before the audience migration has no audience and no org', () => {
+    const a = mapMiniAppRow(row);
+    expect(a.audience).toBeNull();
+    expect(a.orgAccountId).toBeNull();
+    expect(a.orgName).toBeNull();
+  });
+});
+
 describe('selectWithColumnFallback', () => {
   const missing = { data: null, error: { code: '42703', message: 'column does not exist' } };
 
-  it('falls back from contracts to identity to the legacy columns', async () => {
+  it('asks for the audience, the binding and the org name through a named foreign key first', async () => {
+    const seen: string[] = [];
+    await selectWithColumnFallback(async (cols) => {
+      seen.push(cols);
+      return { data: [], error: null };
+    });
+    expect(seen[0]).toContain('audience');
+    expect(seen[0]).toContain('org_binding');
+    expect(seen[0]).toContain('accounts!mini_apps_org_account_id_fkey(name)');
+  });
+
+  it('drops only the audience columns when the relationship or a column is missing', async () => {
+    for (const err of [missing.error, { code: 'PGRST200', message: 'Could not find a relationship' }]) {
+      const seen: string[] = [];
+      await selectWithColumnFallback(async (cols) => {
+        seen.push(cols);
+        return seen.length < 2 ? { data: null, error: err } : { data: [], error: null };
+      });
+      expect(seen).toHaveLength(2);
+      expect(seen[1]).not.toContain('audience');
+      expect(seen[1]).not.toContain('accounts!');
+      expect(seen[1]).toContain('contracts');
+    }
+  });
+
+  it('falls back from audience to contracts to identity to the legacy columns', async () => {
     const seen: string[] = [];
     const res = await selectWithColumnFallback(async (cols) => {
       seen.push(cols);
-      return seen.length < 3 ? missing : { data: [], error: null };
+      return seen.length < 4 ? missing : { data: [], error: null };
     });
     expect(res.error).toBeNull();
-    expect(seen).toHaveLength(3);
-    expect(seen[0]).toContain('contracts');
-    expect(seen[1]).not.toContain('contracts');
-    expect(seen[1]).toContain('identity');
-    expect(seen[2]).not.toContain('identity');
+    expect(seen).toHaveLength(4);
+    expect(seen[0]).toContain('audience');
+    expect(seen[1]).toContain('contracts');
+    expect(seen[2]).not.toContain('contracts');
+    expect(seen[2]).toContain('identity');
+    expect(seen[3]).not.toContain('identity');
   });
 
   it('keeps the identity columns when only contracts is missing', async () => {
     const seen: string[] = [];
     await selectWithColumnFallback(async (cols) => {
       seen.push(cols);
-      return seen.length < 2 ? missing : { data: [], error: null };
+      return seen.length < 3 ? missing : { data: [], error: null };
     });
-    expect(seen).toHaveLength(2);
-    expect(seen[1]).toContain('manifest_version');
+    expect(seen).toHaveLength(3);
+    expect(seen[2]).toContain('manifest_version');
   });
 
   it('does not retry on other errors', async () => {

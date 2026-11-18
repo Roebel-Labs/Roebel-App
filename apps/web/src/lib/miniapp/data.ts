@@ -35,8 +35,9 @@ import {
 
 /**
  * Run a mini_apps insert/update whose patch includes the new manifest columns
- * (manifest_version, identity, contracts); if a migration is not applied yet, retry
- * without the missing columns (the app then reads as version 1 / without contracts).
+ * (manifest_version, identity, contracts, audience, org_account_id); if a migration is not
+ * applied yet, retry without the missing columns (the app then reads as version 1 / without
+ * contracts / without audience and org).
  */
 export async function withIdentityColumnFallback<T>(
   patch: Record<string, unknown>,
@@ -46,9 +47,10 @@ export async function withIdentityColumnFallback<T>(
 ): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
   let current = patch;
   let result = await run(current);
-  // At most two retries: first a missing `contracts` column (contracts migration not
-  // applied), then a missing identity column (neither migration applied).
-  for (let i = 0; i < 2; i++) {
+  // At most three retries: a missing audience/org column (audience migration not applied),
+  // a missing `contracts` column (contracts migration not applied), then a missing identity
+  // column (none applied).
+  for (let i = 0; i < 3; i++) {
     const drop = missingNewColumns(result.error).filter((c) => c in current);
     if (drop.length === 0) return result;
     current = withoutColumns(current, drop);

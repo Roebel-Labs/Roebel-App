@@ -43,6 +43,9 @@ function devApp(url: string): MiniApp {
     manifestVersion: 1,
     identity: null,
     contracts: [],
+    audience: null,
+    orgAccountId: null,
+    orgName: null,
   };
 }
 
