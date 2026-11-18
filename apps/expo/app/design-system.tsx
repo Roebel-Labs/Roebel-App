@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
@@ -13,6 +13,8 @@ import {
   ColorTokens,
 } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import StampCard from '@/components/credentials/StampCard';
+import StampMoment from '@/components/credentials/StampMoment';
 
 const THEME_LABELS: Record<ThemePreference, string> = {
   system: 'System',
@@ -280,13 +282,52 @@ export default function DesignSystemScreen() {
           </View>
         </DSSection>
 
+        {/* Stamps (credential register): play the moment with reduced motion on and off */}
+        <StampDemo colors={colors} />
+
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function StampDemo({ colors }: { colors: ColorTokens }) {
+  const [tone, setTone] = useState<'success' | 'warning' | null>(null);
+  return (
+    <DSSection title="STEMPEL" colors={colors}>
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+        {(['collected', 'pending', 'queued'] as const).map((state) => (
+          <View key={state} style={{ flex: 1 }}>
+            <StampCard imageUrl={null} title="Dabei: Sommerfest" subtitle="5.12.2026" state={state} size="tile" />
+          </View>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable onPress={() => setTone('success')} style={[styles.stampDemoButton, { backgroundColor: colors.primary }]}>
+          <Text style={{ color: colors.onPrimary, fontFamily: fontFamily.semiBold }}>Stempel abspielen</Text>
+        </Pressable>
+        <Pressable onPress={() => setTone('warning')} style={[styles.stampDemoButton, { borderColor: colors.border, borderWidth: 1 }]}>
+          <Text style={{ color: colors.textPrimary, fontFamily: fontFamily.semiBold }}>Hinweis-Zustand</Text>
+        </Pressable>
+      </View>
+      <Modal visible={tone !== null} animationType="fade" onRequestClose={() => setTone(null)}>
+        {tone ? (
+          <StampMoment
+            stamp={{ imageUrl: null, title: 'Dabei: Sommerfest', subtitle: '5. Dezember 2026', state: tone === 'success' ? 'pending' : 'collected', size: 'hero' }}
+            headline={tone === 'success' ? 'Abzeichen erhalten' : 'Schon gesammelt'}
+            lines={tone === 'success' ? ['Sommerfest', '5. Dezember 2026', 'Wird in dein Profil eingetragen.'] : []}
+            muenzen={tone === 'success' ? 5 : null}
+            tone={tone}
+            actions={[{ label: 'Schließen', kind: 'primary', onPress: () => setTone(null) }]}
+          />
+        ) : null}
+      </Modal>
+    </DSSection>
+  );
+}
+
 const styles = StyleSheet.create({
+  stampDemoButton: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   container: {
     flex: 1,
   },
