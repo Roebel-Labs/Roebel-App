@@ -26,6 +26,10 @@ import { getAccountRole, canEditEvents, AccountRole } from '@/lib/supabase-accou
 import { getViewCount } from '@/lib/supabase-event-views';
 import { getInterestCount } from '@/lib/supabase-interests';
 import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
+import EventBadgeSetupSection from '@/components/credentials/EventBadgeSetupSection';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import { fetchEventBadge, setupEventBadge } from '@/lib/credreg/api';
+import { badgeSetupPayload, SETUP_LABELS, type BadgeSetupForm } from '@/lib/credreg/event-page';
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,6 +61,33 @@ export default function EditEventScreen() {
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [ticketPrice, setTicketPrice] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  // "Abzeichen für Teilnehmende": owners/admins of the event's org with the credential gate open.
+  const credentialsGate = useCredentialsGate();
+  const badgeSectionVisible = credentialsGate === true && (role === 'owner' || role === 'admin');
+  const [badgeForm, setBadgeForm] = useState<BadgeSetupForm>({ enabled: false, name: '', artUrl: null, limit: '' });
+  const [badgeInitiallyOn, setBadgeInitiallyOn] = useState(false);
+  const [badgeLoaded, setBadgeLoaded] = useState(false);
+  useEffect(() => {
+    if (!badgeSectionVisible || !account || !id || badgeLoaded) return;
+    let alive = true;
+    void fetchEventBadge(account, id).then((r) => {
+      if (!alive || !r.ok) return;
+      setBadgeLoaded(true);
+      const b = r.data.badge;
+      if (!b) return;
+      setBadgeInitiallyOn(true);
+      setBadgeForm({
+        enabled: true,
+        name: b.name,
+        artUrl: b.imageUrl && b.imageUrl !== imageUrl ? b.imageUrl : null,
+        limit: b.supplyCap > 0 ? String(b.supplyCap) : '',
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [badgeSectionVisible, account, id, badgeLoaded, imageUrl]);
 
   useEffect(() => {
     async function load() {
@@ -129,6 +160,13 @@ export default function EditEventScreen() {
       return;
     }
 
+    const sendBadge = badgeSectionVisible && badgeLoaded && (badgeForm.enabled || badgeInitiallyOn);
+    const badge = badgeSetupPayload(badgeForm, { eventId: id, title, posterUrl: imageUrl });
+    if (sendBadge && !badge.ok) {
+      Alert.alert('Abzeichen', badge.message);
+      return;
+    }
+
     setSaving(true);
 
     const { error } = await supabase
@@ -151,19 +189,25 @@ export default function EditEventScreen() {
       })
       .eq('id', id);
 
-    setSaving(false);
-
     if (error) {
+      setSaving(false);
       Alert.alert('Fehler', 'Änderungen konnten nicht gespeichert werden.');
       return;
     }
+
+    // The badge goes in after the event itself was saved; a failure never fails the event.
+    if (sendBadge && badge.ok && account) {
+      const r = await setupEventBadge(account, badge.payload);
+      if (!r.ok) Alert.alert('Abzeichen', SETUP_LABELS.saveFailed);
+    }
+    setSaving(false);
 
     showSnackbar({
       message: 'Änderungen gespeichert — wird erneut geprüft',
       duration: 4000,
     });
     router.back();
-  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice]);
+  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice, badgeSectionVisible, badgeLoaded, badgeForm, badgeInitiallyOn, imageUrl, account]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -399,6 +443,10 @@ export default function EditEventScreen() {
               placeholderTextColor={colors.textTertiary}
             />
           </FormField>
+
+          {editable && badgeSectionVisible && badgeLoaded && (
+            <EventBadgeSetupSection value={badgeForm} onChange={setBadgeForm} eventTitle={title} posterUri={imageUrl} />
+          )}
 
           {/* Action buttons */}
           {editable && (

@@ -93,6 +93,15 @@ export const fetchEventBadge = (a: SigningAccount, eventId: string) => credApi<E
 export const prepareEventBadge = (a: SigningAccount, eventId: string) =>
   credApi<EventBadgePrepared>(a, 'org', 'event_badge_prepare', { eventId, client: 'app' });
 
+/** Create/edit toggle: stores (or retires) the event's draft badge; no chain step (event_badge_setup). */
+export const setupEventBadge = (
+  a: SigningAccount,
+  p: { eventId: string; enabled: boolean; name?: string; imageUrl?: string; supplyCap?: number },
+) => credApi<{ typeId: Hex | null }>(a, 'org', 'event_badge_setup', { ...p, client: 'app' });
+
+/** The event's Smart Event QR id (created on first use for a published event). */
+export const ensureEventQr = (a: SigningAccount, eventId: string) => credApi<{ rewardEventId: string }>(a, 'org', 'event_badge_qr', { eventId });
+
 /**
  * The event's badge as anyone may see it (no signature, no names). undefined when it could not
  * be read (network, timeout), null when the event has no badge. Never throws.

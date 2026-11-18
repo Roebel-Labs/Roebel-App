@@ -145,4 +145,4 @@ export type EventBadgeGetResult = {
 };
 export type EventBadgePrepared = { actionId: string; typeId: Hex; count: number };
 /** GET /api/credentials/events/<eventId>/badge (public, no names). Unix seconds. */
-export type PublicEventBadge = { name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
+export type PublicEventBadge = { typeId: Hex; name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };

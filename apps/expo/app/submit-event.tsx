@@ -34,6 +34,10 @@ import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveAccount } from 'thirdweb/react';
+import EventBadgeSetupSection from '@/components/credentials/EventBadgeSetupSection';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import { setupEventBadge } from '@/lib/credreg/api';
+import { badgeSetupPayload, SETUP_LABELS, type BadgeSetupForm } from '@/lib/credreg/event-page';
 import { createAnthropicMessage } from '@/lib/ai/proxy';
 import { useUser } from '@/context/UserContext';
 import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
@@ -122,9 +126,16 @@ export default function SubmitEventScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { activeAccount } = useAccount();
+  const { activeAccount, roleInActiveAccount } = useAccount();
   const { user } = useUser();
   const { celebrate } = useRewardCelebration();
+  // "Abzeichen für Teilnehmende": only for an org's owners/admins with the credential gate open.
+  const credentialsGate = useCredentialsGate();
+  const badgeSectionVisible =
+    credentialsGate === true &&
+    activeAccount?.account_type === 'organisation' &&
+    (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin');
+  const [badgeForm, setBadgeForm] = useState<BadgeSetupForm>({ enabled: false, name: '', artUrl: null, limit: '' });
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const navigation = useNavigation();
   const params = useLocalSearchParams<{ draftId?: string }>();
@@ -586,6 +597,14 @@ export default function SubmitEventScreen() {
       return;
     }
 
+    // Badge limit is checked before anything is saved.
+    const badgeCheck = badgeSetupPayload(badgeForm, { eventId: '', title: form.title, posterUrl: null });
+    if (badgeSectionVisible && badgeForm.enabled && !badgeCheck.ok) {
+      setSubmissionError(badgeCheck.message);
+      scrollViewRef.current?.scrollToPosition(0, 0, true);
+      return;
+    }
+
     setIsSubmitting(true);
     setIsGeocodingLocation(true);
 
@@ -677,6 +696,15 @@ export default function SubmitEventScreen() {
       if (datesError) {
         console.error('Error inserting event dates:', datesError);
         // Don't fail the whole submission, event was created successfully
+      }
+
+      // The badge goes in after the event itself was saved; a failure never fails the event.
+      if (badgeSectionVisible && badgeForm.enabled && thirdwebAccount) {
+        const badge = badgeSetupPayload(badgeForm, { eventId: eventData.id, title: eventData.title, posterUrl: imageUrl });
+        if (badge.ok) {
+          const r = await setupEventBadge(thirdwebAccount, badge.payload);
+          if (!r.ok) Alert.alert('Abzeichen', SETUP_LABELS.saveFailed);
+        }
       }
 
       setCreatedEventData({
@@ -1193,6 +1221,10 @@ export default function SubmitEventScreen() {
             </Field>
           </View>
         </View>
+
+        {badgeSectionVisible && (
+          <EventBadgeSetupSection value={badgeForm} onChange={setBadgeForm} eventTitle={form.title} posterUri={uploadedImage} />
+        )}
 
         {/* Submit and Cancel Buttons */}
         <View style={styles.buttonRow}>
