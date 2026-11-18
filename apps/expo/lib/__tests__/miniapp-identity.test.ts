@@ -4,6 +4,7 @@
 import { pendingConsentKeys } from '@netizen-labs/miniapp-sdk/host';
 import {
   buildConsentItems,
+  credentialsEqual,
   fetchIdentityState,
   grantFromChoices,
   grantWithItem,
@@ -153,5 +154,17 @@ describe('identity requests', () => {
     const grant = { profile: true, address: false, credentials: [], asked: ['profile'] };
     expect(await saveIdentityGrant(account(), 'demo', grant)).toBeNull();
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ action: 'identity_set', payload: { app: 'demo', grant } });
+  });
+});
+
+describe('credentialsEqual', () => {
+  const c = (type: string, validUntil?: number | null) => ({ type, kind: 'builtin' as const, name: type, recognised: true, validUntil });
+  it('credentialsEqual sees a new, a removed and a renewed credential', () => {
+    const base = [c('citizen', null), c('attester', 100)];
+    expect(credentialsEqual(base, [c('attester', 100), c('citizen', null)])).toBe(true);
+    expect(credentialsEqual(base, [...base, c('guest')])).toBe(false);
+    expect(credentialsEqual(base, [c('citizen', null)])).toBe(false);
+    expect(credentialsEqual(base, [c('citizen', null), c('attester', 200)])).toBe(false);
+    expect(credentialsEqual([c('citizen')], [c('citizen', null)])).toBe(true);
   });
 });

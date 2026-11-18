@@ -53,12 +53,14 @@ import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 
 import {
   createHostBridge,
+  credentialMatches,
   pendingConsentKeys,
   type ConsentKey,
   type HostHandlers,
 } from '@netizen-labs/miniapp-sdk/host';
 import type {
   BridgeMessage,
+  Credential,
   Eip1193RequestArgs,
   MiniAppContext,
 } from '@netizen-labs/miniapp-sdk';
@@ -80,6 +82,7 @@ import MiniAppNotificationSheet from '@/components/miniapp/MiniAppNotificationSh
 import MiniAppConsentSheet from '@/components/miniapp/MiniAppConsentSheet';
 import {
   buildConsentItems,
+  credentialsEqual,
   fetchIdentityState,
   grantFromChoices,
   saveIdentityGrant,
@@ -119,8 +122,17 @@ import {
   resolveMiniAppUserToken,
 } from '@/lib/miniapp-token';
 import { canSignSilently } from '@/lib/passkey/api-session-runtime';
+import {
+  buildSignInMessage,
+  encodeSignInToken,
+  normalizeSignInNonce,
+  signInOrigin,
+} from '@/lib/miniapp-signin';
 
 const HEARTBEAT_MS = 25_000;
+/** Version 2: how often the identity state is re-read while the app is open. */
+const IDENTITY_REFRESH_MS = 60_000;
+const NO_CREDENTIALS: Credential[] = [];
 const NO_ITEMS: ConsentItem[] = [];
 /** Failsafe: reveal the WebView if the app never calls actions.ready(). */
 const READY_TIMEOUT_MS = 10_000;
@@ -150,6 +162,8 @@ type PendingConfirm = {
   request: WalletConfirmRequest;
   method: string;
   params: unknown[];
+  /** Runs instead of `executeSigning` on approve (auth.signIn). */
+  run?: () => Promise<unknown>;
   resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
 };
@@ -223,6 +237,29 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   }, [isV2]);
   const [consent, setConsent] = useState<PendingConsent | null>(null);
   const [consentBusy, setConsentBusy] = useState(false);
+  // A credentials.request sheet on screen: its `done`, so closing the host never leaves it hanging.
+  const requestConsentDoneRef = useRef<((s: IdentityState | null) => void) | null>(null);
+  // The mini-app user token cache (see "mini-app user token" below); declared here because a
+  // changed credential list clears it.
+  const tokenAccountRef = useRef(account);
+  const tokenCacheRef = useRef<ReturnType<typeof createMiniAppTokenCache> | null>(null);
+  // Bumped by every applied state: a re-fetch that started earlier is dropped when it lands.
+  const identitySeqRef = useRef(0);
+  // Take a newer identity state. When the shared credentials differ from what the app had, the
+  // token (whose claims carry them) is dropped and the app gets `credentialsChanged`.
+  const applyIdentityState = useCallback(
+    (next: IdentityState) => {
+      identitySeqRef.current += 1;
+      // No previous state (the first load failed): the app saw no credentials.
+      const prev = identityRef.current?.credentials ?? NO_CREDENTIALS;
+      setIdentityState(next);
+      if (!credentialsEqual(prev, next.credentials)) {
+        tokenCacheRef.current?.clear();
+        bridgeRef.current?.sendEvent('credentialsChanged', next.credentials);
+      }
+    },
+    [setIdentityState],
+  );
 
   // --- telemetry convenience -----------------------------------------------
   const track = useCallback(
@@ -423,7 +460,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       setConsent({
         items,
         done: (saved) => {
-          if (saved) setIdentityState(saved);
+          if (saved) applyIdentityState(saved);
           g.settle();
         },
       });
@@ -432,11 +469,41 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       cancelled = true;
       // A closed host never leaves a bridge call hanging.
       g.settle();
+      requestConsentDoneRef.current?.(null);
       setIdentityState(null);
       setConsent(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload per open and per account only
   }, [visible, isV2, walletLc, app.id]);
+
+  // Version 2: re-read the identity state while open (every 60 s and when the app returns to the
+  // foreground), so a grant withdrawn elsewhere or a new / renewed credential reaches the app.
+  useEffect(() => {
+    if (!visible || !isV2) return;
+    const acc = account;
+    if (!acc) return;
+    let cancelled = false;
+    const refresh = () => {
+      const seq = identitySeqRef.current;
+      void fetchIdentityState(acc, app.id).then((state) => {
+        // Closed, another account, or a newer state (a grant just saved) landed meanwhile.
+        if (cancelled || !state || seq !== identitySeqRef.current) return;
+        // The first load (and its consent sheet) has not finished: leave it to the open effect.
+        if (!gateRef.current?.isSettled()) return;
+        applyIdentityState(state);
+      });
+    };
+    const id = setInterval(refresh, IDENTITY_REFRESH_MS);
+    const sub = AppState.addEventListener('change', (s: AppStateStatus) => {
+      if (s === 'active') refresh();
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      sub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per open and per account only
+  }, [visible, isV2, walletLc, app.id, applyIdentityState]);
 
   // wallet_connect when a connected account first appears while open.
   useEffect(() => {
@@ -538,7 +605,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     if (!confirm || !account) return;
     setConfirmBusy(true);
     try {
-      const result = await executeSigning(confirm.method, confirm.params, account);
+      const result = confirm.run
+        ? await confirm.run()
+        : await executeSigning(confirm.method, confirm.params, account);
       confirm.resolve(result);
       if (confirm.method === 'eth_sendTransaction') {
         track('tx_sent', { app: app.slug });
@@ -569,8 +638,6 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   // and back off 60 s; the call then goes out wallet-only, as before.
   // The cache is created on first use (inside a handler, never during render) and reads the
   // current account through a ref updated after each render.
-  const tokenAccountRef = useRef(account);
-  const tokenCacheRef = useRef<ReturnType<typeof createMiniAppTokenCache> | null>(null);
   useEffect(() => {
     tokenAccountRef.current = account;
   }, [account]);
@@ -614,7 +681,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       try {
         const shown = pending.items.map((i) => i.key);
         const saved = await saveIdentityGrant(account, app.id, grantFromChoices(app, state, shown, on));
-        // A changed grant changes the token's claims.
+        // A changed grant changes the token's claims (and `pending.done` applies the new state,
+        // which sends credentialsChanged when the shared list differs).
         if (saved) tokenCacheRef.current?.clear();
         track(on.size > 0 ? 'identity_granted' : 'identity_declined', { count: on.size });
         pending.done(saved);
@@ -666,7 +734,96 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         const t = await getUserToken({ silent: true });
         return t ? { token: t } : null;
       },
+      // Only the credentials the person shares with this app (the node already filtered them).
+      credentialsList: async () => {
+        await settled();
+        return identityRef.current?.credentials ?? [];
+      },
+      credentialsHas: async (p: { type: string }) => {
+        const type = p?.type;
+        if (typeof type !== 'string') throw { code: 'invalid_params', message: 'type fehlt.' };
+        await settled();
+        return (identityRef.current?.credentials ?? []).some((held) => credentialMatches(type, held));
+      },
+      // Asks again (even if asked before) for credential types from the reviewed manifest; a type
+      // the manifest does not request is refused, so review cannot be bypassed at runtime.
+      credentialsRequest: async (p: { types: string[] }) => {
+        const types = p?.types;
+        if (!Array.isArray(types) || types.length === 0 || !types.every((t) => typeof t === 'string')) {
+          throw { code: 'invalid_params', message: 'types muss eine Liste sein.' };
+        }
+        await settled();
+        const requested = new Set((app.identity?.credentials ?? []).map((c) => c.type));
+        if (types.some((t) => !requested.has(t))) {
+          throw { code: 'unauthorized', message: 'Diese Mitgliedschaft fragt die Mini-App in ihrem Manifest nicht an.' };
+        }
+        const state = identityRef.current;
+        if (!state || !account) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
+        const keys = [...new Set(types)].map((t) => `cred:${t}` as ConsentKey);
+        const items = buildConsentItems(app, state, keys);
+        if (items.length > 0) {
+          if (requestConsentDoneRef.current) {
+            throw { code: 'rate_limited', message: 'Eine Anfrage ist noch offen.' };
+          }
+          await new Promise<void>((resolve) => {
+            const done = (saved: IdentityState | null) => {
+              if (requestConsentDoneRef.current !== done) return;
+              requestConsentDoneRef.current = null;
+              if (saved) applyIdentityState(saved);
+              resolve();
+            };
+            requestConsentDoneRef.current = done;
+            setConsent({ items, done });
+          });
+        }
+        const granted = identityRef.current?.granted.credentials ?? [];
+        return { granted: types.filter((t, i) => granted.includes(t) && types.indexOf(t) === i) };
+      },
     } satisfies Partial<HostHandlers>;
+    // Version 1 (and the dev preview): no identity section, so nothing is shared.
+    const v1Credentials = {
+      credentialsList: async () => [] as Credential[],
+      credentialsHas: async () => false,
+      credentialsRequest: async (): Promise<{ granted: string[] }> => {
+        throw { code: 'unauthorized', message: 'Diese Mini-App fragt keine Mitgliedschaften an.' };
+      },
+    } satisfies Partial<HostHandlers>;
+    // auth.signIn: an EIP-4361 message for the app's own domain, signed by the account after a
+    // native confirmation. Needs the address grant (version 2); version 1 always has the wallet.
+    const authSignIn = async (p: { nonce?: string }): Promise<{ token: string }> => {
+      if (isV2) await settled();
+      if (!walletAllowed(app, identityRef.current)) throw ADDRESS_NOT_GRANTED;
+      const acc = account;
+      if (!acc) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
+      const origin = signInOrigin(app.homeUrl);
+      if (!origin) throw { code: 'internal', message: 'Ungültige Adresse der Mini-App.' };
+      const message = buildSignInMessage({
+        ...origin,
+        address: acc.address,
+        nonce: normalizeSignInNonce(p?.nonce, getRandomBytes),
+        issuedAt: new Date().toISOString(),
+        appName: app.name,
+      });
+      const request: WalletConfirmRequest = {
+        kind: 'personal_sign',
+        title: 'Anmelden',
+        appName: app.name,
+        rows: [{ label: 'App', value: app.name }],
+      };
+      return new Promise<{ token: string }>((resolve, reject) => {
+        setConfirm({
+          request,
+          method: 'personal_sign',
+          params: [],
+          run: async () => {
+            const signature = await acc.signMessage({ message });
+            return { token: encodeSignInToken({ address: acc.address, message, signature }) };
+          },
+          resolve: resolve as (v: unknown) => void,
+          reject,
+        });
+      });
+    };
     return {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: () => setSplashVisible(false),
@@ -774,9 +931,15 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             return t ? { token: t } : null;
           },
 
+      authSignIn,
+
+      credentialsList: isV2 ? v2Only.credentialsList : v1Credentials.credentialsList,
+      credentialsHas: isV2 ? v2Only.credentialsHas : v1Credentials.credentialsHas,
+      credentialsRequest: isV2 ? v2Only.credentialsRequest : v1Credentials.credentialsRequest,
+
       track: ({ event, props }) => track(event, props),
     };
-  }, [app, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken, isV2, gate]);
+  }, [app, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken, isV2, gate, applyIdentityState]);
 
   // --- construct/refresh the bridge ----------------------------------------
   useEffect(() => {

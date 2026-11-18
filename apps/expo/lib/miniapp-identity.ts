@@ -239,3 +239,12 @@ export function isGranted(state: IdentityState, key: ConsentKey): boolean {
   if (key === 'address') return state.granted.address;
   return state.granted.credentials.includes(key.slice('cred:'.length));
 }
+
+/** Same credentials (by `type` and `validUntil`, order ignored)? Absent and null expiry are equal. */
+export function credentialsEqual(a: Credential[], b: Credential[]): boolean {
+  if (a.length !== b.length) return false;
+  const key = (c: Credential) => `${c.type}|${c.validUntil ?? ''}`;
+  const sa = a.map(key).sort();
+  const sb = b.map(key).sort();
+  return sa.every((k, i) => k === sb[i]);
+}
