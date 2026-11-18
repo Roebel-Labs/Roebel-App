@@ -4,7 +4,7 @@
  * A mini app talks to an injected EIP-1193 provider (`wallet.request`). The host
  * (MiniAppHost) forwards each request here:
  *  - read-only / trivial methods (`eth_chainId`, `eth_accounts`, `eth_requestAccounts`)
- *    are answered directly;
+ *    are answered directly; chain reads go through the host's RPC proxy (miniapp-rpc.ts);
  *  - signing methods (`eth_sendTransaction`, `personal_sign`, `eth_signTypedData*`)
  *    are decoded into a `WalletConfirmRequest` for the native confirm sheet, then
  *    executed against the thirdweb smart account only after the user approves.
@@ -17,6 +17,7 @@ import { classifyWalletMethod } from '@netizen-labs/miniapp-sdk/host';
 import { client } from '@/constants/thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
+import { PROXIED_METHODS, type RpcProxy } from '@/lib/miniapp-rpc';
 
 // Mini apps operate on Gnosis — Röbel-Münzen (Circles v2), identity, and
 // governance all live on Gnosis (chainId 100). The active thirdweb smart
@@ -178,11 +179,22 @@ export function buildConfirmRequest(
 
 // --- execution --------------------------------------------------------------
 
-/** Answer read-only EIP-1193 methods without any confirm sheet. Throws for signing. */
+/**
+ * Answer read-only EIP-1193 methods without any confirm sheet. Throws for signing.
+ * The trivial methods are answered here; the chain reads in `PROXIED_METHODS` go to the
+ * host's rate-limited RPC proxy (one per open). `account` is only given when the app may
+ * see the address; reads then default `from` to it.
+ */
 export async function handleReadOnly(
   method: string,
+  params: unknown[],
   account: Account | undefined,
+  proxy: RpcProxy | undefined,
 ): Promise<unknown> {
+  if (PROXIED_METHODS.includes(method)) {
+    if (!proxy) throw unsupported(method);
+    return proxy.request(method, params, { account: account?.address });
+  }
   switch (method) {
     case 'eth_chainId':
       return `0x${HOST_CHAIN_ID.toString(16)}`;

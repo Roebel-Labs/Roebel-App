@@ -105,6 +105,8 @@ import {
   normalizeParams,
   userRejected,
 } from '@/lib/miniapp-wallet';
+import { createRpcProxy } from '@/lib/miniapp-rpc';
+import { GNOSIS_READ_RPC } from '@/constants/gnosis';
 import {
   apiDataGet,
   apiDataList,
@@ -314,6 +316,12 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     });
   }, [bridgeNonce, sourceUrl]);
   const bridgeGuardJs = useMemo(() => bridgeGuardScript(bridgeNonce), [bridgeNonce]);
+  // Chain reads of the mini app: one rate-limited RPC proxy per open (fresh limits per mount).
+  const rpcProxy = useMemo(
+    () => createRpcProxy({ rpcUrl: GNOSIS_READ_RPC }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- new proxy per open
+    [openCount],
+  );
   // The guard whose first accepted message was already checked for the
   // envelope (bridge_envelope_missing is tracked once per open).
   const envelopeCheckedForRef = useRef<ReturnType<typeof createBridgeGuard> | null>(null);
@@ -583,7 +591,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       // Version 2 without the address grant: reads see no account, signing is refused.
       const allowed = walletAllowed(app, identityRef.current);
       if (!isSigningMethod(method)) {
-        return handleReadOnly(method, allowed ? account : undefined);
+        return handleReadOnly(method, params, allowed ? account : undefined, rpcProxy);
       }
       if (!allowed) throw ADDRESS_NOT_GRANTED;
       if (!account) {
@@ -598,7 +606,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         setConfirm({ request, method, params, resolve, reject });
       });
     },
-    [account, app],
+    [account, app, rpcProxy],
   );
 
   const handleConfirmApprove = useCallback(async () => {
