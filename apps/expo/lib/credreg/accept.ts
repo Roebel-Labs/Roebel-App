@@ -10,12 +10,13 @@
  * device cache holds none). `makePrivate` lives in ./visibility and is re-exported here.
  * Never logs and never returns a raw error: errors can carry addresses or call data.
  */
-import { claimCall, leafHash, type Leaf } from '@netizen-labs/credential-registry';
+import { leafHash } from '@netizen-labs/credential-registry';
 import type { Account } from 'thirdweb/wallets';
 import type { Address, Hex } from 'viem';
 import type { ApiResult, SigningAccount } from '@/lib/signed-request';
 import { fetchMine, respondInvitation } from './api';
-import { REGISTRY, readHolding, readIsCitizen } from './chain';
+import { readHolding, readIsCitizen } from './chain';
+import { chainLeaf, claimFor } from './claim-call';
 import { credentialsConfigured } from './gate';
 import { sendWithGuestClaim } from './guest';
 import type { HeldCredential } from './held';
@@ -80,31 +81,6 @@ function isExpiredAt(validUntilIso: string | null, nowSec: number): boolean {
   if (!validUntilIso) return false;
   const ms = Date.parse(validUntilIso);
   return Number.isFinite(ms) && Math.floor(ms / 1000) < nowSec;
-}
-
-function chainLeaf(inv: InvitationView): Leaf | null {
-  const c = inv.claim;
-  if (!c || !c.leaf) return null;
-  try {
-    return { kind: c.leaf.kind, typeId: c.leaf.typeId, subject: c.leaf.subject, validUntil: BigInt(c.leaf.validUntil), salt: c.leaf.salt };
-  } catch {
-    return null;
-  }
-}
-
-/** The claim call for an invitation, encoded against the app's own REGISTRY. null = malformed. */
-function claimFor(inv: InvitationView): { to: `0x${string}`; data: Hex } | null {
-  const c = inv.claim;
-  const leaf = chainLeaf(inv);
-  if (!leaf) return null;
-  try {
-    // A claim-key leaf needs the server's signature bound to this account; an account leaf none.
-    const claimSignature = c.leaf.kind === 'claimKey' ? c.claimSignature ?? undefined : undefined;
-    if (c.leaf.kind === 'claimKey' && !claimSignature) return null;
-    return claimCall(REGISTRY, { batchId: BigInt(c.batchId), leaf, proof: c.proof, claimSignature });
-  } catch {
-    return null;
-  }
 }
 
 /**

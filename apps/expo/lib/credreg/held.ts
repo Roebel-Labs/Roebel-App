@@ -12,10 +12,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
 import type { Address, Hex } from 'viem';
 import { getApiBaseUrl, type ApiResult, type SigningAccount } from '@/lib/signed-request';
-import { fetchMine } from './api';
+import { fetchMineFull } from './api';
 import { registryReader } from './chain';
 import { credentialsConfigured, useCredentialsGate } from './gate';
-import type { CredentialKind, InvitationView } from './types';
+import { readCollectQueue } from './collect-queue';
+import { readyClaimCalls, rememberReady, settleArrivedBadges } from './pending';
+import type { CredentialKind, InvitationView, MineResult, PendingBadge } from './types';
 
 export type HeldCredential = {
   typeId: Hex;
@@ -32,17 +34,22 @@ export type HeldCredential = {
   benefits?: string[];
   /** The org lets members show this type publicly. Absent = unknown (treated as allowed). */
   publicAllowed?: boolean;
+  /** Event badges: the event (collection year groups, "Ansehen" from the stamp moment). */
+  eventId?: string;
+  eventTitle?: string;
+  eventDate?: string;
 };
 
 type Reader = Pick<CredentialRegistryReader, 'holdsMany'>;
 
 export type HeldDeps = {
-  fetchMine: (a: SigningAccount) => Promise<ApiResult<InvitationView[]>>;
+  /** `mine`: the plain list (older servers) or { invitations, pendingBadges }. */
+  fetchMine: (a: SigningAccount) => Promise<ApiResult<InvitationView[] | MineResult>>;
   reader: () => Reader;
   configured: () => boolean;
 };
 
-const defaultDeps: HeldDeps = { fetchMine, reader: registryReader, configured: credentialsConfigured };
+const defaultDeps: HeldDeps = { fetchMine: fetchMineFull, reader: registryReader, configured: credentialsConfigured };
 
 export const heldCacheKey = (address: string) => `credreg:held:v1:${address.toLowerCase()}`;
 
@@ -78,6 +85,9 @@ function cacheEntry(v: unknown): HeldCredential | null {
     invitationId: e.invitationId as string | null,
     ...(Array.isArray(e.benefits) ? { benefits: e.benefits.filter((b): b is string => typeof b === 'string') } : {}),
     ...(typeof e.publicAllowed === 'boolean' ? { publicAllowed: e.publicAllowed } : {}),
+    ...(typeof e.eventId === 'string' ? { eventId: e.eventId } : {}),
+    ...(typeof e.eventTitle === 'string' ? { eventTitle: e.eventTitle } : {}),
+    ...(typeof e.eventDate === 'string' ? { eventDate: e.eventDate } : {}),
     claim: null, // never stored: proofs and claim signatures come only from the server
   };
 }
@@ -118,7 +128,15 @@ function better(a: { inv: InvitationView; index: number }, b: { inv: InvitationV
   return a.index > b.index;
 }
 
-export type HolderState = { held: HeldCredential[]; pending: InvitationView[]; fromCache: boolean };
+export type HolderState = {
+  held: HeldCredential[];
+  pending: InvitationView[];
+  fromCache: boolean;
+  /** Attended events whose badge has not reached the person yet ("wird eingetragen"). */
+  pendingBadges: PendingBadge[];
+  /** Accepted badge invitations not held on chain yet (candidates for a ride-along claim). */
+  ready: InvitationView[];
+};
 
 /**
  * `mine` → accepted invitations; one `holdsMany` decides public (held on chain) vs private.
@@ -127,12 +145,14 @@ export type HolderState = { held: HeldCredential[]; pending: InvitationView[]; f
  * and the cache is left as it was.
  */
 export async function loadHolder(account: SigningAccount, deps: HeldDeps = defaultDeps): Promise<HolderState> {
-  if (!deps.configured()) return { held: [], pending: [], fromCache: false };
+  if (!deps.configured()) return { held: [], pending: [], fromCache: false, pendingBadges: [], ready: [] };
   const res = await deps.fetchMine(account);
-  if (!res.ok) return { held: (await readCache(account.address)) ?? [], pending: [], fromCache: true };
+  if (!res.ok) return { held: (await readCache(account.address)) ?? [], pending: [], fromCache: true, pendingBadges: [], ready: [] };
+  const all: InvitationView[] = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.invitations) ? res.data.invitations : [];
+  const pendingBadges: PendingBadge[] = !Array.isArray(res.data) && Array.isArray(res.data?.pendingBadges) ? res.data.pendingBadges : [];
 
-  const accepted = res.data.filter((i) => i.state === 'accepted');
-  const pending = res.data.filter((i) => i.state === 'invited');
+  const accepted = all.filter((i) => i.state === 'accepted');
+  const pending = all.filter((i) => i.state === 'invited');
   const typeIds = [...new Set(accepted.map((i) => i.type.typeId))];
 
   let onChain: Map<string, boolean> | null = null;
@@ -175,10 +195,22 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
         claim: i.claim,
         benefits: Array.isArray(i.type.benefits) ? i.type.benefits : [],
         publicAllowed: i.type.publicClaimAllowed !== false,
+        ...(i.type.eventId ? { eventId: i.type.eventId } : {}),
+        ...(i.type.eventTitle ? { eventTitle: i.type.eventTitle } : {}),
+        ...(i.type.eventDate ? { eventDate: i.type.eventDate } : {}),
       };
     });
   if (onChain) await writeCache(account.address, held);
-  return { held, pending, fromCache: false };
+  // Ready: accepted badges the chain does not show yet (unknown chain state = none, no guessing).
+  const ready = onChain
+    ? accepted.filter((i) => {
+        if (i.type.kind !== 'badge' || onChain.get(i.type.typeId.toLowerCase())) return false;
+        const until = untilOf(i);
+        return until === null || until >= nowSec;
+      })
+    : [];
+  rememberReady(account.address, ready);
+  return { held, pending, fromCache: false, pendingBadges, ready };
 }
 
 export async function loadHeld(account: SigningAccount, deps: HeldDeps = defaultDeps): Promise<HeldCredential[]> {
@@ -289,18 +321,50 @@ export function announceHeldChanged(): void {
   changeListeners.forEach((l) => l());
 }
 
-type HookState = { owner: string; held: HeldCredential[]; pending: InvitationView[] };
+type HookState = { owner: string; held: HeldCredential[]; pending: InvitationView[]; pendingBadges: PendingBadge[]; readyClaims: number; queued: string[] };
 /** `pending` absent = keep what is shown (the cache holds no invitations). */
-type HookUpdate = { owner: string; held: HeldCredential[]; pending?: InvitationView[] };
+type HookUpdate = { owner: string; held: HeldCredential[]; pending?: InvitationView[]; pendingBadges?: PendingBadge[]; readyClaims?: number; queued?: string[] };
 
-const merge = (prev: HookState | null, u: HookUpdate): HookState => ({
-  owner: u.owner,
-  held: u.held,
-  pending: u.pending ?? (prev?.owner === u.owner ? prev.pending : []),
-});
+const merge = (prev: HookState | null, u: HookUpdate): HookState => {
+  const same = prev?.owner === u.owner;
+  return {
+    owner: u.owner,
+    held: u.held,
+    pending: u.pending ?? (same ? prev.pending : []),
+    pendingBadges: u.pendingBadges ?? (same ? prev.pendingBadges : []),
+    readyClaims: u.readyClaims ?? (same ? prev.readyClaims : 0),
+    queued: u.queued ?? (same ? prev.queued : []),
+  };
+};
+
+/**
+ * loadHolder, then arrived badges are settled by the person's stored wish (pending.ts) and, when
+ * that changed anything, loaded once more. Never throws past loadHolder's own behaviour.
+ */
+async function loadAndSettle(account: SigningAccount): Promise<HolderState & { readyClaims: number; queued: string[] }> {
+  let r = await loadHolder(account);
+  if (!r.fromCache && r.pending.some((i) => i.type.kind === 'badge')) {
+    const settled = await settleArrivedBadges(account, r.pending).catch(() => ({ acceptedPrivately: 0, ready: [] }));
+    if (settled.acceptedPrivately + settled.ready.length > 0) r = await loadHolder(account);
+  }
+  const readyClaims = r.fromCache ? 0 : (await readyClaimCalls(account.address).catch(() => [])).length;
+  const queued = (await readCollectQueue(account.address)).map((e) => e.eventId);
+  return { ...r, readyClaims, queued };
+}
 
 /** The signed-in person's credentials. Does nothing while the gate is closed or loading. */
-export function useHeld(): { held: HeldCredential[]; pending: InvitationView[]; refresh(): Promise<void>; loading: boolean } {
+export function useHeld(): {
+  held: HeldCredential[];
+  pending: InvitationView[];
+  /** Attended events whose badge has not reached the person yet. */
+  pendingBadges: PendingBadge[];
+  /** How many accepted public badges wait for their claim (the collection banner). */
+  readyClaims: number;
+  /** Ids of event QR scans waiting offline. */
+  queued: string[];
+  refresh(): Promise<void>;
+  loading: boolean;
+} {
   const account = useActiveAccount();
   const gate = useCredentialsGate();
   const [state, setState] = useState<HookState | null>(null);
@@ -316,9 +380,15 @@ export function useHeld(): { held: HeldCredential[]; pending: InvitationView[]; 
         .then((cached) => {
           setLoadingFor(owner);
           if (cached) onUpdate({ owner, held: cached });
-          return loadHolder(account);
+          return loadAndSettle(account);
         })
-        .then((r) => onUpdate(r.fromCache ? { owner, held: r.held } : { owner, held: r.held, pending: r.pending }))
+        .then((r) =>
+          onUpdate(
+            r.fromCache
+              ? { owner, held: r.held, queued: r.queued }
+              : { owner, held: r.held, pending: r.pending, pendingBadges: r.pendingBadges, readyClaims: r.readyClaims, queued: r.queued },
+          ),
+        )
         .finally(() => setLoadingFor((cur) => (cur === owner ? null : cur)));
     },
     // account object identity changes on re-render; the address is what matters
@@ -350,5 +420,13 @@ export function useHeld(): { held: HeldCredential[]; pending: InvitationView[]; 
 
   // A closed gate or another signed-in account never sees a previous list.
   const mine = open && state?.owner === address ? state : null;
-  return { held: mine?.held ?? [], pending: mine?.pending ?? [], refresh, loading: open && loadingFor === address };
+  return {
+    held: mine?.held ?? [],
+    pending: mine?.pending ?? [],
+    pendingBadges: mine?.pendingBadges ?? [],
+    readyClaims: mine?.readyClaims ?? 0,
+    queued: mine?.queued ?? [],
+    refresh,
+    loading: open && loadingFor === address,
+  };
 }

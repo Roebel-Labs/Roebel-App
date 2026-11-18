@@ -20,6 +20,8 @@ import {
   type BatchStatus,
   type CredentialStore,
   type DelegateRow,
+  type EventRow,
+  type AttendanceRow,
   type InvitationFilter,
   type InvitationGuard,
   type InvitationRow,
@@ -69,6 +71,7 @@ const toUser = (r: Row): UserRow => ({
   wallet: String(r.wallet_address).toLowerCase(),
   displayName: r.display_name || r.username || "",
   avatarUrl: r.profile_picture_url ?? null,
+  username: r.username ?? null,
 });
 
 const toType = (r: Row): TypeRow => ({
@@ -96,6 +99,9 @@ const toType = (r: Row): TypeRow => ({
   eventId: r.event_id ?? null,
   createdBy: r.created_by,
   createdAt: r.created_at,
+  // Only once migration 20261117crb added the columns; absent keys are never written back.
+  ...(r.auto_badges !== undefined ? { autoBadges: r.auto_badges === true } : {}),
+  ...(r.last_auto_at !== undefined ? { lastAutoAt: r.last_auto_at ?? null } : {}),
 });
 const TYPE_FIELDS: Record<keyof TypeRow, string> = {
   typeId: "type_id", registry: "registry", accountId: "account_id", orgId: "org_id", localUuid: "local_uuid",
@@ -103,7 +109,7 @@ const TYPE_FIELDS: Record<keyof TypeRow, string> = {
   benefits: "benefits", template: "template", defaultValiditySeconds: "default_validity_seconds",
   claimStart: "claim_start", claimEnd: "claim_end", supplyCap: "supply_cap", publicClaim: "public_claim",
   recognised: "recognised", retired: "retired", chainStatus: "chain_status", eventId: "event_id",
-  createdBy: "created_by", createdAt: "created_at",
+  createdBy: "created_by", createdAt: "created_at", autoBadges: "auto_badges", lastAutoAt: "last_auto_at",
 };
 
 const toAction = (r: Row): ActionRow => ({
@@ -180,6 +186,23 @@ const LOWERCASE_COLUMNS = new Set([
   "type_id", "org_id", "local_id", "registry", "root", "leaf_hash", "subject", "recipient_wallet", "delegate", "created_by",
   "prepared_by", "confirmed_by", "tx_hash",
 ]);
+
+// The events table has no end-date column today, so endDate stays null (badgeWindow uses `date`).
+const EVENT_COLS = "id, title, date, time, end_time, image_url, account_id, status, max_attendees";
+const toEvent = (r: Row): EventRow => ({
+  id: r.id,
+  title: r.title ?? "",
+  date: String(r.date ?? ""),
+  endDate: null,
+  imageUrl: r.image_url ?? null,
+  accountId: r.account_id ?? null,
+  time: r.time ?? null,
+  endTime: r.end_time ?? null,
+  status: r.status ?? null,
+  maxAttendees: typeof r.max_attendees === "number" ? r.max_attendees : null,
+});
+/** PostgREST returns at most 1000 rows per request. */
+const PAGE = 1000;
 
 function toColumns<R>(patch: Partial<R>, fields: Record<keyof R, string>): Row {
   const out: Row = {};
@@ -296,6 +319,16 @@ export class SupabaseCredentialStore implements CredentialStore {
   async updateType(typeId: Hex, patch: Partial<Omit<TypeRow, "typeId">>) {
     const r = await this.db.from(T.types).update(toColumns(patch, TYPE_FIELDS)).eq("type_id", typeId.toLowerCase()).select("type_id");
     check("updateType", r);
+    return ((r.data ?? []) as Row[]).length > 0;
+  }
+  async claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string) {
+    const r = await this.db
+      .from(T.types)
+      .update({ last_auto_at: nowIso })
+      .eq("type_id", typeId.toLowerCase())
+      .or(`last_auto_at.is.null,last_auto_at.lt."${beforeIso}"`)
+      .select("type_id");
+    check("claimAutoRun", r);
     return ((r.data ?? []) as Row[]).length > 0;
   }
 
@@ -517,6 +550,87 @@ export class SupabaseCredentialStore implements CredentialStore {
     const row = r.data as Row | null;
     return row ? { registry: row.registry, lastBlock: BigInt(row.last_block) } : null;
   }
+  // ── events ──────────────────────────────────────────────────────────────────
+  async getEvent(eventId: string): Promise<EventRow | null> {
+    const r = await this.db.from("events").select(EVENT_COLS).eq("id", eventId).maybeSingle();
+    check("getEvent", r);
+    return r.data ? toEvent(r.data as Row) : null;
+  }
+  async listEventsForAccount(accountId: string): Promise<EventRow[]> {
+    const r = await this.db.from("events").select(EVENT_COLS).eq("account_id", accountId).order("date", { ascending: false }).limit(200);
+    check("listEventsForAccount", r);
+    return ((r.data ?? []) as Row[]).map(toEvent);
+  }
+  async ticketsForEvent(eventId: string): Promise<AttendanceRow[]> {
+    const out: AttendanceRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const r = await this.db.from("tickets").select("holder_wallet, status").eq("event_id", eventId).order("id").range(from, from + PAGE - 1);
+      check("ticketsForEvent", r);
+      const rows = (r.data ?? []) as Row[];
+      out.push(...rows.map((x) => ({ wallet: String(x.holder_wallet ?? ""), status: String(x.status ?? "") })));
+      if (rows.length < PAGE) return out;
+    }
+  }
+  async attendClaimsForEvent(eventId: string): Promise<AttendanceRow[]> {
+    const re = await this.db.from("reward_events").select("id").eq("event_id", eventId);
+    check("attendClaimsForEvent", re);
+    const refs = ((re.data ?? []) as Row[]).map((x) => String(x.id));
+    if (refs.length === 0) return [];
+    const out: AttendanceRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const r = await this.db
+        .from("reward_claims")
+        .select("wallet, status")
+        .eq("action", "event_attend")
+        .in("reference_id", refs)
+        .order("id")
+        .range(from, from + PAGE - 1);
+      check("attendClaimsForEvent", r);
+      const rows = (r.data ?? []) as Row[];
+      out.push(...rows.map((x) => ({ wallet: String(x.wallet ?? ""), status: String(x.status ?? "") })));
+      if (rows.length < PAGE) return out;
+    }
+  }
+
+  async attendedEventIdsForWallet(wallet: string): Promise<string[]> {
+    // Wallet columns are not normalised everywhere: ilike on a hex address (no wildcards) matches case-insensitively.
+    const w = wallet.toLowerCase();
+    const out = new Set<string>();
+    const t = await this.db.from("tickets").select("event_id").ilike("holder_wallet", w).eq("status", "checked_in").limit(PAGE);
+    check("attendedEventIdsForWallet", t);
+    for (const x of (t.data ?? []) as Row[]) if (x.event_id) out.add(String(x.event_id));
+    const c = await this.db.from("reward_claims").select("reference_id").ilike("wallet", w).eq("action", "event_attend").neq("status", "rejected").limit(PAGE);
+    check("attendedEventIdsForWallet", c);
+    const refs = [...new Set(((c.data ?? []) as Row[]).map((x) => String(x.reference_id ?? "")).filter(Boolean))];
+    for (let i = 0; i < refs.length; i += 200) {
+      const re = await this.db.from("reward_events").select("event_id").in("id", refs.slice(i, i + 200)).not("event_id", "is", null);
+      check("attendedEventIdsForWallet", re);
+      for (const x of (re.data ?? []) as Row[]) if (x.event_id) out.add(String(x.event_id));
+    }
+    return [...out];
+  }
+  async eventIdForRewardEvent(rewardEventId: string): Promise<string | null> {
+    const r = await this.db.from("reward_events").select("event_id").eq("id", rewardEventId).maybeSingle();
+    check("eventIdForRewardEvent", r);
+    const id = (r.data as Row | null)?.event_id;
+    return id ? String(id) : null;
+  }
+  async rewardEventIdFor(eventId: string): Promise<string | null> {
+    const r = await this.db.from("reward_events").select("id").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    check("rewardEventIdFor", r);
+    return r.data ? String((r.data as Row).id) : null;
+  }
+  async createRewardEvent(x: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }): Promise<string> {
+    // Same row the org dashboard's QR panel inserts (apps/web/src/app/actions/org-events.ts createEventQr).
+    const r = await this.db
+      .from("reward_events")
+      .insert({ label: x.label, event_id: x.eventId, starts_at: x.startsAt, active: true, created_by: x.createdBy, max_rewards: x.maxRewards })
+      .select("id")
+      .single();
+    check("createRewardEvent", r);
+    return String((r.data as Row).id);
+  }
+
   async setSyncCursor(state: SyncState) {
     check(
       "setSyncCursor",

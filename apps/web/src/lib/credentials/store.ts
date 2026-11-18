@@ -12,6 +12,7 @@
  *
  * Relative imports only: loaded by `npx tsx --test`.
  */
+import { randomUUID } from "node:crypto";
 import type { Hex } from "viem";
 import type { RegisterStep } from "@netizen-labs/credential-registry";
 
@@ -62,7 +63,32 @@ export type TypeRow = {
   eventId: string | null;
   createdBy: string;
   createdAt: string;
+  /**
+   * Event badges (migration 20261117crb): the org appointed the node key as delegate, so the
+   * node issues small batches itself. Optional: absent until that migration's columns exist.
+   */
+  autoBadges?: boolean;
+  /** Last node batch of this type (compare-and-set guard of the nudge). */
+  lastAutoAt?: string | null;
 };
+
+/** An `events` row as the event badges need it. */
+export type EventRow = {
+  id: string;
+  title: string;
+  date: string;
+  endDate: string | null;
+  imageUrl: string | null;
+  accountId: string | null;
+  /** events.time / events.end_time ("HH:MM[:SS]", Europe/Berlin), when set. */
+  time?: string | null;
+  endTime?: string | null;
+  /** events.status ("approved" = published) and events.max_attendees, when read. */
+  status?: string | null;
+  maxAttendees?: number | null;
+};
+/** A ticket (tickets.holder_wallet) or an event_attend reward claim (reward_claims.wallet) of one event, unfiltered. */
+export type AttendanceRow = { wallet: string; status: string };
 
 export type ActionStatus = "awaiting_confirmation" | "submitted" | "done" | "failed" | "cancelled" | "expired";
 export type ActionVia = "app" | "dashboard" | "studio" | "node";
@@ -143,7 +169,7 @@ export type UserRow = {
   /** display_name, else username. */
   displayName: string;
   avatarUrl: string | null;
-  /** In-memory store only: the username, when it differs from the display name. */
+  /** The username (profile link), when set. */
   username?: string | null;
 };
 
@@ -189,6 +215,11 @@ export interface CredentialStore {
   listTypes(filter?: TypeFilter): Promise<TypeRow[]>;
   upsertType(row: TypeRow): Promise<void>;
   updateType(typeId: Hex, patch: Partial<Omit<TypeRow, "typeId">>): Promise<boolean>;
+  /**
+   * Compare-and-set of the node batch guard: sets last_auto_at to `nowIso` only while it is null
+   * or older than `beforeIso`. Returns whether this call took the slot.
+   */
+  claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string): Promise<boolean>;
 
   // credential_actions
   insertAction(row: ActionRow): Promise<void>;
@@ -241,6 +272,26 @@ export interface CredentialStore {
   // credential_sync_state
   syncCursor(): Promise<SyncState | null>;
   setSyncCursor(state: SyncState): Promise<void>;
+
+  // events, tickets, reward_events / reward_claims (read): event badges
+  getEvent(eventId: string): Promise<EventRow | null>;
+  /** The org's events, newest first, at most 200. */
+  listEventsForAccount(accountId: string): Promise<EventRow[]>;
+  /** Every ticket of the event (any status). */
+  ticketsForEvent(eventId: string): Promise<AttendanceRow[]>;
+  /** Every `event_attend` claim whose reference is a reward_events row linked to the event (any status). */
+  attendClaimsForEvent(eventId: string): Promise<AttendanceRow[]>;
+  /**
+   * Events the wallet attended (same rule as attendeesOf: a `checked_in` ticket, or a non-rejected
+   * `event_attend` claim on a reward_events row linked to an event), each id once.
+   */
+  attendedEventIdsForWallet(wallet: string): Promise<string[]>;
+  /** The event a Smart Event QR (reward_events row) belongs to, or null. */
+  eventIdForRewardEvent(rewardEventId: string): Promise<string | null>;
+  /** The newest reward_events row linked to the event (its Smart Event QR), or null. */
+  rewardEventIdFor(eventId: string): Promise<string | null>;
+  /** Inserts the event's Smart Event QR row (reward_events); returns its id. */
+  createRewardEvent(r: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }): Promise<string>;
 }
 
 const lc = <T extends string | null | undefined>(v: T): T => (typeof v === "string" ? (v.toLowerCase() as T) : v);
@@ -281,6 +332,10 @@ export class InMemoryCredentialStore implements CredentialStore {
   readonly delegates = new Map<string, DelegateRow>();
   readonly presentations = new Map<string, PresentationRow>();
   cursor: SyncState | null = null;
+  readonly events = new Map<string, EventRow>();
+  readonly tickets: { eventId: string; wallet: string; status: string }[] = [];
+  readonly rewardEvents: { id: string; eventId: string | null; label?: string; startsAt?: string | null; createdBy?: string; maxRewards?: number | null }[] = [];
+  readonly rewardClaims: { wallet: string; action: string; referenceId: string; status: string }[] = [];
 
   // ── test seeding ────────────────────────────────────────────────────────────
   seedAccount(a: AccountRow): void {
@@ -291,6 +346,18 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   seedUser(u: UserRow): void {
     this.users.push({ ...u, wallet: u.wallet.toLowerCase() });
+  }
+  seedEvent(e: EventRow): void {
+    this.events.set(e.id, { ...e });
+  }
+  seedTicket(t: { eventId: string; wallet: string; status: string }): void {
+    this.tickets.push({ ...t });
+  }
+  seedRewardEvent(r: { id: string; eventId: string | null }): void {
+    this.rewardEvents.push({ ...r });
+  }
+  seedRewardClaim(c: { wallet: string; action: string; referenceId: string; status: string }): void {
+    this.rewardClaims.push({ ...c });
   }
 
   // ── accounts ────────────────────────────────────────────────────────────────
@@ -332,7 +399,7 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   async usersByWallets(wallets: readonly string[]) {
     const set = new Set(wallets.map((w) => w.toLowerCase()));
-    return this.users.filter((u) => set.has(u.wallet)).map(({ wallet, displayName, avatarUrl }) => ({ wallet, displayName, avatarUrl }));
+    return this.users.filter((u) => set.has(u.wallet)).map(({ wallet, displayName, avatarUrl, username }) => ({ wallet, displayName, avatarUrl, username: username ?? null }));
   }
 
   // ── types ───────────────────────────────────────────────────────────────────
@@ -351,12 +418,24 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   async upsertType(row: TypeRow) {
     const typeId = row.typeId.toLowerCase() as Hex;
+    // Mirrors credential_types_event_badge_uq: one live badge type per event.
+    if (row.kind === "badge" && row.eventId && !row.retired) {
+      const clash = [...this.types.values()].some((t) => t.typeId !== typeId && t.kind === "badge" && t.eventId === row.eventId && !t.retired);
+      if (clash) throw new CredentialStoreError("upsertType", "23505");
+    }
     this.types.set(typeId, clone({ ...row, typeId, orgId: lc(row.orgId), localId: lc(row.localId) }));
   }
   async updateType(typeId: Hex, patch: Partial<Omit<TypeRow, "typeId">>) {
     const t = this.types.get(typeId.toLowerCase());
     if (!t) return false;
     Object.assign(t, clone(patch));
+    return true;
+  }
+  async claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string) {
+    const t = this.types.get(typeId.toLowerCase());
+    if (!t) return false;
+    if (t.lastAutoAt && Date.parse(t.lastAutoAt) >= Date.parse(beforeIso)) return false;
+    t.lastAutoAt = nowIso;
     return true;
   }
 
@@ -546,5 +625,48 @@ export class InMemoryCredentialStore implements CredentialStore {
   }
   async setSyncCursor(state: SyncState) {
     this.cursor = { registry: state.registry.toLowerCase(), lastBlock: state.lastBlock };
+  }
+
+  // ── events ──────────────────────────────────────────────────────────────────
+  async getEvent(eventId: string) {
+    const e = this.events.get(eventId);
+    return e ? { ...e } : null;
+  }
+  async listEventsForAccount(accountId: string) {
+    return [...this.events.values()]
+      .filter((e) => e.accountId === accountId)
+      .sort((x, y) => y.date.localeCompare(x.date))
+      .slice(0, 200)
+      .map((e) => ({ ...e }));
+  }
+  async ticketsForEvent(eventId: string) {
+    return this.tickets.filter((t) => t.eventId === eventId).map(({ wallet, status }) => ({ wallet, status }));
+  }
+  async attendClaimsForEvent(eventId: string) {
+    const refs = new Set(this.rewardEvents.filter((r) => r.eventId === eventId).map((r) => r.id));
+    return this.rewardClaims.filter((c) => c.action === "event_attend" && refs.has(c.referenceId)).map(({ wallet, status }) => ({ wallet, status }));
+  }
+  async attendedEventIdsForWallet(wallet: string) {
+    const w = wallet.toLowerCase();
+    const out = new Set<string>();
+    for (const t of this.tickets) if (t.wallet.toLowerCase() === w && t.status === "checked_in") out.add(t.eventId);
+    for (const c of this.rewardClaims) {
+      if (c.wallet.toLowerCase() !== w || c.action !== "event_attend" || c.status === "rejected") continue;
+      const ev = this.rewardEvents.find((r) => r.id === c.referenceId)?.eventId;
+      if (ev) out.add(ev);
+    }
+    return [...out];
+  }
+  async eventIdForRewardEvent(rewardEventId: string) {
+    return this.rewardEvents.find((r) => r.id === rewardEventId)?.eventId ?? null;
+  }
+  async rewardEventIdFor(eventId: string) {
+    const linked = this.rewardEvents.filter((r) => r.eventId === eventId);
+    return linked.length ? linked[linked.length - 1].id : null;
+  }
+  async createRewardEvent(r: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }) {
+    const id = randomUUID();
+    this.rewardEvents.push({ id, ...r });
+    return id;
   }
 }

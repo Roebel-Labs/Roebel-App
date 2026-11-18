@@ -52,6 +52,10 @@ import { isTicketSalesEnabled } from '@/lib/supabase-app-settings';
 import { fetchTicketTypes, formatCents, type TicketTypeRow } from '@/lib/tickets';
 import { useLiveShowForEvent } from '@/lib/live';
 import LiveEventMedia, { isStreaming, useEventLiveShow } from '@/components/live/LiveEventMedia';
+import { useAccount } from '@/context/AccountContext';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import EventBadgeOrganiser from '@/components/credentials/EventBadgeOrganiser';
+import EventBadgeAttendee from '@/components/credentials/EventBadgeAttendee';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -116,6 +120,8 @@ export default function EventDetails() {
   const { showSnackbar } = useSnackbar();
   const { user } = useUser();
   const activeAccount = useActiveAccount();
+  const { activeAccount: activeOrg, roleInActiveAccount } = useAccount();
+  const credentialsGate = useCredentialsGate();
   const { loadPreviews } = useInterest();
   const scrollRef = useRef<ScrollView>(null);
   const experienceSectionRef = useRef<ExperienceSectionHandle>(null);
@@ -552,6 +558,15 @@ export default function EventDetails() {
         </View>
 
         <View style={styles.sections}>
+          {credentialsGate === true && typeof id === 'string' ? (
+            event.account_id &&
+            activeOrg?.id === event.account_id &&
+            (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin') ? (
+              <EventBadgeOrganiser eventId={id} orgAccountId={event.account_id} />
+            ) : (
+              <EventBadgeAttendee eventId={id} />
+            )
+          ) : null}
           {liveSlug ? (
             <Pressable
               style={[styles.livestreamCta, { backgroundColor: colors.primary }]}

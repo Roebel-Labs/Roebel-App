@@ -25,6 +25,10 @@ export type InvitationView = {
     recognised: boolean;
     publicClaimAllowed: boolean;
     benefits: string[];
+    /** The event of an event badge (id, title, "YYYY-MM-DD"); absent from older servers. */
+    eventId?: string | null;
+    eventTitle?: string | null;
+    eventDate?: string | null;
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
@@ -132,3 +136,40 @@ export type RecipientInput =
 
 export type BatchPrepared = { actionId: string; batchId: string; counts: { app: number; link: number; skipped: number } };
 export type ActionPrepared = { actionId: string };
+
+// ── event badges (plan credreg-4) ────────────────────────────────────────────
+
+/** event_badge_get answer (server: EventBadgeGetResult in apps/web/src/lib/credentials/event-badges.ts). */
+export type EventBadgeGetResult = {
+  attendees: number;
+  notYetIssued: number;
+  issued: number;
+  accepted: number;
+  badge: { typeId: Hex; name: string; imageUrl: string | null; supplyCap: number; chain: 'draft' | 'onchain'; auto: boolean } | null;
+};
+export type EventBadgePrepared = { actionId: string; typeId: Hex; count: number };
+/** An attended event whose badge has not reached the person yet (server: PendingBadge in holder.ts). */
+export type PendingBadge = {
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  orgName: string | null;
+  typeId: Hex | null;
+  name: string;
+  imageUrl: string | null;
+  state: 'waiting_for_issue';
+};
+/** `mine` answer. */
+export type MineResult = { invitations: InvitationView[]; pendingBadges: PendingBadge[] };
+/** GET /api/credentials/events/<eventId>/badge (public, no names). Unix seconds. */
+export type PublicEventBadge = { typeId: Hex; name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
+
+/** GET /api/credentials/orgs/<accountId>/public (server: OrgPublicView in org-public.ts). No addresses. */
+export type OrgPublicPerson = { displayName: string; avatarUrl: string | null; username: string | null };
+export type OrgPublicView = {
+  offices: { typeId: Hex; name: string; recognised: boolean; holders: OrgPublicPerson[] }[];
+  /** null: the org keeps members private and nobody holds publicly. */
+  publicMembers: OrgPublicPerson[] | null;
+  badges: { typeId: Hex; name: string; imageUrl: string | null; eventTitle: string | null; collected: number }[];
+  usesRegister: boolean;
+};

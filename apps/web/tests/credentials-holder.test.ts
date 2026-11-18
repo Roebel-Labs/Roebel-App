@@ -114,7 +114,7 @@ test("mine returns leaf, proof and batch id for account invitations of the calle
   const w: World = await world();
   const a = await w.batch(w.types.verein.typeId, [{ wallet: ALICE }, { wallet: BOB }]);
   await w.batch(w.types.badge.typeId, [{ wallet: ALICE }], "prepared");
-  const views = ok(await mine(w.d, caller(ALICE)));
+  const views = ok(await mine(w.d, caller(ALICE))).invitations;
   assert.equal(views.length, 1);
   const v = views[0];
   assert.equal(v.id, a.invitations[0].id);
@@ -136,7 +136,7 @@ test("mine returns leaf, proof and batch id for account invitations of the calle
 test("publicClaimAllowed follows the chain's orgPrivateOnly for memberships", async () => {
   const w = await world({ privateOnly: { [orgIdFromUuid(FRAKTION).toLowerCase()]: true } });
   await w.batch(w.types.fraktion.typeId, [{ wallet: ALICE }]);
-  const [v] = ok(await mine(w.d, caller(ALICE)));
+  const [v] = ok(await mine(w.d, caller(ALICE))).invitations;
   assert.equal(v.type.publicClaimAllowed, false);
 });
 
@@ -156,7 +156,7 @@ test("redeem binds a claim-key invitation to the first caller and returns a sign
   assert.equal(signer.toLowerCase(), v.claim.leaf.subject);
   assert.equal(JSON.stringify(v).includes(inv.claimKey!.slice(2)), false);
   // now listed in mine with a signature for the caller
-  const [m] = ok(await mine(w.d, caller(ALICE)));
+  const [m] = ok(await mine(w.d, caller(ALICE))).invitations;
   assert.equal(m.id, inv.id);
   assert.ok(m.claim.claimSignature);
 });
@@ -312,7 +312,7 @@ test("redeem of a prepared invitation of an on-chain batch marks it invited and 
   assert.equal(row!.status, "invited");
   assert.equal(row!.contactEmail, null);
   assert.equal(row!.invitedAt, new Date(T0).toISOString());
-  const [m] = ok(await mine(w.d, caller(ALICE)));
+  const [m] = ok(await mine(w.d, caller(ALICE))).invitations;
   assert.equal(m.id, id);
   ok(await respond(w.d, caller(ALICE, "respond"), { invitationId: id, decision: "accept" }));
 });

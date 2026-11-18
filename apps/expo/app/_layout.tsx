@@ -50,6 +50,7 @@ import { WalletBootProvider } from '@/context/WalletBootContext';
 import { GnosisWalletProvider } from '@/context/GnosisWalletContext';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
+import CollectQueueFlusher from '@/components/credentials/CollectQueueFlusher';
 import { ConsentGate } from '@/components/consent/ConsentGate';
 import { ObserveConsentGate } from '@/components/consent/ObserveConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
@@ -459,6 +460,8 @@ function Layout() {
                                 <ConsentGate />
                                 <ObserveConsentGate />
                                 <AppUpdateGate />
+                                {/* Event QR scans queued offline are sent once the device is online again. */}
+                                <CollectQueueFlusher />
                                 <ThemedLayout />
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
                               </LivePlayerProvider>

@@ -14,6 +14,7 @@ import type { RegisterLog } from "@netizen-labs/credential-registry";
 import type { ActionStatus, BatchRow, CredentialStore, Kind, Policy, TypeRow } from "./store";
 import type { Notifier } from "./notify";
 import { recoverInterruptedMails } from "./delivery";
+import { badgeDelegateAddress } from "./badge-delegate";
 
 export type SyncDeps = {
   store: CredentialStore;
@@ -26,6 +27,8 @@ export type SyncDeps = {
   notify: Notifier;
   /** Clock for the sweep's interrupted-mail cutoff; defaults to Date.now. */
   now?: () => number;
+  /** The node's badge delegate key; defaults to CREDENTIAL_BADGE_DELEGATE_KEY's address (null = not configured). */
+  badgeDelegate?: string | null;
 };
 
 const DEFAULT_MAX_BLOCKS = 20_000n;
@@ -170,6 +173,9 @@ async function onDelegateSet(d: SyncDeps, a: Record<string, unknown>): Promise<v
   const delegate = lc<string>(a.delegate);
   const existing = (await d.store.listDelegates(typeId)).find((x) => x.delegate === delegate);
   await d.store.setDelegate({ typeId, delegate, label: existing?.label ?? null, active: Boolean(a.allowed) });
+  // Instant event badges follow the chain: on when the org appointed the node key, off when removed.
+  const node = d.badgeDelegate !== undefined ? d.badgeDelegate : badgeDelegateAddress();
+  if (node && delegate === node.toLowerCase()) await d.store.updateType(typeId, { autoBadges: Boolean(a.allowed) });
 }
 
 async function onOrgPrivateOnlySet(d: SyncDeps, a: Record<string, unknown>): Promise<void> {

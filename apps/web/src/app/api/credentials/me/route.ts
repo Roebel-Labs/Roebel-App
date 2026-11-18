@@ -2,7 +2,7 @@
 // or declining, holdings, and the presentation relay. mine / redeem / respond / present_create are
 // app only; holdings and present_resolve also accept a pairing session (lib/credentials/caller.ts).
 // Payloads: redeem { token }, respond { invitationId, decision }, holdings { typeIds },
-// present_create { presentation }, present_resolve { code }.
+// present_create { presentation }, present_resolve { code }, badge_nudge { eventId } (app only).
 import { NextRequest } from "next/server";
 import type { Hex } from "viem";
 import { failResponse, jsonFail, jsonOk } from "@/lib/signed-request/verify";
@@ -10,7 +10,8 @@ import { authenticateCaller } from "@/lib/credentials/caller";
 import type { Result } from "@/lib/credentials/actions";
 import { holdings, ME_ACTIONS, mine, redeem, REDEEM_RATE_RULE, respond as respondToInvitation, type HolderDeps } from "@/lib/credentials/holder";
 import { createPresentation, resolvePresentation, type Presentation } from "@/lib/credentials/presentations";
-import { credentialDeps } from "@/lib/credentials/runtime";
+import { nudgeAutoBadges } from "@/lib/credentials/badge-delegate";
+import { badgeAutoDeps, credentialDeps } from "@/lib/credentials/runtime";
 import { sharedLimiters } from "@/lib/rate-limit/server";
 
 export const runtime = "nodejs";
@@ -44,6 +45,12 @@ export async function POST(request: NextRequest) {
         return respond(await createPresentation(d, c, p.presentation as Presentation));
       case "present_resolve":
         return respond(await resolvePresentation(d, c, { code: p.code as string }));
+      case "badge_nudge": {
+        // Without the node badge key nothing runs; the badge then comes with the organiser's tap.
+        const auto = badgeAutoDeps();
+        if (!auto) return jsonOk({ ran: false });
+        return respond(await nudgeAutoBadges(auto, c, { eventId: p.eventId as string }));
+      }
       default:
         return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }

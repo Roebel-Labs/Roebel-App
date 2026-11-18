@@ -12,7 +12,7 @@ import { bytesToHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { prepareAction, viaOf, type Deps, type Fail, type Result } from "./actions";
 import type { Caller } from "./caller";
-import { normaliseRecipients } from "./people";
+import { normaliseRecipients, parsePeopleCsv } from "./people";
 import { chainReadiness, needsPrivateOnlyStep, orgContextFor, type OrgContext } from "./rights";
 import { sealSecret } from "./secrets";
 import type { ActionStatus, BatchRow, BatchSource, InvitationRow, NewInvitation, TypeRow } from "./store";
@@ -230,28 +230,67 @@ async function livePeople(d: Deps, typeId: Hex, validUntil: bigint): Promise<{ l
 
 // ── prepare a batch ───────────────────────────────────────────────────────────
 
-export async function prepareBatch(
-  d: Deps,
-  c: Caller,
-  p: {
-    accountId: string;
-    typeId: Hex;
-    recipients?: RecipientInput[];
-    fromMemberList?: boolean;
-    /** ISO date, end of that day Europe/Berlin. Absent: the type's default validity, else none. */
-    validUntil?: string;
-    source?: "people" | "member_list" | "event";
-  },
-): Promise<Result<{ actionId: string; batchId: string; counts: { app: number; link: number; skipped: number } }>> {
+/** Upper bound for a pasted or uploaded list (2000 people fit comfortably). */
+export const MAX_CSV_CHARS = 512 * 1024;
+
+export type BatchInput = {
+  accountId: string;
+  typeId: Hex;
+  recipients?: RecipientInput[];
+  /** A pasted or uploaded list (parsePeopleCsv + normaliseRecipients), added to `recipients`. */
+  csv?: string;
+  fromMemberList?: boolean;
+  /** ISO date, end of that day Europe/Berlin. Absent: the type's default validity, else none. */
+  validUntil?: string;
+  source?: "people" | "member_list" | "event";
+  /** The admin saw the rejected rows in the preview and confirmed: issue the valid rows only. */
+  dropRejected?: boolean;
+  /**
+   * "Für neues Jahr erneuern": everyone with an accepted, unrevoked invitation of this type gets a
+   * new leaf (account leaf to the bound wallet) with the new `validUntil` (required). Replaces
+   * `typeId` / `recipients` / `csv` / `fromMemberList`.
+   */
+  renewTypeId?: Hex;
+};
+
+export type BatchOptions = {
+  /** Injected randomness (tests). */
+  rand?: (bytes: number) => Uint8Array;
+  /**
+   * Register steps that go before the addBatch step in the same action, e.g. the createType of a
+   * badge type that is still a draft (event badges). With pre-steps a draft type is accepted.
+   */
+  preSteps?: RegisterStep[];
+  /** Keys (recipientKey) that never get a leaf in this batch, e.g. anyone ever invited to an event badge. */
+  exclude?: ReadonlySet<string>;
+  /** Overrides the summary title (badge wording of the event layer). */
+  title?: (n: number, t: TypeRow) => string;
+};
+
+type BatchPlan = {
+  org: OrgContext;
+  t: TypeRow;
+  validUntil: bigint;
+  given: RecipientInput[];
+  rejected: { row: number; reason: string }[];
+  /** Distinct people of the request. */
+  unique: number;
+  included: RecipientInput[];
+  renewals: number;
+  skipped: number;
+};
+
+/** Validation, org/type checks, duplicates and skip rules shared by people_preview and batch_prepare. Writes nothing. */
+async function planBatch(d: Deps, c: Caller, p: BatchInput, opts: BatchOptions): Promise<BatchPlan | Fail> {
   if (!p || typeof p.typeId !== "string" || !BYTES32.test(p.typeId)) return bad("typeId fehlt.");
   if (p.recipients !== undefined && !Array.isArray(p.recipients)) return bad("Die Liste der Personen ist ungültig.");
   if (p.source !== undefined && !["people", "member_list", "event"].includes(p.source)) return bad("Unbekannte Quelle.");
+  if (p.csv !== undefined && typeof p.csv !== "string") return bad("Die Liste ist ungültig.");
+  if (typeof p.csv === "string" && p.csv.length > MAX_CSV_CHARS) return bad("Die Liste ist zu groß.");
 
-  const { recipients: given, rejected } = normaliseRecipients(p.recipients ?? []);
-  if (rejected.length > 0) {
-    const rows = rejected.slice(0, 5).map((r) => `Zeile ${r.row}: ${r.reason}`).join("; ");
-    return fail(400, "REJECTED_ROWS", `Einige Einträge sind ungültig (${rows}${rejected.length > 5 ? " …" : ""}).`);
-  }
+  const raw: unknown[] = [...(p.recipients ?? [])];
+  if (typeof p.csv === "string") raw.push(...parsePeopleCsv(p.csv));
+  const { recipients: given, rejected } = normaliseRecipients(raw);
 
   let validUntil = 0n;
   const typeIdLc = p.typeId.toLowerCase() as Hex;
@@ -260,7 +299,9 @@ export async function prepareBatch(
   if (isFail(org)) return org;
   const t = await d.store.getType(typeIdLc);
   if (!t || t.accountId !== org.accountId) return TYPE_NOT_FOUND;
-  if (t.chainStatus !== "onchain") return fail(409, "TYPE_NOT_ON_CHAIN", "Dieser Ausweis ist noch nicht im Register.");
+  if (t.chainStatus !== "onchain" && !(opts.preSteps && opts.preSteps.length > 0)) {
+    return fail(409, "TYPE_NOT_ON_CHAIN", "Dieser Ausweis ist noch nicht im Register.");
+  }
   if (t.retired) return fail(409, "TYPE_RETIRED", "Dieser Ausweis wird nicht mehr ausgegeben.");
   if (t.policy !== "issuer_batch" || !t.kind) return fail(409, "NOT_ISSUABLE", "Dieser Ausweis wird nicht über Listen vergeben.");
 
@@ -285,23 +326,106 @@ export async function prepareBatch(
     const k = recipientKey(r) ?? `row:${idx}`;
     if (!unique.has(k)) unique.set(k, r);
   });
-  if (unique.size === 0) return bad("Die Liste ist leer.");
   if (unique.size > MAX_BATCH_RECIPIENTS) return bad(`Höchstens ${MAX_BATCH_RECIPIENTS} Personen auf einmal.`);
 
   const { live, renewable } = await livePeople(d, typeIdLc, validUntil);
-  const includedKeys = [...unique.keys()].filter((k) => !live.has(k));
-  const included = includedKeys.map((k) => unique.get(k)!);
-  const renewals = includedKeys.filter((k) => renewable.has(k)).length;
-  const skipped = unique.size - included.length;
+  const includedKeys = [...unique.keys()].filter((k) => !live.has(k) && !opts.exclude?.has(k));
+  return {
+    org,
+    t,
+    validUntil,
+    given,
+    rejected,
+    unique: unique.size,
+    included: includedKeys.map((k) => unique.get(k)!),
+    renewals: includedKeys.filter((k) => renewable.has(k)).length,
+    skipped: unique.size - includedKeys.length,
+  };
+}
+
+export type PeoplePreview = {
+  app: number;
+  link: number;
+  skipped: number;
+  rejected: { row: number; reason: string }[];
+  rows: { displayName: string; channel: "app" | "link" | "mail" }[];
+};
+
+/**
+ * people_preview: what batch_prepare would issue for the same input (same normalisation and skip
+ * rules), with the rejected rows and their reasons. Writes nothing. Never shows an email address.
+ */
+export async function previewPeople(d: Deps, c: Caller, p: BatchInput): Promise<Result<PeoplePreview>> {
+  const plan = await planBatch(d, c, p, {});
+  if (isFail(plan)) return plan;
+  const unnamed = plan.included.filter((r) => r.kind === "account" && !r.displayName).map((r) => (r as { wallet: string }).wallet);
+  const names = new Map((unnamed.length ? await d.store.usersByWallets(unnamed) : []).map((u) => [u.wallet.toLowerCase(), u.displayName]));
+  const rows = plan.included.map((r): PeoplePreview["rows"][number] =>
+    r.kind === "account"
+      ? { displayName: (r.displayName && normName(r.displayName)) || names.get(r.wallet.toLowerCase()) || "Ohne Namen", channel: "app" }
+      : { displayName: normName(r.name), channel: r.email ? "mail" : "link" },
+  );
+  const app = rows.filter((r) => r.channel === "app").length;
+  return { ok: true, data: { app, link: rows.length - app, skipped: plan.skipped, rejected: plan.rejected, rows } };
+}
+
+/** The holders a renewal re-issues: accepted invitations of on-chain, unrevoked batches, by bound wallet. */
+async function renewalRecipients(d: Deps, typeId: Hex): Promise<RecipientInput[]> {
+  const batches = new Map<string, BatchRow | null>();
+  const wallets = new Set<string>();
+  for (const i of await d.store.listInvitations({ typeId, statuses: ["accepted"] })) {
+    if (!batches.has(i.batchId)) batches.set(i.batchId, await d.store.getBatch(i.batchId));
+    const b = batches.get(i.batchId);
+    if (!b || b.status !== "onchain") continue;
+    const w = i.recipientWallet ?? (i.leafKind === "account" ? i.subject : null);
+    if (w) wallets.add(w.toLowerCase());
+  }
+  return [...wallets].map((wallet) => ({ kind: "account" as const, wallet }));
+}
+
+export async function prepareBatch(
+  d: Deps,
+  c: Caller,
+  p: BatchInput,
+  opts: BatchOptions = {},
+): Promise<Result<{ actionId: string; batchId: string; counts: { app: number; link: number; skipped: number } }>> {
+  if (p && p.renewTypeId !== undefined) {
+    if (typeof p.renewTypeId !== "string" || !BYTES32.test(p.renewTypeId)) return bad("typeId fehlt.");
+    if (typeof p.validUntil !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.validUntil)) return bad("Bitte das neue „gültig bis“ angeben.");
+    const typeId = p.renewTypeId.toLowerCase() as Hex;
+    // Org rights first: the holders of another org's type are never read for a stranger.
+    const org = await readyOrg(d, p.accountId, c.wallet);
+    if (isFail(org)) return org;
+    const t = await d.store.getType(typeId);
+    if (!t || t.accountId !== org.accountId) return TYPE_NOT_FOUND;
+    const recipients = await renewalRecipients(d, typeId);
+    if (recipients.length === 0) return fail(409, "NOTHING_TO_ISSUE", "Niemand hat diesen Ausweis angenommen.");
+    const year = p.validUntil.slice(0, 4);
+    return prepareBatch(
+      d,
+      c,
+      { accountId: p.accountId, typeId, recipients, validUntil: p.validUntil, source: "people" },
+      { ...opts, title: (n, type) => `${n} ${n === 1 ? "Ausweis" : "Ausweise"} für ${year} erneuern: ${type.name}` },
+    );
+  }
+  const plan = await planBatch(d, c, p, opts);
+  if (isFail(plan)) return plan;
+  const { org, t, validUntil, given, rejected, renewals, skipped, included } = plan;
+  if (rejected.length > 0 && p.dropRejected !== true) {
+    const rows = rejected.slice(0, 5).map((r) => `Zeile ${r.row}: ${r.reason}`).join("; ");
+    return fail(400, "REJECTED_ROWS", `Einige Einträge sind ungültig (${rows}${rejected.length > 5 ? " …" : ""}).`);
+  }
+  if (plan.unique === 0) return bad("Die Liste ist leer.");
   if (included.length === 0) {
     return fail(409, "NOTHING_TO_ISSUE", "Alle ausgewählten Personen haben schon eine gültige Einladung für diesen Ausweis.");
   }
+  const typeIdLc = t.typeId;
 
   const built = buildBatch({
     typeId: typeIdLc,
     recipients: included,
     validUntil,
-    rand: (n) => new Uint8Array(randomBytes(n)),
+    rand: opts.rand ?? ((n) => new Uint8Array(randomBytes(n))),
     seal: (plain, context) => sealSecret(plain, context),
   });
   const counts = {
@@ -314,21 +438,26 @@ export async function prepareBatch(
   const source: BatchSource = p.source ?? (p.fromMemberList && given.length === 0 ? "member_list" : "people");
   await d.store.insertBatchWithInvitations({ id: batchId, actionId: null, typeId: typeIdLc, root: built.root, count: built.count, source }, built.invitations);
 
-  const steps: RegisterStep[] = [];
+  const steps: RegisterStep[] = [...(opts.preSteps ?? [])];
   if (t.kind === "membership" && needsPrivateOnlyStep(org, await d.reader.orgPrivateOnly(org.orgId))) {
     steps.push({ fn: "setOrgPrivateOnly", orgId: org.orgId, privateOnly: true });
   }
   steps.push({ fn: "addBatch", typeId: typeIdLc, root: built.root, count: built.count });
 
   const n = built.count;
-  const title = t.kind === "badge" ? `${n} Abzeichen vergeben: ${t.name}` : `${n} ${n === 1 ? "Ausweis" : "Ausweise"} ausstellen: ${t.name}`;
+  const title = opts.title
+    ? opts.title(n, t)
+    : t.kind === "badge"
+      ? `${n} Abzeichen vergeben: ${t.name}`
+      : `${n} ${n === 1 ? "Ausweis" : "Ausweise"} ausstellen: ${t.name}`;
   const lines = [
     validUntil === 0n ? "Unbefristet gültig" : `Gültig bis ${formatDay(validUntil)}`,
     `${counts.app} in der App, ${counts.link} per Link`,
   ];
   if (renewals > 0) lines.push(`davon ${renewals} Verlängerungen`);
   if (skipped > 0) lines.push(`${skipped} übersprungen (haben schon eine gültige Einladung)`);
-  if (steps.length > 1) lines.push("Mitglieder dieser Organisation sind nur privat sichtbar.");
+  if (rejected.length > 0) lines.push(`${rejected.length} ungültige Zeilen ausgelassen`);
+  if (t.kind === "membership" && steps.some((s) => s.fn === "setOrgPrivateOnly")) lines.push("Mitglieder dieser Organisation sind nur privat sichtbar.");
 
   try {
     const { actionId } = await prepareAction(d, {
@@ -365,38 +494,45 @@ export async function prepareRevocation(
   const org = await readyOrg(d, p.accountId, c.wallet);
   if (isFail(org)) return org;
 
-  let batch: BatchRow | null;
-  let invitations: InvitationRow[] = [];
+  // Single invitations may come from several batches of one type (the people table selects per
+  // type): one revokeLeaves step per batch chunk, all in one action.
+  let steps: RegisterStep[] = [];
+  let title: string;
   if (hasIds) {
-    const ids = [...new Set(p.invitationIds!)];
-    for (const id of ids) {
+    const invitations: InvitationRow[] = [];
+    for (const id of [...new Set(p.invitationIds!)]) {
       const i = await d.store.getInvitation(id);
       if (!i) return fail(404, "NOT_FOUND", "Diese Einladung gibt es nicht.");
       invitations.push(i);
     }
-    const batchIds = new Set(invitations.map((i) => i.batchId));
-    if (batchIds.size !== 1) return bad("Alle Einladungen müssen aus derselben Liste stammen.");
-    batch = await d.store.getBatch([...batchIds][0]);
-  } else {
-    batch = await d.store.getBatch(p.batchId!);
-  }
-  if (!batch) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
-  const t: TypeRow | null = await d.store.getType(batch.typeId);
-  // Another org's batch reads as unknown, never as "forbidden".
-  if (!t || t.accountId !== org.accountId) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
-  if (batch.status !== "onchain" || !batch.chainBatchId) return fail(409, "BATCH_NOT_ON_CHAIN", "Diese Liste ist (noch) nicht im Register.");
-
-  let steps: RegisterStep[];
-  let title: string;
-  if (hasIds) {
-    const leaves = invitations.filter((i) => i.status !== "revoked").map((i) => i.leafHash.toLowerCase() as Hex);
-    if (leaves.length === 0) return fail(409, "NOTHING_TO_REVOKE", "Diese Einladungen sind schon widerrufen.");
-    steps = [];
-    for (let i = 0; i < leaves.length; i += REVOKE_LEAVES_PER_STEP) {
-      steps.push({ fn: "revokeLeaves", batchId: batch.chainBatchId, leaves: leaves.slice(i, i + REVOKE_LEAVES_PER_STEP) });
+    const byBatch = new Map<string, InvitationRow[]>();
+    for (const i of invitations) byBatch.set(i.batchId, [...(byBatch.get(i.batchId) ?? []), i]);
+    let typeRow: TypeRow | null = null;
+    let total = 0;
+    for (const [batchId, invs] of byBatch) {
+      const batch = await d.store.getBatch(batchId);
+      if (!batch) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
+      const t = await d.store.getType(batch.typeId);
+      // Another org's batch reads as unknown, never as "forbidden".
+      if (!t || t.accountId !== org.accountId) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
+      if (typeRow && typeRow.typeId !== t.typeId) return bad("Alle Einladungen müssen zum selben Ausweis gehören.");
+      typeRow = t;
+      if (batch.status !== "onchain" || !batch.chainBatchId) return fail(409, "BATCH_NOT_ON_CHAIN", "Diese Liste ist (noch) nicht im Register.");
+      const leaves = invs.filter((i) => i.status !== "revoked").map((i) => i.leafHash.toLowerCase() as Hex);
+      total += leaves.length;
+      for (let i = 0; i < leaves.length; i += REVOKE_LEAVES_PER_STEP) {
+        steps.push({ fn: "revokeLeaves", batchId: batch.chainBatchId, leaves: leaves.slice(i, i + REVOKE_LEAVES_PER_STEP) });
+      }
     }
-    title = `${leaves.length} ${leaves.length === 1 ? "Ausweis" : "Ausweise"} widerrufen: ${t.name}`;
+    if (total === 0) return fail(409, "NOTHING_TO_REVOKE", "Diese Einladungen sind schon widerrufen.");
+    if (steps.length > MAX_STEPS) return bad("Zu viele Einladungen auf einmal.");
+    title = `${total} ${total === 1 ? "Ausweis" : "Ausweise"} widerrufen: ${typeRow!.name}`;
   } else {
+    const batch = await d.store.getBatch(p.batchId!);
+    if (!batch) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
+    const t = await d.store.getType(batch.typeId);
+    if (!t || t.accountId !== org.accountId) return fail(404, "NOT_FOUND", "Diese Liste gibt es nicht.");
+    if (batch.status !== "onchain" || !batch.chainBatchId) return fail(409, "BATCH_NOT_ON_CHAIN", "Diese Liste ist (noch) nicht im Register.");
     steps = [{ fn: "revokeBatch", batchId: batch.chainBatchId }];
     title = `Ganze Liste widerrufen: ${t.name} (${batch.count})`;
   }

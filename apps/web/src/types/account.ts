@@ -170,6 +170,8 @@ export interface SubTypeFeatures {
   foerdermittel: boolean;
   flyer: boolean;
   workspace: boolean;
+  /** Credential register dashboard (/dashboard/credentials); also gated by the status route. */
+  credentials: boolean;
 }
 
 /** Single source of truth for which dashboard panels each sub_type sees. */
@@ -192,6 +194,7 @@ export function subTypeFeatures(
         foerdermittel: true,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     case "unternehmen":
       return {
@@ -208,6 +211,7 @@ export function subTypeFeatures(
         foerdermittel: true,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     case "verein":
       return {
@@ -224,6 +228,7 @@ export function subTypeFeatures(
         foerdermittel: true,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     case "stadt":
       return {
@@ -240,6 +245,7 @@ export function subTypeFeatures(
         foerdermittel: true,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     case "fraktion":
       return {
@@ -256,6 +262,7 @@ export function subTypeFeatures(
         foerdermittel: false,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     case "journalist":
       return {
@@ -272,6 +279,7 @@ export function subTypeFeatures(
         foerdermittel: false,
         flyer: true,
         workspace: true,
+        credentials: true,
       };
     default:
       return {
@@ -288,6 +296,7 @@ export function subTypeFeatures(
         foerdermittel: false,
         flyer: false,
         workspace: false,
+        credentials: false,
       };
   }
 }

@@ -13,7 +13,10 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
 import type { CredentialKind } from '@/lib/credentials';
-import type { RegisterCard } from '@/lib/credreg/model';
+import { badgeTileForEvent, groupBadgesByYear, type BadgeTile, type RegisterCard } from '@/lib/credreg/model';
+import { shareRoute } from '@/lib/credreg/collect';
+import { sendReadyClaims } from '@/lib/credreg/pending';
+import { announceHeldChanged } from '@/lib/credreg/held';
 import { makePrivate } from '@/lib/credreg/visibility';
 import { makePublic } from '@/lib/credreg/accept';
 import { useProfileCredentials } from '@/hooks/useProfileCredentials';
@@ -87,17 +90,27 @@ export default function ProfileScreen() {
 
   // A `credential_visibility` push opens the detail sheet of its type (once per push), as soon as
   // that card is loaded.
-  const { credential: credentialParam } = useLocalSearchParams<{ credential?: string }>();
+  const { credential: credentialParam, badge: badgeParam } = useLocalSearchParams<{ credential?: string; badge?: string }>();
   const [handledCredentialParam, setHandledCredentialParam] = useState<string | null>(null);
+  // "Ansehen" from the stamp moment (`/profile?badge=<eventId>`) opens that badge's sheet once.
+  const [handledBadgeParam, setHandledBadgeParam] = useState<string | null>(null);
+  const [detailTile, setDetailTile] = useState<BadgeTile | null>(null);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [readyError, setReadyError] = useState<string | null>(null);
+  const badgeGroups = creds.open ? groupBadgesByYear(creds.profile.badges, creds.pendingBadges, creds.queued) : [];
+  const pushedTile =
+    creds.open && typeof badgeParam === 'string' && handledBadgeParam !== badgeParam ? badgeTileForEvent(badgeGroups, badgeParam) : null;
   const pushedCard =
     creds.open && typeof credentialParam === 'string' && handledCredentialParam !== credentialParam
       ? ([...creds.profile.cards, ...creds.profile.badges].find(
           (c) => c.source === 'register' && c.key.toLowerCase() === credentialParam.toLowerCase(),
         ) ?? null)
       : null;
-  const shownCard = detailCard ?? pushedCard;
+  const shownCard = detailCard ?? pushedCard ?? (detailTile ? null : pushedTile?.card ?? null);
+  const shownTile = shownCard ? null : detailTile ?? (pushedTile && !pushedTile.card ? pushedTile : null);
   const dismissPushedCard = () => {
     if (typeof credentialParam === 'string') setHandledCredentialParam(credentialParam);
+    if (typeof badgeParam === 'string') setHandledBadgeParam(badgeParam);
   };
   const members = useOrgMemberPreview(isOrg ? activeAccount?.id : undefined);
 
@@ -144,7 +157,34 @@ export default function ProfileScreen() {
     if (cardBusy) return;
     dismissPushedCard();
     setDetailCard(null);
+    setDetailTile(null);
     setCardError(null);
+  };
+  const openTile = (tile: BadgeTile) => {
+    setCardError(null);
+    setDetailTile(tile);
+  };
+  const shareBadge = (card: RegisterCard) => {
+    if (!card.eventId) return;
+    dismissPushedCard();
+    setDetailCard(null);
+    router.push(
+      shareRoute({ eventId: card.eventId, eventTitle: card.eventTitle ?? card.title, eventDate: card.eventDate ?? '', name: card.title, imageUrl: card.imageUrl }) as any,
+    );
+  };
+  // "<n> Abzeichen bereit · Jetzt eintragen": the waiting public badges in one operation.
+  const enterReadyBadges = async () => {
+    if (!account || readyBusy) return;
+    setReadyBusy(true);
+    setReadyError(null);
+    try {
+      await sendReadyClaims(account);
+      announceHeldChanged();
+    } catch {
+      setReadyError('Das hat nicht geklappt. Bitte versuche es gleich noch einmal.');
+    } finally {
+      setReadyBusy(false);
+    }
   };
   const showCard = (card: RegisterCard) => {
     dismissPushedCard();
@@ -272,6 +312,20 @@ export default function ProfileScreen() {
                     <Text style={[styles.pendingAction, { color: colors.primary }]}>Ansehen</Text>
                   </Pressable>
                 )}
+                {creds.open && creds.readyClaims > 0 && (
+                  <Pressable
+                    onPress={enterReadyBadges}
+                    disabled={readyBusy}
+                    style={[styles.pendingRow, { backgroundColor: colors.primaryLight, borderColor: colors.primary }, readyBusy && { opacity: 0.6 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${creds.readyClaims} Abzeichen bereit, jetzt eintragen`}
+                  >
+                    <Text style={[styles.pendingText, { color: colors.primary }]}>
+                      {readyError ?? `${creds.readyClaims} Abzeichen bereit`}
+                    </Text>
+                    <Text style={[styles.pendingAction, { color: colors.primary }]}>{readyBusy ? 'Wird eingetragen…' : 'Jetzt eintragen'}</Text>
+                  </Pressable>
+                )}
                 <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
                 <ProfileSheet>
                   <IdentityRow
@@ -282,7 +336,16 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
-                  {creds.open && <BadgeGrid badges={creds.profile.badges} onPress={openCard} />}
+                  {creds.open && (
+                    <BadgeGrid
+                      badges={creds.profile.badges}
+                      pending={creds.pendingBadges}
+                      queued={creds.queued}
+                      onPress={openCard}
+                      onPressTile={openTile}
+                      emptyState
+                    />
+                  )}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (
@@ -326,6 +389,8 @@ export default function ProfileScreen() {
         {creds.open && (
           <CredentialDetailSheet
             card={shownCard}
+            tile={shownTile}
+            onShare={shareBadge}
             onClose={closeCard}
             onShow={showCard}
             onMakePrivate={makeCardPrivate}

@@ -78,6 +78,8 @@ export default function CreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     feedType?: string;
+    /** Prefilled post text (the stamp moment's "Teilen": "Ich war dabei: <Event>"). */
+    initialText?: string;
     linkedEventId?: string;
     linkedEventTitle?: string;
     linkedEventDate?: string;
@@ -145,6 +147,12 @@ export default function CreateScreen() {
       });
     }
   }, [params.linkedEventId]);
+
+  // Prefilled text from a share action; never overwrites what the person already typed.
+  useEffect(() => {
+    if (params.initialText && !draft.content) draft.setContent(params.initialText.slice(0, 500));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.initialText]);
 
   useEffect(() => {
     if (params.linkedListingId && !draft.linkedMarketplaceId) {

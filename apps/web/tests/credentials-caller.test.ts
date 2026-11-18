@@ -4,7 +4,7 @@ import { APP_ONLY_ACTIONS, authenticateCaller } from "../src/lib/credentials/cal
 import { CREDENTIALS_SCOPE, type CredentialAction } from "../src/lib/signed-request/message";
 
 const WALLET = "0x1111111111111111111111111111111111111111";
-const ALL: CredentialAction[] = ["types_list", "orgs_list", "mine", "redeem", "respond", "present_create", "action_submitted", "holdings"];
+const ALL: CredentialAction[] = ["types_list", "orgs_list", "mine", "redeem", "respond", "present_create", "action_submitted", "holdings", "badge_nudge"];
 
 function req(authorization?: string) {
   const h = new Map<string, string>();
@@ -30,7 +30,7 @@ test("a chat session token authenticates a dashboard action", async () => {
 });
 
 test("a chat session is refused for every APP_ONLY action with 403 APP_ONLY", async () => {
-  assert.deepEqual([...APP_ONLY_ACTIONS].sort(), ["action_submitted", "mine", "present_create", "redeem", "respond"]);
+  assert.deepEqual([...APP_ONLY_ACTIONS].sort(), ["action_submitted", "badge_nudge", "mine", "present_create", "redeem", "respond"]);
   for (const action of APP_ONLY_ACTIONS) {
     const r = await authenticateCaller(req("Bearer chat.jwt.token"), { action, payload: {} }, ALL, {
       verifySigned: neverSigned,

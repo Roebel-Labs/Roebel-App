@@ -15,7 +15,30 @@ export type Caller = {
   payload: Record<string, unknown>;
 };
 
-export const APP_ONLY_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "present_create", "action_submitted"];
+export const APP_ONLY_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "present_create", "action_submitted", "badge_nudge"];
+
+/** Actions of /api/credentials/org (dashboard, Studio and app), including the plan-4 event badge actions. */
+export const ORG_ACTIONS: readonly CredentialAction[] = [
+  "types_list",
+  "type_prepare",
+  "delegate_prepare",
+  "members_public_prepare",
+  "orgs_list",
+  "actions_list",
+  "people_list",
+  "people_search",
+  "people_preview",
+  "batch_prepare",
+  "revoke_prepare",
+  "letters",
+  "delegates_list",
+  "event_badges_list",
+  "event_badge_setup",
+  "event_badge_get",
+  "event_badge_prepare",
+  "event_badge_auto",
+  "event_badge_qr",
+];
 
 const PASSKEY_TOKEN_PREFIX = "pst1.";
 

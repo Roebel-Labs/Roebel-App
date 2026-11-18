@@ -11,13 +11,14 @@ import { signClaim } from "@netizen-labs/credential-registry";
 import type { Address, Hex } from "viem";
 import type { Fail, Result } from "./actions";
 import type { Caller } from "./caller";
+import { badgeTypeOf } from "./event-badges";
 import type { NodeRegistryReader } from "./rights";
 import { openSecret } from "./secrets";
-import type { AccountRow, BatchRow, CredentialStore, InvitationRow, TypeRow } from "./store";
+import type { AccountRow, BatchRow, CredentialStore, EventRow, InvitationRow, TypeRow } from "./store";
 import type { CredentialAction } from "../signed-request/message";
 
 /** The actions of POST /api/credentials/me. holdings and present_resolve also accept a pairing session. */
-export const ME_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "holdings", "present_create", "present_resolve"];
+export const ME_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "holdings", "present_create", "present_resolve", "badge_nudge"];
 
 export const REDEEM_RATE_RULE = { name: "credentials-redeem-min", limit: 10, windowMs: 60_000 } as const;
 
@@ -45,6 +46,11 @@ export type InvitationView = {
     recognised: boolean;
     publicClaimAllowed: boolean;
     benefits: string[];
+    /** The event of an event badge (the app keys the person's public/private wish by it). */
+    eventId: string | null;
+    /** Its title and day ("YYYY-MM-DD"): the collection groups badges by year. */
+    eventTitle: string | null;
+    eventDate: string | null;
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
@@ -55,6 +61,24 @@ export type InvitationView = {
     claimSignature: Hex | null;
   };
 };
+
+/**
+ * An event the caller attended whose badge exists (draft or on chain) but reached the caller as no
+ * invitation yet: the app shows it as a stamp that "wird eingetragen". typeId is null while the
+ * type is still a draft (it has no id in the register yet).
+ */
+export type PendingBadge = {
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  orgName: string | null;
+  typeId: Hex | null;
+  name: string;
+  imageUrl: string | null;
+  state: "waiting_for_issue";
+};
+
+export type MineResult = { invitations: InvitationView[]; pendingBadges: PendingBadge[] };
 
 export type Holding = { typeId: Hex; held: boolean; visibility: "public" | "private" | null; validUntil: string | null };
 
@@ -86,6 +110,7 @@ function viewContext(d: HolderDeps) {
   const types = new Map<string, Promise<TypeRow | null>>();
   const accounts = new Map<string, Promise<AccountRow | null>>();
   const privateOnly = new Map<string, Promise<boolean>>();
+  const events = new Map<string, Promise<EventRow | null>>();
   const memo = <T>(m: Map<string, Promise<T>>, k: string, f: () => Promise<T>) => {
     if (!m.has(k)) m.set(k, f());
     return m.get(k)!;
@@ -94,6 +119,7 @@ function viewContext(d: HolderDeps) {
     batch: (id: string) => memo(batches, id, () => d.store.getBatch(id)),
     type: (id: Hex) => memo(types, id.toLowerCase(), () => d.store.getType(id)),
     account: (id: string) => memo(accounts, id, () => d.store.getAccount(id)),
+    event: (id: string) => memo(events, id, () => d.store.getEvent(id)),
     // Read from the chain at request time: an org that was just opened is open right away.
     privateOnly: (orgId: Hex) => memo(privateOnly, orgId.toLowerCase(), () => d.reader.orgPrivateOnly(orgId)),
   };
@@ -114,6 +140,7 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
   if (!type || !type.kind) return null;
   const account = type.accountId ? await ctx.account(type.accountId) : null;
   const privateOnly = type.kind === "membership" ? await ctx.privateOnly(type.orgId) : false;
+  const event = type.eventId ? await ctx.event(type.eventId) : null;
   const revoked = inv.status === "revoked" || batch.status === "revoked";
   return {
     id: inv.id,
@@ -127,6 +154,9 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
       recognised: type.recognised,
       publicClaimAllowed: type.publicClaim && !privateOnly,
       benefits: type.benefits,
+      eventId: type.eventId ?? null,
+      eventTitle: event?.title ?? null,
+      eventDate: event?.date ?? null,
     },
     org: account ? { accountId: account.id, name: account.name, avatarUrl: account.avatarUrl } : null,
     validUntil: isoOfSeconds(inv.validUntil),
@@ -145,20 +175,44 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
   };
 }
 
-/** Every invitation bound to the caller whose batch is on chain. */
-export async function mine(d: HolderDeps, c: Caller): Promise<Result<InvitationView[]>> {
+/** Every invitation bound to the caller whose batch is on chain, plus the badges still waiting for issue. */
+export async function mine(d: HolderDeps, c: Caller): Promise<Result<MineResult>> {
   const wallet = c.wallet.toLowerCase();
   const ctx = viewContext(d);
-  const rows = await d.store.invitationsForWallet(wallet);
+  const rows = (await d.store.invitationsForWallet(wallet)).filter((inv) => inv.recipientWallet === wallet);
   const views: InvitationView[] = [];
   for (const inv of rows) {
-    if (inv.recipientWallet !== wallet) continue;
     const batch = await ctx.batch(inv.batchId);
     if (!onChain(batch)) continue;
     const v = await toView(d, ctx, inv, batch, wallet);
     if (v) views.push(v);
   }
-  return ok(views);
+  // Any invitation row of the badge type (also one whose batch still waits for the chain) means
+  // the badge is on its way through the normal path, so it is no longer "waiting".
+  const invitedTypes = new Set(rows.map((i) => i.typeId.toLowerCase()));
+  return ok({ invitations: views, pendingBadges: await pendingBadgesFor(d, ctx, wallet, invitedTypes) });
+}
+
+async function pendingBadgesFor(d: HolderDeps, ctx: ViewContext, wallet: string, invitedTypes: Set<string>): Promise<PendingBadge[]> {
+  const out: PendingBadge[] = [];
+  for (const eventId of await d.store.attendedEventIdsForWallet(wallet)) {
+    const event = await d.store.getEvent(eventId);
+    if (!event?.accountId) continue;
+    const t = await badgeTypeOf(d.store, event.accountId, event.id);
+    if (!t || invitedTypes.has(t.typeId.toLowerCase())) continue;
+    const account = await ctx.account(event.accountId);
+    out.push({
+      eventId: event.id,
+      eventTitle: event.title,
+      eventDate: event.date,
+      orgName: account?.name ?? null,
+      typeId: t.chainStatus === "onchain" ? t.typeId : null,
+      name: t.name,
+      imageUrl: t.imageUrl,
+      state: "waiting_for_issue",
+    });
+  }
+  return out.sort((a, b) => b.eventDate.localeCompare(a.eventDate));
 }
 
 /** Binds a claim-key link to the first signed-in account that redeems it. */

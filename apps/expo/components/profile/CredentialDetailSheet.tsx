@@ -2,11 +2,17 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import BottomDrawer from '@/components/BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
-import type { RegisterCard } from '@/lib/credreg/model';
+import StampCard from '@/components/credentials/StampCard';
+import { formatEventDate } from '@/lib/credreg/collect-format';
+import type { BadgeTile, RegisterCard } from '@/lib/credreg/model';
 import CredentialCard from './CredentialCard';
 
 type Props = {
   card: RegisterCard | null;
+  /** A waiting badge (pending or queued, no card yet): information only. */
+  tile?: BadgeTile | null;
+  /** Badges: "Teilen" (feed post). Absent = no button. */
+  onShare?(card: RegisterCard): void;
   onClose(): void;
   onShow(card: RegisterCard): void;
   /** Absent = the action is not available here yet (no button is drawn). */
@@ -22,6 +28,9 @@ type Props = {
 
 export const MAKE_PRIVATE_EXPLAINER =
   'Dein Ausweis wird aus dem öffentlichen Register genommen. Dein Nachweis bleibt gültig und du kannst ihn weiter vorzeigen. Wichtig: Dass du ihn öffentlich gezeigt hast, bleibt im Verlauf des Registers dauerhaft sichtbar und kann nicht gelöscht werden.';
+
+export const PENDING_BADGE_TEXT = 'Wird eingetragen, sobald der Veranstalter die Abzeichen vergibt.';
+export const QUEUED_BADGE_TEXT = 'Wird gesammelt, sobald du wieder online bist.';
 
 export const ORG_PRIVATE_ONLY = 'Diese Organisation zeigt ihre Mitglieder nicht öffentlich.';
 
@@ -44,6 +53,8 @@ const isOffice = (c: RegisterCard) => c.kind === 'role' && c.recognised;
  */
 export default function CredentialDetailSheet({
   card,
+  tile = null,
+  onShare,
   onClose,
   onShow,
   onMakePublic,
@@ -57,7 +68,25 @@ export default function CredentialDetailSheet({
   // The explanation step belongs to one card: another card opens on its details again.
   const [confirmingFor, setConfirmingFor] = useState<string | null>(null);
 
+  if (!card && tile && tile.state !== 'collected') {
+    return (
+      <BottomDrawer visible onClose={onClose}>
+        <View style={styles.content}>
+          <View style={styles.stamp}>
+            <StampCard imageUrl={tile.imageUrl} title={tile.title} subtitle="" state={tile.state} size="hero" />
+          </View>
+          {tile.eventTitle ? <Text style={[styles.title, { color: colors.textPrimary }]}>{tile.eventTitle}</Text> : null}
+          {tile.orgName ? <Text style={[styles.org, { color: colors.textSecondary }]}>{tile.orgName}</Text> : null}
+          {tile.date ? <Text style={[styles.meta, { color: colors.textSecondary }]}>{formatEventDate(tile.date)}</Text> : null}
+          <View style={styles.block}>
+            <Text style={[styles.note, { color: colors.textSecondary }]}>{tile.state === 'queued' ? QUEUED_BADGE_TEXT : PENDING_BADGE_TEXT}</Text>
+          </View>
+        </View>
+      </BottomDrawer>
+    );
+  }
   if (!card || card.source !== 'register') return null;
+  const isBadge = card.kind === 'badge';
 
   const expired = card.state === 'expired';
   const isPrivate = card.visibility === 'private';
@@ -71,12 +100,22 @@ export default function CredentialDetailSheet({
   return (
     <BottomDrawer visible onClose={onClose}>
       <View style={styles.content}>
-        <CredentialCard card={card} width={Math.min(screenWidth - 64, 320)} style={styles.card} />
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{card.title}</Text>
+        {isBadge ? (
+          <View style={styles.stamp}>
+            <StampCard imageUrl={card.imageUrl} title={card.title} subtitle="" state="collected" size="hero" />
+          </View>
+        ) : (
+          <CredentialCard card={card} width={Math.min(screenWidth - 64, 320)} style={styles.card} />
+        )}
+        {isBadge ? null : <Text style={[styles.title, { color: colors.textPrimary }]}>{card.title}</Text>}
+        {isBadge && card.eventTitle ? <Text style={[styles.title, { color: colors.textPrimary }]}>{card.eventTitle}</Text> : null}
         {card.orgName ? <Text style={[styles.org, { color: colors.textSecondary }]}>{card.orgName}</Text> : null}
-        <Text style={[styles.meta, { color: expired ? colors.warning : colors.textSecondary }]}>
-          {expired ? 'Abgelaufen' : validityLabel(card.validUntil)}
-        </Text>
+        {isBadge && card.eventDate ? <Text style={[styles.meta, { color: colors.textSecondary }]}>{formatEventDate(card.eventDate)}</Text> : null}
+        {isBadge && !expired && card.validUntil === null ? null : (
+          <Text style={[styles.meta, { color: expired ? colors.warning : colors.textSecondary }]}>
+            {expired ? 'Abgelaufen' : validityLabel(card.validUntil)}
+          </Text>
+        )}
 
         {confirming ? (
           <View style={styles.block}>
@@ -120,6 +159,11 @@ export default function CredentialDetailSheet({
                 >
                   <Text style={[styles.primaryText, { color: colors.onPrimary }]}>Vorzeigen</Text>
                 </Pressable>
+                {isBadge && onShare ? (
+                  <Pressable onPress={() => onShare(card)} accessibilityRole="button" accessibilityLabel="Teilen" style={styles.secondary}>
+                    <Text style={[styles.secondaryText, { color: colors.primary }]}>Teilen</Text>
+                  </Pressable>
+                ) : null}
                 {showMakePublic ? (
                   <Pressable
                     onPress={() => onMakePublic?.(card)}
@@ -160,6 +204,11 @@ const styles = StyleSheet.create({
   },
   card: {
     alignSelf: 'center',
+    marginBottom: 12,
+  },
+  stamp: {
+    alignSelf: 'center',
+    width: 260,
     marginBottom: 12,
   },
   title: {

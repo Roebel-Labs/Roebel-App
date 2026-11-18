@@ -59,7 +59,26 @@ export type ActionView = {
   error: string | null;
   createdAt: string;
   expiresAt: string;
+  /** The batches this action carries (addBatch steps), with their invitation counts. */
+  batches: BatchView[];
 };
+
+export type BatchView = {
+  id: string;
+  actionId: string | null;
+  typeId: Hex;
+  count: number;
+  status: string;
+  /** Delivered invitations (every status but `prepared`). */
+  invited: number;
+  accepted: number;
+  revoked: number;
+  /** Claim-key invitations still waiting for their personal link (letters can be printed). */
+  hasOpenLinks: boolean;
+  createdAt: string;
+};
+
+export type DelegateListRow = { typeId: Hex; typeName: string; delegate: string; label: string | null; displayName: string | null };
 
 export type OrgListEntry = {
   accountId: string;
@@ -86,6 +105,8 @@ export type TypeView = {
   recognised: boolean;
   retired: boolean;
   chainStatus: TypeRow["chainStatus"];
+  /** Invitations on chain: accepted, and still open (invited, not yet answered). */
+  counts: { accepted: number; open: number };
 };
 
 // ── results ───────────────────────────────────────────────────────────────────
@@ -114,7 +135,7 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 // ── org access ────────────────────────────────────────────────────────────────
 
-async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
+export async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
   if (typeof accountId !== "string") return NOT_FOUND_ORG;
   const o = await orgContextFor(d.store, accountId, wallet);
   if ("error" in o) return o.error === "FORBIDDEN" ? FORBIDDEN : NOT_FOUND_ORG;
@@ -122,7 +143,7 @@ async function orgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgC
 }
 
 /** Owner/admin in the database AND allowed by the chain. */
-async function readyOrgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
+export async function readyOrgFor(d: Deps, accountId: unknown, wallet: string): Promise<OrgContext | Fail> {
   const o = await orgFor(d, accountId, wallet);
   if ("ok" in o) return o;
   const r = await chainReadiness(d.reader, o, wallet as Address);
@@ -278,7 +299,7 @@ function cleanTypeInput(p: TypeInput): Clean | Fail {
 
 const unixSeconds = (iso: string | null | undefined) => (iso ? Math.floor(Date.parse(iso) / 1000) : 0);
 
-function configOf(t: Pick<TypeRow, "typeId" | "defaultValiditySeconds" | "claimStart" | "claimEnd" | "supplyCap" | "publicClaim">): TypeConfigInput {
+export function configOf(t: Pick<TypeRow, "typeId" | "defaultValiditySeconds" | "claimStart" | "claimEnd" | "supplyCap" | "publicClaim">): TypeConfigInput {
   return {
     metadataURI: metadataUrl(t.typeId),
     defaultValidity: t.defaultValiditySeconds,
@@ -365,7 +386,7 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
       wallet: c.wallet,
       via,
       steps: [{ fn: "retireType", typeId: t.typeId }],
-      summary: { title: `Ausweis „${t.name}“ nicht mehr ausgeben`, lines: ["Bestehende Ausweise bleiben gültig."], orgName: org.name },
+      summary: { title: `Ausweis „${t.name}“ nicht mehr ausgeben`, lines: ["Alle Ausweise dieses Typs verlieren sofort ihre Gültigkeit. Das kann nicht rückgängig gemacht werden."], orgName: org.name },
     });
     return ok({ actionId, typeId: t.typeId });
   }
@@ -509,6 +530,11 @@ export async function listTypesForOrg(d: Deps, c: Caller, accountId: string): Pr
   const org = await orgFor(d, accountId, c.wallet);
   if (isFail(org)) return org;
   const rows = await d.store.listTypes({ accountId: org.accountId });
+  const counts = new Map<string, { accepted: number; open: number }>();
+  for (const t of rows) {
+    const invs = await d.store.listInvitations({ typeId: t.typeId, statuses: ["invited", "accepted"] });
+    counts.set(t.typeId, { accepted: invs.filter((i) => i.status === "accepted").length, open: invs.filter((i) => i.status === "invited").length });
+  }
   return ok(
     rows
       .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
@@ -527,6 +553,7 @@ export async function listTypesForOrg(d: Deps, c: Caller, accountId: string): Pr
         recognised: t.recognised,
         retired: t.retired,
         chainStatus: t.chainStatus,
+        counts: counts.get(t.typeId) ?? { accepted: 0, open: 0 },
       })),
   );
 }
@@ -535,7 +562,7 @@ export async function getActionForPhone(
   d: Deps,
   c: Caller,
   actionId: string,
-): Promise<Result<{ id: string; status: string; steps: RegisterStep[]; summary: ActionSummary; registry: Address; expiresAt: string }>> {
+): Promise<Result<{ id: string; status: string; steps: RegisterStep[]; summary: ActionSummary; registry: Address; expiresAt: string; error: string | null }>> {
   const found = await actionFor(d, c, actionId);
   if (isFail(found)) return found;
   if (found.org) {
@@ -544,7 +571,8 @@ export async function getActionForPhone(
     if (r === "no_chain_authority") return NO_CHAIN_AUTHORITY;
   }
   const a = await expireIfDue(d, found.action);
-  return ok({ id: a.id, status: a.status, steps: a.steps, summary: a.summary as ActionSummary, registry: d.registry, expiresAt: a.expiresAt });
+  // `error` lets the dashboard's live panel say why a confirmation failed.
+  return ok({ id: a.id, status: a.status, steps: a.steps, summary: a.summary as ActionSummary, registry: d.registry, expiresAt: a.expiresAt, error: a.error });
 }
 
 export async function listActions(d: Deps, c: Caller, accountId: string): Promise<Result<ActionView[]>> {
@@ -566,9 +594,62 @@ export async function listActions(d: Deps, c: Caller, accountId: string): Promis
       error: a.error,
       createdAt: a.createdAt,
       expiresAt: a.expiresAt,
+      batches: await batchViews(d, a.id),
     });
   }
   return ok(out);
+}
+
+async function batchViews(d: Deps, actionId: string): Promise<BatchView[]> {
+  const out: BatchView[] = [];
+  for (const b of await d.store.listBatches({ actionId })) {
+    const invs = await d.store.listInvitations({ batchId: b.id });
+    out.push({
+      id: b.id,
+      actionId: b.actionId,
+      typeId: b.typeId,
+      count: b.count,
+      status: b.status,
+      invited: invs.filter((i) => i.status !== "prepared").length,
+      accepted: invs.filter((i) => i.status === "accepted").length,
+      revoked: invs.filter((i) => i.status === "revoked").length,
+      // Same rule as people.ts hasLink: an unclaimed claim-key invitation whose link is still sealed here.
+      hasOpenLinks: invs.some((i) => i.status === "invited" && i.leafKind === "claim_key" && i.tokenEnc !== null && i.recipientWallet === null),
+      createdAt: b.createdAt,
+    });
+  }
+  return out;
+}
+
+/**
+ * delegates_list: the active delegates of the org's types and the org's members (the picker of
+ * "Türscanner-Konto berechtigen"). Addresses are returned for the next delegate_prepare only; the
+ * dashboard shows display names and labels.
+ */
+export async function listDelegatesForOrg(
+  d: Deps,
+  c: Caller,
+  p: { accountId: string },
+): Promise<Result<{ delegates: DelegateListRow[]; members: { wallet: string; displayName: string }[] }>> {
+  const org = await orgFor(d, p?.accountId, c.wallet);
+  if (isFail(org)) return org;
+  const types = await d.store.listTypes({ accountId: org.accountId, includeRetired: false });
+  const rows: Omit<DelegateListRow, "displayName">[] = [];
+  for (const t of types) {
+    for (const x of await d.store.listDelegates(t.typeId)) {
+      if (x.active) rows.push({ typeId: t.typeId, typeName: t.name, delegate: x.delegate, label: x.label });
+    }
+  }
+  const owners = await d.store.ownersOf(org.accountId);
+  const wallets = [...new Set([...rows.map((r) => r.delegate), ...owners.map((o) => o.wallet)])];
+  const names = new Map((wallets.length ? await d.store.usersByWallets(wallets) : []).map((u) => [u.wallet.toLowerCase(), u.displayName]));
+  return ok({
+    delegates: rows.map((r) => ({ ...r, displayName: names.get(r.delegate.toLowerCase()) ?? null })),
+    members: owners
+      .map((o) => ({ wallet: o.wallet, displayName: names.get(o.wallet.toLowerCase()) ?? "" }))
+      .filter((m) => m.displayName !== "")
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "de")),
+  });
 }
 
 // ── confirm / cancel ──────────────────────────────────────────────────────────

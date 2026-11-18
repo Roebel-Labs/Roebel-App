@@ -7,17 +7,22 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useCredentialsGate } from '@/lib/credreg/gate';
 import { useHeld, type HeldCredential } from '@/lib/credreg/held';
 import { buildProfile, type Profile } from '@/lib/credreg/model';
-import type { InvitationView } from '@/lib/credreg/types';
+import type { InvitationView, PendingBadge } from '@/lib/credreg/types';
 
 type Snapshot = {
   held: HeldCredential[];
   pending: InvitationView[];
+  pendingBadges: PendingBadge[];
+  readyClaims: number;
+  queued: string[];
   refresh: () => Promise<void>;
   loading: boolean;
 };
 
 const EMPTY_HELD: HeldCredential[] = [];
 const EMPTY_PENDING: InvitationView[] = [];
+const EMPTY_BADGES: PendingBadge[] = [];
+const EMPTY_QUEUED: string[] = [];
 const noop = async () => {};
 
 /** Mounted only while the gate is open: reports `useHeld` to the profile. Renders nothing. */
@@ -26,6 +31,9 @@ function HeldLoader({ onChange }: { onChange: (s: Snapshot) => void }) {
   // Stable empties: useHeld returns a fresh [] per render before anything loaded.
   const held = h.held.length > 0 ? h.held : EMPTY_HELD;
   const pending = h.pending.length > 0 ? h.pending : EMPTY_PENDING;
+  const pendingBadges = h.pendingBadges && h.pendingBadges.length > 0 ? h.pendingBadges : EMPTY_BADGES;
+  const queued = h.queued && h.queued.length > 0 ? h.queued : EMPTY_QUEUED;
+  const readyClaims = h.readyClaims ?? 0;
   const { loading } = h;
   // Latest refresh through a ref: its identity must not re-trigger the report.
   const refreshRef = useRef(h.refresh);
@@ -34,8 +42,8 @@ function HeldLoader({ onChange }: { onChange: (s: Snapshot) => void }) {
   });
   const [refresh] = useState(() => () => refreshRef.current());
   useEffect(() => {
-    onChange({ held, pending, refresh, loading });
-  }, [held, pending, refresh, loading, onChange]);
+    onChange({ held, pending, pendingBadges, readyClaims, queued, refresh, loading });
+  }, [held, pending, pendingBadges, readyClaims, queued, refresh, loading, onChange]);
   return null;
 }
 
@@ -45,6 +53,11 @@ export type ProfileCredentials = {
   profile: Profile;
   held: HeldCredential[];
   pending: InvitationView[];
+  /** Attended events whose badge is not issued yet, and scans queued offline (own collection). */
+  pendingBadges: PendingBadge[];
+  queued: string[];
+  /** Accepted public badges waiting for their claim (the "Jetzt eintragen" banner). */
+  readyClaims: number;
   refresh: () => Promise<void>;
   /** Render this somewhere in the screen (null while closed). */
   loader: React.ReactElement | null;
@@ -68,6 +81,9 @@ export function useProfileCredentials(input: { isCitizen: boolean; isAttester: b
     profile,
     held,
     pending,
+    pendingBadges: open && snap ? snap.pendingBadges : EMPTY_BADGES,
+    queued: open && snap ? snap.queued : EMPTY_QUEUED,
+    readyClaims: open && snap ? snap.readyClaims : 0,
     refresh: open && snap ? snap.refresh : noop,
     loader: open ? <HeldLoader onChange={setSnap} /> : null,
   };
