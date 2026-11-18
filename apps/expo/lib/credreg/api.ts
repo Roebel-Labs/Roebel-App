@@ -16,6 +16,7 @@ import type {
   InvitationView,
   MineResult,
   OrgListEntry,
+  OrgPublicView,
   PersonRow,
   PersonSearchHit,
   PhoneAction,
@@ -160,3 +161,28 @@ export const reportSubmitted = (a: SigningAccount, actionId: string, txHash: Hex
   credApi<ActionSubmitted>(a, 'actions', 'action_submitted', { actionId, txHash });
 
 export const cancelAction = (a: SigningAccount, actionId: string) => credApi<null>(a, 'actions', 'action_cancel', { actionId });
+
+/**
+ * An org's offices, public members and badges as anyone may see them (unsigned GET, cached 5 min
+ * on the server). null when it could not be read (network, timeout, not configured). Never throws.
+ */
+export async function fetchOrgPublic(accountId: string, timeoutMs = 8000): Promise<OrgPublicView | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/credentials/orgs/${encodeURIComponent(accountId)}/public`, { signal: ctl.signal });
+    if (res.status !== 200) return null;
+    const json = (await res.json()) as Partial<OrgPublicView> | null;
+    if (!json || !Array.isArray(json.offices) || !Array.isArray(json.badges)) return null;
+    return {
+      offices: json.offices,
+      publicMembers: Array.isArray(json.publicMembers) ? json.publicMembers : null,
+      badges: json.badges,
+      usesRegister: json.usesRegister === true,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

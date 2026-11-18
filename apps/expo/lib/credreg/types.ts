@@ -163,3 +163,13 @@ export type PendingBadge = {
 export type MineResult = { invitations: InvitationView[]; pendingBadges: PendingBadge[] };
 /** GET /api/credentials/events/<eventId>/badge (public, no names). Unix seconds. */
 export type PublicEventBadge = { typeId: Hex; name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
+
+/** GET /api/credentials/orgs/<accountId>/public (server: OrgPublicView in org-public.ts). No addresses. */
+export type OrgPublicPerson = { displayName: string; avatarUrl: string | null; username: string | null };
+export type OrgPublicView = {
+  offices: { typeId: Hex; name: string; recognised: boolean; holders: OrgPublicPerson[] }[];
+  /** null: the org keeps members private and nobody holds publicly. */
+  publicMembers: OrgPublicPerson[] | null;
+  badges: { typeId: Hex; name: string; imageUrl: string | null; eventTitle: string | null; collected: number }[];
+  usesRegister: boolean;
+};
