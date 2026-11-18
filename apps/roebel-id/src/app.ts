@@ -8,12 +8,18 @@ export function createApp(deps?: {
   provider?: Provider
   interactionRouter?: express.Router
   relyingParties?: Config['relyingParties']
+  miniappTokenRouter?: express.Router
 }): express.Express {
   const app = express()
   app.get('/healthz', (_req, res) => { res.json({ status: 'ok' }) })
   // Passkey app associations (AASA + assetlinks) for the id.ortis.app rpId. Before
   // provider.callback() so panva's catch-all never answers these paths with a 404.
   app.use(appAssociationsRouter())
+  // Mini-app user tokens signed for the node (internal, shared secret). Before
+  // provider.callback() so panva's catch-all never answers this path.
+  if (deps?.miniappTokenRouter) {
+    app.use(deps.miniappTokenRouter)
+  }
   // The interaction router owns /interaction/* and must be mounted BEFORE provider.callback()
   // so panva's catch-all OIDC routes never shadow it.
   if (deps?.interactionRouter) {

@@ -52,6 +52,23 @@ export interface Config {
    * indicators entirely.
    */
   signerResourceUrl?: string
+  /**
+   * Shared secret the node presents to `POST /internal/miniapp-token` (mini-app user tokens,
+   * plan miniapp-2 Task 8). Unset = the route answers 404 on this instance.
+   */
+  miniappIssuerSecret?: string
+}
+
+const MIN_MINIAPP_SECRET_LENGTH = 32
+
+/** Optional; a value that is set but shorter than 32 characters fails at boot. */
+function optionalMiniappSecret(): string | undefined {
+  const v = process.env.MINIAPP_ISSUER_SECRET
+  if (!v) return undefined
+  if (v.length < MIN_MINIAPP_SECRET_LENGTH) {
+    throw new Error(`Invalid MINIAPP_ISSUER_SECRET: must be at least ${MIN_MINIAPP_SECRET_LENGTH} characters`)
+  }
+  return v
 }
 
 function required(name: string): string {
@@ -216,5 +233,6 @@ export function loadConfig(): Config {
     thirdwebClientId: required('THIRDWEB_CLIENT_ID'),
     relyingParties,
     signerResourceUrl: optionalAbsoluteUrl('SIGNER_RESOURCE_URL'),
+    miniappIssuerSecret: optionalMiniappSecret(),
   }
 }
