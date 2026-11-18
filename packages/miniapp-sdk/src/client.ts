@@ -51,7 +51,7 @@ export function createClient(): NetizenSDK {
 
     auth: {
       getToken: () => bridge.request<{ token: string } | null>('auth.getToken'),
-      signIn: () => bridge.request<{ token: string }>('auth.signIn'),
+      signIn: (opts) => bridge.request<{ token: string }>('auth.signIn', opts?.nonce ? { nonce: opts.nonce } : {}),
     },
 
     haptics: {

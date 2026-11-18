@@ -71,3 +71,16 @@ test('onChange delivers the new list and unsubscribes', async () => {
   fake.deliver({ netizen: 1, event: 'credentialsChanged', data: [] });
   assert.deepEqual(seen, [list]);
 });
+
+test('auth.signIn passes the nonce to the host', async () => {
+  const sdk = createClient();
+  answerHello({ ok: true, methods: ['auth.signIn'] });
+  await sdk.isReady;
+  const p = sdk.auth.signIn({ nonce: 'abcdef12' });
+  await new Promise((r) => setTimeout(r, 0));
+  const sent = JSON.parse(fake.posted[fake.posted.length - 1]) as { id: string; method: string; params: unknown };
+  assert.equal(sent.method, 'auth.signIn');
+  assert.deepEqual(sent.params, { nonce: 'abcdef12' });
+  fake.deliver({ netizen: 1, id: sent.id, result: { token: 'nzsi1.x' } });
+  assert.deepEqual(await p, { token: 'nzsi1.x' });
+});
