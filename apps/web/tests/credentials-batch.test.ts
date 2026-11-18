@@ -322,3 +322,41 @@ test("prepareRevocation refuses a batch that is not on chain", async () => {
   assert.equal(b.ok, false);
   if (!b.ok) assert.equal(b.code, "BATCH_NOT_ON_CHAIN");
 });
+
+test("renewTypeId builds a batch of all accepted, unrevoked holders with the new date", async () => {
+  const w = world();
+  const first = must(
+    await prepareBatch(w.d, caller("batch_prepare"), {
+      accountId: VEREIN,
+      typeId: TYPE_ID,
+      recipients: [
+        { kind: "account", wallet: wallet(1) },
+        { kind: "account", wallet: wallet(2) },
+        { kind: "account", wallet: wallet(3) },
+        { kind: "account", wallet: wallet(4) },
+        { kind: "contact", name: "Erika", email: "erika@example.org" },
+      ],
+      validUntil: "2027-06-30",
+    }),
+  );
+  await w.store.updateBatch(first.batchId, { status: "onchain", chainBatchId: "1" });
+  await w.store.updateAction(first.actionId, { status: "done" });
+  for (const i of await w.store.listInvitations({ batchId: first.batchId })) {
+    // 1 accepted, 2 revoked, 3 still invited, 4 declined; Erika redeemed her link and accepted.
+    const status = i.recipientWallet === wallet(1) ? "accepted" : i.recipientWallet === wallet(2) ? "revoked" : i.recipientWallet === wallet(3) ? "invited" : i.recipientWallet === wallet(4) ? "declined" : "accepted";
+    await w.store.updateInvitation(i.id, { status, ...(i.leafKind === "claim_key" ? { recipientWallet: wallet(9) } : {}) });
+  }
+
+  // The new date is required.
+  const noDate = await prepareBatch(w.d, caller("batch_prepare"), { accountId: VEREIN, typeId: TYPE_ID, renewTypeId: TYPE_ID });
+  assert.equal(noDate.ok, false);
+  if (!noDate.ok) assert.equal(noDate.code, "BAD_REQUEST");
+
+  const r = must(await prepareBatch(w.d, caller("batch_prepare"), { accountId: VEREIN, renewTypeId: TYPE_ID, validUntil: "2028-12-31" } as never));
+  assert.deepEqual(r.counts, { app: 2, link: 0, skipped: 0 });
+  const invs = await w.store.listInvitations({ batchId: r.batchId });
+  assert.deepEqual(invs.map((i) => i.recipientWallet).sort(), [wallet(1), wallet(9)].sort());
+  assert.ok(invs.every((i) => i.leafKind === "account" && i.validUntil === String(Date.parse("2028-12-31T22:59:59Z") / 1000)));
+  const action = await w.store.getAction(r.actionId);
+  assert.equal((action?.summary as { title: string }).title, "2 Ausweise für 2028 erneuern: Mitglied");
+});

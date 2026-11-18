@@ -245,6 +245,12 @@ export type BatchInput = {
   source?: "people" | "member_list" | "event";
   /** The admin saw the rejected rows in the preview and confirmed: issue the valid rows only. */
   dropRejected?: boolean;
+  /**
+   * "Für neues Jahr erneuern": everyone with an accepted, unrevoked invitation of this type gets a
+   * new leaf (account leaf to the bound wallet) with the new `validUntil` (required). Replaces
+   * `typeId` / `recipients` / `csv` / `fromMemberList`.
+   */
+  renewTypeId?: Hex;
 };
 
 export type BatchOptions = {
@@ -363,12 +369,45 @@ export async function previewPeople(d: Deps, c: Caller, p: BatchInput): Promise<
   return { ok: true, data: { app, link: rows.length - app, skipped: plan.skipped, rejected: plan.rejected, rows } };
 }
 
+/** The holders a renewal re-issues: accepted invitations of on-chain, unrevoked batches, by bound wallet. */
+async function renewalRecipients(d: Deps, typeId: Hex): Promise<RecipientInput[]> {
+  const batches = new Map<string, BatchRow | null>();
+  const wallets = new Set<string>();
+  for (const i of await d.store.listInvitations({ typeId, statuses: ["accepted"] })) {
+    if (!batches.has(i.batchId)) batches.set(i.batchId, await d.store.getBatch(i.batchId));
+    const b = batches.get(i.batchId);
+    if (!b || b.status !== "onchain") continue;
+    const w = i.recipientWallet ?? (i.leafKind === "account" ? i.subject : null);
+    if (w) wallets.add(w.toLowerCase());
+  }
+  return [...wallets].map((wallet) => ({ kind: "account" as const, wallet }));
+}
+
 export async function prepareBatch(
   d: Deps,
   c: Caller,
   p: BatchInput,
   opts: BatchOptions = {},
 ): Promise<Result<{ actionId: string; batchId: string; counts: { app: number; link: number; skipped: number } }>> {
+  if (p && p.renewTypeId !== undefined) {
+    if (typeof p.renewTypeId !== "string" || !BYTES32.test(p.renewTypeId)) return bad("typeId fehlt.");
+    if (typeof p.validUntil !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.validUntil)) return bad("Bitte das neue „gültig bis“ angeben.");
+    const typeId = p.renewTypeId.toLowerCase() as Hex;
+    // Org rights first: the holders of another org's type are never read for a stranger.
+    const org = await readyOrg(d, p.accountId, c.wallet);
+    if (isFail(org)) return org;
+    const t = await d.store.getType(typeId);
+    if (!t || t.accountId !== org.accountId) return TYPE_NOT_FOUND;
+    const recipients = await renewalRecipients(d, typeId);
+    if (recipients.length === 0) return fail(409, "NOTHING_TO_ISSUE", "Niemand hat diesen Ausweis angenommen.");
+    const year = p.validUntil.slice(0, 4);
+    return prepareBatch(
+      d,
+      c,
+      { accountId: p.accountId, typeId, recipients, validUntil: p.validUntil, source: "people" },
+      { ...opts, title: (n, type) => `${n} ${n === 1 ? "Ausweis" : "Ausweise"} für ${year} erneuern: ${type.name}` },
+    );
+  }
   const plan = await planBatch(d, c, p, opts);
   if (isFail(plan)) return plan;
   const { org, t, validUntil, given, rejected, renewals, skipped, included } = plan;

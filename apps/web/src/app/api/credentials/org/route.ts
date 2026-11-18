@@ -37,6 +37,7 @@ function batchInput(p: Record<string, unknown>): BatchInput {
     validUntil: p.validUntil as string | undefined,
     source: p.source as BatchInput["source"],
     dropRejected: p.dropRejected === true,
+    ...(p.renewTypeId !== undefined ? { renewTypeId: p.renewTypeId as BatchInput["typeId"] } : {}),
   };
 }
 
