@@ -1,7 +1,7 @@
 /**
  * Read-only ABI fragments for the community contracts on Gnosis. Copied (not imported) so the
  * package has no workspace dependency: identity NFTs from apps/web/src/lib/verification-contracts.ts,
- * the OrgRegistry views from packages/org-registry/src/abi.ts.
+ * the OrgRegistry views from packages/org-registry/src/abi.ts, the CredentialRegistry `holds` view.
  */
 
 const balanceOf = {
@@ -99,8 +99,23 @@ export const ORG_REGISTRY_ABI = [
   },
 ] as const;
 
+/** The `holds` view of the CredentialRegistry (from packages/credential-registry/src/abi.ts). */
+export const CREDENTIAL_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "holds",
+    stateMutability: "view",
+    inputs: [
+      { name: "typeId", type: "bytes32" },
+      { name: "account", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+] as const;
+
 export const ABIS = {
   citizenNft: CITIZEN_NFT_ABI,
   attesterNft: ATTESTER_NFT_ABI,
   orgRegistry: ORG_REGISTRY_ABI,
+  credentialRegistry: CREDENTIAL_REGISTRY_ABI,
 } as const;

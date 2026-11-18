@@ -102,10 +102,19 @@ input returns `false`; an RPC failure throws. Default RPC `https://rpc.gnosischa
 import { holdsCredential, ADDRESSES, ABIS, CHAIN_ID } from "@netizen-labs/miniapp-verify";
 
 const isCitizen = await holdsCredential("citizen", address);
+const isMember = await holdsCredential("type:0x…", address); // a credential register type
 ```
 
-`ADDRESSES` (`citizenNft`, `attesterNft`, `orgRegistry` on Gnosis, `CHAIN_ID = 100`) and `ABIS`
-(the read functions of those contracts) are exported for your own viem calls.
+`holdsCredential` takes `citizen`, `attester` or a register type `type:0x<64 hex>` (the ids the
+user token and the SDK use). It reads `holds(typeId, account)` on the credential register. Only
+**public** holdings are on chain: a credential held privately answers `false` here by design, and
+only the user token can prove it. While the register is not deployed on Gnosis
+(`ADDRESSES.credentialRegistry` is empty) a `type:` ref throws `MiniAppVerifyError` with code
+`unsupported`; pass `{ registry: "0x…" }` to use an address published after this release.
+
+`ADDRESSES` (`citizenNft`, `attesterNft`, `orgRegistry`, `credentialRegistry` on Gnosis,
+`CHAIN_ID = 100`) and `ABIS` (the read functions of those contracts) are exported for your own
+viem calls.
 
 ## License
 
