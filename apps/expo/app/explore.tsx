@@ -21,6 +21,7 @@ import {
   type ExploreBlockId,
 } from '@/lib/explore-layout';
 import PinnedMiniAppBlock from '@/components/explore/PinnedMiniAppBlock';
+import MiniAppSuggestion from '@/components/explore/MiniAppSuggestion';
 import ExploreEditBoard from '@/components/explore/ExploreEditBoard';
 import type {
   EventRecord,
@@ -453,7 +454,10 @@ export default function ExploreScreen() {
                 Long-press anywhere on them enters edit mode for the whole screen. */}
             <GestureDetector gesture={editLongPress}>
               <View collapsable={false}>
-                {aboveFold.map(renderBlock)}
+                {aboveFold.slice(0, 1).map(renderBlock)}
+                {/* At most one fitting mini app, below the first block (suggest only). */}
+                <MiniAppSuggestion />
+                {aboveFold.slice(1).map(renderBlock)}
 
                 {belowFoldReady ? (
                   belowFold.map(renderBlock)

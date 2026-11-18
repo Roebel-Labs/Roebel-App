@@ -13,6 +13,8 @@ import type { MiniAppContext, MuenzenBalance } from "@netizen-labs/miniapp-sdk";
  *  3. sdk.roebel.getMuenzenBalance() — show the Röbel-Münzen balance
  *  4. sdk.roebel.grantReward() — request a server-authorized reward
  *  5. sdk.track()              — fire-and-forget analytics
+ *  6. sdk.credentials.has()    — content only citizens see (manifest version "2")
+ *  7. sdk.auth.getToken()      — a verified call to this app's own server (/api/me)
  *
  * The AI builder clones this file and mutates the UI per user prompt while
  * keeping this SDK wiring intact. Follow the DESIGN.md component idioms.
@@ -31,6 +33,9 @@ export default function Page() {
   const [balance, setBalance] = useState<MuenzenBalance | null>(null);
   const [balanceError, setBalanceError] = useState(false);
   const [reward, setReward] = useState<RewardState>({ kind: "idle" });
+  // null = not known yet; false also on an older Röbel app without sdk.credentials.
+  const [isCitizen, setIsCitizen] = useState<boolean | null>(null);
+  const [server, setServer] = useState<string | null>(null);
 
   // ── 1. Announce readiness + load context/balance once mounted ─────────────
   // MANDATORY: the host renders a splash overlay until the mini app calls
@@ -62,9 +67,51 @@ export default function Page() {
         if (alive) setBalanceError(true);
       });
 
+    // ── 6. Credential-gated content ────────────────────────────────────────
+    // A courtesy on the device: anything that really matters is checked on the
+    // server (see askServer below). Guarded so the template runs in older apps.
+    void sdk.isReady
+      .then(async () => {
+        const has = sdk.supports("credentials.has") ? await sdk.credentials.has("citizen") : false;
+        if (alive) setIsCitizen(has);
+      })
+      .catch(() => {
+        if (alive) setIsCitizen(false);
+      });
+
     return () => {
       alive = false;
     };
+  }, []);
+
+  // ── 7. Ask this app's own server, with a verified user token ──────────────
+  const askServer = useCallback(async () => {
+    setServer("Frage den Server …");
+    try {
+      await sdk.isReady;
+      if (sdk.isMockMode()) {
+        setServer("Das geht nur in der Röbel App: dort gibt es ein echtes Anmelde-Token.");
+        return;
+      }
+      if (!sdk.supports("auth.getToken")) {
+        setServer("Diese Version der Röbel App kann das noch nicht. Bitte aktualisieren.");
+        return;
+      }
+      const t = await sdk.auth.getToken();
+      if (!t) {
+        setServer("Du bist nicht angemeldet.");
+        return;
+      }
+      const res = await fetch("/api/me", { headers: { Authorization: `Bearer ${t.token}` } });
+      const body = (await res.json()) as { id?: string; citizen?: boolean; error?: string };
+      setServer(
+        res.ok
+          ? `Der Server kennt dich (Kennung ${String(body.id).slice(0, 10)}…)${body.citizen ? " als Bürger:in." : "."}`
+          : (body.error ?? "Der Server hat abgelehnt."),
+      );
+    } catch {
+      setServer("Der Server ist gerade nicht erreichbar.");
+    }
   }, []);
 
   // ── 4. Request a reward ───────────────────────────────────────────────────
@@ -155,6 +202,32 @@ export default function Page() {
         </button>
 
         <RewardFeedback state={reward} />
+      </section>
+
+      {/* Credential-gated block + verified server call (manifest version "2"). */}
+      <section className="rounded-[10px] border border-border bg-card p-4">
+        {isCitizen ? (
+          <>
+            <p className="text-sm font-medium">Nur für Bürger:innen sichtbar</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Diesen Bereich zeigt die App nur, wenn du deinen Bürger-Nachweis mit ihr teilst.
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {isCitizen === null
+              ? "Prüfe Nachweise …"
+              : "Bürger:innen sehen hier einen eigenen Bereich."}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={askServer}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-[10px] border border-border px-4 py-3 text-sm font-semibold"
+        >
+          Server fragen
+        </button>
+        {server ? <p className="mt-2 text-xs text-muted-foreground">{server}</p> : null}
       </section>
 
       <footer className="mt-auto pt-2 text-center text-xs text-muted-foreground">

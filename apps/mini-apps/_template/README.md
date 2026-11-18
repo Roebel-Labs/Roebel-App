@@ -42,6 +42,10 @@ balance → "—"). Inside the Röbel Playground / Expo WebView, they round-trip
 | 3 | `sdk.roebel.getMuenzenBalance()` | Shows the balance labelled **Röbel-Münzen (RÖ)**. |
 | 4 | `sdk.roebel.grantReward(...)` | Server-authorized reward *request* with full loading / granted / rejected / budget / error handling. |
 | 5 | `sdk.track('template_opened')` | Fire-and-forget analytics → `mini_app_events`. |
+| 6 | `sdk.credentials.has('citizen')` | Shows "Nur für Bürger:innen sichtbar" only to citizens who shared it (manifest version "2", consent sheet). A courtesy, not security. Guarded by `sdk.supports()`. |
+| 7 | `sdk.auth.getToken()` → `GET /api/me` | "Server fragen": the server verifies the token with `verifyUserToken` from `@netizen-labs/miniapp-verify` (`lib/me.ts`, `app/api/me/route.ts`; issuer from `ROEBEL_ISSUER`, default `https://id.roebel.app`). In mock mode it explains that it needs the Röbel app. |
+
+Test the server helper: `npx tsx --test lib/me.test.ts`.
 
 ## The three hard rules (do not remove when mutating)
 
@@ -78,10 +82,13 @@ _template/
 │   ├── fonts.ts          # Mona Sans via next/font/local (--font-sans/-heading/-mono)
 │   ├── globals.css       # Tailwind v4 @theme tokens (navy, radius 10px, dark mode)
 │   ├── layout.tsx        # loads fonts + globals; title/desc from the manifest
-│   └── page.tsx          # the demo screen (the SDK walkthrough above)
+│   ├── page.tsx          # the demo screen (the SDK walkthrough above)
+│   └── api/me/route.ts   # verified "who am I" for the Server fragen button
+├── lib/me.ts             # whoAmI(): token → { id, citizen } or 401 (+ me.test.ts)
+├── public/.well-known/roebel-miniapp.json  # THE manifest the registry reads (version "2")
 ├── public/fonts/mona-sans/   # self-hosted variable fonts (SIL OFL 1.1)
-├── netizen.manifest.ts   # MiniAppManifest — slug/permissions/category/color
-├── next.config.ts        # transpilePackages: ['@netizen-labs/miniapp-sdk'] + standalone
+├── netizen.manifest.ts   # TypeScript mirror of the JSON manifest (the registry does not read it)
+├── next.config.ts        # transpilePackages: SDK + verify package, standalone
 ├── postcss.config.mjs    # Tailwind v4 PostCSS plugin
 ├── tsconfig.json
 ├── vercel.json           # framework: nextjs (one-click standalone deploy)
@@ -92,5 +99,8 @@ _template/
 
 Standalone-deployable (`output: 'standalone'`, `vercel.json` → `framework: nextjs`).
 Deploy from the monorepo root so the `@netizen-labs/miniapp-sdk` workspace link
-resolves, then set the deployed URL as `homeUrl` in `netizen.manifest.ts` and
-register the app (a `mini_apps` row) via the web dashboard.
+resolve (both packages are `workspace:*`; outside the monorepo use the published npm
+versions instead), then set the deployed URL as `homeUrl` in
+`public/.well-known/roebel-miniapp.json` (and its mirror `netizen.manifest.ts`), put your
+Röbel account address in `owner` (the template ships the zero address as a placeholder) and
+register: `POST https://www.roebel.app/api/mini-apps/register {"url": "<deployed origin>"}`.

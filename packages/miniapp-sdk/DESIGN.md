@@ -59,9 +59,12 @@ recharts/chart.js to a mini app unless asked.
 1. Bundle `@netizen-labs/miniapp-sdk` (add `transpilePackages: ['@netizen-labs/miniapp-sdk']` in `next.config`).
 2. Call **`sdk.actions.ready()`** once the first screen is mounted — otherwise the host shows an
    infinite splash. This is the #1 mistake; treat it as a hard requirement.
-3. Ship a `netizen.manifest.ts` exporting a `MiniAppManifest` with a correct `permissions[]` array.
-   Only request permissions the app actually uses (`wallet`, `rewards`, `notifications`, `circles`,
+3. Serve the manifest at `/.well-known/roebel-miniapp.json` (the file the store indexes; recipe:
+   https://www.roebel.app/mini-apps/publish.md) with a correct `permissions[]` array. The template's
+   `netizen.manifest.ts` is only its own source for that file. Only request permissions the app actually uses (`wallet`, `rewards`, `notifications`, `circles`,
    `share`).
 4. Treat `sdk.getContext().user` as **display-only / untrusted**. For any server call that must
-   trust the user, send `sdk.auth.getToken()` and verify it server-side.
+   trust the user, send `sdk.auth.getToken()` and verify it server-side. `auth.getToken`,
+   `auth.signIn` and `roebel.pay` work in the Röbel app from version 3.10.0; check
+   `sdk.supports()` and handle `unsupported` on older app versions.
 5. Analytics: call `sdk.track('<event>', props)` for meaningful actions (fire-and-forget).

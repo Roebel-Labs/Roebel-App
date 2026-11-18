@@ -28,7 +28,7 @@ import {
 } from "@/lib/miniapp/data";
 import { deleteData, listData, setData } from "@/lib/miniapp/dataStore";
 import { importImagesFromWebsite } from "@/lib/miniapp/images/importFromWebsite";
-import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
+import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL, DOCS_SECTIONS } from "@/lib/miniapp/devdocs";
 import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
 import { resolveMcpDeveloper } from "@/lib/miniapp/mcpAuth";
@@ -148,14 +148,15 @@ const handler = createMcpHandler(
             `4. publish_html_app {html, manifest} — creates/updates your app, serves it at https://<slug>.${MINI_APPS_SITE_DOMAIN}, status "pending" until an admin approves.\n\n` +
             `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n` +
             `Self-hosted (recommended for Vercel/Lovable/own server): serve /.well-known/roebel-miniapp.json, then register_app_url {url} — recipe ${DOCS_BASE_URL}/mini-apps/publish.md.\n\n` +
+            `Identity, verification, credentials, wallet, gasless calls, badges and store targeting: get_docs {section:"identity"|"verify"|"credentials"|"wallet"|"gasless"|"issuer"|"store"}.\n\n` +
             `Auth for publishing tools: Authorization: Bearer nz_<api-key> — create at ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
         ),
     );
 
     server.tool(
       "get_docs",
-      "Developer documentation. Sections: sdk (SDK reference), screens (mandatory screen structure), design (design system), copy (German copy rules), publish (single-file boilerplate + publishing API), all (everything).",
-      { section: z.enum(["sdk", "screens", "design", "copy", "publish", "all"]).default("all") },
+      "Developer documentation. Sections: sdk (SDK reference), screens (mandatory screen structure), design (design system), copy (German copy rules), publish (single-file boilerplate + publishing API), identity (manifest v2 identity + consent), verify (verify the person on your server), credentials (credential references + sdk.credentials), wallet (provider, limits, errors, pay, events), gasless (declared contracts + gas budget), issuer (badges via an org delegate key), store (audience + org), all (everything).",
+      { section: z.enum(DOCS_SECTIONS).default("all") },
       async ({ section }) => text(getDocsSection(section)),
     );
 
