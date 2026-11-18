@@ -265,3 +265,20 @@ export function credentialsEqual(a: Credential[], b: Credential[]): boolean {
   const sb = b.map(key).sort();
   return sa.every((k, i) => k === sb[i]);
 }
+
+/**
+ * Did the grant (or the subject) change between two states? The mini-app user token carries the
+ * granted address / name / credentials in its claims, so the host drops its cached token then.
+ * No previous state counts as changed.
+ */
+export function grantChanged(prev: IdentityState | null, next: IdentityState): boolean {
+  if (!prev) return true;
+  if (prev.subject !== next.subject) return true;
+  const a = prev.granted;
+  const b = next.granted;
+  if (a.profile !== b.profile || a.address !== b.address) return true;
+  if (a.credentials.length !== b.credentials.length) return true;
+  const sa = [...a.credentials].sort();
+  const sb = [...b.credentials].sort();
+  return sa.some((c, i) => c !== sb[i]);
+}

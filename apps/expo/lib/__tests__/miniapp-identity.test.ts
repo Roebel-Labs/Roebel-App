@@ -5,6 +5,7 @@ import { pendingConsentKeys } from '@netizen-labs/miniapp-sdk/host';
 import {
   buildConsentItems,
   credentialsEqual,
+  grantChanged,
   fetchIdentityState,
   grantFromChoices,
   grantWithItem,
@@ -218,5 +219,30 @@ describe('credentialsEqual', () => {
     expect(credentialsEqual(base, [c('citizen', null)])).toBe(false);
     expect(credentialsEqual(base, [c('citizen', null), c('attester', 200)])).toBe(false);
     expect(credentialsEqual([c('citizen')], [c('citizen', null)])).toBe(true);
+  });
+});
+
+describe('grantChanged (drops the cached token whose claims carry the grant)', () => {
+  const g = (granted: Partial<IdentityState['granted']>, extra: Partial<IdentityState> = {}): IdentityState => ({
+    ...state,
+    ...extra,
+    granted: { profile: false, address: false, credentials: [], ...granted },
+  });
+  it('no previous state counts as changed', () => {
+    expect(grantChanged(null, g({}))).toBe(true);
+  });
+  it('the same grant (credential order ignored) is unchanged', () => {
+    expect(grantChanged(g({ profile: true, credentials: ['a', 'b'] }), g({ profile: true, credentials: ['b', 'a'] }))).toBe(false);
+  });
+  it('a withdrawn address or profile is a change', () => {
+    expect(grantChanged(g({ address: true }), g({ address: false }))).toBe(true);
+    expect(grantChanged(g({ profile: true }), g({ profile: false }))).toBe(true);
+  });
+  it('a withdrawn or added credential grant is a change', () => {
+    expect(grantChanged(g({ credentials: ['citizen'] }), g({ credentials: [] }))).toBe(true);
+    expect(grantChanged(g({ credentials: [] }), g({ credentials: ['citizen'] }))).toBe(true);
+  });
+  it('another subject is a change', () => {
+    expect(grantChanged(g({}), g({}, { subject: 'nz_other' }))).toBe(true);
   });
 });

@@ -84,6 +84,7 @@ import {
   buildConsentItems,
   credentialsEqual,
   fetchIdentityState,
+  grantChanged,
   grantFromChoices,
   saveIdentityGrant,
   shapeUser,
@@ -254,18 +255,19 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const tokenCacheRef = useRef<ReturnType<typeof createMiniAppTokenCache> | null>(null);
   // Bumped by every applied state: a re-fetch that started earlier is dropped when it lands.
   const identitySeqRef = useRef(0);
-  // Take a newer identity state. When the shared credentials differ from what the app had, the
-  // token (whose claims carry them) is dropped and the app gets `credentialsChanged`.
+  // Take a newer identity state. When any part of the grant changed, or the shared credentials
+  // differ from what the app had, the token (whose claims carry them) is dropped; a changed
+  // credential list also sends the app `credentialsChanged`.
   const applyIdentityState = useCallback(
     (next: IdentityState) => {
       identitySeqRef.current += 1;
+      const prevState = identityRef.current;
       // No previous state (the first load failed): the app saw no credentials.
-      const prev = identityRef.current?.credentials ?? NO_CREDENTIALS;
+      const prev = prevState?.credentials ?? NO_CREDENTIALS;
       setIdentityState(next);
-      if (!credentialsEqual(prev, next.credentials)) {
-        tokenCacheRef.current?.clear();
-        bridgeRef.current?.sendEvent('credentialsChanged', next.credentials);
-      }
+      const credsChanged = !credentialsEqual(prev, next.credentials);
+      if (credsChanged || grantChanged(prevState, next)) tokenCacheRef.current?.clear();
+      if (credsChanged) bridgeRef.current?.sendEvent('credentialsChanged', next.credentials);
     },
     [setIdentityState],
   );
@@ -467,6 +469,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     let cancelled = false;
     void fetchIdentityState(acc, app.id).then((state) => {
       if (cancelled) return;
+      // The host stays mounted between opens: a token cached on an earlier open may carry a grant
+      // withdrawn meanwhile (detail page, another device). Every open starts from a fresh token.
+      tokenCacheRef.current?.clear();
       setIdentityState(state);
       // Offline / node down: no sheet, the app runs signed out.
       if (!state) return g.settle();
