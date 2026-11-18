@@ -37,6 +37,7 @@ export const ORG_ACTIONS: readonly CredentialAction[] = [
   "event_badge_get",
   "event_badge_prepare",
   "event_badge_auto",
+  "event_badge_qr",
 ];
 
 const PASSKEY_TOKEN_PREFIX = "pst1.";

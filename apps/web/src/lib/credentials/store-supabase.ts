@@ -187,7 +187,7 @@ const LOWERCASE_COLUMNS = new Set([
 ]);
 
 // The events table has no end-date column today, so endDate stays null (badgeWindow uses `date`).
-const EVENT_COLS = "id, title, date, time, end_time, image_url, account_id";
+const EVENT_COLS = "id, title, date, time, end_time, image_url, account_id, status, max_attendees";
 const toEvent = (r: Row): EventRow => ({
   id: r.id,
   title: r.title ?? "",
@@ -197,6 +197,8 @@ const toEvent = (r: Row): EventRow => ({
   accountId: r.account_id ?? null,
   time: r.time ?? null,
   endTime: r.end_time ?? null,
+  status: r.status ?? null,
+  maxAttendees: typeof r.max_attendees === "number" ? r.max_attendees : null,
 });
 /** PostgREST returns at most 1000 rows per request. */
 const PAGE = 1000;
@@ -587,6 +589,22 @@ export class SupabaseCredentialStore implements CredentialStore {
       out.push(...rows.map((x) => ({ wallet: String(x.wallet ?? ""), status: String(x.status ?? "") })));
       if (rows.length < PAGE) return out;
     }
+  }
+
+  async rewardEventIdFor(eventId: string): Promise<string | null> {
+    const r = await this.db.from("reward_events").select("id").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    check("rewardEventIdFor", r);
+    return r.data ? String((r.data as Row).id) : null;
+  }
+  async createRewardEvent(x: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }): Promise<string> {
+    // Same row the org dashboard's QR panel inserts (apps/web/src/app/actions/org-events.ts createEventQr).
+    const r = await this.db
+      .from("reward_events")
+      .insert({ label: x.label, event_id: x.eventId, starts_at: x.startsAt, active: true, created_by: x.createdBy, max_rewards: x.maxRewards })
+      .select("id")
+      .single();
+    check("createRewardEvent", r);
+    return String((r.data as Row).id);
   }
 
   async setSyncCursor(state: SyncState) {

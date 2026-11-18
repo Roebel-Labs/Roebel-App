@@ -30,7 +30,8 @@ export type CredentialAction =
   | 'action_cancel' | 'letters' | 'mine' | 'redeem' | 'respond' | 'holdings' | 'present_create' | 'present_resolve'
   | 'people_preview' | 'event_badges_list' | 'event_badge_setup' | 'event_badge_get' | 'event_badge_prepare'
   | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status'
-  | 'delegates_list';
+  | 'delegates_list'
+  | 'event_badge_qr';
 export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {

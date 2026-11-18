@@ -12,6 +12,7 @@
  *
  * Relative imports only: loaded by `npx tsx --test`.
  */
+import { randomUUID } from "node:crypto";
 import type { Hex } from "viem";
 import type { RegisterStep } from "@netizen-labs/credential-registry";
 
@@ -82,6 +83,9 @@ export type EventRow = {
   /** events.time / events.end_time ("HH:MM[:SS]", Europe/Berlin), when set. */
   time?: string | null;
   endTime?: string | null;
+  /** events.status ("approved" = published) and events.max_attendees, when read. */
+  status?: string | null;
+  maxAttendees?: number | null;
 };
 /** A ticket (tickets.holder_wallet) or an event_attend reward claim (reward_claims.wallet) of one event, unfiltered. */
 export type AttendanceRow = { wallet: string; status: string };
@@ -277,6 +281,10 @@ export interface CredentialStore {
   ticketsForEvent(eventId: string): Promise<AttendanceRow[]>;
   /** Every `event_attend` claim whose reference is a reward_events row linked to the event (any status). */
   attendClaimsForEvent(eventId: string): Promise<AttendanceRow[]>;
+  /** The newest reward_events row linked to the event (its Smart Event QR), or null. */
+  rewardEventIdFor(eventId: string): Promise<string | null>;
+  /** Inserts the event's Smart Event QR row (reward_events); returns its id. */
+  createRewardEvent(r: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }): Promise<string>;
 }
 
 const lc = <T extends string | null | undefined>(v: T): T => (typeof v === "string" ? (v.toLowerCase() as T) : v);
@@ -319,7 +327,7 @@ export class InMemoryCredentialStore implements CredentialStore {
   cursor: SyncState | null = null;
   readonly events = new Map<string, EventRow>();
   readonly tickets: { eventId: string; wallet: string; status: string }[] = [];
-  readonly rewardEvents: { id: string; eventId: string | null }[] = [];
+  readonly rewardEvents: { id: string; eventId: string | null; label?: string; startsAt?: string | null; createdBy?: string; maxRewards?: number | null }[] = [];
   readonly rewardClaims: { wallet: string; action: string; referenceId: string; status: string }[] = [];
 
   // ── test seeding ────────────────────────────────────────────────────────────
@@ -630,5 +638,14 @@ export class InMemoryCredentialStore implements CredentialStore {
   async attendClaimsForEvent(eventId: string) {
     const refs = new Set(this.rewardEvents.filter((r) => r.eventId === eventId).map((r) => r.id));
     return this.rewardClaims.filter((c) => c.action === "event_attend" && refs.has(c.referenceId)).map(({ wallet, status }) => ({ wallet, status }));
+  }
+  async rewardEventIdFor(eventId: string) {
+    const linked = this.rewardEvents.filter((r) => r.eventId === eventId);
+    return linked.length ? linked[linked.length - 1].id : null;
+  }
+  async createRewardEvent(r: { eventId: string; label: string; startsAt: string | null; createdBy: string; maxRewards: number | null }) {
+    const id = randomUUID();
+    this.rewardEvents.push({ id, ...r });
+    return id;
   }
 }

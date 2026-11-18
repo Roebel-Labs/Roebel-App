@@ -18,7 +18,7 @@ import {
 } from "@/lib/credentials/actions";
 import { prepareBatch, prepareRevocation, previewPeople, type BatchInput, type RecipientInput } from "@/lib/credentials/batch";
 import { listPeople, searchPeople } from "@/lib/credentials/people";
-import { eventBadgeGet, eventBadgesList, prepareEventBadge, prepareEventBadgeAuto, setupEventBadge } from "@/lib/credentials/event-badges";
+import { ensureEventQr, eventBadgeGet, eventBadgesList, prepareEventBadge, prepareEventBadgeAuto, setupEventBadge } from "@/lib/credentials/event-badges";
 import { credentialDeps } from "@/lib/credentials/runtime";
 import { prepareLetters } from "@/lib/credentials/delivery";
 import { renderLetters } from "@/lib/credentials/letters";
@@ -128,6 +128,8 @@ export async function POST(request: NextRequest) {
             supplyCap: p.supplyCap as number | undefined,
           }),
         );
+      case "event_badge_qr":
+        return respond(await ensureEventQr(d, c, { eventId: String(p.eventId ?? "") }));
       case "event_badge_auto":
         return respond(await prepareEventBadgeAuto(d, c, { eventId: String(p.eventId ?? ""), enabled: p.enabled as boolean }));
       case "letters": {

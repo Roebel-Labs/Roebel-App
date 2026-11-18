@@ -40,11 +40,43 @@ test("public badge route returns name, image, window and count, and null for eve
 
   const w = badgeWindow({ date: "2026-12-05" });
   const got = await publicEventBadge(store, EVENT);
-  assert.deepEqual(got, { badge: { name: "Dabei: Sommerfest", imageUrl: "https://img.example/s.jpg", claimStart: w.claimStart, claimEnd: w.claimEnd, collected: 2 } });
-  // No names, no wallets anywhere in the answer.
-  assert.ok(!/0x[0-9a-f]{40}/i.test(JSON.stringify(got)));
+  const typeId = got.badge?.typeId;
+  assert.match(String(typeId), /^0x[0-9a-f]{64}$/);
+  assert.deepEqual(got, { badge: { typeId, name: "Dabei: Sommerfest", imageUrl: "https://img.example/s.jpg", claimStart: w.claimStart, claimEnd: w.claimEnd, collected: 2 } });
+  // No names, no wallets anywhere in the answer (the 32-byte type id is not an account).
+  assert.ok(!/"0x[0-9a-f]{40}"/i.test(JSON.stringify(got)));
 
   assert.deepEqual(await publicEventBadge(store, BARE), { badge: null });
   assert.deepEqual(await publicEventBadge(store, "11111111-2222-4333-8444-999999999999"), { badge: null });
   assert.deepEqual(await publicEventBadge(store, "not-a-uuid"), { badge: null });
+});
+
+test("event_badge_qr reuses the linked Smart Event QR or creates it for a published event, owners and admins only", async () => {
+  const { ensureEventQr } = await import("../src/lib/credentials/event-badges");
+  const store = new InMemoryCredentialStore();
+  store.seedAccount({ id: VEREIN, accountType: "organisation", name: "Heimatverein", subType: "verein", avatarUrl: null, membersPublicColumn: null });
+  store.seedOwner(VEREIN, OWNER, "owner");
+  store.seedEvent({ id: EVENT, title: "Sommerfest", date: "2026-12-05", endDate: null, imageUrl: null, accountId: VEREIN, status: "approved", time: "18:00" });
+  store.seedEvent({ id: BARE, title: "Entwurf", date: "2026-12-06", endDate: null, imageUrl: null, accountId: VEREIN, status: "pending" });
+  const d = { store, now: () => Date.parse("2026-12-05T10:00:00Z") } as unknown as EventBadgeDeps;
+  const c = (wallet: string): Caller => ({ ok: true, wallet, via: "signature", action: "event_badge_qr", payload: {} });
+
+  const first = await ensureEventQr(d, c(OWNER), { eventId: EVENT });
+  assert.equal(first.ok, true);
+  const id = first.ok ? first.data.rewardEventId : "";
+  assert.ok(id);
+  assert.equal(store.rewardEvents.length, 1);
+  assert.equal(store.rewardEvents[0].eventId, EVENT);
+  // Idempotent: the second call returns the same QR and creates nothing.
+  const again = await ensureEventQr(d, c(OWNER), { eventId: EVENT });
+  assert.deepEqual(again, { ok: true, data: { rewardEventId: id } });
+  assert.equal(store.rewardEvents.length, 1);
+
+  const draft = await ensureEventQr(d, c(OWNER), { eventId: BARE });
+  assert.equal(draft.ok, false);
+  assert.equal(draft.ok ? "" : draft.code, "NOT_PUBLISHED");
+
+  const stranger = await ensureEventQr(d, c(wallet(9)), { eventId: EVENT });
+  assert.equal(stranger.ok, false);
+  assert.equal(stranger.ok ? 0 : stranger.status, 403);
 });

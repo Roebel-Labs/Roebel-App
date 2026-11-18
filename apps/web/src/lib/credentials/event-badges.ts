@@ -396,9 +396,33 @@ export async function prepareEventBadgeAuto(d: EventBadgeDeps, c: Caller, p: { e
   });
 }
 
+// ── Smart Event QR (the badge QR at the door) ─────────────────────────────────
+
+/**
+ * event_badge_qr: the event's Smart Event QR id (`roebel.app/e/<id>`), created on first use for a
+ * published event, exactly like the org dashboard's QR panel does (reward_events row linked to
+ * the event, so its claims count as attendance). Owner or admin of the event's org. Idempotent.
+ */
+export async function ensureEventQr(d: Deps, c: Caller, p: { eventId: string }): Promise<Result<{ rewardEventId: string }>> {
+  const ctx = await eventOrg(d, c, p?.eventId, false);
+  if (isFail(ctx)) return ctx;
+  const existing = await d.store.rewardEventIdFor(ctx.event.id);
+  if (existing) return { ok: true, data: { rewardEventId: existing } };
+  if (ctx.event.status !== "approved") return fail(409, "NOT_PUBLISHED", "Bitte die Veranstaltung zuerst veröffentlichen.");
+  const startsAt = ctx.event.date ? `${ctx.event.date}T${ctx.event.time ?? "00:00:00"}` : null;
+  const id = await d.store.createRewardEvent({
+    eventId: ctx.event.id,
+    label: (ctx.event.title || "Röbel-Event").slice(0, 80),
+    startsAt,
+    createdBy: c.wallet,
+    maxRewards: ctx.event.maxAttendees ?? null,
+  });
+  return { ok: true, data: { rewardEventId: id } };
+}
+
 // ── public ────────────────────────────────────────────────────────────────────
 
-export type PublicEventBadge = { name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
+export type PublicEventBadge = { typeId: Hex; name: string; imageUrl: string | null; claimStart: number; claimEnd: number; collected: number };
 
 /**
  * GET /api/credentials/events/<eventId>/badge: what anyone may see of an event's badge (the event
@@ -415,6 +439,6 @@ export async function publicEventBadge(store: CredentialStore, eventId: string):
   const accepted = new Set<string>();
   for (const i of await store.listInvitations({ typeId: t.typeId, statuses: ["accepted"] })) accepted.add(i.recipientWallet ?? i.subject);
   return {
-    badge: { name: t.name, imageUrl: t.imageUrl, claimStart: unix(t.claimStart, w.claimStart), claimEnd: unix(t.claimEnd, w.claimEnd), collected: accepted.size },
+    badge: { typeId: t.typeId, name: t.name, imageUrl: t.imageUrl, claimStart: unix(t.claimStart, w.claimStart), claimEnd: unix(t.claimEnd, w.claimEnd), collected: accepted.size },
   };
 }
