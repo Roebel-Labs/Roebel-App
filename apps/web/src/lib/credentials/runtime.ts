@@ -1,10 +1,12 @@
 // Production wiring for the credential routes: Supabase (service role) store, a Gnosis reader of
 // the configured register, the receipt lookup and the push hub. Server-only; never loaded by tests.
 import { CREDENTIAL_REGISTRY_ABI, REGISTER_EVENTS, type RegisterLog } from "@netizen-labs/credential-registry";
-import { createPublicClient, http, TransactionReceiptNotFoundError, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, TransactionReceiptNotFoundError, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { gnosis } from "viem/chains";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Deps } from "./actions";
+import { AUTO_MIN_BALANCE_WEI, badgeDelegateAddress, type AutoDeps } from "./badge-delegate";
 import { registryConfig } from "./config";
 import { deliverInvitations, MAX_MAILS_PER_RUN, type DeliveryDeps } from "./delivery";
 import { createResendMailer } from "@/lib/passkey/email-mailer";
@@ -91,5 +93,43 @@ export function credentialDeps(): Deps | null {
     applyConfirmed: async (actionId, logs) => {
       if (sync) await applyConfirmedAction(sync, actionId, logs);
     },
+  };
+}
+
+/**
+ * The node badge key's deps (cron and badge_nudge). null when the register or
+ * CREDENTIAL_BADGE_DELEGATE_KEY is not configured: then nothing is ever sent.
+ */
+export function badgeAutoDeps(): AutoDeps | null {
+  const cfg = registryConfig();
+  const node = badgeDelegateAddress();
+  const key = process.env.CREDENTIAL_BADGE_DELEGATE_KEY?.trim();
+  if (!cfg || !node || !key) return null;
+  const client = gnosisClient();
+  const account = privateKeyToAccount(key as Hex);
+  const wallet = createWalletClient({ account, chain: gnosis, transport: http(process.env.GNOSIS_RPC_URL || DEFAULT_GNOSIS_RPC, { batch: false, timeout: 15_000 }) });
+  const admin = createAdminClient();
+  return {
+    store: supabaseCredentialStore(admin),
+    reader: {
+      isDelegate: (typeId, who) =>
+        client.readContract({ address: cfg.address as Address, abi: CREDENTIAL_REGISTRY_ABI, functionName: "isDelegate", args: [typeId, who] } as never) as Promise<boolean>,
+    },
+    send: (call) => wallet.sendTransaction({ to: call.to, data: call.data, account, chain: gnosis }),
+    balance: () => client.getBalance({ address: node }),
+    // Missing key, read error or anything but 'true' = off: closed is the safe direction.
+    async killSwitch() {
+      try {
+        const { data, error } = await admin.from("app_settings").select("value").eq("key", "credentials_badge_delegate_enabled").maybeSingle();
+        if (error) return true;
+        return String(data?.value ?? "").trim() !== "true";
+      } catch {
+        return true;
+      }
+    },
+    now: () => Date.now(),
+    registry: cfg.address as Address,
+    minBalanceWei: AUTO_MIN_BALANCE_WEI,
+    node,
   };
 }

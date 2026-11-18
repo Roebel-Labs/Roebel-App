@@ -108,7 +108,7 @@ async function eventOrg(d: Deps, c: Caller, eventId: unknown, ready: boolean): P
   return { event, org };
 }
 
-async function badgeTypeOf(store: CredentialStore, accountId: string, eventId: string): Promise<TypeRow | null> {
+export async function badgeTypeOf(store: CredentialStore, accountId: string, eventId: string): Promise<TypeRow | null> {
   const types = await store.listTypes({ accountId, includeRetired: false });
   return types.find((t) => t.kind === "badge" && t.eventId === eventId && !t.retired) ?? null;
 }
@@ -124,7 +124,7 @@ function view(t: TypeRow | null): EventBadgeView | null {
  * a batch that was discarded or whose action expired or failed frees its people again.
  * `delivered`: invitations that reached the person. `accepted`: accepted ones.
  */
-export async function badgeHolders(d: Deps, typeId: Hex): Promise<{ covered: Set<string>; delivered: Set<string>; accepted: Set<string> }> {
+export async function badgeHolders(d: Pick<Deps, "store" | "now">, typeId: Hex): Promise<{ covered: Set<string>; delivered: Set<string>; accepted: Set<string> }> {
   const covered = new Set<string>();
   const delivered = new Set<string>();
   const accepted = new Set<string>();

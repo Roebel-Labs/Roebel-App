@@ -17,7 +17,7 @@ import type { AccountRow, BatchRow, CredentialStore, InvitationRow, TypeRow } fr
 import type { CredentialAction } from "../signed-request/message";
 
 /** The actions of POST /api/credentials/me. holdings and present_resolve also accept a pairing session. */
-export const ME_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "holdings", "present_create", "present_resolve"];
+export const ME_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "holdings", "present_create", "present_resolve", "badge_nudge"];
 
 export const REDEEM_RATE_RULE = { name: "credentials-redeem-min", limit: 10, windowMs: 60_000 } as const;
 

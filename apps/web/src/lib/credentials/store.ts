@@ -72,7 +72,17 @@ export type TypeRow = {
 };
 
 /** An `events` row as the event badges need it. */
-export type EventRow = { id: string; title: string; date: string; endDate: string | null; imageUrl: string | null; accountId: string | null };
+export type EventRow = {
+  id: string;
+  title: string;
+  date: string;
+  endDate: string | null;
+  imageUrl: string | null;
+  accountId: string | null;
+  /** events.time / events.end_time ("HH:MM[:SS]", Europe/Berlin), when set. */
+  time?: string | null;
+  endTime?: string | null;
+};
 /** A ticket (tickets.holder_wallet) or an event_attend reward claim (reward_claims.wallet) of one event, unfiltered. */
 export type AttendanceRow = { wallet: string; status: string };
 
@@ -201,6 +211,11 @@ export interface CredentialStore {
   listTypes(filter?: TypeFilter): Promise<TypeRow[]>;
   upsertType(row: TypeRow): Promise<void>;
   updateType(typeId: Hex, patch: Partial<Omit<TypeRow, "typeId">>): Promise<boolean>;
+  /**
+   * Compare-and-set of the node batch guard: sets last_auto_at to `nowIso` only while it is null
+   * or older than `beforeIso`. Returns whether this call took the slot.
+   */
+  claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string): Promise<boolean>;
 
   // credential_actions
   insertAction(row: ActionRow): Promise<void>;
@@ -399,6 +414,13 @@ export class InMemoryCredentialStore implements CredentialStore {
     const t = this.types.get(typeId.toLowerCase());
     if (!t) return false;
     Object.assign(t, clone(patch));
+    return true;
+  }
+  async claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string) {
+    const t = this.types.get(typeId.toLowerCase());
+    if (!t) return false;
+    if (t.lastAutoAt && Date.parse(t.lastAutoAt) >= Date.parse(beforeIso)) return false;
+    t.lastAutoAt = nowIso;
     return true;
   }
 

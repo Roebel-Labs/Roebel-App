@@ -15,7 +15,7 @@ export type Caller = {
   payload: Record<string, unknown>;
 };
 
-export const APP_ONLY_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "present_create", "action_submitted"];
+export const APP_ONLY_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "present_create", "action_submitted", "badge_nudge"];
 
 /** Actions of /api/credentials/org (dashboard, Studio and app), including the plan-4 event badge actions. */
 export const ORG_ACTIONS: readonly CredentialAction[] = [

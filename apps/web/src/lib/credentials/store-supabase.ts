@@ -187,7 +187,7 @@ const LOWERCASE_COLUMNS = new Set([
 ]);
 
 // The events table has no end-date column today, so endDate stays null (badgeWindow uses `date`).
-const EVENT_COLS = "id, title, date, image_url, account_id";
+const EVENT_COLS = "id, title, date, time, end_time, image_url, account_id";
 const toEvent = (r: Row): EventRow => ({
   id: r.id,
   title: r.title ?? "",
@@ -195,6 +195,8 @@ const toEvent = (r: Row): EventRow => ({
   endDate: null,
   imageUrl: r.image_url ?? null,
   accountId: r.account_id ?? null,
+  time: r.time ?? null,
+  endTime: r.end_time ?? null,
 });
 /** PostgREST returns at most 1000 rows per request. */
 const PAGE = 1000;
@@ -314,6 +316,16 @@ export class SupabaseCredentialStore implements CredentialStore {
   async updateType(typeId: Hex, patch: Partial<Omit<TypeRow, "typeId">>) {
     const r = await this.db.from(T.types).update(toColumns(patch, TYPE_FIELDS)).eq("type_id", typeId.toLowerCase()).select("type_id");
     check("updateType", r);
+    return ((r.data ?? []) as Row[]).length > 0;
+  }
+  async claimAutoRun(typeId: Hex, beforeIso: string, nowIso: string) {
+    const r = await this.db
+      .from(T.types)
+      .update({ last_auto_at: nowIso })
+      .eq("type_id", typeId.toLowerCase())
+      .or(`last_auto_at.is.null,last_auto_at.lt."${beforeIso}"`)
+      .select("type_id");
+    check("claimAutoRun", r);
     return ((r.data ?? []) as Row[]).length > 0;
   }
 
