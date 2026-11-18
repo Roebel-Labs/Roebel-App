@@ -21,6 +21,7 @@ import { credentialsConfigured } from './gate';
 import { sendWithGuestClaim } from './guest';
 import type { HeldCredential } from './held';
 import type { InvitationView } from './types';
+import { queueMiniAppSuggestion } from '@/lib/miniapp-suggestions';
 
 export { makePrivate } from './visibility';
 
@@ -154,7 +155,10 @@ export async function acceptInvitation(
   let res = await d.respond(signer, inv.id, 'accept');
   // After a successful claim the register already shows it: one more try to record it.
   if (!res.ok && choice === 'public') res = await d.respond(signer, inv.id, 'accept');
-  return res.ok ? { ok: true } : { ok: false, message: apiMessage(res) };
+  if (!res.ok) return { ok: false, message: apiMessage(res) };
+  // The org's mini app may be suggested on Erkunden once (device only, nothing sent).
+  if (inv.org?.accountId) await queueMiniAppSuggestion(inv.org.accountId).catch(() => {});
+  return { ok: true };
 }
 
 /**
