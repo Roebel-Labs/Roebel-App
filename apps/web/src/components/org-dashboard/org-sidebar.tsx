@@ -31,6 +31,7 @@ import {
   SUB_TYPE_EMOJI,
 } from "@/types/account";
 import type { Account } from "@/types/account";
+import { credentialsVisible } from "@/lib/credentials/client";
 
 interface OrgSidebarProps {
   account: Account;
@@ -45,7 +46,7 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
     let alive = true;
     fetch("/api/credentials/status")
       .then((r) => r.json())
-      .then((s) => alive && setCredentialsEnabled(s?.enabled === true && s?.configured === true))
+      .then((s) => alive && setCredentialsEnabled(credentialsVisible(s)))
       .catch(() => {});
     return () => {
       alive = false;

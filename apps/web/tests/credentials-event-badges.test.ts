@@ -376,3 +376,23 @@ test("event_badge_setup stores a draft with name, poster image and limit, and th
     assert.deepEqual((await store.getAction(offLive.data.actionId!))!.steps, [{ fn: "retireType", typeId: live.typeId }]);
   }
 });
+
+test("turning auto off stops the node even when the key is gone or the org lost its chain readiness", async () => {
+  const { d, store } = world();
+  store.seedTicket({ eventId: EVENT, wallet: wallet(1), status: "checked_in" });
+  const first = await prepareEventBadge(d, caller("event_badge_prepare"), { eventId: EVENT });
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  await landAll(store);
+  await store.updateType(first.data.typeId, { autoBadges: true });
+  // The node key was removed from the server: the answer is NOT_CONFIGURED, but the flag is off.
+  const noKey = { ...d, badgeDelegate: () => null };
+  const r = await prepareEventBadgeAuto(noKey, caller("event_badge_auto"), { eventId: EVENT, enabled: false });
+  assert.equal(r.ok, false);
+  assert.equal((await store.getType(first.data.typeId))!.autoBadges, false);
+  // A member (not owner/admin) can never switch it.
+  await store.updateType(first.data.typeId, { autoBadges: true });
+  const member = await prepareEventBadgeAuto(d, caller("event_badge_auto", wallet(77)), { eventId: EVENT, enabled: false });
+  assert.equal(member.ok, false);
+  assert.equal((await store.getType(first.data.typeId))!.autoBadges, true);
+});

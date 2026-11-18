@@ -161,3 +161,9 @@ export function safeActionError(error: string | null | undefined): string {
   if (/0x[0-9a-f]{6,}/i.test(error) || /https?:\/\//i.test(error) || error.length > 160) return "Senden fehlgeschlagen";
   return error;
 }
+
+/** GET /api/credentials/status → whether the "Ausweise" surfaces (sidebar, event tab) are shown. */
+export function credentialsVisible(s: unknown): boolean {
+  const v = s as { enabled?: unknown; configured?: unknown } | null;
+  return !!v && v.enabled === true && v.configured === true;
+}

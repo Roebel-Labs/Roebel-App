@@ -31,6 +31,7 @@ import { EventInterestsPanel } from "@/components/org-dashboard/EventInterestsPa
 import { EventStatsQrPanel } from "@/components/org-dashboard/EventStatsQrPanel"
 import { EventFlyerGenerator } from "@/components/org-dashboard/EventFlyerGenerator"
 import { EventBadgePanel } from "@/components/org-dashboard/EventBadgePanel"
+import { credentialsVisible } from "@/lib/credentials/client"
 import { updateOrgEvent } from "@/app/actions/org-events"
 import { deleteEvent } from "@/app/actions/manage-events"
 
@@ -58,6 +59,18 @@ export default function EditOrgEventPage() {
   const [status, setStatus] = useState<string>("draft")
   const [title, setTitle] = useState("")
   const [accountId, setAccountId] = useState<string | null>(null)
+  // "Abzeichen" only while the credential register is on and configured (like the sidebar item).
+  const [badgesOn, setBadgesOn] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch("/api/credentials/status")
+      .then((r) => r.json())
+      .then((s) => alive && setBadgesOn(credentialsVisible(s)))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // Deep-link ?tab=flyer (e.g. from the events list) without needing useSearchParams.
   useEffect(() => {
@@ -159,7 +172,7 @@ export default function EditOrgEventPage() {
     { key: "flyer", label: "Flyer" },
     { key: "anmeldungen", label: "Anmeldungen" },
     { key: "statistik", label: "Statistik & QR" },
-    { key: "abzeichen", label: "Abzeichen" },
+    ...(badgesOn ? [{ key: "abzeichen" as Tab, label: "Abzeichen" }] : []),
   ]
 
   return (
@@ -253,7 +266,7 @@ export default function EditOrgEventPage() {
 
       {tab === "statistik" && <EventStatsQrPanel eventId={eventId} />}
 
-      {tab === "abzeichen" && accountId && (
+      {tab === "abzeichen" && badgesOn && accountId && (
         <EventBadgePanel eventId={eventId} accountId={accountId} eventTitle={title} eventImageUrl={values.image_url || null} />
       )}
     </div>

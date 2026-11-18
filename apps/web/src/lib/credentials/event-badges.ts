@@ -378,6 +378,13 @@ export async function setupEventBadge(
  */
 export async function prepareEventBadgeAuto(d: EventBadgeDeps, c: Caller, p: { eventId: string; enabled: boolean }): Promise<Result<{ actionId: string }>> {
   if (!p || typeof p.enabled !== "boolean") return bad("enabled muss wahr oder falsch sein.");
+  // Stopping never waits: owners/admins clear the flag before the readiness and key checks.
+  if (!p.enabled) {
+    const plain = await eventOrg(d, c, p.eventId, false);
+    if (isFail(plain)) return plain;
+    const current = await badgeTypeOf(d.store, plain.org.accountId, plain.event.id);
+    if (current?.autoBadges) await d.store.updateType(current.typeId, { autoBadges: false });
+  }
   const ctx = await eventOrg(d, c, p.eventId, true);
   if (isFail(ctx)) return ctx;
   const node = (d.badgeDelegate ?? (() => badgeDelegateAddress()))();
