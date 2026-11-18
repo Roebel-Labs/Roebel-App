@@ -14,4 +14,5 @@ export const wayBackRuntime: WayBackRuntime = {
   loadPool: () => loadWordsPool(recoveryStorage),
   wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words'),
   phraseConfirmed: () => phraseStore.isConfirmed(),
+  backupFileExported: () => phraseStore.isBackupExported(),
 };

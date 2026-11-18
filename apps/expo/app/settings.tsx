@@ -484,6 +484,15 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
+        <Pressable
+          style={styles.restoreLogRow}
+          onPress={() => router.push('/settings/restore-log' as any)}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.footerNoteText, { color: colors.textTertiary }]}>Anmelde-Protokoll</Text>
+          <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+        </Pressable>
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
@@ -770,6 +779,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     lineHeight: 18,
+  },
+  restoreLogRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   bottomSpacer: {
     height: 40,

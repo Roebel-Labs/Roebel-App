@@ -101,7 +101,7 @@ export default function PasskeySignInOption({ onSignedIn, beforeActivate, initia
       >
         <Text style={[styles.title, { color: colors.textPrimary }]}>Unabhängiges Konto</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Nur du hast den Schlüssel.
+          Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Wir haben keinen Schlüssel zu deinem Konto.
         </Text>
       </Pressable>
 

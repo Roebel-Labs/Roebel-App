@@ -1,5 +1,7 @@
 # Passkey Accounts — State
 
+> What the person controls and what still depends on a vendor or on us: [`SOVEREIGNTY_LEDGER.md`](SOVEREIGNTY_LEDGER.md). Check any independence claim in the app or in marketing against it.
+
 **Status (2026-09-27):** preview-only. First device test on a Pixel 7 passed the everyday basics (see "Device test 2026-09-27"); tranche 1 originally built on `feat/passkey-accounts`.
 Spec: [`superpowers/specs/2026-09-26-passkey-sovereign-accounts-design.md`](superpowers/specs/2026-09-26-passkey-sovereign-accounts-design.md) ·
 Plan: [`superpowers/plans/2026-09-26-passkey-accounts-tranche-1.md`](superpowers/plans/2026-09-26-passkey-accounts-tranche-1.md)

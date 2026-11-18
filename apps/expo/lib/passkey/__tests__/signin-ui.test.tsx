@@ -56,7 +56,7 @@ describe('LoginDrawer + passkey option', () => {
     const t = texts(await render());
     const passkey = t.indexOf('Unabhängiges Konto');
     expect(passkey).toBeGreaterThanOrEqual(0);
-    expect(t).toContain('Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Nur du hast den Schlüssel.');
+    expect(t).toContain('Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Wir haben keinen Schlüssel zu deinem Konto.');
     expect(passkey).toBeLessThan(t.indexOf('THIRDWEB_CONNECT_EMBED'));
   });
 });

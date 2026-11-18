@@ -1,0 +1,23 @@
+{
+  "password": "Müritz-Hecht-2026",
+  "phrase": "test test test test test test test test test test test junk",
+  "saltHex": "0102030405060708090a0b0c0d0e0f10",
+  "ivHex": "a0a1a2a3a4a5a6a7a8a9aaab",
+  "file": {
+    "format": "ortis-account-backup",
+    "version": 1,
+    "kind": "bip39-12",
+    "kdf": {
+      "name": "pbkdf2-hmac-sha256",
+      "iterations": 600000,
+      "salt": "AQIDBAUGBwgJCgsMDQ4PEA"
+    },
+    "cipher": {
+      "name": "aes-256-gcm",
+      "iv": "oKGio6Slpqeoqaqr",
+      "aad": "ortis-account-backup/v1"
+    },
+    "ciphertext": "9hgPKSXYSP2hujnVDEufDUMy35xG7W4Z2nic03ANR5jmbXLCXhXvtrOTkVDVLY5YFEgDfHfdTULJwSWj7goy6UvXgLp2jhmd66Hw",
+    "createdAt": "2026-11-17T10:00:00.000Z"
+  }
+}
