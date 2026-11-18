@@ -1,7 +1,7 @@
 // Top-level navigation of Ortis Studio: the left rail picks a section, the livestream is one of them.
 // Pure helpers only (tested); the components live next to this file.
 
-export type Section = 'home' | 'foryou' | 'skills' | 'wiki' | 'library' | 'live' | 'apps';
+export type Section = 'home' | 'foryou' | 'skills' | 'wiki' | 'library' | 'live' | 'apps' | 'credentials';
 /** Everything the content frame can show: the rail sections plus pages reached from elsewhere. */
 export type AppSection = Section | 'agent';
 export type LiveTab = 'show' | 'design' | 'table' | 'liveroom' | 'settings' | 'help';
@@ -14,6 +14,7 @@ export const SECTIONS: ReadonlyArray<{ id: Section; label: string; soon?: boolea
   { id: 'library', label: 'Bibliothek' },
   { id: 'live', label: 'Livestream' },
   { id: 'apps', label: 'Mini-Apps' },
+  { id: 'credentials', label: 'Ausweise' },
 ];
 
 /** Own key, never part of ShowState (which is autosaved and broadcast to the overlay page). */

@@ -16,9 +16,16 @@ describe('shell navigation', () => {
   });
 
   it('lists the personal-context sections between Start and the livestream', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['home', 'foryou', 'skills', 'wiki', 'library', 'live', 'apps']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['home', 'foryou', 'skills', 'wiki', 'library', 'live', 'apps', 'credentials']);
     for (const id of ['foryou', 'skills', 'wiki', 'library'] as const) expect(parseSection(id)).toBe(id);
     for (const s of SECTIONS) expect(typeof SECTION_ICONS[s.id]).toBe('function');
+  });
+
+  it('parseSection accepts credentials and SECTIONS lists Ausweise after Mini-Apps', () => {
+    expect(parseSection('credentials')).toBe('credentials');
+    const i = SECTIONS.findIndex((s) => s.id === 'apps');
+    expect(SECTIONS[i + 1]).toEqual({ id: 'credentials', label: 'Ausweise' });
+    expect(typeof SECTION_ICONS.credentials).toBe('function');
   });
 
   it('remembers the last section', () => {

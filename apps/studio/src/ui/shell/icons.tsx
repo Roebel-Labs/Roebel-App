@@ -1,5 +1,5 @@
 // Rail icons per section (Hugeicons through the shared wrapper in line-icons.tsx).
-import { IconApps, IconForYou, IconHome, IconLibrary, IconLive, IconSkills, IconWiki } from './line-icons';
+import { IconApps, IconCard, IconForYou, IconHome, IconLibrary, IconLive, IconSkills, IconWiki } from './line-icons';
 
 export const SECTION_ICONS = {
   home: IconHome,
@@ -9,4 +9,5 @@ export const SECTION_ICONS = {
   library: IconLibrary,
   live: IconLive,
   apps: IconApps,
+  credentials: IconCard,
 };
