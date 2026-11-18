@@ -107,6 +107,10 @@ import {
 } from '@/lib/miniapp-wallet';
 import { createRpcProxy } from '@/lib/miniapp-rpc';
 import { addressesIn, cachedName, prefetchNames } from '@/lib/miniapp-names';
+import { buildTransactionConfirm } from '@/lib/miniapp-confirm';
+import { parseSendCalls, preflightCalls } from '@/lib/miniapp-calls';
+import { assertHostChain } from '@/lib/miniapp-chain';
+import { passkeySessionOf } from '@/lib/passkey/active';
 import { GNOSIS_READ_RPC } from '@/constants/gnosis';
 import {
   apiDataGet,
@@ -167,6 +171,8 @@ type PendingConfirm = {
   params: unknown[];
   /** Runs instead of `executeSigning` on approve (auth.signIn). */
   run?: () => Promise<unknown>;
+  /** Declared calls of a version-2 app on an independent account: sent gasless for this app. */
+  miniAppId?: string;
   resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
 };
@@ -599,17 +605,38 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
       }
 
+      // Sends: the calls, checked before any sheet. An independent account sending for a
+      // version-2 app may only send its declared calls (gasless, the app id rides along);
+      // version 1 and the old sign-in keep today's path.
+      const confirmApp = { ...app, manifestVersion: isV2 ? (2 as const) : (1 as const) };
+      let miniAppId: string | undefined;
+      let calls: { to?: string; data?: string; value?: string }[] | null = null;
+      if (method === 'wallet_sendCalls') {
+        calls = parseSendCalls(params, account.address).calls;
+      } else if (method === 'eth_sendTransaction') {
+        const tx = (params[0] ?? {}) as { to?: string; data?: string; value?: string; chainId?: unknown };
+        assertHostChain(tx.chainId);
+        calls = [{ to: tx.to, data: tx.data, value: tx.value }];
+      }
+      if (calls) {
+        const pre = preflightCalls({ app: confirmApp, calls, sponsored: !!passkeySessionOf(account) });
+        if (!pre.ok) throw pre.error;
+        if (pre.miniAppId) miniAppId = app.id;
+      }
+
       // Names for every address in the request first: the sheet never shows an address.
       await prefetchNames(addressesIn(params));
-      const request = buildConfirmRequest(app, method, params, cachedName);
+      const request = calls
+        ? buildTransactionConfirm(confirmApp, calls, cachedName)
+        : buildConfirmRequest(confirmApp, method, params, cachedName);
       if (!request) throw { code: 'unsupported', message: `Methode "${method}".` };
 
       // Show the sheet and wait for the user.
       return new Promise((resolve, reject) => {
-        setConfirm({ request, method, params, resolve, reject });
+        setConfirm({ request, method, params, miniAppId, resolve, reject });
       });
     },
-    [account, app, rpcProxy],
+    [account, app, rpcProxy, isV2],
   );
 
   const handleConfirmApprove = useCallback(async () => {
@@ -618,9 +645,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     try {
       const result = confirm.run
         ? await confirm.run()
-        : await executeSigning(confirm.method, confirm.params, account);
+        : await executeSigning(confirm.method, confirm.params, account, { miniAppId: confirm.miniAppId });
       confirm.resolve(result);
-      if (confirm.method === 'eth_sendTransaction') {
+      if (confirm.method === 'eth_sendTransaction' || confirm.method === 'wallet_sendCalls') {
         track('tx_sent', { app: app.slug });
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

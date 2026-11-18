@@ -29,13 +29,14 @@ import {
   decodeOnBehalfSignature,
   encodeLegacyExecute,
   encodeLegacyExecuteBatch,
+  miniAppIdForTxs,
   passkeyWalletOptions,
   signHashAsIdentity,
   signHashAsIdentityWithPrf,
   WRONG_CHAIN_MESSAGE,
   type AdapterDeps,
 } from '../thirdweb-adapter';
-import { dummyUserOpSignature, type SafeUserOpArgs } from '../userop';
+import { dummyUserOpSignature, sponsorRequestBody, type SafeUserOpArgs } from '../userop';
 import rv from './recovery-vector.json';
 import sv from './passkey-safe-vector.json';
 
@@ -174,6 +175,50 @@ describe('sendTransaction / sendBatchTransaction', () => {
     expect(sent[0].legacy).toBeUndefined();
     expect(sent[0].deployed).toBe(false);
     expect(sent[0].calls.map((c) => c.data)).toEqual(['0x01', '0x02']);
+  });
+});
+
+describe('mini-app id', () => {
+  const APP = '7b0c7f1e-1d2a-4c3b-9e8f-0a1b2c3d4e5f';
+
+  it('passes the mini-app id to the sponsor request', async () => {
+    const { d, sent } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await acc.sendTransaction({ chainId: 100, to: TARGET, data: '0x0d873a79', miniAppId: APP });
+    expect(sent[0].miniApp).toBe(APP);
+    await acc.sendBatchTransaction([
+      { chainId: 100, to: TARGET, data: '0x01', miniAppId: APP },
+      { chainId: 100, to: TARGET, data: '0x02', miniAppId: APP },
+    ]);
+    expect(sent[1].miniApp).toBe(APP);
+  });
+
+  it('refuses a batch that mixes mini-app ids', async () => {
+    const { d } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await expect(
+      acc.sendBatchTransaction([
+        { chainId: 100, to: TARGET, data: '0x01', miniAppId: APP },
+        { chainId: 100, to: TARGET, data: '0x02' },
+      ]),
+    ).rejects.toThrow();
+    expect(() => miniAppIdForTxs([{ miniAppId: APP }, { miniAppId: 'other' }])).toThrow();
+    expect(() => miniAppIdForTxs([{ miniAppId: 5 }])).toThrow();
+    expect(d.sendUserOp).not.toHaveBeenCalled();
+  });
+
+  it('a send without a mini-app id is unchanged', async () => {
+    const { d, sent } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await acc.sendTransaction({ chainId: 100, to: TARGET, data: '0x0d873a79' });
+    expect('miniApp' in sent[0]).toBe(false);
+    expect(miniAppIdForTxs([{}, {}])).toBeUndefined();
+  });
+
+  it('the sponsor body carries miniApp only when set', () => {
+    const op = { sender: SAFE, nonce: 0n, callData: '0x', callGasLimit: 0n, verificationGasLimit: 0n, preVerificationGas: 0n, maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: '0x' } as never;
+    expect(sponsorRequestBody(op, { proof: { x, y }, miniApp: APP }).miniApp).toBe(APP);
+    expect('miniApp' in sponsorRequestBody(op, { proof: { x, y } })).toBe(false);
   });
 });
 

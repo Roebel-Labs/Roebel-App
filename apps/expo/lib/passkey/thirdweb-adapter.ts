@@ -137,6 +137,22 @@ export function buildAdapterCalls(
   return { calls: inner.map(({ to, value, data }): SponsoredCall => (value > 0n ? { to, data, value } : { to, data })) };
 }
 
+/**
+ * The mini-app id a send carries to the sponsor (mode "miniapp"): the mini-app host attaches
+ * `miniAppId` to each transaction of a declared send. All transactions of one send must carry
+ * the same id, or none; a mix (or a non-string id) throws, so a declared call can never smuggle an
+ * undeclared one into a sponsored op.
+ */
+export function miniAppIdForTxs(txs: readonly { miniAppId?: unknown }[]): string | undefined {
+  const ids = txs.map((t) => t.miniAppId);
+  if (ids.every((id) => id === undefined)) return undefined;
+  const first = ids[0];
+  if (typeof first !== 'string' || first.length === 0 || !ids.every((id) => id === first)) {
+    throw new Error('a send must carry one mini-app id for every transaction, or none');
+  }
+  return first;
+}
+
 // ---------------------------------------------------------------------------
 // ERC-1271
 // ---------------------------------------------------------------------------
@@ -229,7 +245,9 @@ export type PasskeyThirdwebAccount = {
 };
 
 export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps): PasskeyThirdwebAccount {
-  const send = async (txs: AdapterTx[]) => {
+  const send = async (txs: (AdapterTx & { miniAppId?: unknown })[]) => {
+    // Mini-app sends name the app so the sponsor checks them against its declared calls only.
+    const miniApp = miniAppIdForTxs(txs);
     const { calls, legacy } = buildAdapterCalls(session, txs);
     // Poll.publishMessage needs the MACI pollId in the sponsor body (everyday mode).
     const pollId = deps.pollIdFor ? pollIdForTxs(txs, deps.pollIdFor) : pollIdForTxs(txs);
@@ -239,6 +257,7 @@ export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps)
       signer: signer.opSigner,
       ...(legacy ? { legacy } : {}),
       ...(pollId !== undefined ? { pollId } : {}),
+      ...(miniApp !== undefined ? { miniApp } : {}),
       calls,
       deployed,
       sender: session.safe,

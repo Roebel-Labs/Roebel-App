@@ -18,6 +18,8 @@ import { client } from '@/constants/thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
 import { PROXIED_METHODS, type RpcProxy } from '@/lib/miniapp-rpc';
+import { assertHostChain, unsupportedChain, type BridgeErrorLike } from '@/lib/miniapp-chain';
+import { callsStatus, capabilities, parseSendCalls, sponsorErrorToBridge } from '@/lib/miniapp-calls';
 import {
   buildMessageConfirm,
   buildTransactionConfirm,
@@ -34,26 +36,7 @@ const chain = gnosis;
 /** Host chain the smart account signs on (Gnosis, chainId 100). */
 export const HOST_CHAIN_ID = chain.id;
 
-export type BridgeErrorLike = { code: string; message: string; rpcCode?: number };
-
-/** The standard EIP-1193 "unrecognized chain" error: the host only runs on Gnosis. */
-export function unsupportedChain(): BridgeErrorLike & { rpcCode: 4902 } {
-  return { code: 'unsupported', message: 'Diese Mini-App läuft nur auf der Gnosis Chain.', rpcCode: 4902 };
-}
-
-/**
- * Throws `unsupportedChain()` unless `chainId` names the host chain (100). `undefined` means
- * "not specified" and is accepted; `100`, `'0x64'` and `'100'` are the accepted spellings.
- */
-export function assertHostChain(chainId: unknown): void {
-  if (chainId === undefined) return;
-  if (chainId === HOST_CHAIN_ID) return;
-  if (typeof chainId === 'string') {
-    const s = chainId.trim().toLowerCase();
-    if (s === `0x${HOST_CHAIN_ID.toString(16)}` || s === String(HOST_CHAIN_ID)) return;
-  }
-  throw unsupportedChain();
-}
+export { assertHostChain, unsupportedChain, type BridgeErrorLike };
 
 /** The `chainId` of a `wallet_switchEthereumChain` / `wallet_addEthereumChain` request. */
 function requestedChain(params: unknown[]): unknown {
@@ -181,25 +164,75 @@ export async function handleReadOnly(
       assertHostChain(chainId);
       return null;
     }
+    case 'wallet_getCapabilities':
+      return capabilities();
+    case 'wallet_getCallsStatus': {
+      const id = params[0];
+      if (typeof id !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(id)) throw invalidParams('Ungültige Batch-ID.');
+      if (!proxy) throw unsupported(method);
+      return callsStatus(id, async (hash) => {
+        const r = await proxy.request('eth_getTransactionReceipt', [hash], {});
+        return r && typeof r === 'object' ? (r as { status?: unknown }) : null;
+      });
+    }
     default:
       throw unsupported(method);
   }
 }
 
+/** A transaction object as `Account.sendTransaction` takes it (plus the mini-app id hint). */
+type DirectTx = { to: string; data?: `0x${string}`; value: bigint; chainId: number; miniAppId?: string };
+
+function directTx(c: { to?: string; data?: string; value?: unknown }, miniAppId: string | undefined): DirectTx {
+  return {
+    to: c.to as string,
+    ...(c.data && c.data !== '0x' ? { data: c.data as `0x${string}` } : {}),
+    value: toBigIntSafe(c.value),
+    chainId: HOST_CHAIN_ID,
+    ...(miniAppId ? { miniAppId } : {}),
+  };
+}
+
+/** Runs a send and turns a sponsor refusal of a mini-app op into the bridge's German message. */
+async function withSponsorErrors<T>(miniAppId: string | undefined, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    const mapped = miniAppId ? sponsorErrorToBridge(e) : null;
+    throw mapped ?? e;
+  }
+}
+
 /**
- * Execute a signing request against the thirdweb smart account. MUST only be
- * called after the user approved the confirm sheet. Returns the EIP-1193 result
- * (tx hash for sends, signature hex for signs).
+ * Execute a signing request against the active account. MUST only be called after the user
+ * approved the confirm sheet. Returns the EIP-1193 result (tx hash for sends, `{ id }` for
+ * `wallet_sendCalls`, signature hex for signs).
+ *
+ * `opts.miniAppId` (set by the host only for a passkey session sending a version-2 app's
+ * declared calls, see `preflightCalls`): every transaction goes to `account.sendTransaction` /
+ * `sendBatchTransaction` directly with `miniAppId` and chain 100 attached (thirdweb's
+ * `prepareTransaction` would drop the unknown field), so the sponsor can check it in mode
+ * "miniapp". Without it, `eth_sendTransaction` takes today's path unchanged.
  */
 export async function executeSigning(
   method: string,
   params: unknown[],
   account: Account,
+  opts: { miniAppId?: string } = {},
 ): Promise<unknown> {
+  const { miniAppId } = opts;
+
   if (method === 'eth_sendTransaction') {
     const tx = (params[0] ?? {}) as RawTx;
     assertHostChain(tx.chainId);
     if (!tx.to && !tx.data) throw invalidParams('Transaktion braucht `to` oder `data`.');
+    if (miniAppId) {
+      if (!tx.to) throw invalidParams('Transaktion braucht `to`.');
+      const { transactionHash } = await withSponsorErrors(miniAppId, () =>
+        account.sendTransaction(directTx(tx, miniAppId) as never),
+      );
+      return transactionHash;
+    }
     const transaction = prepareTransaction({
       client,
       chain,
@@ -209,6 +242,33 @@ export async function executeSigning(
     });
     const { transactionHash } = await sendTransaction({ account, transaction });
     return transactionHash;
+  }
+
+  if (method === 'wallet_sendCalls') {
+    const { calls } = parseSendCalls(params, account.address);
+    const txs = calls.map((c) => directTx(c, miniAppId));
+    if (txs.length === 1) {
+      if (miniAppId) {
+        const { transactionHash } = await withSponsorErrors(miniAppId, () => account.sendTransaction(txs[0] as never));
+        return { id: transactionHash };
+      }
+      // One call without a mini-app id: today's eth_sendTransaction path.
+      const transaction = prepareTransaction({
+        client,
+        chain,
+        to: txs[0].to,
+        value: txs[0].value > 0n ? txs[0].value : undefined,
+        data: txs[0].data,
+      });
+      const { transactionHash } = await sendTransaction({ account, transaction });
+      return { id: transactionHash };
+    }
+    if (typeof account.sendBatchTransaction !== 'function') {
+      throw { code: 'unsupported', message: 'Dieses Konto kann mehrere Aktionen nicht zusammen senden.' };
+    }
+    const sendBatch = account.sendBatchTransaction.bind(account);
+    const { transactionHash } = await withSponsorErrors(miniAppId, () => sendBatch(txs as never));
+    return { id: transactionHash };
   }
 
   if (method === 'personal_sign' || method === 'eth_sign') {
