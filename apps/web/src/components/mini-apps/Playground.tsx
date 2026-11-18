@@ -5,11 +5,13 @@
 // exercised before approval. Also reused (conceptually) by the AI-builder preview.
 import { useEffect, useRef, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
+import { toFunctionSelector } from "viem";
 import { RefreshCw, Play, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createWebMiniAppHost, type WebMiniAppHost } from "@/lib/miniapp-host";
+import { confirmText } from "@/lib/miniapp-host/confirmText";
 import { fetchUserTokenWithAccount, invalidateUserToken } from "@/lib/miniapp/clientToken";
 import type { MiniAppRow } from "@/lib/miniapp/types";
 import { previewCredentials, previewWalletOverrides } from "@/lib/miniapp/identityReview";
@@ -119,6 +121,7 @@ export function Playground({
         homeUrl: useSrcDoc ? "playground-srcdoc" : app.home_url,
         permissions: (app.permissions ?? []) as MiniAppPermission[],
         enforcePermissions,
+        contracts: app.contracts,
       },
       user: {
         id: account?.address ?? "reviewer",
@@ -131,8 +134,11 @@ export function Playground({
         if (method === "actions.ready") setReady(true);
         setLog((prev) => [{ method, ok, at: Date.now() }, ...prev].slice(0, 40));
       },
+      // Declared calls by label and function; anything undeclared is flagged with its address.
       confirmSign: async (req) =>
-        window.confirm(`Mini App möchte signieren:\n${req.method}\n\nAls Prüfer:in bestätigen?`),
+        window.confirm(
+          confirmText({ name: app.name, contracts: app.contracts }, req, (sig) => toFunctionSelector(`function ${sig}`)),
+        ),
       // User-scoped calls carry a mini-app user token for the reviewer's wallet.
       getUserToken: async () => (account ? fetchUserTokenWithAccount(account, app.id) : null),
       onUserTokenRejected: (token) => {

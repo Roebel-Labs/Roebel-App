@@ -10,8 +10,10 @@
 // CLIENT-ONLY (touches `window`). Do not import from a server component.
 "use client";
 
+import { toFunctionSelector } from "viem";
 import {
   createHostBridge,
+  type DeclaredContract,
   type HostBridge,
   type HostHandlers,
   type MiniAppContext,
@@ -24,10 +26,10 @@ import type {
   GrantRewardParams,
   MiniAppPermission,
   NetizenEvent,
-  PayParams,
   WalletAccount,
 } from "@netizen-labs/miniapp-sdk";
 import { gateWalletRequest } from "./walletGate";
+import { confirmText } from "./confirmText";
 import { createUserFetch } from "./userFetch";
 
 export interface WebHostApp {
@@ -38,6 +40,8 @@ export interface WebHostApp {
   permissions: MiniAppPermission[];
   /** Approved apps enforce their permission set; in the Playground pass `undefined` to allow-all. */
   enforcePermissions?: boolean;
+  /** Version-2 `contracts` declaration: the confirmation names declared calls, flags the rest. */
+  contracts?: DeclaredContract[];
 }
 
 export interface WebHostUser {
@@ -91,9 +95,6 @@ export interface WebMiniAppHost {
   destroy: () => void;
 }
 
-function rejected(): never {
-  throw { code: "user_rejected", message: "Vom Nutzer abgelehnt." };
-}
 function unsupported(msg: string): never {
   throw { code: "unsupported", message: msg };
 }
@@ -161,13 +162,15 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     }),
 
     walletGetAccount: () => account ?? null,
+    // Reads and wallet_sendCalls go to the reviewer's wallet provider as they are; signing
+    // methods only after the confirmation, which names declared calls and flags the rest.
     walletRequest: async (req: Eip1193RequestArgs) => {
       if (!walletProvider) unsupported("Keine Wallet verbunden.");
       return gateWalletRequest(req, {
         confirm: async (r) =>
           confirmSign
             ? confirmSign(r)
-            : window.confirm(`Mini App möchte signieren:\n${r.method}\n\nBestätigen?`),
+            : window.confirm(confirmText(app, r, (sig) => toFunctionSelector(`function ${sig}`))),
         forward: (r) => walletProvider.request(r),
       });
     },
@@ -225,16 +228,9 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       };
     },
 
-    pay: async (p: PayParams) => {
-      // User-signed transfer must go through the wallet provider (confirm sheet).
-      if (!walletProvider || !account?.address) unsupported("Keine Wallet verbunden.");
-      const ok = confirmSign
-        ? await confirmSign({ method: "eth_sendTransaction", params: [p] })
-        : window.confirm(`Röbel-Münzen senden: ${p.amount} RÖ an ${p.to}?`);
-      if (!ok) rejected();
-      // Actual transfer construction is host-specific; the web Playground surfaces
-      // this via the wallet provider. Left to the shell to complete for real sends.
-      unsupported("Zahlungen sind in der Web-Vorschau nicht verfügbar.");
+    // roebel.pay needs the app's name lookup, balance and transfer: only the Röbel app has them.
+    pay: async (): Promise<{ txHash: string }> => {
+      unsupported("Zahlungen lassen sich nur in der App testen.");
     },
 
     notificationsSend: async (p: { title: string; body: string; targetUrl?: string }) => {
