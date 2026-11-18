@@ -30,10 +30,11 @@ import { RecurringDatesEditor } from "@/components/org-dashboard/RecurringDatesE
 import { EventInterestsPanel } from "@/components/org-dashboard/EventInterestsPanel"
 import { EventStatsQrPanel } from "@/components/org-dashboard/EventStatsQrPanel"
 import { EventFlyerGenerator } from "@/components/org-dashboard/EventFlyerGenerator"
+import { EventBadgePanel } from "@/components/org-dashboard/EventBadgePanel"
 import { updateOrgEvent } from "@/app/actions/org-events"
 import { deleteEvent } from "@/app/actions/manage-events"
 
-type Tab = "details" | "anmeldungen" | "statistik" | "flyer"
+type Tab = "details" | "anmeldungen" | "statistik" | "abzeichen" | "flyer"
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   approved: { label: "Veröffentlicht", className: "bg-green-100 text-green-700" },
@@ -61,7 +62,7 @@ export default function EditOrgEventPage() {
   // Deep-link ?tab=flyer (e.g. from the events list) without needing useSearchParams.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab")
-    if (t === "flyer" || t === "anmeldungen" || t === "statistik") setTab(t as Tab)
+    if (t === "flyer" || t === "anmeldungen" || t === "statistik" || t === "abzeichen") setTab(t as Tab)
   }, [])
 
   const fetchEvent = useCallback(async () => {
@@ -158,6 +159,7 @@ export default function EditOrgEventPage() {
     { key: "flyer", label: "Flyer" },
     { key: "anmeldungen", label: "Anmeldungen" },
     { key: "statistik", label: "Statistik & QR" },
+    { key: "abzeichen", label: "Abzeichen" },
   ]
 
   return (
@@ -250,6 +252,10 @@ export default function EditOrgEventPage() {
       )}
 
       {tab === "statistik" && <EventStatsQrPanel eventId={eventId} />}
+
+      {tab === "abzeichen" && accountId && (
+        <EventBadgePanel eventId={eventId} accountId={accountId} eventTitle={title} eventImageUrl={values.image_url || null} />
+      )}
     </div>
   )
 }

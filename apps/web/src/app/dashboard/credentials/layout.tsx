@@ -14,6 +14,7 @@ const TABS = [
   { href: "/dashboard/credentials/types", label: "Ausweis-Typen" },
   { href: "/dashboard/credentials/people", label: "Personen" },
   { href: "/dashboard/credentials/batches", label: "Ausstellungen" },
+  { href: "/dashboard/credentials/events", label: "Abzeichen" },
   { href: "/dashboard/credentials/settings", label: "Einstellungen" },
 ];
 
