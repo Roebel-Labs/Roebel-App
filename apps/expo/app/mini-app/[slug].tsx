@@ -3,6 +3,10 @@
  * with ✕ + "Mini-Apps" on top, a rounded sheet with circular back/share
  * buttons, identity + Öffnen, a divided stats row, screenshot carousel,
  * Überblick, Links chips, and a sticky "App öffnen" CTA.
+ *
+ * A locked app (required audience not matched on this device) keeps its page,
+ * but both open buttons are disabled and MiniAppLockNote shows the reason and
+ * the way in. This is where deep links, pinned blocks and notifications land.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -44,6 +48,9 @@ import {
 } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
+import MiniAppLockNote from '@/components/miniapp/MiniAppLockNote';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { openDecision } from '@/lib/miniapp-open';
 import { PERMISSION_LABELS } from '@/lib/miniapp-permissions';
 import { useActiveAccount } from 'thirdweb/react';
 import { consentKeys, type ConsentKey } from '@netizen-labs/miniapp-sdk/host';
@@ -155,6 +162,10 @@ export default function MiniAppDetailScreen() {
   const [stats, setStats] = useState<MiniAppStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [hostVisible, setHostVisible] = useState(false);
+  const { held, ready } = useMatchCredentials();
+  const decision = app ? openDecision(app, held, ready) : 'wait';
+  const canOpen = decision === 'open';
+  const locked = decision === 'locked';
 
   useEffect(() => {
     if (!slug) return;
@@ -175,7 +186,9 @@ export default function MiniAppDetailScreen() {
     };
   }, [slug]);
 
-  const open = useCallback(() => setHostVisible(true), []);
+  const open = useCallback(() => {
+    if (canOpen) setHostVisible(true);
+  }, [canOpen]);
   const closeHost = useCallback(() => setHostVisible(false), []);
 
   const handleShare = useCallback(() => {
@@ -296,9 +309,13 @@ export default function MiniAppDetailScreen() {
                   </Text>
                   <Pressable
                     onPress={open}
+                    disabled={!canOpen}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !canOpen }}
                     style={({ pressed }) => [
                       styles.openBtn,
                       { backgroundColor: colors.primary },
+                      !canOpen && styles.disabled,
                       pressed && { opacity: 0.85 },
                     ]}
                   >
@@ -306,6 +323,11 @@ export default function MiniAppDetailScreen() {
                   </Pressable>
                 </View>
               </View>
+              {locked ? (
+                <View style={styles.lockWrap}>
+                  <MiniAppLockNote app={app} />
+                </View>
+              ) : null}
 
               {/* Stats row — left-aligned, horizontally swipeable */}
               <ScrollView
@@ -465,9 +487,13 @@ export default function MiniAppDetailScreen() {
             >
               <Pressable
                 onPress={open}
+                disabled={!canOpen}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canOpen }}
                 style={({ pressed }) => [
                   styles.cta,
                   { backgroundColor: colors.primary },
+                  !canOpen && styles.disabled,
                   pressed && { opacity: 0.85 },
                 ]}
               >
@@ -475,7 +501,7 @@ export default function MiniAppDetailScreen() {
               </Pressable>
             </View>
 
-            <MiniAppHost app={app} visible={hostVisible} onClose={closeHost} />
+            {canOpen ? <MiniAppHost app={app} visible={hostVisible} onClose={closeHost} /> : null}
           </>
         )}
       </View>
@@ -485,6 +511,8 @@ export default function MiniAppDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: CHROME_BG },
+  disabled: { opacity: 0.4 },
+  lockWrap: { paddingHorizontal: 20 },
   chromeBar: {
     height: 56,
     flexDirection: 'row',

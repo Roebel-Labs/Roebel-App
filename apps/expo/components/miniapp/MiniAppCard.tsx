@@ -9,7 +9,9 @@
  *  - <MiniAppRowCard>     icon + name + desc + pill button, for lists.
  *
  * Buttons are installed-aware (World-App Get→Open): not installed → "Laden"
- * (goes to the preview page), installed → "Öffnen" (launches the host).
+ * (goes to the preview page), installed → "Öffnen" (launches the host). A
+ * locked app (required audience not matched) shows "Gesperrt" with a padlock
+ * and goes to its detail page.
  *
  * Idioms: expo-image, useTheme colors, Mona Sans, 10px button radius.
  */
@@ -21,11 +23,13 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import type { MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
+import { LockIcon } from '@/components/miniapp/hostIcons';
 
 const BTN_RADIUS = 100; // fully-rounded pill (World-App Get/Open style)
 
-/** German Get/Open pair (App-Store convention). */
-export function installLabel(installed: boolean): string {
+/** German Get/Open pair (App-Store convention); "Gesperrt" for a locked app. */
+export function installLabel(installed: boolean, locked = false): string {
+  if (locked) return 'Gesperrt';
   return installed ? 'Öffnen' : 'Laden';
 }
 
@@ -92,17 +96,21 @@ export function MiniAppHeroCard({
   app,
   width,
   installed,
+  locked = false,
   onPress,
 }: {
   app: MiniApp;
   width: number;
   installed: boolean;
+  locked?: boolean;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={app.name}
       style={({ pressed }) => [
         styles.hero,
         { width, height: Math.round(width * HERO_RATIO) },
@@ -135,7 +143,8 @@ export function MiniAppHeroCard({
           </Text>
         </View>
         <View style={styles.heroBtn}>
-          <Text style={styles.heroBtnText}>{installLabel(installed)}</Text>
+          {locked ? <LockIcon size={14} color="#fff" /> : null}
+          <Text style={styles.heroBtnText}>{installLabel(installed, locked)}</Text>
         </View>
       </View>
     </Pressable>
@@ -177,11 +186,14 @@ export function MiniAppCoverCard({ app, onPress }: { app: MiniApp; onPress: () =
 export function MiniAppRowCard({
   app,
   installed = false,
+  locked = false,
   onPress,
   columnMode = false,
 }: {
   app: MiniApp;
   installed?: boolean;
+  /** Required audience not matched: "Gesperrt" with a padlock. */
+  locked?: boolean;
   onPress: () => void;
   /** Inside a fixed-width carousel column: drop the row's own side padding. */
   columnMode?: boolean;
@@ -190,6 +202,8 @@ export function MiniAppRowCard({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={app.name}
       style={({ pressed }) => [
         styles.row,
         columnMode && styles.rowColumn,
@@ -206,8 +220,9 @@ export function MiniAppRowCard({
         </Text>
       </View>
       <View style={[styles.openBtn, { backgroundColor: colors.surfaceSecondary }]}>
+        {locked ? <LockIcon size={13} color={colors.textPrimary} /> : null}
         <Text style={[styles.openBtnText, { color: colors.textPrimary }]}>
-          {installLabel(installed)}
+          {installLabel(installed, locked)}
         </Text>
       </View>
     </Pressable>
@@ -267,6 +282,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     height: 38,
     borderRadius: 19,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -322,6 +339,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 34,
     borderRadius: BTN_RADIUS,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
