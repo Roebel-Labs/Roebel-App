@@ -1,7 +1,7 @@
 // apps/web/src/lib/miniapp/userToken.ts
 // Short-lived ES256 user tokens a mini app receives from the host. Pure module:
 // no `server-only`, no `@/` alias, so node:test can load it.
-import { SignJWT, errors, importJWK, jwtVerify, type JWK } from "jose";
+import { SignJWT, createRemoteJWKSet, errors, importJWK, jwtVerify, type JWK } from "jose";
 
 export const MINIAPP_TOKEN_TTL_SEC = 600;
 export const MINIAPP_TOKEN_TYP = "miniapp+jwt";
@@ -141,18 +141,46 @@ export async function verifyUserToken(
   }
 }
 
+/**
+ * Signs through the community's identity service (`apps/roebel-id`,
+ * `POST /internal/miniapp-token`). The service sets `iss`, `iat` and `jti` itself; this
+ * sends the remaining claims and the expiry. Throws on any non-200 answer or after the timeout.
+ */
+export function keystoneTokenIssuer(p: { url: string; secret: string; fetch?: typeof fetch; timeoutMs?: number }): TokenIssuer {
+  const base = p.url.replace(/\/+$/, "");
+  const doFetch = p.fetch ?? fetch;
+  const timeoutMs = p.timeoutMs ?? 5_000;
+  return {
+    issuer: base,
+    async sign(claims) {
+      const { iat: _iat, jti: _jti, exp, ...rest } = claims;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await doFetch(`${base}/internal/miniapp-token`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${p.secret}` },
+          body: JSON.stringify({ claims: rest, exp }),
+          signal: ctrl.signal,
+        });
+        if (res.status !== 200) throw new Error(`identity service answered ${res.status}`);
+        const json = (await res.json()) as { token?: unknown };
+        if (typeof json.token !== "string" || !json.token) throw new Error("identity service sent no token");
+        return json.token;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  };
+}
+
 type FromEnv = { issuer: TokenIssuer; keys: TokenKeyResolver; issuers: string[] };
 const DEFAULT_ISSUER = "https://www.roebel.app";
 const cache = new Map<string, FromEnv | null>();
 
-export function tokenKeysFromEnv(env: Record<string, string | undefined> = process.env): FromEnv | null {
-  const raw = env.MINIAPP_TOKEN_PRIVATE_JWK;
-  if (!raw) return null;
-  const iss = env.MINIAPP_TOKEN_ISSUER || DEFAULT_ISSUER;
-  const cacheKey = `${iss}\n${raw}`;
-  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+type LocalKeys = { issuer: TokenIssuer; kid: string; key: () => Promise<unknown> };
 
-  let result: FromEnv | null = null;
+function localKeysFromJwk(raw: string, iss: string): LocalKeys | null {
   try {
     const j = JSON.parse(raw) as Record<string, unknown>;
     if (
@@ -167,18 +195,80 @@ export function tokenKeysFromEnv(env: Record<string, string | undefined> = proce
     const pub: JWK = { kty: "EC", crv: "P-256", x: j.x, y: j.y, kid: j.kid };
     let signer: Promise<TokenIssuer> | undefined;
     let verifyKey: Promise<unknown> | undefined;
-    result = {
+    return {
+      kid: j.kid,
       issuer: {
         issuer: iss,
         sign: async (claims) => (await (signer ??= localTokenIssuer({ issuer: iss, privateJwk: jwk }).catch((e) => { signer = undefined; throw e; }))).sign(claims),
       },
-      keys: (async () =>
-        await (verifyKey ??= importJWK(pub, "ES256").catch((e) => { verifyKey = undefined; throw e; }))) as TokenKeyResolver,
-      issuers: [iss],
+      key: async () => await (verifyKey ??= importJWK(pub, "ES256").catch((e) => { verifyKey = undefined; throw e; })),
     };
   } catch (e) {
     console.error("[miniapp] MINIAPP_TOKEN_PRIVATE_JWK is malformed:", (e as Error).message);
+    return null;
   }
-  cache.set(cacheKey, result);
+}
+
+export interface TokenKeysDeps {
+  fetch?: typeof fetch;
+  /** Key resolver for the identity service's JWKS (tests inject a local set). */
+  remoteJwks?: (url: URL) => TokenKeyResolver;
+}
+
+/**
+ * Token signing and verification from env:
+ * - issuer: the identity service when MINIAPP_ISSUER_URL and MINIAPP_ISSUER_SECRET are set,
+ *   falling back to the local key (MINIAPP_TOKEN_PRIVATE_JWK) when the service fails; else
+ *   the local key alone.
+ * - keys: the local public key for its own `kid`, otherwise the identity service's JWKS
+ *   (`<issuer>/jwks`, oidc-provider's default `jwks_uri`).
+ * - issuers: both.
+ * null when neither is configured.
+ */
+export function tokenKeysFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  deps?: TokenKeysDeps,
+): FromEnv | null {
+  const raw = env.MINIAPP_TOKEN_PRIVATE_JWK;
+  const ksUrl = env.MINIAPP_ISSUER_URL?.trim();
+  const ksSecret = env.MINIAPP_ISSUER_SECRET;
+  const hasKeystone = !!ksUrl && !!ksSecret;
+  if (!raw && !hasKeystone) return null;
+  const iss = env.MINIAPP_TOKEN_ISSUER || DEFAULT_ISSUER;
+  const cacheKey = `${iss}\n${raw ?? ""}\n${hasKeystone ? `${ksUrl}\n${ksSecret}` : ""}`;
+  if (!deps && cache.has(cacheKey)) return cache.get(cacheKey)!;
+
+  const local = raw ? localKeysFromJwk(raw, iss) : null;
+  let result: FromEnv | null = null;
+
+  if (hasKeystone) {
+    const keystone = keystoneTokenIssuer({ url: ksUrl, secret: ksSecret, ...(deps?.fetch ? { fetch: deps.fetch } : {}) });
+    const jwksUrl = new URL(`${keystone.issuer}/jwks`);
+    let remote: TokenKeyResolver | undefined;
+    const remoteKeys = () => (remote ??= deps?.remoteJwks ? deps.remoteJwks(jwksUrl) : (createRemoteJWKSet(jwksUrl) as TokenKeyResolver));
+    result = {
+      issuer: {
+        issuer: keystone.issuer,
+        async sign(claims) {
+          try {
+            return await keystone.sign(claims);
+          } catch (e) {
+            if (!local) throw e;
+            console.warn("[miniapp] identity service signing failed, using the local key:", (e as Error).message);
+            return local.issuer.sign(claims);
+          }
+        },
+      },
+      keys: (async (header: { kid?: string }, token: unknown) => {
+        if (local && header?.kid === local.kid) return local.key();
+        return (remoteKeys() as unknown as (h: unknown, t: unknown) => Promise<unknown>)(header, token);
+      }) as TokenKeyResolver,
+      issuers: local ? [keystone.issuer, iss] : [keystone.issuer],
+    };
+  } else if (local) {
+    result = { issuer: local.issuer, keys: (async () => local.key()) as TokenKeyResolver, issuers: [iss] };
+  }
+
+  if (!deps) cache.set(cacheKey, result);
   return result;
 }
