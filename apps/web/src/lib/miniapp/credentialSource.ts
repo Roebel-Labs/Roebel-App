@@ -7,7 +7,7 @@
 // Kept free of `server-only` and path aliases so node:test can load it.
 import { createPublicClient, http, parseAbi, type Address } from "viem";
 import { gnosis } from "viem/chains";
-import { parseCredentialRef } from "@netizen-labs/miniapp-sdk";
+import { parseCredentialRef } from "@netizen-labs/miniapp-sdk/host";
 
 /** A credential the account holds (only ever for refs that were asked about). */
 export interface CredentialAnswer {
