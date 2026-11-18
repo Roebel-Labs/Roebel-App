@@ -6,6 +6,7 @@ import {
   buildConsentItems,
   credentialsEqual,
   grantChanged,
+  manifestCredentialTypes,
   fetchIdentityState,
   grantFromChoices,
   grantWithItem,
@@ -244,5 +245,17 @@ describe('grantChanged (drops the cached token whose claims carry the grant)', (
   });
   it('another subject is a change', () => {
     expect(grantChanged(g({}), g({}, { subject: 'nz_other' }))).toBe(true);
+  });
+});
+
+describe('manifestCredentialTypes (credentials.request)', () => {
+  const T = 'type:0x' + 'ab'.repeat(32);
+  const withTyped = { identity: { ...app.identity, credentials: [...app.identity.credentials, { type: T, reason: 'x' }] } };
+  it('maps requested types to the manifest spelling, case-insensitively, without duplicates', () => {
+    expect(manifestCredentialTypes(withTyped, ['Citizen', T.toUpperCase().replace('TYPE:0X', 'type:0x'), 'citizen'])).toEqual(['citizen', T]);
+  });
+  it('a type the manifest does not request gives null', () => {
+    expect(manifestCredentialTypes(withTyped, ['citizen', 'guest'])).toBeNull();
+    expect(manifestCredentialTypes({ identity: null }, ['citizen'])).toBeNull();
   });
 });

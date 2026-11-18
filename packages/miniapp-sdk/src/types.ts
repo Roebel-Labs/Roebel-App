@@ -368,7 +368,11 @@ export interface NetizenSDK {
     list(): Promise<Credential[]>;
     /** `type` is a credential reference; `org:<id>` matches any credential of that org. */
     has(type: string): Promise<boolean>;
-    /** Ask for more; only types in the app's reviewed manifest can be granted. */
+    /**
+     * Ask for more; only types in the app's reviewed manifest can be granted. `granted` lists the
+     * requested types the person has shared with this app (manifest spelling); whether they hold
+     * one right now is what `list()` / `has()` tell.
+     */
     request(types: string[]): Promise<{ granted: string[] }>;
     /** Called with the new list after a grant or a withdrawal. Returns an unsubscribe function. */
     onChange(cb: (list: Credential[]) => void): () => void;

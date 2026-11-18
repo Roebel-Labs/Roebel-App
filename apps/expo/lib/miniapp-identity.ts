@@ -282,3 +282,19 @@ export function grantChanged(prev: IdentityState | null, next: IdentityState): b
   const sb = [...b.credentials].sort();
   return sa.some((c, i) => c !== sb[i]);
 }
+
+/**
+ * credentials.request: the requested types in the manifest's spelling (matched case-insensitively,
+ * like the node's clampGrant; duplicates collapse), or null when one is not requested by the
+ * reviewed manifest.
+ */
+export function manifestCredentialTypes(app: Pick<MiniApp, 'identity'>, types: string[]): string[] | null {
+  const byLower = new Map((app.identity?.credentials ?? []).map((c) => [c.type.toLowerCase(), c.type]));
+  const out: string[] = [];
+  for (const t of types) {
+    const ref = byLower.get(t.toLowerCase());
+    if (!ref) return null;
+    if (!out.includes(ref)) out.push(ref);
+  }
+  return out;
+}

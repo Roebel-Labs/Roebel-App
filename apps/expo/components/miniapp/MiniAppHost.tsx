@@ -85,6 +85,7 @@ import {
   credentialsEqual,
   fetchIdentityState,
   grantChanged,
+  manifestCredentialTypes,
   grantFromChoices,
   saveIdentityGrant,
   shapeUser,
@@ -797,13 +798,15 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           throw { code: 'invalid_params', message: 'types muss eine Liste sein.' };
         }
         await settled();
-        const requested = new Set((app.identity?.credentials ?? []).map((c) => c.type));
-        if (types.some((t) => !requested.has(t))) {
+        // Types in the manifest's spelling (case-insensitive, like the node), so `cred:` keys and
+        // the grant compare match what the node stores.
+        const refs = manifestCredentialTypes(app, types);
+        if (!refs) {
           throw { code: 'unauthorized', message: 'Diese Mitgliedschaft fragt die Mini-App in ihrem Manifest nicht an.' };
         }
         const state = identityRef.current;
         if (!state || !account) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
-        const keys = [...new Set(types)].map((t) => `cred:${t}` as ConsentKey);
+        const keys = refs.map((t) => `cred:${t}` as ConsentKey);
         const items = buildConsentItems(app, state, keys);
         if (items.length > 0) {
           if (requestConsentDoneRef.current) {
@@ -820,8 +823,11 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             setConsent({ items, done });
           });
         }
+        // `granted` = the requested types the person has granted this app (manifest spelling),
+        // whether or not they currently hold them; credentials.list says what is held. (The SDK
+        // mock answers held types instead; a real host answers grants.)
         const granted = identityRef.current?.granted.credentials ?? [];
-        return { granted: types.filter((t, i) => granted.includes(t) && types.indexOf(t) === i) };
+        return { granted: refs.filter((t) => granted.includes(t)) };
       },
     } satisfies Partial<HostHandlers>;
     // Version 1 (and the dev preview): no identity section, so nothing is shared.
