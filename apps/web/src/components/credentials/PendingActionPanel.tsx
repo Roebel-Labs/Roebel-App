@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Smartphone, CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import { useCredentials } from "./CredentialsContext";
-import { credentialsRequest, isPendingStatus, pollAction, type ActionView } from "@/lib/credentials/client";
+import { credentialsRequest, isPendingStatus, pollAction, safeActionError, type ActionView } from "@/lib/credentials/client";
 
 export function statusLabel(a: Pick<ActionView, "status" | "error">): string {
   switch (a.status) {
@@ -14,7 +14,7 @@ export function statusLabel(a: Pick<ActionView, "status" | "error">): string {
     case "done":
       return "Erledigt";
     case "failed":
-      return `Fehlgeschlagen: ${a.error || "unbekannter Fehler"}`;
+      return `Fehlgeschlagen: ${safeActionError(a.error)}`;
     case "cancelled":
       return "Verworfen";
     case "expired":

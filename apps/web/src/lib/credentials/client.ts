@@ -151,3 +151,13 @@ export async function pollAction(
     await sleep(interval, opts.signal);
   }
 }
+
+/**
+ * A failed action's reason as the dashboard may show it: server texts are German and short; anything
+ * that looks technical (an address, a URL, a long dump) becomes a fixed line.
+ */
+export function safeActionError(error: string | null | undefined): string {
+  if (!error || !error.trim()) return "unbekannter Fehler";
+  if (/0x[0-9a-f]{6,}/i.test(error) || /https?:\/\//i.test(error) || error.length > 160) return "Senden fehlgeschlagen";
+  return error;
+}

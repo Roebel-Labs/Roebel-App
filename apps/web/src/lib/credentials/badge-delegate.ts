@@ -41,6 +41,9 @@ export const AUTO_MAX_RECIPIENTS = 500;
 export const AUTO_MIN_BALANCE_WEI = 10n ** 16n;
 /** The nudge runs a type at most once per this many milliseconds. */
 export const NUDGE_INTERVAL_MS = 60_000;
+/** One run per type at a time: every run takes this slot on last_auto_at (compare-and-set) first. */
+export const RUN_LOCK_MS = 30_000;
+const SEND_FAILED = "Senden fehlgeschlagen";
 
 export type AutoSkip = "window" | "not_delegate" | "kill_switch" | "low_balance" | "nothing_new" | "pending_batch";
 export type AutoResult = { type: Hex; issued: number; skipped?: AutoSkip };
@@ -128,17 +131,25 @@ async function pendingNodeBatch(d: AutoDeps, typeId: Hex): Promise<boolean> {
       continue;
     }
     await d.store.updateBatch(b.id, { status: "cancelled" }, ["prepared"]);
-    if (a) await d.store.updateAction(a.id, { status: "failed", error: "Node batch never reached the chain." }, ["submitted", "awaiting_confirmation"]);
+    if (a) await d.store.updateAction(a.id, { status: "failed", error: "Nicht im Register angekommen." }, ["submitted", "awaiting_confirmation"]);
   }
   return waiting;
 }
 
-async function runType(d: AutoDeps, t: TypeRow, event: EventRow | null, balance: { value?: bigint }): Promise<AutoResult> {
+async function runType(d: AutoDeps, t: TypeRow, event: EventRow | null, balance: { value?: bigint }, slotHeld = false): Promise<AutoResult> {
   const skip = (skipped: AutoSkip): AutoResult => ({ type: t.typeId, issued: 0, skipped });
   if (!event || !inAutoWindow(eventTimes(event), Math.floor(d.now() / 1000))) return skip("window");
   if (!(await d.reader.isDelegate(t.typeId, d.node))) {
     await d.store.updateType(t.typeId, { autoBadges: false });
     return skip("not_delegate");
+  }
+  // The slot: a cron pass and a nudge (or two cron passes) never build batches for the same
+  // attendees at once. The nudge takes its own, longer slot before it calls in (slotHeld).
+  if (!slotHeld) {
+    const nowMs = d.now();
+    if (!(await d.store.claimAutoRun(t.typeId, new Date(nowMs - RUN_LOCK_MS + 1).toISOString(), new Date(nowMs).toISOString()))) {
+      return skip("pending_batch");
+    }
   }
   if (await pendingNodeBatch(d, t.typeId)) return skip("pending_batch");
   if (balance.value === undefined) balance.value = await d.balance();
@@ -189,15 +200,17 @@ async function runType(d: AutoDeps, t: TypeRow, event: EventRow | null, balance:
     hash = await d.send({ to: d.registry, data: call.data });
   } catch (e) {
     await d.store.updateBatch(batchId, { status: "cancelled" }, ["prepared"]);
-    await d.store.updateAction(actionId, { status: "failed", error: e instanceof Error ? e.message.slice(0, 300) : "send failed" });
-    throw e;
+    // The raw error can carry the keyed RPC URL and addresses: admins see a fixed line, the log
+    // only the error's name.
+    await d.store.updateAction(actionId, { status: "failed", error: SEND_FAILED });
+    throw new Error(`node send failed (${e instanceof Error ? e.name : "unknown"})`);
   }
   await d.store.updateAction(actionId, { txHash: hash.toLowerCase() });
   return { type: t.typeId, issued: built.count };
 }
 
 /** One pass over every auto badge type (or only `typeId`). */
-export async function runAutoBadges(d: AutoDeps, opts: { typeId?: Hex } = {}): Promise<AutoResult[]> {
+export async function runAutoBadges(d: AutoDeps, opts: { typeId?: Hex; slotHeld?: boolean } = {}): Promise<AutoResult[]> {
   const types = (await d.store.listTypes({ chainStatus: "onchain", includeRetired: false, ...(opts.typeId ? { typeIds: [opts.typeId] } : {}) })).filter(
     (t) => t.autoBadges === true && t.kind === "badge" && t.eventId,
   );
@@ -207,7 +220,7 @@ export async function runAutoBadges(d: AutoDeps, opts: { typeId?: Hex } = {}): P
   const balance: { value?: bigint } = {};
   for (const t of types) {
     try {
-      out.push(await runType(d, t, await d.store.getEvent(t.eventId!), balance));
+      out.push(await runType(d, t, await d.store.getEvent(t.eventId!), balance, opts.slotHeld === true));
       if (out.at(-1)!.issued > 0) balance.value = undefined; // gas was spent: read it again
     } catch (e) {
       console.error("[credentials/badges] run failed", t.typeId, e instanceof Error ? e.message : e);
@@ -232,6 +245,6 @@ export async function nudgeAutoBadges(d: AutoDeps, c: Caller, p: { eventId: stri
   if (!(await attendeesOf(d.store, event.id)).some((a) => a.wallet === me)) return no;
   const nowMs = d.now();
   if (!(await d.store.claimAutoRun(t.typeId, new Date(nowMs - NUDGE_INTERVAL_MS + 1).toISOString(), new Date(nowMs).toISOString()))) return no;
-  await runAutoBadges(d, { typeId: t.typeId });
+  await runAutoBadges(d, { typeId: t.typeId, slotHeld: true });
   return { ok: true, data: { ran: true } };
 }

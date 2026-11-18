@@ -156,15 +156,17 @@ test("waits while its previous batch is not yet on chain", async () => {
   attend(store, 1, 3);
   assert.deepEqual(await runAutoBadges(d), [{ type: TYPE, issued: 2 }]);
   attend(store, 3, 4);
+  // Past the run slot (RUN_LOCK_MS): it is the unlanded batch that holds this run back.
+  state.now += 31_000;
   assert.deepEqual(await runAutoBadges(d), [{ type: TYPE, issued: 0, skipped: "pending_batch" }]);
   assert.equal(sent.length, 1);
   await land(store);
+  state.now += 31_000;
   // Only the latecomer: the first two already have their invitation.
   assert.deepEqual(await runAutoBadges(d), [{ type: TYPE, issued: 1 }]);
   const latest = [...store.batches.values()].at(-1)!;
   assert.deepEqual((await store.listInvitations({ batchId: latest.id })).map((i) => i.recipientWallet), [wallet(3)]);
 
-  void state;
 
   // A node batch that never landed until its action expired is given up, and its people are freed.
   const w = world({ now: DURING });
@@ -183,10 +185,11 @@ test("waits while its previous batch is not yet on chain", async () => {
 
 test("caps a batch at 500 and takes the rest next run", async () => {
   assert.equal(AUTO_MAX_RECIPIENTS, 500);
-  const { d, store } = world();
+  const { d, store, state } = world();
   attend(store, 1, 502);
   assert.deepEqual(await runAutoBadges(d), [{ type: TYPE, issued: 500 }]);
   await land(store);
+  state.now += 31_000;
   assert.deepEqual(await runAutoBadges(d), [{ type: TYPE, issued: 1 }]);
   const all = (await store.listInvitations({ typeId: TYPE })).map((i) => i.recipientWallet);
   assert.equal(new Set(all).size, 501);
@@ -198,6 +201,7 @@ test("only ever sends addBatch to the registry address", async () => {
   await runAutoBadges(d);
   await land(store);
   attend(store, 5, 7);
+  state.now += 31_000;
   await runAutoBadges(d);
   await land(store);
   state.now += 61_000;
@@ -235,4 +239,38 @@ test("badge_nudge runs at most once per type per 60 s and only for an attendee",
   // A bad event id is refused.
   const bad = await nudgeAutoBadges(d, caller(wallet(1)), { eventId: "nope" });
   assert.equal(bad.ok, false);
+});
+
+test("cron and nudge running at the same time issue one batch, never two", async () => {
+  const { d, store, sent } = world();
+  attend(store, 1, 4);
+  // A slow send keeps the first run open while the second one starts.
+  const realSend = d.send;
+  d.send = async (call) => {
+    await new Promise((r) => setTimeout(r, 20));
+    return realSend(call);
+  };
+  const [cron, nudge] = await Promise.all([runAutoBadges(d), nudgeAutoBadges(d, caller(wallet(1)), { eventId: EVENT })]);
+  assert.equal(sent.length, 1);
+  const batches = [...store.batches.values()].filter((b) => b.source === "node_delegate");
+  assert.equal(batches.length, 1);
+  const issued = cron.reduce((n, r) => n + r.issued, 0);
+  assert.ok(issued === 3 || (nudge.ok && nudge.data.ran));
+  // Two cron passes at once: also one batch.
+  const w2 = world();
+  attend(w2.store, 1, 3);
+  await Promise.all([runAutoBadges(w2.d), runAutoBadges(w2.d)]);
+  assert.equal(w2.sent.length, 1);
+});
+
+test("a failed send stores a fixed text for the admins, never the raw error", async () => {
+  const { d, store } = world();
+  attend(store, 1, 3);
+  d.send = async () => {
+    throw new Error("HTTP request failed. URL: https://rpc.example/v1/SECRETKEY Details: from 0x00000000000000000000000000000000000000dd");
+  };
+  await runAutoBadges(d);
+  const [a] = [...store.actions.values()];
+  assert.equal(a.status, "failed");
+  assert.equal(a.error, "Senden fehlgeschlagen");
 });
