@@ -18,6 +18,36 @@ export interface MiniAppTokenClaims {
   jti: string;
   v: 1;
   addr?: string;
+  /** Version 2, profile granted: display name. */
+  name?: string;
+  /** Version 2, profile granted: profile picture URL. */
+  picture?: string;
+  /** Version 2: held and granted credentials (always present, possibly empty). Absent for version 1. */
+  creds?: MiniAppTokenCredential[];
+}
+
+export interface MiniAppTokenCredential {
+  type: string;
+  org?: string;
+  /** Unix seconds; absent = no expiry. */
+  exp?: number;
+  recognised?: true;
+}
+
+function parseCreds(v: unknown): MiniAppTokenCredential[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: MiniAppTokenCredential[] = [];
+  for (const c of v) {
+    if (!c || typeof c !== "object" || typeof (c as { type?: unknown }).type !== "string") continue;
+    const x = c as { type: string; org?: unknown; exp?: unknown; recognised?: unknown };
+    out.push({
+      type: x.type,
+      ...(typeof x.org === "string" ? { org: x.org } : {}),
+      ...(typeof x.exp === "number" ? { exp: x.exp } : {}),
+      ...(x.recognised === true ? { recognised: true as const } : {}),
+    });
+  }
+  return out;
 }
 
 export function audienceFor(slug: string): string {
@@ -92,7 +122,11 @@ export async function verifyUserToken(
       jti: payload.jti,
       v: 1,
       ...(typeof payload.addr === "string" ? { addr: payload.addr } : {}),
+      ...(typeof payload.name === "string" ? { name: payload.name } : {}),
+      ...(typeof payload.picture === "string" ? { picture: payload.picture } : {}),
     };
+    const creds = parseCreds(payload.creds);
+    if (creds) claims.creds = creds;
     return { ok: true, claims };
   } catch (e) {
     if (e instanceof errors.JWTExpired) return { ok: false, code: "expired" };

@@ -166,3 +166,33 @@ test("an onLegacy failure never fails the request", async () => {
   }));
   assert.deepEqual(u, { wallet: WALLET, via: "legacy" });
 });
+
+// ---- Pseudonym resolution (plan miniapp-2, Task 7) ----
+import { resolveTokenWallet } from "../src/lib/miniapp/runtimeAuth";
+
+const PSEUDO = "nz_abcdefghijklmnopqrstuvwxyz0";
+
+test("resolveTokenWallet finds the wallet behind a pseudonym", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  const w = await resolveTokenWallet(claims, { walletOf: async (s) => (s === PSEUDO ? WALLET.toUpperCase().replace("0X", "0x") : null) });
+  assert.equal(w, WALLET);
+});
+
+test("resolveTokenWallet prefers the granted address", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const, addr: WALLET };
+  assert.equal(await resolveTokenWallet(claims, { walletOf: async () => OTHER }), WALLET);
+});
+
+test("an unknown pseudonym is unauthorized", async () => {
+  const claims = { iss: ISS, aud: "miniapp:demo", sub: "nz_unknownunknownunknownunkno", app: APP_ID, iat: NOW, exp: NOW + 600, jti: "j", v: 1 as const };
+  await assert401(resolveTokenWallet(claims, { walletOf: async () => null }));
+});
+
+test("a pseudonym token resolves through the store in resolveRuntimeUser", async () => {
+  const t = await issuer.sign({ aud: "miniapp:demo", sub: PSEUDO, app: APP_ID, iat: NOW - 10, exp: NOW + 600, jti: "j2", v: 1 });
+  const u = await resolveRuntimeUser(
+    { authorization: `Bearer ${t}`, app, claimedWallet: OTHER, route: "data" },
+    deps({ walletOf: async (s) => (s === PSEUDO ? WALLET : null) }),
+  );
+  assert.deepEqual(u, { wallet: WALLET, via: "token" });
+});

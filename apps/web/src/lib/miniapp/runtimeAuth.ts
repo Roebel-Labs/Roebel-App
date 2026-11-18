@@ -26,6 +26,8 @@ export type RuntimeUser = { wallet: string; via: "token" | "legacy" };
 export interface RuntimeAuthDeps {
   verify(token: string, audience: string): Promise<VerifyTokenResult>;
   requireToken: boolean;
+  /** The wallet behind a version-2 pseudonym (`mini_app_subjects`); absent = none resolve. */
+  walletOf?(subject: string): Promise<string | null>;
   onLegacy?(info: LegacyCallInfo): void;
 }
 
@@ -59,13 +61,24 @@ export function bearerToken(authorization: string | null | undefined): string | 
   return (m[1] ?? "").trim();
 }
 
-/** The wallet a verified token stands for. Plan 2 adds the pseudonym lookup. */
-export async function resolveTokenWallet(claims: MiniAppTokenClaims): Promise<string> {
-  if (!claims.addr || !WALLET_RE.test(claims.addr)) {
-    throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
+/**
+ * The wallet a verified token stands for: the granted address when present, else the
+ * wallet behind the pseudonym `sub` (version-2 apps that were not granted the address).
+ */
+export async function resolveTokenWallet(
+  claims: MiniAppTokenClaims,
+  deps: { walletOf(subject: string): Promise<string | null> },
+): Promise<string> {
+  if (claims.addr !== undefined) {
+    if (!WALLET_RE.test(claims.addr)) throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
+    return claims.addr.toLowerCase();
   }
-  return claims.addr.toLowerCase();
+  const wallet = claims.sub ? await deps.walletOf(claims.sub) : null;
+  if (!wallet || !WALLET_RE.test(wallet)) throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
+  return wallet.toLowerCase();
 }
+
+const NO_SUBJECTS = { walletOf: async () => null };
 
 export async function resolveRuntimeUser(
   p: {
@@ -86,7 +99,9 @@ export async function resolveRuntimeUser(
     if (!v.ok || v.claims.app !== p.app.id) {
       throw new MiniAppError("unauthorized", INVALID_TOKEN_MESSAGE);
     }
-    return { wallet: await resolveTokenWallet(v.claims), via: "token" };
+    const walletOf = deps.walletOf;
+    const lookup = walletOf ? { walletOf: (s: string) => walletOf(s) } : NO_SUBJECTS;
+    return { wallet: await resolveTokenWallet(v.claims, lookup), via: "token" };
   }
 
   if (deps.requireToken) throw new MiniAppError("unauthorized", MISSING_TOKEN_MESSAGE);
@@ -104,10 +119,24 @@ export async function resolveRuntimeUser(
   return { wallet: claimed.toLowerCase(), via: "legacy" };
 }
 
-/** Production deps: env-driven switch, keys from MINIAPP_TOKEN_PRIVATE_JWK. */
+/**
+ * Production deps: env-driven switch, keys from MINIAPP_TOKEN_PRIVATE_JWK, pseudonyms from
+ * the grant store (`mini_app_subjects`) when MINIAPP_SUBJECT_SECRET is set. The store and the
+ * admin client are imported lazily so node:test can load this module.
+ */
 export function runtimeAuthDeps(): RuntimeAuthDeps {
   return {
     requireToken: process.env.MINIAPP_REQUIRE_USER_TOKEN === "1",
+    async walletOf(subject) {
+      const [{ subjectSecretFromEnv }, { supabaseGrantStore }, { createAdminClient }] = await Promise.all([
+        import("./subject"),
+        import("./grants"),
+        import("../supabase/admin"),
+      ]);
+      const secret = subjectSecretFromEnv();
+      if (!secret) return null;
+      return supabaseGrantStore(createAdminClient(), secret).walletOf(subject);
+    },
     async verify(token, audience) {
       const k = tokenKeysFromEnv();
       // No keys configured: a token cannot be verified, so it is refused.
