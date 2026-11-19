@@ -78,11 +78,6 @@ export async function fetchStatus(): Promise<CredentialsStatus> {
   }
 }
 
-/** The rail entry exists only when the register is on and the user manages at least one org. */
-export function credentialsVisible(status: CredentialsStatus | null, orgs: OrgListItem[] | null): boolean {
-  return !!status?.enabled && !!orgs && orgs.length > 0;
-}
-
 export const fetchOrgs = (token: string) => credCall<OrgListItem[]>('org', 'orgs_list', {}, token);
 
 // ---- types --------------------------------------------------------------------------

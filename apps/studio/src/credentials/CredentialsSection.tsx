@@ -57,7 +57,9 @@ export function CredentialsSection() {
     if (!token) return;
     setError(null);
     try {
-      const [s, o] = await Promise.all([fetchStatus(), fetchOrgs(token)]);
+      // While the register is off the org routes answer 503: ask for orgs only when it is on.
+      const s = await fetchStatus();
+      const o = s.enabled && s.configured ? await fetchOrgs(token) : [];
       setStatus(s);
       setOrgs(o);
       setOrgId((cur) => (cur && o.some((x) => x.accountId === cur) ? cur : (o[0]?.accountId ?? null)));
@@ -87,7 +89,7 @@ export function CredentialsSection() {
   if (session.state === 'loading' || (token && !orgs && !error)) body = <SkCards cards={3} height={120} />;
   else if (session.state === 'signed-out') body = <SignedOutHint what={t('die Ausweise deiner Organisation')} />;
   else if (error) body = <LoadError message={error} onRetry={() => void load()} />;
-  else if (!status?.enabled) body = <div className="pz-state w-muted">{t('Ausweise sind auf diesem Server noch nicht freigeschaltet.')}</div>;
+  else if (!status?.enabled || !status.configured) body = <div className="pz-state w-muted">{t('Ausweise sind auf diesem Server noch nicht freigeschaltet.')}</div>;
   else if (!org) body = <div className="pz-state w-muted">{t('Nur Inhaber:innen und Admins einer Organisation können Ausweise verwalten.')}</div>;
   else if (org.onChain !== 'ready') body = <NotReady org={org} />;
   else {

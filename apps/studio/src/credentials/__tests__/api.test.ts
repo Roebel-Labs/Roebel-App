@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CredentialsApiError, credCall, credentialsVisible, downloadLetters, fetchOrgs, fetchStatus } from '../api';
+import { CredentialsApiError, credCall, downloadLetters, fetchOrgs, fetchStatus } from '../api';
 import { API_BASE } from '../../live-room/config';
 
 type Call = { url: string; init: RequestInit };
@@ -76,10 +76,4 @@ describe('credentials API client', () => {
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ action: 'letters', payload: { accountId: 'acc', batchId: 'b1', client: 'studio' } });
   });
 
-  it('shows the section only when the register is on and the user manages an org', () => {
-    expect(credentialsVisible({ enabled: true, configured: true }, [{ accountId: 'a' } as never])).toBe(true);
-    expect(credentialsVisible({ enabled: false, configured: true }, [{ accountId: 'a' } as never])).toBe(false);
-    expect(credentialsVisible({ enabled: true, configured: true }, [])).toBe(false);
-    expect(credentialsVisible(null, null)).toBe(false);
-  });
 });
