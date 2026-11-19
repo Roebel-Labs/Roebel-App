@@ -33,7 +33,7 @@ is one section, mini apps another. It ships as a macOS/Windows Electron app and 
 | Mini-Apps | `ui/shell/AppsSection.tsx`, `AppAnalytics.tsx` | The user's own mini apps; "Nutzung" shows the web dashboard numbers (KPIs, opens per day, top events). |
 | Livestream | `ui/show`, `ui/design`, `ui/table`, `live-room`, … | Unchanged control room (dark). **Camera gate** (`media/gate.ts`): cameras and microphones open only in the Livestream section or while on air; no permission prompt at launch. **0.3.13:** source „Bildschirm oder Fenster“ (`ui/show/ScreenPicker.tsx`, `screen:*` IPC, needs installer 0.3.13; behind the same gate) and free scene layout „Anordnen“ on the preview (`ui/show/LayoutEditor.tsx`, `Scene.layout = 'free'` + `frames`). |
 | Fonts | `ui/theme.css`, `assets/MonaSans*.woff2` | Interface: Mona Sans, headlines Mona Sans SemiCondensed (same file, `font-stretch: 87.5%`), Mona Sans Mono. On-air canvas graphics keep Inter / Plus Jakarta Sans (`render/fonts.ts`). |
-| Ausweise | `src/credentials/*` | Credential register for org owners/admins (§6a.7). Rail entry only when `/api/credentials/status` is `enabled` and `orgs_list` returns an org. **0.3.14 OTA.** |
+| Ausweise | `src/credentials/*` | Credential register for org owners/admins (§6a.7). Rail entry for every signed-in user since **0.3.15** (owner decision 2026-11-19); until the register is enabled and configured the section says „noch nicht freigeschaltet“. |
 | Browser build | `web-shim.ts` | Stands in for `window.studio`; Livestream shows a download notice; capture is never allowed. |
 
 Logout: rail avatar → Abmelden, the arrow icon at the bottom of the thread list, or the menu-bar icon.
@@ -195,7 +195,7 @@ Plan `docs/superpowers/plans/2026-11-17-credreg-5-studio.md`; merged into `feat/
 - Calls `/api/credentials/{org,actions,status}` on main with the pairing session as Bearer (`src/credentials/api.ts`); holder actions answer 403 `APP_ONLY` ("Das geht nur in der Röbel App."), a 401 shows the sign-in hint.
 - Tabs: Typen (templates, editor, image upload), Personen (CSV/TXT drop or paste, Windows-1252 fallback, server preview, one batch, revoke), Ausstellungen (pending actions polled every 5 s / 60 s, history, letters PDF via `<a download>`, revoke a batch), Veranstaltungen (event badges, same labels as `event-panel.ts`), Einstellungen (members-public switch, delegates via `delegates_list`).
 - Studio cannot sign: every change is a prepared action the phone confirms.
-- **Invisible in production until `app_settings.credentials_enabled = true`** (status was `enabled:false` on 2026-11-19). Tested only in the browser build with mocked routes; not yet against the live register or a real phone confirmation. Browser version (`ortis-studio-web`) not redeployed.
+- **0.3.15 (`6d1984f5`):** the rail entry shows for every signed-in user. Production status on 2026-11-19 is `enabled:false, configured:false` (no production registry contract, no registry env on Vercel), so the section only explains that it is not switched on yet; it asks for orgs only once both are true. Tested only in the browser build with mocked routes; not yet against the live register or a real phone confirmation. Browser version (`ortis-studio-web`) not redeployed.
 
 ## 7. Release and deploy runbook
 
