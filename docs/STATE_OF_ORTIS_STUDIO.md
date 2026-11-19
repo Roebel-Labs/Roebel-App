@@ -1,6 +1,6 @@
 # State of Ortis Studio
 
-**Last verified: 2026-11-13**, against production (`www.roebel.app`), the Supabase project
+**Last verified: 2026-11-19**, against production (`www.roebel.app`), the Supabase project
 `wwbeqhkslxdxhktqzqti` and the built installers. Part of the [documentation index](README.md).
 Read this before touching `apps/studio`, the chat API under `apps/web/src/app/api/chat`, device
 pairing, own API keys or the Google connector.
@@ -33,6 +33,7 @@ is one section, mini apps another. It ships as a macOS/Windows Electron app and 
 | Mini-Apps | `ui/shell/AppsSection.tsx`, `AppAnalytics.tsx` | The user's own mini apps; "Nutzung" shows the web dashboard numbers (KPIs, opens per day, top events). |
 | Livestream | `ui/show`, `ui/design`, `ui/table`, `live-room`, … | Unchanged control room (dark). **Camera gate** (`media/gate.ts`): cameras and microphones open only in the Livestream section or while on air; no permission prompt at launch. **0.3.13:** source „Bildschirm oder Fenster“ (`ui/show/ScreenPicker.tsx`, `screen:*` IPC, needs installer 0.3.13; behind the same gate) and free scene layout „Anordnen“ on the preview (`ui/show/LayoutEditor.tsx`, `Scene.layout = 'free'` + `frames`). |
 | Fonts | `ui/theme.css`, `assets/MonaSans*.woff2` | Interface: Mona Sans, headlines Mona Sans SemiCondensed (same file, `font-stretch: 87.5%`), Mona Sans Mono. On-air canvas graphics keep Inter / Plus Jakarta Sans (`render/fonts.ts`). |
+| Ausweise | `src/credentials/*` | Credential register for org owners/admins (§6a.7). Rail entry only when `/api/credentials/status` is `enabled` and `orgs_list` returns an org. **0.3.14 OTA.** |
 | Browser build | `web-shim.ts` | Stands in for `window.studio`; Livestream shows a download notice; capture is never allowed. |
 
 Logout: rail avatar → Abmelden, the arrow icon at the bottom of the thread list, or the menu-bar icon.
@@ -187,6 +188,15 @@ German is the default; English is the second language (Einstellungen → Darstel
 - Daily caps per tier in `MEDIA_DAILY_LIMITS` (free: 10 speech, 2 music, 1 video). Cost in `chat_runs.cost_micros` from kie's `creditsConsumed`, assuming 0.005 USD per credit.
 - **Not verified against the live API**: no real job was run. Not built: media in the Bibliothek listing, an inline player part, sound effects.
 
+### 6a.7 Ausweise — credential register in Studio (2026-11-19)
+
+Plan `docs/superpowers/plans/2026-11-17-credreg-5-studio.md`; merged into `feat/ortis-studio-desktop` (`018e0cf6`), shipped as **interface OTA 0.3.14** (release `ortis-studio-ota-v0.3.14`, 2026-11-19). Renderer only, no `electron/` change.
+
+- Calls `/api/credentials/{org,actions,status}` on main with the pairing session as Bearer (`src/credentials/api.ts`); holder actions answer 403 `APP_ONLY` ("Das geht nur in der Röbel App."), a 401 shows the sign-in hint.
+- Tabs: Typen (templates, editor, image upload), Personen (CSV/TXT drop or paste, Windows-1252 fallback, server preview, one batch, revoke), Ausstellungen (pending actions polled every 5 s / 60 s, history, letters PDF via `<a download>`, revoke a batch), Veranstaltungen (event badges, same labels as `event-panel.ts`), Einstellungen (members-public switch, delegates via `delegates_list`).
+- Studio cannot sign: every change is a prepared action the phone confirms.
+- **Invisible in production until `app_settings.credentials_enabled = true`** (status was `enabled:false` on 2026-11-19). Tested only in the browser build with mocked routes; not yet against the live register or a real phone confirmation. Browser version (`ortis-studio-web`) not redeployed.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
@@ -194,7 +204,7 @@ German is the default; English is the second language (Einstellungen → Darstel
   Install locally with `ditto --noqtn` into `/Applications` and `~/Applications`.
 - Release: `gh release create ortis-studio-v<v> … <dmg> <exe>` — **public; Max's explicit OK
   required** (auto mode blocks creating releases; uploading to an existing one with `--clobber`
-  works). Check `roebel.app/studio/latest.json` checksums after the 5-minute cache.
+  works). `--target` needs the **full** commit SHA (a short one gives HTTP 422). Check `roebel.app/studio/latest.json` checksums after the 5-minute cache.
 - Browser version: copy `apps/studio/dist` to a scratch folder and `vercel deploy --prod --yes
   --scope maxbrychs-projects` there (project `ortis-studio-web`).
 - App OTA (Röbel App, for the pairing screen and scanner): from `.worktrees/prod-390` (filtered
