@@ -4,6 +4,7 @@
  */
 import { RESERVED_TYPE_IDS } from '@netizen-labs/credential-registry';
 import type { Hex } from 'viem';
+import type { CardDesign } from '@roebel/card-design';
 import { CREDENTIAL_COPY, credentialKindsFor, type CredentialKind } from '@/lib/credentials';
 import type { HeldCredential } from './held';
 import type { PendingBadge } from './types';
@@ -29,6 +30,8 @@ export type RegisterCard = {
   eventId?: string;
   eventTitle?: string;
   eventDate?: string;
+  /** Drawn with Skia on the holder's device when present; otherwise `imageUrl` as before. */
+  design?: CardDesign;
 };
 
 export type Profile = { cards: RegisterCard[]; badges: RegisterCard[] };
@@ -85,6 +88,7 @@ function registerCard(h: HeldCredential, nowSec: number): RegisterCard | null {
   if (h.eventId) card.eventId = h.eventId;
   if (h.eventTitle) card.eventTitle = h.eventTitle;
   if (h.eventDate) card.eventDate = h.eventDate;
+  if (h.design) card.design = h.design;
   return card;
 }
 

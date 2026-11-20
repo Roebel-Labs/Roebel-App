@@ -68,6 +68,29 @@ describe('loadHeld', () => {
     expect(held[1]).toMatchObject({ invitationId: 'b', title: 'Typ b', orgName: 'Verein', claim: expect.objectContaining({ batchId: '1' }) });
   });
 
+  it('carries a valid card design and keeps the preview picture for older builds', async () => {
+    const { TEMPLATES } = require('@roebel/card-design');
+    const design = TEMPLATES[0].design;
+    const sha = 'f'.repeat(64);
+    const preview = 'https://www.roebel.app/api/credentials/designs/' + sha + '/image';
+    const { d } = deps({
+      fetchMine: jest.fn(async () => ({
+        ok: true as const,
+        data: [
+          inv('a', tid(1), { design, designSha: sha, type: { ...inv('a', tid(1)).type, imageUrl: preview } }),
+          inv('b', tid(2), { design: { schema: 99 }, designSha: sha }),
+        ],
+      })),
+    });
+    const [a, b] = await loadHeld(account, d);
+    expect(a).toMatchObject({ design, designSha: sha, imageUrl: preview });
+    // A broken design is dropped: the card falls back to its picture.
+    expect(b.design).toBeUndefined();
+    // The design survives the cache.
+    const cached = JSON.parse((await AsyncStorage.getItem(heldCacheKey(ADDR)))!);
+    expect(cached[0].design).toEqual(design);
+  });
+
   it('converts validUntil to unix seconds', async () => {
     const { d } = deps({
       fetchMine: jest.fn(async () => ({ ok: true as const, data: [inv('a', tid(1), { validUntil: '2027-01-01T00:00:00.000Z' })] })),
