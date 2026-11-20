@@ -87,6 +87,27 @@ export const fetchDesignAssets = (a: SigningAccount, accountId: string) => desig
 export const sendDraftTest = (a: SigningAccount, draftId: string) => designApi<{ sentAt: string }>(a, 'design_test_send', { draftId });
 export const publishDraft = (a: SigningAccount, draftId: string) => designApi<DesignPublished>(a, 'design_publish', { draftId });
 
+// ── AI help (D5) ─────────────────────────────────────────────────────────────
+
+export type AiKind = 'background' | 'sticker';
+export type AiBackgroundResult = { asset: AssetView; background: CardDesign['background'] };
+export type AiStickerResult = { asset: AssetView; layer: CardDesign['layers'][number]; notice?: string };
+
+/** A generated card background (up to a minute; 429 AI_LIMIT / 504 AI_TIMEOUT as German messages). */
+export const generateDesignBackground = (a: SigningAccount, accountId: string, prompt: string) =>
+  designApi<AiBackgroundResult>(a, 'design_ai_background', { accountId, prompt });
+/** A generated sticker, background removed when possible (`notice` otherwise). */
+export const generateDesignSticker = (a: SigningAccount, accountId: string, prompt: string) =>
+  designApi<AiStickerResult>(a, 'design_ai_sticker', { accountId, prompt });
+
+/** True when a design contains AI images: an `ai` layer or an AI background asset. */
+export function designHasAi(design: CardDesign | null | undefined, assets: readonly { sha: string; ai: boolean }[] = []): boolean {
+  if (!design) return false;
+  if (design.layers.some((l) => l.ai === true)) return true;
+  const bg = design.background;
+  return bg.kind === 'image' && assets.some((x) => x.ai && x.sha === bg.assetId);
+}
+
 export type SaveDraftInput = {
   accountId: string;
   /** Absent = a new draft. With it, `baseRevision` is required. */

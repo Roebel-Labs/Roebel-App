@@ -42,6 +42,8 @@ export type HeldCredential = {
   /** The type's live card design (validated); absent = the picture (`imageUrl`) as before. */
   design?: CardDesign;
   designSha?: string;
+  /** The design contains AI-generated images. */
+  designAi?: boolean;
 };
 
 /** A design from the server or the cache, only if it is a valid card design. */
@@ -72,10 +74,11 @@ function isoToSec(iso: string | null): number | null {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
-function designFields(design: unknown, sha: unknown): Pick<HeldCredential, 'design' | 'designSha'> {
+function designFields(design: unknown, sha: unknown, ai?: unknown): Pick<HeldCredential, 'design' | 'designSha' | 'designAi'> {
   const d = validDesign(design);
   if (!d) return {};
-  return typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? { design: d, designSha: sha } : { design: d };
+  const marked = ai === true ? { designAi: true } : {};
+  return typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? { design: d, designSha: sha, ...marked } : { design: d, ...marked };
 }
 
 const KINDS = new Set(['role', 'membership', 'badge']);
@@ -105,7 +108,7 @@ function cacheEntry(v: unknown): HeldCredential | null {
     ...(typeof e.eventId === 'string' ? { eventId: e.eventId } : {}),
     ...(typeof e.eventTitle === 'string' ? { eventTitle: e.eventTitle } : {}),
     ...(typeof e.eventDate === 'string' ? { eventDate: e.eventDate } : {}),
-    ...designFields(e.design, e.designSha),
+    ...designFields(e.design, e.designSha, e.designAi),
     claim: null, // never stored: proofs and claim signatures come only from the server
   };
 }
@@ -216,7 +219,7 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
         ...(i.type.eventId ? { eventId: i.type.eventId } : {}),
         ...(i.type.eventTitle ? { eventTitle: i.type.eventTitle } : {}),
         ...(i.type.eventDate ? { eventDate: i.type.eventDate } : {}),
-        ...designFields(i.design, i.designSha),
+        ...designFields(i.design, i.designSha, i.designAi),
       };
     });
   if (onChain) await writeCache(account.address, held);

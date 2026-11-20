@@ -7,6 +7,7 @@ import { formatEventDate } from '@/lib/credreg/collect-format';
 import type { BadgeTile, RegisterCard } from '@/lib/credreg/model';
 import CredentialCard from './CredentialCard';
 import type { Holder } from '@/lib/card-design/holder-values';
+import { designHasAi } from '@/lib/credreg/designs';
 
 type Props = {
   card: RegisterCard | null;
@@ -34,6 +35,9 @@ export const MAKE_PRIVATE_EXPLAINER =
 
 export const PENDING_BADGE_TEXT = 'Wird eingetragen, sobald der Veranstalter die Abzeichen vergibt.';
 export const QUEUED_BADGE_TEXT = 'Wird gesammelt, sobald du wieder online bist.';
+
+/** AI Act Art. 50: a designed card with generated pictures says so. */
+export const AI_IMAGES_NOTE = 'Enthält KI-generierte Bilder';
 
 export const ORG_PRIVATE_ONLY = 'Diese Organisation zeigt ihre Mitglieder nicht öffentlich.';
 
@@ -126,6 +130,9 @@ export default function CredentialDetailSheet({
             {expired ? 'Abgelaufen' : validityLabel(card.validUntil)}
           </Text>
         )}
+        {card.design && (card.designAi || designHasAi(card.design)) ? (
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>{AI_IMAGES_NOTE}</Text>
+        ) : null}
 
         {confirming ? (
           <View style={styles.block}>

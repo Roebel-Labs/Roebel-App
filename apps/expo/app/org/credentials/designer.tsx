@@ -26,7 +26,7 @@ import { holderValues, useHolder } from '@/lib/card-design/holder-values';
 import { usePublishGate } from '@/lib/card-design/publish-gate';
 import { useDesignerOpen } from '@/lib/card-design/designer-status';
 import {
-  designErrorMessage, fetchDraft, publishDraft, saveDraft, uploadDesignAsset,
+  designErrorMessage, fetchDraft, generateDesignBackground, generateDesignSticker, publishDraft, saveDraft, uploadDesignAsset,
   type AssetKind, type DesignKind, type DraftWithDesign,
 } from '@/lib/credreg/designs';
 import type { SigningAccount } from '@/lib/signed-request';
@@ -205,6 +205,15 @@ function Editor({ account, init }: { account: SigningAccount; init: EditorInit }
     [account.address, init.accountId],
   );
 
+  const generate = useMemo(
+    () => ({
+      background: (prompt: string) => generateDesignBackground(account, init.accountId, prompt),
+      sticker: (prompt: string) => generateDesignSticker(account, init.accountId, prompt),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [account.address, init.accountId],
+  );
+
   const sendToPhone = async () => {
     if (busy) return;
     setBusy('test');
@@ -333,7 +342,7 @@ function Editor({ account, init }: { account: SigningAccount; init: EditorInit }
         width={screenWidth - 48}
         onPick={(design) => { apply(() => design); dispatch({ type: 'select', id: null }); }}
       />
-      <AddSheet visible={sheet === 'add'} onClose={() => setSheet(null)} design={state.design} apply={apply} upload={upload} />
+      <AddSheet visible={sheet === 'add'} onClose={() => setSheet(null)} design={state.design} apply={apply} upload={upload} generate={generate} />
       <PropsSheet
         visible={sheet === 'props'}
         onClose={() => setSheet(null)}

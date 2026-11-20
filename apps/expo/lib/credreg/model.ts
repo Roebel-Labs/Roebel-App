@@ -32,6 +32,8 @@ export type RegisterCard = {
   eventDate?: string;
   /** Drawn with Skia on the holder's device when present; otherwise `imageUrl` as before. */
   design?: CardDesign;
+  /** The design contains AI-generated images (server metadata). */
+  designAi?: boolean;
 };
 
 export type Profile = { cards: RegisterCard[]; badges: RegisterCard[] };
@@ -89,6 +91,7 @@ function registerCard(h: HeldCredential, nowSec: number): RegisterCard | null {
   if (h.eventTitle) card.eventTitle = h.eventTitle;
   if (h.eventDate) card.eventDate = h.eventDate;
   if (h.design) card.design = h.design;
+  if (h.designAi) card.designAi = true;
   return card;
 }
 

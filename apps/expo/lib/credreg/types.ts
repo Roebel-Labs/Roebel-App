@@ -36,6 +36,8 @@ export type InvitationView = {
   design?: unknown;
   /** sha of that design version. `type.imageUrl` stays the preview picture for older app builds. */
   designSha?: string | null;
+  /** The design contains AI-generated images ("Enthält KI-generierte Bilder"). */
+  designAi?: boolean;
   claim: {
     batchId: string;
     leaf: InvitationLeaf;

@@ -14,6 +14,7 @@ import BottomDrawer from '@/components/BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import type { AssetKind, AssetView, DesignResult } from '@/lib/credreg/designs';
+import AiPromptBox, { type AiGenerate } from './AiPromptBox';
 
 export const PRESET_LABELS: Record<PresetId, string> = {
   silver: 'Silber', navy: 'Navy', gold: 'Gold', black: 'Schwarz', paper: 'Papier', holo: 'Holografisch', matte: 'Matt', glass: 'Glas',
@@ -63,9 +64,11 @@ type Props = {
   design: CardDesign;
   apply: (fn: (d: CardDesign) => CardDesign, select?: (d: CardDesign) => string | null) => void;
   upload: Upload;
+  /** AI help (D5); absent = no AI entries. */
+  generate?: AiGenerate;
 };
 
-export default function AddSheet({ visible, onClose, design, apply, upload }: Props) {
+export default function AddSheet({ visible, onClose, design, apply, upload, generate }: Props) {
   const { colors } = useTheme();
   const [busy, setBusy] = useState<AssetKind | null>(null);
 
@@ -84,6 +87,12 @@ export default function AddSheet({ visible, onClose, design, apply, upload }: Pr
     } finally {
       setBusy(null);
     }
+  };
+
+  const applyAi = (select: boolean) => (change: (d: CardDesign) => CardDesign, notice?: string) => {
+    apply(change, select ? (d) => d.layers[d.layers.length - 1]?.id ?? null : undefined);
+    if (notice) Alert.alert('Sticker eingefügt', notice);
+    onClose();
   };
 
   const Row = ({ label, onPress, kind }: { label: string; onPress: () => void; kind?: AssetKind }) => (
@@ -120,6 +129,7 @@ export default function AddSheet({ visible, onClose, design, apply, upload }: Pr
           kind="background"
           onPress={() => withUpload('background', (a) => apply((d) => ({ ...d, background: { kind: 'image', assetId: a.sha, fit: 'cover' } })))}
         />
+        {generate ? <AiPromptBox kind="background" generate={generate} onResult={applyAi(false)} /> : null}
         <View style={[styles.row, { borderColor: colors.border }]}>
           <Text style={[styles.rowText, { color: colors.textPrimary }]}>Glanz über die ganze Karte</Text>
           <Switch
@@ -146,6 +156,7 @@ export default function AddSheet({ visible, onClose, design, apply, upload }: Pr
           kind="sticker"
           onPress={() => withUpload('sticker', (a) => apply((d) => addLayer(d, imageLayer(d, a.sha, 'sticker', a)), (d) => d.layers[d.layers.length - 1]?.id ?? null))}
         />
+        {generate ? <AiPromptBox kind="sticker" generate={generate} onResult={applyAi(true)} /> : null}
       </ScrollView>
     </BottomDrawer>
   );
