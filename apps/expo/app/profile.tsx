@@ -51,6 +51,9 @@ import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
+import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
+import { ProfileEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
+import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -66,6 +69,7 @@ export default function ProfileScreen() {
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const entryShimmer = useEntryShimmer();
 
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
@@ -368,6 +372,11 @@ export default function ProfileScreen() {
               </>
             )}
           </ScrollView>
+          {isConnected && (
+            <ScreenShimmer shimmer={entryShimmer} backgroundColor={colors.backdrop}>
+              <ProfileEntrySkeleton />
+            </ScreenShimmer>
+          )}
         </GlassBackdrop>
 
         {hasAnyNFT && (

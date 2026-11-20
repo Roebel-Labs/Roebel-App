@@ -26,6 +26,8 @@ import ProfileTabs from '@/components/profile/ProfileTabs';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
+import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import RatingModal from '@/components/RatingModal';
@@ -136,6 +138,7 @@ function PublicAccountScreenInner() {
   const { user } = useUser();
   const { isFollowing, isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
+  const entryShimmer = useEntryShimmer();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
@@ -532,6 +535,9 @@ function PublicAccountScreenInner() {
           accountName={account.name}
           onClose={closeRatingModal}
         />
+        <ScreenShimmer shimmer={entryShimmer}>
+          <AccountPageSkeleton onBack={goBack} />
+        </ScreenShimmer>
       </View>
     );
   }
@@ -1136,6 +1142,9 @@ function PublicAccountScreenInner() {
           onClose={() => setSearchModalOpen(false)}
         />
       )}
+      <ScreenShimmer shimmer={entryShimmer}>
+        <AccountPageSkeleton onBack={goBack} />
+      </ScreenShimmer>
     </SafeAreaView>
   );
 }

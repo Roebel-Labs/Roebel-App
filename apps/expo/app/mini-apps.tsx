@@ -40,6 +40,8 @@ import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import { MiniAppHeroCard } from '@/components/miniapp/MiniAppCard';
 import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
 import MiniAppStoreSkeleton from '@/components/miniapp/MiniAppSkeleton';
+import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
+import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useAccount } from '@/context/AccountContext';
@@ -52,6 +54,7 @@ const NEW_APPS_COUNT = 6;
 
 export default function MiniAppsStoreScreen() {
   const { colors } = useTheme();
+  const entryShimmer = useEntryShimmer();
   const router = useRouter();
   const goBack = useGoBack();
   const { width } = useWindowDimensions();
@@ -172,6 +175,7 @@ export default function MiniAppsStoreScreen() {
       </View>
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Apps</Text>
 
+      <View style={styles.body}>
       {loading ? (
         <MiniAppStoreSkeleton />
       ) : (
@@ -304,6 +308,12 @@ export default function MiniAppsStoreScreen() {
           )}
         </ScrollView>
       )}
+      {!loading && (
+        <ScreenShimmer shimmer={entryShimmer}>
+          <MiniAppStoreSkeleton />
+        </ScreenShimmer>
+      )}
+      </View>
 
       {/* Host for installed apps launched straight from the store */}
       {runningApp && <MiniAppHost app={runningApp} visible={hostVisible} onClose={closeHost} />}
@@ -312,6 +322,7 @@ export default function MiniAppsStoreScreen() {
 }
 
 const styles = StyleSheet.create({
+  body: { flex: 1 },
   container: { flex: 1 },
   header: {
     height: 52,

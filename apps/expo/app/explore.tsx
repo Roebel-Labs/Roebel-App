@@ -57,6 +57,9 @@ import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
 import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
+import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
+import { ExploreEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
+import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
@@ -167,6 +170,7 @@ export default function ExploreScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const entryShimmer = useEntryShimmer();
   // Controls context only changes on track switches, never per playback tick.
   const { track: audioTrack } = useAudioPlayerControls();
 
@@ -488,6 +492,9 @@ export default function ExploreScreen() {
         {/* Clearance for the now-overlaying glass BottomNavigation (+ mini player) */}
         <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
       </Animated.ScrollView>
+      <ScreenShimmer shimmer={entryShimmer}>
+        <ExploreEntrySkeleton />
+      </ScreenShimmer>
       </GlassBackdrop>
 
       {/* Search Modal */}

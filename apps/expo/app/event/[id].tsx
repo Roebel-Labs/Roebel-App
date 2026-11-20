@@ -24,6 +24,8 @@ import type { Account, EventRecord, EventDateRecord, OrgSubType } from '@/lib/ty
 import { currency, formatDate, formatTime, formatLocationFull, getNextUpcomingDate } from '@/lib/utils';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { EventDetailSkeleton } from '@/components/SkeletonLoader';
+import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
+import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
 import EventLocationMap from '@/components/EventLocationMap';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -101,6 +103,7 @@ export default function EventDetails() {
   const goBack = useGoBack();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const entryShimmer = useEntryShimmer();
   const liveSlug = useLiveShowForEvent(typeof id === 'string' ? id : null);
   const liveShow = useEventLiveShow(typeof id === 'string' ? id : null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -753,6 +756,9 @@ export default function EventDetails() {
           onError={(message) => showSnackbar({ message, duration: 4000 })}
         />
       )}
+      <ScreenShimmer shimmer={entryShimmer}>
+        <EventDetailSkeleton />
+      </ScreenShimmer>
     </View>
   );
 }

@@ -20,6 +20,9 @@ let mockInstalled: string[] = [];
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+// Entry shimmer overlay (reanimated + focus) is out of scope for the store logic.
+jest.mock('@/components/shimmer/ScreenShimmer', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/hooks/useEntryShimmer', () => ({ useEntryShimmer: () => ({ visible: false, reduceMotion: false }) }));
 jest.mock('@/lib/miniapps', () => ({ fetchLiveMiniApps: () => Promise.resolve(mockApps) }));
 jest.mock('@/lib/miniapp-installs', () => ({
   useInstalledMiniApps: () => ({ isInstalled: (s: string) => mockInstalled.includes(s) }),
