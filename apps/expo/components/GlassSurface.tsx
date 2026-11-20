@@ -238,3 +238,11 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
 });
+
+/** The screen's blur target (the GlassBackdrop ref), for transient overlays such as the return blur. */
+export function useGlassTarget(): RefObject<View | null> | null {
+  return useContext(GlassTargetContext);
+}
+
+/** Whether this binary has the expo-blur native module. */
+export const GLASS_BLUR_AVAILABLE = BLUR_AVAILABLE;

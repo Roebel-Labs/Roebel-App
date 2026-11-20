@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/botto
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
 import { chatFont, chatSize, haloShadow, useChatTokens } from './tokens';
 
 export type ConfirmOptions = {
@@ -43,11 +44,20 @@ export function ConfirmSheet({
   const result = useRef(false);
   const closing = useRef(false);
 
+  // Drives the app-wide sheet stage (page shrinks behind); the stage then
+  // owns the dim, so the backdrop only catches taps.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={hasStage ? 0 : 0.25}
+        pressBehavior="close"
+      />
     ),
-    [],
+    [hasStage],
   );
 
   const close = (confirmed: boolean) => {
@@ -73,6 +83,7 @@ export function ConfirmSheet({
     <BottomSheet
       ref={sheetRef}
       index={0}
+      animatedIndex={animatedIndex}
       enableDynamicSizing
       enablePanDownToClose
       onClose={() => onDone(result.current)}

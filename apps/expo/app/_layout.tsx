@@ -60,6 +60,7 @@ import { bootState } from '@/lib/navigation/bootPathname';
 import PasskeyRecoveryWatch from '@/components/passkey/PasskeyRecoveryWatch';
 import PhraseReentryWatch from '@/components/passkey/PhraseReentryWatch';
 import WidgetSyncer from '@/components/WidgetSyncer';
+import { SheetStageProvider, SheetStageView } from '@/components/ui/SheetStage';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -283,7 +284,8 @@ function ThemedLayout() {
       <RewardsTaskTriggers />
       <WidgetSyncer />
       <ReferralDeepLinkHandler />
-      <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
+      {/* Sheet stage: the whole navigator shrinks behind open bottom sheets (iOS page-sheet depth). */}
+      <SheetStageView style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false }}>
           <TransitionStack.Screen
             name="submit"
@@ -356,7 +358,7 @@ function ThemedLayout() {
             options={{ headerShown: false, presentation: 'modal', gestureEnabled: true }}
           />
         </TransitionStack>
-      </View>
+      </SheetStageView>
       {/* Preview-only: gate checked first, renders nothing in production. */}
       <PasskeyRecoveryWatch />
       {/* Words sessions only: the 12 words were invalidated -> ask for them again (never a logout). */}
@@ -428,6 +430,7 @@ function Layout() {
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        <SheetStageProvider>
         <SafeAreaProvider>
           <ThemeProvider>
             <ConsentProvider>
@@ -496,6 +499,7 @@ function Layout() {
             </ConsentProvider>
           </ThemeProvider>
         </SafeAreaProvider>
+        </SheetStageProvider>
         {!splashDone && <AnimatedSplash onFinish={handleSplashFinish} />}
       </GestureHandlerRootView>
     </ErrorBoundary>

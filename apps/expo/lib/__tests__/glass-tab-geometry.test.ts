@@ -8,8 +8,8 @@ import {
   glassTabWidth,
 } from '../glass-tab-geometry';
 
-// Standard bar: 72 content + max(insets.bottom, 8).
-const standardFootprint = (inset: number) => 72 + Math.max(inset, 8);
+// Standard bar: 78 content + max(insets.bottom, 8).
+const standardFootprint = (inset: number) => 78 + Math.max(inset, 8);
 
 describe('glass tab geometry', () => {
   it('splits the inner width evenly between tabs', () => {
@@ -53,6 +53,6 @@ describe('glass tab geometry', () => {
   });
 
   it('highlight fits inside the pill', () => {
-    expect(GLASS_HIGHLIGHT_HEIGHT).toBe(50);
+    expect(GLASS_HIGHLIGHT_HEIGHT).toBe(58);
   });
 });

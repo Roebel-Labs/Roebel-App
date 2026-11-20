@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 import { formatEuros } from '@/lib/format-currency';
 import {
   approveCharge,
@@ -34,6 +35,8 @@ interface Props {
 
 export default function PendingChargeModal({ charge, walletAddress, onResolved }: Props) {
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(!!charge);
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -96,7 +99,7 @@ export default function PendingChargeModal({ charge, walletAddress, onResolved }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={handleDecline}>
-      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
+      <View style={[styles.backdrop, { backgroundColor: hasStage ? 'transparent' : colors.scrim }]}>
         <View
           style={[
             styles.sheet,

@@ -8,11 +8,9 @@
  * instead. Paint the card with the theme `sheet` token so it lifts off the
  * page in dark mode.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Animated,
   Dimensions,
-  Easing,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,8 +19,24 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
-} from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
+} from "react-native";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import { useTheme } from "@/context/ThemeContext";
+import {
+  SHEET_CLOSE_TIMING,
+  SHEET_OPEN_TIMING,
+  useSheetStageLink,
+} from "@/components/ui/SheetStage";
 
 type Props = {
   visible: boolean;
@@ -36,9 +50,16 @@ type Props = {
   /** Lift the content above the keyboard (sheets with inputs). */
   keyboardAware?: boolean;
   statusBarTranslucent?: boolean;
+  /**
+   * Swipe the content down to dismiss (calls `onBackdropPress`). Defaults to
+   * on whenever `onBackdropPress` is set; pass false for centred dialogs.
+   */
+  dragToDismiss?: boolean;
 };
 
-const OFFSET = Math.min(480, Dimensions.get('window').height * 0.6);
+const OFFSET = Math.min(480, Dimensions.get("window").height * 0.6);
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 500;
 
 export default function SheetModal({
   visible,
@@ -48,39 +69,79 @@ export default function SheetModal({
   contentContainerStyle,
   keyboardAware = false,
   statusBarTranslucent = true,
+  dragToDismiss,
 }: Props) {
   const { colors } = useTheme();
   const [mounted, setMounted] = useState(visible);
-  const progress = useRef(new Animated.Value(0)).current;
+  // 0 closed → 1 open; also follows the finger and drives the SheetStage.
+  const progress = useSharedValue(0);
+  const hasStage = useSheetStageLink(progress, mounted);
+  const canDrag = (dragToDismiss ?? true) && !!onBackdropPress;
+
+  const unmount = useCallback(() => setMounted(false), []);
+  const callDismiss = useCallback(() => onBackdropPress?.(), [onBackdropPress]);
+
+  // Mount on open during render (no effect round-trip); unmount after the close animation.
+  if (visible && !mounted) setMounted(true);
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
+      progress.set(withTiming(1, SHEET_OPEN_TIMING));
     } else if (mounted) {
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: 200,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setMounted(false);
-      });
+      progress.set(
+        withTiming(0, SHEET_CLOSE_TIMING, (finished) => {
+          if (finished) runOnJS(unmount)();
+        })
+      );
     }
     // `mounted` is read, not tracked: only `visible` drives the animation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, progress]);
 
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(canDrag)
+        .activeOffsetY(12)
+        .failOffsetY(-12)
+        .failOffsetX([-16, 16])
+        .onUpdate((e) => {
+          const dy = e.translationY > 0 ? e.translationY : 0;
+          const p = 1 - dy / OFFSET;
+          progress.set(p < 0 ? 0 : p);
+        })
+        .onEnd((e) => {
+          if (
+            e.translationY > DISMISS_DISTANCE ||
+            e.velocityY > DISMISS_VELOCITY
+          ) {
+            // Stay at the dragged position; the parent flips `visible` and the
+            // effect above finishes the slide-out from here.
+            progress.set(
+              withTiming(0.0001, { ...SHEET_CLOSE_TIMING, duration: 200 })
+            );
+            runOnJS(callDismiss)();
+          } else {
+            progress.set(withTiming(1, SHEET_OPEN_TIMING));
+          }
+        }),
+    [canDrag, progress, callDismiss]
+  );
+
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - progress.get()) * OFFSET }],
+  }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: progress.get() }));
+
   if (!mounted) return null;
 
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [OFFSET, 0] });
   const Container = keyboardAware ? KeyboardAvoidingView : View;
-  const containerProps = keyboardAware ? { behavior: Platform.OS === 'ios' ? ('padding' as const) : ('height' as const) } : {};
+  const containerProps = keyboardAware
+    ? {
+        behavior:
+          Platform.OS === "ios" ? ("padding" as const) : ("height" as const),
+      }
+    : {};
 
   return (
     <Modal
@@ -90,29 +151,40 @@ export default function SheetModal({
       statusBarTranslucent={statusBarTranslucent}
       onRequestClose={onRequestClose ?? (() => undefined)}
     >
-      <Container style={styles.fill} {...containerProps}>
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim, opacity: progress }]}
-        />
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onBackdropPress}
-          disabled={!onBackdropPress}
-          accessibilityLabel={onBackdropPress ? 'Schließen' : undefined}
-        />
-        <Animated.View
-          pointerEvents="box-none"
-          style={[styles.content, contentContainerStyle, { transform: [{ translateY }] }]}
-        >
-          {children}
-        </Animated.View>
-      </Container>
+      <GestureHandlerRootView style={styles.fill}>
+        <Container style={styles.fill} {...containerProps}>
+          {/* Own scrim only without a SheetStage (the stage dims the page). */}
+          {!hasStage && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: colors.scrim },
+                scrimStyle,
+              ]}
+            />
+          )}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onBackdropPress}
+            disabled={!onBackdropPress}
+            accessibilityLabel={onBackdropPress ? "Schließen" : undefined}
+          />
+          <GestureDetector gesture={pan}>
+            <Animated.View
+              pointerEvents="box-none"
+              style={[styles.content, contentContainerStyle, contentStyle]}
+            >
+              {children}
+            </Animated.View>
+          </GestureDetector>
+        </Container>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  content: { flex: 1, justifyContent: 'flex-end' },
+  content: { flex: 1, justifyContent: "flex-end" },
 });

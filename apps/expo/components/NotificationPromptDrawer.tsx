@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -24,6 +25,8 @@ export default function NotificationPromptDrawer({
   onDismiss,
 }: NotificationPromptDrawerProps) {
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(visible);
   const insets = useSafeAreaInsets();
 
   return (
@@ -34,7 +37,7 @@ export default function NotificationPromptDrawer({
       statusBarTranslucent
     >
       <View style={styles.overlay}>
-        <Pressable style={[styles.backdrop, { backgroundColor: colors.scrim }]} onPress={onDismiss} />
+        <Pressable style={[styles.backdrop, { backgroundColor: hasStage ? 'transparent' : colors.scrim }]} onPress={onDismiss} />
         <View
           style={[
             styles.drawer,

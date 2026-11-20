@@ -59,6 +59,8 @@ import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 import { ShimmerGroup } from '@/components/feed/Shimmer';
 import { useNavHideStyle } from '@/hooks/useScrollChrome';
+import ScreenTransition from '@/components/skeleton/ScreenTransition';
+import { ExploreEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
@@ -494,6 +496,9 @@ export default function ExploreScreen() {
         <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
       </Animated.ScrollView>
       </GlassBackdrop>
+
+      {/* First open: matched skeleton until the hero data is there; back from a detail page: blur → sharp. */}
+      <ScreenTransition skeleton={<ExploreEntrySkeleton />} ready={!popularQuery.isPending} />
 
       {/* Search Modal */}
       <SearchModal

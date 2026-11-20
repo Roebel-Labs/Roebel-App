@@ -1,19 +1,10 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  FlatList,
-  StyleSheet,
-  useWindowDimensions,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { View, Text, Pressable, FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
-import { placeCardStyles, PLACE_CARD_WIDTH, PLACE_COVER_HEIGHT } from '@/components/GastroCard';
+import { placeCardStyles } from '@/components/GastroCard';
 import { RAIL_LIST_PROPS } from '@/components/railListProps';
 import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { transformedImageUrl } from '@/lib/image-url';
@@ -36,11 +27,7 @@ type Dish = {
   day: string | null;
 };
 
-const LOGO_SIZE = 16;
-// 2½ cards across the screen: the half card teases that the rail scrolls.
-const VISIBLE_CARDS = 2.5;
-const CARD_GAP = 12;
-const COVER_RATIO = PLACE_COVER_HEIGHT / PLACE_CARD_WIDTH;
+const LOGO_SIZE = 20;
 
 const dishKey = (dish: Dish) => dish.item.id;
 
@@ -53,16 +40,6 @@ const dishKey = (dish: Dish) => dish.item.id;
 export default function FeedSpecialMenuSection({ menus, gutter = 24, containerStyle }: Props) {
   // Locks the feed pager while a finger is on the rail (see HorizontalRailLock).
   const railLockHandlers = useRailLockTouchHandlers();
-  const { width: screenWidth } = useWindowDimensions();
-  // Leading gutter + two full gaps (the half card's gap is off screen).
-  const cardWidth = Math.floor((screenWidth - gutter - CARD_GAP * 2) / VISIBLE_CARDS);
-  const cardSize = useMemo(
-    () => ({
-      card: { width: cardWidth, marginRight: CARD_GAP },
-      cover: { height: Math.round(cardWidth * COVER_RATIO) },
-    }),
-    [cardWidth],
-  );
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -98,11 +75,11 @@ export default function FeedSpecialMenuSection({ menus, gutter = 24, containerSt
       return (
         <Pressable
           onPress={() => router.push(`/restaurant/dish/${item.id}` as any)}
-          style={({ pressed }) => [placeCardStyles.card, cardSize.card, pressed && { opacity: 0.9 }]}
+          style={({ pressed }) => [placeCardStyles.card, pressed && { opacity: 0.9 }]}
           accessibilityRole="button"
           accessibilityLabel={`${item.name} ansehen`}
         >
-          <View style={[placeCardStyles.cover, cardSize.cover, { backgroundColor: colors.surfaceSecondary }]}>
+          <View style={[placeCardStyles.cover, { backgroundColor: colors.surfaceSecondary }]}>
             {item.image_url ? (
               <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} style={StyleSheet.absoluteFill} />
             ) : (
@@ -114,8 +91,8 @@ export default function FeedSpecialMenuSection({ menus, gutter = 24, containerSt
               />
             )}
             {dayLabel ? (
-              <View style={[placeCardStyles.pill, styles.pill]}>
-                <Text style={[placeCardStyles.pillText, styles.pillText]}>{dayLabel}</Text>
+              <View style={placeCardStyles.pill}>
+                <Text style={placeCardStyles.pillText}>{dayLabel}</Text>
               </View>
             ) : null}
           </View>
@@ -145,7 +122,7 @@ export default function FeedSpecialMenuSection({ menus, gutter = 24, containerSt
         </Pressable>
       );
     },
-    [router, colors, today, cardSize]
+    [router, colors, today]
   );
 
   if (dishes.length === 0) return null;
@@ -179,26 +156,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'MonaSansSemiCondensed-Medium',
   },
-  // Smaller day pill to match the narrower card.
-  pill: {
-    top: 8,
-    left: 8,
-    height: 24,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-  },
-  pillText: {
-    fontSize: 12,
-  },
   fallback: {
-    width: 56,
-    height: 56,
+    width: 96,
+    height: 96,
   },
   name: {
-    fontSize: 15,
-    lineHeight: 19,
+    fontSize: 18,
     fontFamily: 'MonaSans-SemiBold',
-    marginTop: 8,
+    marginTop: 10,
   },
   metaRow: {
     flexDirection: 'row',
@@ -214,6 +179,5 @@ const styles = StyleSheet.create({
   metaText: {
     flex: 1,
     marginTop: 0,
-    fontSize: 13,
   },
 });

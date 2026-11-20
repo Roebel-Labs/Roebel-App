@@ -5,11 +5,15 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Dimensions,
   Share,
   Alert,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
@@ -25,19 +29,22 @@ import {
   type SellerProfile,
 } from '@/lib/supabase-marketplace';
 import MeckyNotFound from '@/components/MeckyNotFound';
-import { MarketplaceDetailSkeleton } from '@/components/SkeletonLoader';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
+  ChevronRight,
   LocationSmallIcon,
   ShareIcon,
   SparklesIcon,
-  MailSmallIcon,
 } from '@/components/Icons';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
-import ImageZoomModal from '@/components/ImageZoomModal';
+import GlassIconButton from '@/components/GlassIconButton';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import DetailBodySkeleton from '@/components/detail/DetailBodySkeleton';
+import ImageGalleryModal from '@/components/detail/ImageGalleryModal';
+import { fontFamily } from '@/constants/theme';
 import ListingCategoryIcon from '@/components/ListingCategoryIcon';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from '@/constants/listing-categories';
 import MarketplaceCard from '@/components/MarketplaceCard';
@@ -45,8 +52,15 @@ import type { MarketplaceListingRecord } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const HERO_HEIGHT = 400;
+/** Hero takes ~45% of the screen. */
+const HERO_RATIO = 0.45;
+const AVATAR = 76;
+const AVATAR_RING = 4;
+const SIDE = 24;
+/** Height of the floating bottom bar card. */
+const BAR_HEIGHT = 76;
+/** Long descriptions collapse under the title until "Mehr anzeigen". */
+const DESCRIPTION_CLAMP = 4;
 
 function formatPrice(price: number, priceType: string): string {
   if (priceType === 'free') return 'Gratis';
@@ -59,7 +73,10 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const goBack = useGoBack();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const heroHeight = Math.round(windowHeight * HERO_RATIO);
   const { user } = useUser();
   const { activeAccount } = useAccount();
 
@@ -69,7 +86,9 @@ export default function ListingDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [canEdit, setCanEdit] = useState(false);
   const [seller, setSeller] = useState<SellerProfile | null>(null);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -179,25 +198,34 @@ export default function ListingDetailScreen() {
     );
   };
 
+  const openGallery = (index: number) => {
+    setGalleryIndex(index);
+    setGalleryOpen(true);
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <MarketplaceDetailSkeleton />
-        </ScrollView>
-      </SafeAreaView>
+        <CollapsingHeroScreen
+          heroHeight={heroHeight}
+          onBack={goBack}
+          loading
+          backgroundColor={colors.backdrop}
+          skeleton={<DetailBodySkeleton centered avatar={AVATAR} />}
+        />
+      </>
     );
   }
 
   if (!listing) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.headerAbsolute}>
-          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
-            <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-          </Pressable>
+        <View style={styles.notFoundBack}>
+          <GlassIconButton onPress={goBack} accessibilityLabel="Zurück">
+            <ArrowLeftIcon size={22} color={colors.textPrimary} />
+          </GlassIconButton>
         </View>
         <MeckyNotFound title="Anzeige nicht gefunden" />
       </SafeAreaView>
@@ -205,6 +233,7 @@ export default function ListingDetailScreen() {
   }
 
   const images = listing.media_urls || [];
+  const isService = listing.listing_type === 'service';
   const categoryDef =
     [...PRODUCT_CATEGORIES, ...SERVICE_CATEGORIES].find((c) => c.key === listing.category) || null;
   const categoryIconName = categoryDef?.icon || 'note';
@@ -215,6 +244,9 @@ export default function ListingDetailScreen() {
   // display name, falling back to a neutral placeholder while it loads / when
   // it can't be resolved. See feedback: never show wallet addresses.
   const sellerName = seller?.name || 'Jemand';
+  const sellerFirstName = listing.account_id ? sellerName : sellerName.split(' ')[0];
+  const sellerInitial = (sellerName[0] || '?').toUpperCase();
+  const sellerRole = listing.account_id ? 'Organisation' : 'Privatperson';
 
   // Hide "Kontaktieren" only when the ACTIVE account is the seller's account
   // (you can't message yourself). A wallet owns several accounts (personal +
@@ -222,10 +254,17 @@ export default function ListingDetailScreen() {
   // an org you should be able to message your own citizen account.
   const isOwn = !!activeAccount?.id && !!seller?.accountId && activeAccount.id === seller.accountId;
 
-  const priceBase =
-    listing.price_type === 'free'
-      ? 'Gratis'
-      : listing.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+  const isFree = listing.price_type === 'free';
+  const priceBase = isFree
+    ? 'Gratis'
+    : listing.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+  const priceLabel = isFree ? priceBase : isService ? `Ab ${priceBase}` : priceBase;
+  const priceSub =
+    listing.price_type === 'negotiable'
+      ? 'Verhandlungsbasis'
+      : isFree
+        ? isService ? 'Kostenloses Angebot' : 'Zu verschenken'
+        : 'Festpreis';
 
   let createdRelative = '';
   try {
@@ -236,41 +275,153 @@ export default function ListingDetailScreen() {
   } catch {
     createdRelative = '';
   }
-  const metaParts = [
+  // "<Kategorie> in <Ort>" and a secondary line with what else is known.
+  const metaLine = listing.neighborhood ? `${categoryLabel} in ${listing.neighborhood}` : categoryLabel;
+  const subLine = [
+    conditionLabel ? `Zustand: ${conditionLabel}` : null,
+    createdRelative ? `Eingestellt ${createdRelative}` : null,
     `${listing.views_count} Aufrufe`,
-    createdRelative,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const longDescription = (listing.description?.length ?? 0) > 180;
+
+  const openSellerProfile = () => {
+    // /account/[id] only renders organisations; personal sellers
+    // have their profile at /user/[username].
+    if (seller?.username) router.push(`/user/${seller.username}` as any);
+    else if (seller?.accountId) router.push(`/account/${seller.accountId}` as any);
+  };
+
+  // The bottom bar's one primary action.
+  const cta = !isOwn
+    ? { label: isService ? 'Anfragen' : 'Nachricht senden', onPress: handleContact, a11y: 'Anbieter kontaktieren' }
+    : canEdit
+      ? { label: 'Bearbeiten', onPress: () => router.push(`/marketplace/edit/${listing.id}` as any), a11y: 'Anzeige bearbeiten' }
+      : null;
+
+  const cardShadow: ViewStyle = isDark
+    ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }
+    : ({ boxShadow: '0px 6px 24px rgba(0,0,0,0.08)' } as ViewStyle);
+
+  const goodToKnow: {
+    key: string;
+    icon: React.ReactNode;
+    title: string;
+    subtitle?: string;
+    onPress?: () => void;
+    destructive?: boolean;
+  }[] = [
+    listing.neighborhood
+      ? { key: 'place', icon: <LocationSmallIcon size={24} color={colors.textPrimary} />, title: 'Ort', subtitle: listing.neighborhood }
+      : null,
+    { key: 'category', icon: <ListingCategoryIcon name={categoryIconName} size={24} color={colors.textPrimary} />, title: 'Kategorie', subtitle: categoryLabel },
+    conditionLabel
+      ? { key: 'condition', icon: <SparklesIcon size={24} color={colors.textPrimary} />, title: 'Qualität', subtitle: conditionLabel }
+      : null,
+    { key: 'price', icon: <Ionicons name="pricetag-outline" size={22} color={colors.textPrimary} />, title: 'Preis', subtitle: `${priceBase} · ${priceSub}` },
+    {
+      key: 'share',
+      icon: <ShareIcon size={22} color={colors.textPrimary} />,
+      title: 'Anzeige teilen',
+      subtitle: 'Schick sie an Freunde und Nachbarn',
+      onPress: handleShare,
+    },
+    canEdit
+      ? {
+          key: 'edit',
+          icon: <Ionicons name="create-outline" size={22} color={colors.textPrimary} />,
+          title: 'Anzeige bearbeiten',
+          onPress: () => router.push(`/marketplace/edit/${listing.id}` as any),
+        }
+      : null,
+    canEdit
+      ? {
+          key: 'delete',
+          icon: <Ionicons name="trash-outline" size={22} color={colors.error} />,
+          title: 'Anzeige löschen',
+          onPress: handleDelete,
+          destructive: true,
+        }
+      : null,
+  ].filter((x): x is NonNullable<typeof x> => !!x);
+
+  const onHeroScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setActiveImageIndex(Math.round(e.nativeEvent.contentOffset.x / windowWidth));
+  };
+
+  const bottomBar = (
+    <View
+      pointerEvents="box-none"
+      style={[styles.barWrap, { bottom: Math.max(insets.bottom, 12) + 4 }]}
+    >
+      <View style={[styles.bar, { backgroundColor: isDark ? colors.sheet : colors.background }, cardShadow, !isDark && styles.barShadow]}>
+        <View style={styles.barText}>
+          <Text style={[styles.barPrice, { color: colors.textPrimary }]} numberOfLines={1}>
+            {priceLabel}
+          </Text>
+          <Text style={[styles.barSub, { color: colors.textSecondary }]} numberOfLines={1}>
+            {priceSub}
+          </Text>
+        </View>
+        {cta ? (
+          <Pressable
+            onPress={cta.onPress}
+            style={({ pressed }) => [styles.barCta, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={cta.a11y}
+          >
+            <Text style={[styles.barCtaText, { color: colors.onPrimary }]} numberOfLines={1}>
+              {cta.label}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero Image */}
-        <View style={styles.heroContainer}>
-          {images.length > 0 ? (
+      <CollapsingHeroScreen
+        heroHeight={heroHeight}
+        imageUri={images[activeImageIndex] ?? images[0] ?? null}
+        backgroundColor={colors.backdrop}
+        heroBackgroundColor={colors.cardPlaceholder}
+        sheetStyle={styles.sheet}
+        title={listing.title}
+        onBack={goBack}
+        actions={[
+          {
+            key: 'share',
+            accessibilityLabel: 'Anzeige teilen',
+            onPress: handleShare,
+            renderIcon: (c) => <ShareIcon size={20} color={c} />,
+          },
+        ]}
+        contentContainerStyle={{ paddingBottom: BAR_HEIGHT + Math.max(insets.bottom, 12) + 40 }}
+        renderHero={() =>
+          images.length > 0 ? (
             <ScrollView
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                setActiveImageIndex(index);
-              }}
+              onMomentumScrollEnd={onHeroScrollEnd}
+              scrollEnabled={images.length > 1}
             >
               {images.map((uri, index) => (
                 <Pressable
-                  key={index}
-                  onPress={() => {
-                    setActiveImageIndex(index);
-                    setLightboxOpen(true);
-                  }}
+                  key={`${index}-${uri}`}
+                  onPress={() => openGallery(index)}
                   accessibilityRole="imagebutton"
-                  accessibilityLabel="Bild vergrößern"
+                  accessibilityLabel="Bilder ansehen"
                 >
                   <Image
                     source={{ uri }}
-                    style={styles.heroImage}
+                    style={{ width: windowWidth, height: heroHeight }}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={index === 0 ? 0 : 150}
                     accessibilityIgnoresInvertColors
                   />
                 </Pressable>
@@ -278,463 +429,407 @@ export default function ListingDetailScreen() {
             </ScrollView>
           ) : (
             <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]}>
-              <Text style={styles.placeholderEmoji}>🛍️</Text>
+              <ListingCategoryIcon name={categoryIconName} size={64} color={colors.textTertiary} />
             </View>
-          )}
-
-          {/* Pagination dots */}
-          {images.length > 1 && (
-            <View style={styles.paginationDots}>
-              {images.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor: index === activeImageIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
-                    },
-                  ]}
-                />
-              ))}
+          )
+        }
+        heroOverlay={
+          images.length > 1 ? (
+            <View style={styles.heroCounter} pointerEvents="none">
+              <Text style={styles.heroCounterText}>
+                {activeImageIndex + 1} / {images.length}
+              </Text>
             </View>
-          )}
+          ) : null
+        }
+        footer={bottomBar}
+        belowSheet={
+          <Pressable
+            onPress={() => router.push('/feedback' as any)}
+            hitSlop={8}
+            style={({ pressed }) => [styles.reportLink, pressed && styles.pressed]}
+            accessibilityRole="link"
+          >
+            <Ionicons name="flag-outline" size={16} color={colors.textPrimary} />
+            <Text style={[styles.reportText, { color: colors.textPrimary }]}>Problem melden?</Text>
+          </Pressable>
+        }
+      >
+        {/* ── Identity: avatar on the sheet edge, centered title block ── */}
+        <View style={styles.identity}>
+          <Pressable
+            onPress={openSellerProfile}
+            disabled={!seller?.accountId}
+            style={[styles.avatarRing, { backgroundColor: colors.background }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Profil von ${sellerName} öffnen`}
+          >
+            <UserAvatarWithFrame size={AVATAR} uri={seller?.avatarUrl ?? null} fallbackInitial={sellerInitial} disabled />
+          </Pressable>
 
-          {/* Back button */}
-          <View style={styles.headerAbsolute}>
-            <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
-              <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-            </Pressable>
-          </View>
-
-          {/* Price pill — sibling of the carousel so it stays fixed during swipes.
-              Always white bg + black text for consistent contrast over any image. */}
-          <View style={[styles.priceBadge, { backgroundColor: '#FFFFFF' }]}>
-            <Text style={[styles.priceBadgeText, { color: '#000000' }]}>{priceBase}</Text>
-          </View>
-        </View>
-
-        {/* Fullscreen image lightbox */}
-        <ImageZoomModal
-          visible={lightboxOpen}
-          images={images}
-          imageUrl={images[activeImageIndex]}
-          onClose={() => setLightboxOpen(false)}
-        />
-
-        {/* Content overlay */}
-        <View style={[styles.contentOverlay, { backgroundColor: colors.background }]}>
-          {/* Title */}
           <Text style={[styles.title, { color: colors.textPrimary }]}>{listing.title}</Text>
 
-          {/* Meta line */}
-          {metaParts.length > 0 && (
-            <Text style={[styles.metaLine, { color: colors.textSecondary }]}>
-              {metaParts.join(' • ')}
-            </Text>
-          )}
+          {listing.description ? (
+            <>
+              <Text
+                style={[styles.description, { color: colors.textSecondary }]}
+                numberOfLines={descExpanded ? undefined : DESCRIPTION_CLAMP}
+              >
+                {listing.description}
+              </Text>
+              {longDescription ? (
+                <Pressable onPress={() => setDescExpanded((v) => !v)} hitSlop={8} accessibilityRole="button">
+                  <Text style={[styles.moreLink, { color: colors.textPrimary }]}>
+                    {descExpanded ? 'Weniger anzeigen' : 'Mehr anzeigen'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
+          ) : null}
 
-          {/* Seller row */}
-          <View style={styles.sellerRow}>
+          <Text style={[styles.metaLine, { color: colors.textPrimary }]}>{metaLine}</Text>
+          {subLine ? <Text style={[styles.subLine, { color: colors.textSecondary }]}>{subLine}</Text> : null}
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        {/* ── Provider ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            {isService ? 'Angeboten von' : 'Verkauft von'}
+          </Text>
+          <Pressable
+            onPress={openSellerProfile}
+            disabled={!seller?.accountId}
+            style={({ pressed }) => [
+              styles.providerCard,
+              { backgroundColor: isDark ? colors.surface : colors.background },
+              cardShadow,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Profil von ${sellerName} öffnen`}
+          >
+            <UserAvatarWithFrame size={96} uri={seller?.avatarUrl ?? null} fallbackInitial={sellerInitial} disabled />
+            <Text style={[styles.providerName, { color: colors.textPrimary }]} numberOfLines={2}>
+              {sellerName}
+            </Text>
+            <Text style={[styles.providerRole, { color: colors.textSecondary }]}>{sellerRole}</Text>
+          </Pressable>
+          {!isOwn ? (
             <Pressable
-              style={({ pressed }) => [styles.sellerInfo, pressed && { opacity: 0.6 }]}
-              onPress={() => {
-                // /account/[id] only renders organisations; personal sellers
-                // have their profile at /user/[username].
-                if (seller?.username) router.push(`/user/${seller.username}` as any);
-                else if (seller?.accountId) router.push(`/account/${seller.accountId}` as any);
-              }}
-              disabled={!seller?.accountId}
+              onPress={handleContact}
+              style={({ pressed }) => [styles.messageButton, { backgroundColor: colors.surface }, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel={`Profil von ${sellerName} öffnen`}
+              accessibilityLabel="Verkäufer kontaktieren"
             >
-              <UserAvatarWithFrame
-                size={44}
-                uri={seller?.avatarUrl ?? null}
-                fallbackInitial={(sellerName[0] || '?').toUpperCase()}
-                disabled
-              />
-              <Text style={[styles.sellerName, { color: colors.textPrimary }]} numberOfLines={1}>
-                {sellerName}
+              <Text style={[styles.messageButtonText, { color: colors.textPrimary }]} numberOfLines={1}>
+                Nachricht an {sellerFirstName}
               </Text>
             </Pressable>
-            {!isOwn && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.contactPill,
-                  { backgroundColor: colors.surface },
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={handleContact}
-                accessibilityRole="button"
-                accessibilityLabel="Verkäufer kontaktieren"
-              >
-                <MailSmallIcon size={24} color={colors.textPrimary} />
-                <Text style={[styles.contactPillText, { color: colors.textPrimary }]}>Kontaktieren</Text>
-              </Pressable>
-            )}
-          </View>
+          ) : null}
+        </View>
 
-          {/* Description */}
-          {listing.description && (
-            <Text style={[styles.descriptionText, { color: colors.textPrimary }]}>{listing.description}</Text>
-          )}
-
-          {/* Info Cards */}
-          <View style={styles.infoCards}>
-            {/* Location card */}
-            {listing.neighborhood && (
-              <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-                  <LocationSmallIcon size={24} color={colors.textPrimary} />
-                </View>
-                <View style={styles.infoCardContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Ort</Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{listing.neighborhood}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Condition / quality card */}
-            {conditionLabel && (
-              <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-                  <SparklesIcon size={24} color={colors.textPrimary} />
-                </View>
-                <View style={styles.infoCardContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Qualität</Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{conditionLabel}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Category card (dynamic icon) */}
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
-                <ListingCategoryIcon name={categoryIconName} size={24} color={colors.textPrimary} />
-              </View>
-              <View style={styles.infoCardContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Kategorie</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{categoryLabel}</Text>
+        {/* ── Portfolio ── */}
+        {images.length > 1 ? (
+          <>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                {isService ? 'Einblicke' : 'Fotos'}
+              </Text>
+              <View style={styles.grid}>
+                {images.slice(0, 6).map((uri, index) => (
+                  <Pressable
+                    key={`${index}-${uri}`}
+                    onPress={() => openGallery(index)}
+                    style={({ pressed }) => [
+                      styles.gridTile,
+                      { width: (windowWidth - SIDE * 2 - 8) / 2, backgroundColor: colors.cardPlaceholder },
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Foto ${index + 1} ansehen`}
+                  >
+                    <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                    {index === 5 && images.length > 6 ? (
+                      <View style={styles.gridMore}>
+                        <Text style={styles.gridMoreText}>+{images.length - 6}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
               </View>
             </View>
-          </View>
+          </>
+        ) : null}
 
-          {/* Action Buttons */}
-          <View style={styles.actionRow}>
-            <Pressable
-              style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
-              onPress={handleShare}
-            >
-              <ShareIcon size={24} color={colors.textPrimary} />
-              <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Teilen</Text>
-            </Pressable>
-            {canEdit && (
+        {/* ── Gut zu wissen ── */}
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gut zu wissen</Text>
+          {goodToKnow.map((row) => {
+            const content = (
+              <>
+                <View style={styles.rowIcon}>{row.icon}</View>
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowTitle, { color: row.destructive ? colors.error : colors.textPrimary }]}>
+                    {row.title}
+                  </Text>
+                  {row.subtitle ? (
+                    <Text style={[styles.rowSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {row.subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                {row.onPress && !row.destructive ? (
+                  <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
+                ) : null}
+              </>
+            );
+            return row.onPress ? (
               <Pressable
-                style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
-                onPress={() => router.push(`/marketplace/edit/${listing.id}` as any)}
+                key={row.key}
+                onPress={row.onPress}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={row.title}
               >
-                <Text style={[styles.actionButtonText, { color: colors.primary }]}>Bearbeiten</Text>
+                {content}
               </Pressable>
-            )}
-          </View>
+            ) : (
+              <View key={row.key} style={styles.row}>
+                {content}
+              </View>
+            );
+          })}
+        </View>
 
-          {/* Delete button for owners */}
-          {canEdit && (
-            <Pressable
-              style={[styles.deleteButton, { borderColor: '#EF4444' }]}
-              onPress={handleDelete}
-            >
-              <Text style={styles.deleteButtonText}>Anzeige löschen</Text>
-            </Pressable>
-          )}
-
-          {/* More Listings */}
-          {moreListings.length > 0 && (
+        {/* ── Weitere Anzeigen ── */}
+        {moreListings.length > 0 && (
+          <>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.moreSection}>
-              <Text style={[styles.moreSectionTitle, { color: colors.textPrimary }]}>Weitere Anzeigen</Text>
+              <Text style={[styles.sectionTitle, styles.moreTitle, { color: colors.textPrimary }]}>Weitere Anzeigen</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moreList}>
                 {moreListings.map((item) => (
                   <MarketplaceCard key={item.id} listing={item} compact />
                 ))}
               </ScrollView>
             </View>
-          )}
+          </>
+        )}
+      </CollapsingHeroScreen>
 
-          <View style={{ height: 40 }} />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      <ImageGalleryModal
+        visible={galleryOpen}
+        images={images}
+        initialIndex={galleryIndex}
+        onClose={() => setGalleryOpen(false)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
-  },
+  container: { flex: 1 },
+  pressed: { opacity: 0.7 },
+  notFoundBack: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
+
   // Hero
-  heroContainer: {
-    width: SCREEN_WIDTH,
-    height: HERO_HEIGHT,
-    position: 'relative',
-  },
-  heroImage: {
-    width: SCREEN_WIDTH,
-    height: HERO_HEIGHT,
-  },
-  heroPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderEmoji: {
-    fontSize: 64,
-  },
-  paginationDots: {
+  heroPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  heroCounter: {
     position: 'absolute',
-    bottom: 44,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  headerAbsolute: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    zIndex: 10,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  priceBadge: {
-    position: 'absolute',
-    bottom: 60,
     right: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    bottom: 24 + 16,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  priceBadgeText: {
-    fontSize: 18,
-    fontFamily: 'MonaSans-Medium',
+  heroCounterText: { color: '#FFFFFF', fontSize: 13, lineHeight: 16, fontFamily: fontFamily.semiBold },
+
+  // Sheet: rounded on all four corners — ends over the grey backdrop.
+  sheet: {
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingBottom: 8,
   },
-  // Content Overlay
-  contentOverlay: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -30,
-    padding: 24,
-    paddingTop: 28,
-    minHeight: 600,
+
+  // Identity
+  identity: {
+    alignItems: 'center',
+    paddingHorizontal: SIDE,
   },
-  // Title
+  avatarRing: {
+    width: AVATAR + AVATAR_RING * 2,
+    height: AVATAR + AVATAR_RING * 2,
+    borderRadius: (AVATAR + AVATAR_RING * 2) / 2,
+    marginTop: -(AVATAR + AVATAR_RING * 2) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: {
-    fontSize: 26,
-    fontFamily: 'MonaSans-Medium',
-    marginBottom: 6,
+    marginTop: 16,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.4,
+    fontFamily: fontFamily.heading,
+    textAlign: 'center',
+  },
+  description: {
+    marginTop: 10,
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: fontFamily.regular,
+    textAlign: 'center',
+  },
+  moreLink: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: fontFamily.semiBold,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
   metaLine: {
-    fontSize: 14,
-    fontFamily: 'MonaSans-Regular',
-    marginBottom: 20,
-  },
-  // Seller row
-  sellerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 24,
-  },
-  sellerInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sellerName: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: 'MonaSans-Medium',
-  },
-  contactPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  contactPillText: {
-    fontSize: 15,
-    fontFamily: 'MonaSans-Medium',
-  },
-  // Info Cards
-  infoCards: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoCardContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontFamily: 'MonaSans-Medium',
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 15,
-    fontFamily: 'MonaSans-Medium',
-  },
-  infoSubvalue: {
-    fontSize: 13,
-    fontFamily: 'Inter',
-    marginTop: 2,
-  },
-  // Section
-  section: {
-    marginBottom: 28,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'MonaSansSemiCondensed-Medium',
-    marginBottom: 12,
-  },
-  descriptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  // Seller
-  sellerCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sellerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sellerIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sellerLabel: {
-    fontSize: 12,
-    fontFamily: 'MonaSans-Medium',
-    marginBottom: 2,
-  },
-  sellerAddress: {
-    fontSize: 15,
-    fontFamily: 'MonaSans-Medium',
-  },
-  // Contact CTA
-  contactButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  contactButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-  },
-  // Action Buttons
-  actionRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    fontSize: 15,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-  },
-  deleteButton: {
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  deleteButtonText: {
-    fontSize: 15,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-    color: '#EF4444',
-  },
-  // More Listings
-  moreSection: {
     marginTop: 16,
-    marginHorizontal: -24,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: fontFamily.medium,
+    textAlign: 'center',
   },
-  moreSectionTitle: {
+  subLine: {
+    marginTop: 4,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: fontFamily.regular,
+    textAlign: 'center',
+  },
+
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: SIDE,
+    marginVertical: 28,
+  },
+
+  // Sections
+  section: { paddingHorizontal: SIDE },
+  sectionTitle: {
     fontSize: 22,
-    fontFamily: 'MonaSans-Medium',
+    lineHeight: 28,
+    letterSpacing: -0.2,
+    fontFamily: fontFamily.heading,
     marginBottom: 16,
-    paddingHorizontal: 24,
   },
-  moreList: {
+
+  // Provider
+  providerCard: {
+    borderRadius: 24,
+    paddingVertical: 28,
     paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  providerName: {
+    marginTop: 14,
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+    fontFamily: fontFamily.heading,
+    textAlign: 'center',
+  },
+  providerRole: {
+    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: fontFamily.regular,
+  },
+  messageButton: {
+    marginTop: 16,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  messageButtonText: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontFamily: fontFamily.semiBold,
+  },
+
+  // Portfolio grid
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gridTile: { aspectRatio: 1, borderRadius: 16, overflow: 'hidden' },
+  gridMore: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridMoreText: { color: '#FFFFFF', fontSize: 20, fontFamily: fontFamily.semiBold },
+
+  // Gut zu wissen rows
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 14,
+  },
+  rowIcon: { width: 28, alignItems: 'center' },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 16, lineHeight: 21, fontFamily: fontFamily.semiBold },
+  rowSubtitle: { marginTop: 2, fontSize: 15, lineHeight: 20, fontFamily: fontFamily.regular },
+
+  // More listings
+  moreSection: { paddingBottom: 16 },
+  moreTitle: { paddingHorizontal: SIDE },
+  moreList: { paddingHorizontal: SIDE, gap: 12 },
+
+  // Below the sheet
+  reportLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    marginTop: 24,
+    paddingVertical: 8,
+  },
+  reportText: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: fontFamily.semiBold,
+    textDecorationLine: 'underline',
+  },
+
+  // Floating bottom bar
+  barWrap: { position: 'absolute', left: 16, right: 16 },
+  bar: {
+    height: BAR_HEIGHT,
+    borderRadius: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 24,
+    paddingRight: 10,
     gap: 12,
   },
+  barShadow: { boxShadow: '0px 8px 28px rgba(0,0,0,0.14)' } as ViewStyle,
+  barText: { flex: 1 },
+  barPrice: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: fontFamily.semiBold,
+    textDecorationLine: 'underline',
+  },
+  barSub: { marginTop: 1, fontSize: 13, lineHeight: 18, fontFamily: fontFamily.regular },
+  barCta: {
+    height: 56,
+    paddingHorizontal: 26,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  barCtaText: { fontSize: 16, lineHeight: 20, fontFamily: fontFamily.semiBold },
 });

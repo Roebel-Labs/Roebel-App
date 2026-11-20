@@ -35,6 +35,8 @@ import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { useNavBarStyle } from '@/lib/nav-bar-style';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import ScreenTransition from '@/components/skeleton/ScreenTransition';
+import { FeedEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
 import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
@@ -684,6 +686,9 @@ export default function FeedHome() {
       </HorizontalRailLockProvider>
       </GlassBackdrop>
 
+      {/* First open: post skeleton beat (the tabs show their own while loading);
+          back from a detail page: blur → sharp. Below the floating header. */}
+      <ScreenTransition skeleton={<FeedEntrySkeleton />} ready topInset={headerHeight} />
 
       {appHeader}
 

@@ -62,6 +62,8 @@ export default function WalletConfirmSheet({
       visible={visible && !!request}
       onRequestClose={onReject}
       onBackdropPress={busy ? undefined : onReject}
+      // Inner ScrollView + a signing decision: no swipe-to-reject.
+      dragToDismiss={false}
     >
         <View style={[styles.sheet, { backgroundColor: colors.sheet, borderColor: colors.border }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,13 +11,14 @@ import MenuImage from '@/components/MenuImage';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import DishComments from '@/components/DishComments';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
-import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
 import { fetchSpecialMenuDish, type SpecialMenuDish } from '@/lib/supabase-restaurants';
 import { dishDayLabel, resolveDishDay, toIsoDay } from '@/lib/special-menu-days';
 import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { transformedImageUrl } from '@/lib/image-url';
 
 const LOGO_SIZE = 40;
+const HERO_HEIGHT = 340;
 
 export default function SpecialMenuDishScreen() {
   return (
@@ -32,6 +33,7 @@ function SpecialMenuDishScreenInner() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [dish, setDish] = useState<SpecialMenuDish | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,25 +53,12 @@ function SpecialMenuDishScreenInner() {
     };
   }, [id]);
 
-  const backButton = (
-    <View style={styles.floatingBack}>
-      <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
-        <ArrowLeftIcon size={22} color={colors.textPrimary} />
-      </GlassIconButton>
-    </View>
-  );
-
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <ShimmerSkeleton width="100%" height={280} borderRadius={0} />
-        <View style={styles.headBlock}>
-          <ShimmerSkeleton width={90} height={16} />
-          <ShimmerSkeleton width="80%" height={26} style={{ marginTop: 10 } as any} />
-          <ShimmerSkeleton width="50%" height={18} style={{ marginTop: 16 } as any} />
-        </View>
-      </SafeAreaView>
+        <CollapsingHeroScreen heroHeight={HERO_HEIGHT} onBack={() => router.back()} loading />
+      </>
     );
   }
 
@@ -77,7 +66,11 @@ function SpecialMenuDishScreenInner() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        {backButton}
+        <View style={styles.floatingBack}>
+          <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
+            <ArrowLeftIcon size={22} color={colors.textPrimary} />
+          </GlassIconButton>
+        </View>
         <MeckyNotFound title="Gericht nicht gefunden" />
       </SafeAreaView>
     );
@@ -92,23 +85,31 @@ function SpecialMenuDishScreenInner() {
     : null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
-        <View style={[styles.heroWrap, { backgroundColor: colors.surfaceSecondary }]}>
-          {dish.image_url ? (
-            <MenuImage uri={dish.image_url} thumbUri={dish.image_thumb_url} size="full" style={styles.hero} />
+      <CollapsingHeroScreen
+        heroHeight={HERO_HEIGHT}
+        imageUri={dish.image_thumb_url || dish.image_url || null}
+        heroBackgroundColor={colors.surfaceSecondary}
+        renderHero={() =>
+          dish.image_url ? (
+            <MenuImage uri={dish.image_url} thumbUri={dish.image_thumb_url} size="full" style={StyleSheet.absoluteFill} />
           ) : (
-            <Image
-              source={require('@/assets/illustration/categories/essen_trinken.png')}
-              style={styles.heroFallback}
-              contentFit="contain"
-              accessibilityIgnoresInvertColors
-            />
-          )}
-          {backButton}
-        </View>
-
+            <View style={styles.heroFallbackWrap}>
+              <Image
+                source={require('@/assets/illustration/categories/essen_trinken.png')}
+                style={styles.heroFallback}
+                contentFit="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+          )
+        }
+        title={dish.name}
+        onBack={() => router.back()}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}
+        scrollViewProps={{ keyboardShouldPersistTaps: 'handled' }}
+      >
         <View style={styles.headBlock}>
           {dayLine ? (
             <Text style={[styles.day, { color: colors.textSecondary }]}>Mittagstisch · {dayLine}</Text>
@@ -161,18 +162,17 @@ function SpecialMenuDishScreenInner() {
         </View>
 
         <DishComments target={{ kind: 'special_menu_item', id: dish.id }} />
-      </ScrollView>
-    </SafeAreaView>
+      </CollapsingHeroScreen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  heroWrap: { width: '100%', height: 280, position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  hero: { width: '100%', height: '100%' },
+  heroFallbackWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   heroFallback: { width: 140, height: 140 },
-  floatingBack: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
-  headBlock: { paddingHorizontal: 16, paddingTop: 24 },
+  floatingBack: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
+  headBlock: { paddingHorizontal: 20, paddingTop: 24 },
   day: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   title: { fontSize: 26, fontFamily: 'MonaSansSemiCondensed-Bold', marginTop: 6 },
   tagsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },

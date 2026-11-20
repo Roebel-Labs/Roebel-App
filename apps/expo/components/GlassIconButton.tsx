@@ -100,8 +100,20 @@ export function glassChrome(dark: boolean, tinted = false): { rim: string; shado
  * transparent container). iOS: system chrome blur; Android: tint + sheen,
  * deliberately without a blur sampler (see header comment).
  */
-export function GlassFill({ dark, black = false, tint }: { dark: boolean; black?: boolean; tint?: string }) {
-  const fill = tint ? tint : dark ? (black ? 'rgba(28,29,32,0.62)' : 'rgba(44,46,50,0.55)') : 'rgba(255,255,255,0.62)';
+export function GlassFill({
+  dark,
+  black = false,
+  tint,
+  fillAlpha,
+}: {
+  dark: boolean;
+  black?: boolean;
+  tint?: string;
+  /** Stronger, more opaque glass (e.g. the Karte pill over busy content). Also tints the iOS blur. */
+  fillAlpha?: number;
+}) {
+  const fa = fillAlpha ?? (dark ? (black ? 0.62 : 0.55) : 0.62);
+  const fill = tint ? tint : dark ? (black ? `rgba(28,29,32,${fa})` : `rgba(44,46,50,${fa})`) : `rgba(255,255,255,${fa})`;
   const sheen = tint || dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.55)';
   const blur = Platform.OS === 'ios' && !tint;
   return (
@@ -113,9 +125,10 @@ export function GlassFill({ dark, black = false, tint }: { dark: boolean; black?
           intensity={80}
           tint={dark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
         />
-      ) : (
+      ) : null}
+      {!blur || fillAlpha !== undefined ? (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: fill }]} />
-      )}
+      ) : null}
       <LinearGradient
         pointerEvents="none"
         colors={[sheen, 'rgba(255,255,255,0)']}

@@ -3,8 +3,8 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   RefreshControl,
+  useWindowDimensions,
   Pressable,
   Share,
   Alert,
@@ -13,19 +13,17 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
-import { ArrowLeftIcon } from '@/components/Icons';
+import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { NewsArticle } from '@/lib/types';
 import { estimateListenMinutes } from '@/lib/news-audio';
 import ArticleListenRow from '@/components/news/ArticleListenRow';
 import { fontFamily } from '@/constants/theme';
 import RichTextRenderer from '@/components/RichTextRenderer';
-import { NewsDetailSkeleton } from '@/components/SkeletonLoader';
-import GlassIconButton from '@/components/GlassIconButton';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
 import NewsCard from '@/components/NewsCard';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -38,6 +36,8 @@ export default function NewsDetailScreen() {
   const goBack = useGoBack();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const heroSize = Math.round(windowWidth * 0.9);
   const [article, setArticle] = useState<NewsArticle | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,19 +122,10 @@ export default function NewsDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
-            <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Artikel</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-        <ScrollView contentContainerStyle={styles.loadingContainer}>
-          <NewsDetailSkeleton />
-        </ScrollView>
-      </SafeAreaView>
+        <CollapsingHeroScreen heroHeight={heroSize} onBack={goBack} loading />
+      </>
     );
   }
 
@@ -171,45 +162,27 @@ export default function NewsDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView
+      <CollapsingHeroScreen
+        heroHeight={article.cover_image_url ? heroSize : insets.top + 64}
+        imageUri={article.cover_image_url || null}
+        onHeroPress={() => setImageZoomVisible(true)}
+        heroBackgroundColor={article.cover_image_url ? colors.surface : colors.background}
+        sheet={!!article.cover_image_url}
+        title={article.title}
+        onBack={goBack}
+        actions={[
+          {
+            key: 'share',
+            accessibilityLabel: 'Artikel teilen',
+            onPress: handleShare,
+            renderIcon: (c) => <ShareIcon size={20} color={c} />,
+          },
+        ]}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={insets.top} />
         }
       >
-        {/* Hero: blurred cover as backdrop, the cover itself inset on top */}
-        {article.cover_image_url ? (
-          <Pressable
-            onPress={() => setImageZoomVisible(true)}
-            accessibilityRole="imagebutton"
-            accessibilityLabel="Titelbild vergrößern"
-            style={[styles.hero, { backgroundColor: colors.surface }]}
-          >
-            <Image
-              source={{ uri: article.cover_image_url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              blurRadius={40}
-              accessibilityIgnoresInvertColors
-            />
-            <View style={[styles.heroInset, { paddingTop: insets.top + 56 }]}>
-              <Image
-                source={{ uri: article.cover_image_url }}
-                style={styles.heroImage}
-                contentFit="contain"
-                accessibilityIgnoresInvertColors
-              />
-            </View>
-            <LinearGradient
-              colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)']}
-              style={[styles.heroScrim, { height: insets.top + 72 }]}
-              pointerEvents="none"
-            />
-          </Pressable>
-        ) : (
-          <View style={{ height: insets.top + 64 }} />
-        )}
-
         <View style={styles.contentContainer}>
           {/* Kicker */}
           <View style={styles.kickerRow}>
@@ -275,21 +248,7 @@ export default function NewsDetailScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
-
-      {/* Floating back chevron over the hero */}
-      <GlassIconButton
-        onPress={goBack}
-        accessibilityLabel="Zurück"
-        tone={article.cover_image_url ? 'dark' : 'auto'}
-        style={[styles.floatingBack, { top: insets.top + 8 }]}
-      >
-        <Ionicons
-          name="chevron-back"
-          size={24}
-          color={article.cover_image_url ? '#FFFFFF' : colors.textPrimary}
-        />
-      </GlassIconButton>
+      </CollapsingHeroScreen>
 
       {/* Image Zoom Modal */}
       {article.cover_image_url && (
@@ -365,7 +324,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingTop: 28,
+    paddingTop: 24,
   },
   kickerRow: {
     flexDirection: 'row',

@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
@@ -24,6 +25,8 @@ import { POLICY_CHANGELOG, PRIVACY_POLICY_VERSION } from '@/constants/consent';
 export function ConsentReconsentSheet() {
   const { needsReconsent, confirmReconsent } = useConsent();
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(needsReconsent);
   const router = useRouter();
   const account = useActiveAccount();
   const { isCitizen } = useUser();
@@ -66,7 +69,7 @@ export function ConsentReconsentSheet() {
 
   return (
     <Modal visible animationType="none" transparent statusBarTranslucent>
-      <Animated.View style={[styles.backdrop, { backgroundColor: colors.scrim }, { opacity: fade }]}>
+      <Animated.View style={[styles.backdrop, { backgroundColor: hasStage ? 'transparent' : colors.scrim }, { opacity: fade }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleConfirm} />
         <Animated.View
           style={[

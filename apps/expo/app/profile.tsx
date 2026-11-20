@@ -54,6 +54,8 @@ import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated from 'react-native-reanimated';
 import GlassIconButton from '@/components/GlassIconButton';
+import ScreenTransition from '@/components/skeleton/ScreenTransition';
+import { ProfileEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
 import { useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
 
 /** How far the header's fade reaches below the bar itself. */
@@ -388,6 +390,14 @@ export default function ProfileScreen() {
             )}
           </Animated.ScrollView>
         </GlassBackdrop>
+
+        {/* First open: matched skeleton until the profile is there; back from a detail page: blur → sharp. */}
+        <ScreenTransition
+          skeleton={<ProfileEntrySkeleton sheetColor={colors.background} />}
+          ready={!isConnected || !!user}
+          topInset={headerHeight}
+          backgroundColor={colors.backdrop}
+        />
 
         {/* Floating title bar: content scrolls under it and fades out through
             a gradient (opaque at the top → 0 % at its bottom edge) instead of

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { ShimmerGroup } from '@/components/feed/Shimmer';
+import { Bone } from '@/components/skeleton/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
@@ -18,26 +19,14 @@ type SkeletonProps = {
   style?: any;
 };
 
+/** A skeleton block lit by the screen-wide top-to-bottom sweep (components/skeleton/Skeleton). */
 export function Skeleton({ width = '100%', height = 20, borderRadius = 4, style }: SkeletonProps) {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={[
-        styles.skeleton,
-        { width, height, borderRadius, backgroundColor: colors.skeleton },
-        style
-      ]}
-    />
-  );
+  return <Bone width={width as any} height={height as any} radius={borderRadius} style={[styles.skeleton, style]} />;
 }
 
-/** Skeleton block that breathes on its own (one native-driven opacity loop). */
+/** Same as Skeleton (kept for existing callers: dish and sponsoring images). */
 export function ShimmerSkeleton(props: SkeletonProps) {
-  return (
-    <ShimmerGroup>
-      <Skeleton {...props} />
-    </ShimmerGroup>
-  );
+  return <Skeleton {...props} />;
 }
 
 export function EventCardSkeleton() {

@@ -4,7 +4,7 @@
  */
 
 /** Height of the floating pill itself. */
-export const GLASS_PILL_HEIGHT = 60;
+export const GLASS_PILL_HEIGHT = 68;
 /** Rim width; the rim sits inside the pill box. */
 export const GLASS_PILL_BORDER = 1;
 /** Gap between the rim and the active-tab highlight (inside the border). */

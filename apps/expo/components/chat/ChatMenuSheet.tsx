@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { ChatMenuItem, PopoverFrame } from '@/lib/chat/sheets';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
 import { chatFont, haloShadow, useChatTokens, type ChatTokens } from './tokens';
 
 /** Called once the sheet/popover has fully animated out, with the chosen row's action (null = dismissed). */
@@ -44,11 +45,20 @@ export function ChatMenuSheet({ title, groups, onDone, dismissSignal }: ChatMenu
   const chosen = useRef<(() => void) | null>(null);
   const closing = useRef(false);
 
+  // Drives the app-wide sheet stage (page shrinks behind); the stage then
+  // owns the dim, so the backdrop only catches taps.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={hasStage ? 0 : 0.25}
+        pressBehavior="close"
+      />
     ),
-    [],
+    [hasStage],
   );
 
   const choose = (item: ChatMenuItem) => {
@@ -67,6 +77,7 @@ export function ChatMenuSheet({ title, groups, onDone, dismissSignal }: ChatMenu
     <BottomSheet
       ref={sheetRef}
       index={0}
+      animatedIndex={animatedIndex}
       enableDynamicSizing
       enablePanDownToClose
       onClose={() => onDone(chosen.current)}

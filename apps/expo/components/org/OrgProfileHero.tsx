@@ -61,13 +61,81 @@ type Props = {
 };
 
 /**
- * Top of every org detail page: a swipeable full-bleed photo with round
- * floating actions, and a flat sheet below it carrying the name (+ gold
- * verified check), category, rating · open-state line and a tappable
+ * Swipeable full-bleed photo pager with a "n/N" counter. Used as the clean
+ * hero layer of CollapsingHeroScreen (org page) and inside OrgProfileHero.
+ */
+export function OrgHeroImages({
+  images,
+  height = HERO_HEIGHT,
+  counterBottom = SHEET_OVERLAP + 14,
+  onPageChange,
+}: {
+  images: string[];
+  height?: number;
+  counterBottom?: number;
+  onPageChange?: (page: number) => void;
+}) {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+
+  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (next !== page) {
+      setPage(next);
+      onPageChange?.(next);
+    }
+  };
+
+  return (
+    <View style={[styles.hero, { height, backgroundColor: colors.cardPlaceholder }]}>
+      {images.length > 0 ? (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onMomentumEnd}
+          scrollEnabled={images.length > 1}
+        >
+          {images.map((uri) => (
+            <Image
+              key={uri}
+              source={{ uri: orgHeroImageUrl(uri) }}
+              style={{ width, height }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              accessibilityIgnoresInvertColors
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+      {images.length > 1 ? (
+        <View style={[styles.counter, { bottom: counterBottom }]} pointerEvents="none">
+          <Text style={styles.counterText}>
+            {page + 1}/{images.length}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Same transformed URL the pager renders — reuse it for the blurred copy (cache hit). */
+export function orgHeroImageUrl(uri: string): string {
+  return transformedImageUrl(uri, { width: 1200 }) ?? uri;
+}
+
+type IdentityProps = Pick<
+  Props,
+  'logoUrl' | 'name' | 'verified' | 'category' | 'ratingSummary' | 'openState' | 'address' | 'onOpenLocation' | 'onRatingPress'
+>;
+
+/**
+ * Identity block under the photo: logo badge overlapping the photo, name
+ * (+ gold verified check), category, rating · open-state line and a tappable
  * location row that opens the map focused on the org.
  */
-function OrgProfileHero({
-  images,
+export function OrgIdentitySheet({
   logoUrl,
   name,
   verified,
@@ -77,51 +145,121 @@ function OrgProfileHero({
   address,
   onOpenLocation,
   onRatingPress,
-  onBack,
-  onShare,
-  liked,
-  onToggleLike,
-  extraActions = [],
-}: Props) {
+}: IdentityProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const [page, setPage] = useState(0);
-
-  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (next !== page) setPage(next);
-  };
-
   const hasRating = !!ratingSummary && ratingSummary.rating_count > 0;
   const ratingText = ratingSummary ? formatRating(ratingSummary.avg_stars) : '';
   const ratingCount = ratingSummary?.rating_count ?? 0;
   const closedColor = colors.warning;
 
   return (
-    <View>
-      <View style={[styles.hero, { height: HERO_HEIGHT, backgroundColor: colors.cardPlaceholder }]}>
-        {images.length > 0 ? (
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onMomentumEnd}
-            scrollEnabled={images.length > 1}
-          >
-            {images.map((uri) => (
-              <Image
-                key={uri}
-                source={{ uri: transformedImageUrl(uri, { width: 1200 }) ?? uri }}
-                style={{ width, height: HERO_HEIGHT }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                accessibilityIgnoresInvertColors
-              />
-            ))}
-          </ScrollView>
+    <View style={styles.sheet}>
+      {logoUrl ? (
+        <Image
+          source={{ uri: transformedImageUrl(logoUrl, { width: 240 }) ?? logoUrl }}
+          style={[styles.logo, { borderColor: colors.background, backgroundColor: colors.surface }]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
+      <Text style={[styles.name, { color: colors.textPrimary }]}>
+        {name}
+        {verified ? (
+          <>
+            {' '}
+            <View style={styles.badgeWrap} accessibilityLabel="Verifiziert">
+              <BadgeCheckIcon width={26} height={26} color={VERIFIED_GOLD} />
+            </View>
+          </>
         ) : null}
+      </Text>
 
+      {category ? (
+        <Text style={[styles.category, { color: colors.textSecondary }]}>{category}</Text>
+      ) : null}
+
+      {hasRating || openState ? (
+        <View style={styles.metaRow}>
+          {hasRating ? (
+            <Pressable
+              onPress={onRatingPress}
+              disabled={!onRatingPress}
+              style={styles.metaItem}
+              accessibilityRole="button"
+              accessibilityLabel={`Bewertung ${ratingText} von 5`}
+            >
+              <StarIcon size={18} color={STAR_GOLD} />
+              <Text style={[styles.ratingValue, { color: colors.textPrimary }]}>
+                {ratingText}
+              </Text>
+              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                ({ratingCount})
+              </Text>
+            </Pressable>
+          ) : null}
+          {hasRating && openState ? (
+            <Text style={[styles.dot, { color: colors.textSecondary }]}>·</Text>
+          ) : null}
+          {openState ? (
+            <View style={[styles.metaItem, styles.metaShrink]}>
+              <ClockIcon size={17} color={openState.isOpen ? colors.success : closedColor} />
+              <Text style={[styles.metaText, styles.metaShrink]} numberOfLines={1}>
+                <Text style={{ color: openState.isOpen ? colors.success : closedColor }}>
+                  {openState.label}
+                </Text>
+                {openState.detail ? (
+                  <Text style={{ color: colors.textSecondary }}> – {openState.detail}</Text>
+                ) : null}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {address || onOpenLocation ? (
+        <Pressable
+          onPress={onOpenLocation}
+          disabled={!onOpenLocation}
+          style={({ pressed }) => [
+            styles.locationRow,
+            { backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 },
+          ]}
+          accessibilityRole={onOpenLocation ? 'button' : undefined}
+          accessibilityLabel={onOpenLocation ? `${name} auf der Karte ansehen` : undefined}
+        >
+          <LocationIcon size={20} color={colors.textPrimary} />
+          <Text style={[styles.locationText, { color: colors.textPrimary }]} numberOfLines={2}>
+            {formatAddress(address) || 'Auf der Karte ansehen'}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Top of an org detail page as one block (pager + floating glass actions +
+ * identity sheet) for screens that own a plain scroll view
+ * (BusinessProfileView). The main org page uses CollapsingHeroScreen with
+ * OrgHeroImages + OrgIdentitySheet instead.
+ */
+function OrgProfileHero({
+  images,
+  onBack,
+  onShare,
+  liked,
+  onToggleLike,
+  extraActions = [],
+  ...identity
+}: Props) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View>
+      <View>
+        <OrgHeroImages images={images} />
         <View style={[styles.actionsRow, { top: insets.top + 8 }]} pointerEvents="box-none">
           <GlassIconButton onPress={onBack} accessibilityLabel="Zurück">
             <ArrowLeftIcon size={22} color={colors.textPrimary} />
@@ -144,97 +282,9 @@ function OrgProfileHero({
             </GlassIconButton>
           </View>
         </View>
-
-        {images.length > 1 ? (
-          <View style={[styles.counter, { bottom: SHEET_OVERLAP + 14 }]}>
-            <Text style={styles.counterText}>
-              {page + 1}/{images.length}
-            </Text>
-          </View>
-        ) : null}
       </View>
-
-      <View style={[styles.sheet, { backgroundColor: colors.background }]}>
-        {logoUrl ? (
-          <Image
-            source={{ uri: transformedImageUrl(logoUrl, { width: 240 }) ?? logoUrl }}
-            style={[styles.logo, { borderColor: colors.background, backgroundColor: colors.surface }]}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            accessibilityIgnoresInvertColors
-          />
-        ) : null}
-        <Text style={[styles.name, { color: colors.textPrimary }]}>
-          {name}
-          {verified ? (
-            <>
-              {' '}
-              <View style={styles.badgeWrap} accessibilityLabel="Verifiziert">
-                <BadgeCheckIcon width={26} height={26} color={VERIFIED_GOLD} />
-              </View>
-            </>
-          ) : null}
-        </Text>
-
-        {category ? (
-          <Text style={[styles.category, { color: colors.textSecondary }]}>{category}</Text>
-        ) : null}
-
-        {hasRating || openState ? (
-          <View style={styles.metaRow}>
-            {hasRating ? (
-              <Pressable
-                onPress={onRatingPress}
-                disabled={!onRatingPress}
-                style={styles.metaItem}
-                accessibilityRole="button"
-                accessibilityLabel={`Bewertung ${ratingText} von 5`}
-              >
-                <StarIcon size={18} color={STAR_GOLD} />
-                <Text style={[styles.ratingValue, { color: colors.textPrimary }]}>
-                  {ratingText}
-                </Text>
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  ({ratingCount})
-                </Text>
-              </Pressable>
-            ) : null}
-            {hasRating && openState ? (
-              <Text style={[styles.dot, { color: colors.textSecondary }]}>·</Text>
-            ) : null}
-            {openState ? (
-              <View style={[styles.metaItem, styles.metaShrink]}>
-                <ClockIcon size={17} color={openState.isOpen ? colors.success : closedColor} />
-                <Text style={[styles.metaText, styles.metaShrink]} numberOfLines={1}>
-                  <Text style={{ color: openState.isOpen ? colors.success : closedColor }}>
-                    {openState.label}
-                  </Text>
-                  {openState.detail ? (
-                    <Text style={{ color: colors.textSecondary }}> – {openState.detail}</Text>
-                  ) : null}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {address || onOpenLocation ? (
-          <Pressable
-            onPress={onOpenLocation}
-            disabled={!onOpenLocation}
-            style={({ pressed }) => [
-              styles.locationRow,
-              { backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 },
-            ]}
-            accessibilityRole={onOpenLocation ? 'button' : undefined}
-            accessibilityLabel={onOpenLocation ? `${name} auf der Karte ansehen` : undefined}
-          >
-            <LocationIcon size={20} color={colors.textPrimary} />
-            <Text style={[styles.locationText, { color: colors.textPrimary }]} numberOfLines={2}>
-              {formatAddress(address) || 'Auf der Karte ansehen'}
-            </Text>
-          </Pressable>
-        ) : null}
+      <View style={{ backgroundColor: colors.background }}>
+        <OrgIdentitySheet {...identity} />
       </View>
     </View>
   );

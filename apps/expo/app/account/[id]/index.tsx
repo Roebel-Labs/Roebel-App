@@ -18,7 +18,6 @@ import { useUser } from '@/context/UserContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRelations } from '@/context/RelationsContext';
 import FollowButton from '@/components/follow/FollowButton';
-import GlassIconButton from '@/components/GlassIconButton';
 import { FollowCounts } from '@/components/follow/FollowersDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
@@ -26,7 +25,6 @@ import AvatarStack from '@/components/AvatarStack';
 import ProfileTabs from '@/components/profile/ProfileTabs';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
-import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import RatingModal from '@/components/RatingModal';
@@ -34,9 +32,12 @@ import MenuSearchModal from '@/components/MenuSearchModal';
 import FeaturedMenuItemsGrid from '@/components/FeaturedMenuItemsGrid';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
 import ThumbsVote from '@/components/ThumbsVote';
-import OrgProfileHero, { HERO_HEIGHT, SHEET_OVERLAP, type HeroAction } from '@/components/org/OrgProfileHero';
+import OrgProfileHero, { HERO_HEIGHT, OrgHeroImages, OrgIdentitySheet, orgHeroImageUrl, type HeroAction } from '@/components/org/OrgProfileHero';
+import CollapsingHeroScreen, { type DetailAction } from '@/components/detail/CollapsingHeroScreen';
+import { DETAIL_HEADER_BAR } from '@/components/detail/collapseRanges';
+import { Bone } from '@/components/skeleton/Skeleton';
 import BusinessProfileView from '@/components/org/BusinessProfileView';
-import { SearchIcon } from '@/components/Icons';
+import { HeartFilledIcon, HeartIcon, SearchIcon, ShareIcon } from '@/components/Icons';
 import { useOrgSheetData } from '@/hooks/useOrgSheetData';
 import { describeOpenState, formatAddress, formatListingPrice as formatPrice, orgCategoryLabel, orgShareUrl } from '@/lib/org-profile';
 import StickyCategoryBar from '@/components/StickyCategoryBar';
@@ -77,7 +78,8 @@ import type { PostRecord } from '@/lib/types/feed';
 /** Wallets left out of the public member list (they keep their role). */
 const HIDDEN_MEMBER_WALLETS = new Set(['0xc49de63ccfee46c6c5c3e393293f66779799fb28']);
 
-const STICKY_OFFSET = 56;
+// Sticky category bar sits below the collapsing app header (status bar + bar).
+const STICKY_OFFSET = 56 + DETAIL_HEADER_BAR;
 
 type TabKey = 'menu' | 'info' | 'posts';
 
@@ -150,7 +152,7 @@ function PublicAccountScreenInner() {
   const [categoriesSheetOpen, setCategoriesSheetOpen] = useState(false);
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
   const [isBarStuck, setIsBarStuck] = useState(false);
-  const [pastHero, setPastHero] = useState(false);
+  const [heroPage, setHeroPage] = useState(0);
   const categoryYsRef = React.useRef<Record<string, number>>({});
   const scrollRef = React.useRef<ScrollView>(null);
   // Hoisted from below — these MUST live above any conditional return to keep
@@ -469,6 +471,47 @@ function PublicAccountScreenInner() {
           accessibilityLabel: isMuted(account.id) ? 'Stummschaltung aufheben' : 'Stummschalten',
         }]
       : []),
+  ];
+
+  // Same actions for the collapsing header: icons are re-colored as the
+  // glass circle fades into the app header.
+  const detailActions: DetailAction[] = [
+    ...(isRestaurant
+      ? [{
+          key: 'search',
+          renderIcon: (c: string) => <SearchIcon size={22} color={c} />,
+          onPress: () => setSearchModalOpen(true),
+          accessibilityLabel: 'Speisekarte durchsuchen',
+        }]
+      : []),
+    ...(canEdit
+      ? [{
+          key: 'edit',
+          renderIcon: (c: string) => <PencilEditIcon width={20} height={20} color={c} />,
+          onPress: () => goToOwnerScreen('/edit-org'),
+          accessibilityLabel: 'Profil bearbeiten',
+        }]
+      : []),
+    ...(!canEdit && user
+      ? [{
+          key: 'mute',
+          renderIcon: (c: string) => <Ionicons name={isMuted(account.id) ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color={c} />,
+          onPress: () => void (isMuted(account.id) ? unmute(account.id, null) : mute(account.id, null)),
+          accessibilityLabel: isMuted(account.id) ? 'Stummschaltung aufheben' : 'Stummschalten',
+        }]
+      : []),
+    {
+      key: 'share',
+      renderIcon: (c: string) => <ShareIcon size={22} color={c} />,
+      onPress: shareAccount,
+      accessibilityLabel: 'Teilen',
+    },
+    {
+      key: 'like',
+      renderIcon: (c: string) => (liked ? <HeartFilledIcon size={22} color="#E53935" /> : <HeartIcon size={22} color={c} />),
+      onPress: toggleLike,
+      accessibilityLabel: liked ? 'Gefällt mir entfernen' : 'Gefällt mir',
+    },
   ];
 
   const followRow = (
@@ -895,9 +938,6 @@ function PublicAccountScreenInner() {
     // the in-flow slot has scrolled off the top.
     const shouldStick = y >= slot5Y.current - STICKY_OFFSET;
     if (shouldStick !== isBarStuck) setIsBarStuck(shouldStick);
-    // Solid status-bar backdrop once content scrolls under the clock.
-    const overContent = y >= HERO_HEIGHT - insets.top;
-    if (overContent !== pastHero) setPastHero(overContent);
 
     if (activeTab !== 'menu' || !gastroData.categories.length) return;
     const adjusted = y + STICKY_OFFSET;
@@ -916,14 +956,30 @@ function PublicAccountScreenInner() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={[]}>
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
+      <CollapsingHeroScreen
+        scrollRef={scrollRef}
+        heroHeight={HERO_HEIGHT}
+        imageUri={heroImages.length ? orgHeroImageUrl(heroImages[Math.min(heroPage, heroImages.length - 1)]) : null}
+        renderHero={() => (
+          <OrgHeroImages images={heroImages} counterBottom={24 + 14} onPageChange={setHeroPage} />
+        )}
+        title={account.name}
+        onBack={goBack}
+        actions={detailActions}
         contentContainerStyle={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
+        onScrollJS={(y) => handleScroll({ nativeEvent: { contentOffset: { y } } })}
       >
-        {hero}
+        <OrgIdentitySheet
+          logoUrl={account.avatar_url ?? orgLocation?.restaurant?.logo_url ?? null}
+          name={account.name}
+          verified={account.is_verified}
+          category={orgCategoryLabel(account, orgLocation?.business)}
+          ratingSummary={heroRating}
+          openState={describeOpenState(openingHours)}
+          address={address}
+          onOpenLocation={hasValidCoords ? openMap : undefined}
+          onRatingPress={() => setRatingModalOpen(true)}
+        />
 
         {/* Extern status, bio and thumbs vote under the identity header */}
         <View style={styles.identityBlock}>
@@ -1086,7 +1142,7 @@ function PublicAccountScreenInner() {
         ) : (
           <View />
         )}
-      </ScrollView>
+      </CollapsingHeroScreen>
 
 
       {/* Sticky category bar — rendered OUTSIDE the ScrollView as an
@@ -1098,7 +1154,7 @@ function PublicAccountScreenInner() {
       {showStickyBar && isBarStuck && (
         <View
           pointerEvents="box-none"
-          style={[styles.stickyOverlay, { top: insets.top, backgroundColor: colors.background }]}
+          style={[styles.stickyOverlay, { top: insets.top + DETAIL_HEADER_BAR, backgroundColor: colors.background }]}
         >
           <StickyCategoryBar
             categories={stickyCategoriesProp}
@@ -1108,13 +1164,6 @@ function PublicAccountScreenInner() {
           />
         </View>
       )}
-
-      {pastHero ? (
-        <View
-          pointerEvents="none"
-          style={[styles.statusBarBackdrop, { height: insets.top, backgroundColor: colors.background }]}
-        />
-      ) : null}
 
       <RatingModal
         visible={ratingModalOpen}
@@ -1149,48 +1198,45 @@ function PublicAccountScreenInner() {
 // slot in place, so the user perceives one continuous loading state.
 function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Photo — same height as OrgProfileHero */}
-        <View style={{ height: HERO_HEIGHT }}>
-          <ShimmerSkeleton width={'100%' as any} height={HERO_HEIGHT} borderRadius={0} />
-          <GlassIconButton onPress={onBack} accessibilityLabel="Zurück" style={[styles.backPill, { top: insets.top + 8 }]}>
-            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
-          </GlassIconButton>
-        </View>
-
-        {/* Info sheet — logo, name, category, meta line, location row */}
-        <View style={[styles.skeletonSheet, { backgroundColor: colors.background }]}>
-          <View style={[styles.skeletonLogo, { borderColor: colors.background, backgroundColor: colors.background }]}>
-            <ShimmerSkeleton width={68} height={68} borderRadius={34} />
-          </View>
-          <ShimmerSkeleton width={'70%' as any} height={30} borderRadius={6} />
-          <ShimmerSkeleton width={110} height={16} borderRadius={4} />
-          <ShimmerSkeleton width={'60%' as any} height={18} borderRadius={4} />
-          <ShimmerSkeleton width={'100%' as any} height={50} borderRadius={14} style={{ marginTop: 8 }} />
-        </View>
-
-        {/* Bio + thumbs vote */}
-        <View style={styles.identityBlock}>
-          <ShimmerSkeleton width={'95%' as any} height={14} borderRadius={4} />
-          <ShimmerSkeleton width={'65%' as any} height={14} borderRadius={4} />
-          <ShimmerSkeleton width={88} height={34} borderRadius={17} />
-        </View>
-
-        {/* Tab strip */}
-        <View style={[styles.tabsWrap, styles.skeletonTabs, { borderBottomColor: colors.border }]}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={styles.skeletonTab}>
-              <ShimmerSkeleton width={72} height={14} borderRadius={4} />
+    <CollapsingHeroScreen
+      heroHeight={HERO_HEIGHT}
+      onBack={onBack}
+      loading
+      contentContainerStyle={styles.scrollContent}
+      skeleton={
+        <>
+          {/* Info sheet — logo, name, category, meta line, location row */}
+          <View style={styles.skeletonSheet}>
+            <View style={[styles.skeletonLogo, { borderColor: colors.background, backgroundColor: colors.background }]}>
+              <Bone width={68} height={68} radius={34} />
             </View>
-          ))}
-        </View>
+            <Bone width="70%" height={30} radius={6} />
+            <Bone width={110} height={16} radius={4} />
+            <Bone width="60%" height={18} radius={4} />
+            <Bone width="100%" height={50} radius={14} style={{ marginTop: 8 }} />
+          </View>
 
-        <MenuSkeleton />
-      </ScrollView>
-    </View>
+          {/* Bio + thumbs vote */}
+          <View style={styles.identityBlock}>
+            <Bone width="95%" height={14} radius={4} />
+            <Bone width="65%" height={14} radius={4} />
+            <Bone width={88} height={34} radius={17} />
+          </View>
+
+          {/* Tab strip */}
+          <View style={[styles.tabsWrap, styles.skeletonTabs, { borderBottomColor: colors.border }]}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={styles.skeletonTab}>
+                <Bone width={72} height={14} radius={4} />
+              </View>
+            ))}
+          </View>
+
+          <MenuSkeleton />
+        </>
+      }
+    />
   );
 }
 
@@ -1201,38 +1247,38 @@ function MenuSkeleton() {
   return (
     <View>
       <View style={styles.skeletonFeatured}>
-        <ShimmerSkeleton width={170} height={22} borderRadius={4} style={{ marginHorizontal: 16, marginBottom: 12 }} />
+        <Bone width={170} height={22} radius={4} style={{ marginHorizontal: 16, marginBottom: 12 }} />
         <ScrollView horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skeletonFeaturedRow}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={{ width: 160, gap: 8 }}>
-              <ShimmerSkeleton width={160} height={160} borderRadius={12} />
-              <ShimmerSkeleton width={'80%' as any} height={14} borderRadius={4} />
-              <ShimmerSkeleton width={'40%' as any} height={13} borderRadius={4} />
+              <Bone width={160} height={160} radius={12} />
+              <Bone width="80%" height={14} radius={4} />
+              <Bone width="40%" height={13} radius={4} />
             </View>
           ))}
         </ScrollView>
       </View>
 
       <View style={[styles.skeletonCategoryBar, { borderBottomColor: colors.border }]}>
-        <ShimmerSkeleton width={40} height={40} borderRadius={20} />
+        <Bone width={40} height={40} radius={20} />
         {[64, 88, 56, 72].map((w, i) => (
-          <ShimmerSkeleton key={i} width={w} height={14} borderRadius={4} />
+          <Bone key={i} width={w} height={14} radius={4} />
         ))}
       </View>
 
       <View style={[styles.gastroCategorySection, { borderTopColor: colors.border }]}>
-        <ShimmerSkeleton width={140} height={22} borderRadius={4} style={{ marginBottom: 12 }} />
+        <Bone width={140} height={22} radius={4} style={{ marginBottom: 12 }} />
         {[0, 1, 2, 3].map((i) => (
           <View
             key={i}
             style={[styles.gastroItemRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}
           >
             <View style={{ flex: 1, gap: 8 }}>
-              <ShimmerSkeleton width={'60%' as any} height={16} borderRadius={4} />
-              <ShimmerSkeleton width={'30%' as any} height={13} borderRadius={4} />
-              <ShimmerSkeleton width={'90%' as any} height={13} borderRadius={4} />
+              <Bone width="60%" height={16} radius={4} />
+              <Bone width="30%" height={13} radius={4} />
+              <Bone width="90%" height={13} radius={4} />
             </View>
-            <ShimmerSkeleton width={96} height={96} borderRadius={8} />
+            <Bone width={96} height={96} radius={8} />
           </View>
         ))}
       </View>
@@ -1317,7 +1363,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   skeletonSheet: {
-    marginTop: -SHEET_OVERLAP,
     paddingHorizontal: 16,
     paddingTop: 24,
     gap: 10,

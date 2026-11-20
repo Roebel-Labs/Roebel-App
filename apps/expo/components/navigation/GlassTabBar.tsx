@@ -152,7 +152,7 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
           }
         : {
             active: '#000000',
-            inactive: '#7C7C82',
+            inactive: '#6E7079',
             highlight: 'rgba(118,118,128,0.14)',
             rim: 'rgba(255,255,255,0.9)',
             liquidTint: 'rgba(255,255,255,0.6)',
@@ -281,9 +281,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    marginTop: 1,
-    fontSize: 11,
-    lineHeight: 14,
+    // More air between icon and label, slightly smaller type (Max's reference, 2026-11-20).
+    marginTop: 4,
+    fontSize: 10.5,
+    lineHeight: 13,
+    letterSpacing: 0.1,
   },
   dot: {
     position: 'absolute',

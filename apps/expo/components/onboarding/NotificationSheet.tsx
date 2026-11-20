@@ -16,6 +16,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 import { useConsent } from '@/context/ConsentContext';
 import { registerDevicePushToken } from '@/hooks/useNotifications';
 
@@ -28,6 +29,8 @@ type NotificationSheetProps = {
 
 export default function NotificationSheet({ visible, onDismiss }: NotificationSheetProps) {
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(visible);
   const { setPreference } = useConsent();
   const activeAccount = useActiveAccount();
   const insets = useSafeAreaInsets();
@@ -96,7 +99,7 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
-      <View style={[styles.overlay, { backgroundColor: colors.scrim }]}>
+      <View style={[styles.overlay, { backgroundColor: hasStage ? 'transparent' : colors.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityLabel="Schließen" />
         <Animated.View
           style={[

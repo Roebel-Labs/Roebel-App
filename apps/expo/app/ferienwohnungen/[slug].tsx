@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   FlatList,
   Pressable,
   Share,
@@ -23,7 +22,8 @@ import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
 import EmbeddedMap from '@/components/map/EmbeddedMap';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
-import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import DetailBodySkeleton from '@/components/detail/DetailBodySkeleton';
 import GlassIconButton from '@/components/GlassIconButton';
 import {
   fetchVacationRental,
@@ -59,6 +59,7 @@ function VacationRentalScreenInner() {
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const { data: rental, isPending } = useQuery({
     queryKey: ['vacation-rental', slug],
     queryFn: () => fetchVacationRental(slug!),
@@ -67,15 +68,15 @@ function VacationRentalScreenInner() {
 
   if (isPending && slug) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <ShimmerSkeleton width="100%" height={340} borderRadius={0} />
-        <View style={styles.skeletonBlock}>
-          <ShimmerSkeleton width="60%" height={30} />
-          <ShimmerSkeleton width="80%" height={18} style={{ marginTop: 12 } as any} />
-          <ShimmerSkeleton width="100%" height={80} style={{ marginTop: 24 } as any} />
-        </View>
-      </SafeAreaView>
+        <CollapsingHeroScreen
+          heroHeight={Math.round(width * 0.9)}
+          onBack={() => router.back()}
+          loading
+          skeleton={<DetailBodySkeleton centered />}
+        />
+      </>
     );
   }
 
@@ -128,8 +129,11 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-        <View style={{ height: galleryHeight, backgroundColor: colors.surfaceSecondary }}>
+      <CollapsingHeroScreen
+        heroHeight={galleryHeight}
+        imageUri={rental.images[photoIndex] ?? rental.images[0] ?? null}
+        heroBackgroundColor={colors.surfaceSecondary}
+        renderHero={() => (
           <FlatList
             horizontal
             pagingEnabled
@@ -150,16 +154,29 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
               />
             )}
           />
-          {rental.images.length > 1 ? (
-            <View style={styles.counter}>
+        )}
+        heroOverlay={
+          rental.images.length > 1 ? (
+            <View style={styles.counter} pointerEvents="none">
               <Text style={styles.counterText}>
                 {photoIndex + 1} / {rental.images.length}
               </Text>
             </View>
-          ) : null}
-        </View>
-
-        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+          ) : null
+        }
+        title={rental.title}
+        onBack={() => router.back()}
+        actions={[
+          {
+            key: 'share',
+            accessibilityLabel: 'Teilen',
+            onPress: share,
+            renderIcon: (c) => <ShareIcon size={20} color={c} />,
+          },
+        ]}
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
+        <View style={styles.sheet}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{rental.title}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{rental.kind_label}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{rentalFactsLine(rental)}</Text>
@@ -328,15 +345,7 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
             </>
           ) : null}
         </View>
-      </ScrollView>
-      <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
-          <ArrowLeftIcon size={22} color={colors.textPrimary} />
-        </GlassIconButton>
-        <GlassIconButton onPress={share} accessibilityLabel="Teilen">
-          <ShareIcon size={20} color={colors.textPrimary} />
-        </GlassIconButton>
-      </View>
+      </CollapsingHeroScreen>
 
       {rental.badge ? (
         <View style={[styles.badgeStrip, { backgroundColor: colors.surfaceSecondary }]}>
@@ -395,9 +404,6 @@ const styles = StyleSheet.create({
   },
   counterText: { color: '#fff', fontSize: 13, fontFamily: fontFamily.semiBold },
   sheet: {
-    marginTop: -24,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingHorizontal: 24,
     paddingTop: 28,
   },

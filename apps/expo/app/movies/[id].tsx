@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,13 @@ import {
   Pressable,
   Linking,
   useWindowDimensions,
-  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { SvgXml } from 'react-native-svg';
-import { ArrowLeftIcon, CalendarIcon, UserIcon } from '@/components/Icons';
+import { CalendarIcon, UserIcon } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { MovieRecord } from '@/lib/types';
 import { formatDate, formatTime, addMinutesToTime } from '@/lib/utils';
@@ -22,10 +21,10 @@ import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useGoBack } from '@/hooks/useGoBack';
 import MovieCard from '@/components/MovieCard';
-import GlassIconButton from '@/components/GlassIconButton';
 import AmbientBackdrop from '@/components/AmbientBackdrop';
 import ImageZoomModal from '@/components/ImageZoomModal';
-import { MovieDetailSkeleton } from '@/components/SkeletonLoader';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import { DETAIL_HEADER_BAR } from '@/components/detail/collapseRanges';
 import { useTheme } from '@/context/ThemeContext';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { fontFamily } from '@/constants/theme';
@@ -35,8 +34,8 @@ const POSTER_RADIUS = 12;
 /** Cinema posters are 2:3 (width / height) until the image reports its size. */
 const POSTER_ASPECT_DEFAULT = 2 / 3;
 const POSTER_MAX_HEIGHT_RATIO = 0.6;
-/** The ambient blur keeps running this far below the poster block. */
-const AMBIENT_TAIL = 160;
+/** Below the poster: the sheet overlap (24) + breathing room. */
+const HERO_BOTTOM_SPACE = 48;
 const FOOTER_BUTTON_HEIGHT = 54;
 
 // The cinema evenings are a fixed series; venue and price do not live on the row.
@@ -69,11 +68,6 @@ export default function MovieDetailScreen() {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [zoomVisible, setZoomVisible] = useState(false);
   const [posterAspect, setPosterAspect] = useState(POSTER_ASPECT_DEFAULT);
-  const [heroHeight, setHeroHeight] = useState(0);
-
-  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
-    setHeroHeight(e.nativeEvent.layout.height);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +139,14 @@ export default function MovieDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <MovieDetailSkeleton />
-      </View>
+        <CollapsingHeroScreen
+          heroHeight={insets.top + DETAIL_HEADER_BAR + Math.round(screenHeight * POSTER_MAX_HEIGHT_RATIO) + HERO_BOTTOM_SPACE}
+          onBack={goBack}
+          loading
+        />
+      </>
     );
   }
 
@@ -168,11 +166,12 @@ export default function MovieDetailScreen() {
     (admission ? ` • Einlass ${admission}${start ? `, Beginn ${start}` : ''} Uhr` : '');
   const hasTrailer = !!movie.trailer_youtube_url;
   const hasAmbient = !!movie.cover_image_url;
-  const chromeColor = hasAmbient ? '#ffffff' : colors.textPrimary;
 
   const maxPosterWidth = screenWidth - GUTTER * 2;
   const posterWidth = Math.min(maxPosterWidth, screenHeight * POSTER_MAX_HEIGHT_RATIO * posterAspect);
   const posterHeight = posterWidth / posterAspect;
+  // Hero = ambient blur with the uncropped poster under the header bar.
+  const heroHeight = Math.round(insets.top + DETAIL_HEADER_BAR + posterHeight + HERO_BOTTOM_SPACE);
 
   const handleTrailerPress = () => {
     if (movie.trailer_youtube_url) {
@@ -185,55 +184,55 @@ export default function MovieDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView
-        style={styles.container}
+      <CollapsingHeroScreen
+        heroHeight={heroHeight}
+        imageUri={movie.cover_image_url || null}
+        heroBackgroundColor={colors.background}
+        tone={hasAmbient ? 'dark' : 'auto'}
+        renderHero={() => (
+          <View style={StyleSheet.absoluteFill}>
+            {hasAmbient && movie.cover_image_url ? (
+              <AmbientBackdrop uri={movie.cover_image_url} height={heroHeight} fadeRatio={0.3} />
+            ) : null}
+            <View style={[styles.hero, { paddingTop: insets.top + DETAIL_HEADER_BAR }]}>
+              <View style={[styles.posterWrap, { width: posterWidth, height: posterHeight }]}>
+                <Pressable
+                  onPress={() => setZoomVisible(true)}
+                  disabled={!movie.cover_image_url}
+                  style={[styles.poster, { backgroundColor: colors.cardPlaceholder }]}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="Filmplakat vergrößern"
+                >
+                  {movie.cover_image_url ? (
+                    <Image
+                      source={{ uri: movie.cover_image_url }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={200}
+                      priority="high"
+                      accessibilityIgnoresInvertColors
+                      onLoad={(e) => {
+                        const { width, height } = e.source;
+                        if (width && height) setPosterAspect(width / height);
+                      }}
+                    />
+                  ) : (
+                    <View style={styles.posterPlaceholder}>
+                      <Text style={styles.posterPlaceholderText}>🎬</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        )}
+        title={movie.title}
+        onBack={goBack}
         contentContainerStyle={{
           paddingBottom: (hasTrailer ? FOOTER_BUTTON_HEIGHT + 48 : 24) + insets.bottom,
         }}
-        showsVerticalScrollIndicator={false}
       >
-        {hasAmbient && heroHeight > 0 && movie.cover_image_url && (
-          <AmbientBackdrop uri={movie.cover_image_url} height={heroHeight + AMBIENT_TAIL} />
-        )}
-
-        <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
-          <View style={styles.topBar}>
-            <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" tone={hasAmbient ? 'dark' : 'auto'}>
-              <ArrowLeftIcon size={22} color={chromeColor} strokeWidth={2} />
-            </GlassIconButton>
-          </View>
-
-          <View style={[styles.posterWrap, { width: posterWidth, height: posterHeight }]}>
-            <Pressable
-              onPress={() => setZoomVisible(true)}
-              disabled={!movie.cover_image_url}
-              style={[styles.poster, { backgroundColor: colors.cardPlaceholder }]}
-              accessibilityRole="imagebutton"
-              accessibilityLabel="Filmplakat vergrößern"
-            >
-              {movie.cover_image_url ? (
-                <Image
-                  source={{ uri: movie.cover_image_url }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  transition={200}
-                  priority="high"
-                  accessibilityIgnoresInvertColors
-                  onLoad={(e) => {
-                    const { width, height } = e.source;
-                    if (width && height) setPosterAspect(width / height);
-                  }}
-                />
-              ) : (
-                <View style={styles.posterPlaceholder}>
-                  <Text style={styles.posterPlaceholderText}>🎬</Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
         <View style={styles.headerBlock}>
           <View style={styles.hostRow}>
             <View style={styles.host}>
@@ -319,7 +318,7 @@ export default function MovieDetailScreen() {
             </ScrollView>
           </View>
         )}
-      </ScrollView>
+      </CollapsingHeroScreen>
 
       {/* Sticky footer: the trailer is the one action a film page has. */}
       {hasTrailer && (
@@ -381,7 +380,7 @@ const styles = StyleSheet.create({
   },
   posterWrap: {
     alignSelf: 'center',
-    marginTop: 10,
+    marginTop: 4,
   },
   poster: {
     ...StyleSheet.absoluteFill,

@@ -8,6 +8,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 
 interface VoteConfirmationDrawerProps {
   visible: boolean;
@@ -27,6 +28,8 @@ export default function VoteConfirmationDrawer({
   isVoting,
 }: VoteConfirmationDrawerProps) {
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(visible);
   const insets = useSafeAreaInsets();
 
   const getVoteLabel = () => {
@@ -62,7 +65,7 @@ export default function VoteConfirmationDrawer({
       animationType="fade"
       onRequestClose={onCancel}
     >
-      <Pressable style={[styles.overlay, { backgroundColor: colors.scrim }]} onPress={onCancel}>
+      <Pressable style={[styles.overlay, { backgroundColor: hasStage ? 'transparent' : colors.scrim }]} onPress={onCancel}>
         <Pressable
           style={[
             styles.drawer,

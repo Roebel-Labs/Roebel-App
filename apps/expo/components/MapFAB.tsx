@@ -11,7 +11,8 @@ import ReanimatedAnimated, {
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { GlassFill, glassChrome } from '@/components/GlassIconButton';
+import { glassChrome } from '@/components/GlassIconButton';
+import GlassSurface from '@/components/GlassSurface';
 import { LocationIcon } from '@/components/Icons';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 
@@ -40,7 +41,7 @@ export default function MapFAB({
   bottomOffset = 0,
 }: Props) {
   const router = useRouter();
-  const { colors, isDark, variant } = useTheme();
+  const { colors, isDark } = useTheme();
   const { rim, shadow } = glassChrome(isDark);
   const scale = useSharedValue(1);
   const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -92,7 +93,9 @@ export default function MapFAB({
           {/* Frosted pill: the outer pressable carries the shadow, the inner
               view clips the glass — same material as the map's controls. */}
           <View style={[styles.clip, { borderColor: rim }]}>
-            <GlassFill dark={isDark} black={variant === 'dark'} />
+            {/* Real backdrop blur (iOS chrome material; Android samples the screen's
+                GlassBackdrop) with the nav's wash on top — the same glass as the pill nav. */}
+            <GlassSurface androidExperimentalBlur />
             <View style={styles.content}>
               {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
               <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>

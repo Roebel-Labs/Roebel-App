@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { useSheetStageVisibility } from '@/components/ui/SheetStage';
 import { StarIcon } from '@/components/Icons';
 import { useAccountRating } from '@/hooks/useAccountRating';
 
@@ -14,6 +15,8 @@ type Props = {
 
 export default function RatingModal({ visible, accountId, accountName, onClose }: Props) {
   const { colors } = useTheme();
+  // Shrinks the page behind (SheetStage); the stage then owns the dim.
+  const hasStage = useSheetStageVisibility(visible);
   const insets = useSafeAreaInsets();
   const { userRating, isSignedIn, setRating, loading } = useAccountRating(accountId);
   const [stars, setStars] = useState<number>(0);
@@ -37,7 +40,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
+      <View style={[styles.backdrop, { backgroundColor: hasStage ? 'transparent' : colors.scrim }]}>
         <View
           style={[
             styles.sheet,

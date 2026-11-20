@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   FlatList,
   Share,
   useWindowDimensions,
-  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,12 +17,13 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import { SvgXml } from 'react-native-svg';
 import { useGoBack } from '@/hooks/useGoBack';
-import { ArrowLeftIcon, UserIcon, CallIcon, ShareIcon, CalendarIcon, ChevronRight } from '@/components/Icons';
+import { UserIcon, CallIcon, ShareIcon, CalendarIcon, ChevronRight } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import type { Account, EventRecord, EventDateRecord, OrgSubType } from '@/lib/types';
 import { currency, formatDate, formatTime, formatLocationFull, getNextUpcomingDate } from '@/lib/utils';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { EventDetailSkeleton } from '@/components/SkeletonLoader';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import { DETAIL_HEADER_BAR } from '@/components/detail/collapseRanges';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
 import EventLocationMap from '@/components/EventLocationMap';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -42,7 +42,6 @@ import InterestSocialRow from '@/components/InterestSocialRow';
 import HorizontalEventCard from '@/components/HorizontalEventCard';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
 import AmbientBackdrop from '@/components/AmbientBackdrop';
-import GlassIconButton from '@/components/GlassIconButton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
@@ -69,11 +68,10 @@ const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
 
 const GUTTER = 16;
 const FLYER_RADIUS = 12;
-/** The ambient blur keeps running this far below the flyer block so it
- *  fades out underneath the organizer row and title, not at a hard edge. */
-const AMBIENT_TAIL = 160;
 /** How much of the screen a very tall flyer may take before it shrinks. */
 const FLYER_MAX_HEIGHT_RATIO = 0.6;
+/** Below the flyer: the sheet overlap (24) + breathing room for the orbs. */
+const HERO_BOTTOM_SPACE = 52;
 
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
   const svgXml = `
@@ -114,8 +112,6 @@ export default function EventDetails() {
   const [composerOpen, setComposerOpen] = useState(false);
   // The flyer is shown uncropped at its own ratio; A4 until the image reports its size.
   const [flyerAspect, setFlyerAspect] = useState(POSTER_ASPECT_RATIO);
-  // Measured height of the top block (chrome + flyer) — sizes the ambient backdrop.
-  const [heroHeight, setHeroHeight] = useState(0);
   const [ticketTypes, setTicketTypes] = useState<TicketTypeRow[]>([]);
   const [salesEnabled, setSalesEnabled] = useState(false);
   const { showSnackbar } = useSnackbar();
@@ -151,10 +147,6 @@ export default function EventDetails() {
       cancelled = true;
     };
   }, [id]);
-
-  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
-    setHeroHeight(e.nativeEvent.layout.height);
-  }, []);
 
   const handleShare = async () => {
     if (!event) return;
@@ -313,10 +305,14 @@ export default function EventDetails() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <EventDetailSkeleton />
-      </View>
+        <CollapsingHeroScreen
+          heroHeight={insets.top + DETAIL_HEADER_BAR + Math.round(screenWidth * 1.1)}
+          onBack={goBack}
+          loading
+        />
+      </>
     );
   }
   if (!event) {
@@ -350,9 +346,10 @@ export default function EventDetails() {
   const flyerWidth = Math.min(maxFlyerWidth, screenHeight * FLYER_MAX_HEIGHT_RATIO * flyerAspect);
   const flyerHeight = flyerWidth / flyerAspect;
 
-  // Chrome over the ambient blur reads white; without an image it sits on
-  // the plain page and uses the text colour.
-  const chromeColor = hasAmbient ? '#ffffff' : colors.textPrimary;
+  const mediaHeight = liveSlug || showLivestream ? (maxFlyerWidth * 9) / 16 : flyerHeight;
+  // Hero = ambient blur with the uncropped flyer; room for the header bar on
+  // top and the sheet overlap + orbs below.
+  const heroHeight = Math.round(insets.top + DETAIL_HEADER_BAR + 4 + mediaHeight + HERO_BOTTOM_SPACE);
   const hostName = publisherAccount?.name ?? event.organizer_name;
   const hostAvatar = publisherAccount?.avatar_url ?? null;
   const hostIsOrg = publisherAccount?.account_type === 'organisation';
@@ -368,97 +365,100 @@ export default function EventDetails() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView
-        ref={scrollRef}
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: INTEREST_CTA_HEIGHT + insets.bottom + 48 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Ambient backdrop: the flyer itself, blurred wide, fading into the
-            page under the title block. Sized from the measured hero block. */}
-        {hasAmbient && heroHeight > 0 && event.image_url && (
-          <AmbientBackdrop uri={event.image_url} height={heroHeight + AMBIENT_TAIL} />
-        )}
-
-        <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
-          <View style={styles.topBar}>
-            <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" tone={hasAmbient ? 'dark' : 'auto'}>
-              <ArrowLeftIcon size={22} color={chromeColor} strokeWidth={2} />
-            </GlassIconButton>
-            <GlassIconButton onPress={handleShare} accessibilityLabel="Veranstaltung teilen" tone={hasAmbient ? 'dark' : 'auto'}>
-              <ShareIcon size={20} color={chromeColor} />
-            </GlassIconButton>
-          </View>
-
-          {liveSlug ? (
-            // Live room: the stream on top (flyer + start time until it goes live); a tap opens the live room.
-            <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
-              <Pressable
-                onPress={() => router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } })}
-                style={[styles.liveBox, { height: (maxFlyerWidth * 9) / 16 }]}
-                accessibilityRole="button"
-                accessibilityLabel="Livestream öffnen"
-              >
-                {event.image_url ? (
-                  <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
-                ) : null}
-                <View style={styles.liveScrim} />
-                <View style={styles.liveCenter}>
-                  <View style={styles.livePlay}>
-                    <PlayIcon size={26} color="#111" />
-                  </View>
-                  <Text style={styles.liveLabel}>
-                    {liveShow?.status === 'live'
-                      ? 'Livestream ansehen'
-                      : liveShow?.starts_at
-                        ? `Livestream ab ${new Date(liveShow.starts_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Uhr`
-                        : 'Livestream'}
-                  </Text>
+      <CollapsingHeroScreen
+        scrollRef={scrollRef}
+        heroHeight={heroHeight}
+        imageUri={event.image_url || null}
+        heroBackgroundColor={colors.background}
+        tone={hasAmbient ? 'dark' : 'auto'}
+        renderHero={() => (
+          <View style={StyleSheet.absoluteFill}>
+            {hasAmbient && event.image_url ? (
+              <AmbientBackdrop uri={event.image_url} height={heroHeight} fadeRatio={0.3} />
+            ) : null}
+            <View style={[styles.hero, { paddingTop: insets.top + DETAIL_HEADER_BAR + 4 }]}>
+              {liveSlug ? (
+                // Live room: the stream on top (flyer + start time until it goes live); a tap opens the live room.
+                <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
+                  <Pressable
+                    onPress={() => router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } })}
+                    style={[styles.liveBox, { height: (maxFlyerWidth * 9) / 16 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Livestream öffnen"
+                  >
+                    {event.image_url ? (
+                      <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                    ) : null}
+                    <View style={styles.liveScrim} />
+                    <View style={styles.liveCenter}>
+                      <View style={styles.livePlay}>
+                        <PlayIcon size={26} color="#111" />
+                      </View>
+                      <Text style={styles.liveLabel}>
+                        {liveShow?.status === 'live'
+                          ? 'Livestream ansehen'
+                          : liveShow?.starts_at
+                            ? `Livestream ab ${new Date(liveShow.starts_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Uhr`
+                            : 'Livestream'}
+                      </Text>
+                    </View>
+                    {isStreaming(liveShow) ? <LiveEventMedia show={liveShow} large /> : null}
+                  </Pressable>
                 </View>
-                {isStreaming(liveShow) ? <LiveEventMedia show={liveShow} large /> : null}
-              </Pressable>
+              ) : showLivestream ? (
+                <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
+                  <View style={styles.flyer}>
+                    <YouTubeEmbed
+                      youtubeUrl={event.livestream_url as string}
+                      height={maxFlyerWidth * 9 / 16}
+                      borderRadius={FLYER_RADIUS}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <View style={[styles.flyerWrap, { width: flyerWidth, height: flyerHeight }]}>
+                  <Pressable
+                    onPress={() => setImageZoomVisible(true)}
+                    disabled={!event.image_url}
+                    style={[styles.flyer, { backgroundColor: colors.cardPlaceholder }]}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="Flyer vergrößern"
+                  >
+                    {event.image_url ? (
+                      <Image
+                        source={{ uri: event.image_url }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={200}
+                        priority="high"
+                        accessibilityIgnoresInvertColors
+                        onLoad={(e) => {
+                          const { width, height } = e.source;
+                          if (width && height) setFlyerAspect(width / height);
+                        }}
+                      />
+                    ) : null}
+                    {event.is_cancelled && <EventCancelledScrim radius={FLYER_RADIUS} />}
+                  </Pressable>
+                  <InterestOrbs eventId={id as string} />
+                </View>
+              )}
             </View>
-          ) : showLivestream ? (
-            <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
-              <View style={styles.flyer}>
-                <YouTubeEmbed
-                  youtubeUrl={event.livestream_url as string}
-                  height={maxFlyerWidth * 9 / 16}
-                  borderRadius={FLYER_RADIUS}
-                />
-              </View>
-            </View>
-          ) : (
-            <View style={[styles.flyerWrap, { width: flyerWidth, height: flyerHeight }]}>
-              <Pressable
-                onPress={() => setImageZoomVisible(true)}
-                disabled={!event.image_url}
-                style={[styles.flyer, { backgroundColor: colors.cardPlaceholder }]}
-                accessibilityRole="imagebutton"
-                accessibilityLabel="Flyer vergrößern"
-              >
-                {event.image_url ? (
-                  <Image
-                    source={{ uri: event.image_url }}
-                    style={StyleSheet.absoluteFill}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={200}
-                    priority="high"
-                    accessibilityIgnoresInvertColors
-                    onLoad={(e) => {
-                      const { width, height } = e.source;
-                      if (width && height) setFlyerAspect(width / height);
-                    }}
-                  />
-                ) : null}
-                {event.is_cancelled && <EventCancelledScrim radius={FLYER_RADIUS} />}
-              </Pressable>
-              <InterestOrbs eventId={id as string} />
-            </View>
-          )}
-        </View>
-
+          </View>
+        )}
+        title={event.title}
+        onBack={goBack}
+        actions={[
+          {
+            key: 'share',
+            accessibilityLabel: 'Veranstaltung teilen',
+            onPress: handleShare,
+            renderIcon: (c) => <ShareIcon size={20} color={c} />,
+          },
+        ]}
+        contentContainerStyle={{ paddingBottom: INTEREST_CTA_HEIGHT + insets.bottom + 48 }}
+      >
         <View style={styles.headerBlock}>
           <View style={styles.hostRow}>
             <Pressable
@@ -710,7 +710,7 @@ export default function EventDetails() {
         )}
 
         <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
-      </ScrollView>
+      </CollapsingHeroScreen>
 
 
       {/* Sticky footer: the primary action floats over the scrolling content. */}

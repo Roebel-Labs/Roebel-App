@@ -22,7 +22,9 @@ import { isRestaurantOpen } from '@/lib/utils';
 import { fetchBusinessBySlug } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import MeckyNotFound from '@/components/MeckyNotFound';
-import GlassIconButton from '@/components/GlassIconButton';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import DetailBodySkeleton from '@/components/detail/DetailBodySkeleton';
+import { Ionicons } from '@expo/vector-icons';
 import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
@@ -34,7 +36,6 @@ import {
 import BusinessDealCard from '@/components/BusinessDealCard';
 import ProfileCoverBanner from '@/components/profile/ProfileCoverBanner';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
-import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import type { BusinessRecord, BusinessDealRecord, OpeningHours } from '@/lib/types';
 
 type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
@@ -139,17 +140,15 @@ export default function BusinessDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.headerAbsolute}>
-          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
-            <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-          </Pressable>
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Laden...</Text>
-        </View>
-      </SafeAreaView>
+        <CollapsingHeroScreen
+          heroHeight={HERO_HEIGHT}
+          onBack={goBack}
+          loading
+          skeleton={<DetailBodySkeleton avatar={AVATAR_SIZE} />}
+        />
+      </>
     );
   }
 
@@ -166,6 +165,8 @@ export default function BusinessDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const hasCustomCover = !!business.cover_image_url && !business.cover_image_url.includes('placehold.co');
 
   const contactRows = [
     business.address
@@ -192,32 +193,35 @@ export default function BusinessDetailScreen() {
   // Same skeleton as the citizen profile (user/[username]): cover banner,
   // overlapping avatar, name + meta, then flat sections at a 16px gutter.
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <CollapsingHeroScreen
+        heroHeight={HERO_HEIGHT}
+        imageUri={hasCustomCover ? business.cover_image_url : null}
+        renderHero={() => <ProfileCoverBanner assetUrl={business.cover_image_url} height={HERO_HEIGHT} />}
+        title={business.name}
+        onBack={goBack}
+        actions={[
+          ...(isOwner
+            ? [
+                {
+                  key: 'edit',
+                  accessibilityLabel: 'Bearbeiten',
+                  onPress: () => router.push(`/business/edit/${business.slug}` as any),
+                  renderIcon: (c: string) => <Ionicons name="create-outline" size={21} color={c} />,
+                },
+              ]
+            : []),
+          {
+            key: 'share',
+            accessibilityLabel: 'Teilen',
+            onPress: handleShare,
+            renderIcon: (c: string) => <ShareIcon size={20} color={c} />,
+          },
+        ]}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* ── Cover banner with back chevron + optional edit pill ── */}
-        <View style={styles.bannerWrap}>
-          <ProfileCoverBanner assetUrl={business.cover_image_url} />
-          <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" style={styles.backPill}>
-            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
-          </GlassIconButton>
-          {isOwner && (
-            <Pressable
-              onPress={() => router.push(`/business/edit/${business.slug}` as any)}
-              style={[styles.editPill, { backgroundColor: colors.background, borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Bearbeiten"
-            >
-              <Text style={[styles.editPillText, { color: colors.textPrimary }]}>Bearbeiten</Text>
-            </Pressable>
-          )}
-        </View>
-
         {/* ── Logo ── */}
         <View style={styles.identityRow}>
           <UserAvatarWithFrame
@@ -401,12 +405,13 @@ export default function BusinessDetailScreen() {
             )}
           </View>
         )}
-      </ScrollView>
-    </SafeAreaView>
+      </CollapsingHeroScreen>
+    </>
   );
 }
 
 const AVATAR_SIZE = 96;
+const HERO_HEIGHT = 260;
 
 const styles = StyleSheet.create({
   container: {
@@ -462,7 +467,7 @@ const styles = StyleSheet.create({
   },
   identityRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     marginTop: -(AVATAR_SIZE / 2),
   },
   header: {
