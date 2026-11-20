@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import useOrgMembers from '@/hooks/useOrgMembers';
-import { useCredentialsGate } from '@/lib/credreg/gate';
+import { useOrgCredentialsVisible } from '@/lib/credreg/org-visibility';
 import OrgRoleBadge from '@/components/OrgRoleBadge';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import InviteDrawer from '@/components/InviteDrawer';
@@ -26,7 +26,8 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function OrgManageScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const credentialsGate = useCredentialsGate();
+  // Gate open and the org on chain; every other org keeps today's screen.
+  const credentialsVisible = useOrgCredentialsVisible();
   const { activeAccount } = useAccount();
   const accountId = activeAccount?.id;
 
@@ -320,7 +321,7 @@ export default function OrgManageScreen() {
           }
         }}
         ListHeaderComponent={
-          canManage && credentialsGate === true ? (
+          canManage && credentialsVisible ? (
             <Pressable
               onPress={() => router.push('/org/credentials' as any)}
               style={[styles.credentialsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
