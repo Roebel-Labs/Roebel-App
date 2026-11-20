@@ -17,7 +17,7 @@ jest.mock('@/components/BottomDrawer', () => ({
   default: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => (visible ? children : null),
 }));
 
-import BadgeGrid, { BADGE_EMPTY_TEXT } from '../BadgeGrid';
+import BadgeGrid, { BADGE_EMPTY_TEXT, hasCollectedStamp } from '../BadgeGrid';
 import CredentialDetailSheet, { PENDING_BADGE_TEXT } from '../CredentialDetailSheet';
 
 const tid = (n: number) => ('0x' + n.toString(16).padStart(64, '0')) as Hex;
@@ -37,6 +37,15 @@ const texts = (tree: renderer.ReactTestRenderer): string[] =>
   tree.root.findAllByType(Text).flatMap((n) => [n.props.children].flat(Infinity).filter((c) => typeof c === 'string' || typeof c === 'number').map(String));
 const buttons = (tree: renderer.ReactTestRenderer) =>
   tree.root.findAll((n) => typeof n.type === 'string' && n.props.accessibilityRole === 'button').map((n) => n.props.accessibilityLabel as string);
+
+describe('stamp section on the own profile', () => {
+  it('appears only after the first collected stamp', () => {
+    expect(hasCollectedStamp([], [])).toBe(false);
+    expect(hasCollectedStamp([{}], [])).toBe(true);
+    // Scanned offline, waiting to be sent: collected from the person's view.
+    expect(hasCollectedStamp([], ['event-1'])).toBe(true);
+  });
+});
 
 describe('BadgeGrid', () => {
   it('empty grid shows the collect-your-first explanation', () => {

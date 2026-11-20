@@ -45,6 +45,17 @@ export function phaseForTilt(t: Tilt): number {
   return Math.max(0, Math.min(1, REST_PHASE + t.x * 0.3 + t.y * 0.2));
 }
 
+/** Tilt steps that are redrawn (1/40 of full tilt): finer changes are not visible in the sheen. */
+export const TILT_STEP = 0.025;
+
+export function quantiseTilt(t: Tilt, step = TILT_STEP): Tilt {
+  return { x: Math.round(t.x / step) * step, y: Math.round(t.y / step) * step };
+}
+
+export function sameTilt(a: Tilt, b: Tilt): boolean {
+  return Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+}
+
 /** Whether a tilt change is big enough to redraw (saves frames while the phone lies still). */
 export function tiltMoved(a: Tilt, b: Tilt, eps = 0.004): boolean {
   return Math.abs(a.x - b.x) > eps || Math.abs(a.y - b.y) > eps;

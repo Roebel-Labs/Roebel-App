@@ -78,14 +78,23 @@ export function loadCardSkia(): Promise<CardSkia> {
   return loading;
 }
 
-/** The api and fonts, or null while the fonts are still loading. */
-export function useCardSkia(): CardSkia | null {
+/** The api and fonts; null while the fonts are still loading or when loading failed (`failed`). */
+export function useCardSkiaState(): { skia: CardSkia | null; failed: boolean } {
   const [skia, setSkia] = useState<CardSkia | null>(ready);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (skia) return;
     let alive = true;
-    loadCardSkia().then((s) => { if (alive) setSkia(s); }, () => undefined);
+    loadCardSkia().then(
+      (s) => { if (alive) setSkia(s); },
+      () => { if (alive) setFailed(true); },
+    );
     return () => { alive = false; };
   }, [skia]);
-  return skia;
+  return { skia, failed: !skia && failed };
+}
+
+/** The api and fonts, or null while the fonts are still loading. */
+export function useCardSkia(): CardSkia | null {
+  return useCardSkiaState().skia;
 }

@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Canvas, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
-import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import { useDerivedValue, useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { DeviceMotion } from 'expo-sensors';
 import { CARD_RADIUS, designSize, drawHeight, type CardDesign, type FieldValues, type RenderMode } from '@roebel/card-design';
 import { useTheme } from '@/context/ThemeContext';
-import { useCardSkia } from '@/lib/card-design/skia';
+import { useCardSkiaState } from '@/lib/card-design/skia';
 import { useDesignImages } from '@/lib/card-design/assets';
-import { REST_PHASE, nextTilt, phaseForTilt, recordDesign, tiltMoved, type Tilt } from '@/lib/card-design/record';
+import { REST_PHASE, nextTilt, phaseForTilt, quantiseTilt, recordDesign, sameTilt, type Tilt } from '@/lib/card-design/record';
 
 type Props = {
   design: CardDesign;
@@ -19,20 +19,36 @@ type Props = {
   animate?: 'tilt' | 'static';
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  /** Shown instead while the fonts load and when Skia cannot draw this card (fonts failed, nothing recorded). */
+  fallback?: ReactNode;
 };
 
 /** Sensor interval (ms): 60 Hz. */
 const MOTION_INTERVAL = 16;
 
+type Disposable = { dispose?: () => void };
+/** Frees a picture two frames later: the UI thread may still be drawing it right now. */
+function disposeLater(p: unknown) {
+  const d = p as Disposable | null;
+  if (!d || typeof d.dispose !== 'function') return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    try {
+      d.dispose!();
+    } catch {
+      // Already gone.
+    }
+  }));
+}
+
 /**
  * A card drawn from its design with Skia. Missing images are left out and fetched again on the
  * next focus; while the fonts load, a quiet placeholder of the card's shape is shown.
  */
-export default function DesignedCard({ design, width, mode, values, animate = 'static', style, accessibilityLabel }: Props) {
+export default function DesignedCard({ design, width, mode, values, animate = 'static', style, accessibilityLabel, fallback }: Props) {
   const { colors } = useTheme();
   const focused = useIsFocused();
   const reduced = useReducedMotion();
-  const skia = useCardSkia();
+  const { skia, failed } = useCardSkiaState();
   const images = useDesignImages(design, focused);
   const height = drawHeight(design, width);
   const radius = design.format === 'stamp' ? width / 2 : (CARD_RADIUS * width) / designSize(design.format).w;
@@ -48,12 +64,12 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
 
   // The resting picture: what static cards show, and where a tilting card starts and returns to.
   const still = useMemo(() => (draw ? draw(undefined, REST_PHASE) : null), [draw]);
-  const picture = useSharedValue<SkPicture | null>(still);
-  useEffect(() => {
-    if (still) picture.value = still;
-  }, [still, picture]);
-  const stillRef = useRef(still);
-  stillRef.current = still;
+  // A resting picture that is replaced (new design, size, images) is freed.
+  useEffect(() => () => disposeLater(still), [still]);
+  // The tilting picture; null = the resting one. The Canvas reads the derived value, so it never
+  // sees null (I3: the shared value used to start as null while the fonts were loading).
+  const picture = useSharedValue<SkPicture | null>(null);
+  const shown = useDerivedValue(() => picture.value ?? still, [still]);
 
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -64,13 +80,20 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
     let drawn: Tilt = tilt;
     let baseline: number | null = null;
     let frame: number | null = null;
+    let current: SkPicture | null = null;
     const flush = () => {
       frame = null;
       const d = drawRef.current;
-      if (!d || !tiltMoved(tilt, drawn)) return;
-      drawn = tilt;
-      const pic = d(tilt, phaseForTilt(tilt));
-      if (pic) picture.value = pic;
+      // Quantised: sensor noise while the phone is held still no longer redraws every frame.
+      const q = quantiseTilt(tilt);
+      if (!d || sameTilt(q, drawn)) return;
+      drawn = q;
+      const pic = d(q, phaseForTilt(q));
+      if (!pic) return;
+      const old = current;
+      current = pic;
+      picture.value = pic;
+      disposeLater(old);
     };
     DeviceMotion.setUpdateInterval(MOTION_INTERVAL);
     const sub = DeviceMotion.addListener((m) => {
@@ -84,7 +107,9 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
       sub.remove();
       if (frame !== null) cancelAnimationFrame(frame);
       // Back to the resting sheen when the card stops following the phone.
-      if (stillRef.current) picture.value = stillRef.current;
+      picture.value = null;
+      disposeLater(current);
+      current = null;
     };
   }, [tilting, picture]);
 
@@ -98,8 +123,10 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
       {still ? (
         <Canvas style={{ width, height }}>
           {/* Only the tilting card reads the shared value; the others keep their one picture. */}
-          <Picture picture={animate === 'tilt' ? (picture as unknown as SkPicture) : still} />
+          <Picture picture={animate === 'tilt' ? (shown as unknown as SkPicture) : still} />
         </Canvas>
+      ) : fallback ? (
+        fallback
       ) : (
         <View style={[styles.placeholder, { width, height, borderRadius: radius, backgroundColor: colors.surface }]} />
       )}

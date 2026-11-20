@@ -23,6 +23,28 @@ const ART: Record<PresetId, '' | '-dark' | '-gold'> = {
   silver: '-dark', navy: '', gold: '-gold', black: '', paper: '-dark', holo: '-dark', matte: '', glass: '-dark',
 };
 
+/**
+ * The community cards (Gast, Bürger, Bescheiniger) as the app's card PNGs draw them
+ * (apps/expo/assets/cards/png/*@2x.png, which are 924 x 580 = card units): semi-condensed bold
+ * title and place name; the bottom row sits at `rowY` (Bürger's sits higher).
+ */
+function communityCard(preset: PresetId, title: string, rowY: number, intensity: number): CardDesign {
+  const p = PRESETS[preset];
+  const art = ART[preset];
+  return {
+    schema: 1,
+    format: 'card',
+    background: { kind: 'preset', preset },
+    shine: { enabled: true, intensity },
+    layers: [
+      text('title', 52, 57, 600, 72, title, 'mona-condensed', 55.4, p.ink),
+      image('logo', 698, 46, 180, 102, `builtin:person-laurel${art}`, 'logo'),
+      text('place', 52, rowY - 5, 560, 52, 'Röbel / Müritz', 'mona-condensed', 39.4, p.art),
+      image('mark', 685, rowY, 193, 45, `builtin:roebel-mark${art}`, 'image'),
+    ],
+  };
+}
+
 function card(preset: PresetId, title: string, opts: { community: boolean; shine: boolean; intensity?: number }): CardDesign {
   const p = PRESETS[preset];
   const art = ART[preset];
@@ -59,9 +81,9 @@ function holoStamp(): CardDesign {
 const t = (id: string, label: string, design: CardDesign): CardTemplate => ({ id, label, format: design.format, design });
 
 export const TEMPLATES: CardTemplate[] = [
-  t('gast', 'Gast', card('silver', 'Gast', { community: true, shine: true, intensity: 0.5 })),
-  t('buerger', 'Bürger', card('navy', 'Bürger', { community: true, shine: true, intensity: 0.5 })),
-  t('bescheiniger', 'Bescheiniger', card('gold', 'Bescheiniger', { community: true, shine: true, intensity: 0.5 })),
+  t('gast', 'Gast', communityCard('silver', 'Gast', 490, 0.5)),
+  t('buerger', 'Bürger', communityCard('navy', 'Bürger', 476, 0.5)),
+  t('bescheiniger', 'Bescheiniger', communityCard('gold', 'Bescheiniger', 490, 0.5)),
   t('schwarz', 'Schwarz', card('black', 'Mitglied', { community: false, shine: true })),
   t('papier', 'Papier', card('paper', 'Mitglied', { community: false, shine: false })),
   t('matt', 'Matt', card('matte', 'Mitglied', { community: false, shine: false })),

@@ -17,22 +17,23 @@ export function orgCredentialsVisible(p: { gate: boolean | null; onChain: OrgLis
   return p.gate === true && p.onChain === 'ready';
 }
 
-const sessionOrgs = new Map<string, Promise<OrgListEntry[] | null>>();
+const sessionOrgs = new Map<string, { at: number; p: Promise<OrgListEntry[] | null> }>();
+/** An org that becomes ready (or loses a role) shows up after at most this long, not only after a restart. */
+export const ORG_LIST_TTL_MS = 60_000;
 
-/** orgs_list for this wallet, cached for the session (failures are not cached). */
+/** orgs_list for this wallet, cached for a minute (failures are not cached). */
 export function sessionOrgList(account: SigningAccount): Promise<OrgListEntry[] | null> {
   const key = account.address.toLowerCase();
-  let p = sessionOrgs.get(key);
-  if (!p) {
-    p = fetchOrgs(account).then(
-      (res) => {
-        if (!res.ok) { sessionOrgs.delete(key); return null; }
-        return res.data;
-      },
-      () => { sessionOrgs.delete(key); return null; },
-    );
-    sessionOrgs.set(key, p);
-  }
+  const hit = sessionOrgs.get(key);
+  if (hit && Date.now() - hit.at < ORG_LIST_TTL_MS) return hit.p;
+  const p = fetchOrgs(account).then(
+    (res) => {
+      if (!res.ok) { sessionOrgs.delete(key); return null; }
+      return res.data;
+    },
+    () => { sessionOrgs.delete(key); return null; },
+  );
+  sessionOrgs.set(key, { at: Date.now(), p });
   return p;
 }
 

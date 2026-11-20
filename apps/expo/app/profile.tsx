@@ -36,7 +36,7 @@ import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
-import BadgeGrid from '@/components/profile/BadgeGrid';
+import BadgeGrid, { hasCollectedStamp } from '@/components/profile/BadgeGrid';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
@@ -339,14 +339,14 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
-                  {creds.open && (
+                  {/* Stempel: only after the first collected stamp (no empty section before). */}
+                  {creds.open && hasCollectedStamp(creds.profile.badges, creds.queued) && (
                     <BadgeGrid
                       badges={creds.profile.badges}
                       pending={creds.pendingBadges}
                       queued={creds.queued}
                       onPress={openCard}
                       onPressTile={openTile}
-                      emptyState
                     />
                   )}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}

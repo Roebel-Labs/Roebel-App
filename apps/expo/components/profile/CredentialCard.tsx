@@ -7,6 +7,10 @@ import { softShadow } from '@/lib/shadow';
 import { CARD_ASPECT, CREDENTIAL_ART, cardRadiusFor } from './credential-art';
 import RecognisedSeal from './RecognisedSeal';
 import { cardHolderValues, type Holder } from '@/lib/card-design/holder-values';
+// Skia (and Reanimated) load only when a card has a design and the binary has Skia; a card Skia
+// cannot draw shows its old picture.
+import SafeDesignedCard from '@/components/credentials/SafeDesignedCard';
+import { COMMUNITY_DESIGNS } from '@/lib/card-design/community';
 
 type Props = {
   /** A built-in card by kind (today's cards), or any card of the profile model. */
@@ -21,15 +25,6 @@ type Props = {
   animate?: 'tilt' | 'static';
 };
 
-// Skia (and Reanimated) load only when a card actually has a design: every card without one keeps
-// today's light path, and screens/tests that never show a designed card never touch Skia.
-let designedCard: typeof import('@/components/credentials/DesignedCard').default | null = null;
-function DesignedCardLazy(props: React.ComponentProps<typeof import('@/components/credentials/DesignedCard').default>) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  if (!designedCard) designedCard = require('@/components/credentials/DesignedCard').default;
-  const C = designedCard!;
-  return <C {...props} />;
-}
 
 export function cardHeightFor(width: number): number {
   return Math.round(width / CARD_ASPECT);
@@ -75,6 +70,17 @@ export function DefaultCardFace({ card, width }: { card: RegisterCard; width: nu
   );
 }
 
+/** The card's picture (type image), or the neutral face without one. */
+function PictureFace({ card, width }: { card: RegisterCard; width: number }) {
+  const height = cardHeightFor(width);
+  const radius = cardRadiusFor(width);
+  return card.imageUrl ? (
+    <Image source={{ uri: card.imageUrl }} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+  ) : (
+    <DefaultCardFace card={card} width={width} />
+  );
+}
+
 /** One credential card at the given width (462:290 aspect). */
 export default function CredentialCard({ kind, card, width, style, shadow = true, holder, animate = 'static' }: Props) {
   const { colors, isDark } = useTheme();
@@ -87,13 +93,22 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
 
   if (!card || card.source === 'builtin' || builtin) {
     const k = (builtin ?? 'guest') as CredentialKind;
+    const art = <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />;
     return (
       <View
         style={[{ width, height, borderRadius: radius }, shadow && softShadow(2, isDark), style]}
         accessibilityRole="image"
         accessibilityLabel={CREDENTIAL_COPY[k].title}
       >
-        <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+        {/* The tilting card is drawn from its design so the sheen follows the phone; the PNG is the
+            fallback (no Skia in this binary, still loading, or drawing failed) and every static card. */}
+        {animate === 'tilt' ? (
+          <View style={[styles.inner, { borderRadius: radius }]}>
+            <SafeDesignedCard design={COMMUNITY_DESIGNS[k]} width={width} mode="holder" animate="tilt" fallback={art} />
+          </View>
+        ) : (
+          art
+        )}
       </View>
     );
   }
@@ -108,17 +123,16 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
     >
       <View style={[styles.inner, { borderRadius: radius }, expired && styles.dimmed]}>
         {card.design ? (
-          <DesignedCardLazy
+          <SafeDesignedCard
             design={card.design}
             width={width}
             mode="holder"
             values={values}
             animate={animate}
+            fallback={<PictureFace card={card} width={width} />}
           />
-        ) : card.imageUrl ? (
-          <Image source={{ uri: card.imageUrl }} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
         ) : (
-          <DefaultCardFace card={card} width={width} />
+          <PictureFace card={card} width={width} />
         )}
       </View>
       {card.kind === 'role' && card.recognised ? (

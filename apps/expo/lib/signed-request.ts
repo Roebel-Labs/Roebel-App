@@ -34,7 +34,8 @@ export type CredentialAction =
   | 'event_badge_qr'
   // card designer (POST /api/credentials/designs and …/designs/assets)
   | 'design_orgs' | 'design_drafts_list' | 'design_draft_get' | 'design_draft_save' | 'design_draft_delete'
-  | 'design_test_send' | 'design_publish' | 'design_assets_list' | 'design_asset_upload';
+  | 'design_test_send' | 'design_publish' | 'design_assets_list' | 'design_asset_upload'
+  | 'design_ai_background' | 'design_ai_sticker';
 export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {
