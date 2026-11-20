@@ -126,6 +126,9 @@ importers:
       '@rnmapbox/maps':
         specifier: 10.3.5
         version: 10.3.5(expo@56.0.21(haj35gvialewoygqr5cvfeja3a))(react-dom@19.2.3(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3)
+      '@sbaiahmed1/react-native-blur':
+        specifier: 6.0.3
+        version: 6.0.3(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3)
       '@sentry/cli':
         specifier: 2.58.4
         version: 2.58.4
@@ -5823,6 +5826,12 @@ packages:
 
   '@safe-global/types-kit@4.0.1':
     resolution: {integrity: sha512-zmIYyAH9mcBcqHszPgcfNjOJYuPSvWCcc/f8zeznh7N1HSA7jEoFErO06O4QDfwAAS4aEyoyjhPyfHbVYRheZg==}
+
+  '@sbaiahmed1/react-native-blur@6.0.3':
+    resolution: {integrity: sha512-g+Zn7oP/rCU8gsJe4tCIgOAVEBIEgT2SN0haeYH9JG+E8wjIEqHY0XxkhQYCggkgMZIl730LeI3guiWDCLyHTA==}
+    peerDependencies:
+      react: '>=18.2.0'
+      react-native: '>=0.80.0'
 
   '@scure/base@1.1.9':
     resolution: {integrity: sha512-8YKhl8GHiNI/pU2VMaofa2Tor7PJRAjwQLBBuilkJ9L5+13yVbC7JO/wS7piioAvPSwR3JKM1IJ/u4xQzbcXKg==}
@@ -25541,6 +25550,11 @@ snapshots:
     transitivePeerDependencies:
       - typescript
       - zod
+
+  '@sbaiahmed1/react-native-blur@6.0.3(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3)':
+    dependencies:
+      react: 19.2.3
+      react-native: 0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10)
 
   '@scure/base@1.1.9': {}
 
