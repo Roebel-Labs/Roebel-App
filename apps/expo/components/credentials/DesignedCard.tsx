@@ -30,7 +30,8 @@ type Props = {
 
 /** How far the card leans against the phone's tilt, degrees at full tilt. */
 const LEAN_DEG = 5;
-const LEAN_TIMING = { duration: 120, easing: Easing.out(Easing.quad) } as const;
+/** Long enough to glide between sensor frames (60 Hz) instead of stepping. */
+const LEAN_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
 
 /** Sensor interval (ms): 60 Hz. */
 const MOTION_INTERVAL = 16;

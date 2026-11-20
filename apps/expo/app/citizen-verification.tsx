@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { ArrowLeftIcon } from '@/components/Icons';
 import GlassIconButton from '@/components/GlassIconButton';
 import { useTheme } from '@/context/ThemeContext';
@@ -11,6 +11,7 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useIsCitizen } from '@/hooks/useIsCitizen';
 import { CREDENTIAL_COPY, credentialKindsFor, type BenefitIcon, type CredentialKind } from '@/lib/credentials';
 import CredentialCarousel from '@/components/profile/CredentialCarousel';
+import BlurSwap from '@/components/skeleton/BlurSwap';
 import CredentialQrSheet from '@/components/profile/CredentialQrSheet';
 import CompleteCitizenDataBanner from '@/components/profile/CompleteCitizenDataBanner';
 import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
@@ -98,7 +99,9 @@ export default function CredentialExplainerScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <CredentialCarousel kinds={kinds} initialKind={initialKind} onActiveChange={setActive} />
 
-        <Animated.View key={active} entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} style={styles.body}>
+        {/* The text sharpens out of a blur when the next card snaps in. */}
+        <BlurSwap swapKey={active}>
+        <Animated.View key={active} entering={FadeIn.duration(220)} style={styles.body}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{copy.title}</Text>
           <Text style={[styles.intro, { color: colors.textSecondary }]}>{copy.intro}</Text>
 
@@ -143,6 +146,7 @@ export default function CredentialExplainerScreen() {
             </Pressable>
           )}
         </Animated.View>
+        </BlurSwap>
       </ScrollView>
 
       <CredentialQrSheet visible={showQr} onClose={() => setShowQr(false)} requestId={citizenRequest?.request_id ?? null} />

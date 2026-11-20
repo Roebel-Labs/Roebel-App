@@ -96,7 +96,7 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
     const art = <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />;
     return (
       <View
-        style={[{ width, height, borderRadius: radius }, shadow && softShadow(2, isDark), style]}
+        style={[{ width, height, borderRadius: radius }, shadow && softShadow(animate === 'tilt' ? 3 : 2, isDark), style]}
         accessibilityRole="image"
         accessibilityLabel={CREDENTIAL_COPY[k].title}
       >
@@ -117,7 +117,7 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
   const tagInset = Math.max(10, Math.round(width * 0.035));
   return (
     <View
-      style={[{ width, height, borderRadius: radius }, shadow && softShadow(2, isDark), style]}
+      style={[{ width, height, borderRadius: radius }, shadow && softShadow(animate === 'tilt' ? 3 : 2, isDark), style]}
       accessibilityRole="image"
       accessibilityLabel={registerCardLabel(card)}
     >

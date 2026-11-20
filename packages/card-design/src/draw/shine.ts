@@ -4,7 +4,7 @@
 //   - rainbow interference bands whose position AND angle follow both tilt axes,
 //   - a fine diffraction micro-texture that shimmers as the phone moves,
 //   - strongest where the light hits (soft spot moving opposite the tilt),
-//   - a small specular glint and a faint rim; nearly invisible at rest.
+//   - a faint rim; no glint dots (Max: "no lens dots"); nearly invisible at rest.
 // Output is premultiplied (colour * alpha), drawn src-over on the card.
 
 export const SHINE_SKSL = `
@@ -14,7 +14,9 @@ uniform float intensity;
 uniform float2 size;
 
 float3 spectrum(float t) {
-  return 0.5 + 0.5 * cos(6.28318 * (t + float3(0.0, 0.33, 0.67)));
+  float3 c = 0.5 + 0.5 * cos(6.28318 * (t + float3(0.0, 0.33, 0.67)));
+  // Soft, pearly foil — not a saturated rainbow (Max 2026-11-21).
+  return mix(float3(1.0), c, 0.42);
 }
 
 half4 main(float2 p) {
@@ -36,13 +38,11 @@ half4 main(float2 p) {
 
   float tiltAmount = clamp(length(tilt) * 1.4, 0.0, 1.0);
   float a = (0.10 + 0.24 * spot) * (0.6 + 0.4 * sheen) * (0.4 + 0.6 * tiltAmount);
-  float glint = exp(-r2 / 0.006);
   float2 e = min(uv, 1.0 - uv);
   float rim = 1.0 - smoothstep(0.0, 0.06, min(e.x * aspect, e.y));
-  a = a + glint * 0.06 + rim * 0.05 * tiltAmount;
-  a = clamp(a * intensity, 0.0, 0.75);
-  float3 col = mix(holo, float3(1.0), glint * 0.7);
-  return half4(half3(col * a), half(a));
+  a = a + rim * 0.04 * tiltAmount;
+  a = clamp(a * intensity, 0.0, 0.6);
+  return half4(half3(holo * a), half(a));
 }
 `;
 

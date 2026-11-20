@@ -116,7 +116,7 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
   // Android blurs only by sampling the screen's GlassBackdrop; without one it would be a flat tint.
   const canBlur = GLASS_BLUR_AVAILABLE && (Platform.OS !== 'android' || !!target?.current);
   const frost = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.6)';
-  const blurStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, blur.value * 1.6) }));
+  const blurStyle = useAnimatedStyle(() => ({ opacity: blur.value }));
 
   return (
     <>
@@ -126,17 +126,21 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: frost }, blurStyle]} />
       ) : null}
       {returning && canBlur ? (
-        // A moderate blur that loosens to sharp — strength animates, not opacity (Max's
-        // reference: content stays recognisable, no heavy frost). Android samples the screen's
-        // GlassBackdrop with the nav's light material.
-        <AnimatedBlurView
+        // Blur strength AND layer opacity fall together, so no tint is left behind at the end
+        // (a lone tint read as grey in dark mode and snapped from dark grey to white in light
+        // mode). Plain light/dark tint matching the theme — no material film.
+        <Animated.View
           pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-          animatedProps={blurProps}
-          tint={Platform.OS === 'ios' ? (isDark ? 'systemThinMaterialDark' : 'systemThinMaterialLight') : isDark ? 'systemUltraThinMaterialDark' : 'default'}
-          blurMethod="dimezisBlurViewSdk31Plus"
-          blurTarget={Platform.OS === 'android' ? target ?? undefined : undefined}
-        />
+          style={[StyleSheet.absoluteFill, Platform.OS === 'ios' ? null : blurStyle]}
+        >
+          <AnimatedBlurView
+            style={StyleSheet.absoluteFill}
+            animatedProps={blurProps}
+            tint={isDark ? 'dark' : 'light'}
+            blurMethod="dimezisBlurViewSdk31Plus"
+            blurTarget={Platform.OS === 'android' ? target ?? undefined : undefined}
+          />
+        </Animated.View>
       ) : null}
       {entryShown ? (
         <Animated.View
