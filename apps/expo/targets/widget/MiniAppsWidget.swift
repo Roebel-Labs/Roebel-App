@@ -140,18 +140,17 @@ struct MiniAppsWidgetView: View {
   let entry: MiniAppsEntry
 
   private var columns: Int { family == .systemSmall ? 2 : 4 }
-  private var rows: Int {
-    switch family {
-    case .systemLarge: return 4
-    default: return 2
-    }
-  }
-  private var iconSize: CGFloat {
-    switch family {
-    case .systemSmall: return 44
-    case .systemLarge: return 54
-    default: return 50
-    }
+  private var rows: Int { family == .systemLarge ? 4 : 2 }
+  private let rowSpacing: CGFloat = 6
+  /// Label (11 pt, one line) + the gap above it.
+  private let labelHeight: CGFloat = 18
+
+  /// Icon size from the real widget size (it differs per device): fill the rows
+  /// without clipping, never wider than the column, capped like the Erkunden grid.
+  private func iconSize(_ size: CGSize) -> CGFloat {
+    let byHeight = (size.height - rowSpacing * CGFloat(rows - 1)) / CGFloat(rows) - labelHeight
+    let byWidth = size.width / CGFloat(columns) - 12
+    return max(24, min(56, byHeight, byWidth))
   }
 
   var body: some View {
@@ -165,35 +164,56 @@ struct MiniAppsWidgetView: View {
       }
       .widgetURL(settingsURL)
     } else {
-      grid
+      GeometryReader { geo in
+        grid(icon: iconSize(geo.size), width: geo.size.width)
+      }
+      // Small widgets have a single tap target: open the store.
+      .widgetURL(family == .systemSmall ? storeURL : nil)
     }
   }
 
-  private var grid: some View {
-    let slots = columns * rows
-    let shown = Array(entry.apps.prefix(slots - 1))
-    let layout = Array(repeating: GridItem(.flexible(), spacing: 4), count: columns)
-    return VStack {
-      LazyVGrid(columns: layout, alignment: .center, spacing: family == .systemLarge ? 10 : 8) {
-        ForEach(shown) { app in
-          if family == .systemSmall {
-            AppTile(app: app, size: iconSize)
-          } else {
-            Link(destination: URL(string: app.url) ?? storeURL) {
-              AppTile(app: app, size: iconSize)
-            }
+  private enum Slot: Identifiable {
+    case app(WidgetApp)
+    case store
+    var id: String {
+      switch self {
+      case .app(let a): return a.slug
+      case .store: return "__store"
+      }
+    }
+  }
+
+  private func grid(icon: CGFloat, width: CGFloat) -> some View {
+    let slots: [Slot] = entry.apps.prefix(columns * rows - 1).map { Slot.app($0) } + [.store]
+    let colWidth = width / CGFloat(columns)
+    return VStack(alignment: .leading, spacing: rowSpacing) {
+      ForEach(0..<Int(ceil(Double(slots.count) / Double(columns))), id: \.self) { r in
+        HStack(spacing: 0) {
+          ForEach(slots[(r * columns)..<min(slots.count, r * columns + columns)]) { slot in
+            tile(slot, icon: icon).frame(width: colWidth)
           }
-        }
-        if family == .systemSmall {
-          StoreTile(size: iconSize)
-        } else {
-          Link(destination: storeURL) { StoreTile(size: iconSize) }
         }
       }
       Spacer(minLength: 0)
     }
-    // Small widgets have a single tap target: open the store.
-    .widgetURL(family == .systemSmall ? storeURL : nil)
+  }
+
+  @ViewBuilder
+  private func tile(_ slot: Slot, icon: CGFloat) -> some View {
+    switch slot {
+    case .app(let app):
+      if family == .systemSmall {
+        AppTile(app: app, size: icon)
+      } else {
+        Link(destination: URL(string: app.url) ?? storeURL) { AppTile(app: app, size: icon) }
+      }
+    case .store:
+      if family == .systemSmall {
+        StoreTile(size: icon)
+      } else {
+        Link(destination: storeURL) { StoreTile(size: icon) }
+      }
+    }
   }
 }
 
