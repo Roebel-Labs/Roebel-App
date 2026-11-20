@@ -15,6 +15,8 @@ import { OrgChainNotice, useCredOrg } from '@/components/credentials/OrgCredenti
 import { fetchActions, fetchPeople, fetchTypes, prepareMembersPublic } from '@/lib/credreg/api';
 import { preparedLabel, safeServerText, submittedMessage } from '@/lib/credreg/org';
 import type { ActionView, PersonRow, TypeView } from '@/lib/credreg/types';
+import DraftList from '@/components/credentials/designer/DraftList';
+import { useDesignerOpen } from '@/lib/card-design/designer-status';
 
 const WAITING_FALLBACK = 'Eine Aktion wartet auf deine Bestätigung';
 
@@ -40,6 +42,7 @@ export default function OrgCredentialsScreen() {
   const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [notOnChain, setNotOnChain] = useState(false);
+  const designer = useDesignerOpen();
   const key = `${accountId}:${account?.address ?? ''}:${reloadKey}`;
 
   // Back from the approve screen: load again (the first focus is the first load).
@@ -236,6 +239,13 @@ export default function OrgCredentialsScreen() {
         <Pressable onPress={() => router.push('/org/credentials/delegates' as any)} style={styles.textLink} accessibilityRole="button">
           <Text style={[styles.link, { color: colors.primary }]}>Türscanner-Konten</Text>
         </Pressable>
+
+        {/* Card designs with their state ("Entwurf", unpublished changes); the designer is on. */}
+        {designer && account && accountId ? (
+          <View style={styles.section}>
+            <DraftList account={account} accountId={accountId} showNew={false} />
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Ausweis-Typen</Text>

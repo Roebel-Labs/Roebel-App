@@ -20,6 +20,7 @@ import { announceHeldChanged } from '@/lib/credreg/held';
 import { makePrivate } from '@/lib/credreg/visibility';
 import { makePublic } from '@/lib/credreg/accept';
 import { useProfileCredentials } from '@/hooks/useProfileCredentials';
+import { useHolder } from '@/lib/card-design/holder-values';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
@@ -139,6 +140,8 @@ export default function ProfileScreen() {
   };
 
   const displayName = user?.display_name || user?.username || 'Du';
+  // Fills the name field of designed cards, on this device only (verified name first).
+  const holder = useHolder(account?.address, user?.display_name || user?.username || null);
   const personalAvatarUrl = user?.profile_picture_url ?? null;
   const profileHref = user?.username
     ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
@@ -326,7 +329,7 @@ export default function ProfileScreen() {
                     <Text style={[styles.pendingAction, { color: colors.primary }]}>{readyBusy ? 'Wird eingetragen…' : 'Jetzt eintragen'}</Text>
                   </Pressable>
                 )}
-                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
+                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} holder={holder} animateFront={!shownCard} />
                 <ProfileSheet>
                   <IdentityRow
                     name={displayName}
@@ -397,6 +400,7 @@ export default function ProfileScreen() {
             onMakePublic={makeCardPublic}
             busy={cardBusy}
             error={cardError}
+            holder={holder}
           />
         )}
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />

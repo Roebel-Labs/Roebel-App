@@ -1,14 +1,16 @@
 /**
- * MiniAppConsentSheet — what a version-2 mini app asks to know about the person (profile,
- * account address, credentials). One switch per item, all on by default.
+ * MiniAppConsentSheet — the standard connect dialog of every mini app ("Verbinden mit …").
  *
- * Same floating-card pattern as MiniAppNotificationSheet. Pure presentation: the host decides
- * when to show it and stores the decision (lib/miniapp-identity.ts). "Nicht jetzt" still counts
- * the items as asked, so they are not asked again on the next open.
+ * Shows the app, a verified mark for reviewed apps, and what the app will see. Every row is a
+ * check the person can tap off. "Verbinden" stores the choice (the host decides where: node
+ * grants for version-2 apps, the device for version-1 apps) and then shows "Verbunden" briefly.
+ * Closing with ✕ counts as answered too, so the dialog does not come back; the person can change
+ * the choice later on the app's detail page.
  */
 import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, ScrollView, Switch, StyleSheet } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ConsentKey } from '@netizen-labs/miniapp-sdk/host';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,13 +24,29 @@ type Props = {
   iconUrl: string | null;
   items: ConsentItem[];
   busy?: boolean;
+  /** Reviewed app: a check after its name. */
+  verified?: boolean;
+  /** Saved: the button turns into "Verbunden" until the host closes the sheet. */
+  connected?: boolean;
   onAllow(on: Set<ConsentKey>): void;
   onLater(): void;
 };
 
 const initialOn = (items: ConsentItem[]) => new Set(items.filter((i) => i.defaultOn).map((i) => i.key));
 
-export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, busy, onAllow, onLater }: Props) {
+const SUCCESS = '#16A34A';
+const VERIFIED = '#3B82F6';
+
+function Check({ size, color, fill }: { size: number; color: string; fill: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" fill={fill} />
+      <Path d="m7.5 12.5 3 3 6-6.5" stroke={color} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, busy, verified, connected, onAllow, onLater }: Props) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [on, setOn] = useState<Set<ConsentKey>>(() => initialOn(items));
@@ -38,35 +56,35 @@ export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, 
     setShownItems(items);
     setOn(initialOn(items));
   }
+  const locked = !!busy || !!connected;
 
-  const toggle = (key: ConsentKey, value: boolean) =>
+  const toggle = (key: ConsentKey) =>
     setOn((prev) => {
       const next = new Set(prev);
-      if (value) next.add(key);
-      else next.delete(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
+  const ink = isDark ? '#FFFFFF' : '#111114';
+  const inkOn = isDark ? '#111114' : '#FFFFFF';
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={busy ? undefined : onLater}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={locked ? undefined : onLater}>
       <View style={styles.backdrop}>
-        <View
-          style={[styles.card, { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 12) + 12 }]}
-        >
+        <View style={[styles.card, { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 12) + 12 }]}>
           <View style={styles.topRow}>
             <View style={[styles.icon, { backgroundColor: colors.surfaceSecondary }]}>
               {iconUrl ? (
                 <Image source={{ uri: iconUrl }} style={styles.iconImg} contentFit="cover" />
               ) : (
-                <Text style={[styles.iconLetter, { color: colors.textPrimary }]}>
-                  {appName.slice(0, 1).toUpperCase()}
-                </Text>
+                <Text style={[styles.iconLetter, { color: colors.textPrimary }]}>{appName.slice(0, 1).toUpperCase()}</Text>
               )}
             </View>
             <Pressable
               onPress={onLater}
-              disabled={busy}
-              style={[styles.closeBtn, { backgroundColor: colors.surfaceSecondary }]}
+              disabled={locked}
+              style={[styles.closeBtn, { borderColor: colors.borderSecondary }]}
               hitSlop={8}
               accessibilityLabel="Schließen"
             >
@@ -74,52 +92,60 @@ export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, 
             </Pressable>
           </View>
 
-          <Text style={[styles.title, { color: colors.textPrimary }]}>{`${appName} möchte wissen`}</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>{CONSENT_COPY.connectTitle}</Text>
+          <View style={styles.subRow}>
+            <Text style={[styles.subtitle, { color: colors.textPrimary }]} numberOfLines={1}>{`mit ${appName}`}</Text>
+            {verified ? <Check size={20} color="#FFFFFF" fill={VERIFIED} /> : null}
+          </View>
+          <Text style={[styles.lead, { color: colors.textSecondary }]}>{CONSENT_COPY.connectLead}</Text>
 
           <View style={[styles.divider, { backgroundColor: colors.borderSecondary }]} />
+          <Text style={[styles.sees, { color: colors.textSecondary }]}>{CONSENT_COPY.seesTitle}</Text>
 
           <ScrollView style={styles.list} bounces={false}>
-            {items.map((item) => (
-              <View key={item.key} style={styles.row}>
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{item.title}</Text>
-                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>{item.detail}</Text>
-                  {item.privateNote ? (
-                    <Text style={[styles.rowNote, { color: colors.textSecondary }]}>{CONSENT_COPY.privateNote}</Text>
-                  ) : null}
-                </View>
-                <Switch
-                  value={on.has(item.key)}
-                  onValueChange={(v) => toggle(item.key, v)}
-                  disabled={busy}
-                  trackColor={{ true: colors.primary, false: colors.surfaceSecondary }}
+            {items.map((item) => {
+              const checked = on.has(item.key);
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => toggle(item.key)}
+                  disabled={locked}
+                  style={styles.row}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked }}
                   accessibilityLabel={item.title}
-                />
-              </View>
-            ))}
+                >
+                  {checked ? (
+                    <Check size={24} color={inkOn} fill={ink} />
+                  ) : (
+                    <View style={[styles.unchecked, { borderColor: colors.borderSecondary }]} />
+                  )}
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowTitle, { color: checked ? colors.textPrimary : colors.textSecondary }]}>{item.title}</Text>
+                    {item.privateNote ? (
+                      <Text style={[styles.rowNote, { color: colors.textSecondary }]}>{CONSENT_COPY.privateNote}</Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
 
-          <Pressable
-            onPress={() => onAllow(new Set(on))}
-            disabled={busy}
-            accessibilityLabel="Erlauben"
-            style={({ pressed }) => [
-              styles.cta,
-              { backgroundColor: isDark ? '#FFFFFF' : '#111114' },
-              (pressed || busy) && { opacity: 0.8 },
-            ]}
-          >
-            <Text style={[styles.ctaText, { color: isDark ? '#111114' : '#FFFFFF' }]}>
-              {busy ? 'Wird gespeichert…' : 'Erlauben'}
-            </Text>
-          </Pressable>
-          <Pressable onPress={onLater} disabled={busy} accessibilityLabel="Nicht jetzt" style={styles.secondary}>
-            <Text style={[styles.secondaryText, { color: colors.textPrimary }]}>Nicht jetzt</Text>
-          </Pressable>
-
-          <Text style={[styles.footer, { color: colors.textSecondary }]}>
-            Du kannst das jederzeit auf der Seite der Mini-App ändern.
-          </Text>
+          {connected ? (
+            <View style={styles.done} accessibilityLiveRegion="polite">
+              <Check size={26} color="#FFFFFF" fill={SUCCESS} />
+              <Text style={[styles.doneText, { color: SUCCESS }]}>{CONSENT_COPY.connected}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => onAllow(new Set(on))}
+              disabled={locked}
+              accessibilityLabel={CONSENT_COPY.connectCta}
+              style={({ pressed }) => [styles.cta, { backgroundColor: ink }, (pressed || busy) && { opacity: 0.8 }]}
+            >
+              <Text style={[styles.ctaText, { color: inkOn }]}>{busy ? 'Wird gespeichert…' : CONSENT_COPY.connectCta}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>
@@ -157,26 +183,35 @@ const styles = StyleSheet.create({
   iconImg: { width: '100%', height: '100%' },
   iconLetter: { fontFamily: fontFamily.heading, fontSize: 22 },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontFamily: fontFamily.heading,
-    fontSize: 24,
+    fontSize: 28,
   },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  subtitle: { fontFamily: fontFamily.medium, fontSize: 18, flexShrink: 1 },
+  lead: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 21, marginTop: 14 },
+  sees: { fontFamily: fontFamily.regular, fontSize: 15, marginBottom: 6 },
+  unchecked: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5 },
+  done: { marginTop: 20, height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  doneText: { fontFamily: fontFamily.semiBold, fontSize: 18 },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginVertical: 16,
+    marginTop: 16,
+    marginBottom: 14,
   },
   list: { flexGrow: 0 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   rowText: { flex: 1 },
   rowTitle: { fontFamily: fontFamily.semiBold, fontSize: 16 },

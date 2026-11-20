@@ -22,7 +22,8 @@ interface RnParagraphBuilder {
   build(): RnParagraph;
   dispose?(): void;
 }
-interface RnParagraph { layout(width: number): void; getHeight(): number }
+// RN Skia's canvas has no drawParagraph: a paragraph paints itself onto a canvas.
+interface RnParagraph { layout(width: number): void; getHeight(): number; paint(canvas: Native, x: number, y: number): void }
 interface RnCanvas {
   save(): number | void;
   restore(): void;
@@ -34,7 +35,6 @@ interface RnCanvas {
   drawRect(rect: Native, paint: Native): void;
   drawRRect(rrect: Native, paint: Native): void;
   drawImageRect(img: Native, src: Native, dst: Native, paint: Native, fastSample?: boolean): void;
-  drawParagraph(p: Native, x: number, y: number): void;
 }
 
 /** The parts of RN Skia's `Skia` object this adapter uses. */
@@ -141,6 +141,6 @@ function wrapCanvas(Skia: RnSkiaLike, c: RnCanvas): CanvasLike {
     drawRRect: (rr, paint) => c.drawRRect(rr, paint),
     drawImageRect: (img, [sx, sy, sw, sh], [dx, dy, dw, dh], paint) =>
       c.drawImageRect(img as Native, r(sx, sy, sw, sh), r(dx, dy, dw, dh), paint),
-    drawParagraph: (p, x, y) => c.drawParagraph(p as Native, x, y),
+    drawParagraph: (p, x, y) => (p as unknown as RnParagraph).paint(c, x, y),
   };
 }

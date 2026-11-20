@@ -9,14 +9,22 @@ import type { CredentialStore } from "../store";
 import { designImageUrl } from "./public";
 import type { DesignStore, VersionRow } from "./store";
 
-async function promote(store: DesignStore, credStore: CredentialStore, v: VersionRow): Promise<void> {
-  if (v.status === "live" || v.status === "superseded") return;
-  if (!(await store.setVersionStatus(v.sha, "live", undefined, ["pending", "abandoned"]))) return;
+/**
+ * `fromChain`: the chain configured exactly this version's URL, so it is live whatever its order
+ * (a config edit confirmed after a design publish can write an older URL back) and every other live
+ * version of the draft is superseded. Otherwise (receipt path) a newer live version wins.
+ */
+const ORPHAN_MS = 5 * 60_000;
+
+async function promote(store: DesignStore, credStore: CredentialStore, v: VersionRow, fromChain = false): Promise<void> {
+  if (v.status === "live" || (v.status === "superseded" && !fromChain)) return;
+  const from: VersionRow["status"][] = fromChain ? ["pending", "abandoned", "superseded"] : ["pending", "abandoned"];
+  if (!(await store.setVersionStatus(v.sha, "live", undefined, from))) return;
   for (const other of await store.versionsOf(v.draftId)) {
-    if (other.sha !== v.sha && other.status === "live" && other.version < v.version) await store.setVersionStatus(other.sha, "superseded", undefined, ["live"]);
+    if (other.sha !== v.sha && other.status === "live" && (fromChain || other.version < v.version)) await store.setVersionStatus(other.sha, "superseded", undefined, ["live"]);
   }
-  // A later version already live wins: this one goes straight to superseded.
-  const newer = (await store.versionsOf(v.draftId)).find((o) => o.status === "live" && o.version > v.version);
+  // Receipt path: a later version already live wins, this one goes straight to superseded.
+  const newer = fromChain ? undefined : (await store.versionsOf(v.draftId)).find((o) => o.status === "live" && o.version > v.version);
   if (newer) {
     await store.setVersionStatus(v.sha, "superseded", undefined, ["live"]);
     return;
@@ -42,7 +50,16 @@ export async function promoteDesignVersion(store: DesignStore, credStore: Creden
 /** The chain configured a type with a design URL (sync path, TypeConfigured): that version goes live. */
 export async function promoteDesignVersionBySha(store: DesignStore, credStore: CredentialStore, sha: string, typeId: string): Promise<void> {
   const v = await store.getVersion(sha);
-  if (v && (v.typeId === null || v.typeId === typeId.toLowerCase())) await promote(store, credStore, { ...v, typeId: v.typeId ?? typeId.toLowerCase() });
+  if (!v) return;
+  const tid = typeId.toLowerCase();
+  if (v.typeId !== null && v.typeId !== tid) return;
+  if (v.typeId === null) {
+    // Only a version of the same org may be adopted by a type (another org could point its
+    // metadataURI at someone else's version sha).
+    const [draft, type] = await Promise.all([store.getDraft(v.draftId), credStore.getType(tid as Hex)]);
+    if (!draft || !type || !type.accountId || draft.accountId !== type.accountId) return;
+  }
+  await promote(store, credStore, { ...v, typeId: v.typeId ?? tid }, true);
 }
 
 /** The action was cancelled, expired or failed: the version is given up, the previous one stays live. */
@@ -68,7 +85,14 @@ export function designShaOfUri(uri: string): string | null {
  * looked, or one the sync marked done). Returns the version as it is now.
  */
 export async function reconcilePending(store: DesignStore, credStore: CredentialStore, v: VersionRow, nowMs: number): Promise<VersionRow> {
-  if (v.status !== "pending" || !v.actionId) return v;
+  if (v.status !== "pending") return v;
+  if (!v.actionId) {
+    // A publish that never got its action (crash or error between the writes): give it up after
+    // a few minutes so it cannot block the draft.
+    if (nowMs - Date.parse(v.createdAt) < ORPHAN_MS) return v;
+    await store.setVersionStatus(v.sha, "abandoned", undefined, ["pending"]);
+    return (await store.getVersion(v.sha)) ?? v;
+  }
   const a = await credStore.getAction(v.actionId);
   if (!a) return v;
   if (a.status === "done") await promoteDesignVersion(store, credStore, v.actionId);

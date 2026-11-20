@@ -117,3 +117,26 @@ test("renderPreview never draws a personal field", async () => {
   assert.equal((await sharp(a).metadata()).width, 924);
   assert.deepEqual(Buffer.from(a), Buffer.from(b));
 });
+
+// ── review fixes (2026-11-20) ────────────────────────────────────────────────
+
+test("a photo is always re-encoded: EXIF (GPS) is gone", async () => {
+  const { d, files } = world();
+  const jpeg = new Uint8Array(
+    await sharp({ create: { width: 60, height: 40, channels: 3, background: { r: 200, g: 10, b: 10 } } })
+      .jpeg()
+      .withExif({ IFD0: { Copyright: "Erika Muster", Make: "Phone" } })
+      .toBuffer(),
+  );
+  assert.ok((await sharp(jpeg).metadata()).exif, "fixture has EXIF");
+  const a = must(await storeAsset(d, caller(), { accountId: VEREIN, kind: "image", bytes: jpeg, mime: "image/jpeg" }));
+  const stored = files.get(`credential-designs/${VEREIN}/${a.sha}.jpg`) ?? [...files.values()][0];
+  assert.equal((await sharp(stored.bytes).metadata()).exif, undefined);
+});
+
+test("SVG: nested DOCTYPE/ENTITY and prefixed hrefs do not survive", () => {
+  const evil = `<!DOC<!DOCTYPE q>TYPE svg [<!ENT<!ENTITY q>ITY x SYSTEM "file:///etc/hostname">]><svg xmlns="http://www.w3.org/2000/svg" xmlns:l="http://www.w3.org/1999/xlink"><image l:href="file:///etc/passwd"/></svg>`;
+  const clean = sanitiseSvg(evil);
+  assert.doesNotMatch(clean, /<!DOCTYPE|<!ENTITY/i);
+  assert.doesNotMatch(clean, /file:/);
+});

@@ -25,6 +25,8 @@ export type DesignOrg = { accountId: string; name: string; avatarUrl: string | n
 
 export type DraftView = {
   id: string;
+  /** The org the draft belongs to (a test link opened from a push needs it for the publish gate). */
+  accountId: string;
   name: string;
   kind: DesignKind;
   template: string | null;
@@ -96,6 +98,7 @@ export async function draftView(d: DesignDeps, row: DraftRow): Promise<DraftView
   const pending = versions.find((v) => v.status === "pending") ?? null;
   return {
     id: draft.id,
+    accountId: draft.accountId,
     name: draft.name,
     kind: draft.kind,
     template: draft.template,

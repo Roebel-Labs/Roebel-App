@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import PressableScale from '@/components/PressableScale';
 import type { RegisterCard } from '@/lib/credreg/model';
 import CredentialCard from './CredentialCard';
+import type { Holder } from '@/lib/card-design/holder-values';
 
 /** Visible height of the front card above the content sheet. */
 export const CARD_PEEK_FRONT = 64;
@@ -21,6 +22,10 @@ type Props = {
   /** Back → front (the profile model's order). */
   cards: RegisterCard[];
   onPress: (card: RegisterCard) => void;
+  /** The holder: fills the name field of designed cards (on this device only). */
+  holder?: Holder | null;
+  /** The front card's sheen follows the phone (off while a detail sheet shows the card). */
+  animateFront?: boolean;
 };
 
 /**
@@ -31,7 +36,7 @@ type Props = {
  * Built-in cards only (today's profile): one press zone that opens the front card, exactly as
  * before. With register cards each visible band is its own button.
  */
-export default function CredentialCardStack({ cards, onPress }: Props) {
+export default function CredentialCardStack({ cards, onPress, holder = null, animateFront = true }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = screenWidth - 32;
   if (cards.length === 0) return null;
@@ -74,7 +79,8 @@ export default function CredentialCardStack({ cards, onPress }: Props) {
           // Only the visible band of a back card takes touches; the front card takes its whole peek.
           style={[styles.card, { top, left, width, height: isFront ? CARD_PEEK_FRONT : CARD_PEEK_STEP }]}
         >
-          <CredentialCard card={card} width={width} />
+          {/* Only the front card follows the tilt; the cards behind are drawn once. */}
+          <CredentialCard card={card} width={width} holder={holder} animate={isFront && animateFront ? 'tilt' : 'static'} />
         </Pressable>
       ))}
     </View>

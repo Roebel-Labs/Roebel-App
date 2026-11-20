@@ -66,7 +66,7 @@ describe('consent items', () => {
   it('uses the exact copy and the manifest reason', () => {
     const items = buildConsentItems(app, state, ['profile', 'address', 'cred:citizen']);
     expect(items[0]).toMatchObject({ title: 'Name und Bild', detail: 'Dein Anzeigename und dein Profilbild.', defaultOn: true });
-    expect(items[1].title).toBe('Deine Kontoadresse');
+    expect(items[1].title).toBe('Deine öffentliche ID');
     expect(items[2]).toMatchObject({ title: 'Bürger', detail: 'Nur für Bürger.', privateNote: false, defaultOn: true });
   });
 

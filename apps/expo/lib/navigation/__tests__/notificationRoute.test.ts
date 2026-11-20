@@ -29,6 +29,12 @@ describe('routeForNotification', () => {
     expect(routeForNotification({ type: 'credential_visibility', typeId: 'nope' })).toBe('/profile');
   });
 
+  it('opens the test preview for a design_test push', () => {
+    const id = '123e4567-e89b-42d3-a456-426614174000';
+    expect(routeForNotification({ type: 'design_test', draftId: id })).toBe(`/org/credentials/design-test?draft=${id}`);
+    expect(routeForNotification({ type: 'design_test', draftId: '../x' })).toBeNull();
+  });
+
   it('opens the accept screen for a credential invite and the confirm screen for a credential action', () => {
     const id = '11111111-1111-4111-8111-111111111111';
     expect(routeForNotification({ type: 'credential_invite', invitationId: id })).toBe(`/credentials/accept/${id}`);

@@ -66,6 +66,11 @@ export function routeForNotification(data: NotificationData): string | null {
       const actionId = str(data.actionId);
       return actionId && UUID.test(actionId) ? `/org/credentials/approve/${actionId}` : null;
     }
+    case 'design_test': {
+      // A card design draft sent to this phone for testing (only its org's admins can open it).
+      const draftId = str(data.draftId);
+      return draftId && UUID.test(draftId) ? `/org/credentials/design-test?draft=${draftId}` : null;
+    }
     case 'org':
       // Weekly follower digest for org owners/admins.
       return str(data.accountId) && `/account/${data.accountId}`;

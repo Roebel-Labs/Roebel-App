@@ -1,7 +1,8 @@
 /**
  * Supabase (service role) implementation of DesignStore. Server-only.
  *
- * Tables (supabase/migrations/20261120cda_card_designs.sql, NOT applied by agents):
+ * Tables (supabase/migrations/20261120cda_card_designs.sql, NOT applied by agents; the AI
+ * limit function is in 20261120cdb_card_design_ai_limit.sql):
  *   credential_design_drafts, credential_design_versions, credential_design_assets
  * all RLS-on with no policies and no anon/authenticated grants.
  */
@@ -205,6 +206,36 @@ export function supabaseDesignStore(db: SupabaseClient): DesignStore {
         { onConflict: "account_id,sha", ignoreDuplicates: true },
       );
       check("insertAsset", r);
+    },
+    async countAiAssetsSince(accountId, kind, sinceIso) {
+      const r = await db
+        .from(T.assets)
+        .select("sha", { count: "exact", head: true })
+        .eq("account_id", accountId)
+        .eq("kind", kind)
+        .eq("ai", true)
+        .gte("created_at", sinceIso);
+      check("countAiAssetsSince", r);
+      return Number((r as { count?: number | null }).count ?? 0);
+    },
+    async insertAiAssetWithinLimit(row, sinceIso, limit) {
+      // supabase/migrations/20261120cdb_card_design_ai_limit.sql: advisory lock + count + insert.
+      const r = await db.rpc("insert_ai_design_asset", {
+        p_sha: row.sha,
+        p_account_id: row.accountId,
+        p_kind: row.kind,
+        p_storage_path: row.storagePath,
+        p_mime: row.mime,
+        p_width: row.width,
+        p_height: row.height,
+        p_prompt: row.prompt,
+        p_created_by: row.createdBy,
+        p_created_at: row.createdAt,
+        p_since: sinceIso,
+        p_limit: limit,
+      });
+      check("insertAiAssetWithinLimit", r);
+      return r.data === true;
     },
     async assetsOf(accountId) {
       const r = await db.from(T.assets).select("*").eq("account_id", accountId).order("created_at", { ascending: false });

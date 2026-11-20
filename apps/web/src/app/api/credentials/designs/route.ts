@@ -11,9 +11,13 @@ import { publishDraft, sendTest, type PublishDeps } from "@/lib/credentials/desi
 import { credentialDeps } from "@/lib/credentials/runtime";
 import { sendNotificationNotifier } from "@/lib/credentials/notify";
 import { designDeps } from "@/lib/credentials/designs/runtime";
+import { generateBackground, generateSticker } from "@/lib/credentials/designs/ai";
+import { aiDeps } from "@/lib/credentials/designs/ai-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// AI images (design_ai_*) wait up to 60 s for kie.ai.
+export const maxDuration = 90;
 
 function respond<T>(r: DesignResult<T>) {
   if (r.ok) return jsonOk(r.data);
@@ -61,6 +65,16 @@ export async function POST(request: NextRequest) {
         return respond(await publishDraft(publishDeps(d), c, { draftId: String(p.draftId ?? "") }));
       case "design_assets_list":
         return respond(await listAssets(d, c, { accountId: String(p.accountId ?? "") }));
+      case "design_ai_background":
+        return respond(
+          await generateBackground(aiDeps(), c, {
+            accountId: String(p.accountId ?? ""),
+            prompt: typeof p.prompt === "string" ? p.prompt : "",
+            tileable: p.tileable === true,
+          }),
+        );
+      case "design_ai_sticker":
+        return respond(await generateSticker(aiDeps(), c, { accountId: String(p.accountId ?? ""), prompt: typeof p.prompt === "string" ? p.prompt : "" }));
       default:
         return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }

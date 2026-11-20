@@ -6,6 +6,7 @@ import StampCard from '@/components/credentials/StampCard';
 import { formatEventDate } from '@/lib/credreg/collect-format';
 import type { BadgeTile, RegisterCard } from '@/lib/credreg/model';
 import CredentialCard from './CredentialCard';
+import type { Holder } from '@/lib/card-design/holder-values';
 
 type Props = {
   card: RegisterCard | null;
@@ -24,6 +25,8 @@ type Props = {
   busy?: boolean;
   /** German message of the last failed action. */
   error?: string | null;
+  /** The holder of an own card: fills a designed card's name field (never for readOnly cards). */
+  holder?: Holder | null;
 };
 
 export const MAKE_PRIVATE_EXPLAINER =
@@ -62,6 +65,7 @@ export default function CredentialDetailSheet({
   readOnly = false,
   busy = false,
   error = null,
+  holder = null,
 }: Props) {
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -105,7 +109,13 @@ export default function CredentialDetailSheet({
             <StampCard imageUrl={card.imageUrl} title={card.title} subtitle="" state="collected" size="hero" />
           </View>
         ) : (
-          <CredentialCard card={card} width={Math.min(screenWidth - 64, 320)} style={styles.card} />
+          <CredentialCard
+            card={card}
+            width={Math.min(screenWidth - 64, 320)}
+            style={styles.card}
+            holder={readOnly ? null : holder}
+            animate="tilt"
+          />
         )}
         {isBadge ? null : <Text style={[styles.title, { color: colors.textPrimary }]}>{card.title}</Text>}
         {isBadge && card.eventTitle ? <Text style={[styles.title, { color: colors.textPrimary }]}>{card.eventTitle}</Text> : null}
