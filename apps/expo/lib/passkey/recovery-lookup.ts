@@ -31,6 +31,7 @@ import {
   SOCIAL_RECOVERY_MODULE,
 } from './constants';
 import { legacyAccountReadAbi } from './legacy-handover';
+import { SAFE7579 } from './session-keys/builders';
 import {
   CITIZEN_NFT_V2_FROM_BLOCK,
   GNOSIS_SLOT_SECONDS,
@@ -380,7 +381,15 @@ export function createLookupChain(
         client.getStorageAt({ address: a, slot: '0x0' }),
         client.getStorageAt({ address: a, slot: SAFE_FALLBACK_HANDLER_SLOT }),
       ]);
-      if (!sameAddressWord(singleton, SAFE_L2_SINGLETON) || !sameAddressWord(fallback, SAFE_4337_MODULE)) return false;
+      if (!sameAddressWord(singleton, SAFE_L2_SINGLETON)) return false;
+      // Two app layouts: the original Safe4337Module Safe, or one migrated to Safe7579 for device
+      // sessions (Safe7579 is then both the fallback handler and the 4337 module; Safe4337Module gone).
+      const accountModule = sameAddressWord(fallback, SAFE_4337_MODULE)
+        ? SAFE_4337_MODULE
+        : sameAddressWord(fallback, SAFE7579)
+          ? SAFE7579
+          : null;
+      if (!accountModule) return false;
       const [modules, next] = (await client.readContract({
         address: a,
         abi: safeOwnersAbi,
@@ -390,7 +399,7 @@ export function createLookupChain(
       return (
         isAddressEqual(next, SAFE_SENTINEL) &&
         modules.length === 2 &&
-        [SAFE_4337_MODULE, SOCIAL_RECOVERY_MODULE].every((m) => modules.some((x) => isAddressEqual(x, m)))
+        [accountModule, SOCIAL_RECOVERY_MODULE].every((m) => modules.some((x) => isAddressEqual(x, m)))
       );
     },
     async findMintRequest(citizen) {

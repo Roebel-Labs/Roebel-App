@@ -6,7 +6,7 @@
  * Sequence (plan Review Focus 5 — any re-estimate after sponsoring invalidates the voucher):
  *   build unsigned op → eth_estimateUserOperationGas with a 372-byte stub paymasterAndData and a
  *   realistic dummy signature (the signer's) → POST /api/passkey/sponsor → rebuild with the echoed
- *   paymaster gas limits VERBATIM → Safe4337Module op hash → the signer's signature →
+ *   paymaster gas limits VERBATIM → SafeOp hash (Safe4337Module, or Safe7579 for a migrated Safe) → the signer's signature →
  *   eth_sendUserOperation → poll eth_getUserOperationReceipt.
  *
  * All byte layouts are pinned by contracts/passkey-accounts/test/fixtures/passkey-safe-vector.json.
@@ -50,6 +50,9 @@ import { encodeExecuteUserOp } from './legacy-handover';
 import { ecdsaSafeFactoryData, predictEcdsaSafeAddress } from './ecdsa-safe';
 import { encodeMultiSendTx, predictSafeAddress, safeFactoryData } from './safe-address';
 import { signWithPasskey, type PasskeyAssertion } from './webauthn';
+import { getUserOperationHash } from 'viem/account-abstraction';
+import { encode7579Execute, SAFE7579 } from './session-keys/builders';
+import { invalidateSafeLayout, readSafeLayout, type SafeLayout } from './safe-layout';
 
 /** One call from the Safe. `value` (native xDAI from the Safe) defaults to 0. */
 export type SponsoredCall = { to: Address; data: Hex; value?: bigint };
@@ -90,6 +93,8 @@ export type SponsorResponse = {
   paymasterVerificationGasLimit: Hex | string | number;
   paymasterPostOpGasLimit: Hex | string | number;
   validUntil: number;
+  /** The sponsor mode the route chose (when it echoes it), e.g. `session-upgrade`. */
+  mode?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -139,11 +144,20 @@ const safeOpTypes = {
   ],
 } as const;
 
-/** Safe4337Module v0.3.0 `getOperationHash` (EIP-712 domain {chainId, verifyingContract: module}). */
-export function safeOpHash(op: UnpackedUserOp, validAfter: number, validUntil: number): Hex {
+/**
+ * The SafeOp EIP-712 hash the Safe owners sign: Safe4337Module v0.3.0 `getOperationHash`
+ * (domain {chainId, verifyingContract: module}), or for a migrated Safe `Safe7579.getSafeOp`
+ * (same struct, verifyingContract = SAFE7579).
+ */
+export function safeOpHash(
+  op: UnpackedUserOp,
+  validAfter: number,
+  validUntil: number,
+  verifyingContract: Address = SAFE_4337_MODULE,
+): Hex {
   const p = packUserOp(op);
   return hashTypedData({
-    domain: { chainId: PASSKEY_CHAIN_ID, verifyingContract: SAFE_4337_MODULE },
+    domain: { chainId: PASSKEY_CHAIN_ID, verifyingContract },
     types: safeOpTypes,
     primaryType: 'SafeOp',
     message: {
@@ -423,14 +437,24 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
   return r;
 }
 
+/** The raw EntryPoint v0.7 userOpHash (what a device session key signs; no EIP-191 prefix). */
+export function entryPointUserOpHash(op: UnpackedUserOp): Hex {
+  return getUserOperationHash({
+    userOperation: op,
+    entryPointAddress: ENTRY_POINT_V07,
+    entryPointVersion: '0.7',
+    chainId: PASSKEY_CHAIN_ID,
+  });
+}
+
 /**
  * POST /api/passkey/sponsor body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?,
- * pollId?, miniApp? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
+ * pollId?, miniApp?, deviceSession? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
  * owner, never both. Optional identity hints are omitted (not null) when unset.
  */
 export function sponsorRequestBody(
   op: UnpackedUserOp,
-  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId' | 'miniApp'> & { proof: SafeOpProof },
+  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId' | 'miniApp' | 'deviceSession'> & { proof: SafeOpProof },
 ): Record<string, unknown> {
   return {
     chainId: PASSKEY_CHAIN_ID,
@@ -442,12 +466,21 @@ export function sponsorRequestBody(
     ...(args.pollId !== undefined ? { pollId: `0x${args.pollId.toString(16)}` } : {}),
     // Mini-app sends (sponsor mode "miniapp"): the app's uuid.
     ...(args.miniApp ? { miniApp: args.miniApp } : {}),
+    // Device-session upgrade / grant ops (sponsor modes session-upgrade / session-grant).
+    ...(args.deviceSession
+      ? { deviceSession: { signer: getAddress(args.deviceSession.signer), validUntil: args.deviceSession.validUntil } }
+      : {}),
   };
 }
 
-/** Safe4337Module callData: one call = CALL; several = DELEGATECALL MultiSendCallOnly 1.4.1. */
-export function buildCallData(calls: SponsoredCall[]): Hex {
+/**
+ * The op's callData for the Safe's layout. '4337' (Safe4337Module): one call = executeUserOp CALL;
+ * several = DELEGATECALL MultiSendCallOnly 1.4.1. '7579' (migrated Safe): Safe7579.execute,
+ * EXEC_SINGLE for one call, EXEC_BATCH of plain CALLs for several.
+ */
+export function buildCallData(calls: SponsoredCall[], layout: SafeLayout = '4337'): Hex {
   if (calls.length === 0) throw new Error('no calls');
+  if (layout === '7579') return encode7579Execute(calls);
   if (calls.length === 1) return encodeExecuteUserOp(calls[0].to, calls[0].value ?? 0n, calls[0].data);
   const txs = concatHex(calls.map((c) => encodeMultiSendTx(0, c.to, c.value ?? 0n, c.data)));
   const multiSend = encodeFunctionData({
@@ -558,14 +591,15 @@ export type PasskeyUserOpArgs = {
   sender?: Address;
   /** The Safe owner the passkey signs through (default SharedSigner; per-key signer after recovery). */
   owner?: Address;
-};
+} & Pick<SafeUserOpArgs, 'layout' | 'callData' | 'maxFeePerGasCap' | 'deviceSession'>;
 
 /** What the sponsor checks the op's sender against: the passkey key, or the expert path's ECDSA owner. */
 export type SafeOpProof = { x: Hex; y: Hex } | { ecdsaOwner: Address };
 
 /**
  * Everything about a userOp that depends on who signs it. `signOpHash` returns the COMPLETE userOp
- * signature (validAfter ++ validUntil ++ Safe signature) over the Safe4337Module op hash.
+ * signature (validAfter ++ validUntil ++ Safe signature) over the SafeOp hash of the Safe's layout
+ * (Safe4337Module or Safe7579), or, with `hashKind: 'userOpHash'`, the device-session signature.
  */
 export type SafeOpSigner = {
   proof: SafeOpProof;
@@ -576,6 +610,13 @@ export type SafeOpSigner = {
   /** Same layout and size as a real signature, for gas estimation. */
   dummySignature: Hex;
   signOpHash: (hash: Hex) => Promise<Hex>;
+  /** EntryPoint nonce key (default 0n = the Safe owners / root path; a device session uses SESSION_NONCE_KEY). */
+  nonceKey?: bigint;
+  /**
+   * What `signOpHash` receives: 'safeOp' (default) = the SafeOp EIP-712 hash for the Safe's layout;
+   * 'userOpHash' = the raw EntryPoint v0.7 userOpHash (device session ops via SmartSession).
+   */
+  hashKind?: 'safeOp' | 'userOpHash';
 };
 
 /**
@@ -640,7 +681,8 @@ export function normalizeEcdsaSignature(sig: Hex): Hex {
 
 export type SafeUserOpArgs = {
   signer: SafeOpSigner;
-  calls: SponsoredCall[];
+  /** The calls (encoded for the Safe's layout). May be omitted when `callData` is given. */
+  calls?: SponsoredCall[];
   deployed: boolean;
   /** The Safe sending the op (default `signer.predicted`; a recovered Safe keeps its old address). */
   sender?: Address;
@@ -650,6 +692,17 @@ export type SafeUserOpArgs = {
   pollId?: bigint;
   /** Mini-app sends: the mini app's id (uuid); the sponsor accepts only its declared calls. */
   miniApp?: string;
+  /**
+   * The Safe's validation layout. Default: read on-chain (`readSafeLayout`) when deployed; an
+   * undeployed Safe is always '4337'.
+   */
+  layout?: SafeLayout;
+  /** Sent verbatim instead of encoding `calls` (migration / grant / revoke / session ops). */
+  callData?: Hex;
+  /** Upper bound for maxFeePerGas (and maxPriorityFeePerGas); grant ops pass 2_000_000_000n. */
+  maxFeePerGasCap?: bigint;
+  /** Sponsor body field for session-upgrade / session-grant ops. */
+  deviceSession?: { signer: Address; validUntil: number };
 };
 
 /** `sendSafeUserOp` with a passkey signer (`deps.sign`, default the native passkey). */
@@ -684,18 +737,28 @@ export async function sendSafeUserOp(
   if (!args.deployed && getAddress(sender) !== getAddress(signer.predicted)) {
     throw new Error("only the signer's own counterfactual Safe can be deployed by its first userOp");
   }
-  const callData = buildCallData(args.calls);
+  if (!args.deployed && args.layout === '7579') throw new Error('an undeployed Safe always has the 4337 layout');
+  const layout: SafeLayout = !args.deployed
+    ? '4337'
+    : (args.layout ?? (await readSafeLayout(sender, { fetch: fetchImpl, rpcUrl, requestTimeoutMs: timeout })));
+  let callData: Hex;
+  if (args.callData) callData = args.callData;
+  else if (args.calls) callData = buildCallData(args.calls, layout);
+  else throw new Error('no calls');
+  const nonceKey = signer.nonceKey ?? 0n;
 
   // 1. nonce + fees (fees are fixed here, before estimation and sponsoring)
   const nonceData = await rpc<Hex>(
     fetchImpl,
     rpcUrl,
     'eth_call',
-    [{ to: ENTRY_POINT_V07, data: encodeFunctionData({ abi: getNonceAbi, functionName: 'getNonce', args: [sender, 0n] }) }, 'latest'],
+    [{ to: ENTRY_POINT_V07, data: encodeFunctionData({ abi: getNonceAbi, functionName: 'getNonce', args: [sender, nonceKey] }) }, 'latest'],
     timeout,
   );
   const nonce = decodeFunctionResult({ abi: getNonceAbi, functionName: 'getNonce', data: nonceData });
-  const { maxFeePerGas, maxPriorityFeePerGas } = await resolveUserOpFees(fetchImpl, bundlerUrl, rpcUrl, timeout);
+  const fees = await resolveUserOpFees(fetchImpl, bundlerUrl, rpcUrl, timeout);
+  const maxFeePerGas = args.maxFeePerGasCap !== undefined ? minBig(fees.maxFeePerGas, args.maxFeePerGasCap) : fees.maxFeePerGas;
+  const maxPriorityFeePerGas = minBig(fees.maxPriorityFeePerGas, maxFeePerGas);
 
   // 2. unsigned op with the 372-byte stub + realistic dummy signature → estimate
   let op: UnpackedUserOp = {
@@ -744,8 +807,11 @@ export async function sendSafeUserOp(
   )) as SponsorResponse;
   op = applySponsorship(op, reply);
 
-  // 4. the signer signs the Safe op hash
-  const hash = safeOpHash(op, 0, 0);
+  // 4. the signer signs the Safe op hash (or, for a device session, the EntryPoint userOpHash)
+  const hash =
+    signer.hashKind === 'userOpHash'
+      ? entryPointUserOpHash(op)
+      : safeOpHash(op, 0, 0, layout === '7579' ? SAFE7579 : SAFE_4337_MODULE);
   op = { ...op, signature: await signer.signOpHash(hash) };
 
   // 5. submit + wait for the receipt
@@ -762,6 +828,8 @@ export async function sendSafeUserOp(
     ).catch(() => null);
     if (receipt?.receipt?.transactionHash) {
       if (receipt.success === false) throw new Error(`userOp reverted${receipt.reason ? `: ${receipt.reason}` : ''}`);
+      // The migration op moved the Safe to Safe7579: drop the memoized '4337' layout.
+      if (reply.mode === 'session-upgrade' || (layout === '4337' && args.deviceSession)) invalidateSafeLayout(sender);
       return { userOpHash, txHash: receipt.receipt.transactionHash };
     }
     if (Date.now() > deadline) throw new Error('timed out waiting for the userOp receipt');

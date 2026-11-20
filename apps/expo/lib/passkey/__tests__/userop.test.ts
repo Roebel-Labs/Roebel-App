@@ -1,5 +1,5 @@
 import { createPublicKey, verify as nodeVerify } from 'crypto';
-import { concatHex, hexToBytes, hexToString, numberToHex, size, type Hex } from 'viem';
+import { concatHex, hexToBytes, hexToString, numberToHex, pad, size, type Hex } from 'viem';
 import {
   applySponsorship,
   dummyUserOpSignature,
@@ -15,9 +15,12 @@ import {
   webAuthnSigningDigest,
   type UnpackedUserOp,
 } from '../userop';
-import { NETIZEN_VERIFYING_PAYMASTER, SAFE_PROXY_FACTORY } from '../constants';
+import { NETIZEN_VERIFYING_PAYMASTER, SAFE_4337_MODULE, SAFE_PROXY_FACTORY } from '../constants';
 import { predictSafeAddress, safeFactoryData } from '../safe-address';
 import vector from './passkey-safe-vector.json';
+
+/** Fallback-handler storage word of a Safe4337Module (pre-migration) Safe. */
+const LAYOUT_4337_WORD = pad(SAFE_4337_MODULE, { size: 32 });
 
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
 
@@ -181,6 +184,8 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
         };
       }
       switch (body.method) {
+        case 'eth_getStorageAt':
+          return ok(LAYOUT_4337_WORD); // Safe fallback handler = Safe4337Module
         case 'eth_call':
           return ok(numberToHex(0n, { size: 32 })); // EntryPoint.getNonce
         case 'eth_getBlockByNumber':
@@ -304,6 +309,8 @@ async function runToSponsor(m: Mock, paymaster: Hex | '' = NETIZEN_VERIFYING_PAY
     const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
     if (url.endsWith('/api/passkey/sponsor')) return { ok: false, status: 403, json: async () => ({ error: 'stop here' }) };
     switch (body.method) {
+      case 'eth_getStorageAt':
+        return ok(LAYOUT_4337_WORD); // Safe fallback handler = Safe4337Module
       case 'eth_call':
         return ok(numberToHex(0n, { size: 32 }));
       case 'eth_getBlockByNumber':
@@ -478,6 +485,8 @@ describe('userop — post-recovery signature vector', () => {
         };
       }
       switch (body.method) {
+        case 'eth_getStorageAt':
+          return ok(LAYOUT_4337_WORD); // Safe fallback handler = Safe4337Module
         case 'eth_call':
           return ok(numberToHex(BigInt(pr.nonce), { size: 32 }));
         case 'pimlico_getUserOperationGasPrice':
@@ -612,6 +621,8 @@ async function runWithFakeNetwork(args: Omit<SafeUserOpArgs, 'calls'> & { calls:
       };
     }
     switch (body.method) {
+      case 'eth_getStorageAt':
+        return ok(LAYOUT_4337_WORD); // Safe fallback handler = Safe4337Module
       case 'eth_call':
         return ok(numberToHex(op.nonce, { size: 32 }));
       case 'pimlico_getUserOperationGasPrice':
@@ -759,5 +770,338 @@ describe('ECDSA signer (expert path) vs the fork vector', () => {
     const e = sponsorRequestBody(recoveredOp(), { proof: { ecdsaOwner: ecdsaVector.owner }, pollId: 7n });
     expect(Object.keys(e).sort()).toEqual(['chainId', 'ecdsaOwner', 'pollId', 'userOp']);
     expect(e.ecdsaOwner).toBe(getAddress(ecdsaVector.owner));
+  });
+});
+
+// ---- Safe7579 root path + device-session plumbing (session keys plan, Task 5) ----
+
+import { decodeFunctionData, toFunctionSelector } from 'viem';
+import { getUserOperationHash } from 'viem/account-abstraction';
+import skv from './session-keys-vector.json';
+import { legacyClaimBatchData, SAFE7579, SESSION_NONCE_KEY } from '../session-keys/builders';
+import { invalidateSafeLayout, readSafeLayout } from '../safe-layout';
+import { buildCallData, entryPointUserOpHash, type SafeOpSigner, type SponsorResponse } from '../userop';
+
+const EXECUTE_7579_SELECTOR = toFunctionSelector('execute(bytes32,bytes)');
+const EXECUTE_USEROP_SELECTOR = toFunctionSelector('executeUserOp(address,uint256,bytes,uint8)');
+const skLegacy = skv.inputs.legacy as Address;
+const skSafe = skv.inputs.safe as Address;
+const claimCalls = [{ to: skLegacy, data: legacyClaimBatchData(skLegacy, BigInt(skv.groupMintAmount)) }];
+const skPaymaster = getAddress(skv.rootOp.paymasterAndData.slice(0, 42));
+const getNonceAbiT = [
+  {
+    type: 'function',
+    name: 'getNonce',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'sender', type: 'address' },
+      { name: 'key', type: 'uint192' },
+    ],
+    outputs: [{ name: 'nonce', type: 'uint256' }],
+  },
+] as const;
+
+type VecOp = typeof skv.rootOp;
+
+/**
+ * A fake network that answers with one vector op's nonce, gas, fees and stub voucher (so the op the
+ * app builds hashes exactly like the vector's). `handler` = the Safe's fallback-handler word.
+ */
+function vectorNetwork(o: {
+  op: Pick<VecOp, 'nonce' | 'verificationGasLimit' | 'callGasLimit' | 'preVerificationGas' | 'maxFeePerGas' | 'maxPriorityFeePerGas' | 'paymasterAndData'>;
+  handler?: Address;
+  fees?: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+  reply?: Partial<SponsorResponse>;
+}) {
+  const calls: { method: string; body: any }[] = [];
+  const fetchMock = jest.fn(async (url: string, init: any) => {
+    const body = JSON.parse(init.body);
+    calls.push({ method: body.method ?? 'sponsor', body });
+    const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
+    if (url.endsWith('/api/passkey/sponsor')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          paymasterAndData: o.op.paymasterAndData,
+          paymasterVerificationGasLimit: numberToHex(150_000n),
+          paymasterPostOpGasLimit: numberToHex(50_000n),
+          validUntil: 1,
+          ...o.reply,
+        }),
+      };
+    }
+    switch (body.method) {
+      case 'eth_getStorageAt':
+        if (!o.handler) throw new Error('unexpected layout read');
+        return ok(pad(o.handler, { size: 32 }));
+      case 'eth_call':
+        return ok(numberToHex(BigInt(o.op.nonce), { size: 32 }));
+      case 'pimlico_getUserOperationGasPrice': {
+        const f = o.fees ?? { maxFeePerGas: BigInt(o.op.maxFeePerGas), maxPriorityFeePerGas: BigInt(o.op.maxPriorityFeePerGas) };
+        return ok({ fast: { maxFeePerGas: numberToHex(f.maxFeePerGas), maxPriorityFeePerGas: numberToHex(f.maxPriorityFeePerGas) } });
+      }
+      case 'eth_estimateUserOperationGas':
+        return ok({
+          callGasLimit: numberToHex(BigInt(o.op.callGasLimit)),
+          verificationGasLimit: numberToHex(BigInt(o.op.verificationGasLimit)),
+          preVerificationGas: numberToHex(BigInt(o.op.preVerificationGas)),
+          paymasterVerificationGasLimit: numberToHex(150_000n),
+          paymasterPostOpGasLimit: numberToHex(50_000n),
+        });
+      case 'eth_sendUserOperation':
+        return ok(`0x${'ee'.repeat(32)}`);
+      case 'eth_getUserOperationReceipt':
+        return ok({ success: true, receipt: { transactionHash: `0x${'dd'.repeat(32)}` } });
+      default:
+        throw new Error(`unexpected ${body.method}`);
+    }
+  });
+  const deps = {
+    fetch: fetchMock as any,
+    paymaster: skPaymaster,
+    apiUrl: 'https://preview.example',
+    bundlerUrl: 'https://preview.example/api/bundler',
+    rpcUrl: 'https://rpc.example',
+    pollIntervalMs: 1,
+  };
+  const body = (m: string) => calls.find((c) => c.method === m)?.body;
+  return { deps, calls, body, sent: () => body('eth_sendUserOperation')?.params[0] };
+}
+
+/** A recording signer for `sender` (a deployed Safe; predicted/factoryData are never used). */
+function recordingSigner(sender: Address, extra: Partial<SafeOpSigner> = {}, signature: Hex = `0x${'cd'.repeat(80)}`) {
+  const signOpHash = jest.fn(async (_h: Hex) => signature);
+  const signer: SafeOpSigner = {
+    proof: { x: key.x, y: key.y },
+    predicted: sender,
+    factoryData: '0x',
+    dummySignature: `0x${'ab'.repeat(100)}`,
+    signOpHash,
+    ...extra,
+  };
+  return { signer, signOpHash };
+}
+
+/** The sent RPC op back in UnpackedUserOp form (signature cleared), for re-hashing. */
+function unsignedFromRpc(sent: Record<string, Hex>): UnpackedUserOp {
+  return {
+    sender: sent.sender,
+    nonce: BigInt(sent.nonce),
+    callData: sent.callData,
+    callGasLimit: BigInt(sent.callGasLimit),
+    verificationGasLimit: BigInt(sent.verificationGasLimit),
+    preVerificationGas: BigInt(sent.preVerificationGas),
+    maxFeePerGas: BigInt(sent.maxFeePerGas),
+    maxPriorityFeePerGas: BigInt(sent.maxPriorityFeePerGas),
+    paymaster: sent.paymaster,
+    paymasterVerificationGasLimit: BigInt(sent.paymasterVerificationGasLimit),
+    paymasterPostOpGasLimit: BigInt(sent.paymasterPostOpGasLimit),
+    paymasterData: sent.paymasterData,
+    signature: '0x',
+  };
+}
+
+describe('userop — Safe7579 root path (migrated passkey Safes)', () => {
+  beforeEach(() => {
+    invalidateSafeLayout(skSafe);
+  });
+
+  test('buildCallData 7579 = Safe7579.execute; the claim batch matches the fork root op', () => {
+    expect(buildCallData(claimCalls, '7579').toLowerCase()).toBe(skv.rootClaimCallData);
+    expect(buildCallData(claimCalls, '7579').startsWith(EXECUTE_7579_SELECTOR)).toBe(true);
+    expect(buildCallData(claimCalls).startsWith(EXECUTE_USEROP_SELECTOR)).toBe(true);
+    expect(buildCallData([...claimCalls, ...claimCalls], '7579').startsWith(EXECUTE_7579_SELECTOR)).toBe(true);
+  });
+
+  test('safeOpHash with verifyingContract SAFE7579 equals Safe7579.getSafeOp (vector)', () => {
+    const r = skv.rootOp;
+    const op: UnpackedUserOp = {
+      sender: r.sender as Address,
+      nonce: BigInt(r.nonce),
+      callData: r.callData as Hex,
+      callGasLimit: BigInt(r.callGasLimit),
+      verificationGasLimit: BigInt(r.verificationGasLimit),
+      preVerificationGas: BigInt(r.preVerificationGas),
+      maxFeePerGas: BigInt(r.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(r.maxPriorityFeePerGas),
+      ...splitPaymasterAndData(r.paymasterAndData as Hex),
+      signature: '0x',
+    };
+    expect(safeOpHash(op, 0, 0, SAFE7579)).toBe(r.safeOpHash7579);
+    expect(safeOpHash(op, 0, 0)).not.toBe(r.safeOpHash7579);
+  });
+
+  test('sendSafeUserOp builds Safe7579 execute + 7579 SafeOp hash for a 7579 Safe', async () => {
+    const net = vectorNetwork({ op: skv.rootOp, handler: SAFE7579 });
+    const { signer, signOpHash } = recordingSigner(skSafe);
+    await sendSafeUserOp({ signer, deployed: true, sender: skSafe, legacy: skLegacy, calls: claimCalls }, net.deps);
+    expect(net.calls.some((c) => c.method === 'eth_getStorageAt')).toBe(true);
+    const sent = net.sent();
+    expect(sent.callData.startsWith(EXECUTE_7579_SELECTOR)).toBe(true);
+    expect(sent.callData.toLowerCase()).toBe(skv.rootOp.callData);
+    expect(net.body('sponsor').userOp.callData.toLowerCase()).toBe(skv.rootOp.callData);
+    expect(signOpHash).toHaveBeenCalledTimes(1);
+    // The fork's Safe7579.getSafeOp hash, and the same hash recomputed from the bytes actually sent.
+    expect(signOpHash.mock.calls[0][0]).toBe(skv.rootOp.safeOpHash7579);
+    expect(signOpHash.mock.calls[0][0]).toBe(safeOpHash(unsignedFromRpc(sent), 0, 0, SAFE7579));
+  });
+
+  test('a 4337 Safe still gets executeUserOp + module-domain hash', async () => {
+    const S = getAddress(`0x${'4a'.repeat(20)}`);
+    invalidateSafeLayout(S);
+    const net = vectorNetwork({ op: skv.rootOp, handler: SAFE_4337_MODULE });
+    const { signer, signOpHash } = recordingSigner(S);
+    await sendSafeUserOp({ signer, deployed: true, sender: S, legacy: skLegacy, calls: claimCalls }, net.deps);
+    const sent = net.sent();
+    expect(sent.callData).toBe(buildCallData(claimCalls));
+    expect(sent.callData.startsWith(EXECUTE_USEROP_SELECTOR)).toBe(true);
+    expect(signOpHash.mock.calls[0][0]).toBe(safeOpHash(unsignedFromRpc(sent), 0, 0, SAFE_4337_MODULE));
+  });
+
+  test('an undeployed Safe is always 4337 (no layout read); an explicit 7579 layout is refused', async () => {
+    const net = vectorNetwork({ op: { ...skv.rootOp, nonce: '0' } });
+    const { signer } = recordingSigner(skSafe);
+    await sendSafeUserOp({ signer, deployed: false, calls: claimCalls }, net.deps);
+    expect(net.calls.some((c) => c.method === 'eth_getStorageAt')).toBe(false);
+    expect(net.sent().callData).toBe(buildCallData(claimCalls));
+    await expect(sendSafeUserOp({ signer, deployed: false, layout: '7579', calls: claimCalls }, net.deps)).rejects.toThrow(/4337 layout/);
+  });
+
+  test('an unknown fallback handler stops the op before anything is sponsored', async () => {
+    const S = getAddress(`0x${'4b'.repeat(20)}`);
+    const net = vectorNetwork({ op: skv.rootOp, handler: getAddress(`0x${'51'.repeat(20)}`) });
+    const { signer } = recordingSigner(S);
+    await expect(sendSafeUserOp({ signer, deployed: true, sender: S, calls: claimCalls }, net.deps)).rejects.toThrow('unknown Safe layout');
+    expect(net.calls.some((c) => c.method === 'sponsor')).toBe(false);
+  });
+
+  test('signer.nonceKey is used for getNonce and hashKind userOpHash signs the EntryPoint hash', async () => {
+    const so = skv.sessionOp;
+    const net = vectorNetwork({ op: so });
+    const { signer, signOpHash } = recordingSigner(skSafe, { nonceKey: SESSION_NONCE_KEY, hashKind: 'userOpHash' }, so.signature as Hex);
+    await sendSafeUserOp({ signer, deployed: true, sender: skSafe, layout: '7579', legacy: skLegacy, callData: so.callData as Hex }, net.deps);
+    const nonceCall = net.body('eth_call')!.params[0];
+    const decoded = decodeFunctionData({ abi: getNonceAbiT, data: nonceCall.data });
+    expect(decoded.args).toEqual([getAddress(skSafe), SESSION_NONCE_KEY]);
+    expect(SESSION_NONCE_KEY).toBe(BigInt(skv.sessionNonceKey));
+    const sent = net.sent();
+    const expected = getUserOperationHash({
+      userOperation: unsignedFromRpc(sent),
+      entryPointAddress: '0x0000000071727De22E5E9d8BAf0edAc6f37da032',
+      entryPointVersion: '0.7',
+      chainId: 100,
+    });
+    expect(signOpHash.mock.calls[0][0]).toBe(expected);
+    // …and it is the fork's userOpHash that SmartSession accepted.
+    expect(signOpHash.mock.calls[0][0]).toBe(so.userOpHash);
+    expect(sent.signature).toBe(so.signature);
+  });
+
+  test('entryPointUserOpHash reproduces the vector session op hash', () => {
+    const so = skv.sessionOp;
+    expect(
+      entryPointUserOpHash({
+        sender: so.sender as Address,
+        nonce: BigInt(so.nonce),
+        callData: so.callData as Hex,
+        callGasLimit: BigInt(so.callGasLimit),
+        verificationGasLimit: BigInt(so.verificationGasLimit),
+        preVerificationGas: BigInt(so.preVerificationGas),
+        maxFeePerGas: BigInt(so.maxFeePerGas),
+        maxPriorityFeePerGas: BigInt(so.maxPriorityFeePerGas),
+        ...splitPaymasterAndData(so.paymasterAndData as Hex),
+        signature: '0x',
+      }),
+    ).toBe(so.userOpHash);
+  });
+
+  test('callData override is sent verbatim', async () => {
+    const net = vectorNetwork({ op: skv.rootOp });
+    const { signer } = recordingSigner(skSafe);
+    const override = skv.grantInstallCallData as Hex;
+    await sendSafeUserOp({ signer, deployed: true, sender: skSafe, layout: '7579', calls: claimCalls, callData: override }, net.deps);
+    expect(net.sent().callData).toBe(override);
+    expect(net.body('eth_estimateUserOperationGas')!.params[0].callData).toBe(override);
+    expect(net.body('sponsor').userOp.callData).toBe(override);
+  });
+
+  test('maxFeePerGasCap clamps maxFeePerGas and maxPriorityFeePerGas', async () => {
+    const net = vectorNetwork({ op: skv.rootOp, fees: { maxFeePerGas: 2_800_000_000n, maxPriorityFeePerGas: 2_500_000_000n } });
+    const { signer } = recordingSigner(skSafe);
+    await sendSafeUserOp(
+      { signer, deployed: true, sender: skSafe, layout: '7579', calls: claimCalls, maxFeePerGasCap: 2_000_000_000n },
+      net.deps,
+    );
+    for (const op of [net.body('eth_estimateUserOperationGas')!.params[0], net.body('sponsor').userOp, net.sent()]) {
+      expect(BigInt(op.maxFeePerGas)).toBe(2_000_000_000n);
+      expect(BigInt(op.maxPriorityFeePerGas)).toBe(2_000_000_000n);
+    }
+    // Without the cap the bundler price stands.
+    const net2 = vectorNetwork({ op: skv.rootOp, fees: { maxFeePerGas: 2_800_000_000n, maxPriorityFeePerGas: 2_500_000_000n } });
+    await sendSafeUserOp({ signer, deployed: true, sender: skSafe, layout: '7579', calls: claimCalls }, net2.deps);
+    expect(BigInt(net2.sent().maxFeePerGas)).toBe(2_800_000_000n);
+  });
+
+  test('sponsorRequestBody carries deviceSession as {signer, validUntil}', async () => {
+    const op = unsignedFromRpc({
+      sender: skSafe,
+      nonce: '0x0',
+      callData: '0x',
+      callGasLimit: '0x1',
+      verificationGasLimit: '0x1',
+      preVerificationGas: '0x1',
+      maxFeePerGas: '0x1',
+      maxPriorityFeePerGas: '0x1',
+      paymaster: skPaymaster,
+      paymasterVerificationGasLimit: '0x1',
+      paymasterPostOpGasLimit: '0x1',
+      paymasterData: '0x',
+    } as Record<string, Hex>);
+    const signerAddr = skv.inputs.signer as Address;
+    const b = sponsorRequestBody(op, {
+      proof: key,
+      legacy: skLegacy,
+      deviceSession: { signer: signerAddr, validUntil: Number(skv.inputs.validUntil) },
+    });
+    expect(b.deviceSession).toEqual({ signer: getAddress(signerAddr), validUntil: 1_800_000_000 });
+    expect('deviceSession' in sponsorRequestBody(op, { proof: key, legacy: skLegacy })).toBe(false);
+    // …and sendSafeUserOp forwards it.
+    const net = vectorNetwork({ op: skv.rootOp });
+    const { signer } = recordingSigner(skSafe);
+    await sendSafeUserOp(
+      {
+        signer,
+        deployed: true,
+        sender: skSafe,
+        layout: '7579',
+        legacy: skLegacy,
+        callData: skv.grantInstallCallData as Hex,
+        deviceSession: { signer: signerAddr, validUntil: 1_800_000_000 },
+      },
+      net.deps,
+    );
+    expect(net.body('sponsor').deviceSession).toEqual({ signer: getAddress(signerAddr), validUntil: 1_800_000_000 });
+  });
+
+  test('a session-upgrade op drops the memoized 4337 layout', async () => {
+    const S = getAddress(`0x${'4c'.repeat(20)}`);
+    invalidateSafeLayout(S);
+    const net = vectorNetwork({ op: skv.rootOp, handler: SAFE_4337_MODULE, reply: { mode: 'session-upgrade' } });
+    const { signer } = recordingSigner(S);
+    await sendSafeUserOp(
+      { signer, deployed: true, sender: S, legacy: skLegacy, callData: skv.migrationCallData as Hex, deviceSession: { signer: skv.inputs.signer as Address, validUntil: 1_800_000_000 } },
+      net.deps,
+    );
+    // The chain now reports Safe7579: a fresh read must happen (no stale '4337').
+    const after = vectorNetwork({ op: skv.rootOp, handler: SAFE7579 });
+    expect(await readSafeLayout(S, { fetch: after.deps.fetch, rpcUrl: 'https://rpc.example' })).toBe('7579');
+    // A plain op does not invalidate.
+    const T = getAddress(`0x${'4d'.repeat(20)}`);
+    invalidateSafeLayout(T);
+    const net2 = vectorNetwork({ op: skv.rootOp, handler: SAFE_4337_MODULE });
+    await sendSafeUserOp({ signer: recordingSigner(T).signer, deployed: true, sender: T, calls: claimCalls }, net2.deps);
+    const after2 = vectorNetwork({ op: skv.rootOp, handler: SAFE7579 });
+    expect(await readSafeLayout(T, { fetch: after2.deps.fetch, rpcUrl: 'https://rpc.example' })).toBe('4337');
   });
 });

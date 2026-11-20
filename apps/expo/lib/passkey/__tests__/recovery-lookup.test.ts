@@ -7,6 +7,7 @@ import {
   SOCIAL_RECOVERY_MODULE,
 } from '../constants';
 import { internalRpcError, reverted, shapeClient } from '../__testutils__/lookup-client';
+import { SAFE7579 } from '../session-keys/builders';
 import { blockWindows, scanLogs } from '../log-scan';
 import {
   createLookupChain,
@@ -350,6 +351,31 @@ describe('findSafesByOwner over createLookupChain (topic-only AddedOwner is atta
     const otherSingleton = shapeClient({ tip: 0n, safes: [FAKE_SAFE], owners: {}, logs: [] });
     otherSingleton.getStorageAt.mockImplementation(async () => pad(addr(0x51), { size: 32 }));
     expect(await createLookupChain(otherSingleton as any, { readGuardians: async () => [] }).isPasskeySafe(FAKE_SAFE)).toBe(false);
+  });
+
+  it('isPasskeySafe accepts the migrated 7579 layout', async () => {
+    const migrated = shapeClient({ tip: 0n, safes: [REAL], owners: {}, logs: [], layout: '7579' });
+    expect(await createLookupChain(migrated as any, { readGuardians: async () => [] }).isPasskeySafe(REAL)).toBe(true);
+    // Handler Safe7579 while Safe4337Module is still enabled: half-migrated / foreign shape.
+    const stale4337 = shapeClient({
+      tip: 0n,
+      safes: [REAL],
+      owners: {},
+      logs: [],
+      layout: '7579',
+      modules: [SAFE7579, SAFE_4337_MODULE, SOCIAL_RECOVERY_MODULE],
+    });
+    expect(await createLookupChain(stale4337 as any, { readGuardians: async () => [] }).isPasskeySafe(REAL)).toBe(false);
+    // Handler Safe7579 but the modules are the old pair (Safe7579 never enabled).
+    const oldModules = shapeClient({
+      tip: 0n,
+      safes: [REAL],
+      owners: {},
+      logs: [],
+      layout: '7579',
+      modules: [SOCIAL_RECOVERY_MODULE, SAFE_4337_MODULE],
+    });
+    expect(await createLookupChain(oldModules as any, { readGuardians: async () => [] }).isPasskeySafe(REAL)).toBe(false);
   });
 
   it('a -32603 (viem: ContractFunctionRevertedError) on a shape-valid Safe propagates instead of dropping it', async () => {

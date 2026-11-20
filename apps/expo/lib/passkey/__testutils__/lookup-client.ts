@@ -10,6 +10,7 @@ import {
   SAFE_PROXY_RUNTIME_CODE,
   SOCIAL_RECOVERY_MODULE,
 } from '../constants';
+import { SAFE7579 } from '../session-keys/builders';
 
 const addr = (n: number) => getAddress(`0x${n.toString(16).padStart(40, '0')}`);
 
@@ -46,11 +47,14 @@ export function shapeClient(p: {
   owners: Record<string, Address[]>;
   logs: Array<{ emitter: Address; block: bigint }>;
   modules?: Address[];
+  /** '7579' = a Safe migrated for device sessions (fallback handler + default module Safe7579). Default '4337'. */
+  layout?: '4337' | '7579';
   /** Errors thrown by these reads (any address). */
   failRead?: Partial<Record<'getOwners' | 'getModulesPaginated', Error>>;
 }) {
   const word = (a: Address): Hex => pad(a, { size: 32 });
   const isSafe = (a: Address) => p.safes.includes(a);
+  const accountModule = p.layout === '7579' ? SAFE7579 : SAFE_4337_MODULE;
   return {
     getBlockNumber: jest.fn(async () => p.tip),
     getBlock: jest.fn(),
@@ -65,7 +69,7 @@ export function shapeClient(p: {
     getStorageAt: jest.fn(async ({ address, slot }: { address: Address; slot: Hex }) => {
       if (!isSafe(address)) return '0x' as Hex;
       if (BigInt(slot) === 0n) return word(SAFE_L2_SINGLETON);
-      if (slot === SAFE_FALLBACK_HANDLER_SLOT) return word(SAFE_4337_MODULE);
+      if (slot === SAFE_FALLBACK_HANDLER_SLOT) return word(accountModule);
       return '0x' as Hex;
     }),
     readContract: jest.fn(async (a: any) => {
@@ -76,7 +80,7 @@ export function shapeClient(p: {
         return p.owners[a.address];
       }
       if (a.functionName === 'getModulesPaginated') {
-        return [p.modules ?? [SOCIAL_RECOVERY_MODULE, SAFE_4337_MODULE], addr(1)];
+        return [p.modules ?? [SOCIAL_RECOVERY_MODULE, accountModule], addr(1)];
       }
       throw new Error(`unexpected ${a.functionName}`);
     }),
