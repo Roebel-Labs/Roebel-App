@@ -7,7 +7,7 @@ import { signedOrSession } from './passkey/api-session-runtime';
 export const SIGNED_SCOPE = 'roebel-tickets-v1';
 export type TicketAction =
   | 'connect_onboard' | 'connect_session' | 'connect_status' | 'ticket_types_upsert' | 'ticket_types_list' | 'checkout'
-  | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order';
+  | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order' | 'payments_onboard' | 'payments_status';
 /** Proposal-task actions (apps/web/src/lib/signed-request/message.ts); signed under VORHABEN_SCOPE. */
 export const VORHABEN_SCOPE = 'roebel-vorhaben-v1';
 export type VorhabenAction =
