@@ -6,6 +6,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { useExploreDot } from '@/context/ExploreDotContext';
 import GlassSurface from '@/components/GlassSurface';
 import { fontFamily } from '@/constants/theme';
+import GlassTabBar from '@/components/navigation/GlassTabBar';
+import { useNavBarStyle } from '@/lib/nav-bar-style';
 
 // Import SVG icons
 import HomeStroke from '../assets/icons/bottom-nav/home.svg';
@@ -45,6 +47,7 @@ export default function BottomNavigation({ activeTab, onTabPress, transparent = 
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
+  const navStyle = useNavBarStyle();
 
   const activeColor = colors.textPrimary;
   const inactiveColor = colors.textPrimary;
@@ -56,6 +59,19 @@ export default function BottomNavigation({ activeTab, onTabPress, transparent = 
     }
     onTabPress(key);
   };
+
+  if (navStyle === 'glass') {
+    // Floating pill; draws its own glass, so `transparent`/`glass` do not apply.
+    // Its footprint stays within BOTTOM_NAV_HEIGHT + insets.bottom (see
+    // lib/glass-tab-geometry), so hosts keep their existing content padding.
+    return (
+      <GlassTabBar
+        tabs={TABS.map((t) => ({ ...t, dot: t.key === 'explore' && exploreDotVisible }))}
+        activeKey={activeTab}
+        onTabPress={handlePress}
+      />
+    );
+  }
 
   return (
     <View

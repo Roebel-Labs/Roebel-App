@@ -67,7 +67,6 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
   const [showAccountSheet, setShowAccountSheet] = useState(false);
@@ -128,7 +127,6 @@ export default function ProfileScreen() {
   };
 
   const handleTabPress = (tab: Tab) => {
-    setActiveTab(tab);
     if (tab === 'home') router.replace('/');
     else if (tab === 'explore') router.push('/explore');
   };
@@ -384,7 +382,7 @@ export default function ProfileScreen() {
         )}
 
         <View style={styles.navOverlay}>
-          <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
+          <BottomNavigation activeTab="profile" onTabPress={handleTabPress} glass />
         </View>
 
         {/* Closes itself once the login lands (no effect needed). */}

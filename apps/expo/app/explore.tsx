@@ -169,7 +169,6 @@ export default function ExploreScreen() {
   const queryClient = useQueryClient();
   // Controls context only changes on track switches, never per playback tick.
   const { track: audioTrack } = useAudioPlayerControls();
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [refreshing, setRefreshing] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -278,7 +277,6 @@ export default function ExploreScreen() {
   };
 
   const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
-    setActiveTab(tab);
     if (tab === 'home') {
       router.replace('/');
     } else if (tab === 'profile') {
@@ -510,7 +508,7 @@ export default function ExploreScreen() {
 
       {/* Bottom Navigation — frosted glass overlaying the scroll content */}
       <View style={styles.navOverlay}>
-        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
+        <BottomNavigation activeTab="explore" onTabPress={handleTabPress} glass />
     </View>
       </GlassProvider>
     </SafeAreaView>

@@ -33,6 +33,7 @@ import { deletePost, pinPost, DuplicateReportError } from '@/lib/supabase-posts'
 import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { useNavBarStyle } from '@/lib/nav-bar-style';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
@@ -238,6 +239,8 @@ export default function FeedHome() {
   // scrolls down, 0 on any scroll-up or at the top. Nav + FAB follow it —
   // hide on scroll-down, return on scroll-up (feed only, per spec).
   const chromeHidden = useSharedValue(0);
+  // Glass pill draws its own glass; the full-width surface is the standard bar's.
+  const navBarStyle = useNavBarStyle();
   const navHideDistance = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
   const bottomNavAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -261,7 +264,6 @@ export default function FeedHome() {
 
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
-  const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
   const [reportDrawerVisible, setReportDrawerVisible] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [optionsDrawerVisible, setOptionsDrawerVisible] = useState(false);
@@ -386,7 +388,6 @@ export default function FeedHome() {
   }, []);
 
   const handleNavTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
-    setNavTab(tab);
     if (tab === 'explore') {
       router.push('/explore');
     } else if (tab === 'map') {
@@ -764,12 +765,12 @@ export default function FeedHome() {
       >
         {/* The feed screen's ONE Android blur sampler (single-sampler rule —
             see GlassSurface.tsx). All other feed bars stay on the tint. */}
-        <GlassSurface edge="top" androidExperimentalBlur />
+        {navBarStyle === 'standard' && <GlassSurface edge="top" androidExperimentalBlur />}
         {/* BottomNavigation now owns its own safe-area bottom padding
             (Task 7) — no extra paddingBottom here, or the home-indicator
             inset would be applied twice and the glass overlay would grow
             taller than the scroll content's reserved bottomPadding below. */}
-        <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} transparent />
+        <BottomNavigation activeTab="home" onTabPress={handleNavTabPress} transparent />
       </Animated.View>
       </GlassProvider>
     </SafeAreaView>

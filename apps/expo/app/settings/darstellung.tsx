@@ -1,7 +1,7 @@
 /**
  * Profil → Darstellung (also reached from the "Erkunden anpassen" button at
  * the bottom of Erkunden).
- * Theme, layout presets, the Erkunden block list (move up/down, show/hide),
+ * Theme, bottom navigation style (Standard / Glas), layout presets, the Erkunden block list (move up/down, show/hide),
  * pinned mini apps, and a hand-off to Mecky for "describe what you want".
  * Every change applies immediately; the layout lives on this device only.
  */
@@ -22,6 +22,7 @@ import ArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
 import LockIcon from '@/assets/icons/square-lock-02.svg';
 import SparklesIcon from '@/assets/icons/sparkles.svg';
 import { fetchLiveMiniApps } from '@/lib/miniapps';
+import { NAV_BAR_STYLE_OPTIONS, setNavBarStyle, useNavBarStyle } from '@/lib/nav-bar-style';
 import {
   getExploreBlock,
   miniAppBlockId,
@@ -65,6 +66,7 @@ export default function DarstellungScreen() {
   const router = useRouter();
   const { colors, preference, setPreference } = useTheme();
   const { layout, presets, presetId, isCustom, save, applyPreset, reset } = useExploreLayout();
+  const navBarStyle = useNavBarStyle();
 
   const { data: miniApps } = useQuery({
     queryKey: ['explore', 'mini-apps'],
@@ -122,6 +124,20 @@ export default function DarstellungScreen() {
               onPress={() => setPreference(o.value)}
               colors={colors}
               last={i === THEME_OPTIONS.length - 1}
+            />
+          ))}
+        </Section>
+
+        <Section title="Navigationsleiste" colors={colors}>
+          {NAV_BAR_STYLE_OPTIONS.map((o, i) => (
+            <OptionRow
+              key={o.value}
+              label={o.label}
+              description={o.description}
+              selected={navBarStyle === o.value}
+              onPress={() => void setNavBarStyle(o.value)}
+              colors={colors}
+              last={i === NAV_BAR_STYLE_OPTIONS.length - 1}
             />
           ))}
         </Section>
