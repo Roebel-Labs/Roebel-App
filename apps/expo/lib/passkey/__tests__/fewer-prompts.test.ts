@@ -23,6 +23,7 @@ jest.mock('../api-session-runtime', () => ({
 }));
 jest.mock('../recovery-lookup', () => ({ ...jest.requireActual('../recovery-lookup'), findLinkedLegacies: async () => [] }));
 jest.mock('../userop', () => ({ ...jest.requireActual('../userop'), isSafeDeployed: async () => true }));
+jest.mock('../safe-layout', () => ({ ...jest.requireActual('../safe-layout'), readSafeLayout: async () => '4337' }));
 jest.mock('../webauthn', () => ({
   ...jest.requireActual('../webauthn'),
   signWithPasskey: jest.fn(async () => {

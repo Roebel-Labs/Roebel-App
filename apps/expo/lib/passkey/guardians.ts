@@ -41,6 +41,8 @@ import {
   SOCIAL_RECOVERY_SENTINEL,
   WEBAUTHN_VERIFIERS,
 } from './constants';
+import { readSafeLayout, type SafeLayout } from './safe-layout';
+import { withValidatorPrefix } from './session-keys/builders';
 import { DEFAULT_GNOSIS_RPC_URL, safeSignatureFromAssertion, type SponsoredCall } from './userop';
 import { signWithPasskey, type PasskeyAssertion } from './webauthn';
 
@@ -359,8 +361,10 @@ export function safeMessageHash(safe: Address, hash: Hex): Hex {
 
 /**
  * The guardian's off-chain approval: a WebAuthn assertion over safeMessageHash(guardianSafe,
- * recoveryHash), encoded as the guardian Safe's one-owner contract signature. The guardian Safe
- * MUST be deployed (check with `isSafeDeployed`); otherwise use `encodeConfirmRecovery`.
+ * recoveryHash), encoded as the guardian Safe's one-owner contract signature, prefixed with
+ * address(0) when the guardian Safe runs the Safe7579 layout (device-session migration). The
+ * guardian Safe MUST be deployed (check with `isSafeDeployed`); otherwise use
+ * `encodeConfirmRecovery`. Its layout is read BEFORE the prompt (a counterfactual Safe throws).
  */
 export async function signRecoveryApprovalAsGuardian(
   args: {
@@ -373,14 +377,20 @@ export async function signRecoveryApprovalAsGuardian(
     threshold: bigint | number;
     nonce: bigint | number;
   },
-  deps: { sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion> } = {},
+  deps: {
+    sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
+    /** The guardian Safe's validation layout (default: readSafeLayout). */
+    safeLayout?: (safe: Address) => Promise<SafeLayout>;
+  } = {},
 ): Promise<GuardianApproval> {
   const sign = deps.sign ?? signWithPasskey;
   const challenge = safeMessageHash(args.guardianSafe, recoveryHash(args.wallet, args.newOwners, args.threshold, args.nonce));
+  const layout = await (deps.safeLayout ?? ((s: Address) => readSafeLayout(s)))(args.guardianSafe);
   const assertion = await sign(args.credentialId, challenge);
+  const safeSignature = safeSignatureFromAssertion(assertion, challenge, args.guardianOwner ?? SAFE_WEBAUTHN_SHARED_SIGNER);
   return {
     signer: getAddress(args.guardianSafe),
-    signature: safeSignatureFromAssertion(assertion, challenge, args.guardianOwner ?? SAFE_WEBAUTHN_SHARED_SIGNER),
+    signature: layout === '7579' ? withValidatorPrefix(safeSignature) : safeSignature,
   };
 }
 

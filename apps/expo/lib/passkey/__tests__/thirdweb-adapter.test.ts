@@ -37,6 +37,8 @@ import {
   type AdapterDeps,
 } from '../thirdweb-adapter';
 import { dummyUserOpSignature, sponsorRequestBody, type SafeUserOpArgs } from '../userop';
+import { withValidatorPrefix } from '../session-keys/builders';
+import skv from './session-keys-vector.json';
 import rv from './recovery-vector.json';
 import sv from './passkey-safe-vector.json';
 
@@ -83,6 +85,7 @@ function deps(over: Partial<AdapterDeps> = {}) {
       throw new Error('no sign expected');
     }),
     isSafeDeployed: jest.fn(async () => true),
+    safeLayout: jest.fn(async () => '4337' as const),
     sendUserOp: jest.fn(async (args: SafeUserOpArgs) => {
       sent.push(args);
       return { userOpHash: `0x${'aa'.repeat(32)}` as Hex, txHash: `0x${'bb'.repeat(32)}` as Hex };
@@ -285,6 +288,67 @@ describe('ERC-1271 signatures', () => {
     const parsed = parseErc6492Signature(sig);
     expect(getAddress(parsed.address as Address)).toBe(getAddress(SAFE_PROXY_FACTORY));
     expect(parsed.data).toBe(safeFactoryData({ x, y }));
+  });
+});
+
+describe('ERC-1271 on a migrated (Safe7579) Safe', () => {
+  const guardianSafe = getAddress(g.guardianSafe);
+  const vectorAssertion = {
+    authenticatorData: g.authenticatorData as Hex,
+    clientDataJSON: hexToString(g.clientDataJSONHex as Hex),
+    r: BigInt(g.r),
+    s: BigInt(g.s),
+  };
+  const guardianSession = (identity: Address) =>
+    session(identity, { safe: guardianSafe, x: g.guardianX as Hex, y: g.guardianY as Hex });
+  const PREFIX = `0x${'0'.repeat(40)}`;
+
+  it('golden vector: withValidatorPrefix(safeSignature) === prefixedSignature', () => {
+    expect(withValidatorPrefix(skv.erc1271.safeSignature as Hex)).toBe(skv.erc1271.prefixedSignature);
+  });
+
+  it('signHashAsIdentity on a 7579 Safe prefixes 20 zero bytes inside the on-behalf envelope', async () => {
+    const safeLayout = jest.fn(async () => '7579' as const);
+    const { d } = deps({ sign: jest.fn(async () => vectorAssertion), safeLayout });
+    const sig = await signHashAsIdentity(guardianSession(LEGACY), g.recoveryHash as Hex, d);
+    const inner = decodeOnBehalfSignature(sig);
+    expect(inner?.safe).toBe(guardianSafe);
+    expect(inner!.signature.startsWith(PREFIX)).toBe(true);
+    expect(inner!.signature).toBe(`${PREFIX}${g.guardianSignature.slice(2).toLowerCase()}`);
+    expect(safeLayout).toHaveBeenCalledWith(guardianSafe);
+  });
+
+  it('a 7579 Safe signing as itself (XMTP, identity = Safe) carries the bare prefix', async () => {
+    const { d } = deps({ sign: jest.fn(async () => vectorAssertion), safeLayout: jest.fn(async () => '7579' as const) });
+    const sig = await signHashAsIdentity(guardianSession(guardianSafe), g.recoveryHash as Hex, d);
+    expect(sig).toBe(withValidatorPrefix(g.guardianSignature as Hex));
+    expect(isErc6492Signature(sig)).toBe(false);
+  });
+
+  it('signHashAsIdentity on a 4337 Safe is unchanged', async () => {
+    const { d } = deps({ sign: jest.fn(async () => vectorAssertion), safeLayout: jest.fn(async () => '4337' as const) });
+    const sig = await signHashAsIdentity(guardianSession(LEGACY), g.recoveryHash as Hex, d);
+    expect(decodeOnBehalfSignature(sig)?.signature).toBe(g.guardianSignature);
+  });
+
+  it('a counterfactual Safe never reads the layout and is never prefixed (ERC-6492 only)', async () => {
+    const safeLayout = jest.fn(async () => '7579' as const);
+    const sign = jest.fn(async (_id: string, c: Hex) => ({
+      ...vectorAssertion,
+      clientDataJSON: vectorAssertion.clientDataJSON.replace(/"challenge":"[^"]+"/, `"challenge":"${Buffer.from(c.slice(2), 'hex').toString('base64url')}"`),
+    }));
+    const { d } = deps({ sign, isSafeDeployed: jest.fn(async () => false), safeLayout });
+    const sig = await signHashAsIdentity(session(SAFE), g.recoveryHash as Hex, d);
+    expect(isErc6492Signature(sig)).toBe(true);
+    expect(parseErc6492Signature(sig).signature.startsWith(PREFIX)).toBe(false);
+    expect(safeLayout).not.toHaveBeenCalled();
+  });
+
+  it('a failed layout read throws before the prompt', async () => {
+    const sign = jest.fn(async () => vectorAssertion);
+    const { d } = deps({ sign, safeLayout: jest.fn(async () => Promise.reject(new Error('unknown Safe layout'))) });
+    await expect(signHashAsIdentity(guardianSession(LEGACY), g.recoveryHash as Hex, d)).rejects.toThrow('unknown Safe layout');
+    expect(sign).not.toHaveBeenCalled();
   });
 });
 

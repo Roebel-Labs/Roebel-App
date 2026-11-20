@@ -54,6 +54,7 @@ describe('Safe as an XMTP SCW signer', () => {
         return { authenticatorData: a.authenticatorData, clientDataJSON, r: BigInt(a.r), s: BigInt(a.s) };
       }),
       isSafeDeployed: jest.fn(async () => true),
+      safeLayout: jest.fn(async () => '4337' as const),
       sendUserOp: jest.fn(),
     };
     const session = { credentialId: 'c', x, y, safe: SAFE, identity: LEGACY, ownerType: 'sharedSigner' as const, owner: SAFE_WEBAUTHN_SHARED_SIGNER };

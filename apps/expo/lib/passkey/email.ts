@@ -27,6 +27,8 @@ import { PASSKEY_API_URL, SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import { safeMessageHash } from './guardians';
 import type { SafeOwnerType } from './migration';
 import { PhraseCancelledError, PhraseMismatchError, PhraseUnavailableError, type PhraseStore } from './phrase-store';
+import { readSafeLayout, type SafeLayout } from './safe-layout';
+import { withValidatorPrefix } from './session-keys/builders';
 import { isWordsOwner, WORDS_KEY_PLACEHOLDER } from './session';
 import { sessionSignerFor } from './session-signer';
 import { safeSignatureFromAssertion } from './userop';
@@ -81,14 +83,34 @@ export type EmailDeps = {
   phrase?: Pick<PhraseStore, 'read'>;
   nowSec?: () => number;
   timeoutMs?: number;
+  /** The Safe's validation layout (default: readSafeLayout). '7579' = ERC-1271 needs the validator prefix. */
+  safeLayout?: (safe: Address) => Promise<SafeLayout>;
 };
 
-/** Safe contract signature (one owner) over the proof text. */
+/** The Safe's layout as a German PasskeyEmailError on failure (no known handler = no code yet). */
+async function readLayoutForProof(safe: Address, deps: EmailDeps): Promise<SafeLayout> {
+  try {
+    return await (deps.safeLayout ?? ((s: Address) => readSafeLayout(s)))(safe);
+  } catch (e) {
+    const code = e instanceof Error && e.message === 'unknown Safe layout' ? 'safe_not_deployed' : 'chain_unavailable';
+    throw new PasskeyEmailError(code, emailErrorMessage(code));
+  }
+}
+
+/**
+ * Safe contract signature (one owner) over the proof text; prefixed with address(0) when the Safe
+ * runs the Safe7579 layout (device-session migration). The Safe must be deployed: its layout is
+ * read BEFORE the prompt, and a counterfactual Safe throws there (PasskeyEmailError 'safe_not_deployed').
+ */
 export async function signEmailProof(signer: EmailSigner, message: string, deps: EmailDeps = {}): Promise<Hex> {
   const challenge = emailProofChallenge(signer.safe, message);
   if (isWordsOwner(signer)) {
     if (!signer.owner) throw new Error('a 12-word account needs its owner');
     if (!deps.phrase) throw new Error('a 12-word account needs the phrase store');
+  }
+  const layout = await readLayoutForProof(signer.safe, deps);
+  const finish = (safeSignature: Hex): Hex => (layout === '7579' ? withValidatorPrefix(safeSignature) : safeSignature);
+  if (isWordsOwner(signer) && signer.owner && deps.phrase) {
     const session = {
       credentialId: '',
       x: WORDS_KEY_PLACEHOLDER,
@@ -103,10 +125,10 @@ export async function signEmailProof(signer: EmailSigner, message: string, deps:
       getPrf: async () => null,
       phrase: deps.phrase,
     });
-    return (await words.signDigest(challenge)).safeSignature;
+    return finish((await words.signDigest(challenge)).safeSignature);
   }
   const assertion = await (deps.sign ?? signWithPasskey)(signer.credentialId, challenge);
-  return safeSignatureFromAssertion(assertion, challenge, signer.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER);
+  return finish(safeSignatureFromAssertion(assertion, challenge, signer.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER));
 }
 
 /** A German, user-facing error. `code` is the server's error code (or 'network' / 'cancelled'). */

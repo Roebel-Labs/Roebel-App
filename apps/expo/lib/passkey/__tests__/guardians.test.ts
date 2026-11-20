@@ -1,4 +1,10 @@
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+// The Safe layout read (safe-layout.ts) is a chain read: 4337 unless a test says otherwise.
+const mockReadSafeLayout = jest.fn(async (_safe: string): Promise<'4337' | '7579'> => '4337');
+jest.mock('../safe-layout', () => ({
+  ...jest.requireActual('../safe-layout'),
+  readSafeLayout: (safe: string) => mockReadSafeLayout(safe),
+}));
 // guardians-runtime (the sponsored ops at the end of this file): no network, no native store.
 const mockPhrase = { read: jest.fn(async (_reason: string) => '') };
 const mockSend = jest.fn(async (_args: unknown, _deps?: unknown) => ({ userOpHash: '0x01', txHash: '0x02' }));
@@ -43,6 +49,8 @@ import {
 } from '../constants';
 import { webAuthnSigningDigest } from '../userop';
 import rv from './recovery-vector.json';
+import skv from './session-keys-vector.json';
+import { withValidatorPrefix } from '../session-keys/builders';
 
 const g = rv.guardianApproval;
 const wallet = getAddress(g.wallet);
@@ -83,6 +91,40 @@ describe('guardians — recovery approval vs the fork fixture', () => {
     );
     expect(approval).toEqual({ signer: guardianSafe, signature: g.guardianSignature });
     expect(sign).toHaveBeenCalledTimes(1);
+  });
+
+  it('guardian approval of a migrated guardian Safe carries the prefix', async () => {
+    const sign = jest.fn(async () => ({ authenticatorData: g.authenticatorData as Hex, clientDataJSON, r: BigInt(g.r), s: BigInt(g.s) }));
+    const safeLayout = jest.fn(async () => '7579' as const);
+    const approval = await signRecoveryApprovalAsGuardian(
+      { credentialId: 'g1', guardianSafe, wallet, newOwners: [newOwner], threshold: 1, nonce: 0 },
+      { sign, safeLayout },
+    );
+    expect(approval.signer).toBe(guardianSafe);
+    expect(approval.signature).toBe(`0x${'0'.repeat(40)}${g.guardianSignature.slice(2).toLowerCase()}`);
+    expect(safeLayout).toHaveBeenCalledWith(guardianSafe);
+    // Default reader = readSafeLayout.
+    mockReadSafeLayout.mockResolvedValueOnce('7579');
+    const viaDefault = await signRecoveryApprovalAsGuardian(
+      { credentialId: 'g1', guardianSafe, wallet, newOwners: [newOwner], threshold: 1, nonce: 0 },
+      { sign },
+    );
+    expect(viaDefault.signature).toBe(approval.signature);
+  });
+
+  it('a failed layout read throws before the guardian prompt', async () => {
+    const sign = jest.fn();
+    await expect(
+      signRecoveryApprovalAsGuardian(
+        { credentialId: 'g1', guardianSafe, wallet, newOwners: [newOwner], threshold: 1, nonce: 0 },
+        { sign, safeLayout: async () => Promise.reject(new Error('unknown Safe layout')) },
+      ),
+    ).rejects.toThrow('unknown Safe layout');
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('golden vector: withValidatorPrefix(safeSignature) === prefixedSignature', () => {
+    expect(withValidatorPrefix(skv.erc1271.safeSignature as Hex)).toBe(skv.erc1271.prefixedSignature);
   });
 
   it('encodeMultiConfirmRecovery sorts approvals by signer and reproduces the accepted callData', () => {

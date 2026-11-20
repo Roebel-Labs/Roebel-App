@@ -53,6 +53,8 @@ import {
 } from 'viem';
 import { PASSKEY_CHAIN_ID, SAFE_PROXY_FACTORY } from './constants';
 import { safeMessageHash } from './guardians';
+import { readSafeLayout, type SafeLayout } from './safe-layout';
+import { withValidatorPrefix } from './session-keys/builders';
 import { markSponsoredOpSucceeded } from './detach';
 import { pollIdForTxs } from './poll-hints';
 import { PASSKEY_SESSION_PROP } from './active';
@@ -185,6 +187,8 @@ export type AdapterDeps = {
    * words session without it is refused (it never reaches the passkey).
    */
   signerFor?: (session: PasskeySession) => SessionSigner;
+  /** The deployed Safe's validation layout (default: readSafeLayout). '7579' = ERC-1271 needs the validator prefix. */
+  safeLayout?: (safe: Address) => Promise<SafeLayout>;
 };
 
 function signerOf(session: PasskeySession, deps: AdapterDeps): SessionSigner {
@@ -199,7 +203,8 @@ function signerOf(session: PasskeySession, deps: AdapterDeps): SessionSigner {
 
 /**
  * The Safe's ERC-1271 signature over `hash` (the digest a verifier passes to isValidSignature),
- * ERC-6492-wrapped while the Safe is counterfactual, and wrapped in the on-behalf envelope when
+ * ERC-6492-wrapped while the Safe is counterfactual, prefixed with address(0) when the deployed
+ * Safe runs the Safe7579 layout (device-session migration), and wrapped in the on-behalf envelope when
  * the identity is a legacy account.
  */
 export async function signHashAsIdentity(session: PasskeySession, hash: Hex, deps: AdapterDeps): Promise<Hex> {
@@ -219,12 +224,20 @@ export async function signHashAsIdentityWithPrf(
 ): Promise<{ signature: Hex; prf?: Hex }> {
   const signer = signerOf(session, deps);
   const challenge = safeMessageHash(session.safe, hash);
+  // Chain reads before the prompt, so a failed read never wastes a fingerprint.
+  const deployed = await deps.isSafeDeployed(session.safe);
+  // A migrated Safe (Safe7579 handler) is always deployed; a counterfactual Safe is always 4337.
+  const layout = deployed ? await (deps.safeLayout ?? ((s: Address) => readSafeLayout(s)))(session.safe) : '4337';
   const { safeSignature, vaultKey } = await signer.signDigest(challenge);
   let sig = safeSignature;
-  if (!(await deps.isSafeDeployed(session.safe))) {
+  if (!deployed) {
     // Only the Safe created with this key can be deployed from it (a recovered Safe always has code).
     if (!isAddressEqual(signer.counterfactual.predicted, session.safe)) throw new Error('the account Safe is not deployed and is not the counterfactual Safe of its key');
     sig = serializeErc6492Signature({ address: SAFE_PROXY_FACTORY, data: signer.counterfactual.factoryData, signature: sig });
+  } else if (layout === '7579') {
+    // Safe7579's isValidSignature reads a validator address first; address(0) = the Safe owners.
+    // The prefix goes on the plain Safe signature, BEFORE the on-behalf envelope.
+    sig = withValidatorPrefix(sig);
   }
   const signature = identityKind(session) === 'legacy' ? encodeOnBehalfSignature(session.safe, sig) : sig;
   return vaultKey ? { signature, prf: vaultKey } : { signature };

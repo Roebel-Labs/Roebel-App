@@ -1,4 +1,10 @@
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+// The Safe layout read (safe-layout.ts) is a chain read: 4337 unless a test says otherwise.
+const mockReadSafeLayout = jest.fn(async (_safe: string): Promise<'4337' | '7579'> => '4337');
+jest.mock('../safe-layout', () => ({
+  ...jest.requireActual('../safe-layout'),
+  readSafeLayout: (safe: string) => mockReadSafeLayout(safe),
+}));
 
 import { createPrivateKey, createPublicKey, sign as nodeSign, verify as nodeVerify } from 'crypto';
 import { concatHex, decodeAbiParameters, getAddress, hashMessage, hexToBigInt, hexToBytes, numberToHex, recoverAddress, sliceHex, type Hex } from 'viem';
@@ -23,6 +29,8 @@ import { wordAccount } from '../words';
 import { webAuthnSigningDigest } from '../userop';
 import { PasskeyCancelledError, type PasskeyAssertion } from '../webauthn';
 import vector from './email-proof-vector.json';
+import skv from './session-keys-vector.json';
+import { withValidatorPrefix } from '../session-keys/builders';
 import rv from './recovery-vector.json';
 
 const g = rv.guardianApproval;
@@ -98,6 +106,58 @@ describe('signEmailProof', () => {
     const owner = getAddress(g.newOwner);
     const sig = await signEmailProof({ credentialId: 'c', safe: SAFE, owner }, 'x', { sign: realSign });
     expect(getAddress(`0x${sig.slice(2 + 24, 2 + 64)}`)).toBe(owner);
+  });
+});
+
+describe('signEmailProof on a migrated (Safe7579) Safe', () => {
+  const PREFIX = `0x${'0'.repeat(40)}`;
+
+  it('golden vector: withValidatorPrefix(safeSignature) === prefixedSignature', () => {
+    expect(withValidatorPrefix(skv.erc1271.safeSignature as Hex)).toBe(skv.erc1271.prefixedSignature);
+  });
+
+  it('signEmailProof prefixes for a 7579 Safe', async () => {
+    const msg = buildEmailProofMessage({ action: 'add', safe: SAFE, email: 'max@example.de', timestamp: 1_790_000_000 });
+    const plain = await signEmailProof({ credentialId: 'c', safe: SAFE }, msg, { sign: realSign, safeLayout: async () => '4337' });
+    const sign = jest.fn(realSign);
+    const sig = await signEmailProof({ credentialId: 'c', safe: SAFE }, msg, { sign, safeLayout: async () => '7579' });
+    expect(sig.startsWith(PREFIX)).toBe(true);
+    // Same assertion bytes except (r, s): the layout after the prefix is the plain Safe signature's.
+    expect(sig.length).toBe(plain.length + 40);
+    expect(getAddress(`0x${sig.slice(2 + 40 + 24, 2 + 40 + 64)}`)).toBe(SAFE_WEBAUTHN_SHARED_SIGNER);
+    expect(sign).toHaveBeenCalledWith('c', emailProofChallenge(SAFE, msg));
+  });
+
+  it('the default layout reader is readSafeLayout (4337 → unchanged, 7579 → prefixed)', async () => {
+    mockReadSafeLayout.mockResolvedValueOnce('7579');
+    const sig = await signEmailProof({ credentialId: 'c', safe: SAFE }, 'x', { sign: realSign });
+    expect(mockReadSafeLayout).toHaveBeenLastCalledWith(SAFE);
+    expect(sig.startsWith(PREFIX)).toBe(true);
+    const plain = await signEmailProof({ credentialId: 'c', safe: SAFE }, 'x', { sign: realSign });
+    expect(plain.startsWith(PREFIX)).toBe(false);
+  });
+
+  it('a 12-word Safe on 7579 is prefixed too', async () => {
+    const ev = require('./ecdsa-safe-vector.json') as { phrase: string; owner: string; safeAddress: string };
+    const signer = { credentialId: '', safe: getAddress(ev.safeAddress), owner: getAddress(ev.owner), ownerType: 'ecdsa' as const };
+    const phrase = { read: async () => ev.phrase };
+    const plain = await signEmailProof(signer, 'x', { phrase, safeLayout: async () => '4337' });
+    const sig = await signEmailProof(signer, 'x', { phrase, safeLayout: async () => '7579' });
+    expect(sig).toBe(withValidatorPrefix(plain));
+  });
+
+  it('no known handler (counterfactual Safe) = safe_not_deployed, a failed read = chain_unavailable; never a prompt', async () => {
+    const sign = jest.fn(realSign);
+    const { f } = fakeFetch([]);
+    const d = { fetch: f, apiUrl: 'https://preview.example', sign, nowSec: () => 1_790_000_000 };
+    await expect(
+      requestEmailCode({ credentialId: 'c', safe: SAFE }, 'a@example.de', { ...d, safeLayout: async () => Promise.reject(new Error('unknown Safe layout')) }),
+    ).rejects.toMatchObject({ code: 'safe_not_deployed' });
+    await expect(
+      removeWarningEmail({ credentialId: 'c', safe: SAFE }, { ...d, safeLayout: async () => Promise.reject(new Error('eth_getStorageAt: HTTP 503')) }),
+    ).rejects.toMatchObject({ code: 'chain_unavailable' });
+    expect(sign).not.toHaveBeenCalled();
+    expect(f).not.toHaveBeenCalled();
   });
 });
 
