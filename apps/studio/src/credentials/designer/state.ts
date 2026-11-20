@@ -195,10 +195,16 @@ export function useAutosave<T>(
   const saver = saverRef.current;
 
   const first = useRef(true);
+  // Loading the other device's version replaces the document: that is not a local change.
+  const skip = useRef(false);
   useEffect(() => {
     if (first.current) {
       first.current = false;
       if (!opts.initialDirty) return;
+    }
+    if (skip.current) {
+      skip.current = false;
+      return;
     }
     saver.change(doc);
   }, [doc, saver]);
@@ -224,7 +230,10 @@ export function useAutosave<T>(
     loadTheirs: () => {
       const c = conflict;
       setConflict(null);
-      if (c) saver.loadTheirs(c);
+      if (c) {
+        saver.loadTheirs(c);
+        skip.current = true;
+      }
       return c;
     },
   };

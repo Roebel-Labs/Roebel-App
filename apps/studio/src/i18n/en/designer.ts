@@ -63,6 +63,10 @@ const en: Record<string, string> = {
   'Wähle ein Element auf der Karte aus, um es zu ändern.': 'Select an element on the card to change it.',
   Zeichenabstand: 'Letter spacing',
   Überschrift: 'Heading',
+  'Andere Version laden': 'Load the other version',
+  'Meine Version behalten': 'Keep my version',
+  'Dieser Entwurf wurde inzwischen auf einem anderen Gerät geändert. Welche Version soll bleiben? Die andere geht verloren.':
+    'This draft has since been changed on another device. Which version should stay? The other one is lost.',
 };
 
 export default en;

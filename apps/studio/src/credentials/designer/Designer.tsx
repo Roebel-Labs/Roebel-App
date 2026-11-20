@@ -6,19 +6,21 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { designSize, removeLayer, updateLayer, type CardDesign, type CardTemplate, type SkImageLike } from '@roebel/card-design';
 import { t } from '../../i18n';
 import { SkCards } from '../../ui/Skeleton';
-import { fetchDesignAssets, fetchDraft, publishDraft, saveDraft, sendDraftTest, CredentialsApiError, isSessionError } from '../api';
+import { fetchDesignAssets, fetchDraft, publishDraft, saveDraft, sendDraftTest, uploadDesignAsset, CredentialsApiError, isSessionError } from '../api';
 import { PendingCard } from '../PendingCard';
 import { KIND_LABELS } from '../templates';
 import type { TabContext } from '../tabs';
 import type { AssetKind, AssetView, DraftView, Kind, OrgListItem } from '../types';
 import { AddPanel, type Apply } from './AddPanel';
 import { CardCanvas } from './CardCanvas';
+import { ConflictDialog } from './ConflictDialog';
 import { designHints, type HintKind } from './hints';
 import { Overlay } from './Overlay';
 import { PreviewModes } from './PreviewModes';
 import { PropsPanel, hintText, layerLabel } from './PropsPanel';
 import { editorReducer, initEditor, useAutosave, type SaveStatus } from './state';
 import { TemplatePicker, templateLabel } from './TemplatePicker';
+import { assetKindFor, logoTarget, uploadForDesign, type UploadTarget } from './upload';
 import './designer.css';
 
 const KINDS: Kind[] = ['membership', 'role', 'badge'];
@@ -124,7 +126,7 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
   const [view, setView] = useState<'edit' | 'preview'>('edit');
   const [picking, setPicking] = useState(false);
   const [assets, setAssets] = useState<AssetView[]>([]);
-  const [uploading] = useState<AssetKind | null>(null);
+  const [uploading, setUploading] = useState<AssetKind | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<{ id: string; title: string } | null>(null);
@@ -133,6 +135,10 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
   const draftIdRef = useRef<string | null>(initial.draft?.id ?? null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const replaceTarget = useRef<string | null>(null);
+  const designRef = useRef(s.design);
+  designRef.current = s.design;
 
   const doc = useMemo(() => ({ design: s.design, name, kind }), [s.design, name, kind]);
   const save = useCallback(
@@ -266,6 +272,48 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
     }
   };
 
+  // Uploads: the server checks size and format; its message is shown and the design stays as it was.
+  const upload = async (file: File, target: UploadTarget) => {
+    const kind = assetKindFor(target, designRef.current);
+    setUploading(kind);
+    try {
+      const r = await uploadForDesign(file, target, designRef.current, (k, f) => uploadDesignAsset(token, org.accountId, k, f), onError);
+      if (!r) return;
+      setAssets((list) => [r.asset, ...list.filter((a) => a.sha !== r.asset.sha)]);
+      apply(r.change, { select: 'replace' in target ? target.replace : target.role === 'background' ? null : (d) => d.layers[d.layers.length - 1]?.id ?? null });
+    } finally {
+      setUploading(null);
+    }
+  };
+  const onUpload = (k: AssetKind, file: File) =>
+    void upload(file, k === 'logo' ? logoTarget(designRef.current) : k === 'background' ? { role: 'background' } : k === 'sticker' ? { role: 'sticker' } : { role: 'image' });
+  const onDropFile = (file: File, target: string | null) => {
+    const l = s.design.layers.find((x) => x.id === target);
+    void upload(file, l?.type === 'image' ? { replace: l.id } : { role: 'image' });
+  };
+  const onReplaceImage = (layerId: string) => {
+    replaceTarget.current = layerId;
+    fileRef.current?.click();
+  };
+
+  const keepMine = async () => {
+    setBusy(true);
+    try {
+      await autosave.keepMine();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const loadTheirs = () => {
+    const c = autosave.loadTheirs();
+    if (!c) return;
+    dispatch({ type: 'replace', design: c.design, revision: c.revision });
+    setName(c.name);
+    setKind(c.kind);
+    const { design: _design, ...view } = c;
+    setDraft(view);
+  };
+
   const refreshDraft = () => {
     if (draftIdRef.current) fetchDraft(token, draftIdRef.current).then((d) => setDraft(d), () => undefined);
   };
@@ -316,9 +364,23 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
         </div>
       )}
       {pending && <PendingCard ctx={ctx} actionId={pending.id} title={pending.title} onFinal={refreshDraft} onClose={() => (setPending(null), refreshDraft())} />}
+      {autosave.conflict && <ConflictDialog busy={busy} onKeepMine={() => void keepMine()} onLoadTheirs={loadTheirs} />}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          const id = replaceTarget.current;
+          e.target.value = '';
+          replaceTarget.current = null;
+          if (f && id) void upload(f, { replace: id });
+        }}
+      />
       <div className="dz-cols">
         <aside className="dz-left">
-          <AddPanel design={s.design} apply={apply} assets={assets} uploading={uploading} onUpload={() => undefined} onTemplates={() => setPicking(true)} />
+          <AddPanel design={s.design} apply={apply} assets={assets} uploading={uploading} onUpload={onUpload} onTemplates={() => setPicking(true)} />
         </aside>
         <main className="dz-centre" ref={boardRef}>
           <div className="dz-bar">
@@ -349,6 +411,7 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
                     scale={scale}
                     onSelect={select}
                     apply={(fn, key) => apply(fn, { key })}
+                    onDropFile={onDropFile}
                     onEditText={(id) => {
                       select(id);
                       setTimeout(() => textRef.current?.focus(), 0);
@@ -377,7 +440,7 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
           )}
         </main>
         <aside className="dz-right">
-          <PropsPanel ref={textRef} design={s.design} selected={s.selected} hints={hints} apply={apply} onSelect={select} onReplaceImage={() => undefined} />
+          <PropsPanel ref={textRef} design={s.design} selected={s.selected} hints={hints} apply={apply} onSelect={select} onReplaceImage={onReplaceImage} />
         </aside>
       </div>
     </div>
