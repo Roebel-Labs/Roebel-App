@@ -26,7 +26,8 @@ export type EditorState = {
 
 export type EditorAction =
   | { type: 'select'; id: string | null }
-  | { type: 'apply'; fn: (d: CardDesign) => CardDesign }
+  /** `select` picks the selection from the new design (computed in the reducer: never stale). */
+  | { type: 'apply'; fn: (d: CardDesign) => CardDesign; select?: (d: CardDesign) => string | null }
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'saved'; revision: number; design: CardDesign }
@@ -79,8 +80,9 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
       return { ...s, selected: a.id };
     case 'apply': {
       const next = a.fn(s.design);
-      if (next === s.design) return s;
-      const selected = s.selected && next.layers.some((l) => l.id === s.selected) ? s.selected : null;
+      if (next === s.design) return a.select ? { ...s, selected: a.select(next) } : s;
+      const kept = s.selected && next.layers.some((l) => l.id === s.selected) ? s.selected : null;
+      const selected = a.select ? a.select(next) : kept;
       return { ...s, design: next, past: pushPast(s.past, s.design), future: [], dirty: true, selected };
     }
     case 'undo': {

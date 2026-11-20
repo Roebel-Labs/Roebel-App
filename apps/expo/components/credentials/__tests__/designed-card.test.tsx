@@ -16,11 +16,17 @@ jest.mock('@shopify/react-native-skia', () => {
   return {
     Skia: new Proxy({}, { get: (_t, k) => (mockHeadless!.Skia as Record<string | symbol, unknown>)[k] }),
     Canvas: ({ children }: { children: React.ReactNode }) => R.createElement(View, { testID: 'skia-canvas' }, children),
-    Picture: ({ picture }: { picture: unknown }) => { mockPictures.push(picture); return null; },
+    Picture: ({ picture }: { picture: unknown }) => {
+      // A tilting card passes the derived value; it must never hold null (review I3).
+      const p = picture && typeof picture === 'object' && 'value' in (picture as object) ? (picture as { value: unknown }).value : picture;
+      mockPictures.push(p);
+      return null;
+    },
   };
 });
 jest.mock('@/lib/card-design/skia', () => ({
   useCardSkia: () => (mockHeadless ? { api: mockHeadless.api, fonts: mockHeadless.fonts } : null),
+  useCardSkiaState: () => ({ skia: mockHeadless ? { api: mockHeadless.api, fonts: mockHeadless.fonts } : null, failed: false }),
 }));
 jest.mock('@/lib/card-design/assets', () => ({
   // The org logo (a sha) never arrives: offline.
@@ -30,6 +36,7 @@ jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   useReducedMotion: () => false,
   useSharedValue: (v: unknown) => ({ value: v }),
+  useDerivedValue: (fn: () => unknown) => ({ value: fn() }),
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('expo-sensors', () => ({
@@ -79,5 +86,37 @@ describe('DesignedCard', () => {
     const without = await renderRgba(design, opts);
     const withName = await renderRgba(design, { ...opts, values: { holderName: 'Erika Mustermann' } });
     expect(diffRatio(without.data, withName.data)).toBeGreaterThan(0.002);
+  });
+});
+
+describe('tilt redraws', () => {
+  it('are quantised: sensor noise does not redraw, a real tilt does', () => {
+    const { quantiseTilt, sameTilt } = jest.requireActual('@/lib/card-design/record');
+    const a = quantiseTilt({ x: 0.2001, y: -0.1 });
+    expect(sameTilt(a, quantiseTilt({ x: 0.2049, y: -0.1049 }))).toBe(true);
+    expect(sameTilt(a, quantiseTilt({ x: 0.26, y: -0.1 }))).toBe(false);
+  });
+});
+
+describe('SafeDesignedCard', () => {
+  it('shows the fallback without loading Skia when the binary has no Skia', () => {
+    const { setSkiaAvailableForTests } = jest.requireActual('@/lib/card-design/skia-available');
+    const { default: SafeDesignedCard, resetDesignedCardForTests } = jest.requireActual('../SafeDesignedCard');
+    const { Text } = jest.requireActual('react-native');
+    setSkiaAvailableForTests(false);
+    resetDesignedCardForTests();
+    let t!: renderer.ReactTestRenderer;
+    act(() => {
+      t = renderer.create(<SafeDesignedCard design={memberCard()} width={300} mode="holder" fallback={<Text>PNG</Text>} />);
+    });
+    expect(t.root.findAllByType(Text).map((n) => n.props.children)).toEqual(['PNG']);
+    expect(t.root.findAllByProps({ testID: 'designed-card' })).toHaveLength(0);
+    setSkiaAvailableForTests(true);
+    resetDesignedCardForTests();
+    act(() => {
+      t = renderer.create(<SafeDesignedCard design={memberCard()} width={300} mode="holder" fallback={<Text>PNG</Text>} />);
+    });
+    expect(t.root.findAllByProps({ testID: 'designed-card' }).length).toBeGreaterThan(0);
+    setSkiaAvailableForTests(null);
   });
 });
