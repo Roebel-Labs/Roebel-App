@@ -55,7 +55,7 @@ export function identityReviewItems(
     items.push({ key: "profile", label: "Name und Bild", isNew: !before.has("profile"), sensitive: false });
   }
   if (next.address) {
-    items.push({ key: "address", label: "Kontoadresse", isNew: !before.has("address"), sensitive: true });
+    items.push({ key: "address", label: "Öffentliche ID", isNew: !before.has("address"), sensitive: true });
   }
   for (const c of next.credentials ?? []) {
     const key: ConsentKey = `cred:${c.type}`;
@@ -103,7 +103,7 @@ export function previewWalletOverrides(addressShared: boolean): Partial<HostHand
   return {
     walletGetAccount: () => null,
     walletRequest: () => {
-      throw { code: "unauthorized", message: "Die Kontoadresse ist für diese Mini-App nicht freigegeben." };
+      throw { code: "unauthorized", message: "Die öffentliche ID ist für diese Mini-App nicht freigegeben." };
     },
   };
 }
