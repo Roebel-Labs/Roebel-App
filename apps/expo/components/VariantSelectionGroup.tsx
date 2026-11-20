@@ -59,13 +59,13 @@ export default function VariantSelectionGroup({ label, variants, value, onChange
 const styles = StyleSheet.create({
   section: { paddingHorizontal: 16, paddingTop: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  label: { fontSize: 18, fontFamily: 'MonaSans-Medium' },
   requiredPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
-  requiredText: { fontSize: 12, fontFamily: 'Inter-Medium' },
-  hint: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  requiredText: { fontSize: 12, fontFamily: 'MonaSans-Medium' },
+  hint: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  name: { fontSize: 15, fontFamily: 'Inter-Medium' },
-  price: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  name: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
+  price: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   radio: { width: 22, height: 22, borderRadius: 9999, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 12, height: 12, borderRadius: 9999 },
 });

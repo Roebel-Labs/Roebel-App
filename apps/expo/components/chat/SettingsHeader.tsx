@@ -7,7 +7,7 @@ import { GlassCircleButton } from './GlassCircleButton';
 import { chatFont, chatSize, useChatTokens } from './tokens';
 
 /** Header of the chat settings screens: floating back circle + centered title (chat list style). */
-export function SettingsHeader({ title }: { title: string }) {
+export function SettingsHeader({ title, right }: { title: string; right?: React.ReactNode }) {
   const t = useChatTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -22,7 +22,8 @@ export function SettingsHeader({ title }: { title: string }) {
       <Text numberOfLines={1} style={[styles.title, { color: t.textPrimary }]}>
         {title}
       </Text>
-      <View style={styles.spacer} />
+      {/* Optional trailing control; the spacer keeps the title centred without one. */}
+      {right ?? <View style={styles.spacer} />}
     </View>
   );
 }

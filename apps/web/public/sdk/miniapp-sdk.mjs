@@ -1,6 +1,30 @@
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+// src/credential-ref.ts
+var BUILTIN_CREDENTIALS = ["citizen", "attester", "guest"];
+var TYPE_RE = /^type:(0x[0-9a-fA-F]{64})$/;
+var ORG_RE = /^org:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
+function parseCredentialRef(s) {
+  if (typeof s !== "string") return null;
+  if (BUILTIN_CREDENTIALS.includes(s)) {
+    return { kind: "builtin", name: s };
+  }
+  const t = TYPE_RE.exec(s);
+  if (t) return { kind: "type", typeId: t[1].toLowerCase() };
+  const o = ORG_RE.exec(s);
+  if (o) return { kind: "org", org: o[1].toLowerCase() };
+  return null;
+}
+function isCredentialRef(s) {
+  return typeof s === "string" && parseCredentialRef(s) !== null;
+}
+function credentialMatches(pattern, held) {
+  const p = parseCredentialRef(pattern);
+  if (!p) return false;
+  if (p.kind === "org") return typeof held.org === "string" && held.org.toLowerCase() === p.org;
+  const h = parseCredentialRef(held.type);
+  if (!h) return false;
+  if (p.kind === "builtin") return h.kind === "builtin" && h.name === p.name;
+  return h.kind === "type" && h.typeId === p.typeId;
+}
 
 // src/mock.ts
 function getMockConfig() {
@@ -34,8 +58,16 @@ function mockAccount() {
 function mockBalance() {
   return getMockConfig().balance ?? { balance: "12", decimals: 18, symbol: "R\xD6" };
 }
-function err(code, message) {
-  return { code, message };
+function mockCredentials() {
+  return getMockConfig().credentials ?? [
+    { type: "citizen", kind: "builtin", name: "B\xFCrger:in", recognised: true }
+  ];
+}
+function mockHolds(pattern) {
+  return mockCredentials().some((held) => credentialMatches(pattern, held));
+}
+function err(code, message, rpcCode) {
+  return rpcCode === void 0 ? { code, message } : { code, message, rpcCode };
 }
 var mockUserData = /* @__PURE__ */ new Map();
 var announced = false;
@@ -85,14 +117,24 @@ function mockDispatch(method, params) {
           return Promise.resolve(`0x${(account?.chainId ?? 100).toString(16)}`);
         case "net_version":
           return Promise.resolve(String(account?.chainId ?? 100));
+        case "wallet_getCapabilities":
+          return Promise.resolve({ "0x64": { atomic: { status: "supported" } } });
+        case "wallet_switchEthereumChain": {
+          const first = Array.isArray(args.params) ? args.params[0] : void 0;
+          const chainId = typeof first?.chainId === "string" ? first.chainId.toLowerCase() : "";
+          if (chainId === "0x64") return Promise.resolve(null);
+          return Promise.reject(err("unsupported", "Nur Gnosis (Chain 100) wird unterst\xFCtzt", 4902));
+        }
         default:
           return Promise.reject(
             err("unsupported", `Mock-Modus: "${args.method ?? "unknown"}" braucht den R\xF6bel-Host`)
           );
       }
     }
-    case "auth.getToken":
-      return Promise.resolve(null);
+    case "auth.getToken": {
+      const token = getMockConfig().token;
+      return Promise.resolve(token ? { token } : null);
+    }
     case "auth.signIn":
       return Promise.reject(err("unsupported", "Mock-Modus: Anmeldung braucht den R\xF6bel-Host"));
     case "roebel.getMuenzenBalance":
@@ -130,6 +172,17 @@ function mockDispatch(method, params) {
       if (p.key) mockUserData.set(p.key, p.value ?? null);
       return Promise.resolve({ ok: true });
     }
+    case "credentials.list":
+      return Promise.resolve(mockCredentials());
+    case "credentials.has": {
+      const type = params?.type;
+      return Promise.resolve(typeof type === "string" && mockHolds(type));
+    }
+    case "credentials.request": {
+      const types = params?.types;
+      const list = Array.isArray(types) ? types.filter((t) => typeof t === "string") : [];
+      return Promise.resolve({ granted: list.filter(mockHolds) });
+    }
     case "analytics.track":
       return Promise.resolve(void 0);
     default:
@@ -151,16 +204,17 @@ function uuid() {
 }
 var ClientBridge = class {
   constructor() {
-    __publicField(this, "pending", /* @__PURE__ */ new Map());
-    __publicField(this, "listeners", /* @__PURE__ */ new Map());
-    __publicField(this, "started", false);
+    this.pending = /* @__PURE__ */ new Map();
+    this.listeners = /* @__PURE__ */ new Map();
+    this.started = false;
     /** 'host' once the handshake was answered; 'mock' once we gave up waiting. */
-    __publicField(this, "mode", "unknown");
-    __publicField(this, "settleMode");
-    __publicField(this, "modeSettled", new Promise((resolve) => {
+    this.mode = "unknown";
+    this.modeSettled = new Promise((resolve) => {
       this.settleMode = resolve;
-    }));
-    __publicField(this, "onMessage", (ev) => {
+    });
+    /** Methods the host announced in its hello reply; null until/unless it sent a list. */
+    this.announcedMethods = null;
+    this.onMessage = (ev) => {
       const msg = parse(ev.data);
       if (!msg || msg.netizen !== NETIZEN_PROTOCOL) return;
       if ("id" in msg && msg.id && !("method" in msg)) {
@@ -176,10 +230,15 @@ var ClientBridge = class {
       if ("event" in msg && msg.event) {
         this.dispatchEvent(msg.event, msg.data);
       }
-    });
+    };
   }
   getMode() {
     return this.mode;
+  }
+  /** The host's method list from `bridge.hello`. null in mock mode or when the host sent none
+   * (older hosts). */
+  hostMethods() {
+    return this.mode === "mock" ? null : this.announcedMethods;
   }
   start() {
     if (this.started || typeof window === "undefined") return;
@@ -216,8 +275,12 @@ var ClientBridge = class {
         resolve();
       }, HELLO_TIMEOUT_MS);
       this.pending.set(id, {
-        resolve: () => {
+        resolve: (result) => {
           stopRetry();
+          const methods = result?.methods;
+          if (Array.isArray(methods)) {
+            this.announcedMethods = methods.filter((m) => typeof m === "string");
+          }
           this.settle("host");
           resolve();
         },
@@ -351,6 +414,22 @@ function getHostEnvironment() {
 }
 
 // src/provider.ts
+var PROVIDER_CODES = {
+  user_rejected: 4001,
+  unauthorized: 4100,
+  invalid_params: -32602,
+  rate_limited: -32005
+};
+function toProviderError(e) {
+  const bridgeCode = e?.code ?? "internal";
+  let code;
+  if (bridgeCode === "unsupported") code = typeof e.rpcCode === "number" ? e.rpcCode : 4200;
+  else code = PROVIDER_CODES[bridgeCode] ?? -32603;
+  const err2 = new Error(e?.message ?? String(bridgeCode));
+  err2.code = code;
+  err2.data = { bridgeCode };
+  return err2;
+}
 function createEip1193Provider(bridge) {
   const emitters = /* @__PURE__ */ new Map();
   const emit = (event, ...args) => {
@@ -364,7 +443,9 @@ function createEip1193Provider(bridge) {
   });
   return {
     request(args) {
-      return bridge.request("wallet.request", args);
+      return bridge.request("wallet.request", args).catch((e) => {
+        throw toProviderError(asBridgeError(e));
+      });
     },
     on(event, listener) {
       let set = emitters.get(event);
@@ -379,6 +460,12 @@ function createEip1193Provider(bridge) {
     }
   };
 }
+function asBridgeError(e) {
+  if (e && typeof e === "object" && "code" in e && typeof e.code === "string") {
+    return e;
+  }
+  return { code: "internal", message: e instanceof Error ? e.message : String(e) };
+}
 function safe(fn, args) {
   try {
     fn(...args);
@@ -387,7 +474,7 @@ function safe(fn, args) {
 }
 
 // src/client.ts
-var SDK_VERSION = "0.3.1";
+var SDK_VERSION = "0.4.0";
 function createClient() {
   const bridge = new ClientBridge();
   let provider;
@@ -411,7 +498,7 @@ function createClient() {
     },
     auth: {
       getToken: () => bridge.request("auth.getToken"),
-      signIn: () => bridge.request("auth.signIn")
+      signIn: (opts) => bridge.request("auth.signIn", opts?.nonce ? { nonce: opts.nonce } : {})
     },
     haptics: {
       impact: (style) => bridge.request("haptics.impact", { style: style ?? "medium" }),
@@ -434,6 +521,17 @@ function createClient() {
       getUser: (key) => bridge.request("data.userGet", { key }),
       setUser: (key, value) => bridge.request("data.userSet", { key, value })
     },
+    credentials: {
+      list: () => bridge.request("credentials.list"),
+      has: (type) => bridge.request("credentials.has", { type }),
+      request: (types) => bridge.request("credentials.request", { types }),
+      onChange: (cb) => bridge.on("credentialsChanged", (data) => cb(data))
+    },
+    // Mock mode answers every method locally; an old host (no list) lets the call decide.
+    supports: (method) => {
+      const methods = bridge.hostMethods();
+      return methods === null || methods.includes(method);
+    },
     hostEnvironment: () => getHostEnvironment(),
     isMockMode: () => bridge.getMode() === "mock"
   };
@@ -443,4 +541,4 @@ function createClient() {
 // src/index.ts
 var sdk = createClient();
 
-export { NETIZEN_PROTOCOL, createClient, getHostEnvironment, sdk };
+export { BUILTIN_CREDENTIALS, NETIZEN_PROTOCOL, createClient, credentialMatches, getHostEnvironment, isCredentialRef, parseCredentialRef, sdk, toProviderError };

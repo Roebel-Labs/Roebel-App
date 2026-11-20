@@ -1,9 +1,60 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { useSetActiveWallet } from 'thirdweb/react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
 import { client } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
-import { bootWallets } from '@/lib/passkey/boot';
+import { backgroundRestore, bootWallets, type SessionSource } from '@/lib/passkey/boot';
+import { passkeyBootSource } from '@/lib/passkey/boot-source';
 import { passkeyChannelAllowed } from '@/lib/passkey/gate';
+import { bufferError } from '@/lib/sentry-init';
+import {
+  appendRestoreReport,
+  RESTORE_BACKGROUND_INTERVAL_MS,
+  RESTORE_BACKGROUND_MAX_TICKS,
+  RESTORE_RETRY_DELAYS_MS,
+  restoreWithRetry,
+  type RestoreReport,
+  type RestoreResult,
+} from '@/lib/wallet-restore';
+
+/** thirdweb's in-app wallet keeps its login token under this AsyncStorage key (read-only here). */
+const THIRDWEB_AUTH_TOKEN_KEY = `walletToken-${client.clientId}`;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Writes one restore outcome to the on-device log (and to crash reporting when it failed). */
+function recordRestore(
+  result: RestoreResult,
+  outcome: RestoreReport['outcome'] = result.outcome,
+  owner: RestoreReport['owner'] = 'thirdweb',
+): void {
+  let updateId: string | null | undefined;
+  let embeddedLaunch: boolean | undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Updates = require('expo-updates');
+    updateId = Updates.updateId ?? null;
+    embeddedLaunch = Updates.isEmbeddedLaunch;
+  } catch {
+    // expo-updates unavailable (web, tests)
+  }
+  const report: RestoreReport = {
+    ...result,
+    outcome,
+    owner,
+    at: new Date().toISOString(),
+    appVersion: Constants.expoConfig?.version,
+    platform: Platform.OS,
+    updateId,
+    embeddedLaunch,
+  };
+  void appendRestoreReport(AsyncStorage, report);
+  if (outcome === 'failed') {
+    bufferError(new Error(`wallet restore failed: ${result.errors[result.errors.length - 1] ?? 'unknown'}`), { ...report });
+  }
+}
 
 interface WalletBootContextValue {
   /**
@@ -13,6 +64,12 @@ interface WalletBootContextValue {
    * optimistic state during the reconnect window.
    */
   autoConnectFinished: boolean;
+  /**
+   * True while the device holds a login but restoring it failed (thirdweb unreachable, restore
+   * error). This is NOT a logout: the provider keeps retrying in the background, and consumers
+   * must not delete persisted account state while it is set.
+   */
+  restoreFailed: boolean;
 }
 
 const WalletBootContext = createContext<WalletBootContextValue | undefined>(undefined);
@@ -29,48 +86,152 @@ const WalletBootContext = createContext<WalletBootContextValue | undefined>(unde
 export function WalletBootProvider({ children }: { children: React.ReactNode }) {
   const setActiveWallet = useSetActiveWallet();
   const [autoConnectFinished, setAutoConnectFinished] = useState(false);
+  const [restoreFailed, setRestoreFailed] = useState(false);
+  // Someone who logs in by hand after a failed restore must never be disturbed by a background
+  // retry: the retry loop checks this before every attempt.
+  const activeWallet = useActiveWallet();
+  const hasActiveWalletRef = useRef(false);
+  useEffect(() => {
+    hasActiveWalletRef.current = !!activeWallet;
+  }, [activeWallet]);
 
   useEffect(() => {
     let cancelled = false;
-    // The existing thirdweb restore, byte-for-byte as before.
-    const autoConnectThirdweb = async () => {
+    let backgroundTimer: ReturnType<typeof setInterval> | null = null;
+    let appStateSub: { remove: () => void } | null = null;
+    let backgroundBusy = false;
+    let backgroundTicks = 0;
+    // Set when a sovereign session owns a failed boot: the background retry then retries that
+    // source and never falls to thirdweb.
+    let failedSource: SessionSource | null = null;
+
+    // One pass over the wallets. true = connected, false = nothing to restore; throws the last
+    // error when a wallet's restore failed (the caller decides whether that is a logout).
+    const attemptThirdweb = async (): Promise<boolean> => {
+      let lastError: unknown;
       for (const wallet of wallets) {
         try {
           const account = await wallet.autoConnect({ client });
-          if (cancelled) return;
+          if (cancelled) return false;
           if (account) {
             await setActiveWallet(wallet);
-            return;
+            return true;
           }
-        } catch {
-          // No stored session for this wallet, or restore failed; try next.
+        } catch (e) {
+          lastError = e;
         }
       }
+      if (lastError) throw lastError;
+      return false;
     };
-    (async () => {
+    const hasStoredSession = async () => (await AsyncStorage.getItem(THIRDWEB_AUTH_TOKEN_KEY)) !== null;
+
+    const stopBackground = () => {
+      if (backgroundTimer) clearInterval(backgroundTimer);
+      backgroundTimer = null;
+      appStateSub?.remove();
+      appStateSub = null;
+    };
+    // After a failed boot restore: try again every 20 s and whenever the app comes to the front,
+    // until the login is back or the stored session is gone (the person logged in or out).
+    const backgroundRetry = async () => {
+      if (cancelled || backgroundBusy) return;
+      if (hasActiveWalletRef.current) {
+        stopBackground();
+        return;
+      }
+      backgroundBusy = true;
       try {
-        // Passkey session first (preview channels only; production skips this without reading
-        // any storage), else the thirdweb path above. See lib/passkey/boot.ts.
-        await bootWallets({
-          channelAllowed: () => passkeyChannelAllowed(),
-          loadSession: async () => (await import('@/lib/passkey/signin-runtime')).loadStoredPasskeySession(),
-          connectPasskey: async (session) =>
-            (await import('@/lib/passkey/signin-runtime')).activatePasskeySession(session, setActiveWallet),
-          autoConnectThirdweb,
+        // A source whose session turned out corrupt or gone is dropped here and thirdweb is
+        // restored in the same tick (lib/passkey/boot.ts backgroundRestore).
+        const { owner, result, failedSource: next } = await backgroundRestore({
+          failedSource,
+          restoreThirdweb: () =>
+            restoreWithRetry({
+              attempt: attemptThirdweb,
+              hasStoredSession,
+              delaysMs: [],
+              sleep,
+              isCancelled: () => cancelled,
+            }),
+          sleep,
           isCancelled: () => cancelled,
         });
+        if (cancelled) return;
+        failedSource = next;
+        if (result.outcome === 'failed' || result.outcome === 'cancelled') return;
+        stopBackground();
+        setRestoreFailed(false);
+        if (result.outcome === 'restored') recordRestore(result, 'restored-late', owner);
+      } finally {
+        backgroundBusy = false;
+      }
+    };
+
+    const restoreThirdweb = (): Promise<RestoreResult> =>
+      restoreWithRetry({
+        attempt: attemptThirdweb,
+        hasStoredSession,
+        delaysMs: RESTORE_RETRY_DELAYS_MS,
+        sleep,
+        isCancelled: () => cancelled,
+      });
+
+    const startBackgroundRetry = () => {
+      setRestoreFailed(true);
+      backgroundTimer = setInterval(() => {
+        // The timer gives up after ~5 minutes; coming back to the app still retries.
+        backgroundTicks += 1;
+        if (backgroundTicks > RESTORE_BACKGROUND_MAX_TICKS && backgroundTimer) {
+          clearInterval(backgroundTimer);
+          backgroundTimer = null;
+          return;
+        }
+        void backgroundRetry();
+      }, RESTORE_BACKGROUND_INTERVAL_MS);
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') void backgroundRetry();
+      });
+    };
+
+    (async () => {
+      try {
+        // Sovereign session first (only where passkeyChannelAllowed(); elsewhere no sources and no
+        // storage read), else the thirdweb path above. See lib/passkey/boot.ts. The presence check
+        // is a direct SecureStore read; only load/connect import the sign-in runtime, so a failing
+        // import can only affect someone who really holds a passkey session.
+        const sources: SessionSource[] = passkeyChannelAllowed() ? [passkeyBootSource(setActiveWallet)] : [];
+        const { owner, result } = await bootWallets({
+          channelAllowed: () => passkeyChannelAllowed(),
+          sources,
+          restoreThirdweb,
+          delaysMs: RESTORE_RETRY_DELAYS_MS,
+          sleep,
+          isCancelled: () => cancelled,
+        });
+        if (cancelled || result.outcome === 'cancelled') return;
+        // A plain logged-out start is not worth a log line; everything else is.
+        if (result.outcome !== 'no-session' && (result.outcome !== 'restored' || result.attempts > 1)) {
+          recordRestore(result, result.outcome, owner);
+        }
+        if (result.outcome === 'failed') {
+          failedSource = owner === 'thirdweb' ? null : (sources.find((x) => x.owner === owner) ?? null);
+          startBackgroundRetry();
+        }
       } finally {
         if (!cancelled) setAutoConnectFinished(true);
       }
     })();
     return () => {
       cancelled = true;
+      stopBackground();
     };
   }, [setActiveWallet]);
 
   const value = useMemo<WalletBootContextValue>(
-    () => ({ autoConnectFinished }),
-    [autoConnectFinished],
+    // With a connected wallet there is nothing left to restore, whatever the boot attempt said.
+    () => ({ autoConnectFinished, restoreFailed: restoreFailed && !activeWallet }),
+    [autoConnectFinished, restoreFailed, activeWallet],
   );
 
   return <WalletBootContext.Provider value={value}>{children}</WalletBootContext.Provider>;

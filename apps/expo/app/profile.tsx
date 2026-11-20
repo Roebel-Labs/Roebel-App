@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { useIsCitizen } from '@/hooks/useIsCitizen';
@@ -12,7 +12,14 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
-import { credentialKindsFor, type CredentialKind } from '@/lib/credentials';
+import type { CredentialKind } from '@/lib/credentials';
+import { badgeTileForEvent, groupBadgesByYear, type BadgeTile, type RegisterCard } from '@/lib/credreg/model';
+import { shareRoute } from '@/lib/credreg/collect';
+import { sendReadyClaims } from '@/lib/credreg/pending';
+import { announceHeldChanged } from '@/lib/credreg/held';
+import { makePrivate } from '@/lib/credreg/visibility';
+import { makePublic } from '@/lib/credreg/accept';
+import { useProfileCredentials } from '@/hooks/useProfileCredentials';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
@@ -28,6 +35,8 @@ import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
+import BadgeGrid from '@/components/profile/BadgeGrid';
+import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
 import MuenzenButton from '@/components/profile/MuenzenButton';
@@ -35,15 +44,12 @@ import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
-import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
 import SponsoringBanner from '@/components/profile/SponsoringBanner';
 import { DANCECUP_SLUG } from '@/lib/sponsoring';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
-import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
-import * as Updates from 'expo-updates';
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -66,15 +72,6 @@ export default function ProfileScreen() {
   const [showAccountSheet, setShowAccountSheet] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [storyCollections, setStoryCollections] = useState<StoryCollection[]>([]);
-  const [chatEnabled, setChatEnabled] = useState(true);
-  // The Mecky chat banner is not released yet: hidden on the production channel, kept on preview/dev for testing.
-  const chatBannerOnChannel = (() => {
-    try {
-      return Updates.channel !== 'production';
-    } catch {
-      return false;
-    }
-  })();
 
   const isConnected = !!account;
   const isOrg = activeAccount?.account_type === 'organisation';
@@ -85,11 +82,40 @@ export default function ProfileScreen() {
   const userBusiness = businesses.find((b) => b.status === 'published') || businesses[0] || null;
 
   const mint = useDailyMint({ isCitizen });
+  // Closed gate: exactly today's built-in cards, no credential request (useHeld is not mounted).
+  const creds = useProfileCredentials({ isCitizen, isAttester: !!hasAttesterNFT });
+  const [detailCard, setDetailCard] = useState<RegisterCard | null>(null);
+  const [cardBusy, setCardBusy] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+
+  // A `credential_visibility` push opens the detail sheet of its type (once per push), as soon as
+  // that card is loaded.
+  const { credential: credentialParam, badge: badgeParam } = useLocalSearchParams<{ credential?: string; badge?: string }>();
+  const [handledCredentialParam, setHandledCredentialParam] = useState<string | null>(null);
+  // "Ansehen" from the stamp moment (`/profile?badge=<eventId>`) opens that badge's sheet once.
+  const [handledBadgeParam, setHandledBadgeParam] = useState<string | null>(null);
+  const [detailTile, setDetailTile] = useState<BadgeTile | null>(null);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [readyError, setReadyError] = useState<string | null>(null);
+  const badgeGroups = creds.open ? groupBadgesByYear(creds.profile.badges, creds.pendingBadges, creds.queued) : [];
+  const pushedTile =
+    creds.open && typeof badgeParam === 'string' && handledBadgeParam !== badgeParam ? badgeTileForEvent(badgeGroups, badgeParam) : null;
+  const pushedCard =
+    creds.open && typeof credentialParam === 'string' && handledCredentialParam !== credentialParam
+      ? ([...creds.profile.cards, ...creds.profile.badges].find(
+          (c) => c.source === 'register' && c.key.toLowerCase() === credentialParam.toLowerCase(),
+        ) ?? null)
+      : null;
+  const shownCard = detailCard ?? pushedCard ?? (detailTile ? null : pushedTile?.card ?? null);
+  const shownTile = shownCard ? null : detailTile ?? (pushedTile && !pushedTile.card ? pushedTile : null);
+  const dismissPushedCard = () => {
+    if (typeof credentialParam === 'string') setHandledCredentialParam(credentialParam);
+    if (typeof badgeParam === 'string') setHandledBadgeParam(badgeParam);
+  };
   const members = useOrgMemberPreview(isOrg ? activeAccount?.id : undefined);
 
   useEffect(() => {
     fetchProfileStoryCollections().then(setStoryCollections);
-    fetchChatSuiteEnabled().then(setChatEnabled);
   }, []);
 
   const handleDisconnect = async () => {
@@ -117,9 +143,91 @@ export default function ProfileScreen() {
   const profileHref = user?.username
     ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
     : ('/edit-profile' as const);
-  const credentialKinds = credentialKindsFor({ isCitizen, isAttester: !!hasAttesterNFT });
   const openExplainer = (kind: CredentialKind) =>
     router.push({ pathname: '/citizen-verification', params: { card: kind } } as any);
+  const openCard = (card: RegisterCard) => {
+    if (card.source === 'builtin') {
+      if (card.builtin) openExplainer(card.builtin);
+      return;
+    }
+    setCardError(null);
+    setDetailCard(card);
+  };
+  const closeCard = () => {
+    if (cardBusy) return;
+    dismissPushedCard();
+    setDetailCard(null);
+    setDetailTile(null);
+    setCardError(null);
+  };
+  const openTile = (tile: BadgeTile) => {
+    setCardError(null);
+    setDetailTile(tile);
+  };
+  const shareBadge = (card: RegisterCard) => {
+    if (!card.eventId) return;
+    dismissPushedCard();
+    setDetailCard(null);
+    router.push(
+      shareRoute({ eventId: card.eventId, eventTitle: card.eventTitle ?? card.title, eventDate: card.eventDate ?? '', name: card.title, imageUrl: card.imageUrl }) as any,
+    );
+  };
+  // "<n> Abzeichen bereit · Jetzt eintragen": the waiting public badges in one operation.
+  const enterReadyBadges = async () => {
+    if (!account || readyBusy) return;
+    setReadyBusy(true);
+    setReadyError(null);
+    try {
+      await sendReadyClaims(account);
+      announceHeldChanged();
+    } catch {
+      setReadyError('Das hat nicht geklappt. Bitte versuche es gleich noch einmal.');
+    } finally {
+      setReadyBusy(false);
+    }
+  };
+  const showCard = (card: RegisterCard) => {
+    dismissPushedCard();
+    setDetailCard(null);
+    router.push({ pathname: '/credentials/show/[key]', params: { key: card.key } } as any);
+  };
+  const makeCardPrivate = async (card: RegisterCard) => {
+    if (!account || cardBusy) return;
+    setCardBusy(true);
+    setCardError(null);
+    const result = await makePrivate(account, card);
+    setCardBusy(false);
+    if (!result.ok) {
+      setCardError(result.message);
+      return;
+    }
+    dismissPushedCard();
+    setDetailCard(null);
+    await creds.refresh();
+  };
+
+  const makeCardPublic = async (card: RegisterCard) => {
+    if (!account || cardBusy || !card.typeId) return;
+    const typeKey = card.typeId.toLowerCase();
+    const held = creds.held.find((h) => h.typeId.toLowerCase() === typeKey);
+    if (!held) return;
+    setCardBusy(true);
+    setCardError(null);
+    // Refuses expired cards and orgs that keep members private; the proof comes fresh from the server.
+    const result = await makePublic(account, held);
+    setCardBusy(false);
+    if (!result.ok) {
+      setCardError(result.message);
+      return;
+    }
+    dismissPushedCard();
+    setDetailCard(null);
+    await creds.refresh();
+  };
+  const openPending = () => {
+    const only = creds.pending.length === 1 ? creds.pending[0] : null;
+    router.push((only ? `/credentials/accept/${only.id}` : '/credentials') as any);
+  };
 
   const muenzenSlot =
     mint.state === 'hidden' ? null : (
@@ -192,7 +300,33 @@ export default function ProfileScreen() {
               </ProfileSheet>
             ) : (
               <>
-                <CredentialCardStack kinds={credentialKinds} onPress={openExplainer} />
+                {creds.loader}
+                {creds.open && creds.pending.length > 0 && (
+                  <Pressable
+                    onPress={openPending}
+                    style={[styles.pendingRow, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Neuer Ausweis wartet auf dich"
+                  >
+                    <Text style={[styles.pendingText, { color: colors.primary }]}>Neuer Ausweis wartet auf dich</Text>
+                    <Text style={[styles.pendingAction, { color: colors.primary }]}>Ansehen</Text>
+                  </Pressable>
+                )}
+                {creds.open && creds.readyClaims > 0 && (
+                  <Pressable
+                    onPress={enterReadyBadges}
+                    disabled={readyBusy}
+                    style={[styles.pendingRow, { backgroundColor: colors.primaryLight, borderColor: colors.primary }, readyBusy && { opacity: 0.6 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${creds.readyClaims} Abzeichen bereit, jetzt eintragen`}
+                  >
+                    <Text style={[styles.pendingText, { color: colors.primary }]}>
+                      {readyError ?? `${creds.readyClaims} Abzeichen bereit`}
+                    </Text>
+                    <Text style={[styles.pendingAction, { color: colors.primary }]}>{readyBusy ? 'Wird eingetragen…' : 'Jetzt eintragen'}</Text>
+                  </Pressable>
+                )}
+                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
                 <ProfileSheet>
                   <IdentityRow
                     name={displayName}
@@ -202,6 +336,16 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
+                  {creds.open && (
+                    <BadgeGrid
+                      badges={creds.profile.badges}
+                      pending={creds.pendingBadges}
+                      queued={creds.queued}
+                      onPress={openCard}
+                      onPressTile={openTile}
+                      emptyState
+                    />
+                  )}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (
@@ -215,7 +359,6 @@ export default function ProfileScreen() {
                     </View>
                   )}
                   {showGrid && <ProfileActionGrid items={PERSONAL_PROFILE_ACTIONS} />}
-                  {chatEnabled && chatBannerOnChannel && <ChatAgentsBanner wallet={account?.address} />}
                   {(isCitizen || isAspiringCitizen || wantsToBeCitizen) && (
                     <StoryCollectionsBar collections={storyCollections} heading="Lerne mehr über die Röbel App" />
                   )}
@@ -243,6 +386,19 @@ export default function ProfileScreen() {
 
         {/* Closes itself once the login lands (no effect needed). */}
         <LoginDrawer visible={showLoginDrawer && !isConnected} onClose={() => setShowLoginDrawer(false)} />
+        {creds.open && (
+          <CredentialDetailSheet
+            card={shownCard}
+            tile={shownTile}
+            onShare={shareBadge}
+            onClose={closeCard}
+            onShow={showCard}
+            onMakePrivate={makeCardPrivate}
+            onMakePublic={makeCardPublic}
+            busy={cardBusy}
+            error={cardError}
+          />
+        )}
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />
         <AccountSwitchSheet
           visible={showAccountSheet}
@@ -266,6 +422,20 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  pendingText: { fontSize: 15, fontFamily: 'MonaSans-SemiBold', flexShrink: 1 },
+  pendingAction: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   container: { flex: 1 },
   content: { flex: 1 },
   navOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0 },
@@ -278,8 +448,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 32,
   },
-  emptyTitle: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 4 },
-  emptySubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 12 },
+  emptyTitle: { fontSize: 16, fontFamily: 'MonaSans-Medium', marginBottom: 4 },
+  emptySubtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginBottom: 12 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
   qrFab: {

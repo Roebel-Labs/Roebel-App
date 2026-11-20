@@ -175,11 +175,11 @@ export default function PartnerRegisterInfoScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Bold', marginBottom: 8 },
+  subtitle: { fontSize: 15, fontFamily: 'MonaSans-Regular', marginBottom: 32 },
   label: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
   },
-  pickerValue: { fontSize: 15, fontFamily: 'Inter-Regular' },
+  pickerValue: { fontSize: 15, fontFamily: 'MonaSans-Regular' },
   pickerChevron: {
     fontSize: 20,
     transform: [{ rotate: '90deg' }],
@@ -205,17 +205,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   helper: {
     marginTop: 8,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   helperError: {
     marginTop: 6,
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomSpacer: { height: 96 },
   modalBackdrop: {
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -251,6 +251,6 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

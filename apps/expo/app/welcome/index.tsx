@@ -10,12 +10,14 @@ import LoginDrawer from '@/components/LoginDrawer';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 import { deferWelcomeWizard } from '@/lib/onboarding-deferral';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 
 /**
  * Welcome screen.
  *  - Logged in (pushed by UserContext for a row without onboarding): "Loslegen" into the wizard.
  *  - Logged out (first launch while the passkey gate is open, see app/consent.tsx): the passkey
- *    "Unabhängiges Konto" comes FIRST, then the thirdweb login and "Erst mal umsehen". A new
+ *    "Unabhängiges Konto" comes FIRST (with the 12-word link under it while the 'words' surface
+ *    is open), then the thirdweb login and "Erst mal umsehen". A new
  *    passkey account lands in the app right away; the wizard steps wait on the profile card.
  */
 export default function WelcomeIntroScreen() {
@@ -30,6 +32,20 @@ export default function WelcomeIntroScreen() {
   const skipNameStep = user?.auth_provider === 'apple';
 
   const loggedOut = !account;
+  // Expert path ("Ohne Apple- oder Google-Schlüsselbund"): only while the 'words' surface is open.
+  const [wordsOpen, setWordsOpen] = useState(false);
+  useEffect(() => {
+    if (!loggedOut) return;
+    let cancelled = false;
+    isPasskeySurfaceAllowed('words')
+      .catch(() => false)
+      .then((ok) => {
+        if (!cancelled) setWordsOpen(ok);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedOut]);
   // welcome is a full-screen modal over home: leaving it returns to home.
   const leave = () => {
     if (router.canGoBack()) router.back();
@@ -86,13 +102,28 @@ export default function WelcomeIntroScreen() {
                 }}
               />
 
+              {wordsOpen ? (
+                <Pressable
+                  onPress={() => router.push('/passkey/words-signup' as any)}
+                  style={[styles.textButton, styles.wordsLink]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.wordsLinkLabel, { color: colors.primary }]}>
+                    Ohne Apple- oder Google-Schlüsselbund: mit 12 Wörtern
+                  </Text>
+                </Pressable>
+              ) : null}
+
               <Pressable
                 onPress={() => setLoginOpen(true)}
                 style={[styles.secondaryButton, { borderColor: colors.primary }]}
                 accessibilityRole="button"
               >
-                <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Mit E-Mail, Google oder Apple anmelden</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Mit Google, Apple oder E-Mail anmelden</Text>
               </Pressable>
+              <Text style={[styles.secondaryHint, { color: colors.textSecondary }]}>
+                Bequem, aber dein Schlüssel liegt bei einem Anbieter.
+              </Text>
 
               <Pressable onPress={leave} style={styles.textButton} accessibilityRole="button">
                 <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Erst mal umsehen</Text>
@@ -139,7 +170,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 60,
     lineHeight: 64,
     letterSpacing: -1.2,
@@ -170,13 +201,13 @@ const styles = StyleSheet.create({
   },
   cardHeadline: {
     marginTop: 8,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 32,
     lineHeight: 38,
     textAlign: 'center',
   },
   cardHeadlineSmall: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 24,
     lineHeight: 30,
     textAlign: 'center',
@@ -201,6 +232,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  secondaryHint: { fontSize: 13, textAlign: 'center', marginTop: -4 },
   secondaryButtonText: {
     fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
@@ -213,8 +245,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   textButtonLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 15,
+    textDecorationLine: 'underline',
+  },
+  wordsLink: {
+    marginTop: 0,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+  wordsLinkLabel: {
+    fontFamily: 'MonaSans-Medium',
+    fontSize: 15,
+    textAlign: 'center',
     textDecorationLine: 'underline',
   },
 });

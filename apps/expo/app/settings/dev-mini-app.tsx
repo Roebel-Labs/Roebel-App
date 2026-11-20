@@ -39,6 +39,13 @@ function devApp(url: string): MiniApp {
     featureImageUrl: null,
     createdAt: new Date().toISOString(),
     authorName: null,
+    preview: true,
+    manifestVersion: 1,
+    identity: null,
+    contracts: [],
+    audience: null,
+    orgAccountId: null,
+    orgName: null,
   };
 }
 
@@ -101,9 +108,10 @@ export default function DevMiniAppScreen() {
             ]}
           />
           <Text style={[styles.hint, { color: colors.textTertiary }]}>
-            Die Seite läuft im echten Mini-App-Host mit allen Berechtigungen —
-            genau wie eine App aus dem Store. Belohnungen funktionieren erst,
-            wenn die App gelistet ist.
+            Die Seite läuft im echten Mini-App-Host. Alle Berechtigungen sind
+            simuliert, damit du testen kannst. Im Store bekommt deine App nur,
+            was im Manifest steht und geprüft wurde. Belohnungen und Nutzerdaten
+            funktionieren erst, wenn die App gelistet ist.
           </Text>
           <Pressable
             onPress={open}

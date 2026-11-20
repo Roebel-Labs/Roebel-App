@@ -332,3 +332,12 @@ test("no newsletter write path: the email modules never reference users.email or
     assert.ok(!/from\(\s*["']users["']\s*\)/.test(src), `${f} writes the users table`);
   }
 });
+
+test("start: a rejecting limiter answers 503 store_unavailable and sends no mail", async () => {
+  const down = { take: async () => { throw new Error("rate store down"); } };
+  const { deps, mailer } = setup({ limits: { safe: down, email: down } });
+  const r = await handleEmailStart(post(startBody()), deps);
+  assert.equal(r.status, 503);
+  assert.deepEqual(await r.json(), { error: "store_unavailable" });
+  assert.equal(mailer.sent.length, 0);
+});

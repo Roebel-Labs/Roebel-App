@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff', // White text to match white icon
   },
 
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: 24, // Reduced from 28px for better proportions
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
     lineHeight: 28, // Adjusted line height
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   },
   location: {
     fontSize: 14, // Reduced from 16px for consistency with description
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },

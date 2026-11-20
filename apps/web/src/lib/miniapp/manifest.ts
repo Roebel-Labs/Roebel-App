@@ -3,10 +3,15 @@
 // (`invalid_params`). The API submit route and the AI-builder publish route both
 // call `validateManifest` before persisting.
 import type {
+  CredentialRequest,
+  MiniAppAudience,
   MiniAppCategory,
+  MiniAppIdentityRequest,
   MiniAppManifest,
   MiniAppPermission,
 } from "@netizen-labs/miniapp-sdk";
+import { parseCredentialRef } from "@netizen-labs/miniapp-sdk/host";
+import { validateContracts } from "./contracts";
 import { MiniAppError } from "./types";
 
 export const CATEGORIES: MiniAppCategory[] = [
@@ -31,6 +36,15 @@ export const PERMISSIONS: MiniAppPermission[] = [
 
 export const DEFAULT_PRIMARY_COLOR = "#00498B";
 
+/** Supported manifest versions. "1" = today's behaviour; "2" adds the `identity` section. */
+export const MANIFEST_VERSIONS = ["1", "2"] as const;
+export type ManifestVersion = (typeof MANIFEST_VERSIONS)[number];
+
+const MAX_IDENTITY_CREDENTIALS = 12;
+const MAX_REASON_LENGTH = 120;
+const IDENTITY_KEYS = ["profile", "address", "credentials"];
+const CREDENTIAL_KEYS = ["type", "reason"];
+
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -48,6 +62,112 @@ function isHttpsUrl(v: unknown): v is string {
   }
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function validateIdentity(input: unknown): MiniAppIdentityRequest {
+  if (!isPlainObject(input)) fail("identity muss ein Objekt sein.");
+  for (const key of Object.keys(input)) {
+    if (!IDENTITY_KEYS.includes(key)) {
+      fail(`identity.${key} ist unbekannt (erlaubt: ${IDENTITY_KEYS.join(", ")}).`);
+    }
+  }
+  const flag = (key: "profile" | "address"): boolean => {
+    const v = input[key];
+    if (v === undefined) return false;
+    if (typeof v !== "boolean") fail(`identity.${key} muss true oder false sein.`);
+    return v;
+  };
+  const profile = flag("profile");
+  const address = flag("address");
+
+  const raw = input.credentials ?? [];
+  if (!Array.isArray(raw)) fail("identity.credentials muss eine Liste sein.");
+  if (raw.length > MAX_IDENTITY_CREDENTIALS) {
+    fail(`identity.credentials: höchstens ${MAX_IDENTITY_CREDENTIALS} Nachweise erlaubt.`);
+  }
+  const seen = new Set<string>();
+  const credentials: CredentialRequest[] = raw.map((entry, i) => {
+    if (!isPlainObject(entry)) fail(`identity.credentials[${i}] muss ein Objekt mit type und reason sein.`);
+    for (const key of Object.keys(entry)) {
+      if (!CREDENTIAL_KEYS.includes(key)) {
+        fail(`identity.credentials[${i}].${key} ist unbekannt (erlaubt: ${CREDENTIAL_KEYS.join(", ")}).`);
+      }
+    }
+    const parsed = typeof entry.type === "string" ? parseCredentialRef(entry.type) : null;
+    if (!parsed) {
+      fail(
+        `identity.credentials[${i}].type "${String(entry.type ?? "")}" ist unbekannt ` +
+          '(erlaubt: citizen, attester, guest, "type:0x…" oder "org:<id>").',
+      );
+    }
+    const type =
+      parsed.kind === "builtin" ? parsed.name : parsed.kind === "type" ? `type:${parsed.typeId}` : `org:${parsed.org}`;
+    if (seen.has(type)) fail(`identity.credentials: "${type}" ist doppelt.`);
+    seen.add(type);
+    const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
+    if (!reason || reason.length > MAX_REASON_LENGTH) {
+      fail(`identity.credentials[${i}].reason muss 1–${MAX_REASON_LENGTH} Zeichen lang sein.`);
+    }
+    return { type, reason };
+  });
+
+  return { profile, address, credentials };
+}
+
+const AUDIENCE_KEYS = ["mode", "anyOf"] as const;
+const AUDIENCE_MODES = ["required", "recommended"] as const;
+const MAX_AUDIENCE_REFS = 8;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A parsed credential reference back in its canonical (lowercased) string form. */
+function canonicalRef(s: unknown): string | null {
+  if (typeof s !== "string") return null;
+  const p = parseCredentialRef(s);
+  if (!p) return null;
+  if (p.kind === "builtin") return p.name;
+  if (p.kind === "type") return `type:${p.typeId}`;
+  return `org:${p.org}`;
+}
+
+function validateAudience(input: unknown): MiniAppAudience {
+  if (!isPlainObject(input)) fail("audience muss ein Objekt mit mode und anyOf sein.");
+  for (const key of Object.keys(input)) {
+    if (!(AUDIENCE_KEYS as readonly string[]).includes(key)) {
+      fail(`audience.${key} ist unbekannt (erlaubt: ${AUDIENCE_KEYS.join(", ")}).`);
+    }
+  }
+  const mode = input.mode;
+  if (typeof mode !== "string" || !(AUDIENCE_MODES as readonly string[]).includes(mode)) {
+    fail(`audience.mode muss einer von: ${AUDIENCE_MODES.join(", ")} sein.`);
+  }
+  const raw = input.anyOf;
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_AUDIENCE_REFS) {
+    fail(`audience.anyOf muss eine Liste mit 1–${MAX_AUDIENCE_REFS} Nachweisen sein.`);
+  }
+  const anyOf: string[] = [];
+  raw.forEach((entry, i) => {
+    const ref = canonicalRef(entry);
+    if (!ref) {
+      fail(
+        `audience.anyOf[${i}] "${String(entry)}" ist unbekannt ` +
+          "(erlaubt: citizen, attester, guest, type:0x…, org:<Konto-ID>).",
+      );
+    }
+    if (anyOf.includes(ref)) fail(`audience.anyOf: "${ref}" ist doppelt.`);
+    anyOf.push(ref);
+  });
+  return { mode: mode as MiniAppAudience["mode"], anyOf };
+}
+
+function validateOrg(input: unknown): string {
+  if (typeof input !== "string" || !UUID_RE.test(input.trim())) {
+    fail("org muss die Konto-ID des Vereins sein (eine UUID, wie in /account/<id>).");
+  }
+  return input.trim().toLowerCase();
+}
+
 /**
  * Validate + normalize a manifest. Throws MiniAppError('invalid_params') with a
  * German-friendly message on the first problem found.
@@ -55,6 +175,23 @@ function isHttpsUrl(v: unknown): v is string {
 export function validateManifest(input: unknown): MiniAppManifest {
   if (!input || typeof input !== "object") fail("Manifest fehlt oder ist ungültig.");
   const m = input as Record<string, unknown>;
+
+  const version = String(m.version ?? "1");
+  if (!(MANIFEST_VERSIONS as readonly string[]).includes(version)) {
+    fail(`miniapp.version "${version}" wird nicht unterstützt (erlaubt: ${MANIFEST_VERSIONS.join(", ")}).`);
+  }
+  const hasIdentity = m.identity !== undefined && m.identity !== null;
+  if (version === "1" && hasIdentity) fail('identity braucht miniapp.version "2".');
+  const identity = version === "2" && hasIdentity ? validateIdentity(m.identity) : undefined;
+  const hasContracts = m.contracts !== undefined && m.contracts !== null;
+  if (version === "1" && hasContracts) fail('contracts braucht miniapp.version "2".');
+  const contracts = version === "2" && hasContracts ? validateContracts(m.contracts) : undefined;
+  const hasAudience = m.audience !== undefined && m.audience !== null;
+  if (version === "1" && hasAudience) fail('audience braucht miniapp.version "2".');
+  const audience = version === "2" && hasAudience ? validateAudience(m.audience) : undefined;
+  const hasOrg = m.org !== undefined && m.org !== null;
+  if (version === "1" && hasOrg) fail('org braucht miniapp.version "2".');
+  const org = version === "2" && hasOrg ? validateOrg(m.org) : undefined;
 
   const slug = String(m.slug ?? "").trim().toLowerCase();
   if (!SLUG_RE.test(slug)) {
@@ -121,5 +258,100 @@ export function validateManifest(input: unknown): MiniAppManifest {
     screenshots,
     permissions,
     primaryColor,
+    // Version 1 output stays byte-identical to before (no version/identity keys): the
+    // indexer hashes it, and a new key would flag every live app for re-review.
+    ...(version === "2"
+      ? {
+          version: "2" as const,
+          ...(identity ? { identity } : {}),
+          ...(contracts ? { contracts } : {}),
+          ...(audience ? { audience } : {}),
+          ...(org ? { org } : {}),
+        }
+      : {}),
   };
+}
+
+/**
+ * The `mini_apps` column patch for a validated manifest — used by every write path.
+ * `manifest_version` and `identity` are the version-2 columns (identity null for version 1);
+ * `contracts` is always a list (empty for version 1 or no declaration); `audience` and
+ * `org_account_id` are null unless a version-2 manifest declares them. The org binding
+ * status is not part of this patch (see orgBinding.ts).
+ */
+export function manifestStoreFields(m: MiniAppManifest): Record<string, unknown> {
+  const version: ManifestVersion = m.version === "2" ? "2" : "1";
+  return {
+    name: m.name,
+    icon_url: m.iconUrl || null,
+    home_url: m.homeUrl,
+    description: m.description || null,
+    category: m.category,
+    tags: m.tags,
+    screenshots: m.screenshots ?? [],
+    permissions: m.permissions,
+    primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
+    manifest_version: version,
+    identity: version === "2" ? (m.identity ?? null) : null,
+    contracts: version === "2" ? (m.contracts ?? []) : [],
+    audience: version === "2" ? (m.audience ?? null) : null,
+    org_account_id: version === "2" ? (m.org ?? null) : null,
+  };
+}
+
+const IDENTITY_COLUMNS = ["manifest_version", "identity"] as const;
+/** Added by 20261117mb_mini_app_contracts_gas.sql (after the identity migration). */
+const CONTRACTS_COLUMNS = ["contracts"] as const;
+/** Added by 20261117mc_mini_app_audience_org.sql (after the contracts migration). */
+const AUDIENCE_COLUMNS = [
+  "audience",
+  "org_account_id",
+  "org_binding",
+  "org_binding_decided_at",
+  "org_binding_decided_by",
+] as const;
+const NEW_COLUMNS = [...IDENTITY_COLUMNS, ...CONTRACTS_COLUMNS, ...AUDIENCE_COLUMNS] as const;
+
+/**
+ * True when a mini_apps write failed only because the identity migration
+ * (20261117ma_mini_app_identity.sql) is not applied yet: PostgREST reports an unknown
+ * column as PGRST204 (schema cache) or Postgres 42703.
+ */
+export function isMissingIdentityColumnError(
+  err: { code?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!err || (err.code !== "PGRST204" && err.code !== "42703")) return false;
+  const msg = err.message ?? "";
+  return IDENTITY_COLUMNS.some((c) => msg.includes(c));
+}
+
+/**
+ * Which new columns to drop after a failed write: none unless the error is an unknown
+ * column (PGRST204 / 42703) naming one of them. The migrations apply in order (identity →
+ * contracts → audience/org), so a missing identity column means none is applied (drop all);
+ * a missing `contracts` column drops just that one (a following retry finds the audience
+ * columns if they are missing too); a missing `audience` / `org_account_id` column only those.
+ */
+export function missingNewColumns(
+  err: { code?: string | null; message?: string | null } | null | undefined,
+): string[] {
+  if (!err || (err.code !== "PGRST204" && err.code !== "42703")) return [];
+  const msg = err.message ?? "";
+  if (IDENTITY_COLUMNS.some((c) => msg.includes(c))) return [...NEW_COLUMNS];
+  if (CONTRACTS_COLUMNS.some((c) => msg.includes(c))) return [...CONTRACTS_COLUMNS];
+  // "org_binding" also matches "org_binding_decided_*"; any of them means the whole set is missing.
+  if (AUDIENCE_COLUMNS.some((c) => msg.includes(c))) return [...AUDIENCE_COLUMNS];
+  return [];
+}
+
+/** The same patch without the given columns. */
+export function withoutColumns<T extends Record<string, unknown>>(patch: T, columns: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...patch };
+  for (const c of columns) delete out[c];
+  return out;
+}
+
+/** The same patch without the new columns (identity + contracts + audience/org), for the pre-migration retry. */
+export function withoutIdentityColumns<T extends Record<string, unknown>>(patch: T): Record<string, unknown> {
+  return withoutColumns(patch, NEW_COLUMNS);
 }

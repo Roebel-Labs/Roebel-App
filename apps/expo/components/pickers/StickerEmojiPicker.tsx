@@ -323,6 +323,6 @@ const styles = StyleSheet.create({
   },
   emptyChipText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

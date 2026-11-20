@@ -15,6 +15,8 @@ export type ChatListRowProps = {
   preview?: string | null;
   /** One spec = single avatar, 2+ = group stack. */
   avatars: BotAvatarSpec[];
+  /** Bot names in the same order as `avatars` (Mecky's picture, initial-tile letters). */
+  names?: (string | undefined)[];
   /** Green dot: the thread has an enabled routine. */
   online?: boolean;
   unread?: boolean;
@@ -30,6 +32,7 @@ export function ChatListRow({
   time,
   preview,
   avatars,
+  names,
   online,
   unread,
   onPress,
@@ -48,7 +51,7 @@ export function ChatListRow({
       <View style={styles.avatar}>
         {avatars.length > 1 ? (
           <>
-            <BotAvatarStack specs={avatars} size={chatSize.listAvatar} />
+            <BotAvatarStack specs={avatars} names={names} size={chatSize.listAvatar} />
             {online ? (
               <View
                 accessibilityLabel="Routine aktiv"
@@ -57,7 +60,7 @@ export function ChatListRow({
             ) : null}
           </>
         ) : avatars[0] ? (
-          <BotAvatar spec={avatars[0]} size={chatSize.listAvatar} online={online} />
+          <BotAvatar spec={avatars[0]} name={names?.[0]} size={chatSize.listAvatar} online={online} />
         ) : null}
       </View>
       <View style={styles.body}>

@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   imageContainer: { justifyContent: 'center', alignItems: 'center' },
   hintContainer: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, bottom: 40, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
   counterContainer: { position: 'absolute', zIndex: 10, top: 64, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  counterText: { color: '#fff', fontSize: 14, fontFamily: 'Inter-Medium' },
+  counterText: { color: '#fff', fontSize: 14, fontFamily: 'MonaSans-Medium' },
   chevronLeft: { top: '50%', marginTop: -20, left: 10, right: undefined },
   chevronRight: { top: '50%', marginTop: -20, right: 10 },
 });

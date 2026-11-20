@@ -81,17 +81,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
   balance: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 40,
     letterSpacing: -0.8,
     marginTop: 4,
   },
   sublabel: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     marginTop: 4,
   },

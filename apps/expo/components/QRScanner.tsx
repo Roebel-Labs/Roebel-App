@@ -10,13 +10,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import ErrorDrawer from './ErrorDrawer';
+import { parseAusweisPayload } from '@/lib/credreg/show-code';
 
 // Module-level constant so CameraView doesn't see a new object on every
 // render — a fresh prop identity can stall barcode detection on some devices.
 const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'studio_pair' | 'credential' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
@@ -36,7 +37,13 @@ interface QRScannerProps {
   allowedTypes?: QRScanResult['type'][];
 }
 
-function parseQRCode(data: string): QRScanResult {
+export function parseQRCode(data: string): QRScanResult {
+  // Shown credential (Vorzeigen): roebel-ausweis:<12-character presentation code>
+  const ausweisCode = parseAusweisPayload(data);
+  if (ausweisCode) {
+    return { type: 'credential', data, id: ausweisCode };
+  }
+
   // Verification: hometownevents://verification/request/{id}?type=citizen
   const verificationMatch = data.match(/(?:hometownevents|roebel):\/\/verification\/request\/(\d+)\?type=(\w+)/);
   if (verificationMatch) {
@@ -102,6 +109,12 @@ function parseQRCode(data: string): QRScanResult {
     return { type: 'order', data, slug: orderMatch[1], tableNumber: decodeURIComponent(orderMatch[2]) };
   }
 
+  // Ortis Studio pairing: https://www.roebel.app/studio/verbinden?code=ABCDEFGH (or roebel://chat/pair?code=…)
+  const pairMatch = data.match(/(?:roebel\.app\/studio\/verbinden|roebel:\/\/chat\/pair)\?(?:[^#]*&)?code=([A-Za-z0-9-]{8,9})/);
+  if (pairMatch) {
+    return { type: 'studio_pair', data, id: pairMatch[1] };
+  }
+
   return { type: 'unknown', data };
 }
 
@@ -149,6 +162,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         roebel_card: 'Röbel Card',
         event: 'Event',
         ticket: 'Ticket',
+        credential: 'Ausweis',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
@@ -190,6 +204,12 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       return;
     } else if (result.type === 'event' && result.id) {
       router.push(`/e/${result.id}` as any);
+      return;
+    } else if (result.type === 'credential' && result.id) {
+      router.push({ pathname: '/credentials/check', params: { code: result.id } } as any);
+      return;
+    } else if (result.type === 'studio_pair' && result.id) {
+      router.push({ pathname: '/chat/pair', params: { code: result.id } } as any);
       return;
     } else if (result.type === 'checkpoint') {
       // Handled by parent via onScan
@@ -317,7 +337,7 @@ const styles = StyleSheet.create({
   diagText: {
     color: '#ffffff',
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   overlay: {
     flex: 1,
@@ -379,7 +399,7 @@ const styles = StyleSheet.create({
   },
   instructionText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 16,
@@ -397,7 +417,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#ffffff',
     textAlign: 'center',
     padding: 32,

@@ -4,6 +4,7 @@
 //   • admin field update:      { featured?, reward_budget?, status?, review_notes? }
 import { NextResponse } from "next/server";
 import {
+  getAccountName,
   getApp,
   listVersions,
   updateAppManifest,
@@ -27,8 +28,11 @@ export async function GET(
     const { id } = await params;
     const app = await getApp(id);
     if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
-    const versions = await listVersions(app.id);
-    return NextResponse.json({ app, versions });
+    const [versions, orgName] = await Promise.all([
+      listVersions(app.id),
+      app.org_account_id ? getAccountName(app.org_account_id) : Promise.resolve(null),
+    ]);
+    return NextResponse.json({ app, versions, orgName });
   } catch (e) {
     return jsonError(e);
   }
@@ -74,7 +78,9 @@ export async function PATCH(
     }
     if (typeof body.review_notes === "string" || body.decision) {
       if (body.decision === "approve" || body.decision === "reject") {
-        result = await reviewApp(app.id, body.decision, body.review_notes ?? null, reviewer);
+        result = await reviewApp(app.id, body.decision, body.review_notes ?? null, reviewer, {
+          identityReviewed: body.identityReviewed === true,
+        });
       }
     }
     if (typeof body.status === "string") {

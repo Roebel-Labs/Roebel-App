@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 24 },
   label: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -200,17 +200,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   helper: {
     marginTop: 6,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   helperError: {
     marginTop: 6,
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -221,8 +221,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   toggleText: { flex: 1 },
-  toggleTitle: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
-  toggleSubtitle: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  toggleTitle: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
+  toggleSubtitle: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   footer: {
     paddingHorizontal: 24,
     paddingVertical: 16,

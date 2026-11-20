@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   sectionCount: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   hList: {
@@ -174,11 +174,11 @@ const styles = StyleSheet.create({
   },
   mediaCardTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 18,
   },
   mediaCardMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

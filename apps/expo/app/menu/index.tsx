@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   addBtn: {
     borderRadius: 10,
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flex: 1,
     marginRight: 12,
   },
@@ -256,12 +256,12 @@ const styles = StyleSheet.create({
   deleteText: {
     fontSize: 13,
     color: '#DC2626',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 40,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

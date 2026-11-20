@@ -288,10 +288,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   stateEmoji: { fontSize: 56, marginBottom: 8 },
-  stateTitle: { fontSize: 20, fontFamily: 'Inter-Bold', textAlign: 'center' },
+  stateTitle: { fontSize: 20, fontFamily: 'MonaSans-Bold', textAlign: 'center' },
   stateBody: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 16,
@@ -305,11 +305,11 @@ const styles = StyleSheet.create({
   },
   statePrimaryText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   sectionHeading: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 12,
@@ -324,9 +324,9 @@ const styles = StyleSheet.create({
   },
   employeeEmoji: { fontSize: 28 },
   employeeText: { flex: 1, gap: 2 },
-  employeeName: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  employeeMeta: { fontSize: 12, fontFamily: 'Inter-Regular' },
-  chevron: { fontSize: 22, fontFamily: 'Inter-Bold' },
+  employeeName: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  employeeMeta: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
+  chevron: { fontSize: 22, fontFamily: 'MonaSans-Bold' },
   addButton: {
     borderRadius: 16,
     paddingVertical: 16,
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   },
   complianceLinkText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
 });

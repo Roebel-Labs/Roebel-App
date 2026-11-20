@@ -21,14 +21,30 @@ import { utf8Encode } from './encoding';
 
 export const KEY_BACKUP_SLOTS = ['maci', 'nostr', 'salt'] as const;
 export type KeyBackupSlot = (typeof KEY_BACKUP_SLOTS)[number];
-export type KeyBackupBlobs = Partial<Record<KeyBackupSlot, string>>;
+/** The same three secrets wrapped a second time, under the recovery-words vault key (words-vault.ts). */
+export const KEY_BACKUP_WORDS_SLOTS = ['maci_w', 'nostr_w', 'salt_w'] as const;
+/** Primary slot → its words slot. */
+export const KEY_BACKUP_WORDS_SLOT: Record<KeyBackupSlot, (typeof KEY_BACKUP_WORDS_SLOTS)[number]> = {
+  maci: 'maci_w',
+  nostr: 'nostr_w',
+  salt: 'salt_w',
+};
+/** The words vault key, wrapped under the passkey PRF (a phone with only the passkey reads it). */
+export const KEY_BACKUP_VAULT_SLOT = 'wvk';
+export type KeyBackupBlobKey = KeyBackupSlot | (typeof KEY_BACKUP_WORDS_SLOTS)[number] | typeof KEY_BACKUP_VAULT_SLOT;
+export type KeyBackupBlobs = Partial<Record<KeyBackupBlobKey, string>>;
+/** Every stored slot, in content order (same as the server). */
+export const KEY_BACKUP_BLOB_KEYS: readonly KeyBackupBlobKey[] = [...KEY_BACKUP_SLOTS, ...KEY_BACKUP_WORDS_SLOTS, KEY_BACKUP_VAULT_SLOT];
 
 export const KEY_BACKUP_UNAVAILABLE_MESSAGE =
   'Die Schlüssel-Sicherung ist gerade nicht erreichbar. Bitte prüfe deine Verbindung und versuche es erneut.';
 
-/** `slot=blob` lines in slot order, then `replace=0|1` (same as the server). */
+/**
+ * `slot=blob` lines in the order maci, nostr, salt, maci_w, nostr_w, salt_w, wvk (present ones
+ * only), then `replace=0|1` (same as the server).
+ */
 export function keyBackupContent(blobs: KeyBackupBlobs, replace: boolean): string {
-  const lines = KEY_BACKUP_SLOTS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
+  const lines = KEY_BACKUP_BLOB_KEYS.filter((s) => blobs[s] !== undefined).map((s) => `${s}=${blobs[s]}`);
   lines.push(`replace=${replace ? 1 : 0}`);
   return lines.join('\n');
 }
@@ -65,7 +81,18 @@ export type RemoteWrite = 'stored' | 'exists' | 'disabled';
 
 export type RemoteBackup = {
   read: () => Promise<RemoteRead>;
+  /**
+   * A read that never prompts: with a cached session token, else null (the caller decides whether
+   * a signed read is worth a fingerprint). Optional: fakes and older callers may leave it out.
+   */
+  readWithoutPrompt?: () => Promise<RemoteRead | null>;
   write: (blobs: KeyBackupBlobs, replace?: boolean) => Promise<RemoteWrite>;
+  /**
+   * A plain (no `replace`) write that never prompts: only with an already cached session token
+   * (peek, never a new session), else null and nothing is sent or signed. Optional like
+   * `readWithoutPrompt`; callers that must not cost a fingerprint skip the write when it is absent.
+   */
+  writeWithoutPrompt?: (blobs: KeyBackupBlobs) => Promise<RemoteWrite | null>;
 };
 
 type FetchLike = (
@@ -138,6 +165,24 @@ async function postWithToken(
   return null;
 }
 
+function parseRead(r: { status: number; ok: boolean; json: any }, prf?: Hex): RemoteRead {
+  if (isDisabled(r)) return { status: 'disabled' };
+  if (!r.ok || !r.json || typeof r.json.blobs !== 'object' || r.json.blobs === null) {
+    throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
+  }
+  const blobs: KeyBackupBlobs = {};
+  for (const s of KEY_BACKUP_BLOB_KEYS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
+  const withPrf = prf ? { prf } : {};
+  return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
+}
+
+function parseWrite(r: { status: number; ok: boolean; json: any }): RemoteWrite {
+  if (isDisabled(r)) return 'disabled';
+  if (r.status === 409 && r.json?.error === 'exists') return 'exists';
+  if (!r.ok) throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
+  return 'stored';
+}
+
 /** Transport errors and unexpected answers THROW (German): callers must never treat them as "no backup". */
 export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
   const now = () => (d.nowSec ?? (() => Math.floor(Date.now() / 1000)))();
@@ -152,14 +197,12 @@ export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
         prf = signed.prf;
         r = await post(d, '/api/passkey/key-backup/get', { identity: d.identity, proof: { timestamp, signature: signed.signature } });
       }
-      if (isDisabled(r)) return { status: 'disabled' };
-      if (!r.ok || !r.json || typeof r.json.blobs !== 'object' || r.json.blobs === null) {
-        throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
-      }
-      const blobs: KeyBackupBlobs = {};
-      for (const s of KEY_BACKUP_SLOTS) if (typeof r.json.blobs[s] === 'string') blobs[s] = r.json.blobs[s];
-      const withPrf = prf ? { prf } : {};
-      return Object.keys(blobs).length > 0 ? { status: 'found', blobs, ...withPrf } : { status: 'none', ...withPrf };
+      return parseRead(r, prf);
+    },
+    async readWithoutPrompt() {
+      if (!d.apiUrl) return { status: 'disabled' };
+      const r = await postWithToken(d, () => d.session!.peek(), '/api/passkey/key-backup/get', { identity: d.identity });
+      return r ? parseRead(r) : null;
     },
     async write(blobs, replace = false) {
       if (!d.apiUrl) return 'disabled';
@@ -178,10 +221,12 @@ export function createKeyBackupClient(d: KeyBackupClientDeps): RemoteBackup {
           proof: { timestamp, signature },
         });
       }
-      if (isDisabled(r)) return 'disabled';
-      if (r.status === 409 && r.json?.error === 'exists') return 'exists';
-      if (!r.ok) throw new Error(KEY_BACKUP_UNAVAILABLE_MESSAGE);
-      return 'stored';
+      return parseWrite(r);
+    },
+    async writeWithoutPrompt(blobs) {
+      if (!d.apiUrl) return 'disabled';
+      const r = await postWithToken(d, () => d.session!.peek(), '/api/passkey/key-backup/put', { identity: d.identity, blobs });
+      return r ? parseWrite(r) : null;
     },
   };
 }

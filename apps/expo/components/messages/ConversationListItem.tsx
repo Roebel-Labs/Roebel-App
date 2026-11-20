@@ -1,9 +1,14 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
+import { chatFont, useChatTokens } from '@/components/chat/tokens';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import { safeDisplayName, type ConversationWithLastMessage } from '@/lib/supabase-messages';
 import { cleanNotificationBody } from '@/lib/notification-display';
+
+// Rounded-square ("squircle") avatars, a touch larger than the app's
+// default 48 px circles — the messenger list reads by faces first.
+export const AVATAR_SIZE = 56;
+export const AVATAR_RADIUS = 20;
 
 type Props = {
   conversation: ConversationWithLastMessage;
@@ -41,7 +46,7 @@ function getPreviewText(message: ConversationWithLastMessage['lastMessage']): st
 }
 
 export default function ConversationListItem({ conversation, onPress }: Props) {
-  const { colors } = useTheme();
+  const t = useChatTokens();
   const {
     peerName,
     peerAvatarUrl,
@@ -56,60 +61,50 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
   // Personal accounts carry an equipped frame from their owner wallet's
   // users row; orgs never do.
   const frameUrl = peerAccountType === 'personal' ? peerEquippedFrameUrl : null;
+  const preview = lastMessage ? getPreviewText(lastMessage) : 'Keine Nachrichten';
 
+  // Same anatomy as the Mecky chat list (ChatListRow): no dividers, airy
+  // padding, blue time + dark preview when unread.
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.container,
-        { borderBottomColor: colors.border },
-        pressed && { backgroundColor: colors.pressedOverlay },
-      ]}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: t.chipBackground }]}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${displayName}, ${preview}`}
     >
       <UserAvatarWithFrame
-        size={48}
+        size={AVATAR_SIZE}
+        radius={AVATAR_RADIUS}
         uri={peerAvatarUrl}
         fallbackInitial={(displayName[0] || '?').toUpperCase()}
         frameAssetUrl={frameUrl}
       />
-      <View style={styles.content}>
-        <View style={styles.topRow}>
+      <View style={styles.body}>
+        <View style={styles.top}>
           <Text
-            style={[
-              styles.name,
-              { color: colors.textPrimary },
-              hasUnread && styles.nameBold,
-            ]}
+            style={[styles.title, { color: t.textPrimary }, hasUnread && styles.titleUnread]}
             numberOfLines={1}
           >
             {displayName}
           </Text>
           {lastMessage && (
-            <Text style={[styles.time, { color: colors.textTertiary }]}>
+            <Text style={[styles.time, { color: hasUnread ? t.link : t.textTertiary }]}>
               {formatTimestamp(lastMessage.created_at)}
             </Text>
           )}
         </View>
-        <View style={styles.bottomRow}>
-          {lastMessage ? (
-            <Text
-              style={[
-                styles.preview,
-                { color: colors.textSecondary },
-                hasUnread && styles.previewBold,
-              ]}
-              numberOfLines={1}
-            >
-              {getPreviewText(lastMessage)}
-            </Text>
-          ) : (
-            <Text style={[styles.preview, styles.previewEmpty, { color: colors.textSecondary }]}>
-              Keine Nachrichten
-            </Text>
-          )}
-          {hasUnread && (
-            <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-          )}
+        <View style={styles.bottom}>
+          <Text
+            style={[
+              styles.preview,
+              { color: hasUnread ? t.textPrimary : t.textSecondary },
+              !lastMessage && styles.previewEmpty,
+            ]}
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
+          {hasUnread && <View style={[styles.unreadDot, { backgroundColor: t.link }]} />}
         </View>
       </View>
     </Pressable>
@@ -117,63 +112,45 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 15,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
-  },
-  content: {
+  body: {
     flex: 1,
-    gap: 4,
+    minWidth: 0,
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bottomRow: {
+  top: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  name: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+  bottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  title: {
     flex: 1,
-    marginRight: 8,
+    fontSize: 17,
+    fontFamily: chatFont.medium,
+    letterSpacing: -0.2,
   },
-  nameBold: {
-    fontFamily: 'Inter-SemiBold',
+  titleUnread: {
+    fontFamily: chatFont.semiBold,
   },
   time: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    fontFamily: chatFont.regular,
   },
   preview: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
     flex: 1,
-  },
-  previewBold: {
-    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+    fontFamily: chatFont.regular,
+    letterSpacing: -0.1,
   },
   previewEmpty: {
     fontStyle: 'italic',

@@ -9,12 +9,21 @@
  *   RESEND_API_KEY                 sends from konto@roebel.app; unset = every send fails (502)
  *   GNOSIS_RPC_URL                 optional; default https://gnosis-rpc.publicnode.com
  *
- * Rate limits are in memory (see email-rate-limit.ts): a shared limiter is a production gate.
+ *   PASSKEY_RATE_LIMIT_STORE=supabase  shared rate limits (needs migration
+ *                                  20261117b_passkey_rate_limits.sql applied + SUPABASE env).
+ *                                  Unset = in-memory per instance (ceiling = limit x instances).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EmailRouteDeps } from "./email-handler";
 import { createResendMailer, MailSendError, type Mailer } from "./email-mailer";
-import { EMAIL_SENDS_PER_HOUR, FixedWindowLimiter, HOUR_MS, SAFE_SENDS_PER_HOUR } from "./email-rate-limit";
+import {
+  EMAIL_SENDS_PER_HOUR,
+  FixedWindowLimiter,
+  HOUR_MS,
+  type RateLimiter,
+  SAFE_SENDS_PER_HOUR,
+  SupabaseRateLimiter,
+} from "./email-rate-limit";
 import { InMemoryEmailStore, type PasskeyEmailStore } from "./email-store";
 import { SupabaseEmailStore } from "./email-store-supabase";
 import { createGnosisSafeVerifier } from "./email-verifier";
@@ -45,6 +54,25 @@ export function passkeyMailer(): Mailer {
   };
 }
 
+export function passkeyRateLimits(): { safe: RateLimiter; email: RateLimiter } {
+  const shared =
+    process.env.PASSKEY_RATE_LIMIT_STORE === "supabase" &&
+    !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!shared) {
+    return {
+      safe: new FixedWindowLimiter(SAFE_SENDS_PER_HOUR, HOUR_MS),
+      email: new FixedWindowLimiter(EMAIL_SENDS_PER_HOUR, HOUR_MS),
+    };
+  }
+  const db = createAdminClient();
+  const windowSec = HOUR_MS / 1000;
+  return {
+    safe: new SupabaseRateLimiter(db, "email-safe", SAFE_SENDS_PER_HOUR, windowSec),
+    email: new SupabaseRateLimiter(db, "email-address", EMAIL_SENDS_PER_HOUR, windowSec),
+  };
+}
+
 export function passkeyEmailDeps(): EmailRouteDeps {
   if (!passkeyEmailEnabled()) {
     // The handlers answer 503 before touching any dependency.
@@ -54,10 +82,7 @@ export function passkeyEmailDeps(): EmailRouteDeps {
     store: passkeyEmailStore(),
     verifier: createGnosisSafeVerifier(),
     mailer: passkeyMailer(),
-    limits: {
-      safe: new FixedWindowLimiter(SAFE_SENDS_PER_HOUR, HOUR_MS),
-      email: new FixedWindowLimiter(EMAIL_SENDS_PER_HOUR, HOUR_MS),
-    },
+    limits: passkeyRateLimits(),
     nowSec: () => Math.floor(Date.now() / 1000),
   };
   return { enabled: true, ...deps };

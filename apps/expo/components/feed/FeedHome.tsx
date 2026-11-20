@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { HorizontalRailLockProvider } from './HorizontalRailLock';
 import {
   View,
   StyleSheet,
@@ -93,6 +94,8 @@ type PagerProps = {
 
 type PagerHandle = {
   setPage: (index: number) => void;
+  /** Imperative lock — no re-render, so it lands before the native pager claims a swipe. */
+  setScrollEnabled: (enabled: boolean) => void;
 };
 
 const NativePager = PagerViewModule
@@ -103,6 +106,7 @@ const NativePager = PagerViewModule
       const pagerRef = useRef<any>(null);
       React.useImperativeHandle(ref, () => ({
         setPage: (i: number) => pagerRef.current?.setPage?.(i),
+        setScrollEnabled: (enabled: boolean) => pagerRef.current?.setScrollEnabled?.(enabled),
       }));
 
       const handleScroll = useCallback(
@@ -142,6 +146,9 @@ const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPag
   ref,
 ) {
   const scrollRef = useRef<ScrollView>(null);
+  // JS fallback: a local state keeps the re-render to this pager only
+  // (children are stable elements, so React bails out on them).
+  const [railLocked, setRailLocked] = useState(false);
   const scrollX = useSharedValue(initialPage * pageWidth);
 
   React.useEffect(() => {
@@ -152,6 +159,7 @@ const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPag
     setPage: (i: number) => {
       scrollRef.current?.scrollTo({ x: i * pageWidth, animated: true });
     },
+    setScrollEnabled: (enabled: boolean) => setRailLocked(!enabled),
   }));
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -175,7 +183,7 @@ const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPag
       ref={scrollRef as any}
       horizontal
       pagingEnabled
-      scrollEnabled={scrollEnabled}
+      scrollEnabled={scrollEnabled && !railLocked}
       showsHorizontalScrollIndicator={false}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
@@ -254,10 +262,6 @@ export default function FeedHome() {
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
-  // While a finger is on the horizontal story rail, the pager's own
-  // horizontal gesture is disabled so a story swipe can never fall through
-  // and flip the feed tab instead.
-  const [storyRailActive, setStoryRailActive] = useState(false);
   const [reportDrawerVisible, setReportDrawerVisible] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [optionsDrawerVisible, setOptionsDrawerVisible] = useState(false);
@@ -270,6 +274,14 @@ export default function FeedHome() {
   );
 
   const pagerRef = useRef<PagerHandle>(null);
+  // While a finger is on ANY horizontal rail in the feed (stories,
+  // Mittagstisch, post media sliders, news/cinema/restaurant rails) the
+  // pager's own swipe is locked so a rail swipe can never fall through and
+  // flip the tab (e.g. into Umfragen). Imperative on purpose: a state
+  // toggle re-renders this whole screen and arrives too late on a quick flick.
+  const setRailActive = useCallback((active: boolean) => {
+    pagerRef.current?.setScrollEnabled(!active);
+  }, []);
   const scrollProgress = useSharedValue(0);
 
   const mainListRef = useRef<FeedListHandle>(null);
@@ -604,13 +616,14 @@ export default function FeedHome() {
           from (BlurTargetView) — the glass bars below must stay OUTSIDE
           it and render after it. Plain passthrough View on iOS. */}
       <GlassBackdrop style={styles.pager}>
+      <HorizontalRailLockProvider setRailActive={setRailActive}>
       <Pager
         ref={pagerRef}
         initialPage={0}
         scrollProgress={scrollProgress}
         onPageSelected={handlePageSelected}
         pageWidth={screenWidth}
-        scrollEnabled={canAccessCityTabs && !storyRailActive}
+        scrollEnabled={canAccessCityTabs}
       >
         <View key="main" style={[styles.page, { width: screenWidth }]} collapsable={false}>
           <FeedList
@@ -620,7 +633,7 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
-            listHeader={<HomeStoryBar onRailTouchActive={setStoryRailActive} />}
+            listHeader={<HomeStoryBar />}
             showProposalHero={canSeeProposals}
             onOpenUmfragen={
               canAccessCityTabs
@@ -667,6 +680,7 @@ export default function FeedHome() {
           />
         </View>
       </Pager>
+      </HorizontalRailLockProvider>
       </GlassBackdrop>
 
       {appHeader}

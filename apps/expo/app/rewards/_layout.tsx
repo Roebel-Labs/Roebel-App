@@ -7,6 +7,7 @@ export default function RewardsLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="schatzkammer" />
       <Stack.Screen name="referral" />
+      <Stack.Screen name="invite" />
       <Stack.Screen name="lootbox/[id]" />
       <Stack.Screen name="reward/[id]" />
     </Stack>

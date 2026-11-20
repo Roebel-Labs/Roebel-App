@@ -4,10 +4,12 @@
  * Account-keyed: identity is the user's currently active account, not the
  * underlying wallet — so an owned org can hold its own chats and replies.
  *
- * Rails: threads always RENDER the union of the legacy Supabase rows and the
- * XMTP DM for this account pair; SENDS pick exactly one rail. XMTP is used
- * for personal↔personal chats whose peer has registered (E2E, payments,
- * reactions, read receipts, blocking); everything else stays on Supabase.
+ * Rails: threads always RENDER the union of the Supabase rows and the XMTP DM
+ * for this account pair; SENDS pick exactly one rail. XMTP is used only when
+ * BOTH sides can read it: this device has a booted client AND the peer's
+ * `users.xmtp_registered_at` is set (cleared when a wallet turns out to be
+ * chain-locked). Everything else — orgs, chain-locked or not-yet-activated
+ * people — runs on Supabase, so a DM always arrives somewhere readable.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -20,6 +22,7 @@ import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import {
   fetchMessages,
   sendMessage as sendMsg,
+  sendPaymentMessage as sendPaymentMsg,
   hydrateMessageSticker,
   safeDisplayName,
   type Message,
@@ -79,7 +82,6 @@ export function useConversation(conversationId: string) {
   const [isSending, setIsSending] = useState(false);
   const [peerAccount, setPeerAccount] = useState<PeerAccount | null>(null);
   const [rail, setRail] = useState<ConversationRail>('supabase');
-  const [peerUnreachable, setPeerUnreachable] = useState(false);
   const [peerReadAt, setPeerReadAt] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<Message[]>([]);
   // True once the XMTP side of the thread has painted (or decided there is
@@ -110,7 +112,6 @@ export function useConversation(conversationId: string) {
     setXmtpMessages([]);
     setPeerAccount(null);
     setRail('supabase');
-    setPeerUnreachable(false);
     setPeerReadAt(null);
     setPendingPayments([]);
     setXmtpThreadLoaded(false);
@@ -212,10 +213,14 @@ export function useConversation(conversationId: string) {
     }
     if (!xmtpReady) return; // XMTP still booting → skeletons stay
     if (!xmtp) {
-      setXmtpThreadLoaded(true); // no client: sendBlocked notice takes over
+      setXmtpThreadLoaded(true); // no client: the thread runs on Supabase
       return;
     }
     let cancelled = false;
+    // Sending over XMTP needs a peer that can READ it. Chain-locked wallets
+    // still look reachable on the network (their old inbox exists), so the
+    // registration flag is the gate; their local history still renders.
+    const peerOnXmtp = !!peerAccount.xmtpRegisteredAt;
 
     const applyPage = (page: Awaited<ReturnType<typeof fetchXmtpThread>>, dm: Dm<any>) => {
       if (cancelled) return;
@@ -243,7 +248,7 @@ export function useConversation(conversationId: string) {
 
         if (dm) {
           dmRef.current = dm;
-          setRail('xmtp');
+          if (peerOnXmtp) setRail('xmtp');
           getXmtpConsentState(dm).then((state) => {
             if (!cancelled) setConsent(state);
           });
@@ -262,9 +267,8 @@ export function useConversation(conversationId: string) {
         }
 
         // No local DM yet: reachability decides whether we may create one.
-        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) {
+        if (!peerOnXmtp || !(await canMessageCached(xmtp, peerAccount.ownerWallet!))) {
           if (!cancelled) {
-            setPeerUnreachable(true);
             setXmtpThreadLoaded(true);
           }
           return;
@@ -367,9 +371,8 @@ export function useConversation(conversationId: string) {
     return unsubscribe;
   }, [xmtp, subscribeMessages, refreshXmtpThread]);
 
-  // Personal↔personal chats are XMTP-only — never fall back to Supabase for
-  // them (2026-07-12 policy). Orgs/support keep the Supabase transport until
-  // XMTP groups land.
+  // Personal↔personal chats may carry XMTP history; orgs/support stay on the
+  // Supabase transport until XMTP groups land.
   const isPersonalPair =
     !!peerAccount &&
     peerAccount.accountType === 'personal' &&
@@ -383,18 +386,14 @@ export function useConversation(conversationId: string) {
     // Supabase history; the Supabase fetch finishes before peer hydration and
     // would otherwise flash old messages before XMTP takes over.
     if (isLoadingPeer && !peerAccount) return [];
-    // XMTP-only threads: legacy Supabase history is not rendered anymore.
-    // Optimistic (still-settling) payments render at the top.
-    if (isPersonalPair) {
-      return pendingPayments.length > 0
-        ? [...pendingPayments, ...xmtpMessages]
-        : xmtpMessages;
+    // Both rails, newest first. Optimistic (still-settling) payments on top.
+    const merged =
+      xmtpMessages.length === 0 ? supabaseMessages : [...xmtpMessages, ...supabaseMessages];
+    if (xmtpMessages.length > 0) {
+      merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     }
-    if (xmtpMessages.length === 0) return supabaseMessages;
-    const merged = [...xmtpMessages, ...supabaseMessages];
-    merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-    return merged;
-  }, [supabaseMessages, xmtpMessages, pendingPayments, isPersonalPair, isLoadingPeer, peerAccount]);
+    return pendingPayments.length > 0 ? [...pendingPayments, ...merged] : merged;
+  }, [supabaseMessages, xmtpMessages, pendingPayments, isLoadingPeer, peerAccount]);
 
   // ── Sends ────────────────────────────────────────────────────────
   // Push title = the sender's in-app profile name (display name/username),
@@ -417,16 +416,6 @@ export function useConversation(conversationId: string) {
     [peerAccount?.ownerWallet, pushSenderName, conversationId]
   );
 
-  const sendBlocked: 'self' | 'peer' | null = !isPersonalPair
-    ? null
-    : rail === 'xmtp'
-      ? null
-      : xmtpReady && !xmtp
-        ? 'self'
-        : peerUnreachable
-          ? 'peer'
-          : null;
-
   const sendMessage = useCallback(
     async (text: string, stickerRewardId: string | null = null) => {
       if (!conversationId || !myAccountId) return;
@@ -441,10 +430,8 @@ export function useConversation(conversationId: string) {
           firePush(
             pushBodyForMessage({ content: text.trim(), sticker_reward_id: stickerRewardId })
           );
-        } else if (isPersonalPair) {
-          // XMTP-only: no Supabase writes for personal chats.
-          console.warn('[xmtp] send blocked — personal chats are XMTP-only');
         } else {
+          // Supabase rail: realtime delivers it, the DB trigger sends the push.
           await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
         }
       } catch (err) {
@@ -453,8 +440,14 @@ export function useConversation(conversationId: string) {
         setIsSending(false);
       }
     },
-    [conversationId, myAccountId, rail, isPersonalPair, refreshXmtpThread, firePush]
+    [conversationId, myAccountId, rail, refreshXmtpThread, firePush]
   );
+
+  // Münzen can be sent between two personal accounts on either rail.
+  const canSendPayment =
+    myAccountType === 'personal' &&
+    peerAccount?.accountType === 'personal' &&
+    !!peerAccount.ownerWallet;
 
   /**
    * In-chat Röbel Münzen payment — OPTIMISTIC: the bubble appears after a
@@ -465,10 +458,13 @@ export function useConversation(conversationId: string) {
   const sendPayment = useCallback(
     async (amountRaw: bigint, amountDecimal: number) => {
       const dm = dmRef.current;
-      if (rail !== 'xmtp' || !dm || !peerAccount?.ownerWallet || !xmtp) {
+      if (!canSendPayment || !peerAccount?.ownerWallet || !myAccountId) {
         throw new Error('Zahlungen sind in diesem Chat noch nicht verfügbar');
       }
       const peerWallet = peerAccount.ownerWallet;
+      // Receipt rail: XMTP transactionReference when the thread runs on XMTP,
+      // otherwise a direct_messages row with a `payment` receipt.
+      const viaXmtp = rail === 'xmtp' && !!dm && !!xmtp;
       const optimisticId = `pending-payment-${Date.now()}`;
       const optimistic: Message = {
         id: optimisticId,
@@ -477,7 +473,7 @@ export function useConversation(conversationId: string) {
         content: '',
         sticker_reward_id: null,
         created_at: new Date().toISOString(),
-        source: 'xmtp',
+        source: viaXmtp ? 'xmtp' : 'supabase',
         delivery: 'sending',
         payment: { txHash: '', networkId: 'eip155:100', amount: amountDecimal },
       };
@@ -488,7 +484,17 @@ export function useConversation(conversationId: string) {
         try {
           const txHash = await sendTaler(peerWallet, amountRaw);
           try {
-            await sendXmtpTransactionReference(dm, {
+            if (!viaXmtp) {
+              // Supabase rail: realtime delivers the row, the DB trigger pushes.
+              const row = await sendPaymentMsg(conversationId, myAccountId, {
+                txHash: txHash || '',
+                networkId: 'eip155:100',
+                amount: amountDecimal,
+              });
+              if (!row) throw new Error('payment receipt insert failed');
+              return;
+            }
+            await sendXmtpTransactionReference(dm!, {
               namespace: 'eip155',
               networkId: 'eip155:100',
               reference: txHash || '',
@@ -497,7 +503,7 @@ export function useConversation(conversationId: string) {
                 currency: 'Röbel Münzen',
                 amount: amountDecimal,
                 decimals: 18,
-                fromAddress: xmtp.wallet,
+                fromAddress: xmtp!.wallet,
                 toAddress: peerWallet,
               },
             });
@@ -521,6 +527,7 @@ export function useConversation(conversationId: string) {
     },
     [
       rail,
+      canSendPayment,
       peerAccount?.ownerWallet,
       xmtp,
       conversationId,
@@ -599,16 +606,10 @@ export function useConversation(conversationId: string) {
     }
   }, [conversationId, supabaseMessages, xmtp, threadIds]);
 
-  // Keep skeletons up until the rail is actually decided:
-  //  • peer still hydrating → we don't yet know if it's an XMTP pair, so never
-  //    reveal the (fast-loading) Supabase history or the empty-chat state;
-  //  • personal XMTP pair → wait for the XMTP thread to paint;
-  //  • Supabase-rail chat → the Supabase loading flag governs.
-  const effectiveLoadingMessages = isLoadingPeer
-    ? true
-    : isPersonalPair
-      ? !xmtpThreadLoaded
-      : isLoadingMessages;
+  // Keep skeletons up until both rails have painted (personal pairs also wait
+  // for the XMTP side) so chats never flash empty.
+  const effectiveLoadingMessages =
+    isLoadingPeer || isLoadingMessages || (isPersonalPair && !xmtpThreadLoaded);
 
   return {
     messages,
@@ -619,14 +620,12 @@ export function useConversation(conversationId: string) {
     isSending,
     sendMessage,
     sendPayment,
+    canSendPayment,
     sendReaction,
     blockPeer,
     unblockPeer,
     consent,
     rail,
-    /** Non-null when sending is blocked: 'self' = user must activate XMTP,
-     *  'peer' = peer hasn't activated yet (personal chats are XMTP-only). */
-    sendBlocked,
     /** German error from a failed background payment; clear after showing. */
     paymentError,
     clearPaymentError: () => setPaymentError(null),

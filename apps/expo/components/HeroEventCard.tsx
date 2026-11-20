@@ -11,6 +11,7 @@ import EventCancelledScrim from '@/components/EventCancelledScrim';
 import { glassEdgeColor } from '@/components/GlassSurface';
 import { heroGlassTintColor } from '@/lib/glass-contrast';
 import { transformedImageUrl } from '@/lib/image-url';
+import LiveEventMedia, { isStreaming, useEventLiveShow } from '@/components/live/LiveEventMedia';
 
 type Props = {
   event: EventRecord;
@@ -41,6 +42,7 @@ type Props = {
 function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false, style }: Props) {
   const router = useRouter();
   const { colors, isDark, variant } = useTheme();
+  const liveShow = useEventLiveShow(event.id);
 
   const dayName = event.date ? format(parseISO(event.date), 'EEEE', { locale: de }) : '';
 
@@ -111,8 +113,9 @@ function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
         )}
+        {isStreaming(liveShow) ? <LiveEventMedia show={liveShow} /> : null}
 
-        {dayName ? (
+        {dayName && !isStreaming(liveShow) ? (
           <View style={[styles.dayPill, { backgroundColor: colors.background }]}>
             <Text style={[styles.dayPillText, { color: colors.textPrimary }]}>{dayName}</Text>
           </View>
@@ -195,7 +198,7 @@ const styles = StyleSheet.create({
   },
   dayPillText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   contentSection: {
     paddingHorizontal: 16,
@@ -203,13 +206,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 32,
     marginBottom: 6,
   },
   subline: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 16,
   },
   divider: {
@@ -224,7 +227,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     letterSpacing: 0.5,
     flex: 1,
     marginRight: 12,

@@ -219,3 +219,25 @@ export function ChevronRight({ size = 16, color = '#000', strokeWidth = 2 }: Pro
     </Svg>
   );
 }
+
+/** Padlock for a mini app whose audience this person does not match. */
+export function LockIcon({ size = 16, color = '#000', strokeWidth = 2 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 11h12v9H6v-9Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

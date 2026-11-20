@@ -1,7 +1,8 @@
 /**
  * Supabase (service role) implementation of PasskeyEmailStore. Server-only.
  *
- * Tables (supabase/migrations/20260927_passkey_contact_email.sql, NOT applied yet):
+ * Tables (supabase/migrations/20260927_passkey_contact_email.sql, NOT applied yet; the alert
+ * `channel` column comes from 20261117d_passkey_alert_channels.sql):
  *   passkey_contacts, passkey_email_challenges, passkey_email_used_proofs,
  *   passkey_recovery_alerts, passkey_alert_cursor
  * All RLS-on with no policies and no anon/authenticated grants, so only the service role reaches
@@ -11,7 +12,7 @@
  * lacks the migration keeps the in-memory store instead of failing.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { EmailStoreError, type EmailChallenge, type EmailContact, type PasskeyEmailStore } from "./email-store";
+import { alertFailureId, EmailStoreError, type AlertChannel, type EmailChallenge, type EmailContact, type PasskeyEmailStore } from "./email-store";
 
 export const PASSKEY_EMAIL_TABLES = {
   contacts: "passkey_contacts",
@@ -122,10 +123,11 @@ export class SupabaseEmailStore implements PasskeyEmailStore {
     check("setCursor", r);
   }
 
-  async claimAlert(wallet: string, nonce: bigint, executeAfter: bigint): Promise<boolean> {
+  async claimAlert(wallet: string, nonce: bigint, executeAfter: bigint, channel: AlertChannel = "email"): Promise<boolean> {
     const r = await this.db.from(T.alerts).insert({
       wallet_address: wallet.toLowerCase(),
       recovery_nonce: nonce.toString(),
+      channel,
       execute_after: iso(Number(executeAfter)),
     });
     if (r.error?.code === UNIQUE_VIOLATION) return false;
@@ -133,12 +135,21 @@ export class SupabaseEmailStore implements PasskeyEmailStore {
     return true;
   }
 
-  async releaseAlert(wallet: string, nonce: bigint): Promise<void> {
+  async releaseAlert(wallet: string, nonce: bigint, channel: AlertChannel = "email"): Promise<void> {
     const r = await this.db
       .from(T.alerts)
       .delete()
       .eq("wallet_address", wallet.toLowerCase())
-      .eq("recovery_nonce", nonce.toString());
+      .eq("recovery_nonce", nonce.toString())
+      .eq("channel", channel);
     check("releaseAlert", r);
+  }
+
+  /** Stored in the cursor table under `alertFailureId` (one row per alert that failed; no schema change). */
+  async countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel): Promise<number> {
+    const id = alertFailureId(wallet, nonce, channel);
+    const n = ((await this.getCursor(id)) ?? 0n) + 1n;
+    await this.setCursor(id, n);
+    return Number(n);
   }
 }

@@ -12,7 +12,7 @@
  * FS at runtime, which breaks on Vercel lambdas. Keep in sync on contract bumps.
  */
 
-export const SDK_VERSION = "0.3.1";
+export const SDK_VERSION = "0.4.0";
 // Self-hosted build of @netizen-labs/miniapp-sdk (synced from packages/miniapp-sdk
 // via `pnpm sync-web`, served with ACAO:*). Absolute URL so the document also works
 // when saved/hosted outside roebel.app. v0.2 adds mock mode: outside the Röbel
@@ -165,7 +165,8 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
   ⚠ user ist NICHT vertrauenswürdig (nur Anzeige). Niemals für Autorisierung verwenden.
 - sdk.wallet.getAccount() → { address, chainId } | null
 - sdk.wallet.getEthereumProvider() → EIP-1193-Provider (request/on/removeListener). Signatur-Methoden zeigen dem User ein natives Bestätigungs-Sheet.
-- sdk.auth.getToken() / sdk.auth.signIn() → { token } — nur nötig, wenn ein eigener Server dem User vertrauen muss.
+- sdk.auth.getToken() / sdk.auth.signIn() → { token } — nur nötig, wenn ein eigener Server dem User vertrauen muss. Funktioniert in der Röbel App ab Version 3.10.0; ältere Versionen antworten "unsupported".
+- sdk.supports(method) → boolean — vorab prüfen, ob der Host eine neuere Methode kann (z. B. "auth.getToken", "roebel.pay").
 - sdk.haptics.impact("light"|"medium"|"heavy") / sdk.haptics.notification("success"|"warning"|"error") / sdk.haptics.selection()
 - sdk.roebel.getMuenzenBalance() → { balance: string (dezimal, menschenlesbar), decimals, symbol: "RÖ" }
 - sdk.roebel.grantReward({ amount, reason, idempotencyKey }) → { granted, amount?, txRef?, remainingBudget? }
@@ -173,10 +174,15 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
   idempotencyKey mit crypto.randomUUID() erzeugen und pro Aktion GENAU EINMAL verwenden (Doppel-Klick-Schutz).
   Der Host autorisiert serverseitig gegen das App-Budget — { granted: false } und die Fehlercodes "budget_exceeded" / "rate_limited" MÜSSEN freundlich behandelt werden.
   BELOHNUNGS-SCREEN IST HOST-SACHE: Bei jedem erfolgreichen grantReward zeigt die Röbel App AUTOMATISCH ihren nativen Münzen-Screen (Vollbild-Feier, wie bei allen Belohnungen der App). Baue deshalb KEINE eigene Vollbild-Feier, kein Konfetti und kein eigenes Erfolgs-Overlay. Die App selbst aktualisiert nur ihren Zustand: Button deaktivieren bzw. umbeschriften („✓ Abgeholt — morgen wieder"), Punktestand/Fortschritt fortschreiben. reason (kurzer deutscher Satz, z. B. "Quiz geschafft!") erscheint als Unterzeile auf dem nativen Screen. Hinweis: In der Browser-Vorschau (Editor/Playground) gibt es den nativen Screen nicht — dort genügt der Button-Zustand.
-- sdk.roebel.pay({ to, amount, memo? }) → { txHash } — vom User signierte Zahlung.
+- sdk.roebel.pay({ to, amount, memo? }) → { txHash } — vom User signierte Zahlung (ab App-Version 3.10.0).
 - sdk.notifications.send({ title, body, targetUrl? }) → { sent }
 - sdk.track(event, props?) — Analytics, fire-and-forget, wirft nie. Bei sinnvollen Aktionen aufrufen (z. B. "app_open" ist schon der Host — eigene Events wie "vote_cast").
-- sdk.on(event, cb) → unsubscribe. Events: "walletChanged" | "back" | "visibilityChanged" | "themeChanged".
+- sdk.on(event, cb) → unsubscribe. Events (die Röbel App sendet back/visibilityChanged/themeChanged/credentialsChanged ab Version 3.10.0):
+  · "walletChanged" → { address?, chainId? }
+  · "back" → kein Payload; nur nach sdk.actions.ready({ handlesBack: true })
+  · "visibilityChanged" → { visible }
+  · "themeChanged" → { theme: "light" | "dark" }
+  · "credentialsChanged" → Credential[] (nach Freigabe oder Widerruf)
 - sdk.data — Daten-Speicher der Plattform (v0.3, kein eigener Server nötig):
   · sdk.data.get(key) → { value, exists } und sdk.data.list(prefix?) → { items: [{key, value}] } — die INHALTE der App (z. B. Lektionen, Produkte, Texte). Redakteur:innen pflegen sie im Dashboard unter „Inhalte“; zur Laufzeit read-only.
   · sdk.data.getUser(key) → { value, exists } und sdk.data.setUser(key, value) → { ok } — der ZUSTAND der aktuellen Nutzer:in (Fortschritt, Antworten, Punktestände), pro Wallet gespeichert.

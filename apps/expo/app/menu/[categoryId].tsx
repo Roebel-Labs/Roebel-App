@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 4,
   },
   formInput: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     borderWidth: 1,
   },
   priceRow: {
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   euroText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   descriptionInput: {
     minHeight: 80,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
   },
   dietToggleText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#6b7280',
   },
   dietToggleTextActive: {
@@ -491,12 +491,12 @@ const styles = StyleSheet.create({
   },
   gridCardName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 21,
   },
   gridCardPrice: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   gridCardFooter: {
@@ -528,12 +528,12 @@ const styles = StyleSheet.create({
   },
   gridCardAddLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   unavailableLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#DC2626',
   },
   badgeRow: {
@@ -554,13 +554,13 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     color: '#ffffff',
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 40,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

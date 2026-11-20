@@ -8,8 +8,7 @@ import type { PostRecord } from '@/lib/types/feed';
 import { isPostPinned } from '@/lib/utils/pin';
 import LinkifiedText from './LinkifiedText';
 import PostAuthorRow, { PostAuthorAvatar } from './PostAuthorRow';
-import PostImageGrid from './PostImageGrid';
-import PostVideoPlayer from './PostVideoPlayer';
+import PostMedia from './PostMedia';
 import PostLinkPreview from './PostLinkPreview';
 import PostYouTubePreview from './PostYouTubePreview';
 import PostPollView from './PostPollView';
@@ -22,6 +21,7 @@ import QuotedPostPreview from './QuotedPostPreview';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import RepostIcon from '@/assets/icons/repost.svg';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
+import { getPostMedia } from '@/lib/utils/post-media';
 
 // Posts can hold up to 500 chars; in the feed we preview the first 250 and
 // reveal the rest inline via "Mehr anzeigen". The detail screen shows it all.
@@ -80,7 +80,8 @@ function FeedPostCard({
     router.push(`/post/${display.id}` as any);
   };
 
-  const mediaUrls = display.media_urls?.filter(Boolean) || [];
+  const media = getPostMedia(display);
+  const imageUrls = media.filter((m) => m.type === 'image').map((m) => m.url);
   const firstLink = display.links && display.links.length > 0 ? display.links[0] : null;
   const youtubeUrl = resolveYouTubeUrl(display.content, display.links?.map((l) => l.url));
   const displayContent = youtubeUrl ? removeYouTubeUrls(display.content) : display.content;
@@ -175,13 +176,15 @@ function FeedPostCard({
           />
         )}
 
-        {mediaUrls.length > 0 && (
-          <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
-        )}
-
-        {display.video_url && (
-          <PostVideoPlayer videoUrl={display.video_url} isVisible={isVisible} />
-        )}
+        {/* Slider runs out to both screen edges: card padding + avatar rail
+            on the left, card padding on the right. */}
+        <PostMedia
+          items={media}
+          isVisible={isVisible}
+          onPressImage={setZoomImageUrl}
+          bleedLeft={CARD_PADDING_X + AVATAR_RAIL_WIDTH}
+          bleedRight={CARD_PADDING_X}
+        />
 
         {display.sticker && (
           <Image
@@ -247,7 +250,7 @@ function FeedPostCard({
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl || ''}
-        images={mediaUrls}
+        images={imageUrls}
         onClose={() => setZoomImageUrl(null)}
       />
     </View>
@@ -263,10 +266,11 @@ export default React.memo(FeedPostCard);
 // Threads-style layout: 36px avatar + 10px gutter — the content column,
 // notices, and the action bar all align to this left edge.
 const AVATAR_RAIL_WIDTH = 46;
+const CARD_PADDING_X = 16;
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
+    paddingHorizontal: CARD_PADDING_X,
     paddingVertical: 14,
     overflow: 'hidden' as const,
     gap: 10,
@@ -306,16 +310,16 @@ const styles = StyleSheet.create({
   },
   pinnedText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   content: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
   },
   moreToggle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 24,
   },
   sticker: {

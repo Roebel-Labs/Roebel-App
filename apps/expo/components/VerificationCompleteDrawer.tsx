@@ -95,13 +95,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -111,14 +111,14 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 4,
   },
   boldText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   infoBox: {
     borderWidth: 1,
@@ -136,13 +136,13 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#2E7D32',
     marginBottom: 4,
   },
   infoText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#388E3C',
     lineHeight: 18,
   },

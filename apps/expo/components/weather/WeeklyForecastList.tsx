@@ -101,7 +101,7 @@ export default function WeeklyForecastList({ daily }: Props) {
 const styles = StyleSheet.create({
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 12,
   },
   list: {
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   cardBody: {},
   weekday: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tempRow: {
     flexDirection: 'row',
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   },
   bigTemp: {
     fontSize: 40,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 40,
   },
   iconWrap: {
@@ -135,11 +135,11 @@ const styles = StyleSheet.create({
   },
   range: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   condition: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 8,
   },
   metricsRow: {
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   metricValue: {
     flexDirection: 'row',
@@ -164,6 +164,6 @@ const styles = StyleSheet.create({
   },
   metricText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

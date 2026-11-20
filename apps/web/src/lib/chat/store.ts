@@ -4,6 +4,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "../supabase/admin";
 import { BOT_EYES, BOT_SHAPES } from "./types";
+import { PERSONALITY_KEYS, characterById } from "./agent/characters";
+import { isAllowedAvatarUrl } from "./agent/avatar-image";
 import type {
   BotAvatarSpec, ChatBot, ChatMessage, ChatPart, ChatRoutine, ChatThread, ChatTier, RoutineSchedule,
 } from "./types";
@@ -85,7 +87,12 @@ export function normalizeAvatar(input: unknown): BotAvatarSpec {
   const shape = BOT_SHAPES.includes(a.shape as never) ? (a.shape as BotAvatarSpec["shape"]) : "circle";
   const eyes = BOT_EYES.includes(a.eyes as never) ? (a.eyes as BotAvatarSpec["eyes"]) : "dots";
   const color = typeof a.color === "string" && /^#[0-9a-fA-F]{6}$/.test(a.color) ? a.color : "#00498B";
-  return { shape, color, eyes };
+  const out: BotAvatarSpec = { shape, color, eyes };
+  if (characterById(a.character)) out.character = a.character as string;
+  if (PERSONALITY_KEYS.includes(a.personality as never)) out.personality = a.personality as string;
+  // A character brings its own artwork; an image only counts for agents without one.
+  if (!out.character && isAllowedAvatarUrl(a.imageUrl, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")) out.imageUrl = a.imageUrl;
+  return out;
 }
 
 export function rowToBot(row: BotRow, opts: { includeInstructions?: boolean } = {}): ChatBot {
@@ -227,9 +234,10 @@ export async function getBotRow(id: string): Promise<BotRow | null> {
 }
 
 export async function createBot(wallet: string, input: {
-  name: string; description: string; instructions: string; avatar: BotAvatarSpec; modelRoute?: string;
+  name: string; description: string; instructions: string; avatar: BotAvatarSpec; modelRoute?: string; tools?: string[];
 }): Promise<ChatBot> {
   const res = await db().from("chat_bots").insert({
+    ...(input.tools ? { tools: input.tools } : {}),
     owner_wallet: wallet,
     name: input.name,
     description: input.description,
@@ -239,6 +247,22 @@ export async function createBot(wallet: string, input: {
     is_preset: false,
   }).select("*").single();
   return rowToBot(must(res, "create bot") as BotRow, { includeInstructions: true });
+}
+
+/**
+ * Deletes an own bot. Its threads and routines move to `heir` first: the foreign keys would otherwise drop the
+ * bot from its threads and cascade-delete its routines.
+ */
+export async function deleteBot(wallet: string, id: string, heir: string): Promise<boolean> {
+  const row = await getBotRow(id);
+  if (!row || row.is_preset || row.owner_wallet !== wallet) return false;
+  const links = must(await db().from("chat_thread_bots").select("thread_id").eq("bot_id", id), "bot threads") as { thread_id: string }[];
+  if (links.length) {
+    must(await db().from("chat_thread_bots").upsert(links.map((l) => ({ thread_id: l.thread_id, bot_id: heir })), { onConflict: "thread_id,bot_id", ignoreDuplicates: true }), "heir threads");
+  }
+  must(await db().from("chat_routines").update({ bot_id: heir }).eq("bot_id", id).eq("owner_wallet", wallet), "heir routines");
+  must(await db().from("chat_bots").delete().eq("id", id).eq("owner_wallet", wallet).eq("is_preset", false), "delete bot");
+  return true;
 }
 
 export async function updateBot(wallet: string, id: string, patch: Partial<{
@@ -519,10 +543,10 @@ export async function threadsWithActiveRoutines(wallet: string): Promise<Set<str
 export async function recordRun(input: {
   wallet: string; threadId: string | null; botId: string | null; route: string;
   inputTokens: number; outputTokens: number; costMicros: number;
-  status: "ok" | "error" | "quota"; error?: string | null;
+  status: "ok" | "error" | "quota"; error?: string | null; billedTo?: "platform" | "own_key";
 }): Promise<void> {
   const res = await db().from("chat_runs").insert({
-    owner_wallet: input.wallet, thread_id: input.threadId, bot_id: input.botId, route: input.route,
+    owner_wallet: input.wallet, thread_id: input.threadId, bot_id: input.botId, route: input.route, billed_to: input.billedTo ?? "platform",
     input_tokens: input.inputTokens, output_tokens: input.outputTokens, cost_micros: input.costMicros,
     status: input.status, error: input.error?.slice(0, 1000) ?? null,
   });
@@ -531,7 +555,7 @@ export async function recordRun(input: {
 
 export async function usedTokensToday(wallet: string, now: Date = new Date()): Promise<number> {
   const res = await db().from("chat_runs").select("input_tokens, output_tokens")
-    .eq("owner_wallet", wallet).gte("created_at", quotaWindowStart(now)).limit(5000);
+    .eq("owner_wallet", wallet).not("route", "like", "persona:%").gte("created_at", quotaWindowStart(now)).limit(5000);
   return sumTokens(must(res, "usage") as { input_tokens: number; output_tokens: number }[]);
 }
 

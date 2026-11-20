@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     lineHeight: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
 });

@@ -10,7 +10,7 @@ export default function HelpLayout() {
         headerShown: true,
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.textPrimary,
-        headerTitleStyle: { fontFamily: 'Inter-Medium', fontSize: 16 },
+        headerTitleStyle: { fontFamily: 'MonaSans-Medium', fontSize: 16 },
         headerShadowVisible: false,
       }}
     />

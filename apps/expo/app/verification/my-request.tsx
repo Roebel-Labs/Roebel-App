@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 12,
   },
   qrSection: {
@@ -259,12 +259,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   privateLabel: {
-    fontFamily: 'GeistMono-Regular',
+    fontFamily: 'MonaSansMono-Regular',
     fontSize: 13,
     color: '#E8EAED',
   },
   privateValue: {
-    fontFamily: 'GeistMono-Regular',
+    fontFamily: 'MonaSansMono-Regular',
     fontSize: 13,
     color: '#E8EAED',
     textAlign: 'right',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   privateDisclaimer: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 11,
     flex: 1,
   },
@@ -291,12 +291,12 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   messageText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,

@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     textAlign: 'center',
   },

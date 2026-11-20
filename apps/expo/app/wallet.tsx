@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
 
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   },
   addressText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 
   // Balance
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   balanceLoader: {
@@ -478,11 +478,11 @@ const styles = StyleSheet.create({
   },
   balanceLarge: {
     fontSize: 32,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   balanceSecondary: {
     fontSize: 18,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
 
@@ -506,11 +506,11 @@ const styles = StyleSheet.create({
   actionIcon: {
     color: '#fff',
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   actionLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 8,
   },
 
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 
   // Token / Collectible rows
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   },
   tokenIconText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   tokenInfo: {
     flex: 1,
@@ -560,11 +560,11 @@ const styles = StyleSheet.create({
   },
   tokenName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tokenSymbol: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   tokenBalance: {
@@ -572,13 +572,13 @@ const styles = StyleSheet.create({
   },
   tokenBalanceText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 
   // Drawers
   drawerTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 16,
   },
 
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   tokenPickerText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   input: {
     borderWidth: 1,
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 12,
   },
   sendButton: {
@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
   // Receive drawer
   receiveHint: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 16,
   },
   addressBox: {
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   fullAddress: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   copyButton: {

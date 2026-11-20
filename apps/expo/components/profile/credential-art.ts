@@ -11,3 +11,8 @@ export const CREDENTIAL_ART: Record<CredentialKind, ImageSourcePropType> = {
   citizen: require('../../assets/cards/png/citizen.png'),
   attester: require('../../assets/cards/png/attester.png'),
 };
+
+/** Corner radius of a card drawn at `width` (same shape as the art). */
+export function cardRadiusFor(width: number): number {
+  return Math.round((CARD_RADIUS_AT_462 * width) / 462);
+}

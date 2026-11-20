@@ -7,7 +7,7 @@ import { signedOrSession } from './passkey/api-session-runtime';
 export const SIGNED_SCOPE = 'roebel-tickets-v1';
 export type TicketAction =
   | 'connect_onboard' | 'connect_session' | 'connect_status' | 'ticket_types_upsert' | 'ticket_types_list' | 'checkout'
-  | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order';
+  | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order' | 'payments_onboard' | 'payments_status';
 /** Proposal-task actions (apps/web/src/lib/signed-request/message.ts); signed under VORHABEN_SCOPE. */
 export const VORHABEN_SCOPE = 'roebel-vorhaben-v1';
 export type VorhabenAction =
@@ -16,8 +16,23 @@ export type VorhabenAction =
   | 'payout_record_card';
 /** Livestream sponsoring bookings (apps/web/src/lib/signed-request/message.ts); signed under SPONSORING_SCOPE. */
 export const SPONSORING_SCOPE = 'roebel-sponsoring-v1';
-export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'sponsoring_set_creative';
-export type SignedAction = TicketAction | VorhabenAction | SponsoringAction;
+export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'sponsoring_set_creative' | 'sponsoring_set_dishes';
+/** Live room session (apps/web /api/live); signed under LIVE_SCOPE, returns a short-lived chat/vote token. */
+export const LIVE_SCOPE = 'roebel-live-v1';
+export type LiveAction = 'live_session';
+/** Mini-app user token (apps/web /api/mini-apps/token); signed under MINIAPP_SCOPE (lib/miniapp-token.ts). */
+export type MiniAppAction = 'user_token' | 'identity_get' | 'identity_set' | 'org_binding_list' | 'org_binding_decide';
+/** Credential register (apps/web/src/lib/signed-request/message.ts); signed under CREDENTIALS_SCOPE. */
+export const CREDENTIALS_SCOPE = 'roebel-credentials-v1';
+export type CredentialAction =
+  | 'types_list' | 'type_prepare' | 'people_list' | 'people_search' | 'batch_prepare' | 'revoke_prepare'
+  | 'delegate_prepare' | 'members_public_prepare' | 'orgs_list' | 'actions_list' | 'action_get' | 'action_submitted'
+  | 'action_cancel' | 'letters' | 'mine' | 'redeem' | 'respond' | 'holdings' | 'present_create' | 'present_resolve'
+  | 'people_preview' | 'event_badges_list' | 'event_badge_setup' | 'event_badge_get' | 'event_badge_prepare'
+  | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status'
+  | 'delegates_list'
+  | 'event_badge_qr';
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {
   address: string;
@@ -62,7 +77,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 }
 
 /** Runs `task` after every earlier signature finished; a failure or timeout never blocks the queue. */
-function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
+export function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
   const run = signQueue.then(task);
   signQueue = run.catch(() => undefined);
   return run;

@@ -104,7 +104,7 @@ export default function MultiDatePicker({ selectedDates, onDatesChange, minDate 
           isDisabled && { opacity: 0.4 },
         ]}>
           <Text style={[
-            { fontSize: 15, fontFamily: 'Inter-Medium', color: colors.textPrimary },
+            { fontSize: 15, fontFamily: 'MonaSans-Medium', color: colors.textPrimary },
             !isCurrentMonth && { color: colors.disabled },
             isTodayDate && !isSelected && { color: colors.textPrimary },
             isSelected && { color: colors.textInverted },
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
   patternLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   patternScroll: {
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   },
   patternHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 8,
   },
   calendar: {
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   monthTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'capitalize',
   },
   weekdayRow: {
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   weekdayText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -298,11 +298,11 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   clearText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   chipsScroll: {
     marginTop: 4,
@@ -318,11 +318,11 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   chipClose: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginLeft: 2,
   },
   chipOverflow: {

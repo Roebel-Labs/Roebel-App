@@ -14,12 +14,12 @@ type Props = {
 // closes over theme colors.
 const systemFonts = [
   'Inter',
-  'Inter-Bold',
-  'Inter-Medium',
-  'Inter-Medium',
-  'Inter-Regular',
-  'Inter-Medium',
-  'Inter-Medium',
+  'MonaSans-Bold',
+  'MonaSans-Medium',
+  'MonaSans-Medium',
+  'MonaSans-Regular',
+  'MonaSans-Medium',
+  'MonaSans-Medium',
 ];
 
 const classesStyles = {
@@ -50,7 +50,7 @@ function createTagsStyles(colors: ColorTokens) {
     h1: {
       fontSize: 28,
       lineHeight: 36,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginBottom: 16,
       marginTop: 0,
@@ -58,7 +58,7 @@ function createTagsStyles(colors: ColorTokens) {
     h2: {
       fontSize: 24,
       lineHeight: 32,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginBottom: 14,
       marginTop: 0,
@@ -66,7 +66,7 @@ function createTagsStyles(colors: ColorTokens) {
     h3: {
       fontSize: 20,
       lineHeight: 28,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginBottom: 12,
       marginTop: 0,
@@ -74,7 +74,7 @@ function createTagsStyles(colors: ColorTokens) {
     h4: {
       fontSize: 18,
       lineHeight: 24,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginBottom: 10,
       marginTop: 0,
@@ -124,7 +124,7 @@ function createTagsStyles(colors: ColorTokens) {
       textDecorationLine: 'underline',
     },
     strong: {
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
     },
     em: {
       fontFamily: 'Inter',

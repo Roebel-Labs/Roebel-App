@@ -808,6 +808,8 @@ export type AppReleaseConfig = {
   dismiss_label_de: string;
   is_active: boolean;
   updated_at: string;
+  /** Optional hero image (e.g. an event flyer); missing on DBs before 20261107a. */
+  image_url?: string | null;
 };
 
 // Announcement (generic full-screen modal for promotions, updates, etc.)

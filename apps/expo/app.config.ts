@@ -37,7 +37,7 @@ const config: ExpoConfig = {
   // background audio (livestream PiP, Hören on the lock screen). 3.8.0 only ever
   // shipped as preview builds without WebRTC, so JS that imports
   // @livekit/react-native must never be published to runtime 3.8.0 or 3.7.0.
-  version: '3.9.0',
+  version: '3.10.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -76,7 +76,29 @@ const config: ExpoConfig = {
     // "Unresolved reference" on newer style APIs (EAS build 280dbb81).
     '@rnmapbox/maps',
     'expo-secure-store',
-    'expo-font',
+    [
+      // Embed the fonts in the binary so nothing waits for them at launch
+      // (hooks/useFonts.ts skips runtime loading when they are present).
+      // File name == PostScript name for every file, so the same
+      // fontFamily string resolves on iOS and Android.
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/Mona-Sans/MonaSans-Regular.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-Medium.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-SemiBold.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-Bold.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Regular.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Medium.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-SemiBold.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Bold.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Regular.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Medium.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-SemiBold.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Bold.ttf',
+        ],
+      },
+    ],
     'expo-web-browser',
     [
       'expo-location',
@@ -210,9 +232,35 @@ const config: ExpoConfig = {
         }
       }
     ],
+    // Home-screen widget "Mini Apps" (targets/widget). Reads the App Group below.
+    '@bacons/apple-targets',
+    // Android home-screen widget "Mini Apps" (widgets/, task handler in index.js).
+    [
+      'react-native-android-widget',
+      {
+        widgets: [
+          {
+            name: 'MiniApps',
+            label: 'Mini Apps',
+            description: 'Deine Röbel Mini Apps auf einen Blick.',
+            minWidth: '110dp',
+            minHeight: '110dp',
+            targetCellWidth: 4,
+            targetCellHeight: 2,
+            maxResizeWidth: '520dp',
+            maxResizeHeight: '520dp',
+            resizeMode: 'horizontal|vertical',
+            // 30 min (the Android minimum): re-sync so unread dots appear while the app is closed.
+            updatePeriodMillis: 1800000,
+          },
+        ],
+      },
+    ],
   ],
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
+    // Team from the AASA file (apps/web/public/.well-known); @bacons/apple-targets signs the widget with it.
+    appleTeamId: '88879TXSXK',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
     // Bump BY HAND every release, like versionCode below. eas.json no longer
     // auto-increments this: with a dynamic config EAS can only write back to
@@ -220,7 +268,13 @@ const config: ExpoConfig = {
     // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
     // builds sharing one number, and App Store Connect rejects duplicates.
     // Last submitted: 34 (v3.7.0). 35/40 = 3.8.0 preview builds only, never submitted.
-    buildNumber: '36',
+    buildNumber: '37',
+    // Shared with the widget extension (targets/widget): the app writes the widget
+    // payload here (lib/widget-platform.ios.ts). The first EAS build after adding it asks
+    // to create the App Group + the widget target's provisioning profile.
+    entitlements: {
+      'com.apple.security.application-groups': ['group.com.maxbrych.roebelonchain.widgets'],
+    },
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -241,7 +295,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 41,
+    versionCode: 42,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
@@ -283,6 +337,19 @@ const config: ExpoConfig = {
         autoVerify: true,
         action: 'VIEW',
         data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/e/' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // Ortis Studio pairing QR (roebel.app/studio/verbinden?code=…) → in-app confirmation screen
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/studio/verbinden' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/studio/verbinden' },
         category: ['BROWSABLE', 'DEFAULT']
       },
       // Event deep links

@@ -96,6 +96,15 @@ export async function isStripeConnectEnabled(opts?: { walletAddress?: string | n
   if (!opts?.walletAddress) return false;
   return value.toLowerCase().split(',').map((e) => e.trim()).includes(opts.walletAddress.toLowerCase());
 }
+/** Org-side gate for Mollie (default payment rail). Same semantics as stripe_connect_enabled. */
+export async function isMollieEnabled(opts?: { walletAddress?: string | null }): Promise<boolean> {
+  if (__DEV__) return true;
+  const value = await fetchAppSetting('mollie_enabled');
+  if (!value || value === 'false') return false;
+  if (value === 'true') return true;
+  if (!opts?.walletAddress) return false;
+  return value.toLowerCase().split(',').map((e) => e.trim()).includes(opts.walletAddress.toLowerCase());
+}
 /** Citizen-side gate for buying tickets. Missing key = OFF. */
 export async function isTicketSalesEnabled(): Promise<boolean> {
   if (__DEV__) return true;
@@ -112,21 +121,32 @@ export async function fetchChatSuiteEnabled(): Promise<boolean> {
 }
 
 /**
- * Preview gate for passkey sovereign accounts (tranche 1). A NEW surface: missing key = OFF,
- * only an explicit 'true' enables it. The screen is additionally fenced to non-production
- * update channels (lib/passkey/gate.ts).
+ * Every passkey gate flag in ONE query: the `passkey_accounts_enabled` kill switch plus the four
+ * per-surface production keys (lib/passkey/gate.ts). A missing key or any error is false; only an
+ * explicit 'true' opens.
  */
-export async function fetchPasskeyAccountsEnabled(): Promise<boolean> {
-  return (await fetchAppSetting('passkey_accounts_enabled')) === 'true';
-}
-
-/**
- * Production rollout switch for passkey accounts. Missing key = OFF, only an explicit 'true'
- * opens the passkey surfaces on the production channel, and only together with
- * `passkey_accounts_enabled` and a binary ≥ 3.8.0 (lib/passkey/gate.ts).
- */
-export async function fetchPasskeyAccountsEnabledProduction(): Promise<boolean> {
-  return (await fetchAppSetting('passkey_accounts_enabled_production')) === 'true';
+export async function fetchPasskeyFlags(): Promise<Record<string, boolean>> {
+  const keys = [
+    'passkey_accounts_enabled',
+    'passkey_accounts_enabled_production',
+    'passkey_migration_enabled_production',
+    'passkey_detach_enabled_production',
+    'passkey_words_enabled_production',
+  ];
+  const out: Record<string, boolean> = Object.fromEntries(keys.map((k) => [k, false]));
+  try {
+    const { data, error } = await supabase.from('app_settings').select('key, value').in('key', keys);
+    if (error) {
+      console.error('fetch app_settings (passkey flags) error:', error);
+      return out;
+    }
+    for (const row of (data as { key: string; value: string | null }[] | null) ?? []) {
+      if (row.key in out) out[row.key] = row.value === 'true';
+    }
+  } catch (e) {
+    console.error('fetch app_settings (passkey flags) failed:', e);
+  }
+  return out;
 }
 
 /**
@@ -140,6 +160,19 @@ export async function fetchOrgSafesEnabled(): Promise<boolean> {
 /** Production switch for org Safes, on top of `org_safes_enabled`. Missing key = OFF. */
 export async function fetchOrgSafesEnabledProduction(): Promise<boolean> {
   return (await fetchAppSetting('org_safes_enabled_production')) === 'true';
+}
+
+/**
+ * Gate for the credential register (profile cards, badges, Ausweis screens). A NEW surface:
+ * missing key = OFF, only an explicit 'true' enables it (lib/credreg/gate.ts).
+ */
+export async function fetchCredentialsEnabled(): Promise<boolean> {
+  return (await fetchAppSetting('credentials_enabled')) === 'true';
+}
+
+/** Production switch for the credential register, on top of `credentials_enabled`. Missing key = OFF. */
+export async function fetchCredentialsEnabledProduction(): Promise<boolean> {
+  return (await fetchAppSetting('credentials_enabled_production')) === 'true';
 }
 
 /**

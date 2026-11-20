@@ -124,18 +124,18 @@ export default function SidesEditor({ menuItemId }: Props) {
               style={[styles.input, styles.priceInput, { color: colors.textPrimary, borderColor: colors.borderSecondary }]}
             />
             <View style={styles.switchInline}>
-              <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 13 }}>Standard</Text>
+              <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular', fontSize: 13 }}>Standard</Text>
               <Switch value={d.is_default} onValueChange={(v) => update(idx, { is_default: v })} />
             </View>
           </View>
           <View style={styles.rowEnd}>
             {(d.isDirty || d.isNew) && menuItemId && (
               <Pressable onPress={() => saveRow(idx)} style={[styles.smallBtn, { backgroundColor: colors.primary }]}>
-                <Text style={{ color: '#fff', fontFamily: 'Inter-Medium', fontSize: 13 }}>Speichern</Text>
+                <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium', fontSize: 13 }}>Speichern</Text>
               </Pressable>
             )}
             <Pressable onPress={() => removeRow(idx)} style={[styles.smallBtn, { borderWidth: 1, borderColor: colors.error }]}>
-              <Text style={{ color: colors.error, fontFamily: 'Inter-Medium', fontSize: 13 }}>Entfernen</Text>
+              <Text style={{ color: colors.error, fontFamily: 'MonaSans-Medium', fontSize: 13 }}>Entfernen</Text>
             </Pressable>
           </View>
         </View>
@@ -143,7 +143,7 @@ export default function SidesEditor({ menuItemId }: Props) {
 
       {menuItemId && (
         <Pressable onPress={addRow} style={[styles.addBtn, { borderColor: colors.borderSecondary }]}>
-          <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-Medium' }}>+ Beilage hinzufügen</Text>
+          <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-Medium' }}>+ Beilage hinzufügen</Text>
         </Pressable>
       )}
     </View>
@@ -152,8 +152,8 @@ export default function SidesEditor({ menuItemId }: Props) {
 
 const styles = StyleSheet.create({
   section: { gap: 8, paddingVertical: 8 },
-  heading: { fontSize: 16, fontFamily: 'Inter-Medium' },
-  hint: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  heading: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
+  hint: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
   card: {
     borderWidth: 1,
     borderRadius: 12,
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },

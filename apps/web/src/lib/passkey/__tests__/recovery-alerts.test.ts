@@ -10,12 +10,14 @@ import type { Mailer, OutgoingMail } from "../email-mailer";
 import { formatDeadline, recoveryAlertMail } from "../email-mailer";
 import {
   ALERT_CURSOR_ID,
+  MAX_PUSH_ATTEMPTS,
   RECOVERY_EXECUTED_EVENT,
   runRecoveryAlerts,
   type RecoveryExecutedLog,
   type RecoveryLogReader,
 } from "../recovery-alerts";
 import { GET as alertsRoute } from "../../../app/api/passkey/recovery-alerts/route";
+import { createSupabaseAlertPush, recoveryAlertPush, type AlertPush } from "../alert-push";
 
 const W1: Address = "0x1111111111111111111111111111111111111111";
 const W2: Address = "0x2222222222222222222222222222222222222222";
@@ -170,8 +172,13 @@ test("route: CRON_SECRET bearer required; disabled / non-persistent store answer
     assert.equal((await alertsRoute(req())).status, 401);
     assert.equal((await alertsRoute(req("Bearer wrong"))).status, 401);
     assert.equal((await alertsRoute(req("Bearer s3cret"))).status, 503);
-    process.env.PASSKEY_EMAIL_ENABLED = "1";
+    process.env.PASSKEY_PUSH_ALERTS_ENABLED = "1";
     delete process.env.PASSKEY_EMAIL_STORE;
+    const pushOnly = await alertsRoute(req("Bearer s3cret"));
+    assert.equal(pushOnly.status, 503);
+    assert.deepEqual(await pushOnly.json(), { error: "store_not_persistent" });
+    delete process.env.PASSKEY_PUSH_ALERTS_ENABLED;
+    process.env.PASSKEY_EMAIL_ENABLED = "1";
     const r = await alertsRoute(req("Bearer s3cret"));
     assert.equal(r.status, 503);
     assert.deepEqual(await r.json(), { error: "store_not_persistent" });
@@ -180,4 +187,239 @@ test("route: CRON_SECRET bearer required; disabled / non-persistent store answer
   } finally {
     process.env = keep;
   }
+});
+
+// ---- Push alerts (Sovereign Sign-up 2, Task 7) ----
+
+const WALLET: Address = "0x3333333333333333333333333333333333333333";
+const nowSec = () => NOW;
+
+/** Head 1 000; every event sits at block 500, inside the first-run lookback. */
+function readerWith(logs: RecoveryExecutedLog[]): RecoveryLogReader {
+  return {
+    latestBlock: async () => 1_000n,
+    recoveryExecuted: async (from, to) => logs.filter((l) => l.blockNumber >= from && l.blockNumber <= to),
+  };
+}
+
+function ev(wallet: Address, nonce: bigint): RecoveryExecutedLog {
+  return { wallet, nonce, executeAfter: LATER, blockNumber: 500n };
+}
+
+/** Forgets the scan cursor so the next run reads the same blocks again (only the claims protect). */
+function freshCursor(store: InMemoryEmailStore): InMemoryEmailStore {
+  store.cursors.delete(ALERT_CURSOR_ID);
+  return store;
+}
+
+function fakePush(tokens: Record<string, string[]>, failTimes = 0): AlertPush & { sent: { tokens: string[]; title: string; body: string; data: Record<string, string> }[] } {
+  const sent: { tokens: string[]; title: string; body: string; data: Record<string, string> }[] = [];
+  let fails = failTimes;
+  return {
+    sent,
+    tokensFor: async (wallet) => tokens[wallet] ?? tokens[wallet.toLowerCase()] ?? [],
+    async send(t, message) {
+      if (fails-- > 0) throw new Error("expo down");
+      sent.push({ tokens: t, ...message });
+    },
+  };
+}
+
+test("a wallet without an email still gets a push, once per recovery nonce", async () => {
+  const store = await storeWith();
+  const push = fakePush({ [WALLET]: ["ExponentPushToken[a]"] });
+  const r1 = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 1n)]), store, push, nowSec });
+  assert.equal(r1.pushed, 1);
+  assert.equal(r1.sent, 0);
+  assert.deepEqual(push.sent[0].tokens, ["ExponentPushToken[a]"]);
+  assert.equal(push.sent[0].title, "Jemand stellt dein Konto wieder her");
+  assert.deepEqual(push.sent[0].data, { type: "passkey_recovery" });
+  const r2 = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 1n)]), store: freshCursor(store), push, nowSec });
+  assert.equal(r2.pushed, 0);
+  assert.equal(r2.skipped.alreadySent, 1);
+  const r3 = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 2n)]), store: freshCursor(store), push, nowSec });
+  assert.equal(r3.pushed, 1); // a second attempt after a cancel alerts again
+  assert.equal(push.sent.length, 2);
+});
+
+test("email and push are claimed separately; a failed push is retried without a second email", async () => {
+  const store = await storeWith([WALLET, "w@example.de"]);
+  const m = mailer();
+  const push = fakePush({ [WALLET]: ["ExponentPushToken[a]"] }, 1);
+  const first = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 5n)]), store, mailer: m, push, nowSec });
+  assert.equal(first.sent, 1);
+  assert.equal(first.pushed, 0);
+  assert.equal(first.failed, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), null); // cursor held
+  assert.equal(first.toBlock, null);
+
+  const next = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 5n)]), store, mailer: m, push, nowSec });
+  assert.equal(next.sent, 0);
+  assert.equal(next.pushed, 1);
+  assert.equal(next.failed, 0);
+  assert.equal(next.skipped.alreadySent, 1); // the email claim
+  assert.equal(m.sent.length, 1);
+  assert.equal(push.sent.length, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 995n);
+});
+
+test("a failed email does not stop the push, and its retry sends no second push", async () => {
+  const store = await storeWith([WALLET, "w@example.de"]);
+  const m = mailer(1);
+  const push = fakePush({ [WALLET]: ["ExponentPushToken[a]"] });
+  const first = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 6n)]), store, mailer: m, push, nowSec });
+  assert.deepEqual([first.sent, first.pushed, first.failed], [0, 1, 1]);
+  const next = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 6n)]), store, mailer: m, push, nowSec });
+  assert.deepEqual([next.sent, next.pushed, next.failed], [1, 0, 0]);
+  assert.equal(push.sent.length, 1);
+});
+
+test("no device and no email: skipped, cursor advances", async () => {
+  const store = await storeWith();
+  const m = mailer();
+  const push = fakePush({});
+  const r = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 1n)]), store, mailer: m, push, nowSec });
+  assert.equal(r.skipped.noDevice, 1);
+  assert.equal(r.skipped.noContact, 1);
+  assert.equal(r.failed, 0);
+  assert.equal(r.sent + r.pushed, 0);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 995n);
+  assert.equal(store.alerts.size, 0); // nothing claimed
+});
+
+test("the in-memory store claims the same (wallet, nonce) once per channel", async () => {
+  const store = new InMemoryEmailStore(() => NOW);
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER), true);
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER, "email"), false);
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER, "push"), true);
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER, "push"), false);
+  await store.releaseAlert(WALLET, 1n, "push");
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER, "email"), false);
+  assert.equal(await store.claimAlert(WALLET, 1n, LATER, "push"), true);
+});
+
+test("push text: German, names the deadline, data type passkey_recovery", () => {
+  const p = recoveryAlertPush(LATER);
+  assert.equal(p.title, "Jemand stellt dein Konto wieder her");
+  assert.equal(p.body, `Warst du das nicht? Öffne die App und brich es ab. Du hast bis ${formatDeadline(LATER)} Uhr Zeit.`);
+  assert.deepEqual(p.data, { type: "passkey_recovery" });
+});
+
+function fakeDb(rows: { expo_push_token: string }[], fail = false) {
+  const calls: { op: string; args: unknown[] }[] = [];
+  const builder = () => {
+    const q: Record<string, unknown> = {};
+    const chain = (op: string) => (...args: unknown[]) => {
+      calls.push({ op, args });
+      return q;
+    };
+    for (const op of ["select", "eq", "update", "in"]) q[op] = chain(op);
+    q.then = (resolve: (v: unknown) => void) => resolve(fail ? { data: null, error: { code: "x" } } : { data: rows, error: null });
+    return q;
+  };
+  return { calls, db: { from: (t: string) => (calls.push({ op: "from", args: [t] }), builder()) } };
+}
+
+test("supabase push: active tokens of the wallet (lowercased), sent in chunks of 100", async () => {
+  const rows = Array.from({ length: 150 }, (_, i) => ({ expo_push_token: `ExponentPushToken[${i}]` }));
+  const { db, calls } = fakeDb(rows);
+  const bodies: unknown[][] = [];
+  const fetchImpl = (async (_url: string, init: { body: string }) => {
+    const batch = JSON.parse(init.body) as unknown[];
+    bodies.push(batch);
+    return new Response(JSON.stringify({ data: batch.map(() => ({ status: "ok", id: "t" })) }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const push = createSupabaseAlertPush(db as never, fetchImpl);
+  const tokens = await push.tokensFor("0xABCDEFabcdef0000000000000000000000000000");
+  assert.equal(tokens.length, 150);
+  assert.ok(calls.some((c) => c.op === "from" && c.args[0] === "push_tokens"));
+  assert.ok(calls.some((c) => c.op === "eq" && c.args[0] === "wallet_address" && c.args[1] === "0xabcdefabcdef0000000000000000000000000000"));
+  assert.ok(calls.some((c) => c.op === "eq" && c.args[0] === "is_active" && c.args[1] === true));
+  await push.send(tokens, recoveryAlertPush(LATER));
+  assert.deepEqual(bodies.map((b) => b.length), [100, 50]);
+  assert.equal((bodies[0][0] as { title: string }).title, "Jemand stellt dein Konto wieder her");
+});
+
+test("supabase push: an HTTP error or no accepted ticket throws; one accepted device counts as delivered; dead tokens are deactivated", async () => {
+  const { db, calls } = fakeDb([]);
+  const down = createSupabaseAlertPush(db as never, (async () => new Response("no", { status: 500 })) as unknown as typeof fetch);
+  await assert.rejects(down.send(["ExponentPushToken[a]"], recoveryAlertPush(LATER)));
+  const dead = createSupabaseAlertPush(
+    db as never,
+    (async () =>
+      new Response(JSON.stringify({ data: [{ status: "error", details: { error: "DeviceNotRegistered" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await assert.rejects(dead.send(["ExponentPushToken[dead]"], recoveryAlertPush(LATER)));
+  assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[dead]"));
+  // One chunk fine, the other an HTTP error: delivered (devices were warned), the rest only logged.
+  let call = 0;
+  const partial = createSupabaseAlertPush(
+    db as never,
+    (async (_u: string, init: { body: string }) => {
+      const batch = JSON.parse(init.body) as unknown[];
+      if (call++ === 1) return new Response("no", { status: 502 });
+      return new Response(JSON.stringify({ data: batch.map(() => ({ status: "ok" })) }), { status: 200 });
+    }) as unknown as typeof fetch,
+  );
+  const many = Array.from({ length: 150 }, (_, i) => `ExponentPushToken[${i}]`);
+  await partial.send(many, recoveryAlertPush(LATER));
+  // An error ticket other than DeviceNotRegistered next to an accepted one: delivered, logged.
+  const mixed = createSupabaseAlertPush(
+    db as never,
+    (async () =>
+      new Response(JSON.stringify({ data: [{ status: "ok" }, { status: "error", details: { error: "MessageRateExceeded" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await mixed.send(["ExponentPushToken[a]", "ExponentPushToken[b]"], recoveryAlertPush(LATER));
+  // Only error tickets: not delivered, throws (the caller retries).
+  const allBad = createSupabaseAlertPush(
+    db as never,
+    (async () => new Response(JSON.stringify({ data: [{ status: "error", details: { error: "MessageRateExceeded" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await assert.rejects(allBad.send(["ExponentPushToken[a]"], recoveryAlertPush(LATER)));
+  // Accepted + DeviceNotRegistered only: sent, the dead token deactivated, no throw.
+  const okDead = createSupabaseAlertPush(
+    db as never,
+    (async () =>
+      new Response(JSON.stringify({ data: [{ status: "ok" }, { status: "error", details: { error: "DeviceNotRegistered" } }] }), { status: 200 })) as unknown as typeof fetch,
+  );
+  await okDead.send(["ExponentPushToken[a]", "ExponentPushToken[gone]"], recoveryAlertPush(LATER));
+  assert.ok(calls.some((c) => c.op === "in" && (c.args[1] as string[])[0] === "ExponentPushToken[gone]"));
+  const failing = fakeDb([], true);
+  await assert.rejects(createSupabaseAlertPush(failing.db as never).tokensFor(WALLET));
+});
+
+test("a push that keeps failing is given up after MAX_PUSH_ATTEMPTS runs: the cursor moves on, the email went out once", async () => {
+  const store = await storeWith([WALLET, "w@example.de"]);
+  const m = mailer();
+  const push = fakePush({ [WALLET]: ["ExponentPushToken[broken]"] }, 1_000);
+  for (let i = 1; i < MAX_PUSH_ATTEMPTS; i++) {
+    await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store, mailer: m, push, nowSec });
+    assert.equal(await store.getCursor(ALERT_CURSOR_ID), null, `run ${i} holds the cursor for a retry`);
+  }
+  const last = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store, mailer: m, push, nowSec });
+  assert.equal(last.failed, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 995n);
+  assert.equal(m.sent.length, 1);
+  const after = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 7n)]), store: freshCursor(store), mailer: m, push, nowSec });
+  assert.equal(after.failed, 0); // no further push attempt for that nonce
+  // A new recovery (new nonce) is pushed again.
+  const ok = fakePush({ [WALLET]: ["ExponentPushToken[a]"] });
+  const again = await runRecoveryAlerts({ reader: readerWith([ev(WALLET, 8n)]), store: freshCursor(store), mailer: m, push: ok, nowSec });
+  assert.equal(again.pushed, 1);
+});
+
+test("a failing push in an early range does not delay the email of a later range", async () => {
+  const store = await storeWith([W2, "three@example.de"]);
+  await store.setCursor(ALERT_CURSOR_ID, 1_000n);
+  const m = mailer();
+  const push = fakePush({ [W1]: ["ExponentPushToken[broken]"] }, 1_000);
+  const r = reader(30_000n, [
+    { wallet: W1, nonce: 1n, executeAfter: LATER, blockNumber: 5_000n },
+    { wallet: W2, nonce: 1n, executeAfter: LATER, blockNumber: 25_000n },
+  ]);
+  const res = await runRecoveryAlerts({ reader: r, store, mailer: m, push, nowSec: () => NOW, chunkBlocks: 10_000n, confirmations: 0n });
+  assert.equal(m.sent.length, 1);
+  assert.equal(m.sent[0].to, "three@example.de");
+  assert.equal(res.sent, 1);
+  assert.equal(await store.getCursor(ALERT_CURSOR_ID), 1_000n); // held at the failed range
 });

@@ -48,13 +48,35 @@ function unsupported(): never {
   };
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+/** Zero balance, same shape the balance route answers for a logged-out caller. */
+const ZERO_BALANCE: MuenzenBalance = { balance: '0', decimals: 18, symbol: 'RÖ' };
+
+/**
+ * Headers of a user-scoped call: `x-roebel-host: expo` (the server records it on wallet-only
+ * calls) and `Authorization: Bearer <mini-app user token>` when the host holds one.
+ */
+function userHeaders(id: MiniAppApiIdentity): Record<string, string> {
+  return { 'x-roebel-host': 'expo', ...(id.token ? { Authorization: `Bearer ${id.token}` } : {}) };
+}
+
+/** A 401 on a call that carried a token: tell the host so it drops that token. No retry. */
+function noteRejectedToken(res: Response, user?: MiniAppApiIdentity): void {
+  if (res.status !== 401 || !user?.token) return;
+  try {
+    user.onTokenRejected?.(user.token);
+  } catch {
+    // A cache callback must never change the call's outcome.
+  }
+}
+
+async function post<T>(path: string, body: unknown, user: MiniAppApiIdentity): Promise<T> {
   if (!API_BASE) unsupported();
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...userHeaders(user) },
     body: JSON.stringify(body),
   });
+  noteRejectedToken(res, user);
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     throw {
@@ -65,10 +87,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-async function get<T>(path: string, query: Record<string, string>): Promise<T> {
+/** GET; `user` marks a user-scoped call (host header, token, 401 handling). */
+async function get<T>(path: string, query: Record<string, string>, user?: MiniAppApiIdentity): Promise<T> {
   if (!API_BASE) unsupported();
   const qs = new URLSearchParams(query).toString();
-  const res = await fetch(`${API_BASE}${path}?${qs}`);
+  const res = user
+    ? await fetch(`${API_BASE}${path}?${qs}`, { headers: userHeaders(user) })
+    : await fetch(`${API_BASE}${path}?${qs}`);
+  noteRejectedToken(res, user);
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     throw {
@@ -83,16 +109,25 @@ export interface MiniAppApiIdentity {
   miniAppId: string;
   slug: string;
   wallet: string | null;
+  /**
+   * Short-lived mini-app user token (lib/miniapp-token.ts). Sent as `Authorization: Bearer`
+   * on the user-scoped calls; the wallet is still sent for older web deploys.
+   */
+  token?: string | null;
+  /** Called with `token` when the server refused it (401), so the host's cache can drop it. */
+  onTokenRejected?: (token: string) => void;
 }
 
 export async function apiGetMuenzenBalance(
   id: MiniAppApiIdentity,
 ): Promise<MuenzenBalance> {
+  // Logged out: nothing to look up — answer zero locally instead of a wallet-less server call.
+  if (!id.wallet) return { ...ZERO_BALANCE };
   return get<MuenzenBalance>('/api/mini-apps/muenzen-balance', {
     miniAppId: id.miniAppId,
     slug: id.slug,
-    wallet: id.wallet ?? '',
-  });
+    wallet: id.wallet,
+  }, id);
 }
 
 export async function apiGrantReward(
@@ -109,7 +144,7 @@ export async function apiGrantReward(
     amount: p.amount,
     reason: p.reason,
     idempotencyKey: p.idempotencyKey,
-  });
+  }, id);
 }
 
 export async function apiSendNotification(
@@ -123,7 +158,7 @@ export async function apiSendNotification(
     title: p.title,
     body: p.body,
     targetUrl: p.targetUrl,
-  });
+  }, id);
 }
 
 // ── v0.3 mini-app datastore ("Mini-CMS") ─────────────────────────────────────
@@ -162,7 +197,7 @@ export async function apiDataUserGet(
     scope: 'user',
     wallet: id.wallet,
     key,
-  });
+  }, id);
 }
 
 export async function apiDataUserSet(
@@ -177,5 +212,5 @@ export async function apiDataUserSet(
     wallet: id.wallet,
     key,
     value,
-  });
+  }, id);
 }

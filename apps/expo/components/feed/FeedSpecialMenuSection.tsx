@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, FlatList, StyleSheet } from 'react-native';
+import { View, Text, Pressable, FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -10,14 +10,17 @@ import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { transformedImageUrl } from '@/lib/image-url';
 import { dishDayLabel, resolveDishDay, toIsoDay } from '@/lib/special-menu-days';
 import type { SpecialMenuItemRecord, SpecialMenuWithItems } from '@/lib/types';
+import { useRailLockTouchHandlers } from './HorizontalRailLock';
 
 type Props = {
   menus: SpecialMenuWithItems[];
+  /** Side gutter of title and first card: 24 in the feed, 16 on Erkunden. */
+  gutter?: number;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 type Dish = {
   item: SpecialMenuItemRecord;
-  menuId: string;
   restaurantName: string | null;
   restaurantLogo: string | null;
   /** Serving day (YYYY-MM-DD) parsed from the dish's category, if any. */
@@ -32,9 +35,11 @@ const dishKey = (dish: Dish) => dish.item.id;
  * Mittagstisch rail: one photo card per dish of every active weekly menu
  * (photos are generated in the background when a dish is saved), soonest
  * serving day first. Dishes of past days are hidden; dishes without a day
- * go last. Tapping a dish opens its restaurant's Mittagstisch page.
+ * go last. Tapping a dish opens its detail page (photo, day, comments).
  */
-export default function FeedSpecialMenuSection({ menus }: Props) {
+export default function FeedSpecialMenuSection({ menus, gutter = 24, containerStyle }: Props) {
+  // Locks the feed pager while a finger is on the rail (see HorizontalRailLock).
+  const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -45,7 +50,6 @@ export default function FeedSpecialMenuSection({ menus }: Props) {
       // Feed caches written before the dishes were embedded lack the array.
       (menu.special_menu_items ?? []).map((item) => ({
         item,
-        menuId: menu.id,
         restaurantName: menu.restaurant?.name ?? null,
         restaurantLogo: menu.restaurant?.account?.avatar_url || menu.restaurant?.logo_url || null,
         day: resolveDishDay(item.category?.name, menu.start_date),
@@ -70,7 +74,7 @@ export default function FeedSpecialMenuSection({ menus }: Props) {
       const dayLabel = dish.day ? dishDayLabel(dish.day, today) : '';
       return (
         <Pressable
-          onPress={() => router.push(`/restaurant/menu/${dish.menuId}` as any)}
+          onPress={() => router.push(`/restaurant/dish/${item.id}` as any)}
           style={({ pressed }) => [placeCardStyles.card, pressed && { opacity: 0.9 }]}
           accessibilityRole="button"
           accessibilityLabel={`${item.name} ansehen`}
@@ -124,15 +128,16 @@ export default function FeedSpecialMenuSection({ menus }: Props) {
   if (dishes.length === 0) return null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.textPrimary }]}>Mittagstisch</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }, containerStyle]}>
+      <Text style={[styles.title, { color: colors.textPrimary, paddingHorizontal: gutter }]}>Mittagstisch</Text>
       <FlatList
         horizontal
         data={dishes}
         renderItem={renderItem}
         keyExtractor={dishKey}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingHorizontal: gutter }}
+        {...railLockHandlers}
         {...RAIL_LIST_PROPS}
       />
     </View>
@@ -140,19 +145,16 @@ export default function FeedSpecialMenuSection({ menus }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // Full screen width (FeedList renders this module without the side gutter)
+  // so cards scroll out to the phone edge instead of being clipped 8px in.
+  // 24px keeps the first card and the title in line with the other modules.
   container: {
-    borderRadius: 12,
-    overflow: 'hidden',
     paddingVertical: 16,
     gap: 12,
   },
   title: {
     fontSize: 22,
     fontFamily: 'MonaSansSemiCondensed-Medium',
-    paddingHorizontal: 16,
-  },
-  listContent: {
-    paddingHorizontal: 16,
   },
   fallback: {
     width: 96,

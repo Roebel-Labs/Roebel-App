@@ -213,7 +213,7 @@ const toggleStyles = StyleSheet.create({
   check: {
     color: '#00498B',
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 });
 
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   closeIcon: {
     fontSize: 18,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   heroIcon: {
     alignSelf: 'center',
@@ -267,13 +267,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   toggleLabel: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 20,
   },
   primaryButton: {

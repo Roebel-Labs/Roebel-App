@@ -163,7 +163,7 @@ export default function TxHistoryList({ items, loading, onPressTx, emptyText }: 
 
 const styles = StyleSheet.create({
   txDayHeader: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 12,
     letterSpacing: 0.5,
     marginBottom: 6,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eurBadgeText: {
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     fontSize: 20,
   },
   txBadge: {
@@ -207,11 +207,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   txTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
   },
   txTime: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     marginTop: 2,
   },
@@ -222,16 +222,16 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   txLinkText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
   },
   txProofText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     textDecorationLine: 'underline',
   },
   txAmount: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
   },
   emptyState: {
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 32 },
   emptyText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     textAlign: 'center',
   },

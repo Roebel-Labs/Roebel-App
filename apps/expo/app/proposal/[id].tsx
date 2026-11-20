@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 16,
   },
   statusContainer: {
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 32,
     paddingHorizontal: 20,
     marginTop: 16,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   metadataText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   separator: {
     fontSize: 13,

@@ -23,10 +23,13 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export default function MiniAppColumnRail({
   apps,
   isInstalled,
+  isLocked,
   onOpen,
 }: {
   apps: MiniApp[];
   isInstalled: (slug: string) => boolean;
+  /** A locked app shows "Gesperrt"; omitted → nothing is locked. */
+  isLocked?: (app: MiniApp) => boolean;
   onOpen: (app: MiniApp) => void;
 }) {
   const { width } = useWindowDimensions();
@@ -51,6 +54,7 @@ export default function MiniAppColumnRail({
             key={app.id}
             app={app}
             installed={isInstalled(app.slug)}
+            locked={isLocked?.(app) ?? false}
             onPress={() => onOpen(app)}
           />
         ))}
@@ -80,6 +84,7 @@ export default function MiniAppColumnRail({
               key={app.id}
               app={app}
               installed={isInstalled(app.slug)}
+              locked={isLocked?.(app) ?? false}
               onPress={() => onOpen(app)}
               columnMode
             />

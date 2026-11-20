@@ -1,0 +1,21 @@
+{
+  "owner": "0x0000000000000000000000000000000000000000",
+  "miniapp": {
+    "version": "2",
+    "slug": "template",
+    "name": "Vorlage Mini-App",
+    "homeUrl": "https://mini.roebel.app/template",
+    "iconUrl": "https://mini.roebel.app/template/icon-1024.png",
+    "description": "Die Vorlage für Röbel Mini-Apps: begrüßt dich, zeigt deinen Röbel-Münzen-Stand und vergibt eine Beispiel-Belohnung.",
+    "category": "utility",
+    "tags": ["vorlage", "beispiel", "belohnung"],
+    "screenshots": [],
+    "permissions": ["wallet", "circles", "rewards"],
+    "primaryColor": "#00498B",
+    "identity": {
+      "profile": true,
+      "address": false,
+      "credentials": [{ "type": "citizen", "reason": "Zeigt Bürger:innen einen eigenen Bereich." }]
+    }
+  }
+}

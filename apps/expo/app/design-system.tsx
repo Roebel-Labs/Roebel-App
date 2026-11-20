@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
@@ -13,6 +13,8 @@ import {
   ColorTokens,
 } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import StampCard from '@/components/credentials/StampCard';
+import StampMoment from '@/components/credentials/StampMoment';
 
 const THEME_LABELS: Record<ThemePreference, string> = {
   system: 'System',
@@ -49,13 +51,13 @@ const swatchStyles = StyleSheet.create({
   },
   name: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#6b7280',
     textAlign: 'center',
   },
   hex: {
     fontSize: 9,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#9ca3af',
     textAlign: 'center',
   },
@@ -80,7 +82,7 @@ const dsSectionStyles = StyleSheet.create({
   },
   title: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -125,7 +127,7 @@ export default function DesignSystemScreen() {
         {/* Current Theme Info */}
         <View style={[styles.themeInfo, { backgroundColor: colors.surface, marginHorizontal: 16, marginTop: 16 }]}>
           <Text style={[styles.themeInfoLabel, { color: colors.textSecondary }]}>
-            Aktuelles Schema: <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium' }}>
+            Aktuelles Schema: <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium' }}>
               {THEME_LABELS[variant]}
             </Text> (Einstellung: {THEME_LABELS[preference]})
           </Text>
@@ -253,7 +255,7 @@ export default function DesignSystemScreen() {
           />
           <View style={{ height: 16 }} />
           <View style={styles.switchRow}>
-            <Text style={{ fontSize: 15, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>
+            <Text style={{ fontSize: 15, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>
               Switch Beispiel
             </Text>
             <Switch
@@ -270,15 +272,18 @@ export default function DesignSystemScreen() {
           <View style={[styles.demoCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={[styles.demoCardImage, { backgroundColor: colors.cardPlaceholder }]} />
             <View style={styles.demoCardContent}>
-              <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>
+              <Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>
                 Beispiel Karte
               </Text>
-              <Text style={{ fontSize: 12, fontFamily: 'Inter-Regular', color: colors.textSecondary, marginTop: 4 }}>
+              <Text style={{ fontSize: 12, fontFamily: 'MonaSans-Regular', color: colors.textSecondary, marginTop: 4 }}>
                 Eine Beispielkarte mit Platzhalter-Bild und Text
               </Text>
             </View>
           </View>
         </DSSection>
+
+        {/* Stamps (credential register): play the moment with reduced motion on and off */}
+        <StampDemo colors={colors} />
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -286,7 +291,43 @@ export default function DesignSystemScreen() {
   );
 }
 
+function StampDemo({ colors }: { colors: ColorTokens }) {
+  const [tone, setTone] = useState<'success' | 'warning' | null>(null);
+  return (
+    <DSSection title="STEMPEL" colors={colors}>
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+        {(['collected', 'pending', 'queued'] as const).map((state) => (
+          <View key={state} style={{ flex: 1 }}>
+            <StampCard imageUrl={null} title="Dabei: Sommerfest" subtitle="5.12.2026" state={state} size="tile" />
+          </View>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable onPress={() => setTone('success')} style={[styles.stampDemoButton, { backgroundColor: colors.primary }]}>
+          <Text style={{ color: colors.onPrimary, fontFamily: fontFamily.semiBold }}>Stempel abspielen</Text>
+        </Pressable>
+        <Pressable onPress={() => setTone('warning')} style={[styles.stampDemoButton, { borderColor: colors.border, borderWidth: 1 }]}>
+          <Text style={{ color: colors.textPrimary, fontFamily: fontFamily.semiBold }}>Hinweis-Zustand</Text>
+        </Pressable>
+      </View>
+      <Modal visible={tone !== null} animationType="fade" onRequestClose={() => setTone(null)}>
+        {tone ? (
+          <StampMoment
+            stamp={{ imageUrl: null, title: 'Dabei: Sommerfest', subtitle: '5. Dezember 2026', state: tone === 'success' ? 'pending' : 'collected', size: 'hero' }}
+            headline={tone === 'success' ? 'Abzeichen erhalten' : 'Schon gesammelt'}
+            lines={tone === 'success' ? ['Sommerfest', '5. Dezember 2026', 'Wird in dein Profil eingetragen.'] : []}
+            muenzen={tone === 'success' ? 5 : null}
+            tone={tone}
+            actions={[{ label: 'Schließen', kind: 'primary', onPress: () => setTone(null) }]}
+          />
+        ) : null}
+      </Modal>
+    </DSSection>
+  );
+}
+
 const styles = StyleSheet.create({
+  stampDemoButton: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   container: {
     flex: 1,
   },
@@ -321,7 +362,7 @@ const styles = StyleSheet.create({
   },
   themeInfoLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 12,
   },
   themeButtons: {
@@ -349,7 +390,7 @@ const styles = StyleSheet.create({
   },
   typoLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 2,
   },
   typoDivider: {
@@ -366,7 +407,7 @@ const styles = StyleSheet.create({
   },
   spacingLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     width: 70,
   },
   spacingBar: {
@@ -390,7 +431,7 @@ const styles = StyleSheet.create({
   },
   radiiLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   demoButton: {
     height: 48,
@@ -408,7 +449,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   switchRow: {
     flexDirection: 'row',

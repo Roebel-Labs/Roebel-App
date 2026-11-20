@@ -57,7 +57,7 @@ export default function MenuSearchModal({ visible, accountId, onClose }: Props) 
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Pressable onPress={onClose} hitSlop={8}>
-            <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 16 }}>Schließen</Text>
+            <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium', fontSize: 16 }}>Schließen</Text>
           </Pressable>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Speisekarte durchsuchen</Text>
           <View style={{ width: 60 }} />
@@ -112,13 +112,13 @@ export default function MenuSearchModal({ visible, accountId, onClose }: Props) 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  title: { fontSize: 16, fontFamily: 'Inter-Medium' },
+  title: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
-  input: { flex: 1, fontFamily: 'Inter-Regular', fontSize: 15 },
-  empty: { textAlign: 'center', paddingTop: 24, fontFamily: 'Inter-Regular' },
+  input: { flex: 1, fontFamily: 'MonaSans-Regular', fontSize: 15 },
+  empty: { textAlign: 'center', paddingTop: 24, fontFamily: 'MonaSans-Regular' },
   itemRow: { flexDirection: 'row', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
-  itemName: { fontFamily: 'Inter-Medium', fontSize: 15, marginBottom: 2 },
-  itemDesc: { fontFamily: 'Inter-Regular', fontSize: 13, marginBottom: 4 },
-  itemPrice: { fontFamily: 'Inter-Medium', fontSize: 14 },
+  itemName: { fontFamily: 'MonaSans-Medium', fontSize: 15, marginBottom: 2 },
+  itemDesc: { fontFamily: 'MonaSans-Regular', fontSize: 13, marginBottom: 4 },
+  itemPrice: { fontFamily: 'MonaSans-Medium', fontSize: 14 },
   thumb: { width: 72, height: 72, borderRadius: 8 },
 });

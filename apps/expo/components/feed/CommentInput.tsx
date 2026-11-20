@@ -355,7 +355,7 @@ export default function CommentInput({
 }
 
 const styles = StyleSheet.create({
-  fileChipName: { flex: 1, fontSize: 13, fontFamily: 'Inter-Medium' },
+  fileChipName: { flex: 1, fontSize: 13, fontFamily: 'MonaSans-Medium' },
   pill: {
     borderRadius: 26,
     // A visible 1px light rim — the glass edge — instead of a hairline.
@@ -386,14 +386,14 @@ const styles = StyleSheet.create({
   },
   avatarInitial: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   input: {
     flex: 1,
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   iconButton: {
     width: 34,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   replyChipText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   stickerChip: {
     flexDirection: 'row',

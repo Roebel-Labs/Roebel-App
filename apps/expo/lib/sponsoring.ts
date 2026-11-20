@@ -7,6 +7,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 import { getApiBaseUrl, postSigned, SPONSORING_SCOPE, type ApiResult, type SigningAccount } from './signed-request';
 import { uploadVideoToStream } from './stream-upload';
+import { findOrCreateConversation, sendMessage } from './supabase-messages';
 
 export const DANCECUP_SLUG = 'dancecup-2026';
 
@@ -25,7 +26,7 @@ export interface SponsoringPackage {
 }
 export interface SponsoringBooking {
   id: string; package_id: string; status: BookingStatus; media_kind: MediaKind | null; media_url: string | null;
-  creative_id: string | null; amount_cents: number; review_note: string | null; created_at: string; paid_at: string | null;
+  creative_id: string | null; amount_cents: number; review_note: string | null; note?: string | null; created_at: string; paid_at: string | null;
 }
 export interface SponsoringCreative { id: string; image_url: string; variant: number; source: 'ai_logo' | 'ai_wordmark' | 'upload' }
 export interface Supporter { org_account_id: string; name: string; avatar_url: string | null; package_id: string; paid_at: string | null }
@@ -57,6 +58,13 @@ export async function fetchCampaign(slug: string): Promise<CampaignView | null> 
     campaign: campaign as SponsoringCampaign,
     packages: ((packages ?? []) as SponsoringPackage[]).map((p) => ({ ...p, taken: taken.get(p.id) ?? 0 })),
   };
+}
+
+/** Just the booking deadline (profile card): one small read instead of the campaign + packages + availability. */
+export async function fetchBookingDeadline(slug: string): Promise<string | null> {
+  const { data, error } = await db.from('sponsoring_campaigns').select('booking_deadline').eq('slug', slug).maybeSingle();
+  if (error || !data) return null;
+  return (data as { booking_deadline: string }).booking_deadline;
 }
 
 export function isBookingOpen(campaign: Pick<SponsoringCampaign, 'booking_deadline'>, now: number = Date.now()): boolean {
@@ -138,23 +146,116 @@ export function recommendedPackageId(packages: { id: string; name: string; price
   return [...packages].sort((a, b) => a.price_cents - b.price_cents)[0]?.id ?? null;
 }
 
-export interface DishPhoto { name: string; price: number | null; image_url: string }
+export interface DishPhoto { id: string; name: string; price: number | null; image_url: string }
 
-/** Up to `limit` menu photos of the org's restaurant(s): the material of its personal spot preview. */
-export async function fetchDishPhotos(orgAccountId: string, limit = 4): Promise<DishPhoto[]> {
+/** Where the produced spot's pictures come from: restaurant menu photos, else active marketplace listings. */
+export type SpotSource = 'menu' | 'listings' | 'none';
+export interface SpotCatalog { source: SpotSource; hasRestaurant: boolean; items: DishPhoto[] }
+
+/** Every picture the org could show in its produced spot (menu photos first, else its active marketplace listings). */
+export async function fetchSpotCatalog(orgAccountId: string): Promise<SpotCatalog> {
   const { data: restaurants } = await db.from('restaurants').select('id').eq('account_id', orgAccountId);
   const ids = ((restaurants ?? []) as { id: string }[]).map((r) => r.id);
-  if (!ids.length) return [];
-  const { data } = await db.from('menu_items')
-    .select('name, price, image_url')
-    .in('restaurant_id', ids)
-    .not('image_url', 'is', null)
-    .order('sort_order', { ascending: true })
+  if (ids.length) {
+    const { data } = await db.from('menu_items')
+      .select('id, name, price, image_url')
+      .in('restaurant_id', ids)
+      .not('image_url', 'is', null)
+      .order('sort_order', { ascending: true })
+      .limit(80);
+    const items = (data ?? []) as DishPhoto[];
+    if (items.length) return { source: 'menu', hasRestaurant: true, items };
+  }
+  const { data: listings } = await db.from('marketplace_listings')
+    .select('id, title, price, media_urls')
+    .eq('account_id', orgAccountId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
     .limit(40);
-  const rows = (data ?? []) as DishPhoto[];
-  // Spread the picks over the menu instead of four starters in a row.
-  const step = Math.max(1, Math.floor(rows.length / limit));
-  return rows.filter((_, i) => i % step === 0).slice(0, limit);
+  const items: DishPhoto[] = [];
+  for (const l of (listings ?? []) as { id: string; title: string; price: number | null; media_urls: string[] | null }[]) {
+    const image = l.media_urls?.[0];
+    if (image) items.push({ id: l.id, name: l.title, price: l.price && l.price > 0 ? l.price : null, image_url: image });
+  }
+  return { source: items.length ? 'listings' : 'none', hasRestaurant: ids.length > 0, items };
+}
+
+/** Up to `limit` pictures for the spot preview, spread over the catalog instead of four starters in a row. */
+export function pickSpotItems(items: DishPhoto[], limit = 4): DishPhoto[] {
+  const step = Math.max(1, Math.floor(items.length / limit));
+  return items.filter((_, i) => i % step === 0).slice(0, limit);
+}
+
+export const MAX_SPOT_DISHES = 4;
+
+/** Dish ids stored on the booking note by sponsoring_set_dishes (apps/web/src/lib/sponsoring.ts dishNote). */
+export function parseDishNote(note: string | null | undefined): string[] {
+  if (!note) return [];
+  try {
+    const v = JSON.parse(note) as { dishes?: { id?: unknown }[] };
+    return Array.isArray(v.dishes) ? v.dishes.map((d) => d?.id).filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setSpotDishes(account: SigningAccount, orgAccountId: string, bookingId: string, dishIds: string[]) {
+  return postSigned<{ note: string }>('/api/sponsoring', account, 'sponsoring_set_dishes', {
+    org_account_id: orgAccountId, booking_id: bookingId, dish_ids: dishIds,
+  }, SPONSORING_SCOPE);
+}
+
+/** Direct line to the stream production (Max) for questions about a booked spot. */
+export const SPONSORING_WHATSAPP = '4917682275490';
+export function sponsoringWhatsAppUrl(orgName: string, packageName: string | null, booked = true): string {
+  const text = booked
+    ? `Hallo, hier ist ${orgName}. Wir haben ${packageName ? `„${packageName}“` : 'einen Werbeplatz'} für den DanceCup-Livestream gebucht und haben eine Frage:`
+    : `Hallo Max, hier ist ${orgName}. Wir interessieren uns für Werbung beim DanceCup-Livestream und haben eine Frage:`;
+  return `https://wa.me/${SPONSORING_WHATSAPP}?text=${encodeURIComponent(text)}`;
+}
+
+/** Max's personal account: in-app support contact for every sponsoring question, before and after a purchase. */
+export const SPONSORING_CONTACT_ACCOUNT_ID = '182a6f97-e02f-4379-bb0b-b467b74c6da9';
+export const SPONSORING_CONTACT_NAME = 'Max Brych';
+
+/** The DanceCup event and its live room, linked from the sponsoring page. */
+export const DANCECUP_EVENT_ID = '65e89958-6e1d-4e63-b018-66dcfcd20461';
+export const DANCECUP_LIVE_SLUG = 'dancecup-2026';
+
+/**
+ * Reach figures for the sales page. pushDevices + orgs were counted in the database on 2026-11-06;
+ * appPeople and streamViewers come from Max's 2026-11-06 page design (the database counted 180
+ * personal accounts that day). Refresh them for the next campaign.
+ */
+export const SPONSORING_REACH = { appPeople: 500, pushDevices: 240, streamViewers: 100, orgs: 40 } as const;
+
+export interface CampaignEvent { title: string; image_url: string | null }
+
+export async function fetchCampaignEvent(eventId: string): Promise<CampaignEvent | null> {
+  const { data } = await db.from('events').select('title, image_url').eq('id', eventId).maybeSingle();
+  return (data as CampaignEvent | null) ?? null;
+}
+
+/** Opens (or creates) the chat between the viewer's active account and Max. */
+export async function openSponsoringChat(myAccountId: string): Promise<string | null> {
+  const convo = await findOrCreateConversation(myAccountId, SPONSORING_CONTACT_ACCOUNT_ID);
+  return convo?.id ?? null;
+}
+
+/**
+ * Sends the org's own pictures for a custom spot to Max as a chat message (one link per picture),
+ * so he sees them in his inbox right away and can reply to agree on the spot.
+ */
+export async function sendAdMaterialToChat(myAccountId: string, orgName: string, imageUrls: string[], note: string): Promise<string | null> {
+  const conversationId = await openSponsoringChat(myAccountId);
+  if (!conversationId) return null;
+  const lines = [
+    `Hallo Max, hier ist ${orgName}. Hier ${imageUrls.length === 1 ? 'ist ein Bild' : `sind ${imageUrls.length} Bilder`} für unsere DanceCup-Werbung:`,
+    ...imageUrls.map((u, i) => `${i + 1}. ${u}`),
+    ...(note.trim() ? ['', note.trim()] : []),
+  ];
+  const sent = await sendMessage(conversationId, myAccountId, lines.join('\n'));
+  return sent ? conversationId : null;
 }
 
 let logoColors: Promise<Record<string, string | null>> | null = null;

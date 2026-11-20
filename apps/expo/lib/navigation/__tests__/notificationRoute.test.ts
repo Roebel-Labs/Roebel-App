@@ -23,6 +23,21 @@ describe('routeForNotification', () => {
     expect(routeForNotification({ type: 'vorhaben', proposalId: 'p1', screen: 'aufgabe', taskId: 'k1' })).toBe('/aufgabe/k1');
   });
 
+  it('opens the profile detail sheet for a credential visibility push', () => {
+    const typeId = '0x' + 'ab'.repeat(32);
+    expect(routeForNotification({ type: 'credential_visibility', typeId })).toBe(`/profile?credential=${typeId}`);
+    expect(routeForNotification({ type: 'credential_visibility', typeId: 'nope' })).toBe('/profile');
+  });
+
+  it('opens the accept screen for a credential invite and the confirm screen for a credential action', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(routeForNotification({ type: 'credential_invite', invitationId: id })).toBe(`/credentials/accept/${id}`);
+    expect(routeForNotification({ type: 'credential_action', actionId: id })).toBe(`/org/credentials/approve/${id}`);
+    expect(routeForNotification({ type: 'credential_invite', invitationId: '../x' })).toBe('/credentials');
+    expect(routeForNotification({ type: 'credential_action', actionId: 'nope' })).toBeNull();
+    expect(routeForNotification({ type: 'credential_letters' })).toBe('/credentials');
+  });
+
   it('returns null without a target', () => {
     expect(routeForNotification(null)).toBeNull();
     expect(routeForNotification({ type: 'post' })).toBeNull();

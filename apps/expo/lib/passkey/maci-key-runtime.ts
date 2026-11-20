@@ -1,5 +1,5 @@
 /**
- * Real-world wiring for maci-key-resolver.ts on a PASSKEY session ("Schlüssel erstellen" in
+ * Real-world wiring for maci-key-resolver.ts on a passkey or 12-word session ("Schlüssel erstellen" in
  * VoteButtons via MaciContext). Load lazily (native passkey code) — load-derived-keys.ts.
  *
  * The thirdweb account is the device's dormant inApp session restored silently (outside the
@@ -9,13 +9,12 @@
 import type { Account } from 'thirdweb/wallets';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { isCitizenTokenRegistered, lookupMaciSignUp, thirdwebMaciSource } from '@/lib/maci-signup-runtime';
-import { hasLegacyHistory, keyBackupFor, SLOT_GENERATORS } from './derived-keys-runtime';
+import { hasLegacyHistory, keyDepsForSession, SLOT_GENERATORS } from './derived-keys-runtime';
 import { MACI_KEYPAIR_STORE_KEY, singleFlight } from './derived-keys';
 import { maciPubKeyHashOf, silentThirdwebAccount } from './key-completion-runtime';
 import { resolveMaciKeyForIdentity, type MaciResolution } from './maci-key-resolver';
 import { unwrapSecret, wrapSecret } from './prf-vault';
 import type { PasskeySession } from './session';
-import { getPrfSecret } from './webauthn';
 
 const storage = {
   getItem: (k: string) => SecureStore.getItemAsync(k),
@@ -38,9 +37,9 @@ export function resolveMaciKeyForSession(
   return singleFlight(inFlight, key, () =>
     resolveMaciKeyForIdentity({
       identity: session.identity,
-      remote: keyBackupFor(session),
+      // One signer: the passkey (PRF) or, for a 12-word session, the phrase's vault key.
+      ...keyDepsForSession(session),
       storage,
-      getPrf: () => getPrfSecret(session.credentialId),
       wrap: wrapSecret,
       unwrap: unwrapSecret,
       loadLocal: () => SecureStore.getItemAsync(MACI_KEYPAIR_STORE_KEY),

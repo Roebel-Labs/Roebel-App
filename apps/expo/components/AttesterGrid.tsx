@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SECTION_PADDING,
   },
   title: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 18,
     marginBottom: 12,
   },
@@ -184,17 +184,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   orgLogoInitial: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 20,
   },
   orgName: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginTop: 10,
     textAlign: 'center',
   },
   orgSubline: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     marginTop: 2,
     textAlign: 'center',
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   orgLink: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 13,
   },
   personalTile: {
@@ -216,13 +216,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   personalName: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
   },
   emptyText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,

@@ -50,7 +50,7 @@ export type ThirdwebKeySource = {
   derive: (slot: KeyBackupSlot) => Promise<Uint8Array>;
 };
 
-export type CompletionDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap'> & {
+export type CompletionDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap' | 'wordsVaultKey'> & {
   identity: string;
   remote?: RemoteBackup;
   /** This device's secrets per slot (derived-keys-runtime.deviceSecretSources). */
@@ -86,7 +86,11 @@ const uniq = (xs: KeyBackupSlot[]) => KEY_BACKUP_SLOTS.filter((s) => xs.includes
 
 /** Serves the read we already paid a fingerprint for, so backupDeviceSecrets does not re-read. */
 function withCachedRead(remote: RemoteBackup, read: RemoteRead): RemoteBackup {
-  return { read: async () => read, write: (blobs, replace) => remote.write(blobs, replace) };
+  return {
+    read: async () => read,
+    write: (blobs, replace) => remote.write(blobs, replace),
+    ...(remote.writeWithoutPrompt ? { writeWithoutPrompt: remote.writeWithoutPrompt } : {}),
+  };
 }
 
 export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionResult> {
@@ -95,7 +99,7 @@ export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionRe
   if (read.status === 'disabled') return { status: 'disabled' };
 
   const required = requiredKeySlots(await d.hasCommitment());
-  const inBackup = read.status === 'found' ? (Object.keys(read.blobs) as KeyBackupSlot[]) : [];
+  const inBackup = read.status === 'found' ? KEY_BACKUP_SLOTS.filter((s) => read.blobs[s] !== undefined) : [];
   const local = new Map<KeyBackupSlot, Uint8Array>();
   for (const s of d.sources) {
     const v = await s.loadLocal();
@@ -132,6 +136,7 @@ export async function completeKeyBackup(d: CompletionDeps): Promise<CompletionRe
     remote: withCachedRead(d.remote, read),
     wrap: d.wrap,
     unwrap: d.unwrap,
+    wordsVaultKey: d.wordsVaultKey,
   });
   if (report.status === 'disabled') return { status: 'disabled' };
 
@@ -177,4 +182,17 @@ export function describeCompletion(r: CompletionResult): { tone: 'info' | 'error
     return { tone: 'info', text: `Noch offen: ${slotNames(r.required.filter((s) => !r.backedUp.includes(s)))}.` };
   }
   return { tone: 'success', text: `Gesichert: ${slotNames(r.backedUp)}. Nur dein Passkey kann sie entsperren.` };
+}
+
+/** German status line for "Schlüssel sichern" on a 12-word account (no passkey, no thirdweb step). */
+export function describeWordsBackup(r: BackupReport): { tone: 'info' | 'error' | 'success'; text: string } {
+  if (r.status === 'disabled') return { tone: 'info', text: 'Die Schlüssel-Sicherung ist noch nicht freigeschaltet.' };
+  if (r.conflicts.length > 0) {
+    return {
+      tone: 'error',
+      text: `Auf dem Server liegt bereits ein anderer ${slotNames(r.conflicts)}. Er wurde nicht überschrieben – bitte melde dich bei uns.`,
+    };
+  }
+  if (r.saved.length === 0) return { tone: 'info', text: 'Auf diesem Gerät gibt es noch keine Schlüssel zum Sichern.' };
+  return { tone: 'success', text: `Gesichert: ${slotNames(r.saved)}. Entsperren kann sie nur, wer deine 12 Wörter hat.` };
 }

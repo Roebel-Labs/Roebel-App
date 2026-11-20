@@ -12,6 +12,7 @@ import {
   type BridgeErrorCode,
   type BridgeMessage,
   type BridgeMethod,
+  type Credential,
   type Eip1193RequestArgs,
   type GrantRewardParams,
   type GrantRewardResult,
@@ -20,10 +21,11 @@ import {
   type MuenzenBalance,
   type NetizenEvent,
   type PayParams,
+  type ReadyOptions,
   type WalletAccount,
 } from '../types';
 
-export type { MiniAppContext } from '../types';
+export type { DeclaredContract, MiniAppContext, ReadyOptions } from '../types';
 
 /**
  * Platform capability handlers. Every handler is optional; a missing handler for a called
@@ -31,7 +33,7 @@ export type { MiniAppContext } from '../types';
  */
 export interface HostHandlers {
   hello?(params: { sdkVersion?: string }): Promise<unknown> | unknown;
-  ready?(params: { disableNativeGestures?: boolean }): Promise<void> | void;
+  ready?(params: ReadyOptions): Promise<void> | void;
   close?(): Promise<void> | void;
   openUrl?(p: { url: string }): Promise<void> | void;
   share?(p: { text?: string; url?: string }): Promise<void> | void;
@@ -42,7 +44,7 @@ export interface HostHandlers {
   walletRequest?(p: Eip1193RequestArgs): Promise<unknown> | unknown;
 
   authGetToken?(): Promise<{ token: string } | null> | { token: string } | null;
-  authSignIn?(): Promise<{ token: string }> | { token: string };
+  authSignIn?(p: { nonce?: string }): Promise<{ token: string }> | { token: string };
 
   hapticsImpact?(p: { style?: string }): Promise<void> | void;
   hapticsNotification?(p: { type?: string }): Promise<void> | void;
@@ -68,6 +70,50 @@ export interface HostHandlers {
   dataList?(p: { prefix?: string }): Promise<{ items: { key: string; value: unknown }[] }>;
   dataUserGet?(p: { key: string }): Promise<{ value: unknown; exists: boolean }>;
   dataUserSet?(p: { key: string; value: unknown }): Promise<{ ok: boolean }>;
+
+  // v0.4 — identity and credentials (manifest version "2"). No permission
+  // needed; the host answers only what the person agreed to share.
+  credentialsList?(): Promise<Credential[]>;
+  credentialsHas?(p: { type: string }): Promise<boolean>;
+  credentialsRequest?(p: { types: string[] }): Promise<{ granted: string[] }>;
+}
+
+/** Which handler serves each method. `null` = the router answers it itself when no handler is set. */
+const METHOD_HANDLER: Record<BridgeMethod, keyof HostHandlers | null> = {
+  'bridge.hello': null,
+  'actions.ready': null,
+  'actions.close': null,
+  'actions.openUrl': null,
+  'actions.share': null,
+  'actions.addMiniApp': null,
+  'context.get': 'getContext',
+  'wallet.getAccount': null,
+  'wallet.request': 'walletRequest',
+  'auth.getToken': null,
+  'auth.signIn': 'authSignIn',
+  'haptics.impact': null,
+  'haptics.notification': null,
+  'haptics.selection': null,
+  'roebel.getMuenzenBalance': 'getMuenzenBalance',
+  'roebel.grantReward': 'grantReward',
+  'roebel.pay': 'pay',
+  'notifications.send': 'notificationsSend',
+  'analytics.track': null,
+  'data.get': 'dataGet',
+  'data.list': 'dataList',
+  'data.userGet': 'dataUserGet',
+  'data.userSet': 'dataUserSet',
+  'credentials.list': 'credentialsList',
+  'credentials.has': 'credentialsHas',
+  'credentials.request': 'credentialsRequest',
+};
+
+/** Every method this host can answer: those with a handler plus those the router answers itself. */
+export function hostMethods(handlers: HostHandlers): BridgeMethod[] {
+  return (Object.keys(METHOD_HANDLER) as BridgeMethod[]).filter((m) => {
+    const h = METHOD_HANDLER[m];
+    return h === null || typeof handlers[h] === 'function';
+  });
 }
 
 /** Which permission a method requires. Methods not listed are always allowed. */
@@ -110,10 +156,14 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
 
   async function dispatch(method: BridgeMethod, params: unknown): Promise<unknown> {
     switch (method) {
-      case 'bridge.hello':
-        return handlers.hello?.((params ?? {}) as { sdkVersion?: string }) ?? { ok: true };
+      case 'bridge.hello': {
+        const res = (await handlers.hello?.((params ?? {}) as { sdkVersion?: string })) ?? { ok: true };
+        return res && typeof res === 'object' && !Array.isArray(res)
+          ? { ...(res as Record<string, unknown>), methods: hostMethods(handlers) }
+          : res;
+      }
       case 'actions.ready':
-        return handlers.ready?.((params ?? {}) as { disableNativeGestures?: boolean });
+        return handlers.ready?.((params ?? {}) as ReadyOptions);
       case 'actions.close':
         return handlers.close?.();
       case 'actions.openUrl':
@@ -131,7 +181,7 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
       case 'auth.getToken':
         return handlers.authGetToken?.() ?? null;
       case 'auth.signIn':
-        return requireHandler(handlers.authSignIn)();
+        return requireHandler(handlers.authSignIn)((params ?? {}) as { nonce?: string });
       case 'haptics.impact':
         return handlers.hapticsImpact?.(params as { style?: string });
       case 'haptics.notification':
@@ -159,6 +209,12 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
         return requireHandler(handlers.dataUserGet)(params as { key: string });
       case 'data.userSet':
         return requireHandler(handlers.dataUserSet)(params as { key: string; value: unknown });
+      case 'credentials.list':
+        return requireHandler(handlers.credentialsList)();
+      case 'credentials.has':
+        return requireHandler(handlers.credentialsHas)(params as { type: string });
+      case 'credentials.request':
+        return requireHandler(handlers.credentialsRequest)(params as { types: string[] });
       default:
         throw err('unsupported', `unknown method "${method}"`);
     }
@@ -236,3 +292,20 @@ function parse(data: unknown): BridgeMessage | null {
   if (data && typeof data === 'object') return data as BridgeMessage;
   return null;
 }
+
+export { consentKeys, pendingConsentKeys, type ConsentKey } from './consent';
+export {
+  BUILTIN_CREDENTIALS,
+  credentialMatches,
+  isCredentialRef,
+  parseCredentialRef,
+  type BuiltinCredential,
+  type ParsedCredentialRef,
+} from '../credential-ref';
+export {
+  classifyWalletMethod,
+  WALLET_READ_METHODS,
+  WALLET_SIGN_METHODS,
+  type WalletMethodClass,
+} from './wallet-methods';
+export { callRules, findDeclaredCall, type CallRule, type DeclaredCallMatch } from './declared-calls';

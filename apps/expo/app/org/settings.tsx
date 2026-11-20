@@ -13,7 +13,8 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function OrgSettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount } = useAccount();
+  const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount, roleInActiveAccount } = useAccount();
+  const canManage = roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin';
   const account = useActiveAccount();
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -98,6 +99,25 @@ export default function OrgSettingsScreen() {
           </View>
         )}
 
+        {canManage && (
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mini-Apps</Text>
+            <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
+              {'Mini-Apps, die sagen, dass sie zu euch gehören, bestätigen oder ablehnen.'}
+            </Text>
+            <Pressable
+              onPress={() => router.push('/org/mini-apps' as any)}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Mini-Apps verwalten</Text>
+            </Pressable>
+          </View>
+        )}
+
         <OrgSafeSection accountId={activeAccount.id} accountName={activeAccount.name} />
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -122,7 +142,7 @@ export default function OrgSettingsScreen() {
         <View style={styles.confirmBody}>
           <Text style={[styles.confirmTitle, { color: colors.textPrimary }]}>Konto wirklich löschen?</Text>
           <Text style={[styles.confirmText, { color: colors.textSecondary }]}>
-            <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-SemiBold' }}>{activeAccount.name}</Text>
+            <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-SemiBold' }}>{activeAccount.name}</Text>
             {' '}wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
           </Text>
 
@@ -167,8 +187,8 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   contentInner: { padding: 16, gap: 16 },
   accountInfo: { gap: 4 },
-  accountName: { fontSize: 22, fontFamily: 'Inter-Bold' },
-  accountSub: { fontSize: 14, fontFamily: 'Inter-Regular' },
+  accountName: { fontSize: 22, fontFamily: 'MonaSans-Bold' },
+  accountSub: { fontSize: 14, fontFamily: 'MonaSans-Regular' },
   section: {
     borderWidth: 1,
     borderRadius: 16,
@@ -176,7 +196,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
-  sectionBody: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  sectionBody: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
   dangerButton: {
@@ -187,8 +207,8 @@ const styles = StyleSheet.create({
   },
   dangerButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   confirmBody: { gap: 12, paddingTop: 4 },
-  confirmTitle: { fontSize: 18, fontFamily: 'Inter-Bold' },
-  confirmText: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  confirmTitle: { fontSize: 18, fontFamily: 'MonaSans-Bold' },
+  confirmText: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 4 },
   confirmDelete: {
     backgroundColor: '#EF4444',
     height: 52,
@@ -196,7 +216,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
   confirmCancel: { alignItems: 'center', paddingTop: 6 },
-  confirmCancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  confirmCancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });

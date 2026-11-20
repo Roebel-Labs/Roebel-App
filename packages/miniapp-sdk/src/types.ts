@@ -41,6 +41,9 @@ export type BridgeMessage = BridgeRequest | BridgeResponse | BridgeEventMessage;
 export interface BridgeError {
   code: BridgeErrorCode;
   message: string;
+  /** Optional numeric EIP-1193 / JSON-RPC code the host wants the provider to surface
+   * (e.g. 4902 for an unsupported chain, or the RPC node's own error code). */
+  rpcCode?: number;
 }
 
 export type BridgeErrorCode =
@@ -79,13 +82,31 @@ export type BridgeMethod =
   | 'data.get'
   | 'data.list'
   | 'data.userGet'
-  | 'data.userSet';
+  | 'data.userSet'
+  // v0.4 — identity and credentials (manifest version "2"). Older hosts answer
+  // `unsupported`; check `sdk.supports(method)` first.
+  | 'credentials.list'
+  | 'credentials.has'
+  | 'credentials.request';
+// reserved: 'credentials.prove' (credreg-6-zk)
 
 export type NetizenEvent =
   | 'walletChanged'
   | 'back'
   | 'visibilityChanged'
-  | 'themeChanged';
+  | 'themeChanged'
+  /** v0.4 — the person's shared credentials changed (grant or withdrawal). Data = `Credential[]`. */
+  | 'credentialsChanged';
+
+/** Documented event payloads. */
+export interface NetizenEventPayloads {
+  walletChanged: { address?: string; chainId?: number };
+  /** The person pressed back (only sent when the app called `ready({ handlesBack: true })`). */
+  back: undefined;
+  visibilityChanged: { visible: boolean };
+  themeChanged: { theme: 'light' | 'dark' };
+  credentialsChanged: Credential[];
+}
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -103,6 +124,8 @@ export interface MiniAppContext {
     name: string;
     platform: 'ios' | 'android' | 'web';
     version: string;
+    /** The host's current colour scheme, when it reports one. */
+    theme?: 'light' | 'dark';
   };
   safeAreaInsets: { top: number; bottom: number; left: number; right: number };
   launch: {
@@ -185,6 +208,65 @@ export interface MiniAppManifest {
   screenshots?: string[];
   permissions: MiniAppPermission[];
   primaryColor?: string;
+  /** Manifest version; absent = "1". */
+  version?: '1' | '2';
+  /** Version "2" only: what the app may ask the person to share. */
+  identity?: MiniAppIdentityRequest;
+  /** Version "2" only: contracts the app calls; reviewed, then sponsored (gasless). */
+  contracts?: DeclaredContract[];
+  /** Version "2" only: whom the app is for (matched on the device against held credentials). */
+  audience?: MiniAppAudience;
+  /** Version "2" only: the org's account id (uuid, as in its page address `/account/<id>`); the org confirms. */
+  org?: string;
+}
+
+/**
+ * The `audience` section of a version-2 manifest. `required` locks the app for everyone who
+ * holds none of `anyOf` (a courtesy on the device, not security: check on your server);
+ * `recommended` only suggests it to those who do.
+ */
+export interface MiniAppAudience {
+  mode: 'required' | 'recommended';
+  /** 1 to 8 credential references (`citizen`, `attester`, `guest`, `type:0x…`, `org:<uuid>`). */
+  anyOf: string[];
+}
+
+/** One contract a version-2 manifest declares, with the functions the app calls on it. */
+export interface DeclaredContract {
+  address: string;
+  /** Shown on the confirm sheet instead of the address. */
+  label: string;
+  /** Canonical function signatures, e.g. `checkIn(uint256)`. */
+  functions: string[];
+}
+
+/** One credential a version-2 manifest asks for, with the reason shown to the person. */
+export interface CredentialRequest {
+  /** Credential reference: `citizen` | `attester` | `guest` | `type:0x…` | `org:<org account id>`. */
+  type: string;
+  reason: string;
+}
+
+/** The `identity` section of a version-2 manifest: what the app may ask the person to share. */
+export interface MiniAppIdentityRequest {
+  profile: boolean;
+  address: boolean;
+  credentials: CredentialRequest[];
+}
+
+/** A credential the person holds and agreed to share with this app. */
+export interface Credential {
+  /** A built-in (`citizen`, `attester`, `guest`) or a `type:0x…` reference. */
+  type: string;
+  kind: 'builtin' | 'role' | 'membership' | 'badge';
+  /** The issuing org's account id, when the credential has one. */
+  org?: string;
+  name: string;
+  imageUrl?: string;
+  /** Unix seconds; null or absent = no expiry. */
+  validUntil?: number | null;
+  /** Whether this community recognises the issuer. */
+  recognised: boolean;
 }
 
 export type MiniAppStatus =
@@ -212,11 +294,21 @@ export interface NetizenMockConfig {
   /** Mock app CONTENT for sdk.data.get/list (key → value). User-scope
    * setUser/getUser use an in-memory map on top. */
   data?: Record<string, unknown>;
+  /** Credentials the mock person holds. Default: one built-in `citizen`. */
+  credentials?: Credential[];
+  /** Token returned by `auth.getToken` in mock mode. Default: none (null). */
+  token?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Public SDK surface
 // ---------------------------------------------------------------------------
+
+export interface ReadyOptions {
+  disableNativeGestures?: boolean;
+  /** true → the host sends a `back` event instead of closing the app on back. */
+  handlesBack?: boolean;
+}
 
 export interface NetizenSDK {
   /** Resolves once the bridge handshake with the host completes. */
@@ -224,7 +316,7 @@ export interface NetizenSDK {
 
   actions: {
     /** MANDATORY: dismiss the host splash once your UI is mounted. */
-    ready(opts?: { disableNativeGestures?: boolean }): Promise<void>;
+    ready(opts?: ReadyOptions): Promise<void>;
     close(): Promise<void>;
     openUrl(url: string): Promise<void>;
     share(payload: { text?: string; url?: string }): Promise<void>;
@@ -240,7 +332,8 @@ export interface NetizenSDK {
 
   auth: {
     getToken(): Promise<{ token: string } | null>;
-    signIn(): Promise<{ token: string }>;
+    /** `nonce` (optional) is bound into the token so your server can check freshness. */
+    signIn(opts?: { nonce?: string }): Promise<{ token: string }>;
   };
 
   haptics: {
@@ -279,6 +372,30 @@ export interface NetizenSDK {
     getUser(key: string): Promise<{ value: unknown | null; exists: boolean }>;
     setUser(key: string, value: unknown): Promise<{ ok: boolean }>;
   };
+
+  // --- v0.4 additive: identity and credentials (manifest version "2") ------
+
+  /** Credentials the person agreed to share with this app. A private credential
+   * is answered as "holds it" only. Every call can reject on older hosts
+   * (`unsupported`) — check `supports('credentials.list')` first. */
+  // reserved: 'credentials.prove' (credreg-6-zk)
+  credentials: {
+    list(): Promise<Credential[]>;
+    /** `type` is a credential reference; `org:<id>` matches any credential of that org. */
+    has(type: string): Promise<boolean>;
+    /**
+     * Ask for more; only types in the app's reviewed manifest can be granted. `granted` lists the
+     * requested types the person has shared with this app (manifest spelling); whether they hold
+     * one right now is what `list()` / `has()` tell.
+     */
+    request(types: string[]): Promise<{ granted: string[] }>;
+    /** Called with the new list after a grant or a withdrawal. Returns an unsubscribe function. */
+    onChange(cb: (list: Credential[]) => void): () => void;
+  };
+
+  /** Whether the host implements `method`. true in mock mode and on older hosts
+   * that do not announce their methods (let the call decide). */
+  supports(method: BridgeMethod): boolean;
 
   // --- v0.2 additive introspection (no behavior change inside a real host) ---
 

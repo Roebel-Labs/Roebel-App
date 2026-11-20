@@ -1,5 +1,6 @@
 // Response shapes of the credential register routes (apps/web/src/lib/credentials on main, plan 2,
 // plus the dashboard additions of plan 4). Copied field for field: Studio cannot import from apps/web.
+import type { CardDesign } from '@roebel/card-design';
 
 export type Kind = 'role' | 'membership' | 'badge';
 
@@ -7,6 +8,8 @@ export type Kind = 'role' | 'membership' | 'badge';
 export interface CredentialsStatus {
   enabled: boolean;
   configured: boolean;
+  /** app_settings.credential_designer_enabled: drafting works while the register is off. */
+  designer: boolean;
 }
 
 export type OnChain = 'ready' | 'org_not_registered' | 'no_chain_authority';
@@ -140,4 +143,55 @@ export interface PeopleInput {
   csv?: string;
   fromMemberList?: boolean;
   validUntil?: string;
+}
+
+// ---- card designer (D2, apps/web/src/lib/credentials/designs) -------------------------
+
+/** design_orgs: orgs where the caller is owner or admin (works without the register). */
+export interface DesignOrg {
+  accountId: string;
+  name: string;
+  avatarUrl: string | null;
+  role: 'owner' | 'admin';
+}
+
+/** D2 `DraftView`. */
+export interface DraftView {
+  id: string;
+  name: string;
+  kind: Kind;
+  template: string | null;
+  typeId: string | null;
+  revision: number;
+  updatedAt: string;
+  liveVersion: number | null;
+  pendingVersion: number | null;
+  hasUnpublishedChanges: boolean;
+  testSentAt: string | null;
+}
+
+/** D2 `DraftWithDesign` (design_draft_get, and the `data` of a 409 DRAFT_CONFLICT). */
+export type DraftWithDesign = DraftView & { design: CardDesign };
+
+export type AssetKind = 'logo' | 'sticker' | 'background' | 'image';
+
+/** D2 `AssetView`. */
+export interface AssetView {
+  sha: string;
+  kind: AssetKind;
+  url: string;
+  width: number | null;
+  height: number | null;
+  ai: boolean;
+}
+
+/** design_draft_save payload; baseRevision is required together with draftId. */
+export interface DraftSavePayload {
+  accountId: string;
+  draftId?: string;
+  baseRevision?: number;
+  name: string;
+  kind: Kind;
+  template?: string | null;
+  design: CardDesign;
 }

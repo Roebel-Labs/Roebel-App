@@ -130,7 +130,8 @@ async function main() {
   }
   check('org registered', await pub.readContract({ address: registry, abi: registryAbi, functionName: 'isRegistered', args: [orgId] }));
 
-  // 2. Mitglieder übertragen — a new owner joined in the DB, plus an admin and a member.
+  // 2. Inhaber:innen und Admins abgleichen — a new owner joined in the DB, plus an admin and an ordinary member
+  //    (ordinary members are NOT written to the registry; they live in the credential register).
   const members: DbMember[] = [
     { wallet_address: executor, role: 'owner' },
     { wallet_address: owner2, role: 'owner' },
@@ -142,11 +143,11 @@ async function main() {
   let state = await chainState(registry, orgId, safe, everyone);
   check('leave blocked before sync', leaveBlocker(state, members, executor) === 'not_in_sync');
   const plan = planSync(state, members);
-  await sendAll(executor, [syncCall({ safe, executor, registry, orgId, plan })!], `Mitglieder übertragen (${plan.addOwners.length} Inhaber, ${plan.setRoles.length} Rollen)`);
+  await sendAll(executor, [syncCall({ safe, executor, registry, orgId, plan })!], `Inhaber:innen und Admins abgleichen (${plan.addOwners.length} Inhaber, ${plan.setRoles.length} Rollen)`);
   state = await chainState(registry, orgId, safe, everyone);
   check('late owner is now a Safe owner', state.owners.includes(lateOwner));
   check('admin role onchain', state.roles[admin.toLowerCase()] === 'admin');
-  check('member role onchain', state.roles[member.toLowerCase()] === 'member');
+  check('ordinary member is not written onchain', (state.roles[member.toLowerCase()] ?? 'none') === 'none');
   check('sync is idempotent', planSync(state, members).addOwners.length + planSync(state, members).setRoles.length === 0);
 
   // 3. Übergeben & austreten.

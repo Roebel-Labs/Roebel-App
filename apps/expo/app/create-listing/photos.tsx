@@ -114,12 +114,12 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   title: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 32,
   },
   grid: {

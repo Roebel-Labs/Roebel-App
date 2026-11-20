@@ -1,0 +1,121 @@
+{
+  "town": {
+    "seconds": 10.67,
+    "lines": [
+      {
+        "start": 0,
+        "end": 3.309
+      },
+      {
+        "start": 3.889,
+        "end": 8.29
+      },
+      {
+        "start": 8.707,
+        "end": 10.67
+      }
+    ]
+  },
+  "question": {
+    "seconds": 5.061,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 2.484
+      },
+      {
+        "start": 2.971,
+        "end": 5.061
+      }
+    ]
+  },
+  "belonging": {
+    "seconds": 9.206,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 5.235
+      },
+      {
+        "start": 5.618,
+        "end": 7.673
+      },
+      {
+        "start": 7.998,
+        "end": 9.206
+      }
+    ]
+  },
+  "takingPart": {
+    "seconds": 11.331,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 2.507
+      },
+      {
+        "start": 2.89,
+        "end": 7.186
+      },
+      {
+        "start": 7.627,
+        "end": 11.331
+      }
+    ]
+  },
+  "staysLocal": {
+    "seconds": 16.265,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 3.54
+      },
+      {
+        "start": 3.911,
+        "end": 7.731
+      },
+      {
+        "start": 8.23,
+        "end": 12.48
+      },
+      {
+        "start": 12.909,
+        "end": 16.265
+      }
+    ]
+  },
+  "neighbours": {
+    "seconds": 5.293,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 2.147
+      },
+      {
+        "start": 2.472,
+        "end": 5.293
+      }
+    ]
+  },
+  "outro": {
+    "seconds": 11.621,
+    "lines": [
+      {
+        "start": 0.15,
+        "end": 2.1
+      },
+      {
+        "start": 2.542,
+        "end": 4.33
+      },
+      {
+        "start": 4.933,
+        "end": 7.302
+      },
+      {
+        "start": 7.743,
+        "end": 11.621
+      }
+    ]
+  }
+}

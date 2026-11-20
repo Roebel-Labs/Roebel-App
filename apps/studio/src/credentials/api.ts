@@ -5,7 +5,13 @@ import { t } from '../i18n';
 import { apiBase } from '../workspace/session';
 import type {
   ActionView,
+  AssetKind,
+  AssetView,
   CredentialsStatus,
+  DesignOrg,
+  DraftSavePayload,
+  DraftView,
+  DraftWithDesign,
   DelegatesData,
   EventBadgeListItem,
   OrgListItem,
@@ -21,22 +27,26 @@ export class CredentialsApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Only a 409 DRAFT_CONFLICT carries data: the newer draft with its design. */
+    readonly data?: unknown,
   ) {
     super(message);
   }
 }
 
-export type CredRoute = 'org' | 'actions' | 'me';
+export type CredRoute = 'org' | 'actions' | 'me' | 'designs';
 
 /** True for an error that means "pair this device again" (the sign-in prompt is shown). */
 export const isSessionError = (e: unknown): boolean => e instanceof CredentialsApiError && e.code === 'session';
 
 async function failure(res: Response): Promise<CredentialsApiError> {
-  const j = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
+  const j = (await res.json().catch(() => null)) as { code?: string; message?: string; data?: unknown } | null;
   if (res.status === 401) return new CredentialsApiError(401, 'session', t('Deine Anmeldung ist abgelaufen. Melde dich unter Start neu an.'));
   if (res.status === 403 && j?.code === 'APP_ONLY') return new CredentialsApiError(403, 'APP_ONLY', t('Das geht nur in der Röbel App.'));
+  // A proxy in front of the function may refuse a large body without JSON.
+  if (res.status === 413 && !j?.message) return new CredentialsApiError(413, 'TOO_LARGE', t('Das Bild ist zu groß (höchstens 8 MB).'));
   // Server messages are German product text (plan 2) and are shown as they are.
-  return new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Fehler {status}', { status: res.status }));
+  return new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Fehler {status}', { status: res.status }), j?.data);
 }
 
 async function post(route: CredRoute, action: string, payload: Record<string, unknown>, token: string): Promise<Response> {
@@ -69,12 +79,12 @@ export async function credCall<T>(route: CredRoute, action: string, payload: Rec
 export async function fetchStatus(): Promise<CredentialsStatus> {
   try {
     const res = await fetch(`${apiBase()}/api/credentials/status`, { headers: { Accept: 'application/json' } });
-    if (!res.ok) return { enabled: false, configured: false };
+    if (!res.ok) return { enabled: false, configured: false, designer: false };
     const j = (await res.json()) as Partial<CredentialsStatus> & { data?: Partial<CredentialsStatus> };
     const s = j.data ?? j;
-    return { enabled: s.enabled === true, configured: s.configured === true };
+    return { enabled: s.enabled === true, configured: s.configured === true, designer: s.designer === true };
   } catch {
-    return { enabled: false, configured: false };
+    return { enabled: false, configured: false, designer: false };
   }
 }
 
@@ -128,3 +138,46 @@ export const prepareDelegate = (token: string, p: { accountId: string; typeId: s
 
 export const prepareMembersPublic = (token: string, accountId: string, membersPublic: boolean) =>
   credCall<{ actionId: string }>('org', 'members_public_prepare', { accountId, membersPublic }, token);
+
+// ---- card designer (D2) ----------------------------------------------------------------
+
+/** POST /api/credentials/designs with { action, payload }; same error mapping as credCall. */
+export const designCall = <T>(action: string, payload: Record<string, unknown>, token: string) => credCall<T>('designs', action, payload, token);
+
+export const fetchDesignOrgs = (token: string) => designCall<DesignOrg[]>('design_orgs', {}, token);
+
+export const fetchDrafts = (token: string, accountId: string) => designCall<DraftView[]>('design_drafts_list', { accountId }, token);
+
+export const fetchDraft = (token: string, draftId: string) => designCall<DraftWithDesign>('design_draft_get', { draftId }, token);
+
+export const saveDraft = (token: string, p: DraftSavePayload) => designCall<DraftView>('design_draft_save', { ...p }, token);
+
+export const deleteDraft = (token: string, draftId: string) => designCall<null>('design_draft_delete', { draftId }, token);
+
+export const fetchDesignAssets = (token: string, accountId: string) => designCall<AssetView[]>('design_assets_list', { accountId }, token);
+
+export const sendDraftTest = (token: string, draftId: string) => designCall<{ sentAt: string }>('design_test_send', { draftId }, token);
+
+export const publishDraft = (token: string, draftId: string) => designCall<{ actionId: string; version: number; sha: string }>('design_publish', { draftId }, token);
+
+/** Multipart upload of a design image (logo, sticker, background, image). */
+export async function uploadDesignAsset(token: string, accountId: string, kind: AssetKind, file: File): Promise<AssetView> {
+  const form = new FormData();
+  form.append('accountId', accountId);
+  form.append('kind', kind);
+  form.append('file', file, file.name);
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/api/credentials/designs/assets`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: form,
+    });
+  } catch {
+    throw new CredentialsApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
+  }
+  if (!res.ok) throw await failure(res);
+  const j = (await res.json().catch(() => null)) as { ok?: boolean; data?: AssetView; code?: string; message?: string } | null;
+  if (!j || j.ok === false || !j.data) throw new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Unerwartete Antwort vom Server.'));
+  return j.data;
+}

@@ -281,7 +281,7 @@ export default function FeedbackScreen() {
                     style={[
                       styles.typeItemText,
                       { color: colors.textPrimary },
-                      form.feedback_type === type.value && { fontFamily: 'Inter-Medium', color: colors.primary },
+                      form.feedback_type === type.value && { fontFamily: 'MonaSans-Medium', color: colors.primary },
                     ]}
                   >
                     {type.label}
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 24,
     lineHeight: 22,
   },
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   input: {
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   textArea: {
     minHeight: 120,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   characterCount: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'right',
     marginTop: 4,
   },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 16,
     lineHeight: 20,
   },
@@ -418,11 +418,11 @@ const styles = StyleSheet.create({
   },
   pickerText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pickerPlaceholder: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   infoBox: {
     borderWidth: 1,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   buttonRow: {
     gap: 12,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 18,
@@ -481,13 +481,13 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textAlign: 'center',
   },
   successText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 22,
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 24,
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
   },
   typeItemText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   checkmark: {
     fontSize: 18,

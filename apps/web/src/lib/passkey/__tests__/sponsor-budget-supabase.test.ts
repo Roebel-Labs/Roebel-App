@@ -1,5 +1,5 @@
 /**
- * Supabase-backed sponsor budget (RPC passkey_sponsor_reserve) + the env switch.
+ * Supabase-backed sponsor budget (RPC passkey_sponsor_reserve_v2) + the env switch.
  * Run: cd apps/web && npx tsx --test src/lib/passkey/__tests__/sponsor-budget-supabase.test.ts
  */
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import {
   DEFAULT_GLOBAL_DAILY_WEI,
   DEFAULT_PER_KEY_DAILY_WEI,
   InMemorySponsorBudget,
+  GUEST_GROUP_KEY,
   SPONSOR_RESERVE_RPC,
   SupabaseSponsorBudget,
   budgetFromEnv,
@@ -42,9 +43,35 @@ test("reserve calls the atomic RPC with decimal-string wei and the lowercased ke
         p_cost_wei: "60",
         p_key_cap_wei: "100",
         p_global_cap_wei: "1000",
+        p_group_key: null,
+        p_group_cap_wei: null,
       },
     },
   ]);
+});
+
+test("the RPC is passkey_sponsor_reserve_v2", () => {
+  assert.equal(SPONSOR_RESERVE_RPC, "passkey_sponsor_reserve_v2");
+});
+
+test("a guest reservation passes the group key and the group cap", async () => {
+  const { calls, client } = fakeRpc({ data: true });
+  const b = new SupabaseSponsorBudget(client, { perKeyDailyWei: 1000n, globalDailyWei: 10_000n });
+  assert.equal(
+    await b.reserve("0x0000000000000000000000000000000000000001", 60n, {
+      perKeyDailyWei: 100n,
+      group: { key: GUEST_GROUP_KEY, dailyWei: 150n },
+    }),
+    true,
+  );
+  assert.deepEqual(calls[0].args, {
+    p_budget_key: "0x0000000000000000000000000000000000000001",
+    p_cost_wei: "60",
+    p_key_cap_wei: "100",
+    p_global_cap_wei: "10000",
+    p_group_key: "guests",
+    p_group_cap_wei: "150",
+  });
 });
 
 test("the RPC answering false = refused; anything but true = refused", async () => {
@@ -126,4 +153,22 @@ test("migration: reserve function is security definer, pinned search_path, EXECU
   assert.match(SQL, /grant execute on function public\.passkey_sponsor_reserve\(text, numeric, numeric, numeric\)\s+to service_role/);
   // Row locks make the check-and-add atomic across concurrent serverless instances.
   assert.match(SQL, /for update/);
+});
+
+const GUEST_SQL = readFileSync(
+  join(process.cwd(), "../../supabase/migrations/20261117a_passkey_sponsor_guest_cap.sql"),
+  "utf8",
+).toLowerCase();
+
+test("guest-cap migration: additive v2 reserve, 'guests' allowed as a key, service role only", () => {
+  assert.match(GUEST_SQL, /create or replace function public\.passkey_sponsor_reserve_v2\(/);
+  assert.match(GUEST_SQL, /security definer/);
+  assert.match(GUEST_SQL, /set search_path = ''/);
+  assert.match(GUEST_SQL, /'guests'/);
+  const sig = String.raw`public\.passkey_sponsor_reserve_v2\(text, numeric, numeric, numeric, text, numeric\)`;
+  assert.match(GUEST_SQL, new RegExp(`revoke all on function ${sig}\\s+from public, anon, authenticated`));
+  assert.match(GUEST_SQL, new RegExp(`grant execute on function ${sig}\\s+to service_role`));
+  assert.match(GUEST_SQL, /for update/);
+  // The earlier migration is left as it is (not applied yet, never edited).
+  assert.doesNotMatch(GUEST_SQL, /create table/);
 });

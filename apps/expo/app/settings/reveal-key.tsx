@@ -141,7 +141,7 @@ export default function RevealKeyScreen() {
         <Section title="PRIVATEN SCHLÜSSEL EXPORTIEREN" colors={colors}>
           <View style={styles.exportContent}>
             <Text style={[styles.exportLead, { color: colors.textPrimary }]}>
-              Der Export erfolgt über die offizielle Thirdweb-Oberfläche im Browser.
+              Der Export erfolgt über die offizielle Seite deines Anmelde-Anbieters im Browser.
             </Text>
             <View style={styles.steps}>
               <Step
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 18,
   },
   sectionContainer: { paddingHorizontal: 16, paddingTop: 24 },
@@ -311,8 +311,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   rowText: { flex: 1, marginRight: 12 },
-  rowLabel: { fontSize: 12, fontFamily: 'Inter-Regular', marginBottom: 2 },
-  rowValue: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  rowLabel: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginBottom: 2 },
+  rowValue: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
   rowAction: {
     width: 32,
     height: 32,
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   exportContent: { paddingHorizontal: 16, paddingVertical: 16 },
   exportLead: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 20,
     marginBottom: 14,
   },
@@ -337,11 +337,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 1,
   },
-  stepBulletText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  stepBulletText: { fontSize: 12, fontFamily: 'MonaSans-SemiBold' },
   stepText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   cta: {
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   footerNote: { paddingHorizontal: 16, paddingTop: 24 },
   footerNoteText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   bottomSpacer: { height: 40 },

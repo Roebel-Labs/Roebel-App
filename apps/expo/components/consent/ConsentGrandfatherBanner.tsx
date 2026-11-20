@@ -60,11 +60,11 @@ const styles = StyleSheet.create({
   text: { gap: 4 },
   title: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   body: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   actions: {
@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
   },
   dismissLabel: {
     fontSize: 22,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

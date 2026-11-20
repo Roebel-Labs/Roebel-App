@@ -63,10 +63,10 @@ describe('credentials API client', () => {
 
   it('reads the public status and treats a failure as switched off', async () => {
     const calls = mockFetch(() => json(200, { enabled: true, configured: true }));
-    expect(await fetchStatus()).toEqual({ enabled: true, configured: true });
+    expect(await fetchStatus()).toEqual({ enabled: true, configured: true, designer: false });
     expect(calls[0].url).toBe(`${API_BASE}/api/credentials/status`);
     mockFetch(() => json(404, {}));
-    expect(await fetchStatus()).toEqual({ enabled: false, configured: false });
+    expect(await fetchStatus()).toEqual({ enabled: false, configured: false, designer: false });
   });
 
   it('downloads letters as a PDF blob', async () => {

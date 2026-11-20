@@ -155,13 +155,13 @@ const styles = StyleSheet.create({
   },
   keyBadgeText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   name: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
   },
   costRow: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     height: 14,
   },
   cost: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
   },
 });

@@ -4,6 +4,7 @@ import type {
   RestaurantWithMenus,
   OpeningHours,
   SpecialMenuWithItems,
+  SpecialMenuItemRecord,
   SpecialMenuWithDetails,
 } from './types';
 
@@ -146,6 +147,37 @@ export async function fetchActiveSpecialMenus(limit: number = 3): Promise<Specia
     menu.special_menu_items = (menu.special_menu_items ?? []).sort((a, b) => a.sort_order - b.sort_order);
   });
   return menus;
+}
+
+/** One Mittagstisch dish with its day category, menu and restaurant (dish detail page). */
+export type SpecialMenuDish = SpecialMenuItemRecord & {
+  category: { name: string } | null;
+  special_menu: {
+    id: string;
+    start_date: string | null;
+    restaurant: {
+      name: string;
+      slug: string;
+      logo_url: string | null;
+      account: { avatar_url: string | null } | null;
+    } | null;
+  } | null;
+};
+
+export async function fetchSpecialMenuDish(id: string): Promise<SpecialMenuDish | null> {
+  const { data, error } = await supabase
+    .from('special_menu_items')
+    .select(
+      '*, category:category_id (name), special_menu:special_menu_id (id, start_date, restaurant:restaurants (name, slug, logo_url, account:account_id (avatar_url)))'
+    )
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching special menu dish:', error);
+    return null;
+  }
+  return data as SpecialMenuDish | null;
 }
 
 /**

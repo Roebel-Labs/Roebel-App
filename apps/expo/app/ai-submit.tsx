@@ -27,6 +27,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
   backButton: { width: 40, height: 40, borderRadius: 9999, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 22, fontFamily: 'Inter-Medium' },
+  title: { fontSize: 22, fontFamily: 'MonaSans-Medium' },
   spacer: { width: 40 },
 });

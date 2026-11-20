@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 18,
     lineHeight: 24,
   },

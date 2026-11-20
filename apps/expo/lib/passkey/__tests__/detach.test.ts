@@ -6,6 +6,7 @@ import {
   assertDetachRequest,
   buildDetachRequest,
   evaluateDetachChecklist,
+  isDetachConfirmed,
   markSponsoredOpSucceeded,
   resetSponsoredOpProof,
   runDetach,
@@ -65,8 +66,16 @@ describe('checklist', () => {
 
   it('item 1 carries the sync guidance; the explanation says it is irreversible', () => {
     expect(evaluateDetachChecklist(green).items[0].detail).toMatch(/Google-Passwortmanager \/ iCloud-Schlüsselbund/);
-    expect(DETACH_EXPLANATION).toMatch(/nach 3 Tagen deine Vertrauenspersonen/);
+    expect(DETACH_EXPLANATION).toMatch(/hältst nur noch du den Schlüssel/);
     expect(DETACH_EXPLANATION).toMatch(/nicht rückgängig/);
+  });
+
+  it('isDetachConfirmed is true only when every item is done (R12)', () => {
+    expect(isDetachConfirmed({ a: true, b: true })).toBe(true);
+    expect(isDetachConfirmed([true, true, true])).toBe(true);
+    expect(isDetachConfirmed({ a: true, b: false })).toBe(false);
+    expect(isDetachConfirmed([true, false])).toBe(false);
+    expect(isDetachConfirmed([])).toBe(false);
   });
 });
 

@@ -8,10 +8,11 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap } from '@/context/ChatContext';
 import type { ChatMemory } from '@/lib/chat/api';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BOT_COLORS, BotAvatar, BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatSheets, useChatTokens } from '@/components/chat';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
+import { BotAvatar, BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatSheets, useChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
-const FALLBACK_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dots' };
+const FALLBACK_AVATAR: BotAvatarSpec = MECKY_AVATAR_SPEC;
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -119,7 +120,7 @@ export default function ChatMemoryScreen() {
           const bot = item.botId ? botById.get(item.botId) : undefined;
           return (
             <View style={[styles.row, { backgroundColor: t.bubbleBot }]}>
-              <BotAvatar spec={bot?.avatar ?? FALLBACK_AVATAR} size={32} />
+              <BotAvatar spec={bot?.avatar ?? FALLBACK_AVATAR} name={bot?.name} size={32} />
               <View style={styles.rowText}>
                 <Text style={[styles.fact, { color: t.textPrimary }]}>{item.fact}</Text>
                 <Text style={[styles.meta, { color: t.textSecondary }]}>

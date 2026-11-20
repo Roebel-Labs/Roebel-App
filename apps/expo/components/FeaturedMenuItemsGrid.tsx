@@ -91,8 +91,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   // Fixed black text in both light and dark mode.
-  badgeText: { color: '#000', fontFamily: 'Inter-Medium', fontSize: 11 },
-  name: { marginTop: 8, fontFamily: 'Inter-Medium', fontSize: 14 },
+  badgeText: { color: '#000', fontFamily: 'MonaSans-Medium', fontSize: 11 },
+  name: { marginTop: 8, fontFamily: 'MonaSans-Medium', fontSize: 14 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  price: { fontFamily: 'Inter-Regular', fontSize: 13 },
+  price: { fontFamily: 'MonaSans-Regular', fontSize: 13 },
 });

@@ -71,7 +71,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
           )}
           <View style={styles.actions}>
             <Pressable onPress={onClose} style={[styles.btn, styles.btnGhost]}>
-              <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-Medium' }}>Abbrechen</Text>
+              <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-Medium' }}>Abbrechen</Text>
             </Pressable>
             {isSignedIn && (
               <Pressable
@@ -86,7 +86,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
                 {submitting ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>Speichern</Text>
+                  <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium' }}>Speichern</Text>
                 )}
               </Pressable>
             )}
@@ -100,10 +100,10 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 28, gap: 16 },
-  title: { fontSize: 18, fontFamily: 'Inter-Medium' },
-  body: { fontSize: 14, fontFamily: 'Inter-Regular' },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Medium' },
+  body: { fontSize: 14, fontFamily: 'MonaSans-Regular' },
   starsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8 },
-  input: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },
+  input: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'MonaSans-Regular', fontSize: 14, textAlignVertical: 'top' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
   btn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 9999, minWidth: 110, alignItems: 'center' },
   btnGhost: { backgroundColor: 'transparent' },

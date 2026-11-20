@@ -1,7 +1,7 @@
 // Download page for Ortis Studio, the desktop livestream studio (apps/studio).
 import type { Metadata } from "next";
 import Image from "next/image";
-import { STUDIO_DOWNLOADS, STUDIO_VERSION } from "@/lib/studio/release";
+import { getStudioRelease } from "@/lib/studio/release";
 import { DownloadButtons } from "./DownloadButtons";
 
 export const metadata: Metadata = {
@@ -37,23 +37,33 @@ const FEATURES: { title: string; text: string }[] = [
   },
 ];
 
-export default function StudioPage() {
+export const revalidate = 300;
+
+export default async function StudioPage() {
+  const release = await getStudioRelease();
   return (
     <main className="min-h-screen bg-background px-4 py-16 text-foreground">
       <div className="mx-auto max-w-4xl">
         <div className="flex items-center gap-3">
-          <Image src="/favicon.svg" alt="" width={40} height={40} />
+          <Image src="/studio/ortis-icon.svg" alt="" width={40} height={40} unoptimized />
           <p className="text-sm font-semibold uppercase tracking-wide text-[#00498B] dark:text-[#7ABBF2]">Ortis Studio</p>
         </div>
         <h1 className="mt-4 font-heading text-4xl font-bold leading-tight md:text-5xl">
-          Das Livestream-Studio für deine Veranstaltung.
+          Deine KI-Assistenten und dein Livestream-Studio.
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-          Kameras, Einblendungen, Werbung und Sendeziele in einer App. Gebaut für Turniere, Feste und Vereine,
-          zuerst beim DanceCup in Röbel.
+          Termine, Mails, Aufgaben und Veranstaltungen mit deinen Assistenten erledigen, eigene Mini-Apps verwalten
+          und Feste live in die Röbel App senden. Gebaut für Vereine und Betriebe, zuerst beim DanceCup in Röbel.
         </p>
 
-        <DownloadButtons />
+        <DownloadButtons downloads={release.downloads} />
+        <p className="mt-3 text-sm text-muted-foreground">
+          Lieber ohne Installation?{" "}
+          <a href="https://ortis-studio-web.vercel.app" className="font-semibold text-[#00498B] underline dark:text-[#7ABBF2]">
+            Ortis Studio im Browser öffnen
+          </a>{" "}
+          (Arbeitsbereich und Mini-Apps; der Livestream braucht die Desktop-App).
+        </p>
 
         <div className="mt-14 grid gap-4 md:grid-cols-3">
           {FEATURES.map((f) => (
@@ -97,11 +107,11 @@ export default function StudioPage() {
         </section>
 
         <p className="mt-10 text-xs text-muted-foreground">
-          Version {STUDIO_VERSION} · Quelloffen ·{" "}
+          Version {release.version} · Quelloffen ·{" "}
           <a href="https://github.com/Roebel-Labs/Roebel-App/tree/main/apps/studio" className="underline">
             Quellcode
           </a>
-          {STUDIO_DOWNLOADS.filter((d) => d.sha256).map((d) => (
+          {release.downloads.filter((d) => d.sha256).map((d) => (
             <span key={d.os} className="block break-all">
               SHA-256 {d.os === "mac" ? "macOS" : "Windows"}: {d.sha256}
             </span>

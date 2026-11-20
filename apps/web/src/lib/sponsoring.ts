@@ -90,3 +90,26 @@ export function logoEdgeColor(rgba: Uint8Array, width: number, height: number): 
   const hex = (v: number) => Math.round(v / best!.n).toString(16).padStart(2, "0");
   return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`.toUpperCase();
 }
+
+export const MAX_SPOT_DISHES = 4;
+export interface SpotDish { id: string; name: string }
+
+/**
+ * The dishes an org picked for its produced spot, stored in the booking's `note` (≤ 500 chars):
+ * readable for production in the table editor and parseable by the app.
+ */
+export function dishNote(dishes: SpotDish[]): string {
+  return JSON.stringify({ dishes: dishes.slice(0, MAX_SPOT_DISHES).map((d) => ({ id: d.id, name: d.name.slice(0, 60) })) });
+}
+
+export function parseDishNote(note: string | null | undefined): SpotDish[] {
+  if (!note) return [];
+  try {
+    const v = JSON.parse(note) as { dishes?: unknown };
+    return Array.isArray(v.dishes)
+      ? v.dishes.filter((d): d is SpotDish => !!d && typeof (d as SpotDish).id === "string" && typeof (d as SpotDish).name === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}

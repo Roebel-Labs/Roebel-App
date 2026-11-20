@@ -122,8 +122,16 @@ export async function handleEmailStart(req: Request, deps: EmailRouteDeps): Prom
   const bad = await checkProof(deps, safe, proof, message);
   if (bad) return bad;
 
-  // Email first: a refused address must not burn the Safe's quota.
-  if (!deps.limits.email.take(emailKey(email)) || !deps.limits.safe.take(safe)) return err("rate_limited", 429);
+  // Email first: a refused address must not burn the Safe's quota. A limiter that cannot answer
+  // (shared store down) fails closed: 503, no mail.
+  try {
+    if (!(await deps.limits.email.take(emailKey(email))) || !(await deps.limits.safe.take(safe))) {
+      return err("rate_limited", 429);
+    }
+  } catch (e) {
+    console.error("[passkey-email] rate limit store failed:", errName(e));
+    return err("store_unavailable", 503);
+  }
 
   const now = deps.nowSec();
   const code = (deps.randomCode ?? defaultCode)();

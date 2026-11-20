@@ -108,6 +108,7 @@ Full Base→Gnosis consolidation. **Fresh `AttesterNFTv2` + `CitizenNFTv2`** wit
 - NFT owner = Attester **Safe** `0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa` (threshold changes = Safe tx; D2 keeps Safe ownership for bootstrap — hand to Timelock later for full on-chain governance).
 - CommunityRegistry: `0x1c4B243a5f72248aEFcd6F11caf0d3cFAe9fF889` (deployed + Blockscout-verified 2026-07-31 — unowned, admin-free community address book, one per chain; records self-sovereign under each community's timelock/Safe; written by `scripts/community-factory.cjs`, consumed by `netizen deploy --merge`; record: [`deployments/community-registry.json`](contracts/governor-contract/deployments/community-registry.json))
 - OrgRegistry (NSP-14): `0x320b4ea2f4E31b81245e684D08AF593DE05E9919` (deployed 2026-09-27, block 48464904; orgs as attester-approved Safes with a soulbound OrgNFT, Safe-set roles and Nostr keys; owner = Attester Safe for bands + one-time `migrationRegister`; audited twice; record: [`deployments/org-registry.json`](contracts/governor-contract/deployments/org-registry.json); design: [`docs/superpowers/specs/2026-09-26-org-safe-identity-design.md`](docs/superpowers/specs/2026-09-26-org-safe-identity-design.md))
+- CredentialRegistry: `0xF06BAa9396ef57E660D3549897d5ca8fb788b8E1` (deployed 2026-11-20, block 49374195; soulbound role/membership/badge register per org; owner = Attester Safe; Sourcify exact match; feature off until `app_settings.credentials_enabled` + Vercel `CREDENTIAL_REGISTRY_ADDRESS`/`_DEPLOY_BLOCK`; record: [`deployments/credential-registry.json`](contracts/governor-contract/deployments/credential-registry.json))
 - Source of truth: [`contracts/governor-contract/deployments/gnosis-v2.json`](contracts/governor-contract/deployments/gnosis-v2.json).
 - **App cutover SHIPPED — merged to `main` (branch fully merged, 0 unique commits; cutover commit `e75270d`, 2026-06-25).** The chain flip (`base`→`gnosis`), v2-ABI changes, and the apps targeting the v2 contracts are live on `main`: [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) marks the Gnosis v2 addresses as the **active** set and the Base stack as **archived**. `feat/gnosis-v2-sybil-hardening` is now 142 commits behind `main` with nothing to merge. The remaining rollout steps are **operational, not code** (MACI re-signup per citizen; Vercel/Fly env for chain / `GNOSIS_BUNDLER_RPC_URL` / coordinator). The earlier "Gnosis migration" was identity-only (the v1 `0x6FF3…`/`0x7bD6…` NFTs that gate Circles); those are **superseded** by the v2 contracts above.
 
@@ -156,6 +157,12 @@ Key implications when working on coordinator code:
   submissions endpoint, orphan-session race, ERC-1271 fallback for
   submission verify, GovernorDisabledDeposit on survey proposals, etc).
   Read it before touching the coordinator scripts.
+
+## Ortis Studio (desktop workspace) — read first
+
+Before touching `apps/studio`, device pairing (`/api/chat/pair/*`), own API keys, the Google
+connector or Studio releases, READ [`docs/STATE_OF_ORTIS_STUDIO.md`](docs/STATE_OF_ORTIS_STUDIO.md).
+The app lives on branch `feat/ortis-studio-desktop` (never merge unasked); its backend is on main.
 
 ## Environment Variables
 

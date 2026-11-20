@@ -13,6 +13,7 @@ import {
   encodeAbiParameters,
   encodeFunctionData,
   encodePacked,
+  getAddress,
   getContractAddress,
   keccak256,
   numberToHex,
@@ -120,6 +121,65 @@ export function predictSafeAddress(p: PasskeyPublicKey): Hex {
 /** v0.7 userOp `factoryData` (factory = SafeProxyFactory 1.4.1). */
 export function safeFactoryData(p: PasskeyPublicKey): Hex {
   const { initializer, saltNonce } = buildSafeSetup(p);
+  return encodeFunctionData({
+    abi: createProxyWithNonceAbi,
+    functionName: "createProxyWithNonce",
+    args: [PASSKEY_SAFE.singletonL2, initializer, saltNonce],
+  });
+}
+
+// ---- expert path: a Safe owned by ONE plain ECDSA key (the account key of the 12 words) ----
+//
+//   setup(owners = [owner], threshold = 1, to = SafeModuleSetup,
+//         data = enableModules([Safe4337Module, SocialRecoveryModule]),
+//         fallbackHandler = Safe4337Module, 0, 0, 0)
+//   proxy = createProxyWithNonce(SafeL2, setup, SAFE_SALT_NONCE)
+//
+// Mirrors apps/expo/lib/passkey/ecdsa-safe.ts (same names, same bytes); both are pinned by
+// __tests__/ecdsa-safe-vector.json (fork proof contracts/passkey-accounts/test/EcdsaSafe.t.sol).
+// Same factory, singleton, modules, fallback handler and salt nonce as the passkey Safe; only the
+// owner differs (no shared signer, no MultiSend).
+
+export function buildEcdsaSafeSetup(owner: Hex): { initializer: Hex; saltNonce: bigint } {
+  const enableModules = encodeFunctionData({
+    abi: enableModulesAbi,
+    functionName: "enableModules",
+    args: [[PASSKEY_SAFE.safe4337Module, PASSKEY_SAFE.socialRecoveryModule]],
+  });
+  const initializer = encodeFunctionData({
+    abi: safeSetupAbi,
+    functionName: "setup",
+    args: [
+      [getAddress(owner)],
+      1n,
+      PASSKEY_SAFE.safeModuleSetup,
+      enableModules,
+      PASSKEY_SAFE.safe4337Module,
+      zeroAddress,
+      0n,
+      zeroAddress,
+    ],
+  });
+  return { initializer, saltNonce: SAFE_SALT_NONCE };
+}
+
+function predictFromSetup({ initializer, saltNonce }: { initializer: Hex; saltNonce: bigint }): Hex {
+  const salt = keccak256(concatHex([keccak256(initializer), numberToHex(saltNonce, { size: 32 })]));
+  const bytecode = concatHex([
+    SAFE_PROXY_CREATION_CODE,
+    encodeAbiParameters([{ type: "address" }], [PASSKEY_SAFE.singletonL2]),
+  ]);
+  return getContractAddress({ opcode: "CREATE2", from: PASSKEY_SAFE.proxyFactory, salt, bytecode });
+}
+
+/** CREATE2 per SafeProxyFactory 1.4.1 (same formula as `predictSafeAddress`). */
+export function predictEcdsaSafeAddress(owner: Hex): Hex {
+  return predictFromSetup(buildEcdsaSafeSetup(owner));
+}
+
+/** v0.7 userOp `factoryData` of the expert Safe (factory = SafeProxyFactory 1.4.1). */
+export function ecdsaSafeFactoryData(owner: Hex): Hex {
+  const { initializer, saltNonce } = buildEcdsaSafeSetup(owner);
   return encodeFunctionData({
     abi: createProxyWithNonceAbi,
     functionName: "createProxyWithNonce",

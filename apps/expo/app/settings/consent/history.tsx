@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   lede: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
     marginBottom: 16,
   },
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingVertical: 32,
     textAlign: 'center',
   },
@@ -190,15 +190,15 @@ const styles = StyleSheet.create({
   },
   entryCategory: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   entryValue: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   entryMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   bottomSpacer: { height: 40 },
 });

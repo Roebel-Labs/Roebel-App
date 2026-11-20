@@ -48,14 +48,14 @@ function NewCategoryScreenInner() {
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         {!canEdit ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Nicht berechtigt.</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Nicht berechtigt.</Text>
         ) : restaurantId ? (
           <CategoryEditor
             restaurantId={restaurantId}
             onSaved={() => router.back()}
           />
         ) : (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Restaurant lädt…</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Restaurant lädt…</Text>
         )}
       </ScrollView>
     </SafeAreaView>

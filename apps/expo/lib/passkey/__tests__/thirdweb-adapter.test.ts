@@ -8,24 +8,35 @@ import {
   hexToString,
   isErc6492Signature,
   parseErc6492Signature,
+  size,
   type Address,
   type Hex,
 } from 'viem';
 import { SAFE_PROXY_FACTORY, SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
 import { safeMessageHash } from '../guardians';
 import { predictSafeAddress, safeFactoryData } from '../safe-address';
-import type { PasskeySession } from '../session';
+import { loadPasskeySession, PASSKEY_SESSION_KEY, savePasskeySession, WORDS_KEY_PLACEHOLDER, type PasskeySession } from '../session';
+import { ecdsaSafeFactoryData } from '../ecdsa-safe';
+import { onPhraseUnavailable } from '../phrase-events';
+import { PhraseUnavailableError } from '../phrase-store';
+import { sessionSignerFor } from '../session-signer';
+import { wordsVaultKey } from '../words';
+import { mem } from '../__testutils__/signin-helpers';
+import ecdsaVector from './ecdsa-safe-vector.json';
 import {
   buildAdapterCalls,
   createPasskeyAccount,
   decodeOnBehalfSignature,
   encodeLegacyExecute,
   encodeLegacyExecuteBatch,
+  miniAppIdForTxs,
+  passkeyWalletOptions,
   signHashAsIdentity,
+  signHashAsIdentityWithPrf,
   WRONG_CHAIN_MESSAGE,
   type AdapterDeps,
 } from '../thirdweb-adapter';
-import type { PasskeyUserOpArgs } from '../userop';
+import { dummyUserOpSignature, sponsorRequestBody, type SafeUserOpArgs } from '../userop';
 import rv from './recovery-vector.json';
 import sv from './passkey-safe-vector.json';
 
@@ -66,13 +77,13 @@ function session(identity: Address, over: Partial<PasskeySession> = {}): Passkey
 }
 
 function deps(over: Partial<AdapterDeps> = {}) {
-  const sent: PasskeyUserOpArgs[] = [];
+  const sent: SafeUserOpArgs[] = [];
   const d: AdapterDeps = {
     sign: jest.fn(async () => {
       throw new Error('no sign expected');
     }),
     isSafeDeployed: jest.fn(async () => true),
-    sendUserOp: jest.fn(async (args: PasskeyUserOpArgs) => {
+    sendUserOp: jest.fn(async (args: SafeUserOpArgs) => {
       sent.push(args);
       return { userOpHash: `0x${'aa'.repeat(32)}` as Hex, txHash: `0x${'bb'.repeat(32)}` as Hex };
     }),
@@ -124,7 +135,9 @@ describe('sendTransaction / sendBatchTransaction', () => {
     const acc = createPasskeyAccount(session(LEGACY), d);
     const res = await acc.sendTransaction({ chainId: 100, to: TARGET, data: '0x0d873a79' });
     expect(res).toEqual({ transactionHash: `0x${'bb'.repeat(32)}` });
-    expect(sent[0]).toMatchObject({ credentialId: 'cred', x, y, legacy: LEGACY, deployed: true, sender: SAFE, owner: SAFE_WEBAUTHN_SHARED_SIGNER });
+    expect(sent[0]).toMatchObject({ legacy: LEGACY, deployed: true, sender: SAFE });
+    expect(sent[0].signer.proof).toEqual({ x, y });
+    expect(sent[0].signer.dummySignature).toBe(dummyUserOpSignature(SAFE_WEBAUTHN_SHARED_SIGNER));
     expect(sent[0].calls[0].data).toBe(encodeLegacyExecute(TARGET, 0n, '0x0d873a79'));
   });
 
@@ -162,6 +175,50 @@ describe('sendTransaction / sendBatchTransaction', () => {
     expect(sent[0].legacy).toBeUndefined();
     expect(sent[0].deployed).toBe(false);
     expect(sent[0].calls.map((c) => c.data)).toEqual(['0x01', '0x02']);
+  });
+});
+
+describe('mini-app id', () => {
+  const APP = '7b0c7f1e-1d2a-4c3b-9e8f-0a1b2c3d4e5f';
+
+  it('passes the mini-app id to the sponsor request', async () => {
+    const { d, sent } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await acc.sendTransaction({ chainId: 100, to: TARGET, data: '0x0d873a79', miniAppId: APP });
+    expect(sent[0].miniApp).toBe(APP);
+    await acc.sendBatchTransaction([
+      { chainId: 100, to: TARGET, data: '0x01', miniAppId: APP },
+      { chainId: 100, to: TARGET, data: '0x02', miniAppId: APP },
+    ]);
+    expect(sent[1].miniApp).toBe(APP);
+  });
+
+  it('refuses a batch that mixes mini-app ids', async () => {
+    const { d } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await expect(
+      acc.sendBatchTransaction([
+        { chainId: 100, to: TARGET, data: '0x01', miniAppId: APP },
+        { chainId: 100, to: TARGET, data: '0x02' },
+      ]),
+    ).rejects.toThrow();
+    expect(() => miniAppIdForTxs([{ miniAppId: APP }, { miniAppId: 'other' }])).toThrow();
+    expect(() => miniAppIdForTxs([{ miniAppId: 5 }])).toThrow();
+    expect(d.sendUserOp).not.toHaveBeenCalled();
+  });
+
+  it('a send without a mini-app id is unchanged', async () => {
+    const { d, sent } = deps();
+    const acc = createPasskeyAccount(session(SAFE), d);
+    await acc.sendTransaction({ chainId: 100, to: TARGET, data: '0x0d873a79' });
+    expect('miniApp' in sent[0]).toBe(false);
+    expect(miniAppIdForTxs([{}, {}])).toBeUndefined();
+  });
+
+  it('the sponsor body carries miniApp only when set', () => {
+    const op = { sender: SAFE, nonce: 0n, callData: '0x', callGasLimit: 0n, verificationGasLimit: 0n, preVerificationGas: 0n, maxFeePerGas: 0n, maxPriorityFeePerGas: 0n, signature: '0x' } as never;
+    expect(sponsorRequestBody(op, { proof: { x, y }, miniApp: APP }).miniApp).toBe(APP);
+    expect('miniApp' in sponsorRequestBody(op, { proof: { x, y } })).toBe(false);
   });
 });
 
@@ -241,5 +298,118 @@ describe('Safe-admin envelope matches the server', () => {
     expect(env).toBe(
       `${SAFE_ADMIN_SIGNATURE_MAGIC}${LEGACY.slice(2).toLowerCase().padStart(64, '0')}${(64).toString(16).padStart(64, '0')}${(2).toString(16).padStart(64, '0')}1234${'0'.repeat(60)}`,
     );
+  });
+});
+
+describe('words (ecdsa) session', () => {
+  const ev = ecdsaVector;
+  const OWNER = getAddress(ev.owner);
+  const WSAFE = getAddress(ev.safeAddress);
+  const wordsSession = (identity: Address = WSAFE): PasskeySession => ({
+    credentialId: '',
+    x: WORDS_KEY_PLACEHOLDER,
+    y: WORDS_KEY_PLACEHOLDER,
+    safe: WSAFE,
+    identity,
+    ownerType: 'ecdsa',
+    owner: OWNER,
+  });
+  const wordsDeps = (read: (reason: string) => Promise<string>, over: Partial<AdapterDeps> = {}) => {
+    const base = deps(over);
+    const d: AdapterDeps = {
+      ...base.d,
+      signerFor: (s) =>
+        sessionSignerFor(s, {
+          signPasskey: base.d.sign,
+          getPrf: async () => null,
+          phrase: { read },
+        }),
+    };
+    return { d, sent: base.sent };
+  };
+
+  it('a words session signs a message as the counterfactual Safe with an ERC-6492 wrapper around the ECDSA factory data', async () => {
+    const read = jest.fn(async () => ev.phrase);
+    const { d } = wordsDeps(read, { isSafeDeployed: jest.fn(async () => false) });
+    const sig = await signHashAsIdentity(wordsSession(), ev.erc1271.hash as Hex, d);
+    expect(isErc6492Signature(sig)).toBe(true);
+    const parsed = parseErc6492Signature(sig);
+    expect(getAddress(parsed.address as Address)).toBe(getAddress(SAFE_PROXY_FACTORY));
+    expect(parsed.data).toBe(ecdsaSafeFactoryData(OWNER));
+    expect(size(parsed.signature)).toBe(65);
+    // the inner signature is the fork-proven ERC-1271 owner signature over safeMessageHash(safe, hash)
+    expect(parsed.signature).toBe(ev.erc1271.signature);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(d.sign).not.toHaveBeenCalled();
+  });
+
+  it('a deployed words Safe signs without the wrapper; signHashAsIdentityWithPrf returns the vault key of the same read', async () => {
+    const read = jest.fn(async () => ev.phrase);
+    const { d } = wordsDeps(read);
+    const r = await signHashAsIdentityWithPrf(wordsSession(), ev.erc1271.hash as Hex, d);
+    expect(r).toEqual({ signature: ev.erc1271.signature, prf: wordsVaultKey(ev.phrase) });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('a words session sends ONE userOp per transaction with an ECDSA signer and no legacy', async () => {
+    const read = jest.fn(async () => ev.phrase);
+    const { d, sent } = wordsDeps(read, { isSafeDeployed: jest.fn(async () => false) });
+    const acc = createPasskeyAccount(wordsSession(), d);
+    expect(acc.address).toBe(WSAFE);
+    await acc.sendBatchTransaction([
+      { chainId: 100, to: TARGET, data: '0x01' },
+      { chainId: 100, to: TARGET, data: '0x02' },
+    ]);
+    expect(d.sendUserOp).toHaveBeenCalledTimes(1);
+    expect(sent[0].signer.proof).toEqual({ ecdsaOwner: OWNER });
+    expect(sent[0].legacy).toBeUndefined();
+    expect(sent[0]).toMatchObject({ deployed: false, sender: WSAFE });
+    expect(sent[0].signer.factoryData).toBe(ecdsaSafeFactoryData(OWNER));
+    // building the op reads nothing; only signing the op hash asks for the device unlock
+    expect(read).not.toHaveBeenCalled();
+    expect(await sent[0].signer.signOpHash(ev.userOp.safeOpHash as Hex)).toBe(ev.userOp.userOpSignature);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('without a signerFor the adapter refuses a words session (never asks the passkey)', async () => {
+    const { d } = deps();
+    await expect(signHashAsIdentity(wordsSession(), ev.erc1271.hash as Hex, d)).rejects.toThrow();
+    expect(d.sign).not.toHaveBeenCalled();
+  });
+
+  it('Review Focus 1: fingerprints changed -> the next signature fails with PhraseUnavailableError, the session stays, the words are asked for again', async () => {
+    const storage = mem();
+    await savePasskeySession(storage, wordsSession());
+    const before = storage.m.get(PASSKEY_SESSION_KEY);
+    const seen = jest.fn();
+    const off = onPhraseUnavailable(seen);
+    let phraseGone = true;
+    const read = jest.fn(async () => {
+      if (phraseGone) throw new PhraseUnavailableError();
+      return ev.phrase;
+    });
+    // the fake bundler path signs the op hash exactly like sendSafeUserOp does
+    const sendUserOp = jest.fn(async (args: SafeUserOpArgs) => {
+      await args.signer.signOpHash(ev.userOp.safeOpHash as Hex);
+      return { userOpHash: `0x${'aa'.repeat(32)}` as Hex, txHash: `0x${'bb'.repeat(32)}` as Hex };
+    });
+    const { d } = wordsDeps(read, { sendUserOp });
+    const clearSession = jest.fn(async () => storage.deleteItem(PASSKEY_SESSION_KEY));
+    const opts = passkeyWalletOptions(wordsSession(), { client: {}, chain: { id: 100 }, deps: d, clearSession });
+
+    const err = await opts.adaptedAccount.sendTransaction({ chainId: 100, to: TARGET, data: '0x01' }).catch((e) => e);
+    expect(err).toBeInstanceOf(PhraseUnavailableError);
+    expect(clearSession).not.toHaveBeenCalled();
+    expect(storage.m.get(PASSKEY_SESSION_KEY)).toBe(before);
+    expect(await loadPasskeySession(storage)).toEqual(wordsSession());
+    expect(seen).toHaveBeenCalledTimes(1); // the root watcher routes to "enter your 12 words again"
+
+    // after the words were entered again the very same session signs
+    phraseGone = false;
+    await expect(opts.adaptedAccount.sendTransaction({ chainId: 100, to: TARGET, data: '0x01' })).resolves.toEqual({
+      transactionHash: `0x${'bb'.repeat(32)}`,
+    });
+    off();
+    expect(seen).toHaveBeenCalledTimes(1);
   });
 });

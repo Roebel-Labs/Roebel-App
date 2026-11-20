@@ -2,19 +2,38 @@
  * State + actions of "Vertrauenspersonen" for this device's passkey Safe. Every change is ONE
  * sponsored userOp from the Safe (mode "legacy" while citizenship sits on the legacy account,
  * "safe" after the v3 move) signed with one fingerprint.
+ *
+ * Every change goes through `planGuardianSet` with an explicit threshold, so when recovery words
+ * are on, the number of word guardians follows the threshold in the same op.
+ *
+ * Which guardians are the words (controller ruling I1): the local pool counts only while one of
+ * its addresses is a guardian; otherwise a promptless server read decides (`wordsPoolView`). When
+ * this phone cannot tell, unnamed guardians might be words: they are shown as ONE entry
+ * "Wiederherstellungswörter (nicht geladen)" and every change is refused with a German hint until
+ * the words screen loaded the pool (planning without it would keep old words as "people").
+ * That refusal applies only while the 'words' surface is open, so the words screen (the only way
+ * out) is reachable (ruling N2, in `currentWordsPool`); with it closed every guardian is a person,
+ * as before the words existed. A words (12-word) account has no recovery-words pool at all: its
+ * guardians are all people, never held back (final review I-1).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useActiveAccount } from 'thirdweb/react';
 import type { Address } from 'viem';
 import type { MigrationRecord } from '@/lib/passkey/migration';
 import type { IdentityMode } from '@/lib/passkey/guardian-plan';
 import {
   allGuardiansAreAttesters,
+  clampThreshold,
   defaultThreshold,
+  isValidThreshold,
   pendingSuggestions,
-  planAddGuardians,
-  planChangeThreshold,
-  planRemoveGuardian,
 } from '@/lib/passkey/guardian-plan';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
+import { secureKeyValueStorage } from '@/lib/passkey/migration-runtime';
+import { planGuardianSet, splitGuardians, type WordsPool } from '@/lib/passkey/words-guardians';
+import { currentWordsPool, WORDS_NOT_LOADED_MESSAGE, type WordsPoolView } from '@/lib/passkey/words-setup';
 import type { Person } from '@/lib/passkey/people';
 import { helperDisplay, planAddRecoveryHelper, type HelperMeta } from '@/lib/passkey/recovery-helper';
 import type { HelperLogin } from '@/lib/passkey/recovery-helper-runtime';
@@ -33,10 +52,23 @@ import { friendlyError, type NoticeTone } from './PasskeyUi';
 
 export type GuardianAction = 'suggestion' | 'add' | 'helper' | 'remove' | 'threshold' | null;
 
+/** W2 rules: the threshold a change asks for (never silently lower than what is on chain). */
+export const managerThreshold = {
+  /** The suggestion ("Vorschlag übernehmen"): at least 2, a stricter choice survives. */
+  adopt: (current: number) => Math.max(current, 2),
+  add: (current: number, nextPeople: number) => Math.max(current, defaultThreshold(nextPeople)),
+  helper: (current: number, people: number) => (people === 0 ? 1 : clampThreshold(current, people + 1)),
+  remove: (current: number, nextPeople: number) => clampThreshold(current, nextPeople),
+};
+
 export function useGuardianManager(record: MigrationRecord | null) {
+  const account = useActiveAccount();
   const [loading, setLoading] = useState(true);
   const [guardians, setGuardians] = useState<Address[]>([]);
   const [threshold, setThreshold] = useState(0);
+  const [pool, setPool] = useState<WordsPool | null>(null);
+  /** Guardians that may be words this phone cannot read (shown as one entry, changes refused). */
+  const [unloaded, setUnloaded] = useState<Address[]>([]);
   const [mode, setMode] = useState<IdentityMode | null>(null);
   const [people, setPeople] = useState<Map<string, Person>>(new Map());
   const [attesters, setAttesters] = useState<Set<string>>(new Set());
@@ -57,23 +89,32 @@ export function useGuardianManager(record: MigrationRecord | null) {
     if (!record) return;
     setLoading(true);
     try {
-      const [state, identity] = await Promise.all([
-        readGuardianState(record.safe),
-        readIdentityMode(record).catch(() => null),
-      ]);
+      const [state, identity] = await Promise.all([readGuardianState(record.safe), readIdentityMode(record).catch(() => null)]);
+      // A words (12-word) account has no recovery-words pool: every guardian is a person.
+      const view: WordsPoolView = isWordsOwner(passkeySessionOf<PasskeySession>(account) ?? record)
+        ? { pool: null, state: 'none' }
+        : await import('@/lib/passkey/words-setup-runtime')
+            .then((rt) => rt.wordsPoolView(state.guardians, account, record))
+            // Runtime not loadable: the local view under the same N2 rule (the words gate).
+            .catch(() =>
+              currentWordsPool(state.guardians, { storage: secureKeyValueStorage, wordsSurfaceOpen: () => isPasskeySurfaceAllowed('words') }),
+            );
+      const wordsPool = view.pool;
+      // Word guardians are never resolved or shown as people.
+      const peopleOnChain = splitGuardians(state.guardians, wordsPool).people;
       // The suggestion needs the legacy account the citizen was attested on.
       const sugg = record.legacy
         ? await suggestDefaultGuardians({ citizen: record.legacy, wallet: record.safe }, lookupChain).catch(
             () => [] as SuggestedGuardian[],
           )
         : [];
-      const addresses = [...state.guardians, ...sugg.map((s) => s.guardian), ...sugg.map((s) => s.approver)];
+      const addresses = [...peopleOnChain, ...sugg.map((s) => s.guardian), ...sugg.map((s) => s.approver)];
       const [resolved, helperMetas] = await Promise.all([
         resolvePeopleNow(addresses),
         import('@/lib/passkey/recovery-helper-runtime').then((rt) => rt.loadHelpers()).catch(() => ({}) as Record<string, HelperMeta>),
       ]);
       // A recovery helper is shown as "Google-Konto (Helfer)" etc., never by address.
-      for (const g of state.guardians) {
+      for (const g of peopleOnChain) {
         const meta = helperMetas[g.toLowerCase()];
         if (meta) {
           resolved.set(g.toLowerCase(), { address: g, name: helperDisplay(meta).name, known: true, avatarUrl: null, profileWallet: null });
@@ -90,15 +131,20 @@ export function useGuardianManager(record: MigrationRecord | null) {
       const attesterFlags = new Set<string>();
       for (const s of sugg) attesterFlags.add(s.guardian.toLowerCase());
       await Promise.all(
-        state.guardians.map(async (g) => {
+        peopleOnChain.map(async (g) => {
           const profile = resolved.get(g.toLowerCase())?.profileWallet;
           const checks = [isAttester(g), ...(profile && profile.toLowerCase() !== g.toLowerCase() ? [isAttester(profile)] : [])];
           if ((await Promise.all(checks)).some(Boolean)) attesterFlags.add(g.toLowerCase());
         }),
       );
+      // Unknown pool: an unnamed guardian may be a word address. Named people and helpers are people.
+      const maybeWords =
+        view.state === 'unknown' ? peopleOnChain.filter((g) => !resolved.get(g.toLowerCase())?.known && !helperMetas[g.toLowerCase()]) : [];
       if (!alive.current) return;
       setGuardians(state.guardians);
       setThreshold(state.threshold);
+      setPool(wordsPool);
+      setUnloaded(maybeWords);
       setMode(identity);
       setSuggested(sugg);
       setPeople(resolved);
@@ -109,7 +155,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
     } finally {
       if (alive.current) setLoading(false);
     }
-  }, [record]);
+  }, [record, account]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -119,7 +165,7 @@ export function useGuardianManager(record: MigrationRecord | null) {
     async (action: Exclude<GuardianAction, null>, calls: SponsoredCall[], success: string): Promise<boolean> => {
       if (!record || calls.length === 0) return false;
       if (!mode) {
-        setNotice({ tone: 'warning', text: 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' });
+        setNotice({ tone: 'warning', text: record.legacy ? 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.' });
         return false;
       }
       setBusy(action);
@@ -140,6 +186,40 @@ export function useGuardianManager(record: MigrationRecord | null) {
     [record, mode, load],
   );
 
+  const split = splitGuardians(guardians, pool);
+  const peopleGuardians = split.people.filter((g) => !unloaded.some((u) => u.toLowerCase() === g.toLowerCase()));
+  const wordGuardians = split.words;
+  const wordsUnloaded = unloaded.length > 0;
+
+  /**
+   * The calls for "these people, this threshold" with words kept as they are (on stays on and
+   * follows the threshold). Shows the refusal as a notice and returns null when it cannot be planned.
+   */
+  const planSet = useCallback(
+    (nextPeople: readonly Address[], nextThreshold: number): SponsoredCall[] | null => {
+      if (!record) return null;
+      if (wordsUnloaded) {
+        setNotice({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
+        return null;
+      }
+      try {
+        return planGuardianSet({
+          wallet: record.safe,
+          current: guardians,
+          pool,
+          people: nextPeople,
+          words: wordGuardians.length > 0,
+          threshold: nextThreshold,
+          currentThreshold: threshold,
+        }).calls;
+      } catch (e) {
+        setNotice({ tone: 'warning', text: e instanceof Error ? e.message : 'Das geht gerade nicht.' });
+        return null;
+      }
+    },
+    [record, guardians, pool, wordGuardians.length, threshold, wordsUnloaded],
+  );
+
   const exclude: Address[] = record ? [record.safe, ...(record.legacy ? [record.legacy] : [])] : [];
   const pending = pendingSuggestions({ suggested: suggested.map((s) => s.guardian), current: guardians, exclude });
 
@@ -149,22 +229,25 @@ export function useGuardianManager(record: MigrationRecord | null) {
       const p = people.get(s.guardian.toLowerCase());
       if (p?.known) await saveLabel(s.guardian, p.name).catch(() => undefined);
     }
-    const plan = planAddGuardians({ wallet: record.safe, current: guardians, currentThreshold: threshold, add: pending, threshold: 2 });
-    return run('suggestion', plan.calls, 'Vorschlag übernommen.');
-  }, [record, suggested, people, guardians, threshold, pending, run]);
+    const calls = planSet([...peopleGuardians, ...pending], managerThreshold.adopt(threshold));
+    return calls ? run('suggestion', calls, 'Vorschlag übernommen.') : false;
+  }, [record, suggested, people, peopleGuardians, pending, threshold, planSet, run]);
 
   const addGuardian = useCallback(
     async (address: Address, name: string) => {
       if (!record) return false;
       await saveLabel(address, name).catch(() => undefined);
-      const plan = planAddGuardians({ wallet: record.safe, current: guardians, currentThreshold: threshold, add: [address] });
-      if (plan.calls.length === 0) {
+      const already =
+        address.toLowerCase() === record.safe.toLowerCase() || guardians.some((g) => g.toLowerCase() === address.toLowerCase());
+      if (already) {
         setNotice({ tone: 'info', text: `${name} ist schon dabei.` });
         return false;
       }
-      return run('add', plan.calls, `${name} ist jetzt deine Vertrauensperson.`);
+      const nextPeople = [...peopleGuardians, address];
+      const calls = planSet(nextPeople, managerThreshold.add(threshold, nextPeople.length));
+      return calls ? run('add', calls, `${name} ist jetzt deine Vertrauensperson.`) : false;
     },
-    [record, guardians, threshold, run],
+    [record, guardians, peopleGuardians, threshold, planSet, run],
   );
 
   /**
@@ -176,7 +259,12 @@ export function useGuardianManager(record: MigrationRecord | null) {
     async (login: HelperLogin): Promise<boolean> => {
       if (!record) return false;
       if (!mode) {
-        setNotice({ tone: 'warning', text: 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' });
+        setNotice({ tone: 'warning', text: record.legacy ? 'Das geht erst, wenn dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.' });
+        return false;
+      }
+      if (wordsUnloaded) {
+        // Before the helper login: nothing could be planned afterwards anyway.
+        setNotice({ tone: 'warning', text: WORDS_NOT_LOADED_MESSAGE });
         return false;
       }
       setBusy('helper');
@@ -222,28 +310,45 @@ export function useGuardianManager(record: MigrationRecord | null) {
       }
       await rt.saveHelper(plan.helper, session.meta).catch(() => undefined);
       setBusy(null);
-      return run('helper', plan.calls, `${helperDisplay(session.meta).name} hilft dir jetzt beim Wiederherstellen.`);
+      // Same threshold rule as planAddRecoveryHelper, counted over people only.
+      const helperThreshold = managerThreshold.helper(threshold, peopleGuardians.length);
+      const calls = planSet([...peopleGuardians, plan.helper], helperThreshold);
+      return calls ? run('helper', calls, `${helperDisplay(session.meta).name} hilft dir jetzt beim Wiederherstellen.`) : false;
     },
-    [record, mode, guardians, threshold, run],
+    [record, mode, guardians, peopleGuardians, threshold, wordsUnloaded, planSet, run],
   );
 
   const removeGuardian = useCallback(
     async (address: Address) => {
       const name = people.get(address.toLowerCase())?.name ?? 'Die Person';
-      const { call } = planRemoveGuardian({ current: guardians, currentThreshold: threshold, guardian: address });
-      return run('remove', [call], `${name} ist keine Vertrauensperson mehr.`);
+      const nextPeople = peopleGuardians.filter((g) => g.toLowerCase() !== address.toLowerCase());
+      const calls = planSet(nextPeople, managerThreshold.remove(threshold, nextPeople.length));
+      return calls ? run('remove', calls, `${name} ist keine Vertrauensperson mehr.`) : false;
     },
-    [guardians, threshold, people, run],
+    [peopleGuardians, threshold, people, planSet, run],
   );
 
   const changeThreshold = useCallback(
-    async (next: number) => run('threshold', [planChangeThreshold(guardians.length, next)], 'Gespeichert.'),
-    [guardians.length, run],
+    async (next: number) => {
+      if (!isValidThreshold(next, peopleGuardians.length)) {
+        setNotice({ tone: 'warning', text: `Wähle eine Zahl zwischen 1 und ${peopleGuardians.length}.` });
+        return false;
+      }
+      const calls = planSet(peopleGuardians, next);
+      return calls ? run('threshold', calls, 'Gespeichert.') : false;
+    },
+    [peopleGuardians, planSet, run],
   );
 
   return {
     loading,
     guardians,
+    /** The people among the guardians (what the list shows and the threshold counts). */
+    peopleGuardians,
+    /** The word guardians on chain (shown as one entry "Wiederherstellungswörter"). */
+    wordGuardians,
+    /** Guardians that may be words this phone cannot read: one entry "(nicht geladen)", changes refused. */
+    wordsUnloaded,
     threshold,
     mode,
     people,
@@ -253,8 +358,8 @@ export function useGuardianManager(record: MigrationRecord | null) {
     setNotice,
     helpers,
     exclude: [...exclude, ...guardians],
-    allAttesters: allGuardiansAreAttesters(guardians, (g) => attesters.has(g.toLowerCase())),
-    suggestedThreshold: defaultThreshold(guardians.length + pending.length),
+    allAttesters: allGuardiansAreAttesters(peopleGuardians, (g) => attesters.has(g.toLowerCase())),
+    suggestedThreshold: defaultThreshold(peopleGuardians.length + pending.length),
     reload: load,
     adoptSuggestion,
     addGuardian,

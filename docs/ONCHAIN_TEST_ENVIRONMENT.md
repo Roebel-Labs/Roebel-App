@@ -23,6 +23,7 @@ Röbel Münzen are still not covered — see [Out of scope](#out-of-scope).
 | **AttesterNFTv2 (test)** | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` |
 | **CitizenNFTv2 (test)** | `0x0Be374808A567c9088aC8208B90a4239432B3220` |
 | **OrgRegistry (test, NSP-14)** | `0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7` |
+| **CredentialRegistry (test)** | `0xB599e7D7F6F78B4862b592bAD868272008ea8796` (block 49342321, 2026-11-18; e2e green) |
 | Owner (burner EOA) | `0xd5028284017A32C672CbD73Fe35aCD897bA874cf` |
 
 Manifest: [`contracts/governor-contract/deployments/gnosis-test.json`](../contracts/governor-contract/deployments/gnosis-test.json)
@@ -157,7 +158,44 @@ production stack. Run them from `contracts/governor-contract/`.
 | `set-bands.cjs --fast\|--prod` | Retunes thresholds. `--fast` makes every gate 1-of-1 for quick UI loops. |
 | `deploy.cjs` | Deploys a fresh environment. `--dry-run`, `--fast-bands`. |
 | `org-registry-e2e.cjs` | NSP-14: deploys/reuses the test **OrgRegistry** and drives two Safe orgs through register → key → role → revoke. `--dry-run`. `ORG_E2E_REHEARSAL=1 GNOSIS_FORK=1 npx hardhat run …` rehearses on a fork. |
+| `credential-registry-e2e.cjs` | Credential register: deploys/reuses the test **CredentialRegistry** and drives one issue → claim → prove → revoke → Guest cycle. `--dry-run`, `--fresh`. `CRED_E2E_REHEARSAL=1 GNOSIS_FORK=1 npx hardhat run …` rehearses on a fork. See [Credential register](#credential-register). |
 | `rehearse.cjs` | Runs the whole thing on a local Hardhat chain (`npx hardhat run scripts/test-env/rehearse.cjs`). Run before any real deploy. |
+
+---
+
+## Credential register
+
+`CredentialRegistry` (soulbound ERC-1155 credentials: org types, Merkle batches,
+public claims and private proofs, Citizen/Attester read live from the NFTs, Guest
+self-claim) is tested here before production. The script needs the test OrgRegistry
+and test org A from `org-registry-e2e.cjs`.
+
+```bash
+cd contracts/governor-contract
+npx hardhat compile
+
+# 1. Rehearse on a Gnosis fork — no key, impersonates the burner + co-signers, writes nothing
+CRED_E2E_REHEARSAL=1 GNOSIS_FORK=1 ROEBEL_TEST_ENV=1 npx hardhat run scripts/test-env/credential-registry-e2e.cjs
+
+# 2. Real run on Gnosis (burner key in .env, a little xDAI); commit the updated manifest afterwards
+ROEBEL_TEST_ENV=1 node scripts/test-env/credential-registry-e2e.cjs [--dry-run] [--fresh]
+```
+
+What it does: deploys `CredentialRegistry(owner = burner, test CitizenNFTv2, test
+AttesterNFTv2, test OrgRegistry, test reserved URIs)`; org A's Safe creates a
+`Membership` type and adds a batch of three leaves (account leaves for co-signers 1
+and 2, one claim-key leaf). Co-signer 1 claims publicly, co-signer 2 stays private
+(`checkLeaf` → `Valid`), co-signer 3 claims the claim-key leaf with the key's EIP-712
+signature, the Safe revokes co-signer 1's leaf (burning its holding), co-signer 4
+self-claims Guest, and `holds` is asserted for a test citizen and a test attester.
+Results land in `deployments/gnosis-test.json` (`contracts.credentialRegistry`,
+`credentialRegistryDeployBlock`, `credentialRegistryE2E`). Leaves are deterministic
+and every step is skipped when already done, so an interrupted run can be restarted.
+The claim key is derived from the burner key (a random throwaway in rehearsal).
+
+Production is a separate script with the Attester Safe as owner:
+`node -r dotenv/config scripts/deploy-credential-registry.cjs --uris <citizen>,<attester>,<guest> [--dry-run] dotenv_config_path=<.env>`.
+It refuses if `deployments/credential-registry.json` exists or the chain is not 100.
 
 ---
 

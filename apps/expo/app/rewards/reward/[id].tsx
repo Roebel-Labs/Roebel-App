@@ -239,18 +239,18 @@ const styles = StyleSheet.create({
     fontSize: 96,
   },
   headline: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginTop: 8,
   },
   rewardName: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 24,
     textAlign: 'center',
     paddingHorizontal: 12,
   },
   rewardDescription: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   coinBundleText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
     color: '#8A5A00',
   },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   linkBtn: {
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
 });

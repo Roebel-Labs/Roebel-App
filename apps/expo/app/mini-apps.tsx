@@ -10,6 +10,11 @@
  *
  * Installed apps launch the MiniAppHost directly from here (no preview page);
  * uninstalled ones go to the detail screen first.
+ *
+ * Audiences (matched on this device, never sent or tracked): a "Für dich" rail
+ * when something fits, a "Meine Vereine" filter when an org of mine confirmed
+ * an app, and locked apps listed as "Gesperrt" that open their detail page.
+ * A person without credentials or orgs sees the store exactly as before.
  */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
@@ -37,6 +42,10 @@ import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
 import MiniAppStoreSkeleton from '@/components/miniapp/MiniAppSkeleton';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { useGoBack } from '@/hooks/useGoBack';
+import { useAccount } from '@/context/AccountContext';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { forYou, myOrgApps } from '@/lib/miniapp-audience';
+import { openDecision, orgIdsOf } from '@/lib/miniapp-open';
 
 const HERO_GAP = 12;
 const NEW_APPS_COUNT = 6;
@@ -47,6 +56,10 @@ export default function MiniAppsStoreScreen() {
   const goBack = useGoBack();
   const { width } = useWindowDimensions();
   const { isInstalled } = useInstalledMiniApps();
+  const { held, ready } = useMatchCredentials();
+  const { ownedAccounts } = useAccount();
+  const myOrgIds = useMemo(() => orgIdsOf(ownedAccounts), [ownedAccounts]);
+  const [myOrgsOnly, setMyOrgsOnly] = useState(false);
 
   const [apps, setApps] = useState<MiniApp[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,16 +96,22 @@ export default function MiniAppsStoreScreen() {
     setRefreshing(false);
   }, [load]);
 
+  // A locked (or not yet decided) app never mounts the host: its detail page explains.
   const openApp = useCallback(
     (app: MiniApp) => {
-      if (isInstalled(app.slug)) {
+      if (isInstalled(app.slug) && openDecision(app, held, ready) === 'open') {
         setRunningApp(app);
         setHostVisible(true);
       } else {
         router.push(`/mini-app/${app.slug}` as any);
       }
     },
-    [router, isInstalled],
+    [router, isInstalled, held, ready],
+  );
+
+  const isLocked = useCallback(
+    (app: MiniApp) => openDecision(app, held, ready) === 'locked',
+    [held, ready],
   );
 
   const closeHost = useCallback(() => setHostVisible(false), []);
@@ -104,19 +123,26 @@ export default function MiniAppsStoreScreen() {
     );
   }, []);
 
+  // "Meine Vereine": apps whose org confirmed them and that I belong to. The chip
+  // only exists when there is at least one; when active, every list shows only those.
+  const orgApps = useMemo(() => myOrgApps(apps, myOrgIds), [apps, myOrgIds]);
+  const filterOn = myOrgsOnly && orgApps.length > 0;
+  const listed = filterOn ? orgApps : apps;
+  const forYouApps = useMemo(() => forYou(listed, held, myOrgIds), [listed, held, myOrgIds]);
+
   // Hero: featured apps first; fall back to the whole list so the carousel
   // never renders empty while apps exist.
   const heroApps = useMemo(() => {
-    const featured = apps.filter((a) => a.featured);
-    return (featured.length > 0 ? featured : apps).slice(0, 5);
-  }, [apps]);
+    const featured = listed.filter((a) => a.featured);
+    return (featured.length > 0 ? featured : listed).slice(0, 5);
+  }, [listed]);
 
   const newApps = useMemo(
     () =>
-      [...apps]
+      [...listed]
         .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1))
         .slice(0, NEW_APPS_COUNT),
-    [apps],
+    [listed],
   );
 
   const heroW = width - 32;
@@ -185,6 +211,7 @@ export default function MiniAppsStoreScreen() {
                         app={item}
                         width={heroW}
                         installed={isInstalled(item.slug)}
+                        locked={isLocked(item)}
                         onPress={() => openApp(item)}
                       />
                     )}
@@ -208,12 +235,53 @@ export default function MiniAppsStoreScreen() {
                 </View>
               )}
 
+              {/* Für dich — only when something fits this person */}
+              {forYouApps.length > 0 && (
+                <View style={styles.section} testID="miniapps-for-you">
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{'Für dich'}</Text>
+                  </View>
+                  <MiniAppColumnRail
+                    apps={forYouApps}
+                    isInstalled={isInstalled}
+                    isLocked={isLocked}
+                    onOpen={openApp}
+                  />
+                </View>
+              )}
+
               {/* Top-Apps — 3 per column, swiped horizontally */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Top-Apps</Text>
+                  {orgApps.length > 0 && (
+                    <Pressable
+                      onPress={() => setMyOrgsOnly((v) => !v)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel="Meine Vereine"
+                      accessibilityState={{ selected: filterOn }}
+                      style={[
+                        styles.chip,
+                        filterOn
+                          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                          : { borderColor: colors.border },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.chipText, { color: filterOn ? colors.onPrimary : colors.textPrimary }]}
+                      >
+                        {'Meine Vereine'}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
-                <MiniAppColumnRail apps={apps} isInstalled={isInstalled} onOpen={openApp} />
+                <MiniAppColumnRail
+                  apps={listed}
+                  isInstalled={isInstalled}
+                  isLocked={isLocked}
+                  onOpen={openApp}
+                />
               </View>
 
               {/* Neu & bemerkenswert */}
@@ -224,7 +292,12 @@ export default function MiniAppsStoreScreen() {
                       Neu & bemerkenswert
                     </Text>
                   </View>
-                  <MiniAppColumnRail apps={newApps} isInstalled={isInstalled} onOpen={openApp} />
+                  <MiniAppColumnRail
+                    apps={newApps}
+                    isInstalled={isInstalled}
+                    isLocked={isLocked}
+                    onOpen={openApp}
+                  />
                 </View>
               )}
             </>
@@ -287,6 +360,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: fontFamily.heading,
     fontSize: 20,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
   },
   emptyBox: {
     paddingHorizontal: 32,

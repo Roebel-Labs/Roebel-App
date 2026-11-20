@@ -23,15 +23,21 @@ import type { PasskeyUserOpArgs, SponsoredCall } from './userop';
 
 export const DETACH_MIN_GUARDIANS = 2;
 export const DETACH_MIN_THRESHOLD = 2;
-export const DETACH_CONFIRM_WORD = 'TRENNEN';
 
 export const DETACH_EXPLANATION =
-  'Danach kann nur noch dein Passkey — und nach 3 Tagen deine Vertrauenspersonen — dein Konto steuern. ' +
-  'Google/E-Mail-Anmeldung funktioniert dann nicht mehr. Das kann man nicht rückgängig machen.';
+  'Nach diesem Schritt hältst nur noch du den Schlüssel zu deinem Konto. ' +
+  'Dein Anmelde-Anbieter (Google, Apple oder E-Mail) kann es dann nicht mehr öffnen. ' +
+  'Das kann man nicht rückgängig machen.';
 
 export const DETACH_NEEDS_THIRDWEB_MESSAGE =
   'Für diesen Schritt musst du dich noch einmal mit Google/E-Mail anmelden: Deine bisherige Anmeldung ' +
   'muss ihre eigene Entfernung unterschreiben.';
+
+/** True iff every checklist item is done (an empty checklist is never confirmed). */
+export function isDetachConfirmed(checklist: Record<string, boolean> | boolean[]): boolean {
+  const values = Array.isArray(checklist) ? checklist : Object.values(checklist);
+  return values.length > 0 && values.every(Boolean);
+}
 
 // ---------------------------------------------------------------------------
 // Checklist
@@ -189,7 +195,7 @@ const sameSet = (a: readonly Address[], b: readonly Address[]) =>
 /** Guard: the only request this module ever signs removes the EOA, never the Safe. */
 export function assertDetachRequest(req: SignerPermissionRequest, eoa: Address, safe: Address): void {
   if (req.isAdmin !== 2 || !isAddressEqual(req.signer, eoa) || isAddressEqual(req.signer, safe)) {
-    throw new Error('refusing to sign anything but the removal of the thirdweb admin EOA');
+    throw new Error('refusing to sign anything but the removal of the sign-in provider\'s admin key');
   }
 }
 

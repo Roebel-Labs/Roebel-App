@@ -43,9 +43,9 @@ const styles = StyleSheet.create({
   container: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 16, borderBottomWidth: 1 },
   content: { flex: 1, marginRight: 16 },
   nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  name: { fontSize: 14, fontFamily: 'Inter-Regular', marginRight: 8 },
+  name: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginRight: 8 },
   badges: { flexDirection: 'row', gap: 4 },
-  badge: { fontSize: 10, fontFamily: 'Inter-SemiBold', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  description: { fontSize: 14, fontFamily: 'Inter-Regular', marginTop: 4, lineHeight: 20 },
-  price: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  badge: { fontSize: 10, fontFamily: 'MonaSans-SemiBold', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  description: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginTop: 4, lineHeight: 20 },
+  price: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
 });

@@ -1,4 +1,15 @@
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+// guardians-runtime (the sponsored ops at the end of this file): no network, no native store.
+const mockPhrase = { read: jest.fn(async (_reason: string) => '') };
+const mockSend = jest.fn(async (_args: unknown, _deps?: unknown) => ({ userOpHash: '0x01', txHash: '0x02' }));
+jest.mock('@/lib/storage/secureStorage', () => ({ getItemAsync: async () => null, setItemAsync: async () => undefined, deleteItemAsync: async () => undefined }));
+jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('../phrase-store-runtime', () => ({ phraseStore: mockPhrase }));
+jest.mock('../userop', () => ({
+  ...jest.requireActual('../userop'),
+  isSafeDeployed: async () => true,
+  sendSafeUserOp: (args: unknown, deps?: unknown) => mockSend(args, deps),
+}));
 
 import { createPublicKey, verify as nodeVerify } from 'crypto';
 import { concatHex, decodeFunctionData, getAddress, hexToBytes, hexToString, numberToHex, type Address, type Hex } from 'viem';
@@ -162,5 +173,64 @@ describe('guardians — reads go through the injected client', () => {
       newOwners: [newOwner],
     });
     expect(await readWebAuthnSigner(rv.newX as Hex, rv.newY as Hex, client)).toBe(newOwner);
+  });
+});
+
+describe('guardian ops from this device (guardians-runtime)', () => {
+  const runtime = () => require('../guardians-runtime') as typeof import('../guardians-runtime');
+  const { WORDS_KEY_PLACEHOLDER } = require('../session') as typeof import('../session');
+  const ev = require('./ecdsa-safe-vector.json') as { phrase: string; owner: string; safeAddress: string; userOp: { safeOpHash: Hex; userOpSignature: Hex } };
+  const P1 = getAddress('0x1111111111111111111111111111111111111111');
+  const WORDS_RECORD = {
+    credentialId: '',
+    x: WORDS_KEY_PLACEHOLDER,
+    y: WORDS_KEY_PLACEHOLDER,
+    safe: getAddress(ev.safeAddress),
+    ownerType: 'ecdsa' as const,
+    owner: getAddress(ev.owner),
+    status: 'done' as const,
+  };
+
+  beforeEach(() => {
+    mockSend.mockClear();
+    mockPhrase.read.mockReset().mockImplementation(async () => ev.phrase);
+  });
+
+  it('guardian change from a words record: one op, ECDSA signer, guest mode', async () => {
+    const call = encodeAddGuardian(P1, 1);
+    expect(await runtime().sendOwnSafeOp(WORDS_RECORD, { mode: 'safe' }, [call])).toBe('0x02');
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const args = mockSend.mock.calls[0][0] as { signer: { proof: unknown; signOpHash: (h: Hex) => Promise<Hex> }; calls: unknown; sender: Address; deployed: boolean; legacy?: Address };
+    expect(args.signer.proof).toEqual({ ecdsaOwner: WORDS_RECORD.owner });
+    expect(args.calls).toEqual([call]);
+    expect(args.sender).toBe(WORDS_RECORD.safe);
+    expect(args.deployed).toBe(true);
+    expect(args.legacy).toBeUndefined(); // guest mode: the Safe itself, no legacy account
+    // Nothing was unlocked yet; signing the op costs exactly one device unlock and gives the
+    // Safe's ECDSA owner signature the fork accepted.
+    expect(mockPhrase.read).not.toHaveBeenCalled();
+    expect(await args.signer.signOpHash(ev.userOp.safeOpHash)).toBe(ev.userOp.userOpSignature);
+    expect(mockPhrase.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('guardian confirmation from a words record goes through the ECDSA signer too', async () => {
+    const plan = { kind: 'safe' as const, calls: [encodeAddGuardian(P1, 1)] };
+    await runtime().sendGuardianConfirm(WORDS_RECORD, plan);
+    const args = mockSend.mock.calls[0][0] as { signer: { proof: unknown }; sender: Address };
+    expect(args.signer.proof).toEqual({ ecdsaOwner: WORDS_RECORD.owner });
+    expect(args.sender).toBe(WORDS_RECORD.safe);
+  });
+
+  it('a passkey record keeps its passkey signer (and an injected passkey sign)', async () => {
+    const x = `0x${'11'.repeat(32)}` as Hex;
+    const y = `0x${'22'.repeat(32)}` as Hex;
+    const rec = { credentialId: 'cred', x, y, safe: WORDS_RECORD.safe, ownerType: 'webauthnSigner' as const, owner: P1, status: 'done' as const };
+    const sign = jest.fn();
+    expect(runtime().opSignerForRecord(rec, sign).proof).toEqual({ x, y });
+    await runtime().sendOwnSafeOp(rec, { mode: 'legacy', legacy: P1 }, [encodeAddGuardian(P1, 1)], { sign });
+    const args = mockSend.mock.calls[0][0] as { signer: { proof: unknown }; legacy?: Address };
+    expect(args.signer.proof).toEqual({ x, y });
+    expect(args.legacy).toBe(P1);
+    expect(mockPhrase.read).not.toHaveBeenCalled();
   });
 });

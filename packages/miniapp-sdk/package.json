@@ -1,6 +1,6 @@
 {
   "name": "@netizen-labs/miniapp-sdk",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in a host app (WebView/iframe).",
   "license": "MIT",
   "type": "module",
@@ -16,13 +16,16 @@
       "default": "./src/host/index.ts"
     }
   },
-  "files": ["dist", "src", "DESIGN.md", "README.md"],
+  "files": ["dist", "src", "DESIGN.md", "README.md", "CHANGELOG.md"],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "prepack": "tsup",
     "sync-web": "tsup && node scripts/sync-web.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "release:check": "tsup && node scripts/release-check.mjs",
+    "release": "tsup && node scripts/sync-web.mjs && node scripts/release-check.mjs && npm publish"
   },
   "publishConfig": {
     "access": "public",
@@ -50,6 +53,7 @@
   },
   "devDependencies": {
     "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.0"
   }
 }

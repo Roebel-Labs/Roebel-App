@@ -95,6 +95,15 @@ export interface BotAvatarSpec {
   shape: BotShape;
   color: string;
   eyes: BotEyes;
+  /** Illustrated agent character (lib/chat/agent/characters.ts); clients without the artwork fall back to the shape. */
+  character?: string;
+  /** Personality preset key of a character agent (the main assistant uses its profile's instead). */
+  personality?: string;
+  /**
+   * The agent's picture when it is not a character: an own upload or house artwork (lib/chat/agent/avatar-image.ts).
+   * Clients show imageUrl, else the character, else an initial; shape/color/eyes stay only for older app builds.
+   */
+  imageUrl?: string;
 }
 
 export interface ChatBot {

@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   guestName: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   staffBadge: {
     paddingHorizontal: 6,
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   },
   staffBadgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   timeText: {
     fontSize: 12,
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   },
   itemQty: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginRight: 6,
   },
   itemName: {
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   },
   totalText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   statusBtn: {
     paddingHorizontal: 14,

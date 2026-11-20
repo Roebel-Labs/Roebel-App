@@ -13,11 +13,15 @@
  *     account: { address: '0x00000000000000000000000000000000000000ff', chainId: 100 },
  *     balance: { balance: '42', decimals: 18, symbol: 'RÖ' },
  *     rewards: true, // grantReward resolves granted:true (demo happy path)
+ *     credentials: [{ type: 'citizen', kind: 'builtin', name: 'Bürger:in', recognised: true }],
+ *     token: 'eyJ…', // auth.getToken resolves { token }
  *   }
  */
+import { credentialMatches } from './credential-ref';
 import type {
   BridgeError,
   BridgeMethod,
+  Credential,
   GrantRewardParams,
   MiniAppContext,
   MuenzenBalance,
@@ -66,8 +70,20 @@ function mockBalance(): MuenzenBalance {
   return getMockConfig().balance ?? { balance: '12', decimals: 18, symbol: 'RÖ' };
 }
 
-function err(code: BridgeError['code'], message: string): BridgeError {
-  return { code, message };
+function mockCredentials(): Credential[] {
+  return (
+    getMockConfig().credentials ?? [
+      { type: 'citizen', kind: 'builtin', name: 'Bürger:in', recognised: true },
+    ]
+  );
+}
+
+function mockHolds(pattern: string): boolean {
+  return mockCredentials().some((held) => credentialMatches(pattern, held));
+}
+
+function err(code: BridgeError['code'], message: string, rpcCode?: number): BridgeError {
+  return rpcCode === undefined ? { code, message } : { code, message, rpcCode };
 }
 
 /** In-memory user-scope store for mock mode (per page load). */
@@ -114,7 +130,7 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
     case 'wallet.getAccount':
       return Promise.resolve(mockAccount());
     case 'wallet.request': {
-      const args = (params ?? {}) as { method?: string };
+      const args = (params ?? {}) as { method?: string; params?: unknown };
       const account = mockAccount();
       switch (args.method) {
         case 'eth_accounts':
@@ -124,14 +140,24 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
           return Promise.resolve(`0x${(account?.chainId ?? 100).toString(16)}`);
         case 'net_version':
           return Promise.resolve(String(account?.chainId ?? 100));
+        case 'wallet_getCapabilities':
+          return Promise.resolve({ '0x64': { atomic: { status: 'supported' } } });
+        case 'wallet_switchEthereumChain': {
+          const first = Array.isArray(args.params) ? (args.params[0] as { chainId?: unknown }) : undefined;
+          const chainId = typeof first?.chainId === 'string' ? first.chainId.toLowerCase() : '';
+          if (chainId === '0x64') return Promise.resolve(null);
+          return Promise.reject(err('unsupported', 'Nur Gnosis (Chain 100) wird unterstützt', 4902));
+        }
         default:
           return Promise.reject(
             err('unsupported', `Mock-Modus: "${args.method ?? 'unknown'}" braucht den Röbel-Host`),
           );
       }
     }
-    case 'auth.getToken':
-      return Promise.resolve(null);
+    case 'auth.getToken': {
+      const token = getMockConfig().token;
+      return Promise.resolve(token ? { token } : null);
+    }
     case 'auth.signIn':
       return Promise.reject(err('unsupported', 'Mock-Modus: Anmeldung braucht den Röbel-Host'));
     case 'roebel.getMuenzenBalance':
@@ -171,6 +197,17 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
       const p = (params ?? {}) as { key?: string; value?: unknown };
       if (p.key) mockUserData.set(p.key, p.value ?? null);
       return Promise.resolve({ ok: true });
+    }
+    case 'credentials.list':
+      return Promise.resolve(mockCredentials());
+    case 'credentials.has': {
+      const type = (params as { type?: unknown } | undefined)?.type;
+      return Promise.resolve(typeof type === 'string' && mockHolds(type));
+    }
+    case 'credentials.request': {
+      const types = (params as { types?: unknown } | undefined)?.types;
+      const list = Array.isArray(types) ? types.filter((t): t is string => typeof t === 'string') : [];
+      return Promise.resolve({ granted: list.filter(mockHolds) });
     }
     case 'analytics.track':
       return Promise.resolve(undefined);

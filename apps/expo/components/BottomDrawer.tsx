@@ -39,6 +39,9 @@ type Props = {
   keyboardAware?: boolean;
   /** Horizontal content padding. Defaults to 24; full-width lists can pass 16. */
   contentPaddingHorizontal?: number;
+  /** Fixed sheet colours for screens that are always dark (live room); default = theme. */
+  backgroundColor?: string;
+  handleColor?: string;
 };
 
 export default function BottomDrawer({
@@ -49,6 +52,8 @@ export default function BottomDrawer({
   maxSnapPoint = 0.92,
   keyboardAware = false,
   contentPaddingHorizontal,
+  backgroundColor,
+  handleColor,
 }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -159,13 +164,13 @@ export default function BottomDrawer({
               : { height: drawerHeight },
             {
               transform: [{ translateY }],
-              backgroundColor: colors.background,
+              backgroundColor: backgroundColor ?? colors.background,
             },
           ]}
         >
           {/* Drag Handle */}
           <View {...panResponder.panHandlers} style={styles.handleContainer}>
-            <View style={[styles.handle, { backgroundColor: colors.disabled }]} />
+            <View style={[styles.handle, { backgroundColor: handleColor ?? colors.disabled }]} />
           </View>
 
           {/* Content — flex: 1 for fixed snap points fills the available

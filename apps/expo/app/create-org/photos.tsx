@@ -117,17 +117,17 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   title: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 32,
   },
   sectionLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   logoImage: { width: 112, height: 112, borderRadius: 9999 },
   placeholderIcon: { fontSize: 22 },
-  placeholderText: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 4 },
+  placeholderText: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 4 },
   coverPressable: { marginBottom: 32 },
   coverPlaceholder: {
     width: '100%',
@@ -156,5 +156,5 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   coverImage: { width: '100%', height: 176, borderRadius: 16 },
-  coverPlaceholderText: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 8 },
+  coverPlaceholderText: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 8 },
 });

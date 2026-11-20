@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   },
   likeCount: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   menuButton: {
     paddingLeft: 8,
@@ -233,11 +233,11 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   content: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   videoPlaceholder: {
@@ -250,6 +250,6 @@ const styles = StyleSheet.create({
   },
   videoLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

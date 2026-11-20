@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  scannerTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold', color: '#ffffff' },
+  scannerTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold', color: '#ffffff' },
   content: { padding: 16, gap: 16 },
   progressCard: {
     borderRadius: 20,
@@ -217,12 +217,12 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     color: '#ffffff',
   },
   progressSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255,255,255,0.8)',
   },
   progressBarContainer: {
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: 'rgba(255,255,255,0.7)',
   },
   sectionTitle: {
@@ -258,14 +258,14 @@ const styles = StyleSheet.create({
   },
   checkpointEmoji: { fontSize: 24 },
   checkpointInfo: { flex: 1, gap: 2 },
-  checkpointName: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  checkpointDesc: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  checkpointName: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  checkpointDesc: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   pointsBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
   },
-  pointsText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  pointsText: { fontSize: 12, fontFamily: 'MonaSans-SemiBold' },
   emptyState: {
     borderRadius: 16,
     padding: 32,
@@ -273,6 +273,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
-  emptyText: { fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  emptyTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold' },
+  emptyText: { fontSize: 14, fontFamily: 'MonaSans-Regular', textAlign: 'center' },
 });

@@ -5,10 +5,11 @@ import { randomUUID } from "node:crypto";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, hasToolCall, stepCountIs, streamText } from "ai";
 import type { ModelMessage, StopCondition, ToolSet, UserContent } from "ai";
-import { estimateCostMicros, resolveModel } from "./models";
+import { resolveModelFor, platformCostMicros } from "./models";
 import { calendarPromptBlock, formatEventWhen } from "./calendar";
 import { buildSystemPrompt, fallbackGreeting, greetingInstruction } from "./prompts";
 import { quotaState } from "./quota";
+import { getProviderKey } from "./provider-keys";
 import { nextRunAt, validateSchedule } from "./schedule";
 import { sendChatPush } from "./push";
 import { SplitStreamer, splitBubbles } from "./split";
@@ -22,6 +23,9 @@ import * as store from "./store";
 import type { BotRow, MessageRow } from "./store";
 import type { CalendarContextEvent, ChatMessage, ChatPart, ChatStreamEvent, ChatThread, SendMessageInput } from "./types";
 
+import { agentOverlay } from "./agent/profile";
+import type { Channel } from "./agent/profile";
+import { mailRoutineResult } from "./agent/mail";
 export type Emit = (e: ChatStreamEvent) => void;
 
 export const CONTEXT_MESSAGES = 30;
@@ -153,6 +157,8 @@ interface BotTurnContext {
   initialParts?: ChatPart[];
   /** Pre-loaded profile (skips the DB read). */
   profile?: HarnessProfile | null;
+  /** The turn arrived over SMS, WhatsApp or e-mail: plain answers, no cards. */
+  channel?: Channel | null;
 }
 
 /** Stops the loop once a gated tool asked for approval: the human decides next. */
@@ -173,7 +179,7 @@ function mergeSources(into: Map<string, string>, url: unknown, title: unknown) {
 async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   const { wallet, threadId, bot, emit } = ctx;
   const route = ctx.hasImages && bot.model_route === "bot-fast" ? "vision" : bot.model_route;
-  const resolved = resolveModel(route);
+  const resolved = await resolveModelFor(wallet, route);
   const enabled = new Set(bot.tools ?? []);
   const canSearch = enabled.has("web_search") && resolved.provider === "anthropic";
 
@@ -183,9 +189,10 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   ]);
   const botNames = new Map(ctx.threadBots.map((b) => [b.id, b.name]));
   const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText, { imageUrls: enabled.has("images") });
+  const overlay = await agentOverlay(wallet, bot, ctx.channel);
   const baseSystem = buildSystemPrompt({
-    botName: bot.name,
-    instructions: bot.instructions,
+    botName: overlay.name,
+    instructions: overlay.block ? `${bot.instructions.trim()}\n\n${overlay.block}` : bot.instructions,
     otherBots: ctx.threadBots.filter((b) => b.id !== bot.id).map((b) => b.name),
     files,
     now: new Date(),
@@ -347,7 +354,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   await store.recordRun({
     wallet, threadId, botId: bot.id, route: resolved.route,
     inputTokens, outputTokens,
-    costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+    costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
     status: streamError ? "error" : "ok",
     error: streamError ? errorText(streamError) : null,
   });
@@ -362,8 +369,14 @@ function errorText(err: unknown): string {
 // ---- user turn -------------------------------------------------------------------
 
 export async function checkQuota(wallet: string) {
-  const [tier, used] = await Promise.all([store.getTier(wallet), store.usedTokensToday(wallet)]);
-  return { tier, ...quotaState(used, tier) };
+  const [tier, used, ownKey] = await Promise.all([
+    store.getTier(wallet),
+    store.usedTokensToday(wallet),
+    getProviderKey(wallet, "anthropic").then((k) => !!k).catch(() => false),
+  ]);
+  const state = quotaState(used, tier);
+  // The user's own key pays for model calls: the platform quota does not apply.
+  return { tier, ...state, exceeded: ownKey ? false : state.exceeded, ownKey };
 }
 
 export const QUOTA_MESSAGE = "Dein Tageskontingent ist aufgebraucht. Mit Ultra geht's sofort weiter – oder morgen wieder kostenlos.";
@@ -374,7 +387,7 @@ export const QUOTA_MESSAGE = "Dein Tageskontingent ist aufgebraucht. Mit Ultra g
  * for invalid input BEFORE anything is emitted or persisted.
  */
 export async function runUserTurn(opts: {
-  wallet: string; thread: ChatThread; input: SendMessageInput; emit: Emit;
+  wallet: string; thread: ChatThread; input: SendMessageInput; emit: Emit; channel?: Channel | null;
 }): Promise<void> {
   const { wallet, thread, input, emit } = opts;
   const text = typeof input.text === "string" ? input.text.trim().slice(0, MAX_TEXT_CHARS) : "";
@@ -434,6 +447,7 @@ export async function runUserTurn(opts: {
     const res = await runBotTurn({
       wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0,
       calendarContext: input.calendarContext ?? null,
+      channel: opts.channel ?? null,
     });
     spent += res.inputTokens + res.outputTokens;
     if (res.messages.length) last = res.messages[res.messages.length - 1];
@@ -514,7 +528,7 @@ export async function createThreadWithGreeting(wallet: string, botIds: string[])
 }
 
 async function generateGreeting(wallet: string, threadId: string, bot: BotRow, all: BotRow[], isGroup: boolean): Promise<string[]> {
-  const resolved = resolveModel("bot-fast");
+  const resolved = await resolveModelFor(wallet, "bot-fast");
   try {
     const res = await generateText({
       model: resolved.model,
@@ -530,7 +544,7 @@ async function generateGreeting(wallet: string, threadId: string, bot: BotRow, a
     const outputTokens = res.totalUsage.outputTokens ?? 0;
     await store.recordRun({
       wallet, threadId, botId: bot.id, route: resolved.route, inputTokens, outputTokens,
-      costMicros: resolved.provider === "anthropic" ? estimateCostMicros(resolved.modelId, inputTokens, outputTokens) : 0,
+      costMicros: platformCostMicros(resolved, inputTokens, outputTokens), billedTo: resolved.billedTo,
       status: "ok",
     });
     return splitBubbles(res.text, 2);
@@ -591,6 +605,8 @@ export async function runDueRoutines(now: Date = new Date()): Promise<RoutineRep
           wallet: row.owner_wallet, threadId: thread.id, title: `${bot.name} · ${row.title}`, body: preview,
         });
         if (pushed) report.pushed++;
+        // The same result by mail, when the person wants it (never fails the run).
+        await mailRoutineResult(row.owner_wallet, row.title, res.messages).catch((err) => console.error("[chat/runtime] routine mail failed", err));
       }
       report.ran++;
     } catch (err) {

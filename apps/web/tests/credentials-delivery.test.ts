@@ -1,0 +1,444 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
+import { orgIdFromUuid } from "@netizen-labs/protocol";
+import { credentialTypeId } from "@netizen-labs/credential-registry";
+import { keccak256, toHex, type Address, type Hex } from "viem";
+import { InMemoryCredentialStore, type InvitationRow, type NewInvitation, type TypeRow } from "../src/lib/credentials/store";
+import {
+  deliverInvitations,
+  invitePush,
+  inviteMail,
+  inviteUrl,
+  MAX_MAIL_ATTEMPTS,
+  MAX_MAILS_PER_RUN,
+  prepareLetters,
+  recoverInterruptedMails,
+  type DeliveryDeps,
+} from "../src/lib/credentials/delivery";
+import { sealSecret } from "../src/lib/credentials/secrets";
+import type { Notifier } from "../src/lib/credentials/notify";
+import type { Caller } from "../src/lib/credentials/caller";
+import type { OutgoingMail } from "../src/lib/passkey/email-mailer";
+
+process.env.CREDENTIAL_SECRETS_KEY = randomBytes(32).toString("base64");
+delete process.env.NEXT_PUBLIC_SITE_URL;
+
+const REGISTRY = "0x00000000000000000000000000000000000000c1" as Address;
+const VEREIN = "6f1c2a7e-0d3b-4c55-9a1e-2b3c4d5e6f70";
+const FRAKTION = "7a2d3b8f-1e4c-4d66-8b2f-3c4d5e6f7081";
+const OWNER = "0x00000000000000000000000000000000000000a1";
+const MEMBER = "0x00000000000000000000000000000000000000a3";
+const ALICE = "0x00000000000000000000000000000000000000b1";
+const BOB = "0x00000000000000000000000000000000000000b2";
+const T0 = Date.parse("2026-11-17T10:00:00Z");
+
+const typeIdOf = (account: string, local: string) => credentialTypeId(orgIdFromUuid(account) as Hex, keccak256(toHex(local))).toLowerCase() as Hex;
+
+function typeRow(typeId: Hex, accountId: string, kind: TypeRow["kind"], name: string): TypeRow {
+  return {
+    typeId, registry: REGISTRY, accountId, orgId: orgIdFromUuid(accountId) as Hex, localUuid: null, localId: keccak256(toHex(name)),
+    kind, policy: "issuer_batch", name, description: null, imageUrl: null, benefits: [], template: null,
+    defaultValiditySeconds: 0, claimStart: null, claimEnd: null, supplyCap: 0, publicClaim: true, recognised: false, retired: false,
+    chainStatus: "onchain", eventId: null, createdBy: OWNER, createdAt: new Date(T0).toISOString(),
+  };
+}
+
+let n = 0;
+const uuid = () => `33333333-3333-4333-8333-${(++n).toString(16).padStart(12, "0")}`;
+
+type Person = { wallet?: string; name?: string; email?: string; token?: string };
+
+function invitation(typeId: Hex, p: Person): { row: NewInvitation; token: string | null } {
+  const id = uuid();
+  if (p.wallet) {
+    return {
+      token: null,
+      row: {
+        id, typeId, leafKind: "account", subject: p.wallet, validUntil: "0", salt: keccak256(toHex(id)), leafHash: keccak256(toHex(`leaf-${id}`)),
+        proof: [], claimKeyEnc: null, tokenHash: null, tokenEnc: null, recipientWallet: p.wallet, displayName: p.name ?? null, contactEmail: null,
+      },
+    };
+  }
+  const token = p.token ?? randomBytes(32).toString("base64url");
+  return {
+    token,
+    row: {
+      id, typeId, leafKind: "claim_key", subject: `0x${"d1".repeat(20)}`, validUntil: "0", salt: keccak256(toHex(id)), leafHash: keccak256(toHex(`leaf-${id}`)),
+      proof: [], claimKeyEnc: sealSecret(`0x${"11".repeat(32)}`, `invitation:${id}:claim_key`),
+      tokenHash: createHash("sha256").update(token).digest("hex"), tokenEnc: sealSecret(token, `invitation:${id}:token`),
+      recipientWallet: null, displayName: p.name ?? null, contactEmail: p.email ?? null,
+    },
+  };
+}
+
+async function world() {
+  const store = new InMemoryCredentialStore();
+  store.seedAccount({ id: VEREIN, accountType: "organisation", name: "Heimatverein", subType: "verein", avatarUrl: null, membersPublicColumn: null });
+  store.seedAccount({ id: FRAKTION, accountType: "organisation", name: "Fraktion Grün", subType: "fraktion", avatarUrl: null, membersPublicColumn: null });
+  store.seedOwner(VEREIN, OWNER, "owner");
+  store.seedOwner(VEREIN, MEMBER, "member");
+  const types = {
+    verein: typeRow(typeIdOf(VEREIN, "mitglied"), VEREIN, "membership", "Mitglied"),
+    badge: typeRow(typeIdOf(VEREIN, "helfer"), VEREIN, "badge", "Helfer 2026"),
+    fraktion: typeRow(typeIdOf(FRAKTION, "mitglied"), FRAKTION, "membership", "Parteimitglied"),
+  };
+  for (const t of Object.values(types)) await store.upsertType(t);
+  const pushes: Parameters<Notifier["push"]>[0][] = [];
+  const mails: OutgoingMail[] = [];
+  let failPushFor: string | null = null;
+  let failMail = false;
+  const d: DeliveryDeps = {
+    store,
+    notify: {
+      push: async (p) => {
+        if (failPushFor && p.wallets.includes(failPushFor)) throw new Error("push hub down");
+        pushes.push(p);
+      },
+    },
+    mailer: {
+      send: async (m) => {
+        if (failMail) throw new Error("mail down");
+        mails.push(m);
+      },
+    },
+    now: () => T0,
+  };
+  async function batch(typeId: Hex, people: Person[], status: "onchain" | "prepared" = "onchain") {
+    const id = uuid();
+    const made = people.map((p) => invitation(typeId, p));
+    await store.insertBatchWithInvitations({ id, actionId: null, typeId, root: keccak256(toHex(`root-${id}`)), count: made.length, source: "people" }, made.map((m) => m.row));
+    await store.updateBatch(id, { status, chainBatchId: status === "onchain" ? String(n) : null });
+    return { id, invitations: made.map((m) => ({ id: m.row.id, token: m.token })) };
+  }
+  return {
+    d, store, types, pushes, mails, batch,
+    failPush: (w: string | null) => (failPushFor = w),
+    failMail: (v: boolean) => (failMail = v),
+  };
+}
+
+const inv = async (store: InMemoryCredentialStore, id: string) => (await store.getInvitation(id)) as InvitationRow;
+
+test("account leaves are pushed, mail leaves are mailed once and the address is erased", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ wallet: ALICE }, { name: "Erika Muster", email: "erika@example.org" }, { name: "Otto Ohnemail" }]);
+  const r = await deliverInvitations(w.d, b.id);
+  assert.deepEqual(r, { pushed: 1, mailed: 1, linkOnly: 1 });
+
+  assert.equal(w.pushes.length, 1);
+  assert.deepEqual(w.pushes[0].wallets, [ALICE]);
+  assert.equal(w.pushes[0].type, "credential_invite");
+  assert.deepEqual(w.pushes[0].data, { type: "credential_invite", invitationId: b.invitations[0].id });
+
+  assert.equal(w.mails.length, 1);
+  assert.equal(w.mails[0].to, "erika@example.org");
+  assert.equal(w.mails[0].subject, "Dein Ausweis: Mitglied");
+  assert.ok(w.mails[0].text.includes(`https://www.roebel.app/invite/ausweis/${b.invitations[1].token}`));
+  assert.ok(w.mails[0].text.includes("persönlich"));
+
+  const mailed = await inv(w.store, b.invitations[1].id);
+  assert.equal(mailed.contactEmail, null);
+  assert.equal(mailed.emailSentAt, new Date(T0).toISOString());
+  for (const i of b.invitations) {
+    const row = await inv(w.store, i.id);
+    assert.equal(row.status, "invited");
+    assert.equal(row.invitedAt, new Date(T0).toISOString());
+  }
+});
+
+test("a second deliverInvitations call for the same batch sends nothing", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ wallet: ALICE }, { name: "Erika Muster", email: "erika@example.org" }]);
+  await deliverInvitations(w.d, b.id);
+  const r = await deliverInvitations(w.d, b.id);
+  assert.deepEqual(r, { pushed: 0, mailed: 0, linkOnly: 0 });
+  assert.equal(w.pushes.length, 1);
+  assert.equal(w.mails.length, 1);
+
+  // Two concurrent calls (the sync and a recovery sweep) still send each invitation once.
+  const w2 = await world();
+  const b2 = await w2.batch(w2.types.verein.typeId, [{ wallet: ALICE }, { wallet: BOB }, { name: "Erika Muster", email: "erika@example.org" }]);
+  await Promise.all([deliverInvitations(w2.d, b2.id), deliverInvitations(w2.d, b2.id)]);
+  assert.equal(w2.pushes.length, 2);
+  assert.equal(w2.mails.length, 1);
+
+  // A batch not on chain is never delivered.
+  const w3 = await world();
+  const b3 = await w3.batch(w3.types.verein.typeId, [{ wallet: ALICE }], "prepared");
+  assert.deepEqual(await deliverInvitations(w3.d, b3.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+  assert.equal((await inv(w3.store, b3.invitations[0].id)).status, "prepared");
+});
+
+test("push text for a closed org (membersMayBePublic false) names neither org nor type", async () => {
+  const w = await world();
+  const p = invitePush(w.types.fraktion, "Fraktion Grün", false);
+  assert.equal(p.title, "Neuer Ausweis");
+  assert.equal(p.body, "Du hast einen Ausweis erhalten. Öffne die App, um ihn anzusehen.");
+
+  // End to end: the push and the mail of a fraktion batch carry neither name.
+  const b = await w.batch(w.types.fraktion.typeId, [{ wallet: ALICE }, { name: "Erika Muster", email: "erika@example.org" }]);
+  await deliverInvitations(w.d, b.id);
+  const texts = [w.pushes[0].title, w.pushes[0].body, JSON.stringify(w.pushes[0].data), w.mails[0].subject, w.mails[0].text];
+  for (const t of texts) {
+    assert.ok(!t.includes("Fraktion"), t);
+    assert.ok(!t.includes("Parteimitglied"), t);
+  }
+});
+
+test("push text for a verein is 'Neuer Ausweis' / '<Org>: <Typ>'; a badge says 'Neues Abzeichen'", async () => {
+  const w = await world();
+  assert.deepEqual(invitePush(w.types.verein, "Heimatverein", true), { title: "Neuer Ausweis", body: "Heimatverein: Mitglied" });
+  assert.deepEqual(invitePush(w.types.badge, "Heimatverein", true), { title: "Neues Abzeichen", body: "Heimatverein: Helfer 2026" });
+  assert.deepEqual(invitePush(w.types.verein, null, true), { title: "Neuer Ausweis", body: "Mitglied" });
+  const m = inviteMail({ to: "a@example.org", type: w.types.verein, orgName: "Heimatverein", membersMayBePublic: true, url: "https://www.roebel.app/invite/ausweis/x" });
+  assert.equal(m.subject, "Dein Ausweis: Mitglied");
+});
+
+test("a failing push does not stop the others and still marks the invitation invited", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ wallet: ALICE }, { wallet: BOB }]);
+  w.failPush(ALICE);
+  const r = await deliverInvitations(w.d, b.id);
+  assert.equal(r.pushed, 1);
+  assert.deepEqual(w.pushes.map((p) => p.wallets[0]), [BOB]);
+  for (const i of b.invitations) assert.equal((await inv(w.store, i.id)).status, "invited");
+});
+
+test("a failing mail keeps the invitation prepared with its address, and a later call sends it once", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster", email: "erika@example.org" }]);
+  w.failMail(true);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+  let row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "prepared");
+  assert.equal(row.contactEmail, "erika@example.org");
+  assert.equal(row.mailAttempts, 1);
+  w.failMail(false);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
+  row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "invited");
+  assert.equal(row.contactEmail, null);
+  assert.equal(w.mails.length, 1);
+});
+
+test(`after ${MAX_MAIL_ATTEMPTS} failed mails the invitation falls back to link-only: invited, address erased`, async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster", email: "kaputt@example.org" }]);
+  w.failMail(true);
+  for (let k = 1; k < MAX_MAIL_ATTEMPTS; k++) {
+    assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+    const row = await inv(w.store, b.invitations[0].id);
+    assert.equal(row.status, "prepared");
+    assert.equal(row.mailAttempts, k);
+  }
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 1 });
+  const row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "invited");
+  assert.equal(row.contactEmail, null);
+  assert.equal(row.emailSentAt, null);
+  assert.equal(row.mailAttempts, MAX_MAIL_ATTEMPTS);
+  // Terminal: nothing left to deliver, and the organiser can print a letter for it.
+  w.failMail(false);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 0, linkOnly: 0 });
+  assert.equal(w.mails.length, 0);
+  const caller: Caller = { ok: true, wallet: OWNER, via: "signature", action: "letters", payload: {} };
+  const letters = await prepareLetters(w.d, caller, { accountId: VEREIN, batchId: b.id }, async (rows) => Buffer.from(String(rows.length)));
+  assert.ok(letters.ok && letters.data.toString() === "1");
+});
+
+test("with no mailer configured, mail invitations fall back to link-only right away", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster", email: "erika@example.org" }, { wallet: ALICE }]);
+  const r = await deliverInvitations({ ...w.d, mailer: null }, b.id);
+  assert.deepEqual(r, { pushed: 1, mailed: 0, linkOnly: 1 });
+  const row = await inv(w.store, b.invitations[0].id);
+  assert.equal(row.status, "invited");
+  assert.equal(row.contactEmail, null);
+  assert.equal(row.emailSentAt, null);
+  assert.equal(w.mails.length, 0);
+  assert.deepEqual(await w.store.onchainBatchesWithPreparedInvitations(), []);
+});
+
+test(`a run sends at most ${MAX_MAILS_PER_RUN} mails (shared budget); the rest stay prepared for the next run`, async () => {
+  const w = await world();
+  const people = Array.from({ length: MAX_MAILS_PER_RUN + 1 }, (_, k) => ({ name: `P${k}`, email: `p${k}@example.org` }));
+  const b = await w.batch(w.types.verein.typeId, people);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: MAX_MAILS_PER_RUN, linkOnly: 0 });
+  const left = await w.store.listInvitations({ batchId: b.id, statuses: ["prepared"] });
+  assert.equal(left.length, 1);
+  assert.equal(left[0].mailAttempts, 0);
+  assert.ok(left[0].contactEmail);
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
+
+  // A budget shared across batches (one cron run) caps the total.
+  const w2 = await world();
+  const b1 = await w2.batch(w2.types.verein.typeId, [{ email: "a@example.org" }, { email: "b@example.org" }]);
+  const b2 = await w2.batch(w2.types.verein.typeId, [{ email: "c@example.org" }, { wallet: ALICE }]);
+  const shared = { ...w2.d, mailBudget: { left: 2 } };
+  assert.deepEqual(await deliverInvitations(shared, b1.id), { pushed: 0, mailed: 2, linkOnly: 0 });
+  assert.deepEqual(await deliverInvitations(shared, b2.id), { pushed: 1, mailed: 0, linkOnly: 0 });
+  assert.equal(w2.mails.length, 2);
+});
+
+test("an interrupted mail (taken but never sent or erased) is handed back after 10 minutes, counting the attempt", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [
+    { name: "Alt", email: "alt@example.org" },
+    { name: "Frisch", email: "frisch@example.org" },
+    { name: "Erschöpft", email: "x@example.org" },
+    { wallet: ALICE },
+  ]);
+  const old = new Date(T0 - 11 * 60_000).toISOString();
+  const recent = new Date(T0 - 5 * 60_000).toISOString();
+  // What a death between the take and the send leaves behind.
+  await w.store.updateInvitation(b.invitations[0].id, { status: "invited", invitedAt: old, mailAttempts: 1 });
+  await w.store.updateInvitation(b.invitations[1].id, { status: "invited", invitedAt: recent, mailAttempts: 1 });
+  await w.store.updateInvitation(b.invitations[2].id, { status: "invited", invitedAt: old, mailAttempts: MAX_MAIL_ATTEMPTS });
+  await w.store.updateInvitation(b.invitations[3].id, { status: "invited", invitedAt: old });
+
+  assert.equal(await recoverInterruptedMails(w.store, T0), 2);
+  const a = await inv(w.store, b.invitations[0].id);
+  assert.equal(a.status, "prepared");
+  assert.equal(a.invitedAt, null);
+  assert.equal(a.contactEmail, "alt@example.org");
+  assert.equal((await inv(w.store, b.invitations[1].id)).status, "invited");
+  const exhausted = await inv(w.store, b.invitations[2].id);
+  assert.equal(exhausted.status, "invited");
+  assert.equal(exhausted.contactEmail, null);
+  assert.equal((await inv(w.store, b.invitations[3].id)).status, "invited");
+
+  assert.deepEqual(await deliverInvitations(w.d, b.id), { pushed: 0, mailed: 1, linkOnly: 0 });
+  assert.deepEqual(w.mails.map((m) => m.to), ["alt@example.org"]);
+  assert.equal((await inv(w.store, b.invitations[0].id)).mailAttempts, 2);
+  // An hour later only "Frisch" is stale too; the mailed row (address erased) is never picked again.
+  assert.equal(await recoverInterruptedMails(w.store, T0 + 60 * 60_000), 1);
+  assert.equal((await inv(w.store, b.invitations[0].id)).status, "invited");
+  assert.equal((await inv(w.store, b.invitations[1].id)).status, "prepared");
+});
+
+test("badge mails use the right German; a type without an org or account row is treated as closed", async () => {
+  const w = await world();
+  const m = inviteMail({ to: "a@example.org", type: w.types.badge, orgName: "Heimatverein", membersMayBePublic: true, url: "https://www.roebel.app/invite/ausweis/x" });
+  assert.equal(m.subject, "Dein Abzeichen: Helfer 2026");
+  assert.ok(m.text.includes("ein Abzeichen"), m.text);
+  assert.ok(m.text.includes("So holst du es ab"), m.text);
+  assert.ok(!m.text.includes("einen Abzeichen"), m.text);
+  assert.ok(!m.text.includes("Ausweis"), m.text);
+  const closedBadge = inviteMail({ to: "a@example.org", type: w.types.badge, orgName: null, membersMayBePublic: false, url: "u" });
+  assert.ok(closedBadge.text.includes("ein Abzeichen") && !closedBadge.text.includes("einen Abzeichen"), closedBadge.text);
+  const ausweis = inviteMail({ to: "a@example.org", type: w.types.verein, orgName: "Heimatverein", membersMayBePublic: true, url: "u" });
+  assert.ok(ausweis.text.includes("einen Ausweis") && ausweis.text.includes("So holst du ihn ab") && ausweis.text.includes("den Ausweis"), ausweis.text);
+
+  const community = { ...w.types.verein, typeId: typeIdOf(VEREIN, "gemeinschaft"), accountId: null, name: "Geheimtyp" };
+  const orphan = { ...typeRow(typeIdOf(FRAKTION, "verwaist"), "8b3e4c90-2f5d-4e77-9c30-4d5e6f708192", "membership", "Geheimtyp") };
+  for (const t of [community, orphan]) {
+    await w.store.upsertType(t);
+    const before = { p: w.pushes.length, m: w.mails.length };
+    const b = await w.batch(t.typeId, [{ wallet: ALICE }, { email: "e@example.org" }]);
+    await deliverInvitations(w.d, b.id);
+    const push = w.pushes[before.p];
+    const mail = w.mails[before.m];
+    assert.equal(push.body, "Du hast einen Ausweis erhalten. Öffne die App, um ihn anzusehen.");
+    for (const text of [push.title, push.body, mail.subject, mail.text]) assert.ok(!text.includes("Geheimtyp"), text);
+  }
+});
+
+test("letters include only open claim-key invitations and one page each", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [
+    { wallet: ALICE },
+    { name: "Erika Muster" },
+    { name: "=HYPERLINK(1)", email: "x@example.org" },
+    { name: "Angenommen" },
+    { name: "Widerrufen" },
+  ]);
+  await deliverInvitations(w.d, b.id);
+  await w.store.updateInvitation(b.invitations[3].id, { status: "accepted", recipientWallet: BOB });
+  await w.store.updateInvitation(b.invitations[4].id, { status: "revoked" });
+
+  const calls: { rows: { displayName: string; url: string }[]; ctx: { orgName: string; typeName: string; badge: boolean } }[] = [];
+  const render = async (rows: { displayName: string; url: string }[], ctx: { orgName: string; typeName: string; badge: boolean }) => {
+    calls.push({ rows, ctx });
+    return Buffer.from("%PDF-test");
+  };
+  const caller = (wallet: string): Caller => ({ ok: true, wallet, via: "signature", action: "letters", payload: {} });
+
+  const r = await prepareLetters(w.d, caller(OWNER), { accountId: VEREIN, batchId: b.id }, render);
+  assert.ok(r.ok);
+  assert.equal(r.data.toString(), "%PDF-test");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].ctx, { orgName: "Heimatverein", typeName: "Mitglied", badge: false });
+  // An app caller gets no extra push.
+  assert.equal(w.pushes.filter((x) => (x.type as string) === "credential_letters").length, 0);
+  assert.deepEqual(calls[0].rows, [
+    { displayName: "Erika Muster", url: `https://www.roebel.app/invite/ausweis/${b.invitations[1].token}` },
+    { displayName: "=HYPERLINK(1)", url: `https://www.roebel.app/invite/ausweis/${b.invitations[2].token}` },
+  ]);
+
+  const member = await prepareLetters(w.d, caller(MEMBER), { accountId: VEREIN, batchId: b.id }, render);
+  assert.ok(!member.ok && member.status === 403);
+  const other = await w.batch(w.types.fraktion.typeId, [{ name: "Fremd" }]);
+  const foreign = await prepareLetters(w.d, caller(OWNER), { accountId: VEREIN, batchId: other.id }, render);
+  assert.ok(!foreign.ok && foreign.status === 404);
+  assert.equal(calls.length, 1);
+});
+
+test("renderLetters makes one A4 page per person", async () => {
+  const { renderLetters } = await import("../src/lib/credentials/letters");
+  const pdf = await renderLetters(
+    [
+      { displayName: "Erika Muster", url: "https://www.roebel.app/invite/ausweis/abc" },
+      { displayName: "=SUMME(1)", url: "https://www.roebel.app/invite/ausweis/def" },
+    ],
+    { orgName: "Heimatverein", typeName: "Mitglied", badge: false },
+  );
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+  const pages = pdf.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? [];
+  assert.equal(pages.length, 2);
+});
+
+test("inviteUrl uses the www host", () => {
+  assert.equal(inviteUrl("abc_-1"), "https://www.roebel.app/invite/ausweis/abc_-1");
+  assert.equal(inviteUrl("abc", { NEXT_PUBLIC_SITE_URL: "https://roebel.app/" }), "https://www.roebel.app/invite/ausweis/abc");
+  assert.equal(inviteUrl("abc", { NEXT_PUBLIC_SITE_URL: "https://staging.example.org" }), "https://staging.example.org/invite/ausweis/abc");
+});
+
+test("letters fetched through a pairing session send the caller a neutral push", async () => {
+  const w = await world();
+  const b = await w.batch(w.types.verein.typeId, [{ name: "Erika Muster" }]);
+  await deliverInvitations(w.d, b.id);
+  const before = w.pushes.length;
+  const session: Caller = { ok: true, wallet: OWNER, via: "chat_session", action: "letters", payload: {} };
+  const r = await prepareLetters(w.d, session, { accountId: VEREIN, batchId: b.id }, async () => Buffer.from("%PDF-test"));
+  assert.ok(r.ok);
+  const sent = w.pushes.slice(before);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].wallets, [OWNER]);
+  assert.equal(sent[0].title, "Einladungsbriefe heruntergeladen");
+  assert.equal(sent[0].body, "Am Computer wurden Einladungsbriefe heruntergeladen. Warst du das nicht, melde dich beim Röbel-Team.");
+  for (const t of [sent[0].title, sent[0].body, JSON.stringify(sent[0].data)]) {
+    assert.ok(!t.includes("Heimatverein") && !t.includes(w.types.verein.name), t);
+  }
+  // A refused call sends nothing.
+  const member: Caller = { ...session, wallet: MEMBER };
+  await prepareLetters(w.d, member, { accountId: VEREIN, batchId: b.id }, async () => Buffer.from("x"));
+  assert.equal(w.pushes.length, before + 1);
+});
+
+test("badge wording: closed-org push and letters say 'ein Abzeichen'", async () => {
+  const w = await world();
+  assert.deepEqual(invitePush(w.types.badge, "Heimatverein", false), {
+    title: "Neues Abzeichen",
+    body: "Du hast ein Abzeichen erhalten. Öffne die App, um es anzusehen.",
+  });
+  const { letterWords } = await import("../src/lib/credentials/letters");
+  const badge = letterWords(true);
+  assert.equal(badge.lead, "Du hast ein Abzeichen erhalten.");
+  assert.deepEqual(badge.steps, ["1. Röbel App installieren.", "2. Diesen Code scannen.", "3. Abzeichen annehmen."]);
+  assert.ok(badge.note.includes("das Abzeichen abholen"));
+  assert.ok(!JSON.stringify(badge).includes("Ausweis"));
+  const card = letterWords(false);
+  assert.equal(card.lead, "Du hast einen Ausweis erhalten.");
+  assert.ok(card.note.includes("den Ausweis abholen"));
+});

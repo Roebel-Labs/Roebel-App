@@ -70,7 +70,8 @@
   "contracts": {
     "attesterNFTv2": "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
     "citizenNFTv2": "0x0Be374808A567c9088aC8208B90a4239432B3220",
-    "orgRegistry": "0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7"
+    "orgRegistry": "0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7",
+    "credentialRegistry": "0xB599e7D7F6F78B4862b592bAD868272008ea8796"
   },
   "orgRegistryDeployBlock": 48452489,
   "orgRegistryBands": {
@@ -107,5 +108,37 @@
       "safe": "0xA441D653D3268721112e07aDf481C2AD71050189",
       "revoked": true
     }
+  },
+  "credentialRegistryDeployBlock": 49342321,
+  "credentialRegistryE2E": {
+    "ranAt": "2026-11-18T11:24:05.019Z",
+    "membershipType": "0x0481282a3ea78d76f20951dc889c5ee8dc24e716396c88e1ad16ccc5318eba6c",
+    "membershipLocalId": "0xaf44e6c0f2d50d40cd3843873f663fd8b97147c1530ada4abf98aa69efb54272",
+    "org": "0xf205f4f648e1cbd58a6e7cffa2ad0366cae1ae04e078e6b98afb6d3a582d4222",
+    "batchId": 1,
+    "root": "0x73877b6bc81f39075e8107056da500b53b0d59dc9c449bc4c910b16a9074bc49",
+    "leaves": {
+      "publicClaimedThenRevoked": {
+        "subject": "0x23C1A14d34E2Dd66DB272a916dDbf2a695366706",
+        "leaf": "0x4392f548a1fa980fdd958f49db8032c6ae3d58a14459f7fc2234a82d5abbc0bb"
+      },
+      "privateValid": {
+        "subject": "0x2A8a14a76d7e02FB7ffb4FB1a1b58bC11184225B",
+        "leaf": "0x3ab6b9bf06378e7069ed790941e979cccbd127a40bd6b7dbbe914361ce99989c"
+      },
+      "claimKey": {
+        "key": "0x71e1Da8DA9E88e7Fe81638C1973327C05d80958D",
+        "leaf": "0x3c814e6d7273947d67cde8b5c750ff84720920dbf3babaa4913a41949f7bdeea",
+        "boundTo": "0x5cA779815A65D541d3aAf01B7A6e5c8E25182d77"
+      }
+    },
+    "guest": "0x80474C4E4360321F75cE4b5dE11Ba0BA51d484E8",
+    "holdsCitizen": "0x23C1A14d34E2Dd66DB272a916dDbf2a695366706",
+    "holdsAttester": "0x23C1A14d34E2Dd66DB272a916dDbf2a695366706",
+    "reservedURIs": [
+      "netizen-test://credential-type/citizen.json",
+      "netizen-test://credential-type/attester.json",
+      "netizen-test://credential-type/guest.json"
+    ]
   }
 }

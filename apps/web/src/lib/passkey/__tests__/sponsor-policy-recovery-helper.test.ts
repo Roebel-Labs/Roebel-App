@@ -2,7 +2,7 @@
  * "E-Mail oder Google als Helfer" (Expo lib/passkey/recovery-helper.ts): the passkey Safe adds a
  * thirdweb smart account as a guardian with ONE sponsored op,
  * SRM.addGuardianWithThreshold(helper, t). This pins that the existing policy sponsors exactly
- * that shape for a citizen identity (legacy or Safe), and still refuses it for a non-citizen.
+ * that shape for a citizen identity (legacy or Safe), and for a non-citizen Safe as a guest.
  * The helper's own confirmRecovery on a new phone is a thirdweb smart-account transaction
  * (thirdweb's sponsorship), so it never reaches this policy.
  * Run: cd apps/web && npx tsx --test src/lib/passkey/__tests__/sponsor-policy-recovery-helper.test.ts
@@ -57,8 +57,7 @@ test("a Safe that is not admin of the named legacy account cannot add a helper",
   assert.equal(r.ok, false);
 });
 
-test("a passkey-only Safe without citizenship gets no sponsored helper add (the app hides the action)", async () => {
+test("a passkey-only Safe without citizenship adds the helper as a guest (guest budget)", async () => {
   const r = await evaluateSponsorPolicy(addHelper(1n), SAFE_CTX, fakeChain());
-  assert.equal(r.ok, false);
-  if (!r.ok) assert.match(r.reason, /no CitizenNFT/);
+  assert.deepEqual(r, { ok: true, mode: "safe", budgetKey: SAFE, guest: true });
 });

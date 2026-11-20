@@ -126,8 +126,12 @@ describe('identityModeFor', () => {
       legacy: LEGACY,
     });
   });
-  it('null for a non-citizen Safe or an unfinished handover', () => {
-    expect(identityModeFor({ record: { status: 'passkeyCreated' }, safeIsCitizen: false, legacyIsCitizen: false })).toBeNull();
+  it('safe for a guest account without a legacy record (the server sponsors guests)', () => {
+    expect(identityModeFor({ record: { status: 'passkeyCreated' }, safeIsCitizen: false, legacyIsCitizen: false })).toEqual({
+      mode: 'safe',
+    });
+  });
+  it('null for an unfinished handover', () => {
     expect(
       identityModeFor({ record: { legacy: LEGACY, status: 'passkeyCreated' }, safeIsCitizen: false, legacyIsCitizen: true }),
     ).toBeNull();

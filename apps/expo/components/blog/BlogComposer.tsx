@@ -327,15 +327,15 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 80 },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 6,
   },
-  fieldHint: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: 6 },
+  fieldHint: { fontSize: 11, fontFamily: 'MonaSans-Regular', marginBottom: 6 },
   input: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   },
   inputMulti: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   bodyInput: {
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderStyle: 'dashed',
   },
-  coverPickerText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  coverPickerText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   coverWrap: { position: 'relative' },
   cover: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12 },
   coverRemove: {

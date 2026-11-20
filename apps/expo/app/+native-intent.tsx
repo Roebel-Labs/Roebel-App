@@ -11,6 +11,8 @@
  */
 
 // Route mappings: web path prefix → expo path prefix
+import { redactSecretPath } from '@/lib/navigation/redactPath';
+
 const ROUTE_MAPPINGS: [RegExp, string][] = [
   // Plural → singular (web uses plural, expo uses singular)
   [/^\/events\//, '/event/'],
@@ -24,6 +26,9 @@ const ROUTE_MAPPINGS: [RegExp, string][] = [
 
   // Segment rename
   [/^\/profile\//, '/user/'],
+
+  // Ortis Studio pairing page (QR / universal link) → the in-app confirmation screen
+  [/^\/studio\/verbinden$/, '/chat/pair'],
 ];
 
 /**
@@ -101,7 +106,8 @@ export function redirectSystemPath(options: { path: string; initial: boolean }):
   const result = path + suffix;
 
   if (__DEV__) {
-    console.log(`[native-intent] "${raw}" → "${result}"`);
+    // Invite links carry a one-time token: never in a log line.
+    console.log(`[native-intent] "${redactSecretPath(raw)}" → "${redactSecretPath(result)}"`);
   }
 
   return result;

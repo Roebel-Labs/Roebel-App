@@ -42,61 +42,6 @@ const groupTokenId = BigInt(roebeltalerGroupAddress);
 
 const ZERO_METADATA = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 
-const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
-
-async function circlesQuery(query: Record<string, unknown>): Promise<Record<string, any>[]> {
-	const res = await fetch(CIRCLES_RPC, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_query", params: [query] }),
-	});
-	const json = await res.json();
-	const result = json?.result ?? { columns: [], rows: [] };
-	const columns: string[] = result.columns ?? [];
-	const rows: any[][] = result.rows ?? [];
-	return rows.map((r) => Object.fromEntries(columns.map((c, i) => [c, r[i]])));
-}
-
-/**
- * Finds the citizen who invited `addr` (i.e. trusted them — e.g. via Metri). That
- * inviter is required for registerHuman. Returns null if nobody has invited them yet.
- */
-export async function findInviter(addr: string): Promise<string | null> {
-	try {
-		const lower = addr.toLowerCase();
-		const group = roebeltalerGroupAddress.toLowerCase();
-		const rows = await circlesQuery({
-			Namespace: "V_Crc",
-			Table: "TrustRelations",
-			Columns: [],
-			Filter: [{
-				Type: "Conjunction", ConjunctionType: "And", Predicates: [
-					{ Type: "FilterPredicate", FilterType: "Equals", Column: "version", Value: 2 },
-					{ Type: "FilterPredicate", FilterType: "Equals", Column: "trustee", Value: lower },
-				],
-			}],
-			Order: [],
-		});
-		// Candidates that trust us — EXCLUDING ourselves and the Röbeltaler GROUP
-		// (the group trusts all citizens for collateral, but it is NOT a valid human
-		// inviter — registerHuman(group) reverts with CirclesErrorOneAddressArg).
-		const candidates = rows
-			.map((r) => String(r.truster ?? ""))
-			.filter((t) => t && t.toLowerCase() !== lower && t.toLowerCase() !== group);
-		// Only a registered HUMAN counts as an inviter. Non-human trusters exist for
-		// every citizen (e.g. the group's mint-handler ORGANIZATION trusts members as
-		// minting plumbing) and registerHuman(nonHuman) always reverts on-chain with
-		// CirclesErrorOneAddressArg(inviter, 160) — so never fall back to them:
-		// no human truster ⇒ null ⇒ the app shows the proper "not invited yet" sheet.
-		for (const c of candidates) {
-			try { if (await isOnboarded(c)) return c; } catch { /* keep looking */ }
-		}
-		return null;
-	} catch {
-		return null;
-	}
-}
-
 /** True once the address is onboarded (a Circles human) — i.e. can mint daily. */
 export async function isOnboarded(address: string): Promise<boolean> {
 	return readContract({
@@ -587,17 +532,24 @@ export function prepareOnboard(inviter: string): PreparedTransaction {
 const FAR_EXPIRY = 4102444800n; // ~year 2100 (uint96) — far-future trust expiry
 
 /**
- * Peer-invite: a citizen trusts `addr` (the Circles "invitation"). Once trusted, that
- * address can registerHuman(citizen) and become a plain Circles human — minting their own
- * personal "Münzen" (NOT the Röbel Münzen group token). The ~96 CRC invite cost is burned
- * from the citizen when the guest registers. This does NOT grant RCRC minting (that needs a
- * CitizenNFT + the group's on-chain membership condition).
+ * Invitation: a joined citizen trusts `addr`. Once trusted, that address can
+ * registerHuman(citizen) — which burns 96 of the CITIZEN'S OWN personal Münzen and mints the
+ * 48 welcome bonus to the newcomer. See lib/muenzen-invite.ts for the saving/reserve rules.
  */
 export function prepareTrust(addr: string): PreparedTransaction {
 	return prepareContractCall({
 		contract: hubWrite,
 		method: "function trust(address,uint96)",
 		params: [addr, FAR_EXPIRY],
+	});
+}
+
+/** Withdraw an open invitation: an expiry in the past ends the trust with the current block. */
+export function prepareWithdrawTrust(addr: string): PreparedTransaction {
+	return prepareContractCall({
+		contract: hubWrite,
+		method: "function trust(address,uint96)",
+		params: [addr, 0n],
 	});
 }
 

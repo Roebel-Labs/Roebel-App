@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     lineHeight: 18,
   },

@@ -94,5 +94,16 @@ if (Platform.OS !== "web") {
   }
 }
 
+// Android home-screen widget "Mini Apps": headless handler for add/resize/periodic updates.
+if (Platform.OS === "android") {
+  try {
+    const { registerWidgetTaskHandler } = require("react-native-android-widget");
+    const { widgetTaskHandler } = require("./widgets/task-handler");
+    registerWidgetTaskHandler(widgetTaskHandler);
+  } catch (e) {
+    console.warn("Widget task handler not registered:", e?.message ?? e);
+  }
+}
+
 import "react-native-reanimated";
 import "expo-router/entry";

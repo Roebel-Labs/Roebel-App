@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
+import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   movies: MovieRecord[];
@@ -15,6 +16,8 @@ const renderMovieCard = ({ item }: { item: MovieRecord }) => <MovieCard movie={i
 const movieKey = (movie: MovieRecord) => movie.id;
 
 function MovieSection({ movies }: Props) {
+  // In the Austausch feed: locks the tab pager while a finger is on this rail.
+  const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -56,6 +59,7 @@ function MovieSection({ movies }: Props) {
       </View>
       <FlatList
         horizontal
+        {...railLockHandlers}
         data={upcomingMovies}
         renderItem={renderMovieCard}
         keyExtractor={movieKey}

@@ -5,12 +5,15 @@
  *
  *   POST /api/passkey/key-backup/get  { identity, proof: { timestamp, signature } }
  *        proof = identity's signature over buildKeyBackupProofMessage({ action: 'read', ... })
- *        -> 200 { blobs: { maci?, nostr?, salt? } }   ({} = no backup)
- *   POST /api/passkey/key-backup/put  { identity, blobs: { maci?, nostr?, salt? }, replace?, proof }
+ *        -> 200 { blobs: { maci?, nostr?, salt?, maci_w?, nostr_w?, salt_w?, wvk? } }   ({} = no backup)
+ *   POST /api/passkey/key-backup/put  { identity, blobs: { …same slots }, replace?, proof }
  *        proof over { action: 'write', contentHash = sha256(keyBackupContent(blobs, replace)) }
  *        -> 200 { ok, stored: [slots] }
  *        409 { error: 'exists', slots } when a slot already holds a DIFFERENT blob and
  *        replace is not true (a new device must never silently overwrite the real key).
+ *   Slots: maci / nostr / salt are wrapped under the passkey PRF; maci_w / nostr_w / salt_w are the
+ *   same secrets wrapped under the recovery-words vault key; wvk is that vault key wrapped under
+ *   the PRF. All of them are ciphertext. The client writes the words slots with replace: true.
  *
  * Passkey API session token (PASSKEY_SESSION_TOKENS_ENABLED=1, lib/passkey/session-token-core.ts):
  * a request WITHOUT `proof` may instead carry `Authorization: Bearer pst1.…` + `x-roebel-device`
@@ -28,13 +31,13 @@
 import { NextResponse } from "next/server";
 import { isAddress, isHex, type Address, type Hex } from "viem";
 import {
+  KEY_BACKUP_BLOB_KEYS,
   KEY_BACKUP_BLOB_RE,
-  KEY_BACKUP_SLOTS,
   buildKeyBackupProofMessage,
+  isKeyBackupBlobKey,
   isKeyBackupProofFresh,
-  isKeyBackupSlot,
   keyBackupContentHash,
-  type KeyBackupSlot,
+  type KeyBackupBlobs,
 } from "./key-backup-proof";
 import type { KeyBackupStore } from "./key-backup-store";
 import type { PasskeySessionAuth } from "./session-token-core";
@@ -78,11 +81,11 @@ function parseProof(v: unknown): { timestamp: number; signature: Hex } | null {
   return { timestamp, signature: signature as Hex };
 }
 
-function parseBlobs(v: unknown): Partial<Record<KeyBackupSlot, string>> | null {
+function parseBlobs(v: unknown): KeyBackupBlobs | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  const out: Partial<Record<KeyBackupSlot, string>> = {};
+  const out: KeyBackupBlobs = {};
   for (const [k, blob] of Object.entries(v as Record<string, unknown>)) {
-    if (!isKeyBackupSlot(k) || typeof blob !== "string" || !KEY_BACKUP_BLOB_RE.test(blob)) return null;
+    if (!isKeyBackupBlobKey(k) || typeof blob !== "string" || !KEY_BACKUP_BLOB_RE.test(blob)) return null;
     out[k] = blob;
   }
   return Object.keys(out).length > 0 ? out : null;
@@ -165,7 +168,7 @@ export async function handleKeyBackupPut(req: Request, deps: KeyBackupDeps): Pro
   try {
     if (!replace) {
       const existing = await deps.store.get(identity);
-      const conflicts = KEY_BACKUP_SLOTS.filter((s) => blobs[s] !== undefined && existing[s] !== undefined && existing[s] !== blobs[s]);
+      const conflicts = KEY_BACKUP_BLOB_KEYS.filter((s) => blobs[s] !== undefined && existing[s] !== undefined && existing[s] !== blobs[s]);
       if (conflicts.length > 0) return err("exists", 409, { slots: conflicts });
     }
     await deps.store.put(identity, blobs);
@@ -173,5 +176,5 @@ export async function handleKeyBackupPut(req: Request, deps: KeyBackupDeps): Pro
     console.error("[passkey-key-backup] store failed:", errName(e));
     return err("store_unavailable", 503);
   }
-  return json({ ok: true, stored: KEY_BACKUP_SLOTS.filter((s) => blobs[s] !== undefined) });
+  return json({ ok: true, stored: KEY_BACKUP_BLOB_KEYS.filter((s) => blobs[s] !== undefined) });
 }

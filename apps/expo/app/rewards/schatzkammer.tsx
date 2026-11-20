@@ -380,11 +380,11 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 28,
   },
   subtitle: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     marginTop: -6,
   },
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     height: 36,
   },
   rcrcBadgeText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
     color: '#00498B',
   },
@@ -437,12 +437,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   buyTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 20,
     textAlign: 'center',
   },
   buyBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -458,11 +458,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buyStatLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
   buyStatValue: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
   },
   buyCTA: {
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buyCancelText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
 });
