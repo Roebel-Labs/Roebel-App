@@ -90,6 +90,8 @@ export interface DesignStore {
   versionsOf(draftId: string): Promise<VersionRow[]>;
   /** Compare-and-set when `ifStatus` is given; true when the row changed. */
   setVersionStatus(sha: string, status: VersionStatus, actionId?: string | null, ifStatus?: readonly VersionStatus[]): Promise<boolean>;
+  /** Records the type a first publication created (known only after its createType was prepared). */
+  setVersionType(sha: string, typeId: string): Promise<void>;
   /** The newest live version of a type. */
   liveVersionOfType(typeId: string): Promise<VersionRow | null>;
   versionByAction(actionId: string): Promise<VersionRow | null>;
@@ -168,6 +170,10 @@ export class InMemoryDesignStore implements DesignStore {
     v.status = status;
     if (actionId !== undefined) v.actionId = actionId;
     return true;
+  }
+  async setVersionType(sha: string, typeId: string) {
+    const v = this.versions.get(sha);
+    if (v) v.typeId = typeId;
   }
   async liveVersionOfType(typeId: string) {
     const live = [...this.versions.values()].filter((v) => v.typeId === typeId && v.status === "live").sort((a, b) => b.version - a.version);

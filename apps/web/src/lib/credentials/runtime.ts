@@ -13,6 +13,7 @@ import { createResendMailer } from "@/lib/passkey/email-mailer";
 import { sendNotificationNotifier } from "./notify";
 import { createNodeRegistryReader } from "./rights";
 import { supabaseCredentialStore } from "./store-supabase";
+import { supabaseDesignStore } from "./designs/store-supabase";
 import { applyConfirmedAction, type SyncDeps } from "./sync";
 
 const DEFAULT_GNOSIS_RPC = "https://rpc.gnosischain.com";
@@ -31,7 +32,8 @@ export function credentialSyncDeps(): SyncDeps | null {
   const cfg = registryConfig();
   if (!cfg) return null;
   const client = gnosisClient();
-  const store = supabaseCredentialStore(createAdminClient());
+  const admin = createAdminClient();
+  const store = supabaseCredentialStore(admin);
   const notify = sendNotificationNotifier();
   const resendKey = process.env.RESEND_API_KEY;
   // One mail budget per deps object, i.e. per request: the cron's sync and sweep share it.
@@ -64,6 +66,7 @@ export function credentialSyncDeps(): SyncDeps | null {
     },
     notify,
     now: () => Date.now(),
+    designs: supabaseDesignStore(admin),
   };
 }
 
@@ -93,6 +96,7 @@ export function credentialDeps(): Deps | null {
     applyConfirmed: async (actionId, logs) => {
       if (sync) await applyConfirmedAction(sync, actionId, logs);
     },
+    designs: sync?.designs ?? supabaseDesignStore(createAdminClient()),
   };
 }
 

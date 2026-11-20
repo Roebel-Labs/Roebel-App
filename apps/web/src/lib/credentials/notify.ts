@@ -2,7 +2,8 @@
 // Supabase edge function (same call as lib/chat/push.ts). Best effort: never throws.
 // Relative imports only: loaded by `npx tsx --test`.
 
-export type CredentialPushType = "credential_action" | "credential_invite" | "credential_visibility" | "credential_letters";
+/** `design_test`: a card design draft sent to its editors' phones for testing (plan D2). */
+export type CredentialPushType = "credential_action" | "credential_invite" | "credential_visibility" | "credential_letters" | "design_test";
 
 export interface Notifier {
   push(p: { wallets: string[]; type: CredentialPushType; title: string; body: string; data: Record<string, string> }): Promise<void>;

@@ -7,6 +7,7 @@ import { TEMPLATES, designHash, isBuiltinAsset, validateDesign, type CardDesign 
 import type { Caller } from "../caller";
 import { orgContextFor, type OrgContext } from "../rights";
 import type { CredentialStore } from "../store";
+import { reconcilePending } from "./lifecycle";
 import { designerEnabled, type DesignKind, type DesignStore, type DraftRow, type VersionRow } from "./store";
 
 export type DesignFail = { ok: false; status: number; code: string; message: string; data?: unknown };
@@ -81,8 +82,16 @@ export function sameAsVersion(draft: Pick<DraftRow, "design" | "name">, v: Versi
   return designHash(draft.design) === designHash(v.design) && draft.name === v.meta.name;
 }
 
-export async function draftView(d: DesignDeps, draft: DraftRow): Promise<DraftView> {
-  const versions = await d.store.versionsOf(draft.id);
+/** The view of a draft; a pending version whose action settled meanwhile is settled first. */
+export async function draftView(d: DesignDeps, row: DraftRow): Promise<DraftView> {
+  const versions: VersionRow[] = [];
+  let settled = false;
+  for (const v of await d.store.versionsOf(row.id)) {
+    const now = await reconcilePending(d.store, d.credStore, v, d.now());
+    if (now.status !== v.status) settled = true;
+    versions.push(now);
+  }
+  const draft = settled ? ((await d.store.getDraft(row.id)) ?? row) : row;
   const live = versions.find((v) => v.status === "live") ?? null;
   const pending = versions.find((v) => v.status === "pending") ?? null;
   return {
@@ -101,7 +110,8 @@ export async function draftView(d: DesignDeps, draft: DraftRow): Promise<DraftVi
 }
 
 async function withDesign(d: DesignDeps, draft: DraftRow): Promise<DraftWithDesign> {
-  return { ...(await draftView(d, draft)), design: draft.design };
+  const view = await draftView(d, draft);
+  return { ...view, design: draft.design };
 }
 
 // ── actions ───────────────────────────────────────────────────────────────────

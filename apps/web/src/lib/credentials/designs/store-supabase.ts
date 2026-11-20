@@ -164,6 +164,9 @@ export function supabaseDesignStore(db: SupabaseClient): DesignStore {
       check("setVersionStatus", r);
       return ((r.data ?? []) as Row[]).length > 0;
     },
+    async setVersionType(sha, typeId) {
+      check("setVersionType", await db.from(T.versions).update({ type_id: typeId }).eq("sha", sha));
+    },
     async liveVersionOfType(typeId) {
       const r = await db.from(T.versions).select("*").eq("type_id", typeId).eq("status", "live").order("version", { ascending: false }).limit(1);
       check("liveVersionOfType", r);

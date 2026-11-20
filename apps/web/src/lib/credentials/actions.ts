@@ -26,6 +26,9 @@ import type { Notifier } from "./notify";
 import { chainReadiness, membersMayBePublic, needsPrivateOnlyStep, orgContextFor, type NodeRegistryReader, type OrgContext } from "./rights";
 import type { ActionRow, ActionStatus, ActionVia, CredentialStore, Kind, TypeRow } from "./store";
 import { TYPE_TEMPLATES, isTemplateKey } from "./templates";
+import { abandonDesignVersion } from "./designs/lifecycle";
+import { designUrl } from "./designs/public";
+import type { DesignStore } from "./designs/store";
 
 export type Fail = { ok: false; status: number; code: string; message: string };
 export type Result<T> = { ok: true; data: T } | Fail;
@@ -46,6 +49,11 @@ export type Deps = {
   registry: Address;
   /** Task 6 `applyConfirmedAction` bound to its SyncDeps: applies the receipt's register logs to the mirror. */
   applyConfirmed: (actionId: string, logs: readonly RegisterLog[]) => Promise<void>;
+  /**
+   * Card designs (plan D2): a cancelled or expired action gives its pending design version up, and
+   * a type's current metadataURI is its live design version's URL. Optional: absent = no designs.
+   */
+  designs?: DesignStore;
 };
 
 export type ActionView = {
@@ -170,7 +178,9 @@ async function actionFor(d: Deps, c: Caller, actionId: unknown): Promise<{ actio
 /** Marks an awaiting action whose time ran out as expired (compare-and-set) and returns the current row. */
 async function expireIfDue(d: Deps, a: ActionRow): Promise<ActionRow> {
   if (a.status !== "awaiting_confirmation" || Date.parse(a.expiresAt) > d.now()) return a;
-  await d.store.updateAction(a.id, { status: "expired" }, ["awaiting_confirmation"]);
+  if (await d.store.updateAction(a.id, { status: "expired" }, ["awaiting_confirmation"])) {
+    if (d.designs) await abandonDesignVersion(d.designs, a.id);
+  }
   return (await d.store.getAction(a.id)) ?? { ...a, status: "expired" };
 }
 
@@ -237,6 +247,11 @@ type TypeInput = {
   claimStart?: string;
   claimEnd?: string;
   via?: ActionVia;
+  /**
+   * Card designer (plan D2): the published design version's URL. Replaces the node metadata URL in
+   * the on-chain config; on update a new URI alone prepares an updateType step.
+   */
+  metadataURI?: string;
 };
 
 type Clean = {
@@ -249,6 +264,7 @@ type Clean = {
   supplyCap?: number;
   claimStart?: string | null;
   claimEnd?: string | null;
+  metadataURI?: string;
 };
 
 function cleanTypeInput(p: TypeInput): Clean | Fail {
@@ -294,6 +310,10 @@ function cleanTypeInput(p: TypeInput): Clean | Fail {
     out[key] = new Date(Date.parse(v)).toISOString();
   }
   if (out.claimStart && out.claimEnd && Date.parse(out.claimEnd) <= Date.parse(out.claimStart)) return bad("Das Ende muss nach dem Beginn liegen.");
+  if (p.metadataURI !== undefined) {
+    if (typeof p.metadataURI !== "string" || p.metadataURI.length > 512 || !/^https?:\/\/\S+$/.test(p.metadataURI)) return bad("Ungültige Adresse der Gestaltung.");
+    out.metadataURI = p.metadataURI;
+  }
   return out;
 }
 
@@ -365,10 +385,12 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
     if (kind === "membership" && needsPrivateOnlyStep(org, await d.reader.orgPrivateOnly(org.orgId))) {
       steps.push({ fn: "setOrgPrivateOnly", orgId: org.orgId, privateOnly: true });
     }
-    steps.push({ fn: "createType", orgId: org.orgId, localId, kind, policy: "issuerBatch", config: configOf(row) });
+    const createConfig = clean.metadataURI ? { ...configOf(row), metadataURI: clean.metadataURI } : configOf(row);
+    steps.push({ fn: "createType", orgId: org.orgId, localId, kind, policy: "issuerBatch", config: createConfig });
 
     await d.store.upsertType(row);
     const lines = [`Art: ${KIND_LABEL[kind]}`];
+    if (clean.metadataURI) lines.push("Mit eigener Gestaltung.");
     if (steps.length > 1) lines.push("Mitglieder dieser Organisation sind nur privat sichtbar.");
     const { actionId } = await prepareAction(d, { org, wallet: c.wallet, via, steps, summary: { title: `Ausweis „${name}“ anlegen`, lines, orgName: org.name } });
     return ok({ actionId, typeId });
@@ -405,20 +427,27 @@ export async function prepareTypeAction(d: Deps, c: Caller, p: TypeInput): Promi
   if (clean.description !== undefined) display.description = clean.description;
   if (clean.imageUrl !== undefined) display.imageUrl = clean.imageUrl;
   if (clean.benefits !== undefined) display.benefits = clean.benefits;
-  // The on-chain config lands in the row through the sync (TypeConfigured).
-  const current = configOf(t);
-  const config = configOf({
-    typeId: t.typeId,
-    defaultValiditySeconds: t.defaultValiditySeconds,
-    claimStart: clean.claimStart !== undefined ? clean.claimStart : t.claimStart,
-    claimEnd: clean.claimEnd !== undefined ? clean.claimEnd : t.claimEnd,
-    supplyCap: clean.supplyCap ?? t.supplyCap,
-    publicClaim: clean.publicClaim ?? t.publicClaim,
-  });
+  // The on-chain config lands in the row through the sync (TypeConfigured). A type with a live
+  // card design carries that version's URL on chain, so a plain config edit keeps it.
+  const live = d.designs ? await d.designs.liveVersionOfType(t.typeId) : null;
+  const currentURI = live ? designUrl(live.sha) : configOf(t).metadataURI;
+  const current = { ...configOf(t), metadataURI: currentURI };
+  const config = {
+    ...configOf({
+      typeId: t.typeId,
+      defaultValiditySeconds: t.defaultValiditySeconds,
+      claimStart: clean.claimStart !== undefined ? clean.claimStart : t.claimStart,
+      claimEnd: clean.claimEnd !== undefined ? clean.claimEnd : t.claimEnd,
+      supplyCap: clean.supplyCap ?? t.supplyCap,
+      publicClaim: clean.publicClaim ?? t.publicClaim,
+    }),
+    metadataURI: clean.metadataURI ?? currentURI,
+  };
   if (Object.keys(display).length > 0) await d.store.updateType(t.typeId, display);
   // updateType clears `recognised` on chain, so it is only prepared for a real config change.
   if (sameConfig(current, config)) return ok({ actionId: null, typeId: t.typeId });
-  const lines = t.recognised ? ["Die Anerkennung als Amt entfällt und muss neu erteilt werden."] : [];
+  const lines = config.metadataURI !== current.metadataURI ? ["Neue Gestaltung des Ausweises."] : [];
+  if (t.recognised) lines.push("Die Anerkennung als Amt entfällt und muss neu erteilt werden.");
   const { actionId } = await prepareAction(d, {
     org,
     wallet: c.wallet,
@@ -779,6 +808,8 @@ export async function cancelAction(d: Deps, c: Caller, actionId: string): Promis
   const a = await expireIfDue(d, found.action);
   if (a.status === "expired") return ACTION_EXPIRED;
   if (!(await d.store.updateAction(a.id, { status: "cancelled" }, ["awaiting_confirmation"]))) return ACTION_NOT_PENDING;
+  // A design version waiting on this action is given up; the previous one stays live.
+  if (d.designs) await abandonDesignVersion(d.designs, a.id);
   // Free the roots of batches that will now never be sent.
   for (const b of await d.store.listBatches({ actionId: a.id, statuses: ["prepared"] })) {
     await d.store.updateBatch(b.id, { status: "cancelled" }, ["prepared"]);

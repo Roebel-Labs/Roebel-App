@@ -15,6 +15,8 @@ import type { ActionStatus, BatchRow, CredentialStore, Kind, Policy, TypeRow } f
 import type { Notifier } from "./notify";
 import { recoverInterruptedMails } from "./delivery";
 import { badgeDelegateAddress } from "./badge-delegate";
+import { designShaOfUri, promoteDesignVersion, promoteDesignVersionBySha } from "./designs/lifecycle";
+import type { DesignStore } from "./designs/store";
 
 export type SyncDeps = {
   store: CredentialStore;
@@ -29,6 +31,8 @@ export type SyncDeps = {
   now?: () => number;
   /** The node's badge delegate key; defaults to CREDENTIAL_BADGE_DELEGATE_KEY's address (null = not configured). */
   badgeDelegate?: string | null;
+  /** Card designs (plan D2): a confirmed publication makes its version live. Absent = no designs. */
+  designs?: DesignStore;
 };
 
 const DEFAULT_MAX_BLOCKS = 20_000n;
@@ -101,6 +105,9 @@ async function onTypeCreated(d: SyncDeps, a: Record<string, unknown>): Promise<v
 
 async function onTypeConfigured(d: SyncDeps, a: Record<string, unknown>): Promise<void> {
   const c = a.config as Record<string, unknown>;
+  // The chain configured a design URL: that version is live even if the phone's receipt never came.
+  const sha = d.designs && typeof c.metadataURI === "string" ? designShaOfUri(c.metadataURI) : null;
+  if (d.designs && sha) await promoteDesignVersionBySha(d.designs, d.store, sha, lc<string>(a.typeId));
   await d.store.updateType(lc<Hex>(a.typeId), {
     defaultValiditySeconds: Number(BigInt(c.defaultValidity as bigint)),
     claimStart: isoOrNull(c.claimStart),
@@ -260,6 +267,7 @@ export async function applyRegisterLogs(d: SyncDeps, logs: readonly RegisterLog[
 export async function applyConfirmedAction(d: SyncDeps, actionId: string, logs: readonly RegisterLog[]): Promise<void> {
   await applyRegisterLogs(d, logs);
   await d.store.updateAction(actionId, { status: "done", error: null }, NOT_DONE);
+  if (d.designs) await promoteDesignVersion(d.designs, d.store, actionId);
 }
 
 /**

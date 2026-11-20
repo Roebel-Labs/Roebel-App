@@ -5,6 +5,7 @@ import type { Hex } from "viem";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataFor, reservedMetadataFor } from "@/lib/credentials/metadata";
 import { supabaseCredentialStore } from "@/lib/credentials/store-supabase";
+import { supabaseDesignStore } from "@/lib/credentials/designs/store-supabase";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ typeId: string
 
   try {
     // Drafts are served only while their createType action is live (see metadataFor).
-    const meta = await metadataFor(supabaseCredentialStore(createAdminClient()), typeId as Hex);
+    const admin = createAdminClient();
+    const meta = await metadataFor(supabaseCredentialStore(admin), typeId as Hex, Date.now(), supabaseDesignStore(admin));
     if (!meta) return NextResponse.json({ error: "Unbekannter Ausweis." }, { status: 404 });
     return NextResponse.json(meta, { headers: CACHE });
   } catch (err) {

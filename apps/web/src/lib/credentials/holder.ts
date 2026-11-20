@@ -16,6 +16,8 @@ import type { NodeRegistryReader } from "./rights";
 import { openSecret } from "./secrets";
 import type { AccountRow, BatchRow, CredentialStore, EventRow, InvitationRow, TypeRow } from "./store";
 import type { CredentialAction } from "../signed-request/message";
+import type { CardDesign } from "@roebel/card-design";
+import type { DesignStore, VersionRow } from "./designs/store";
 
 /** The actions of POST /api/credentials/me. holdings and present_resolve also accept a pairing session. */
 export const ME_ACTIONS: readonly CredentialAction[] = ["mine", "redeem", "respond", "holdings", "present_create", "present_resolve", "badge_nudge"];
@@ -32,6 +34,8 @@ export type HolderDeps = {
   now: () => number;
   /** Counts one redeem attempt for the wallet; false when the per-minute limit is reached. */
   takeRedeem?: (wallet: string) => Promise<boolean>;
+  /** Card designs (plan D2): each item carries its type's live design. Absent = no designs. */
+  designs?: DesignStore;
 };
 
 export type InvitationView = {
@@ -54,6 +58,10 @@ export type InvitationView = {
   };
   org: { accountId: string; name: string; avatarUrl: string | null } | null;
   validUntil: string | null;
+  /** The type's live card design (drawn on the holder's device with the personal fields), or null. */
+  design: CardDesign | null;
+  /** sha of that design version (its immutable URL: /api/credentials/designs/<sha>). */
+  designSha: string | null;
   claim: {
     batchId: string;
     leaf: { kind: "account" | "claimKey"; typeId: Hex; subject: Address; validUntil: string; salt: Hex };
@@ -111,6 +119,7 @@ function viewContext(d: HolderDeps) {
   const accounts = new Map<string, Promise<AccountRow | null>>();
   const privateOnly = new Map<string, Promise<boolean>>();
   const events = new Map<string, Promise<EventRow | null>>();
+  const designs = new Map<string, Promise<VersionRow | null>>();
   const memo = <T>(m: Map<string, Promise<T>>, k: string, f: () => Promise<T>) => {
     if (!m.has(k)) m.set(k, f());
     return m.get(k)!;
@@ -120,6 +129,7 @@ function viewContext(d: HolderDeps) {
     type: (id: Hex) => memo(types, id.toLowerCase(), () => d.store.getType(id)),
     account: (id: string) => memo(accounts, id, () => d.store.getAccount(id)),
     event: (id: string) => memo(events, id, () => d.store.getEvent(id)),
+    liveDesign: (typeId: Hex) => memo(designs, typeId.toLowerCase(), async () => (d.designs ? d.designs.liveVersionOfType(typeId.toLowerCase()) : null)),
     // Read from the chain at request time: an org that was just opened is open right away.
     privateOnly: (orgId: Hex) => memo(privateOnly, orgId.toLowerCase(), () => d.reader.orgPrivateOnly(orgId)),
   };
@@ -142,6 +152,7 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
   const privateOnly = type.kind === "membership" ? await ctx.privateOnly(type.orgId) : false;
   const event = type.eventId ? await ctx.event(type.eventId) : null;
   const revoked = inv.status === "revoked" || batch.status === "revoked";
+  const live = await ctx.liveDesign(type.typeId);
   return {
     id: inv.id,
     state: revoked ? "revoked" : inv.status,
@@ -160,6 +171,8 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
     },
     org: account ? { accountId: account.id, name: account.name, avatarUrl: account.avatarUrl } : null,
     validUntil: isoOfSeconds(inv.validUntil),
+    design: live?.design ?? null,
+    designSha: live?.sha ?? null,
     claim: {
       batchId: batch.chainBatchId,
       leaf: {

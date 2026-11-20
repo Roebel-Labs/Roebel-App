@@ -1,5 +1,5 @@
 // Card designer actions for Ortis Studio and the app: owner/admin orgs, drafts (list, get, save,
-// delete), the org's images. Accepts the app's signed request and the pairing session (lib/credentials/caller.ts).
+// delete), the org's images, test-send and publish. Accepts the app's signed request and the pairing session (lib/credentials/caller.ts).
 // Drafts work without the register; they sit behind app_settings.credential_designer_enabled.
 import { NextRequest, NextResponse } from "next/server";
 import { failResponse, jsonFail, jsonOk } from "@/lib/signed-request/verify";
@@ -7,6 +7,9 @@ import { authenticateCaller, DESIGN_ACTIONS } from "@/lib/credentials/caller";
 import { deleteDraft, getDraft, listDesignOrgs, listDrafts, saveDraft, type DesignResult } from "@/lib/credentials/designs/drafts";
 import type { DesignKind } from "@/lib/credentials/designs/store";
 import { listAssets } from "@/lib/credentials/designs/assets";
+import { publishDraft, sendTest, type PublishDeps } from "@/lib/credentials/designs/publish";
+import { credentialDeps } from "@/lib/credentials/runtime";
+import { sendNotificationNotifier } from "@/lib/credentials/notify";
 import { designDeps } from "@/lib/credentials/designs/runtime";
 
 export const runtime = "nodejs";
@@ -17,6 +20,10 @@ function respond<T>(r: DesignResult<T>) {
   // DRAFT_CONFLICT carries the newer draft so the editor can merge or reload.
   if (r.data !== undefined) return NextResponse.json({ ok: false, code: r.code, message: r.message, data: r.data }, { status: r.status });
   return jsonFail(r.status, r.code, r.message);
+}
+
+function publishDeps(d: ReturnType<typeof designDeps>): PublishDeps {
+  return { ...d, notify: sendNotificationNotifier(), register: credentialDeps() };
 }
 
 export async function POST(request: NextRequest) {
@@ -47,6 +54,11 @@ export async function POST(request: NextRequest) {
         );
       case "design_draft_delete":
         return respond(await deleteDraft(d, c, { draftId: String(p.draftId ?? "") }));
+      case "design_test_send":
+        return respond(await sendTest(publishDeps(d), c, { draftId: String(p.draftId ?? "") }));
+      case "design_publish":
+        // Needs the register (credentialDeps); the org must be on chain and the caller allowed there.
+        return respond(await publishDraft(publishDeps(d), c, { draftId: String(p.draftId ?? "") }));
       case "design_assets_list":
         return respond(await listAssets(d, c, { accountId: String(p.accountId ?? "") }));
       default:
