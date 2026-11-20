@@ -1,11 +1,12 @@
 // Card designer actions for Ortis Studio and the app: owner/admin orgs, drafts (list, get, save,
-// delete). Accepts the app's signed request and the pairing session (lib/credentials/caller.ts).
+// delete), the org's images. Accepts the app's signed request and the pairing session (lib/credentials/caller.ts).
 // Drafts work without the register; they sit behind app_settings.credential_designer_enabled.
 import { NextRequest, NextResponse } from "next/server";
 import { failResponse, jsonFail, jsonOk } from "@/lib/signed-request/verify";
 import { authenticateCaller, DESIGN_ACTIONS } from "@/lib/credentials/caller";
 import { deleteDraft, getDraft, listDesignOrgs, listDrafts, saveDraft, type DesignResult } from "@/lib/credentials/designs/drafts";
 import type { DesignKind } from "@/lib/credentials/designs/store";
+import { listAssets } from "@/lib/credentials/designs/assets";
 import { designDeps } from "@/lib/credentials/designs/runtime";
 
 export const runtime = "nodejs";
@@ -46,6 +47,8 @@ export async function POST(request: NextRequest) {
         );
       case "design_draft_delete":
         return respond(await deleteDraft(d, c, { draftId: String(p.draftId ?? "") }));
+      case "design_assets_list":
+        return respond(await listAssets(d, c, { accountId: String(p.accountId ?? "") }));
       default:
         return jsonFail(400, "BAD_REQUEST", "Unbekannte Aktion.");
     }

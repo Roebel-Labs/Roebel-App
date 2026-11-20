@@ -27,6 +27,7 @@ const nextConfig = {
   transpilePackages: [
     "@netizen-labs/miniapp-sdk", "@netizen-labs/workspace", "@netizen-labs/record-client",
     "@netizen-labs/nostr", "@netizen-labs/protocol", "@netizen-labs/credential-registry",
+    "@roebel/card-design",
   ],
   // Keep heavy server-only packages OUT of the webpack bundle (loaded from
   // node_modules at runtime instead). @safe-global/protocol-kit pulls in
@@ -49,7 +50,19 @@ const nextConfig = {
     "mcp-handler",
     "@modelcontextprotocol/sdk",
     "@vercel/functions",
+    // Card designer preview rendering (lib/credentials/designs/render.ts): the wasm build loads
+    // its .wasm from disk next to the package, so it stays a node_modules package.
+    "canvaskit-wasm",
   ],
+  // The design routes read canvaskit.wasm, the curated fonts and the built-in art from disk at
+  // runtime (render.ts resolves them from process.cwd()), which the tracer cannot see.
+  outputFileTracingIncludes: {
+    "/api/credentials/designs": [
+      "./node_modules/canvaskit-wasm/bin/canvaskit.wasm",
+      "../../packages/card-design/fonts/*.ttf",
+      "../../packages/card-design/assets/builtin/*.png",
+    ],
+  },
   images: {
     remotePatterns: [
       {
