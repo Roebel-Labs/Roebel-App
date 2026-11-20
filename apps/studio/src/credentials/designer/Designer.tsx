@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { designSize, removeLayer, updateLayer, type CardDesign, type CardTemplate, type SkImageLike } from '@roebel/card-design';
 import { t } from '../../i18n';
 import { SkCards } from '../../ui/Skeleton';
-import { fetchDesignAssets, fetchDraft, publishDraft, saveDraft, sendDraftTest, uploadDesignAsset, CredentialsApiError, isSessionError } from '../api';
+import { fetchDesignAssets, fetchDraft, generateDesignBackground, generateDesignSticker, publishDraft, saveDraft, sendDraftTest, uploadDesignAsset, CredentialsApiError, isSessionError } from '../api';
+import { generateForDesign, type AiKind } from './ai';
 import { PendingCard } from '../PendingCard';
 import { KIND_LABELS } from '../templates';
 import type { TabContext } from '../tabs';
@@ -285,6 +286,27 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
       setUploading(null);
     }
   };
+  // AI help (D5): the result is applied like an upload; a refusal (limit, time) is shown via onError.
+  const [generating, setGenerating] = useState<AiKind | null>(null);
+  const [aiNotice, setAiNotice] = useState<{ kind: AiKind; text: string } | null>(null);
+  const onGenerate = async (kind: AiKind, prompt: string) => {
+    setGenerating(kind);
+    setAiNotice(null);
+    try {
+      const r = await generateForDesign(
+        kind,
+        prompt,
+        { background: (p) => generateDesignBackground(token, org.accountId, p), sticker: (p) => generateDesignSticker(token, org.accountId, p) },
+        onError,
+      );
+      if (!r) return;
+      setAssets((list) => [r.asset, ...list.filter((a) => a.sha !== r.asset.sha)]);
+      apply(r.change, { select: kind === 'background' ? null : (d) => d.layers[d.layers.length - 1]?.id ?? null });
+      if (r.notice) setAiNotice({ kind, text: r.notice });
+    } finally {
+      setGenerating(null);
+    }
+  };
   const onUpload = (k: AssetKind, file: File) =>
     void upload(file, k === 'logo' ? logoTarget(designRef.current) : k === 'background' ? { role: 'background' } : k === 'sticker' ? { role: 'sticker' } : { role: 'image' });
   const onDropFile = (file: File, target: string | null) => {
@@ -380,7 +402,7 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
       />
       <div className="dz-cols">
         <aside className="dz-left">
-          <AddPanel design={s.design} apply={apply} assets={assets} uploading={uploading} onUpload={onUpload} onTemplates={() => setPicking(true)} />
+          <AddPanel design={s.design} apply={apply} assets={assets} uploading={uploading} onUpload={onUpload} onTemplates={() => setPicking(true)} generating={generating} aiNotice={aiNotice} onGenerate={(k, p) => void onGenerate(k, p)} />
         </aside>
         <main className="dz-centre" ref={boardRef}>
           <div className="dz-bar">

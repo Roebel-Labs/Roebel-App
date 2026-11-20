@@ -1,6 +1,7 @@
 // Credential register client for the "Ausweise" section (plan credreg-5). Studio holds no key: it
 // calls the same routes as the browser dashboard with the paired chat session token, and every change
 // becomes a prepared action that a phone confirms (plan 2 Task 4). Holder actions are app-only (403).
+import type { AiBackgroundResult, AiStickerResult } from './designer/ai';
 import { t } from '../i18n';
 import { apiBase } from '../workspace/session';
 import type {
@@ -159,6 +160,14 @@ export const fetchDesignAssets = (token: string, accountId: string) => designCal
 export const sendDraftTest = (token: string, draftId: string) => designCall<{ sentAt: string }>('design_test_send', { draftId }, token);
 
 export const publishDraft = (token: string, draftId: string) => designCall<{ actionId: string; version: number; sha: string }>('design_publish', { draftId }, token);
+
+/** AI background (D5); can take up to a minute. */
+export const generateDesignBackground = (token: string, accountId: string, prompt: string, tileable = false) =>
+  designCall<AiBackgroundResult>('design_ai_background', { accountId, prompt, tileable }, token);
+
+/** AI sticker with its background removed (D5); `notice` when removal was not possible. */
+export const generateDesignSticker = (token: string, accountId: string, prompt: string) =>
+  designCall<AiStickerResult>('design_ai_sticker', { accountId, prompt }, token);
 
 /** Multipart upload of a design image (logo, sticker, background, image). */
 export async function uploadDesignAsset(token: string, accountId: string, kind: AssetKind, file: File): Promise<AssetView> {
