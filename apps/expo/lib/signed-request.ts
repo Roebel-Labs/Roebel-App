@@ -31,7 +31,10 @@ export type CredentialAction =
   | 'people_preview' | 'event_badges_list' | 'event_badge_setup' | 'event_badge_get' | 'event_badge_prepare'
   | 'event_badge_auto' | 'badge_nudge' | 'zk_join' | 'zk_status'
   | 'delegates_list'
-  | 'event_badge_qr';
+  | 'event_badge_qr'
+  // card designer (POST /api/credentials/designs and …/designs/assets)
+  | 'design_orgs' | 'design_drafts_list' | 'design_draft_get' | 'design_draft_save' | 'design_draft_delete'
+  | 'design_test_send' | 'design_publish' | 'design_assets_list' | 'design_asset_upload';
 export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
 
 export interface SigningAccount {
