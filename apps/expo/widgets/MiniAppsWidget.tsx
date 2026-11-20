@@ -2,8 +2,10 @@
  * Android "Mini Apps" home-screen widget (react-native-android-widget).
  *
  * Same look as the Mini-Apps section on Erkunden and the iOS widget: rounded icon
- * (24 % radius, primary color behind it, first letter without icon), name below,
- * 4-column grid sized to the widget, last tile "Alle" opens the store.
+ * (24 % radius, primary color behind it, first letter without icon), name below.
+ * The recently opened apps come first; the store tile ("Mini-Apps entdecken") is always
+ * the last item. Grid and icon size come from miniAppsGrid (lib/widget-layout.ts):
+ * few items grow to fill the widget, many shrink into a grid.
  */
 // The widget library calls these components as plain functions; the React Compiler's
 // memo hook would make every render throw "Invalid Hook Call" (blank widget).
@@ -11,7 +13,8 @@
 
 import React from 'react';
 import { FlexWidget, ImageWidget, OverlapWidget, TextWidget } from 'react-native-android-widget';
-import { WIDGET_SETTINGS_URL, WIDGET_STORE_URL, type WidgetApp, type WidgetPayload } from '@/lib/widget-payload';
+import { WIDGET_STORE_URL, type WidgetApp, type WidgetPayload } from '@/lib/widget-payload';
+import { MINI_PADDING, miniAppsGrid, storeTileLabel } from '@/lib/widget-layout';
 
 const STORE_ICON = require('@/assets/illustration/mini-app-store.png');
 
@@ -20,8 +23,7 @@ const PALETTE = {
   dark: { bg: '#18191B', text: '#e8eaed', tile: '#3c4043' },
 } as const;
 const DOT = '#FF3B30';
-const PADDING = 12;
-const LABEL_H = 18;
+const FONT_MEDIUM = 'MonaSans-Medium';
 
 type Hex = `#${string}`;
 type Palette = (typeof PALETTE)[keyof typeof PALETTE];
@@ -30,22 +32,13 @@ function asHex(c: string | null, fallback: string): Hex {
   return (c && /^#[0-9a-fA-F]{6}$/.test(c) ? c : fallback) as Hex;
 }
 
-export function gridFor(width: number, height: number) {
-  const cols = width < 200 ? 2 : 4;
-  const rows = Math.max(1, Math.min(4, Math.floor((height - PADDING * 2) / 64)));
-  const tileW = Math.floor((width - PADDING * 2) / cols);
-  const rowH = Math.floor((height - PADDING * 2) / rows);
-  const icon = Math.max(32, Math.min(56, tileW - 16, rowH - LABEL_H - 6));
-  return { cols, rows, tileW, rowH, icon };
-}
-
-function Label({ text, color, width }: { text: string; color: Hex; width: number }) {
+function Label({ text, color, width, size }: { text: string; color: Hex; width: number; size: number }) {
   return (
     <TextWidget
       text={text}
       maxLines={1}
       truncate="END"
-      style={{ fontSize: 11, color, marginTop: 4, width, textAlign: 'center' }}
+      style={{ fontSize: size, color, marginTop: 4, width, textAlign: 'center', fontFamily: FONT_MEDIUM, fontWeight: '500' }}
     />
   );
 }
@@ -105,7 +98,7 @@ function Tile({ uri, width, height, children }: { uri: string; width: number; he
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={{ uri }}
-      style={{ width, height, alignItems: 'center', justifyContent: 'flex-start' }}
+      style={{ width, height, alignItems: 'center', justifyContent: 'center' }}
     >
       {children}
     </FlexWidget>
@@ -124,52 +117,30 @@ export function MiniAppsWidget({
   dark: boolean;
 }) {
   const pal = dark ? PALETTE.dark : PALETTE.light;
-  const apps = payload?.apps ?? [];
+  const all = payload?.apps ?? [];
+  const grid = miniAppsGrid(all.length, width, height);
+  const { cols, tileW, rowH, icon, labels, labelSize } = grid;
+  const dotPad = Math.round(Math.max(8, icon * 0.2) / 2);
 
-  if (apps.length === 0) {
-    return (
-      <FlexWidget
-        clickAction="OPEN_URI"
-        clickActionData={{ uri: WIDGET_SETTINGS_URL }}
-        style={{
-          width: 'match_parent',
-          height: 'match_parent',
-          backgroundColor: pal.bg,
-          borderRadius: 24,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        <ImageWidget image={STORE_ICON} imageWidth={40} imageHeight={40} />
-        <TextWidget
-          text="Mini Apps auswählen"
-          style={{ fontSize: 13, color: pal.text, fontWeight: '600', marginTop: 8 }}
-        />
-      </FlexWidget>
-    );
-  }
-
-  const { cols, rows, tileW, rowH, icon } = gridFor(width, height);
-  const shown = apps.slice(0, cols * rows - 1);
-  const tiles: React.ReactNode[] = shown.map((app) => (
+  const tiles: React.ReactNode[] = all.slice(0, grid.apps).map((app) => (
     <Tile key={app.slug} uri={app.url} width={tileW} height={rowH}>
       <AppIcon app={app} size={icon} pal={pal} />
-      <Label text={app.name} color={pal.text} width={tileW - 4} />
+      {labels ? <Label text={app.name} color={pal.text} width={tileW - 4} size={labelSize} /> : null}
     </Tile>
   ));
   tiles.push(
     <Tile key="__store" uri={WIDGET_STORE_URL} width={tileW} height={rowH}>
-      <FlexWidget style={{ marginTop: Math.round(Math.max(8, icon * 0.2) / 2) }}>
+      <FlexWidget style={{ marginTop: dotPad }}>
         <ImageWidget image={STORE_ICON} imageWidth={icon} imageHeight={icon} />
       </FlexWidget>
-      <Label text="Alle" color={pal.text} width={tileW - 4} />
+      {labels ? <Label text={storeTileLabel(grid.apps, tileW)} color={pal.text} width={tileW - 4} size={labelSize} /> : null}
     </Tile>,
   );
 
   const rowsOut: React.ReactNode[] = [];
   for (let r = 0; r * cols < tiles.length; r++) {
     rowsOut.push(
-      <FlexWidget key={r} style={{ flexDirection: 'row', width: 'match_parent' }}>
+      <FlexWidget key={r} style={{ flexDirection: 'row', width: 'match_parent', justifyContent: 'center' }}>
         {tiles.slice(r * cols, r * cols + cols)}
       </FlexWidget>,
     );
@@ -181,9 +152,10 @@ export function MiniAppsWidget({
         width: 'match_parent',
         height: 'match_parent',
         backgroundColor: pal.bg,
-        borderRadius: 24,
-        padding: PADDING,
+        borderRadius: 22,
+        padding: MINI_PADDING,
         flexDirection: 'column',
+        justifyContent: 'center',
       }}
     >
       {rowsOut}

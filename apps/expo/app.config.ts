@@ -234,7 +234,10 @@ const config: ExpoConfig = {
     ],
     // Home-screen widget "Mini Apps" (targets/widget). Reads the App Group below.
     '@bacons/apple-targets',
-    // Android home-screen widget "Mini Apps" (widgets/, task handler in index.js).
+    // Android home-screen widgets (widgets/, task handler in index.js). Every widget is
+    // responsive from 4×1 up to 4×4 (size logic: lib/widget-layout.ts). previewImage =
+    // the picker preview (assets/widgets/preview-*.png, rendered from real Röbel content
+    // by scripts/render-widget-previews.py); the plugin copies it to res/drawable.
     [
       'react-native-android-widget',
       {
@@ -242,14 +245,15 @@ const config: ExpoConfig = {
           {
             name: 'MiniApps',
             label: 'Mini Apps',
-            description: 'Deine Röbel Mini Apps auf einen Blick.',
+            description: 'Deine zuletzt geöffneten Mini Apps auf einen Blick.',
             minWidth: '110dp',
-            minHeight: '110dp',
+            minHeight: '40dp',
             targetCellWidth: 4,
-            targetCellHeight: 2,
+            targetCellHeight: 4,
             maxResizeWidth: '520dp',
             maxResizeHeight: '520dp',
             resizeMode: 'horizontal|vertical',
+            previewImage: './assets/widgets/preview-miniapps.png',
             // 30 min (the Android minimum): re-sync so unread dots appear while the app is closed.
             updatePeriodMillis: 1800000,
           },
@@ -258,26 +262,29 @@ const config: ExpoConfig = {
             name: 'Mittagstisch',
             label: 'Mittagstisch',
             description: 'Heutige Gerichte der Röbeler Restaurants.',
-            minWidth: '180dp',
-            minHeight: '110dp',
+            minWidth: '110dp',
+            minHeight: '40dp',
             targetCellWidth: 4,
             targetCellHeight: 2,
             maxResizeWidth: '520dp',
             maxResizeHeight: '520dp',
             resizeMode: 'horizontal|vertical',
+            previewImage: './assets/widgets/preview-mittagstisch.png',
             updatePeriodMillis: 1800000,
           },
           {
+            // Name kept from the "Diese Woche" version so placed widgets survive the update.
             name: 'EventsThisWeek',
-            label: 'Diese Woche',
-            description: 'Die Events dieser Woche in Röbel.',
-            minWidth: '180dp',
-            minHeight: '110dp',
+            label: 'Events',
+            description: 'Die nächsten Events in Röbel.',
+            minWidth: '110dp',
+            minHeight: '40dp',
             targetCellWidth: 4,
             targetCellHeight: 2,
             maxResizeWidth: '520dp',
             maxResizeHeight: '520dp',
             resizeMode: 'horizontal|vertical',
+            previewImage: './assets/widgets/preview-events.png',
             updatePeriodMillis: 1800000,
           },
         ],

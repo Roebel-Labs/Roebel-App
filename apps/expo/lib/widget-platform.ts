@@ -8,3 +8,8 @@ import type { WidgetPayload } from './widget-payload';
 export async function pushToPlatform(_payload: WidgetPayload): Promise<void> {}
 export async function pushLunchToPlatform(_payload: LunchPayload, _page: number): Promise<void> {}
 export async function pushEventsToPlatform(_payload: EventsPayload): Promise<void> {}
+/** iOS mirrors the recently opened mini apps into the App Group; elsewhere storage = AsyncStorage. */
+export function pushRecentToPlatform(_slugs: string[]): void {}
+export function readRecentFromPlatform(): string[] {
+  return [];
+}

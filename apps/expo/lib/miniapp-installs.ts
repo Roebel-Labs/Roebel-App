@@ -68,6 +68,46 @@ export async function markMiniAppInstalled(slug: string): Promise<boolean> {
   return true;
 }
 
+// ── Recently opened (home-screen widget order) ───────────────────────────
+
+const RECENT_KEY = 'miniapps.recent.v1';
+/** Twice the largest widget (15 apps) so a delisted app does not push a live one out. */
+const RECENT_MAX = 30;
+
+/** Pure: `slug` moves to the front, duplicates dropped, capped. */
+export function pushRecent(list: string[], slug: string, max = RECENT_MAX): string[] {
+  return [slug, ...list.filter((s) => s !== slug)].slice(0, max);
+}
+
+/** Every open of a mini app moves it to the front of the widget's list. */
+export async function markMiniAppOpened(slug: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    const list = Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
+    await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(pushRecent(list, slug)));
+  } catch {
+    // Best-effort; the widget falls back to the installed order.
+  }
+}
+
+/**
+ * Most recently opened first. Apps opened before this list existed (older app
+ * versions) follow, newest install first.
+ */
+export async function getRecentMiniAppSlugs(): Promise<string[]> {
+  let recent: string[] = [];
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    recent = Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    recent = [];
+  }
+  const installed = [...(await load())].reverse();
+  return [...recent, ...installed.filter((s) => !recent.includes(s))];
+}
+
 /**
  * Hook: re-renders when the installed set changes and exposes a synchronous
  * `isInstalled`. Kick off hydration on first mount.

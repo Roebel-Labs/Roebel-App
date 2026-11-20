@@ -109,19 +109,26 @@ describe('buildEventsPayload', () => {
     const p = buildEventsPayload(
       [ev('a', '2026-11-20', '19:00:00'), ev('b', '2026-11-21', null), ev('c', '2026-11-22', '10:00:00', { is_cancelled: true })],
       2,
+      'SU1H',
     );
     expect(p).toEqual({
       v: 1,
       updatedAt: 2,
+      place: 'Röbel',
       events: [
-        { id: 'a', title: 'Ta', weekday: 'Fr', day: '20', time: '19:00', location: 'Marktplatz', url: 'roebel://event/a' },
-        { id: 'b', title: 'Tb', weekday: 'Sa', day: '21', time: null, location: 'Marktplatz', url: 'roebel://event/b' },
+        { id: 'a', title: 'Ta', weekday: 'Fr', day: '20', month: '11', time: '19:00', location: 'Marktplatz', image: 'SU1H', url: 'roebel://event/a' },
+        { id: 'b', title: 'Tb', weekday: 'Sa', day: '21', month: '11', time: null, location: 'Marktplatz', url: 'roebel://event/b' },
       ],
     });
   });
 
+  it('shortens the venue to the part before the first comma', () => {
+    const p = buildEventsPayload([ev('a', '2026-12-05', null, { location: 'Schule am Gotthunskamp, Gotthunskamp 13, 17207 Röbel' })], 0);
+    expect(p.events[0]).toMatchObject({ location: 'Schule am Gotthunskamp', month: '12', image: null });
+  });
+
   it(`caps at ${WIDGET_EVENTS_MAX} events`, () => {
-    const many = Array.from({ length: 10 }, (_, i) => ev(`e${i}`, '2026-11-21', null));
+    const many = Array.from({ length: 20 }, (_, i) => ev(`e${i}`, '2026-11-21', null));
     expect(buildEventsPayload(many, 0).events).toHaveLength(WIDGET_EVENTS_MAX);
   });
 });

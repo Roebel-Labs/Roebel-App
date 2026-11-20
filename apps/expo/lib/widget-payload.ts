@@ -5,7 +5,7 @@
  */
 import type { MiniApp } from './miniapps';
 
-/** 15 apps + the fixed "Alle" store tile fill the large 4×4 widget. */
+/** 15 apps + the store tile fill the large 4×4 widget. */
 export const WIDGET_MAX_APPS = 15;
 
 export const WIDGET_STORE_URL = 'roebel://mini-apps';
@@ -30,29 +30,22 @@ export function widgetDeepLink(slug: string): string {
 }
 
 /**
- * The apps the widget shows. An explicit choice (even an empty one) wins and keeps its
- * order; without one, the installed apps in store order, else the featured apps,
- * else the newest live apps.
- * Apps that are no longer live are dropped.
+ * The apps the widget shows (the store tile always follows them). An explicit choice
+ * (Einstellungen → Widget, even an empty one) wins and keeps its order; without one,
+ * the recently opened apps, most recent first. Never opened anything → no apps, the
+ * widget shows the store tile alone. Apps that are no longer live are dropped.
  */
 export function resolveSelection(
   selected: string[] | null,
-  installed: string[],
+  recent: string[],
   live: MiniApp[],
 ): MiniApp[] {
   const bySlug = new Map(live.map((a) => [a.slug, a]));
-  let apps: MiniApp[];
-  if (selected) {
-    apps = selected.map((s) => bySlug.get(s)).filter((a): a is MiniApp => !!a);
-  } else {
-    const inst = new Set(installed);
-    apps = live.filter((a) => inst.has(a.slug));
-    if (apps.length === 0) apps = live.filter((a) => a.featured);
-    // Nothing installed and nothing featured (the usual case for a new user):
-    // never leave the widget empty — show the store's newest live apps.
-    if (apps.length === 0) apps = live;
-  }
-  return apps.slice(0, WIDGET_MAX_APPS);
+  const slugs = selected ?? recent;
+  return slugs
+    .map((s) => bySlug.get(s))
+    .filter((a): a is MiniApp => !!a)
+    .slice(0, WIDGET_MAX_APPS);
 }
 
 export function buildPayload(
@@ -73,4 +66,38 @@ export function buildPayload(
       url: widgetDeepLink(a.slug),
     })),
   };
+}
+
+/**
+ * Merge rule — an app that once appeared in the widget stays there. Order: the explicit
+ * selection (removing an app there is the only way out), else the recent opens followed
+ * by everything the widget showed before. Each app takes its fresh entry (new icon,
+ * unread flag) or, when the server did not return it (failed / empty answer, app
+ * delisted), its previous entry. Deduplicated, capped at WIDGET_MAX_APPS.
+ */
+export function mergeWidgetApps(
+  fresh: WidgetApp[],
+  previous: WidgetApp[] | null | undefined,
+  selected: string[] | null,
+  recent: string[],
+): WidgetApp[] {
+  const freshBySlug = new Map(fresh.map((a) => [a.slug, a]));
+  const prevBySlug = new Map((previous ?? []).map((a) => [a.slug, a]));
+  const order = selected ?? [...recent, ...fresh.map((a) => a.slug), ...(previous ?? []).map((a) => a.slug)];
+  const out: WidgetApp[] = [];
+  const seen = new Set<string>();
+  for (const slug of order) {
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    const now = freshBySlug.get(slug);
+    const before = prevBySlug.get(slug);
+    if (now) out.push(before && !now.icon && before.icon ? { ...now, icon: before.icon } : now);
+    else if (before) out.push(before);
+  }
+  return out.slice(0, WIDGET_MAX_APPS);
+}
+
+/** Recent slugs from several stores, first occurrence wins. */
+export function dedupeSlugs(...lists: string[][]): string[] {
+  return [...new Set(lists.flat())];
 }

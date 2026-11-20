@@ -16,8 +16,12 @@ jest.mock('../miniapps', () => ({
 }));
 // Mittagstisch / Diese Woche sync has its own queries (widget-content tests); keep this suite on Mini Apps.
 jest.mock('../widget-content-sync', () => ({ syncContentWidgets: jest.fn(async () => {}) }));
-jest.mock('../miniapp-installs', () => ({ getInstalledMiniAppSlugs: jest.fn(async () => []) }));
-jest.mock('../widget-platform', () => ({ pushToPlatform: jest.fn(async (p: any) => mockPushed.push(p)) }));
+jest.mock('../miniapp-installs', () => ({ getRecentMiniAppSlugs: jest.fn(async () => ['a', 'b']) }));
+jest.mock('../widget-platform', () => ({
+  pushToPlatform: jest.fn(async (p: any) => mockPushed.push(p)),
+  pushRecentToPlatform: jest.fn(),
+  readRecentFromPlatform: jest.fn(() => []),
+}));
 jest.mock('expo-file-system', () => ({
   Paths: { cache: 'cache' },
   Directory: jest.fn().mockImplementation(() => ({ exists: true, create: jest.fn() })),
@@ -57,4 +61,15 @@ it('logged in: unread slugs come from mini_app notifications', async () => {
 it('the saved selection drives the widget', async () => {
   await setWidgetSelection(['b'], null);
   expect(mockPushed.at(-1).apps.map((a: any) => a.slug)).toEqual(['b']);
+});
+
+it('an empty server answer keeps the apps the widget already shows', async () => {
+  const AsyncStorage = require('@react-native-async-storage/async-storage');
+  await AsyncStorage.removeItem('widget.miniapps.v1'); // no explicit selection
+  await syncWidget(null);
+  expect(mockPushed.at(-1).apps.map((a: any) => a.slug)).toEqual(['a', 'b']);
+  const { fetchLiveMiniApps } = require('../miniapps');
+  fetchLiveMiniApps.mockResolvedValueOnce([]);
+  await syncWidget(null);
+  expect(mockPushed.at(-1).apps.map((a: any) => a.slug)).toEqual(['a', 'b']);
 });

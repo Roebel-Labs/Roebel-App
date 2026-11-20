@@ -71,7 +71,7 @@ import type { MiniApp } from '@/lib/miniapps';
 import { trackMiniAppEvent, newMiniAppSessionId } from '@/lib/miniapps';
 import { bridgeGuardScript, createBridgeGuard } from '@/lib/miniapp-bridge-guard';
 import { getRandomBytes } from 'expo-crypto';
-import { markMiniAppInstalled } from '@/lib/miniapp-installs';
+import { markMiniAppInstalled, markMiniAppOpened } from '@/lib/miniapp-installs';
 import {
   getNotificationDecision,
   setNotificationDecision,
@@ -434,6 +434,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     void markMiniAppInstalled(app.slug).then((isNew) => {
       if (isNew) track('install');
     });
+    // Home-screen widget: recently opened apps first.
+    void markMiniAppOpened(app.slug);
   }, [visible, app.slug, track]);
 
   // Notification opt-in prompt: once per open, after the splash hides, only if
