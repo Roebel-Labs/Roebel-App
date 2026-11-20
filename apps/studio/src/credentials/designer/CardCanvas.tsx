@@ -114,13 +114,33 @@ export function CardCanvas({ design, width, mode = 'preview', values, shine = 'l
       draw(performance.now());
       return;
     }
+    // Only while the canvas is on screen and the window visible: a hidden section stops drawing.
     let raf = 0;
-    const tick = (now: number) => {
+    let visible = true;
+    const el = canvasRef.current;
+    const io = el && typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(([entry]) => {
+          visible = entry?.isIntersecting ?? true;
+          if (visible && !raf) raf = requestAnimationFrame(tick);
+        })
+      : null;
+    const onVis = () => {
+      if (!document.hidden && visible && !raf) raf = requestAnimationFrame(tick);
+    };
+    function tick(now: number) {
+      raf = 0;
+      if (!visible || document.hidden) return;
       draw(now);
       raf = requestAnimationFrame(tick);
-    };
+    }
+    if (el) io?.observe(el);
+    document.addEventListener('visibilitychange', onVis);
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      io?.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
+    };
   });
 
   const onPointerMove = shine === 'pointer' && !tilt ? (e: ReactPointerEvent<HTMLCanvasElement>) => (ownTilt.current = tiltFromPointer(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY)) : undefined;

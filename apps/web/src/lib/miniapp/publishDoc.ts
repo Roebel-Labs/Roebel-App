@@ -30,6 +30,16 @@ Plain HTML:
 \`\`\`
 Full SDK reference: ${base}/mini-apps/llms-full.txt
 
+## Every person may decline — build fallbacks
+The Röbel app opens every mini app with a connect dialog ("Verbinden mit …"). The person can
+uncheck "Name und Bild", "Öffentliche ID" (the account) and any credential, or close it. So:
+- \`sdk.getContext().user\` can be \`null\`; \`displayName\`/\`avatarUrl\` can be missing.
+- \`sdk.wallet.getAccount()\` can be \`null\` — then signing, sign-in and \`roebel.pay\` reject
+  with \`unauthorized\`. Disable only that feature and explain in one German sentence that it can
+  be enabled on the app's page under "Zugriff".
+- Use \`user.id\` as the per-person key (address or a per-app pseudonym; not always \`0x…\`).
+- Start in a useful signed-out state. Details: ${base}/mini-apps/llms-full.txt (chapter "The connect dialog").
+
 ## User token
 \`sdk.auth.getToken()\` returns \`{ token }\` or \`null\` (handle \`null\`). The token
 is valid for 10 minutes and for this app only. A server that calls

@@ -91,6 +91,8 @@ export interface Autosaver<T> {
   keepMine(server: DraftWithDesign): Promise<void>;
   /** Conflict: continue from the server's version; the local change is dropped. */
   loadTheirs(server: DraftWithDesign): void;
+  /** Something is still unsaved or on its way. */
+  hasPending(): boolean;
   cancel(): void;
 }
 
@@ -163,6 +165,7 @@ export function createAutosaver<T>(o: AutosaverOptions<T>): Autosaver<T> {
       clear();
       o.onStatus('saved');
     },
+    hasPending: () => pending !== null || running !== null,
     cancel: clear,
   };
 }
@@ -178,6 +181,8 @@ export function useAutosave<T>(
   opts: { revision: number | null; initialDirty?: boolean; delayMs?: number; onSaved: (view: DraftView, doc: T) => void },
 ) {
   const [status, setStatus] = useState<SaveStatus>('saved');
+  // The status right now (after an awaited flush the state of this render is stale).
+  const statusRef = useRef<SaveStatus>('saved');
   const [conflict, setConflict] = useState<DraftWithDesign | null>(null);
   const latest = useRef({ save, onSaved: opts.onSaved });
   latest.current = { save, onSaved: opts.onSaved };
@@ -188,7 +193,10 @@ export function useAutosave<T>(
       onSaved: (v, d) => latest.current.onSaved(v, d),
       delayMs: opts.delayMs,
       revision: opts.revision,
-      onStatus: setStatus,
+      onStatus: (s) => {
+        statusRef.current = s;
+        setStatus(s);
+      },
       onConflict: setConflict,
     });
   }
@@ -208,9 +216,23 @@ export function useAutosave<T>(
     }
     saver.change(doc);
   }, [doc, saver]);
+  // The skip is for the render that loads the other version only: if that version renders the same
+  // document (no doc change), the next real edit must still be saved.
+  useEffect(() => {
+    skip.current = false;
+  });
 
   useEffect(() => {
-    const onUnload = () => void saver.flush();
+    // Closing the window: the page would be gone before an async save finishes, so the close is
+    // held back once, the save runs, and the window is closed again (whatever the save's outcome).
+    let closing = false;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (closing || !saver.hasPending()) return;
+      e.preventDefault();
+      e.returnValue = '';
+      closing = true;
+      void saver.flush().finally(() => window.close());
+    };
     window.addEventListener('beforeunload', onUnload);
     return () => {
       window.removeEventListener('beforeunload', onUnload);
@@ -222,6 +244,8 @@ export function useAutosave<T>(
     status,
     conflict,
     flush: () => saver.flush(),
+    /** The save status right now (also right after an awaited flush). */
+    currentStatus: () => statusRef.current,
     keepMine: async () => {
       const c = conflict;
       setConflict(null);

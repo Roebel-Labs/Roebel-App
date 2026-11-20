@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { CREDENTIAL_COPY, type CredentialKind } from '@/lib/credentials';
@@ -6,6 +6,11 @@ import type { RegisterCard } from '@/lib/credreg/model';
 import { softShadow } from '@/lib/shadow';
 import { CARD_ASPECT, CREDENTIAL_ART, cardRadiusFor } from './credential-art';
 import RecognisedSeal from './RecognisedSeal';
+import { cardHolderValues, type Holder } from '@/lib/card-design/holder-values';
+// Skia (and Reanimated) load only when a card has a design and the binary has Skia; a card Skia
+// cannot draw shows its old picture.
+import SafeDesignedCard from '@/components/credentials/SafeDesignedCard';
+import { COMMUNITY_DESIGNS } from '@/lib/card-design/community';
 
 type Props = {
   /** A built-in card by kind (today's cards), or any card of the profile model. */
@@ -14,7 +19,12 @@ type Props = {
   width: number;
   style?: StyleProp<ViewStyle>;
   shadow?: boolean;
+  /** The holder (own cards only): fills the design's name field on this device. */
+  holder?: Holder | null;
+  /** A designed card's sheen: 'tilt' follows the phone while the screen is focused. */
+  animate?: 'tilt' | 'static';
 };
+
 
 export function cardHeightFor(width: number): number {
   return Math.round(width / CARD_ASPECT);
@@ -60,22 +70,45 @@ export function DefaultCardFace({ card, width }: { card: RegisterCard; width: nu
   );
 }
 
+/** The card's picture (type image), or the neutral face without one. */
+function PictureFace({ card, width }: { card: RegisterCard; width: number }) {
+  const height = cardHeightFor(width);
+  const radius = cardRadiusFor(width);
+  return card.imageUrl ? (
+    <Image source={{ uri: card.imageUrl }} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+  ) : (
+    <DefaultCardFace card={card} width={width} />
+  );
+}
+
 /** One credential card at the given width (462:290 aspect). */
-export default function CredentialCard({ kind, card, width, style, shadow = true }: Props) {
+export default function CredentialCard({ kind, card, width, style, shadow = true, holder, animate = 'static' }: Props) {
   const { colors, isDark } = useTheme();
   const height = cardHeightFor(width);
   const radius = cardRadiusFor(width);
   const builtin: CredentialKind | undefined = card ? card.builtin : kind;
+  const validUntil = card?.validUntil ?? null;
+  // Stable per holder and date, so the designed card is not re-recorded on every render.
+  const values = useMemo(() => (holder ? cardHolderValues(holder, validUntil) : undefined), [holder, validUntil]);
 
   if (!card || card.source === 'builtin' || builtin) {
     const k = (builtin ?? 'guest') as CredentialKind;
+    const art = <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />;
     return (
       <View
         style={[{ width, height, borderRadius: radius }, shadow && softShadow(2, isDark), style]}
         accessibilityRole="image"
         accessibilityLabel={CREDENTIAL_COPY[k].title}
       >
-        <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+        {/* The tilting card is drawn from its design so the sheen follows the phone; the PNG is the
+            fallback (no Skia in this binary, still loading, or drawing failed) and every static card. */}
+        {animate === 'tilt' ? (
+          <View style={[styles.inner, { borderRadius: radius }]}>
+            <SafeDesignedCard design={COMMUNITY_DESIGNS[k]} width={width} mode="holder" animate="tilt" fallback={art} />
+          </View>
+        ) : (
+          art
+        )}
       </View>
     );
   }
@@ -89,10 +122,17 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
       accessibilityLabel={registerCardLabel(card)}
     >
       <View style={[styles.inner, { borderRadius: radius }, expired && styles.dimmed]}>
-        {card.imageUrl ? (
-          <Image source={{ uri: card.imageUrl }} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+        {card.design ? (
+          <SafeDesignedCard
+            design={card.design}
+            width={width}
+            mode="holder"
+            values={values}
+            animate={animate}
+            fallback={<PictureFace card={card} width={width} />}
+          />
         ) : (
-          <DefaultCardFace card={card} width={width} />
+          <PictureFace card={card} width={width} />
         )}
       </View>
       {card.kind === 'role' && card.recognised ? (

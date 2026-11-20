@@ -153,10 +153,16 @@ export interface ConsentItem {
 export const CONSENT_COPY = {
   profileTitle: 'Name und Bild',
   profileDetail: 'Dein Anzeigename und dein Profilbild.',
-  addressTitle: 'Deine Kontoadresse',
+  addressTitle: 'Deine öffentliche ID',
   addressDetail:
-    'Damit die App Transaktionen für dich vorbereiten kann. Ohne sie bekommt die App nur eine anonyme Kennung, die bei jeder Mini-App anders ist.',
+    'Damit die App dich wiedererkennt und Aktionen für dich vorbereiten kann. Ohne sie bekommt die App nur eine anonyme Kennung, die bei jeder Mini-App anders ist.',
   privateNote: 'Diese Mitgliedschaft ist privat. Die App erfährt nur, dass du Mitglied bist.',
+  v1AddressDetail: 'Damit die App dich wiedererkennt und Aktionen für dich vorbereiten kann.',
+  connectTitle: 'Verbinden',
+  connectLead: 'Bestätige, welche Angaben die App sehen darf. Du kannst das später jederzeit auf der Seite der Mini-App ändern.',
+  seesTitle: 'Diese App sieht',
+  connectCta: 'Verbinden',
+  connected: 'Verbunden',
 } as const;
 
 /** The consent sheet's rows for `keys`, in that order. Unknown credential types are left out. */

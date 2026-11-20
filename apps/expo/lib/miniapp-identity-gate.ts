@@ -55,5 +55,5 @@ export function rewardForApp<T extends { txRef?: string }>(
 /** The error a signing call gets when the address is not shared with a version-2 app. */
 export const ADDRESS_NOT_GRANTED = {
   code: 'unauthorized',
-  message: 'Die Kontoadresse ist für diese Mini-App nicht freigegeben.',
+  message: 'Die öffentliche ID ist für diese Mini-App nicht freigegeben.',
 } as const;

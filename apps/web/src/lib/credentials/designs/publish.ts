@@ -109,7 +109,9 @@ export async function publishDraft(d: PublishDeps, c: Caller, p: { draftId: stri
 
   const via = viaOf(c, c.payload.client);
   const metadataURI = designUrl(sha);
-  const r = draft.typeId
+  let r: Awaited<ReturnType<typeof prepareTypeAction>>;
+  try {
+    r = draft.typeId
     ? await prepareTypeAction(d.register, c, { accountId: org.accountId, op: "update", typeId: draft.typeId as Hex, metadataURI, via })
     : await prepareTypeAction(d.register, c, {
         accountId: org.accountId,
@@ -120,14 +122,20 @@ export async function publishDraft(d: PublishDeps, c: Caller, p: { draftId: stri
         metadataURI,
         via,
       });
+  } catch (err) {
+    // A failed prepare (RPC, store) must not leave a pending version that blocks every later publish.
+    await d.store.setVersionStatus(sha, "abandoned", undefined, ["pending"]);
+    throw err;
+  }
   if (!r.ok || r.data.actionId === null) {
     await d.store.setVersionStatus(sha, "abandoned", undefined, ["pending"]);
     return r.ok ? NO_CHANGES : r;
   }
-  await d.store.setVersionStatus(sha, "pending", r.data.actionId);
+  // typeId first: a crash between the writes then leaves a version the chain sync can still match.
   if (!draft.typeId) {
     await d.store.setVersionType(sha, r.data.typeId);
     await d.store.updateDraft(draft.id, { typeId: r.data.typeId }, null);
   }
+  await d.store.setVersionStatus(sha, "pending", r.data.actionId);
   return ok({ actionId: r.data.actionId, version, sha });
 }

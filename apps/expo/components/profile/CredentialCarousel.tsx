@@ -52,15 +52,16 @@ export default function CredentialCarousel({ kinds, initialKind, onActiveChange 
 
   const renderItem = useCallback(
     ({ item, index }: { item: CredentialKind; index: number }) => (
-      <CredentialCard kind={item} width={cardWidth} style={{ marginRight: index === kinds.length - 1 ? 0 : GAP }} />
+      // The card in view follows the tilt; the teased neighbour stays still.
+      <CredentialCard kind={item} width={cardWidth} style={{ marginRight: index === kinds.length - 1 ? 0 : GAP }} animate={index === active ? 'tilt' : 'static'} />
     ),
-    [cardWidth, kinds.length],
+    [cardWidth, kinds.length, active],
   );
 
   if (!multi) {
     return (
       <View style={styles.single}>
-        <CredentialCard kind={kinds[0]} width={cardWidth} />
+        <CredentialCard kind={kinds[0]} width={cardWidth} animate="tilt" />
       </View>
     );
   }
@@ -72,6 +73,7 @@ export default function CredentialCarousel({ kinds, initialKind, onActiveChange 
         data={kinds}
         keyExtractor={(k) => k}
         renderItem={renderItem}
+        extraData={active}
         showsHorizontalScrollIndicator={false}
         snapToInterval={interval}
         snapToAlignment="start"

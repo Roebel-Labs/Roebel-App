@@ -143,6 +143,7 @@ export const PropsPanel = forwardRef<HTMLTextAreaElement, {
             <li key={x.id}>
               <button aria-current={x.id === selected ? 'true' : undefined} onClick={() => onSelect(x.id)}>
                 <span className="w-ellipsis">{layerLabel(x)}</span>
+                {x.ai && <span className="dz-ai-tag" title={t('Mit KI erzeugt')}>{t('KI')}</span>}
                 {(hints.get(x.id) ?? []).length > 0 && <span className="dz-dot" aria-label={t('Hinweis')} />}
               </button>
             </li>

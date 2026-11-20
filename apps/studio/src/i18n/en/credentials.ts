@@ -142,6 +142,15 @@ const en: Record<string, string> = {
   'Entwurf löschen?': 'Delete draft?',
   '„{name}“ wird gelöscht. Das kann nicht rückgängig gemacht werden.': '“{name}” will be deleted. This cannot be undone.',
   'Das Bild ist zu groß (höchstens 8 MB).': 'The image is too large (8 MB at most).',
+  // Card designer AI help (D5)
+  'Beschreibe das Bild': 'Describe the image',
+  'Müritz bei Sonnenuntergang, ruhig, blau': 'Lake Müritz at sunset, calm, blue',
+  Erzeugen: 'Generate',
+  'Wird erzeugt … (bis zu einer Minute)': 'Generating … (up to a minute)',
+  'Mit KI erzeugt': 'AI-generated',
+  KI: 'AI',
+  'Deine letzten Änderungen sind nicht gespeichert. Trotzdem zurück?': 'Your latest changes are not saved. Go back anyway?',
+  'Der Server antwortet gerade nicht. Bitte versuche es gleich noch einmal.': 'The server is not responding right now. Please try again in a moment.',
 };
 
 export default en;

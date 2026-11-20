@@ -217,7 +217,6 @@ struct MiniAppsWidgetView: View {
   }
 }
 
-@main
 struct MiniAppsWidget: Widget {
   let kind = "MiniApps"
 

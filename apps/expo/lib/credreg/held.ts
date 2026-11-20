@@ -11,6 +11,7 @@ import { RESERVED_TYPE_IDS, type CredentialRegistryReader } from '@netizen-labs/
 import { useCallback, useEffect, useState } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
 import type { Address, Hex } from 'viem';
+import { validateDesign, type CardDesign } from '@roebel/card-design';
 import { getApiBaseUrl, type ApiResult, type SigningAccount } from '@/lib/signed-request';
 import { fetchMineFull } from './api';
 import { registryReader } from './chain';
@@ -38,7 +39,19 @@ export type HeldCredential = {
   eventId?: string;
   eventTitle?: string;
   eventDate?: string;
+  /** The type's live card design (validated); absent = the picture (`imageUrl`) as before. */
+  design?: CardDesign;
+  designSha?: string;
+  /** The design contains AI-generated images. */
+  designAi?: boolean;
 };
+
+/** A design from the server or the cache, only if it is a valid card design. */
+function validDesign(v: unknown): CardDesign | undefined {
+  if (v === null || v === undefined) return undefined;
+  const r = validateDesign(v);
+  return r.ok ? r.design : undefined;
+}
 
 type Reader = Pick<CredentialRegistryReader, 'holdsMany'>;
 
@@ -59,6 +72,13 @@ function isoToSec(iso: string | null): number | null {
   if (!iso) return null;
   const ms = Date.parse(iso);
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+
+function designFields(design: unknown, sha: unknown, ai?: unknown): Pick<HeldCredential, 'design' | 'designSha' | 'designAi'> {
+  const d = validDesign(design);
+  if (!d) return {};
+  const marked = ai === true ? { designAi: true } : {};
+  return typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? { design: d, designSha: sha, ...marked } : { design: d, ...marked };
 }
 
 const KINDS = new Set(['role', 'membership', 'badge']);
@@ -88,6 +108,7 @@ function cacheEntry(v: unknown): HeldCredential | null {
     ...(typeof e.eventId === 'string' ? { eventId: e.eventId } : {}),
     ...(typeof e.eventTitle === 'string' ? { eventTitle: e.eventTitle } : {}),
     ...(typeof e.eventDate === 'string' ? { eventDate: e.eventDate } : {}),
+    ...designFields(e.design, e.designSha, e.designAi),
     claim: null, // never stored: proofs and claim signatures come only from the server
   };
 }
@@ -198,6 +219,7 @@ export async function loadHolder(account: SigningAccount, deps: HeldDeps = defau
         ...(i.type.eventId ? { eventId: i.type.eventId } : {}),
         ...(i.type.eventTitle ? { eventTitle: i.type.eventTitle } : {}),
         ...(i.type.eventDate ? { eventDate: i.type.eventDate } : {}),
+        ...designFields(i.design, i.designSha, i.designAi),
       };
     });
   if (onChain) await writeCache(account.address, held);

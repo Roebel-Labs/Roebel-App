@@ -82,6 +82,7 @@ import WalletConfirmSheet, {
 } from '@/components/miniapp/WalletConfirmSheet';
 import MiniAppNotificationSheet from '@/components/miniapp/MiniAppNotificationSheet';
 import MiniAppConsentSheet from '@/components/miniapp/MiniAppConsentSheet';
+import { readV1Choice, saveV1Choice, v1ConnectItems, v1User, type V1Choice } from '@/lib/miniapp-connection';
 import {
   buildConsentItems,
   credentialsEqual,
@@ -168,6 +169,8 @@ type Props = {
 /** The consent sheet on screen: what it shows and what happens with the answer. */
 type PendingConsent = {
   items: ConsentItem[];
+  /** Version-1 connect dialog: the answer is stored on the device, not on the node. */
+  v1?: boolean;
   /** Resolved with the saved state (or null when saving failed) after Erlauben / Nicht jetzt. */
   done: (state: IdentityState | null) => void;
 };
@@ -267,10 +270,13 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const gate = useCallback((): IdentityGate => {
     if (!gateRef.current) {
       gateRef.current = createIdentityGate();
-      if (!isV2) gateRef.current.settle();
+      if (app.preview) gateRef.current.settle();
     }
     return gateRef.current;
-  }, [isV2]);
+  }, [app.preview]);
+  // Version 1: the connect choice stored on this device (null = not asked yet / signed out).
+  const v1ChoiceRef = useRef<V1Choice | null>(null);
+  const [consentConnected, setConsentConnected] = useState(false);
   const [consent, setConsent] = useState<PendingConsent | null>(null);
   const [consentBusy, setConsentBusy] = useState(false);
   // A credentials.request sheet on screen: its `done`, so closing the host never leaves it hanging.
@@ -479,6 +485,39 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [visible, track, app.category]);
 
+  // Version 1: the standard connect dialog on the first open per account; the choice is kept on
+  // this device and identity-bearing calls wait for it (signed out until answered).
+  useEffect(() => {
+    if (!visible || isV2 || app.preview) return;
+    const g = gateRef.current && !gateRef.current.isSettled() ? gateRef.current : createIdentityGate();
+    gateRef.current = g;
+    v1ChoiceRef.current = null;
+    const wallet = walletLc;
+    if (!wallet) {
+      g.settle();
+      return;
+    }
+    let cancelled = false;
+    void readV1Choice(app.id, wallet).then((choice) => {
+      if (cancelled) return;
+      if (choice) {
+        v1ChoiceRef.current = choice;
+        return g.settle();
+      }
+      setConsent({
+        items: v1ConnectItems(),
+        v1: true,
+        done: () => g.settle(),
+      });
+    });
+    return () => {
+      cancelled = true;
+      g.settle();
+      setConsent(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per open and per account only
+  }, [visible, isV2, walletLc, app.id]);
+
   // Version 2: load the identity state on open (and when the account changes); ask for whatever
   // was never asked. Identity-bearing bridge calls wait for this gate.
   useEffect(() => {
@@ -592,14 +631,20 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'web';
     return {
       // Resolve to a display name, never surface the raw wallet. Version 2: only what was granted.
-      user: account?.address
-        ? shapeUser(app, identityRef.current, {
+      user: !account?.address
+        ? null
+        : !isV2 && !app.preview
+          ? v1User(app.id, account.address, v1ChoiceRef.current, {
+              displayName: user?.display_name ?? user?.username ?? undefined,
+              avatarUrl: user?.profile_picture_url ?? undefined,
+              isCitizen: !!isCitizen,
+            })
+          : shapeUser(app, identityRef.current, {
             address: account.address,
             displayName: user?.display_name ?? user?.username ?? undefined,
             avatarUrl: user?.profile_picture_url ?? undefined,
             isCitizen: !!isCitizen,
-          })
-        : null,
+          }),
       host: {
         name: 'Röbel',
         platform,
@@ -620,7 +665,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       launch: { entry: app.slug, referrer: 'roebel-store' },
     };
-  }, [account?.address, user, isCitizen, insets, app, isDark]);
+  }, [account?.address, user, isCitizen, insets, app, isDark, isV2]);
 
   // --- wallet request with confirm sheet -----------------------------------
   const walletRequest = useCallback(
@@ -629,7 +674,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       const params = normalizeParams(args.params);
 
       // Version 2 without the address grant: reads see no account, signing is refused.
-      const allowed = walletAllowed(app, identityRef.current);
+      const allowed = isV2 || app.preview ? walletAllowed(app, identityRef.current) : v1ChoiceRef.current?.address === true;
       if (!isSigningMethod(method)) {
         return handleReadOnly(method, params, allowed ? account : undefined, rpcProxy);
       }
@@ -739,10 +784,25 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
 
   // --- consent sheet answers --------------------------------------------------
   const answerConsent = useCallback(
-    async (on: Set<ConsentKey>) => {
+    async (on: Set<ConsentKey>, viaButton = false) => {
       const pending = consent;
       const state = identityRef.current;
       if (!pending) return;
+      if (pending.v1) {
+        const wallet = walletLc;
+        const choice: V1Choice = { profile: on.has('profile'), address: on.has('address') };
+        if (wallet) await saveV1Choice(app.id, wallet, choice);
+        v1ChoiceRef.current = choice;
+        track(on.size > 0 ? 'identity_granted' : 'identity_declined', { count: on.size });
+        if (viaButton && on.size > 0) {
+          setConsentConnected(true);
+          await new Promise((r) => setTimeout(r, 900));
+          setConsentConnected(false);
+        }
+        setConsent(null);
+        pending.done(null);
+        return;
+      }
       if (!state || !account) {
         setConsent(null);
         pending.done(null);
@@ -756,15 +816,20 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         // which sends credentialsChanged when the shared list differs).
         if (saved) tokenCacheRef.current?.clear();
         track(on.size > 0 ? 'identity_granted' : 'identity_declined', { count: on.size });
+        if (viaButton && saved && on.size > 0) {
+          setConsentConnected(true);
+          await new Promise((r) => setTimeout(r, 900));
+          setConsentConnected(false);
+        }
         pending.done(saved);
       } finally {
         setConsentBusy(false);
         setConsent(null);
       }
     },
-    [consent, account, app, track],
+    [consent, account, app, track, walletLc],
   );
-  const handleConsentAllow = useCallback((on: Set<ConsentKey>) => void answerConsent(on), [answerConsent]);
+  const handleConsentAllow = useCallback((on: Set<ConsentKey>) => void answerConsent(on, true), [answerConsent]);
   // "Nicht jetzt": nothing granted, but the items count as asked.
   const handleConsentLater = useCallback(() => void answerConsent(new Set()), [answerConsent]);
 
@@ -783,6 +848,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     });
     // Version 2: identity-bearing calls wait for the consent decision. Version 1 is untouched.
     const settled = () => gate().settled;
+    // The account is shared: version 2 per grant, version 1 per the connect choice, the dev
+    // preview always.
+    const addressShared = () =>
+      isV2 || app.preview ? walletAllowed(app, identityRef.current) : v1ChoiceRef.current?.address === true;
     const v2Only = {
       getContext: async () => {
         await settled();
@@ -867,8 +936,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     // auth.signIn: an EIP-4361 message for the app's own domain, signed by the account after a
     // native confirmation. Needs the address grant (version 2); version 1 always has the wallet.
     const authSignIn = async (p: { nonce?: string }): Promise<{ token: string }> => {
-      if (isV2) await settled();
-      if (!walletAllowed(app, identityRef.current)) throw ADDRESS_NOT_GRANTED;
+      await settled();
+      if (!addressShared()) throw ADDRESS_NOT_GRANTED;
       const acc = account;
       if (!acc) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
       const origin = signInOrigin(app.homeUrl);
@@ -903,8 +972,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     // roebel.pay: Röbel Münzen to a person or org account known in Röbel, after the native sheet.
     // The memo is shown on the sheet only (never on chain, never logged, never returned).
     const pay = async (p: unknown): Promise<{ txHash: string }> => {
-      if (isV2) await settled();
-      if (!walletAllowed(app, identityRef.current)) throw ADDRESS_NOT_GRANTED;
+      await settled();
+      if (!addressShared()) throw ADDRESS_NOT_GRANTED;
       const acc = account;
       if (!acc) throw { code: 'unauthorized', message: 'Kein Konto verbunden.' };
       const prepared = await preparePay(p, {
@@ -955,12 +1024,26 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         if (message) await Share.share({ message });
       },
       addMiniApp: () => ({ added: false }),
-      getContext: isV2 ? v2Only.getContext : () => buildContext(),
+      getContext: isV2
+        ? v2Only.getContext
+        : async () => {
+            await settled();
+            return buildContext();
+          },
 
       walletGetAccount: isV2
         ? v2Only.walletGetAccount
-        : () => (account?.address ? { address: account.address, chainId: HOST_CHAIN_ID } : null),
-      walletRequest: isV2 ? v2Only.walletRequest : walletRequest,
+        : async () => {
+            await settled();
+            const ok = app.preview || v1ChoiceRef.current?.address === true;
+            return ok && account?.address ? { address: account.address, chainId: HOST_CHAIN_ID } : null;
+          },
+      walletRequest: isV2
+        ? v2Only.walletRequest
+        : async (args: Eip1193RequestArgs) => {
+            await settled();
+            return walletRequest(args);
+          },
 
       hapticsImpact: ({ style }) => {
         const map: Record<string, Haptics.ImpactFeedbackStyle> = {
@@ -1044,6 +1127,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       authGetToken: isV2
         ? v2Only.authGetToken
         : async () => {
+            await settled();
+            // The version-1 token names the account: only once the address is shared.
+            if (!app.preview && v1ChoiceRef.current?.address !== true) return null;
             const t = await getUserToken({ silent: true });
             return t ? { token: t } : null;
           },
@@ -1292,6 +1378,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           iconUrl={app.iconUrl}
           items={consent?.items ?? NO_ITEMS}
           busy={consentBusy}
+          verified={!app.preview}
+          connected={consentConnected}
           onAllow={handleConsentAllow}
           onLater={handleConsentLater}
         />

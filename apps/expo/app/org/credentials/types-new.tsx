@@ -1,9 +1,10 @@
 /**
  * "Neuer Ausweis-Typ" on the phone: pick a template (the dashboard's list), adjust name and
  * description, then the type goes to the approve screen (type_prepare op create). Images, limits
- * and claim windows stay on the dashboard.
+ * and claim windows stay on the dashboard. With the Ausweis-Designer switched on (status
+ * `designer`), this screen hands over to the designer instead.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -12,6 +13,7 @@ import { CredentialScreenFrame, CredentialStatus } from '@/components/credential
 import { OrgChainNotice, useCredOrg } from '@/components/credentials/OrgCredentialParts';
 import { prepareTypeCreate } from '@/lib/credreg/api';
 import { submittedMessage } from '@/lib/credreg/org';
+import { useDesignerOpen } from '@/lib/card-design/designer-status';
 import { KIND_LABEL, TYPE_TEMPLATES, templateFormError, templatePayload, type TemplateKey } from '@/lib/credreg/templates';
 
 const KEYS = Object.keys(TYPE_TEMPLATES) as TemplateKey[];
@@ -27,9 +29,13 @@ export default function NewTypeScreen() {
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const designer = useDesignerOpen();
+  useEffect(() => {
+    if (designer) router.replace('/org/credentials/designer?new=1' as any);
+  }, [designer, router]);
 
   const title = 'Neuer Ausweis-Typ';
-  if (state.status === 'loading') {
+  if (state.status === 'loading' || designer !== false) {
     return (
       <CredentialScreenFrame title={title}>
         <CredentialStatus loading />

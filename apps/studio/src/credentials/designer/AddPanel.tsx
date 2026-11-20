@@ -1,10 +1,11 @@
 // Left column: start again from a template, the finish, and new elements (logo, text, personal
 // fields, stickers). Uploads go through `onUpload` (the server stores the image for the org).
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { PRESETS, PRESET_IDS, addLayer, type CardDesign, type FieldId, type PresetId } from '@roebel/card-design';
 import { t } from '../../i18n';
 import type { AssetKind, AssetView } from '../types';
 import { fieldLayers, imageLayer, textLayer } from './layers';
+import { AI_PROMPT_MAX, promptReady, type AiKind } from './ai';
 
 export function presetLabel(id: PresetId): string {
   switch (id) {
@@ -36,12 +37,39 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** "Beschreibe das Bild" + "Erzeugen"; the text stays after a failure so it can be sent again. */
+export function AiBox({ kind, running, notice, onGenerate }: { kind: AiKind; running: boolean; notice: string | null; onGenerate: (kind: AiKind, prompt: string) => void }) {
+  const [prompt, setPrompt] = useState('');
+  const go = () => promptReady(prompt) && !running && onGenerate(kind, prompt);
+  return (
+    <div className="dz-ai">
+      <label className="dz-ai-label">
+        <span>{t('Beschreibe das Bild')}</span>
+        <input
+          type="text"
+          value={prompt}
+          maxLength={AI_PROMPT_MAX}
+          placeholder={t('Müritz bei Sonnenuntergang, ruhig, blau')}
+          disabled={running}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && go()}
+        />
+      </label>
+      <button className="w-btn" disabled={running || !promptReady(prompt)} onClick={go}>
+        {t('Erzeugen')}
+      </button>
+      {running && <p className="dz-note">{t('Wird erzeugt … (bis zu einer Minute)')}</p>}
+      {!running && notice && <p className="dz-note">{notice}</p>}
+    </div>
+  );
+}
+
 export type Apply = (fn: (d: CardDesign) => CardDesign, opts?: { key?: string; select?: string | null | ((d: CardDesign) => string | null) }) => void;
 
 const lastId = (d: CardDesign) => d.layers[d.layers.length - 1]?.id ?? null;
 
 export function AddPanel({
-  design, apply, assets, uploading, onUpload, onTemplates,
+  design, apply, assets, uploading, onUpload, onTemplates, generating = null, aiNotice = null, onGenerate,
 }: {
   design: CardDesign;
   apply: Apply;
@@ -49,6 +77,10 @@ export function AddPanel({
   uploading: AssetKind | null;
   onUpload: (kind: AssetKind, file: File) => void;
   onTemplates: () => void;
+  /** The AI request running now, if any. */
+  generating?: AiKind | null;
+  aiNotice?: { kind: AiKind; text: string } | null;
+  onGenerate?: (kind: AiKind, prompt: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const kind = useRef<AssetKind>('logo');
@@ -122,6 +154,7 @@ export function AddPanel({
         <button className="w-btn" disabled={uploading !== null} onClick={() => pick('background')}>
           {uploading === 'background' ? t('Lädt hoch …') : t('Bild hochladen')}
         </button>
+        {onGenerate && <AiBox kind="background" running={generating === 'background'} notice={aiNotice?.kind === 'background' ? aiNotice.text : null} onGenerate={onGenerate} />}
         <label className="dz-row">
           <span>{t('Glanz über die ganze Karte')}</span>
           <input
@@ -183,6 +216,7 @@ export function AddPanel({
         <button className="w-btn" disabled={uploading !== null} onClick={() => pick('sticker')}>
           {uploading === 'sticker' ? t('Lädt hoch …') : t('Sticker hochladen')}
         </button>
+        {onGenerate && <AiBox kind="sticker" running={generating === 'sticker'} notice={aiNotice?.kind === 'sticker' ? aiNotice.text : null} onGenerate={onGenerate} />}
       </Group>
 
       <input

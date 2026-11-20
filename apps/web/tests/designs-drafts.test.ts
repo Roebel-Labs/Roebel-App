@@ -101,6 +101,8 @@ test("save → get round-trip, then update with the current revision", async () 
   const list = must(await listDrafts(d, caller(OWNER), { accountId: VEREIN }));
   assert.deepEqual(list.map((x) => [x.name, x.revision]), [["Mitglied 2027", 2]]);
   assert.equal("design" in list[0], false);
+  // The view names its org (a test link opened from a push needs it).
+  assert.equal(list[0].accountId, VEREIN);
 });
 
 test("a stale baseRevision → 409 DRAFT_CONFLICT with the current draft", async () => {

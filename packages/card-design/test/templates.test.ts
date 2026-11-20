@@ -22,13 +22,18 @@ test('card templates carry title, logo, place line, mark and (non-community) the
   const community = new Set(['gast', 'buerger', 'bescheiniger']);
   for (const t of TEMPLATES.filter((x) => x.format === 'card')) {
     const L = t.design.layers;
-    const title = L.find((l) => l.type === 'text' && l.x === 52 && l.y === 72) as Extract<Layer, { type: 'text' }>;
-    assert.ok(title, `${t.id} title`);
-    assert.equal(title.font, 'barlow-black');
-    assert.equal(title.size, 44);
+    const isCommunity = community.has(t.id);
+    const title = L.find((l) => l.type === 'text' && l.id === 'title') as Extract<Layer, { type: 'text' }>;
+    assert.ok(title && title.x === 52, `${t.id} title`);
+    // Community cards follow the app's card PNGs (semi-condensed); the others the designer layout.
+    assert.equal(title.font, isCommunity ? 'mona-condensed' : 'barlow-black');
+    assert.equal(title.size, isCommunity ? 55.4 : 44);
+    assert.equal(title.y, isCommunity ? 57 : 72);
     assert.equal(title.uppercase, true);
     const place = L.find((l) => l.type === 'text' && l.text === 'Röbel / Müritz') as Extract<Layer, { type: 'text' }>;
-    assert.ok(place && place.x === 52 && place.y === 480 && place.font === 'barlow' && place.size === 32, `${t.id} place`);
+    assert.ok(place && place.x === 52, `${t.id} place`);
+    if (isCommunity) assert.ok(place.font === 'mona-condensed' && place.size === 39.4, `${t.id} place`);
+    else assert.ok(place.y === 480 && place.font === 'barlow' && place.size === 32, `${t.id} place`);
     const logo = L.find((l) => l.type === 'image' && l.role === 'logo');
     assert.ok(logo, `${t.id} logo`);
     if (community.has(t.id)) assert.match((logo as { assetId: string }).assetId, /^builtin:person-laurel/);

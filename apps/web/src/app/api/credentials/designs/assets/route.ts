@@ -18,8 +18,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const len = Number(request.headers.get("content-length") ?? "0");
-  if (len > MAX_ASSET_BYTES + 64 * 1024) return jsonFail(413, "TOO_LARGE", "Das Bild ist zu groß (höchstens 8 MB).");
+  // No body is parsed before its size is known (a chunked upload would be buffered before auth).
+  const raw = request.headers.get("content-length");
+  if (!raw) return jsonFail(411, "LENGTH_REQUIRED", "Die Bildgröße fehlt in der Anfrage.");
+  const len = Number(raw);
+  if (!Number.isFinite(len) || len > MAX_ASSET_BYTES + 64 * 1024) return jsonFail(413, "TOO_LARGE", "Das Bild ist zu groß (höchstens 8 MB).");
   const form = await request.formData().catch(() => null);
   if (!form) return jsonFail(400, "BAD_REQUEST", "Bitte ein Bild als Formular senden.");
 

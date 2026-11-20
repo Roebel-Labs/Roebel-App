@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import sharp from "sharp";
 import type { Caller } from "../caller";
 import { publicBaseUrl } from "../config";
-import { designOrgFor, fail, isFail, ok, type DesignDeps, type DesignResult } from "./drafts";
+import { designOrgFor, fail, isFail, ok, type DesignDeps, type DesignFail, type DesignResult } from "./drafts";
 import type { AssetKind, AssetRow } from "./store";
 
 /** Object storage of the asset bytes (Supabase bucket `images` in production). */
@@ -47,13 +47,24 @@ export function assetView(a: AssetRow): AssetView {
  * a same-document fragment (#id). A data: image href is kept (it is the picture itself).
  */
 export function sanitiseSvg(svg: string): string {
+  // Repeat until stable: a single pass can be defeated by nesting (<!DOC<!DOCTYPE q>TYPE …>).
+  let s = svg;
+  for (let i = 0; i < 10; i++) {
+    const next = sanitiseOnce(s);
+    if (next === s) return s;
+    s = next;
+  }
+  return s;
+}
+
+function sanitiseOnce(svg: string): string {
   let s = svg;
   s = s.replace(/<!DOCTYPE[\s\S]*?>/gi, "");
   s = s.replace(/<!ENTITY[\s\S]*?>/gi, "");
   s = s.replace(/<script\b[\s\S]*?<\/script\s*>/gi, "").replace(/<script\b[^>]*\/?>/gi, "");
   s = s.replace(/<foreignObject\b[\s\S]*?<\/foreignObject\s*>/gi, "").replace(/<foreignObject\b[^>]*\/?>/gi, "");
   s = s.replace(/[\s/]on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, " ");
-  s = s.replace(/\s(?:xlink:)?href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (m, _q, a, b, c) => {
+  s = s.replace(/\s(?:[\w-]+:)?href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (m, _q, a, b, c) => {
     const v = String(a ?? b ?? c ?? "").trim();
     if (v.startsWith("#")) return m;
     if (/^data:image\/(png|jpeg|webp|gif);base64,/i.test(v)) return m;
@@ -84,10 +95,11 @@ async function normalise(bytes: Uint8Array, mime: string): Promise<{ bytes: Uint
     const w = meta.width ?? 0;
     const h = meta.height ?? 0;
     if (!w || !h) return UNREADABLE;
-    if (Math.max(w, h) <= MAX_ASSET_SIDE) return { bytes, mime, width: w, height: h };
+    // Always re-encode: strips EXIF/GPS from phone photos (stored in a public bucket) and applies
+    // the EXIF orientation.
     const out = await sharp(bytes, { limitInputPixels: 64_000_000 })
       .rotate()
-      .resize(MAX_ASSET_SIDE, MAX_ASSET_SIDE, { fit: "inside" })
+      .resize(MAX_ASSET_SIDE, MAX_ASSET_SIDE, { fit: "inside", withoutEnlargement: true })
       .toFormat(meta.format as "png" | "jpeg" | "webp")
       .toBuffer({ resolveWithObject: true });
     return { bytes: new Uint8Array(out.data), mime, width: out.info.width, height: out.info.height };
@@ -96,10 +108,20 @@ async function normalise(bytes: Uint8Array, mime: string): Promise<{ bytes: Uint
   }
 }
 
+/** Hooks for generated assets (designs/ai.ts). */
+export type StoreAssetOptions = {
+  /** Applied to the normalised bytes before hashing and storing (the AI Act marking: the
+   *  re-encode in `normalise` would strip a marking written earlier). */
+  mark?: (bytes: Uint8Array) => Uint8Array;
+  /** Replaces the plain insert (the limited AI insert); a returned fail is passed on. */
+  insert?: (row: AssetRow) => Promise<DesignFail | null>;
+};
+
 export async function storeAsset(
   d: AssetDeps,
   c: Caller,
   p: { accountId: string; kind: AssetKind; bytes: Uint8Array; mime: string; ai?: boolean; prompt?: string },
+  opts: StoreAssetOptions = {},
 ): Promise<DesignResult<AssetView>> {
   const org = await designOrgFor(d, c, p?.accountId);
   if (isFail(org)) return org;
@@ -112,6 +134,7 @@ export async function storeAsset(
 
   const n = await normalise(p.bytes, mime);
   if (isFail(n)) return n;
+  if (opts.mark) n.bytes = opts.mark(n.bytes);
   const sha = sha256(n.bytes);
   const existing = await d.store.getAsset(sha, org.accountId);
   if (existing) return ok(assetView(existing));
@@ -131,7 +154,12 @@ export async function storeAsset(
     createdBy: c.wallet.toLowerCase(),
     createdAt: new Date(d.now()).toISOString(),
   };
-  await d.store.insertAsset(row);
+  if (opts.insert) {
+    const refused = await opts.insert(row);
+    if (refused) return refused;
+  } else {
+    await d.store.insertAsset(row);
+  }
   return ok(assetView(row));
 }
 

@@ -62,6 +62,8 @@ export type InvitationView = {
   design: CardDesign | null;
   /** sha of that design version (its immutable URL: /api/credentials/designs/<sha>). */
   designSha: string | null;
+  /** That design contains AI-generated images (public metadata `aiGenerated`). */
+  designAi: boolean;
   claim: {
     batchId: string;
     leaf: { kind: "account" | "claimKey"; typeId: Hex; subject: Address; validUntil: string; salt: Hex };
@@ -173,6 +175,7 @@ async function toView(d: HolderDeps, ctx: ViewContext, inv: InvitationRow, batch
     validUntil: isoOfSeconds(inv.validUntil),
     design: live?.design ?? null,
     designSha: live?.sha ?? null,
+    designAi: live?.meta.aiGenerated === true,
     claim: {
       batchId: batch.chainBatchId,
       leaf: {

@@ -6,6 +6,8 @@ import StampCard from '@/components/credentials/StampCard';
 import { formatEventDate } from '@/lib/credreg/collect-format';
 import type { BadgeTile, RegisterCard } from '@/lib/credreg/model';
 import CredentialCard from './CredentialCard';
+import type { Holder } from '@/lib/card-design/holder-values';
+import { designHasAi } from '@/lib/credreg/designs';
 
 type Props = {
   card: RegisterCard | null;
@@ -24,6 +26,8 @@ type Props = {
   busy?: boolean;
   /** German message of the last failed action. */
   error?: string | null;
+  /** The holder of an own card: fills a designed card's name field (never for readOnly cards). */
+  holder?: Holder | null;
 };
 
 export const MAKE_PRIVATE_EXPLAINER =
@@ -31,6 +35,9 @@ export const MAKE_PRIVATE_EXPLAINER =
 
 export const PENDING_BADGE_TEXT = 'Wird eingetragen, sobald der Veranstalter die Abzeichen vergibt.';
 export const QUEUED_BADGE_TEXT = 'Wird gesammelt, sobald du wieder online bist.';
+
+/** AI Act Art. 50: a designed card with generated pictures says so. */
+export const AI_IMAGES_NOTE = 'Enthält KI-generierte Bilder';
 
 export const ORG_PRIVATE_ONLY = 'Diese Organisation zeigt ihre Mitglieder nicht öffentlich.';
 
@@ -62,6 +69,7 @@ export default function CredentialDetailSheet({
   readOnly = false,
   busy = false,
   error = null,
+  holder = null,
 }: Props) {
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -105,7 +113,13 @@ export default function CredentialDetailSheet({
             <StampCard imageUrl={card.imageUrl} title={card.title} subtitle="" state="collected" size="hero" />
           </View>
         ) : (
-          <CredentialCard card={card} width={Math.min(screenWidth - 64, 320)} style={styles.card} />
+          <CredentialCard
+            card={card}
+            width={Math.min(screenWidth - 64, 320)}
+            style={styles.card}
+            holder={readOnly ? null : holder}
+            animate="tilt"
+          />
         )}
         {isBadge ? null : <Text style={[styles.title, { color: colors.textPrimary }]}>{card.title}</Text>}
         {isBadge && card.eventTitle ? <Text style={[styles.title, { color: colors.textPrimary }]}>{card.eventTitle}</Text> : null}
@@ -116,6 +130,9 @@ export default function CredentialDetailSheet({
             {expired ? 'Abgelaufen' : validityLabel(card.validUntil)}
           </Text>
         )}
+        {card.design && (card.designAi || designHasAi(card.design)) ? (
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>{AI_IMAGES_NOTE}</Text>
+        ) : null}
 
         {confirming ? (
           <View style={styles.block}>

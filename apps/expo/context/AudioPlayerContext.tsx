@@ -11,9 +11,11 @@
  *  - AudioStatusContext  — playing / currentTime / duration (ticks 4×/s)
  *  - AudioProgressContext — saved resume positions (changes every few seconds)
  *
- * Foreground only: the build strips `audio` from UIBackgroundModes
- * (plugins/withRemoveAudioBackgroundMode), so playback stops when the app is
- * backgrounded. Background + lock-screen controls need a native build.
+ * Background + lock screen: the `expo-audio` plugin enables background playback
+ * (app.config.ts, needs a native build ≥ 3.10.0). The audio mode keeps playing in
+ * the background (`doNotMix`, required by the lock-screen controls) and the
+ * current episode is shown on the lock screen / in the notification with its
+ * title, show and artwork. Older builds simply ignore these calls.
  */
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,7 +29,10 @@ type AudioPlayerLike = {
   replace: (source: unknown) => void;
   setPlaybackRate?: (rate: number, quality?: string) => void;
   playbackRate?: number;
+  setActiveForLockScreen?: (active: boolean, metadata?: LockScreenMetadata, options?: { showSeekForward?: boolean; showSeekBackward?: boolean }) => void;
+  updateLockScreenMetadata?: (metadata: LockScreenMetadata) => void;
 } | null;
+type LockScreenMetadata = { title?: string; artist?: string; albumTitle?: string; artworkUrl?: string };
 type AudioStatusLike = {
   playing?: boolean;
   currentTime?: number;
@@ -130,6 +135,36 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const pendingSeek = useRef<{ episodeId: string; at: number } | null>(null);
   const lastSaveAt = useRef(0);
   const audioModeSet = useRef(false);
+  const lockScreenActive = useRef(false);
+
+  // Lock screen / notification: the current episode with title, show and artwork.
+  useEffect(() => {
+    if (!player?.setActiveForLockScreen) return;
+    try {
+      if (!track) {
+        if (lockScreenActive.current) {
+          lockScreenActive.current = false;
+          player.setActiveForLockScreen(false);
+        }
+        return;
+      }
+      const artwork = track.episode.cover_url ?? track.show.cover_url ?? undefined;
+      const metadata: LockScreenMetadata = {
+        title: track.episode.title,
+        artist: track.show.author ?? track.show.title,
+        albumTitle: track.show.title,
+        ...(artwork ? { artworkUrl: artwork } : {}),
+      };
+      if (!lockScreenActive.current) {
+        lockScreenActive.current = true;
+        player.setActiveForLockScreen(true, metadata, { showSeekForward: true, showSeekBackward: true });
+      } else {
+        player.updateLockScreenMetadata?.(metadata);
+      }
+    } catch {
+      // Older native builds without lock-screen support: playback works as before.
+    }
+  }, [player, track]);
 
   // Restore saved positions + preferred speed once.
   useEffect(() => {
@@ -199,7 +234,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       if (!player) return;
       if (!audioModeSet.current) {
         audioModeSet.current = true;
-        setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+        // Keeps playing with the screen locked / app in the background; `doNotMix` is required
+        // for the lock-screen controls.
+        setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' }).catch(() => {});
       }
       const current = trackRef.current;
       if (current?.episode.id === episode.id) {

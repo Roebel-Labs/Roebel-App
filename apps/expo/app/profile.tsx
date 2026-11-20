@@ -20,6 +20,7 @@ import { announceHeldChanged } from '@/lib/credreg/held';
 import { makePrivate } from '@/lib/credreg/visibility';
 import { makePublic } from '@/lib/credreg/accept';
 import { useProfileCredentials } from '@/hooks/useProfileCredentials';
+import { useHolder } from '@/lib/card-design/holder-values';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
@@ -35,7 +36,7 @@ import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
-import BadgeGrid from '@/components/profile/BadgeGrid';
+import BadgeGrid, { hasCollectedStamp } from '@/components/profile/BadgeGrid';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
@@ -139,6 +140,8 @@ export default function ProfileScreen() {
   };
 
   const displayName = user?.display_name || user?.username || 'Du';
+  // Fills the name field of designed cards, on this device only (verified name first).
+  const holder = useHolder(account?.address, user?.display_name || user?.username || null);
   const personalAvatarUrl = user?.profile_picture_url ?? null;
   const profileHref = user?.username
     ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
@@ -326,7 +329,7 @@ export default function ProfileScreen() {
                     <Text style={[styles.pendingAction, { color: colors.primary }]}>{readyBusy ? 'Wird eingetragen…' : 'Jetzt eintragen'}</Text>
                   </Pressable>
                 )}
-                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} />
+                <CredentialCardStack cards={creds.profile.cards} onPress={openCard} holder={holder} animateFront={!shownCard} />
                 <ProfileSheet>
                   <IdentityRow
                     name={displayName}
@@ -336,14 +339,14 @@ export default function ProfileScreen() {
                     right={muenzenSlot}
                   />
                   <ProfileCompletionCard user={user} />
-                  {creds.open && (
+                  {/* Stempel: only after the first collected stamp (no empty section before). */}
+                  {creds.open && hasCollectedStamp(creds.profile.badges, creds.queued) && (
                     <BadgeGrid
                       badges={creds.profile.badges}
                       pending={creds.pendingBadges}
                       queued={creds.queued}
                       onPress={openCard}
                       onPressTile={openTile}
-                      emptyState
                     />
                   )}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
@@ -397,6 +400,7 @@ export default function ProfileScreen() {
             onMakePublic={makeCardPublic}
             busy={cardBusy}
             error={cardError}
+            holder={holder}
           />
         )}
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />

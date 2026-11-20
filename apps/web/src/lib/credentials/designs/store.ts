@@ -100,6 +100,14 @@ export interface DesignStore {
   /** Idempotent per (account, sha). */
   insertAsset(row: AssetRow): Promise<void>;
   assetsOf(accountId: string): Promise<AssetRow[]>;
+  /** AI-generated assets of one kind an org created at or after `sinceIso`. */
+  countAiAssetsSince(accountId: string, kind: AssetKind, sinceIso: string): Promise<number>;
+  /**
+   * Inserts an AI asset only while the org has fewer than `limit` AI assets of its kind since
+   * `sinceIso` — count and insert in one transaction (two admins racing never make a 21st).
+   * false = over the limit, nothing inserted. An existing (account, sha) row counts as inserted.
+   */
+  insertAiAssetWithinLimit(row: AssetRow, sinceIso: string, limit: number): Promise<boolean>;
 }
 
 /** The designer switch (app_settings.credential_designer_enabled): only 'true' opens; errors keep it closed. */
@@ -192,5 +200,18 @@ export class InMemoryDesignStore implements DesignStore {
   }
   async assetsOf(accountId: string) {
     return [...this.assets.values()].filter((a) => a.accountId === accountId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(clone);
+  }
+  async countAiAssetsSince(accountId: string, kind: AssetKind, sinceIso: string) {
+    const since = Date.parse(sinceIso);
+    return [...this.assets.values()].filter((a) => a.accountId === accountId && a.ai && a.kind === kind && Date.parse(a.createdAt) >= since).length;
+  }
+  async insertAiAssetWithinLimit(row: AssetRow, sinceIso: string, limit: number) {
+    // Synchronous check + insert: atomic within the single JS thread, like the SQL function's lock.
+    if (this.assets.has(`${row.accountId}:${row.sha}`)) return true;
+    const since = Date.parse(sinceIso);
+    const used = [...this.assets.values()].filter((a) => a.accountId === row.accountId && a.ai && a.kind === row.kind && Date.parse(a.createdAt) >= since).length;
+    if (used >= limit) return false;
+    this.assets.set(`${row.accountId}:${row.sha}`, clone(row));
+    return true;
   }
 }

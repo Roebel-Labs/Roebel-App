@@ -18,12 +18,17 @@ export type DesignMetadata = {
 export const designUrl = (sha: string) => `${publicBaseUrl()}/api/credentials/designs/${sha}`;
 export const designImageUrl = (sha: string) => `${designUrl(sha)}/image`;
 
+/** Field layers lose their free-text sample in public metadata (it could be a real name). */
+export function publicDesign(d: CardDesign): CardDesign {
+  return { ...d, layers: d.layers.map((l) => (l.type === "field" ? { ...l, sampleText: "" } : l)) };
+}
+
 export function designMetadataJson(v: VersionRow): DesignMetadata {
   return {
     name: v.meta.name,
     description: v.meta.description,
     image: designImageUrl(v.sha),
-    properties: { kind: v.meta.kind, organisation: v.meta.organisation, aiGenerated: v.meta.aiGenerated, designVersion: v.version, design: v.design },
+    properties: { kind: v.meta.kind, organisation: v.meta.organisation, aiGenerated: v.meta.aiGenerated, designVersion: v.version, design: publicDesign(v.design) },
   };
 }
 

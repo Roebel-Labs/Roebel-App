@@ -29,7 +29,7 @@ test("labels, reasons and sensitivity", () => {
     items.map((i) => [i.label, i.reason, i.sensitive, i.isNew]),
     [
       ["Name und Bild", undefined, false, true],
-      ["Kontoadresse", undefined, true, true],
+      ["Öffentliche ID", undefined, true, true],
       ["Bescheiniger:in", "Nur Prüfer:innen", true, true],
       [`${T} (unbekannter Typ)`, "Mitglied", true, true],
     ],

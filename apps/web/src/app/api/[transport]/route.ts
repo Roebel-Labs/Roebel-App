@@ -148,6 +148,7 @@ const handler = createMcpHandler(
             `4. publish_html_app {html, manifest} — creates/updates your app, serves it at https://<slug>.${MINI_APPS_SITE_DOMAIN}, status "pending" until an admin approves.\n\n` +
             `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n` +
             `Self-hosted (recommended for Vercel/Lovable/own server): serve /.well-known/roebel-miniapp.json, then register_app_url {url} — recipe ${DOCS_BASE_URL}/mini-apps/publish.md.\n\n` +
+            `Every mini app opens with the Röbel connect dialog and every item can be declined — build fallbacks first: get_docs {section:"connect"}.\n` +
             `Identity, verification, credentials, wallet, gasless calls, badges and store targeting: get_docs {section:"identity"|"verify"|"credentials"|"wallet"|"gasless"|"issuer"|"store"}.\n\n` +
             `Auth for publishing tools: Authorization: Bearer nz_<api-key> — create at ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
         ),
