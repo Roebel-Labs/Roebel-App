@@ -1,5 +1,5 @@
 /**
- * Android widget layout: Erkunden-style tiles, 4 columns, last tile "Alle" (store),
+ * Android widget layout: Erkunden-style tiles sized by miniAppsGrid, last tile = store,
  * unread dot, empty state.
  */
 import React from 'react';
@@ -44,19 +44,19 @@ function payload(n: number, unread: string[] = []): WidgetPayload {
   };
 }
 
-it('4×4: 15 apps plus the Alle tile last', () => {
+it('4×4: 15 apps plus the store tile last', () => {
   const uris = clickUris(<MiniAppsWidget payload={payload(15)} width={320} height={340} dark={false} />);
   expect(uris).toHaveLength(16);
   expect(uris[0]).toBe('roebel://mini-app/a0?open=1');
   expect(uris[15]).toBe('roebel://mini-apps');
 });
 
-it('4×2: 7 apps plus Alle', () => {
+it('4×2: 7 apps plus the store tile', () => {
   const uris = clickUris(<MiniAppsWidget payload={payload(15)} width={320} height={170} dark={false} />);
   expect(uris).toEqual([...Array.from({ length: 7 }, (_, i) => `roebel://mini-app/a${i}?open=1`), 'roebel://mini-apps']);
 });
 
-it('fewer apps than slots: Alle follows the last app', () => {
+it('fewer apps than slots: the store tile follows the last app', () => {
   const uris = clickUris(<MiniAppsWidget payload={payload(2)} width={320} height={340} dark={false} />);
   expect(uris).toEqual(['roebel://mini-app/a0?open=1', 'roebel://mini-app/a1?open=1', 'roebel://mini-apps']);
 });
@@ -76,8 +76,24 @@ it('an app with unread notifications gets the red dot', () => {
   expect(dots(payload(3))).toBe(0);
 });
 
-it('empty payload asks to choose apps and opens the settings', () => {
+it('no apps opened yet: the store tile alone, "Mini-Apps entdecken"', () => {
   const nodes = expand(<MiniAppsWidget payload={null} width={320} height={170} dark />);
-  expect(nodes.some((n: any) => n.props?.text === 'Mini Apps auswählen')).toBe(true);
-  expect(clickUris(<MiniAppsWidget payload={null} width={320} height={170} dark />)).toEqual(['roebel://settings/widget']);
+  expect(nodes.some((n: any) => n.props?.text === 'Mini-Apps entdecken')).toBe(true);
+  expect(clickUris(<MiniAppsWidget payload={null} width={320} height={170} dark />)).toEqual(['roebel://mini-apps']);
+});
+
+it('one app: the app and the store tile, both big', () => {
+  const nodes = expand(<MiniAppsWidget payload={payload(1)} width={320} height={170} dark={false} />);
+  expect(clickUris(<MiniAppsWidget payload={payload(1)} width={320} height={170} dark={false} />)).toEqual([
+    'roebel://mini-app/a0?open=1',
+    'roebel://mini-apps',
+  ]);
+  const icon = nodes.find((n: any) => n.props?.image === 'data:image/png;base64,QUJD');
+  expect(icon.props.imageWidth).toBeGreaterThanOrEqual(80);
+});
+
+it('4×1: icons only, no names', () => {
+  const nodes = expand(<MiniAppsWidget payload={payload(8)} width={320} height={70} dark={false} />);
+  expect(nodes.some((n: any) => n.props?.text === 'App 0')).toBe(false);
+  expect(clickUris(<MiniAppsWidget payload={payload(8)} width={320} height={70} dark={false} />)).toHaveLength(5);
 });

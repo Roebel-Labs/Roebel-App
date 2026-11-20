@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the "Mittagstisch" and "Diese Woche" home-screen widgets (iOS
+ * Pure helpers for the "Mittagstisch" and "Events" home-screen widgets (iOS
  * WidgetKit + Android): which dishes / events they show and the platform-neutral
  * payloads both widgets read. Side effects (queries, photos, OS reloads) live in
  * lib/widget-sync.ts.
@@ -7,11 +7,14 @@
 import type { EventRecord, SpecialMenuItemRecord } from './types';
 import { dishDayLabel, resolveDishDay } from './special-menu-days';
 import { formatMenuPrice, hasMenuPrice } from './utils';
+import { shortVenue } from './widget-layout';
 
 /** Dishes per restaurant page (the large widget shows a 2×2 photo grid). */
 export const WIDGET_LUNCH_MAX = 4;
-/** Rows of the large events widget. */
-export const WIDGET_EVENTS_MAX = 6;
+/** Events in the payload (the Android list scrolls; iOS shows what fits). */
+export const WIDGET_EVENTS_MAX = 12;
+/** Community name in the events widget header ("Events in Röbel"). */
+export const WIDGET_PLACE = 'Röbel';
 
 export const LUNCH_PAYLOAD_KEY = 'widget.lunch.v1';
 export const LUNCH_PAGE_KEY = 'widget.lunch.page.v1';
@@ -107,7 +110,7 @@ export function lunchPageIndex(current: number, count: number, step: number): nu
   return (((base + step) % count) + count) % count;
 }
 
-// ── Diese Woche ───────────────────────────────────────────────────────────
+// ── Events ───────────────────────────────────────────────────────────────
 
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
@@ -118,34 +121,46 @@ export type WidgetEvent = {
   weekday: string;
   /** "24" */
   day: string;
+  /** "10" (two digits). Optional: payloads of older app versions lack it. */
+  month?: string;
   /** "19:00"; null when the event has no start time. */
   time: string | null;
+  /** Venue, shortened to the part before the first comma. */
   location: string;
+  /** Base64 JPEG without the data: prefix — only the first event (2×2 photo, hero card). */
+  image?: string | null;
   url: string;
 };
-export type EventsPayload = { v: 1; updatedAt: number; events: WidgetEvent[] };
+/** `place` is optional for the same reason as WidgetEvent.month (default: WIDGET_PLACE). */
+export type EventsPayload = { v: 1; updatedAt: number; place?: string; events: WidgetEvent[] };
 
 export function eventDeepLink(id: string): string {
   return `roebel://event/${encodeURIComponent(id)}`;
 }
 
-/** `events` = the "Diese Woche" bucket from partitionExploreEvents (already in order). */
-export function buildEventsPayload(events: EventRecord[], now: number): EventsPayload {
+/**
+ * `events` = upcoming events in Röbel, already in order. `heroImage` (base64) belongs
+ * to the first event that is not cancelled.
+ */
+export function buildEventsPayload(events: EventRecord[], now: number, heroImage: string | null = null): EventsPayload {
   return {
     v: 1,
     updatedAt: now,
+    place: WIDGET_PLACE,
     events: events
       .filter((e) => !e.is_cancelled)
       .slice(0, WIDGET_EVENTS_MAX)
-      .map((e) => {
+      .map((e, i) => {
         const [y, m, d] = e.date.split('-').map(Number);
         return {
           id: e.id,
           title: e.title,
           weekday: WEEKDAY_SHORT[new Date(y, m - 1, d).getDay()],
           day: String(d),
+          month: String(m).padStart(2, '0'),
           time: e.time ? e.time.slice(0, 5) : null,
-          location: e.location,
+          location: shortVenue(e.location),
+          ...(i === 0 ? { image: heroImage } : {}),
           url: eventDeepLink(e.id),
         };
       }),

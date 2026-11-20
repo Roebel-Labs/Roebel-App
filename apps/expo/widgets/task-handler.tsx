@@ -61,7 +61,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps): Promise<
 }
 
 /**
- * Mittagstisch / Diese Woche: draw from storage at once, re-sync on add + periodic
+ * Mittagstisch / Events: draw from storage at once, re-sync on add + periodic
  * update (syncWidget redraws every widget), step the restaurant page on ‹ ›.
  */
 async function contentTaskHandler(props: WidgetTaskHandlerProps): Promise<void> {

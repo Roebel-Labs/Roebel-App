@@ -1,5 +1,5 @@
 /**
- * Mittagstisch + "Diese Woche" widget sync: fetch, shrink dish photos, store the
+ * Mittagstisch + "Events" widget sync: fetch, shrink dish photos, store the
  * payloads (Android redraws from storage, e.g. on a ‹ › tap) and hand them to the OS
  * (lib/widget-platform.{ios,android}.ts). Never throws — a failed sync leaves the last
  * payload on the home screen. Runs alongside the Mini Apps sync in lib/widget-sync.ts.
@@ -9,11 +9,12 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from './supabase';
 import { fetchActiveSpecialMenus } from './supabase-restaurants';
-import { partitionExploreEvents } from './explore-events';
+import { isEventInRoebel } from './utils';
 import { toIsoDay } from './special-menu-days';
 import type { EventRecord } from './types';
 import {
   buildEventsPayload,
+  WIDGET_EVENTS_MAX,
   buildLunchPayload,
   EVENTS_PAYLOAD_KEY,
   LUNCH_PAGE_KEY,
@@ -27,6 +28,8 @@ import { pushEventsToPlatform, pushLunchToPlatform } from './widget-platform';
 
 /** Dish photo width in the payload. 2× a medium-widget tile; ~15 kB as JPEG. */
 const PHOTO_WIDTH = 320;
+/** Photo of the next event (2×2 widget, hero card of the large one); ~30 kB as JPEG. */
+const HERO_WIDTH = 560;
 
 const EVENT_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled';
@@ -61,15 +64,16 @@ export async function stepLunchPage(step: number): Promise<{ payload: LunchPaylo
 
 const photoCache = new Map<string, string | null>();
 
-async function loadPhoto(url: string | null | undefined): Promise<string | null> {
+async function loadPhoto(url: string | null | undefined, width = PHOTO_WIDTH): Promise<string | null> {
   if (!url) return null;
-  if (photoCache.has(url)) return photoCache.get(url) ?? null;
+  const key = `${width}:${url}`;
+  if (photoCache.has(key)) return photoCache.get(key) ?? null;
   let result: string | null = null;
   try {
     const dir = new Directory(Paths.cache, 'widget-photos');
     if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
     const file = await File.downloadFileAsync(url, dir, { idempotent: true });
-    const ref = await ImageManipulator.manipulate(file.uri).resize({ width: PHOTO_WIDTH }).renderAsync();
+    const ref = await ImageManipulator.manipulate(file.uri).resize({ width }).renderAsync();
     const saved = await ref.saveAsync({ format: SaveFormat.JPEG, compress: 0.7, base64: true });
     result = saved.base64 ?? null;
     try {
@@ -78,7 +82,7 @@ async function loadPhoto(url: string | null | undefined): Promise<string | null>
   } catch {
     result = null;
   }
-  photoCache.set(url, result);
+  photoCache.set(key, result);
   return result;
 }
 
@@ -109,8 +113,12 @@ async function syncEvents(): Promise<void> {
     .order('time', { ascending: true, nullsFirst: true })
     .limit(60);
   if (error) return; // offline: keep what the widget shows
-  const { thisWeek } = partitionExploreEvents((data ?? []) as unknown as EventRecord[]);
-  const payload = buildEventsPayload(thisWeek, Date.now());
+  // Upcoming events in Röbel (the widget is "Events in Röbel"); the query already sorts them.
+  const upcoming = ((data ?? []) as unknown as EventRecord[])
+    .filter((e) => !e.is_cancelled && isEventInRoebel(e.location, e.formatted_address, e.address_components))
+    .slice(0, WIDGET_EVENTS_MAX);
+  const hero = upcoming[0] ? await loadPhoto(upcoming[0].image_url, HERO_WIDTH) : null;
+  const payload = buildEventsPayload(upcoming, Date.now(), hero);
   await AsyncStorage.setItem(EVENTS_PAYLOAD_KEY, JSON.stringify(payload)).catch(() => {});
   await pushEventsToPlatform(payload);
 }
