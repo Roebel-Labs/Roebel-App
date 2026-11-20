@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -270,7 +270,8 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.backdrop }]} edges={['top', 'left', 'right']}>
       <GlassProvider>
-        <GlassBackdrop style={styles.content}>
+        {/* Android: no blur sampling here — it froze the tilting card's Skia view (see GlassBackdrop). */}
+        <GlassBackdrop style={styles.content} sampling={Platform.OS !== 'android'}>
           <Animated.ScrollView
             style={styles.content}
             onScroll={chrome.onScroll}

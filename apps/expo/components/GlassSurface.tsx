@@ -45,10 +45,31 @@ export function GlassProvider({ children }: { children: React.ReactNode }) {
  * render its content inside one of these — and the glass bars OUTSIDE it,
  * after it in JSX order, with a <GlassProvider> around both.
  */
-export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
+export function GlassBackdrop({
+  children,
+  style,
+  sampling = true,
+  ...rest
+}: ViewProps & {
+  /**
+   * false: a plain View that is NOT a blur target (Android glass falls back to
+   * its tint). Needed where the content holds a Skia Canvas that must animate:
+   * a TextureView recorded into the blur target's offscreen buffer never
+   * attaches ("LegacySurfaceTexture is not attached") and stops updating —
+   * the profile's tilting credential card (Pixel 2026-11-20).
+   */
+  sampling?: boolean;
+}) {
   const ownRef = useRef<View>(null);
   const shared = useContext(GlassTargetContext);
   const ref = shared ?? ownRef;
+  if (!sampling) {
+    return (
+      <View style={style} {...rest}>
+        {children}
+      </View>
+    );
+  }
   // Native only (web has no BlurTargetView). Android history on this
   // hardware (Pixel 7): 08-23 crash with SurfaceView videos in the target
   // (expo/expo#24572, fixed via TextureView); 08-29 invisible content when
