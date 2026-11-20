@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import { Image } from 'expo-image';
@@ -40,7 +41,7 @@ export default function LivestreamBanner({ event }: Props) {
     <Pressable
       onPress={() => {
         if (liveSlug) router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } });
-        else router.push(`/event/${event.id}` as any);
+        else openEvent(event);
       }}
       style={({ pressed }) => [
         styles.container,

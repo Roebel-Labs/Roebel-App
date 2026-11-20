@@ -1,7 +1,7 @@
+import { openListing } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { currency } from '@/lib/utils';
 import type { MarketplaceListingRecord } from '@/lib/types';
@@ -25,10 +25,9 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export default function PostLinkedMarketplaceCard({ listing }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const handlePress = () => {
-    router.push(`/marketplace/${listing.id}` as any);
+    openListing({ id: listing.id });
   };
 
   const firstImage = listing.media_urls?.[0];

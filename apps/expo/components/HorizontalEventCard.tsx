@@ -1,7 +1,8 @@
+import { prefetchEventDetail } from '@/lib/queries/detailQueries';
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { memo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
 import { currency, formatEventCardWhen, formatLocation } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
@@ -30,7 +31,6 @@ type Props = {
  * heart — interest is toggled on the detail page.
  */
 function HorizontalEventCard({ event, fullWidth = false }: Props) {
-  const router = useRouter();
   const { colors } = useTheme();
   const liveShow = useEventLiveShow(event.id);
   const when = formatEventCardWhen(event.date, event.time);
@@ -43,7 +43,8 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
 
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+      onPress={() => openEvent(event)}
+      onPressIn={() => prefetchEventDetail(event.id)}
       style={({ pressed }) => [
         styles.card,
         fullWidth && styles.cardFullWidth,

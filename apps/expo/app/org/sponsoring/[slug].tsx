@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -252,7 +253,7 @@ export default function SponsoringDetailScreen() {
         )}
 
         <View style={styles.eventBlock}>
-          <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.hero, { backgroundColor: colors.primary }]}
+          <Pressable onPress={() => openEvent({ id: DANCECUP_EVENT_ID })} style={[styles.hero, { backgroundColor: colors.primary }]}
             accessibilityRole="link" accessibilityLabel="Zum Müritz Dance Cup">
             {event?.image_url ? <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
             <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.77)', 'rgba(0,0,0,0.9)']} locations={[0.36, 0.78, 1]} style={StyleSheet.absoluteFill} />
@@ -265,7 +266,7 @@ export default function SponsoringDetailScreen() {
             </View>
           </Pressable>
           <View style={styles.buttons}>
-            <Pressable onPress={() => router.push(`/event/${DANCECUP_EVENT_ID}` as any)} style={[styles.button, { backgroundColor: colors.textPrimary }]} accessibilityRole="link">
+            <Pressable onPress={() => openEvent({ id: DANCECUP_EVENT_ID })} style={[styles.button, { backgroundColor: colors.textPrimary }]} accessibilityRole="link">
               <Text style={[styles.buttonText, { color: colors.background }]}>Zum Event</Text>
             </Pressable>
             <Pressable onPress={() => router.push(`/live/${DANCECUP_LIVE_SLUG}` as any)} style={[styles.button, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#DEDEDE' }]} accessibilityRole="link">

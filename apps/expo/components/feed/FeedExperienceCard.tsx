@@ -1,6 +1,6 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
 import PostAuthorRow from './PostAuthorRow';
@@ -27,26 +27,21 @@ export default function FeedExperienceCard({
   onMore,
 }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
 
-  const openEvent = () => {
+  const openEventPressed = () => {
     if (!post.linked_event_id) return;
-    router.push({
-      pathname: '/event/[id]',
-      params: {
-        id: post.linked_event_id,
-        ...(post.linked_experience_id ? { experienceId: post.linked_experience_id } : {}),
-      },
+    openEvent({ id: post.linked_event_id }, {
+      params: post.linked_experience_id ? { experienceId: post.linked_experience_id } : undefined,
     });
   };
 
   return (
     <>
       <Pressable
-        onPress={openEvent}
+        onPress={openEventPressed}
         style={({ pressed }) => [
           styles.container,
           { backgroundColor: colors.background },
@@ -83,7 +78,7 @@ export default function FeedExperienceCard({
           commentsCount={post.comments_count}
           isLiked={isLiked}
           onLike={onLike}
-          onComment={openEvent}
+          onComment={openEventPressed}
           onShare={onShare}
           iconOnly
         />

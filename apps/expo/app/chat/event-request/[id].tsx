@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
@@ -255,7 +256,7 @@ export default function EventRequestScreen() {
               {eventId && (phase === 'published' || alreadyDecided) && request?.status !== 'rejected' && (
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => router.replace(`/event/${eventId}` as Href)}
+                  onPress={() => openEvent({ id: eventId }, { replace: true })}
                   style={[styles.primary, { backgroundColor: colors.primary }]}
                 >
                   <Text style={[styles.primaryText, { color: colors.onPrimary }]}>Veranstaltung ansehen</Text>

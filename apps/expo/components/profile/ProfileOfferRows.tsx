@@ -1,7 +1,7 @@
+import { openListing } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import { prepareProfileOffers, formatOfferPrice } from '@/lib/profile-offers';
@@ -24,7 +24,6 @@ type Props = {
  */
 export default function ProfileOfferRows({ listings, deals, sellingTitle = 'Zu verkaufen' }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const { listings: safeListings, deals: safeDeals, hasContent } = prepareProfileOffers(
     listings,
@@ -52,7 +51,7 @@ export default function ProfileOfferRows({ listings, deals, sellingTitle = 'Zu v
               {safeListings.map((listing) => (
                 <Pressable
                   key={listing.id}
-                  onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                  onPress={() => openListing({ id: listing.id })}
                   style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
                   accessibilityRole="button"
                   accessibilityLabel={listing.title}

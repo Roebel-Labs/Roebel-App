@@ -15,17 +15,18 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { useListingDetail } from '@/hooks/useDetailQueries';
+import { trackListingOpen } from '@/lib/queries/detailQueries';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import {
-  fetchListingById,
   fetchMarketplaceListings,
   deleteListing,
   fetchSellerProfileByWallet,
-  trackListingView,
   type SellerProfile,
 } from '@/lib/supabase-marketplace';
 import MeckyNotFound from '@/components/MeckyNotFound';
@@ -80,9 +81,14 @@ export default function ListingDetailScreen() {
   const { user } = useUser();
   const { activeAccount } = useAccount();
 
-  const [listing, setListing] = useState<MarketplaceListingRecord | null>(null);
-  const [moreListings, setMoreListings] = useState<MarketplaceListingRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { listing, isLoading, notFound } = useListingDetail(typeof id === 'string' ? id : undefined);
+  const { data: moreRaw } = useQuery({
+    queryKey: ['listing-more', id],
+    queryFn: () => fetchMarketplaceListings({ limit: 7 }),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+  const moreListings: MarketplaceListingRecord[] = (moreRaw ?? []).filter((l) => l.id !== id).slice(0, 6);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [canEdit, setCanEdit] = useState(false);
   const [seller, setSeller] = useState<SellerProfile | null>(null);
@@ -91,9 +97,9 @@ export default function ListingDetailScreen() {
   const [descExpanded, setDescExpanded] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    loadData();
-  }, [id]);
+    if (listing) trackListingOpen(listing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing?.id]);
 
   useEffect(() => {
     if (!listing || !user?.wallet_address) return;
@@ -105,7 +111,7 @@ export default function ListingDetailScreen() {
         setCanEdit(canEditListings(role));
       } else {
         // Personal listing: check if user is the seller
-        setCanEdit(listing.seller_wallet_address.toLowerCase() === user.wallet_address.toLowerCase());
+        setCanEdit(listing.seller_wallet_address?.toLowerCase() === user.wallet_address.toLowerCase());
       }
     };
     checkPermission();
@@ -133,23 +139,6 @@ export default function ListingDetailScreen() {
       cancelled = true;
     };
   }, [listing?.account_id, listing?.seller_wallet_address]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [data, allListings] = await Promise.all([
-        fetchListingById(id!),
-        fetchMarketplaceListings({ limit: 7 }),
-      ]);
-      setListing(data);
-      setMoreListings(allListings.filter((l) => l.id !== id).slice(0, 6));
-      if (data?.id) trackListingView(data.id);
-    } catch (error) {
-      console.error('Error loading listing:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleShare = async () => {
     if (!listing) return;
@@ -203,7 +192,7 @@ export default function ListingDetailScreen() {
     setGalleryOpen(true);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -218,7 +207,7 @@ export default function ListingDetailScreen() {
     );
   }
 
-  if (!listing) {
+  if (!listing || notFound) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -280,7 +269,7 @@ export default function ListingDetailScreen() {
   const subLine = [
     conditionLabel ? `Zustand: ${conditionLabel}` : null,
     createdRelative ? `Eingestellt ${createdRelative}` : null,
-    `${listing.views_count} Aufrufe`,
+    `${listing.views_count ?? 0} Aufrufe`,
   ]
     .filter(Boolean)
     .join(' · ');

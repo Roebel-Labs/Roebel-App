@@ -1,3 +1,4 @@
+import { openEvent, openListing } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
 import { Image } from 'expo-image';
@@ -65,11 +66,11 @@ type RouteParams = {
 function getRouteForItem(type: RichCardData['type'], item: any): RouteParams | string {
   switch (type) {
     case 'events':
-      return { pathname: '/event/[id]', params: { id: item.id } };
+      return '/'; // events + marketplace open via openEvent/openListing
     case 'restaurants':
       return { pathname: '/restaurant/[slug]', params: { slug: item.slug } };
     case 'marketplace':
-      return { pathname: '/marketplace/[id]', params: { id: item.id } };
+      return '/';
     case 'news':
       return { pathname: '/news/[slug]', params: { slug: item.slug } };
     case 'movies':
@@ -271,14 +272,20 @@ export default function MeckyResultCard({ type, item }: Props) {
   // Handle "Anrufen" inline for POIs with phone (Pannendienst etc.)
   const phoneOnTap = type === 'pois' && item.is_pannendienst && item.phone ? item.phone : null;
 
+  const navigate = () => {
+    if (type === 'events') openEvent({ id: item.id });
+    else if (type === 'marketplace') openListing({ id: item.id });
+    else handleNavigate(target, router);
+  };
+
   const handlePress = () => {
     if (phoneOnTap) {
       Linking.openURL(`tel:${phoneOnTap.replace(/\s+/g, '')}`).catch(() =>
-        handleNavigate(target, router)
+        navigate()
       );
       return;
     }
-    handleNavigate(target, router);
+    navigate();
   };
 
   return (

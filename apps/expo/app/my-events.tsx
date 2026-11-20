@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { Image } from 'expo-image';
@@ -182,7 +183,7 @@ export default function MyEventsScreen() {
           if (canEditEvents(role)) {
             router.push({ pathname: '/edit-event/[id]', params: { id: item.id } });
           } else {
-            router.push({ pathname: '/event/[id]', params: { id: item.id } });
+            openEvent(item);
           }
         }}
         style={({ pressed }) => [

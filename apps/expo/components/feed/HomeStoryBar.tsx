@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -247,13 +248,13 @@ export default function HomeStoryBar() {
             subtitle: formatEventDate(event.date),
           },
           onSwipeUp: () => {
-            router.push(`/event/${event.id}` as any);
+            openEvent({ id: event.id });
             setTimeout(() => setOpenTarget(null), 300);
           },
           cta: {
             label: 'Mehr erfahren',
             onPress: () => {
-              router.push(`/event/${event.id}` as any);
+              openEvent({ id: event.id });
               setTimeout(() => setOpenTarget(null), 300);
             },
           },

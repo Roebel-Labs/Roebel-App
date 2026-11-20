@@ -1,7 +1,8 @@
+import { openEvent } from '@/lib/navigation/openDetail';
+import { prefetchEventDetail } from '@/lib/queries/detailQueries';
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { EventRecord } from '@/lib/types';
@@ -40,7 +41,6 @@ type Props = {
  * Sizing (width/height) comes from the parent via `style`.
  */
 function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false, style }: Props) {
-  const router = useRouter();
   const { colors, isDark, variant } = useTheme();
   const liveShow = useEventLiveShow(event.id);
 
@@ -54,13 +54,14 @@ function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false
 
   const locationText = formatLocation(event.location).toUpperCase();
 
-  const openEvent = () => {
-    router.push({ pathname: '/event/[id]', params: { id: event.id } });
+  const openMore = () => {
+    openEvent(event);
   };
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => prefetchEventDetail(event.id)}
       disabled={!onPress}
       accessibilityRole="button"
       accessibilityLabel={`${event.title} öffnen`}
@@ -145,7 +146,7 @@ function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false
             style={[styles.moreButton, { backgroundColor: colors.surfaceSecondary }]}
             onPress={(e) => {
               e.stopPropagation();
-              openEvent();
+              openMore();
             }}
             accessibilityRole="button"
             accessibilityLabel={`Mehr erfahren: ${event.title}`}

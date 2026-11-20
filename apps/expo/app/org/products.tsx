@@ -1,3 +1,4 @@
+import { openListing } from '@/lib/navigation/openDetail';
 import React, { useEffect, useState, useCallback } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -112,7 +113,7 @@ export default function OrgProductsScreen() {
             <View style={styles.listingsGrid}>
               {activeListings.map(listing => (
                 <View key={listing.id} style={styles.listingWrapper}>
-                  <Pressable onPress={() => router.push(`/marketplace/${listing.id}` as any)}>
+                  <Pressable onPress={() => openListing({ id: listing.id })}>
                     <MarketplaceCard listing={listing} compact={false} />
                   </Pressable>
                   {canEdit && (
@@ -146,7 +147,7 @@ export default function OrgProductsScreen() {
             <View style={styles.listingsGrid}>
               {inactiveListings.map(listing => (
                 <View key={listing.id} style={[styles.listingWrapper, { opacity: 0.6 }]}>
-                  <Pressable onPress={() => router.push(`/marketplace/${listing.id}` as any)}>
+                  <Pressable onPress={() => openListing({ id: listing.id })}>
                     <MarketplaceCard listing={listing} compact={false} />
                   </Pressable>
                   {canEdit && (

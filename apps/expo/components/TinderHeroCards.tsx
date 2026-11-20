@@ -1,8 +1,8 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions, PanResponder } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -18,7 +18,6 @@ type Props = {
 
 
 export default function TinderHeroCards({ events }: Props) {
-  const router = useRouter();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -48,7 +47,7 @@ export default function TinderHeroCards({ events }: Props) {
             event={event}
             stackIndex={stackIndex}
             onSwipeComplete={nextCard}
-            onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+            onPress={() => openEvent(event)}
             isBookmarked={isBookmarked(event.id)}
             onBookmark={() => toggleBookmark(event.id)}
           />

@@ -1,7 +1,7 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatEventDateLong, formatLocation } from '@/lib/utils';
 import type { EventRecord } from '@/lib/types';
@@ -14,10 +14,9 @@ type Props = {
 
 export default function PostLinkedEventCard({ event }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const handlePress = () => {
-    router.push(`/event/${event.id}` as any);
+    openEvent({ id: event.id });
   };
 
   const dateLabel = formatEventDateLong(event.date);

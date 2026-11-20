@@ -1,3 +1,4 @@
+import { openEvent, openListing } from '@/lib/navigation/openDetail';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -396,7 +397,7 @@ export default function BusinessProfileView(props: Props) {
 
               <View style={styles.serviceList}>
                 {visibleServices.map((s) => {
-                  const open = () => router.push(`/marketplace/${s.id}` as any);
+                  const open = () => openListing({ id: s.id });
                   const price = formatListingPrice(s.price, s.price_type);
                   return (
                     <Pressable
@@ -436,7 +437,7 @@ export default function BusinessProfileView(props: Props) {
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mehr</Text>
               {products.map((p) =>
                 moreRow(p.id, p.title, formatListingPrice(p.price, p.price_type), 'Kaufen', () =>
-                  router.push(`/marketplace/${p.id}` as any)
+                  openListing({ id: p.id })
                 )
               )}
               {deals.map((d) =>
@@ -446,7 +447,7 @@ export default function BusinessProfileView(props: Props) {
               )}
               {events.map((ev) =>
                 moreRow(ev.id, ev.title, formatEventDate(ev.date, ev.time), 'Ansehen', () =>
-                  router.push(`/event/${ev.id}` as any)
+                  openEvent({ id: ev.id })
                 )
               )}
               {blog.map((a) =>

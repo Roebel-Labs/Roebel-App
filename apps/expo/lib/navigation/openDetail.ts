@@ -7,13 +7,13 @@ import { router } from 'expo-router';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import { seedEventDetail, seedListingDetail } from '@/lib/queries/detailQueries';
 
-type Opts = { replace?: boolean };
+type Opts = { replace?: boolean; params?: Record<string, string> };
 
 const isFull = (o: object) => Object.keys(o).length > 1;
 
 export function openEvent(event: EventRecord | { id: string }, opts: Opts = {}): void {
   if (isFull(event)) seedEventDetail(event as EventRecord);
-  const href = { pathname: '/event/[id]' as const, params: { id: event.id } };
+  const href = { pathname: '/event/[id]' as const, params: { ...opts.params, id: event.id } };
   if (opts.replace) router.replace(href);
   else router.push(href);
 }

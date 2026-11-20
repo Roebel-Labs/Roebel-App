@@ -1,3 +1,4 @@
+import { openEvent, openListing } from '@/lib/navigation/openDetail';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -718,7 +719,7 @@ function PublicAccountScreenInner() {
             {safeEvents.map((event) => (
               <Pressable
                 key={event.id}
-                onPress={() => router.push(`/event/${event.id}` as any)}
+                onPress={() => openEvent({ id: event.id })}
                 style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
                 accessibilityRole="button"
               >
@@ -792,7 +793,7 @@ function PublicAccountScreenInner() {
             {products.map((listing) => (
               <Pressable
                 key={listing.id}
-                onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                onPress={() => openListing({ id: listing.id })}
                 style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
                 accessibilityRole="button"
               >
@@ -828,7 +829,7 @@ function PublicAccountScreenInner() {
             {services.map((listing) => (
               <Pressable
                 key={listing.id}
-                onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                onPress={() => openListing({ id: listing.id })}
                 style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
                 accessibilityRole="button"
               >

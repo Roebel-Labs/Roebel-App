@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,7 +15,6 @@ import {
 import { Image } from 'expo-image';
 import { BookmarkIcon, LocationIcon } from './Icons';
 import { StarSvg, BookmarkActiveSvg } from './AssetIcons';
-import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 
@@ -48,7 +48,6 @@ const SNAP_BACK_CONFIG = {
 type Props = { events: EventRecord[] };
 
 export default function EnhancedTinderCards({ events }: Props) {
-  const router = useRouter();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const heroEvents = events.slice(0, Math.min(3, events.length));
@@ -100,7 +99,7 @@ export default function EnhancedTinderCards({ events }: Props) {
             onSwipeComplete={rotateCards}
             onPress={() => {
               if (!isDragging) {
-                router.push({ pathname: '/event/[id]', params: { id: currentEvent.id } });
+                openEvent(currentEvent);
               }
             }}
             isBookmarked={isBookmarked(currentEvent.id)}

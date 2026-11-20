@@ -27,7 +27,7 @@ import { DETAIL_HEADER_BAR } from '@/components/detail/collapseRanges';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
 import EventLocationMap from '@/components/EventLocationMap';
 import ImageZoomModal from '@/components/ImageZoomModal';
-import { logEventView, logEvent, logCalendarSave } from '@/lib/firebase';
+import { logEvent, logCalendarSave } from '@/lib/firebase';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -44,7 +44,8 @@ import EventCancelledScrim from '@/components/EventCancelledScrim';
 import AmbientBackdrop from '@/components/AmbientBackdrop';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
-import { recordView } from '@/lib/supabase-event-views';
+import { useEventDetail } from '@/hooks/useDetailQueries';
+import { trackEventOpen } from '@/lib/queries/detailQueries';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fontFamily } from '@/constants/theme';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
@@ -103,11 +104,10 @@ export default function EventDetails() {
   const liveSlug = useLiveShowForEvent(typeof id === 'string' ? id : null);
   const liveShow = useEventLiveShow(typeof id === 'string' ? id : null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const [event, setEvent] = useState<EventRecord | null>(null);
+  const { event, isLoading, notFound } = useEventDetail(typeof id === 'string' ? id : undefined);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
   const [eventDates, setEventDates] = useState<EventDateRecord[]>([]);
   const [publisherAccount, setPublisherAccount] = useState<Account | null>(null);
-  const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   // The flyer is shown uncropped at its own ratio; A4 until the image reports its size.
@@ -203,107 +203,83 @@ export default function EventDetails() {
     }
   };
 
+  // View tracking: once per event per session (guarded inside trackEventOpen).
   useEffect(() => {
+    if (event) trackEventOpen(event, activeAccount?.address);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.id, activeAccount?.address]);
+
+  // Secondary data fills in progressively once the event is known.
+  const eventId = event?.id;
+  const eventAccountId = event?.account_id;
+  const eventCategory = event?.category;
+  useEffect(() => {
+    if (!eventId) return;
     let cancelled = false;
-    async function load() {
-      setLoading(true);
+    setEventDates([]);
+    setMoreEvents([]);
 
-      // Fetch current event
-      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
-
-      if (!cancelled) {
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.error(error);
-          setEvent(null);
-        } else {
-          const record = data as EventRecord;
-          setEvent(record);
-          logEventView(record.id, record.title, record.category || undefined);
-
-          // Record unique view in Supabase
-          if (activeAccount?.address) {
-            recordView(record.id, activeAccount.address).catch(() => {});
-          }
-
-          // Load publisher account (org that created the event) so the
-          // organizer row can link to a public org profile.
-          const publisherAccountId = (data as EventRecord).account_id;
-          if (publisherAccountId) {
-            fetchAccountById(publisherAccountId)
-              .then((acc) => {
-                if (!cancelled) setPublisherAccount(acc);
-              })
-              .catch(() => {});
-          } else if (!cancelled) {
-            setPublisherAccount(null);
-          }
-
-          // Fetch event dates for recurring events
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const todayString = today.toISOString().split('T')[0];
-
-          const { data: datesData } = await supabase
-            .from('event_dates')
-            .select('*')
-            .eq('event_id', id)
-            .eq('is_cancelled', false)
-            .gte('date', todayString)
-            .order('date', { ascending: true });
-
-          if (datesData) {
-            setEventDates(datesData as EventDateRecord[]);
-          }
-
-          // Fetch more events (same category if available, otherwise recent events)
-          // Only show events happening today or in the future
-          const currentEvent = data as EventRecord;
-
-          let moreEventsQuery = supabase
-            .from('events')
-            .select('*')
-            .eq('status', 'approved')
-            .neq('id', id)
-            .gte('date', todayString)
-            .order('date', { ascending: true })
-            .limit(5);
-
-          // Prioritize same category
-          if (currentEvent.category) {
-            moreEventsQuery = moreEventsQuery.eq('category', currentEvent.category);
-          }
-
-          const { data: moreEventsData, error: moreEventsError } = await moreEventsQuery;
-
-          if (!moreEventsError && moreEventsData) {
-            setMoreEvents(moreEventsData as EventRecord[]);
-          } else {
-            // Fallback: get any recent events if no same-category events found
-            const { data: fallbackData } = await supabase
-              .from('events')
-              .select('*')
-              .eq('status', 'approved')
-              .neq('id', id)
-              .gte('date', todayString)
-              .order('date', { ascending: true })
-              .limit(5);
-
-            if (fallbackData) {
-              setMoreEvents(fallbackData as EventRecord[]);
-            }
-          }
-        }
-        setLoading(false);
-      }
+    // Publisher account (org that created the event) so the organizer row can link to a public org profile.
+    if (eventAccountId) {
+      fetchAccountById(eventAccountId)
+        .then((acc) => {
+          if (!cancelled) setPublisherAccount(acc);
+        })
+        .catch(() => {});
+    } else {
+      setPublisherAccount(null);
     }
-    if (id) load();
+
+    (async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayString = today.toISOString().split('T')[0];
+
+      // Event dates for recurring events
+      const { data: datesData } = await supabase
+        .from('event_dates')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('is_cancelled', false)
+        .gte('date', todayString)
+        .order('date', { ascending: true });
+      if (cancelled) return;
+      if (datesData) setEventDates(datesData as EventDateRecord[]);
+
+      // More events (same category if available), only today or later
+      let moreEventsQuery = supabase
+        .from('events')
+        .select('*')
+        .eq('status', 'approved')
+        .neq('id', eventId)
+        .gte('date', todayString)
+        .order('date', { ascending: true })
+        .limit(5);
+      if (eventCategory) moreEventsQuery = moreEventsQuery.eq('category', eventCategory);
+
+      const { data: moreEventsData, error: moreEventsError } = await moreEventsQuery;
+      if (cancelled) return;
+      if (!moreEventsError && moreEventsData) {
+        setMoreEvents(moreEventsData as EventRecord[]);
+      } else {
+        const { data: fallbackData } = await supabase
+          .from('events')
+          .select('*')
+          .eq('status', 'approved')
+          .neq('id', eventId)
+          .gte('date', todayString)
+          .order('date', { ascending: true })
+          .limit(5);
+        if (!cancelled && fallbackData) setMoreEvents(fallbackData as EventRecord[]);
+      }
+    })().catch(() => {});
+
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [eventId, eventAccountId, eventCategory]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -315,7 +291,7 @@ export default function EventDetails() {
       </>
     );
   }
-  if (!event) {
+  if (!event || notFound) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />

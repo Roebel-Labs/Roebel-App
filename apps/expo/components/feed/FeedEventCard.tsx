@@ -1,7 +1,8 @@
+import { prefetchEventDetail } from '@/lib/queries/detailQueries';
+import { openEvent } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatEventCardDateSplit, formatTime, formatLocation } from '@/lib/utils';
 import type { EventRecord } from '@/lib/types';
@@ -16,10 +17,9 @@ type Props = {
 
 export default function FeedEventCard({ event }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const handlePress = () => {
-    router.push(`/event/${event.id}` as any);
+    openEvent(event);
   };
 
   const dateSplit = formatEventCardDateSplit(event.date);
@@ -36,6 +36,7 @@ export default function FeedEventCard({ event }: Props) {
   return (
     <Pressable
       onPress={handlePress}
+      onPressIn={() => prefetchEventDetail(event.id)}
       style={({ pressed }) => [
         styles.container,
         {

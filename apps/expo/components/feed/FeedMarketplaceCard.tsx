@@ -1,7 +1,8 @@
+import { prefetchListingDetail } from '@/lib/queries/detailQueries';
+import { openListing } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { MarketplaceListingRecord } from '@/lib/types';
 import { currency } from '@/lib/utils';
@@ -20,10 +21,9 @@ const PRICE_TYPE_LABELS: Record<string, string> = {
 
 export default function FeedMarketplaceCard({ listing }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const handlePress = () => {
-    router.push(`/marketplace/${listing.id}` as any);
+    openListing(listing);
   };
 
   const firstImage = listing.media_urls?.[0];
@@ -35,6 +35,7 @@ export default function FeedMarketplaceCard({ listing }: Props) {
   return (
     <Pressable
       onPress={handlePress}
+      onPressIn={() => prefetchListingDetail(listing.id)}
       style={({ pressed }) => [
         styles.container,
         { backgroundColor: colors.background },

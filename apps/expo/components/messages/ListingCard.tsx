@@ -1,7 +1,7 @@
+import { openListing } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
 export type ListingInquiry = {
@@ -26,7 +26,6 @@ type Props = {
 
 export default function ListingCard({ data, isOwn }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   return (
     <Pressable
@@ -37,7 +36,7 @@ export default function ListingCard({ data, isOwn }: Props) {
           borderColor: isOwn ? 'transparent' : colors.border,
         },
       ]}
-      onPress={() => router.push(`/marketplace/${data.listingId}` as any)}
+      onPress={() => openListing({ id: data.listingId })}
     >
       {data.imageUrl ? (
         <Image

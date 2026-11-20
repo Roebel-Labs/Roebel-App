@@ -1,7 +1,7 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -144,7 +144,6 @@ function SwiperSlide({
   onSlideNext,
   totalSlides,
 }: SwiperSlideProps) {
-  const router = useRouter();
   const { colors, isDark } = useTheme();
 
   const translateX = useSharedValue(0);
@@ -301,10 +300,7 @@ function SwiperSlide({
         <Pressable
           onPress={() => {
             if (isActive) {
-              router.push({
-                pathname: '/event/[id]',
-                params: { id: event.id },
-              });
+              openEvent(event);
             }
           }}
           style={[styles.card, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
@@ -376,10 +372,7 @@ function SwiperSlide({
                 style={[styles.moreButton, { backgroundColor: colors.surfaceSecondary }]}
                 onPress={(e) => {
                   e.stopPropagation();
-                  router.push({
-                    pathname: '/event/[id]',
-                    params: { id: event.id },
-                  });
+                  openEvent(event);
                 }}
               >
                 <Text style={[styles.moreButtonText, { color: colors.textPrimary }]}>

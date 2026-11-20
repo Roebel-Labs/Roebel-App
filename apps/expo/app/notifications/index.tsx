@@ -1,3 +1,4 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -157,7 +158,7 @@ export default function NotificationsInboxScreen() {
 
     switch (data?.type) {
       case 'event':
-        if (data.eventId) router.push(`/event/${data.eventId}` as any);
+        if (data.eventId) openEvent({ id: data.eventId });
         break;
       case 'news':
         if (data.slug) router.push(`/news/${data.slug}` as any);

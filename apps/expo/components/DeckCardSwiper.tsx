@@ -1,6 +1,6 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions, ViewStyle } from 'react-native';
-import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -171,10 +171,9 @@ function DeckCard({
   onSlideNext,
   totalSlides,
 }: DeckCardProps) {
-  const router = useRouter();
   const { isDark } = useTheme();
-  const openEvent = () => {
-    router.push({ pathname: '/event/[id]', params: { id: event.id } });
+  const openEventPressed = () => {
+    openEvent(event);
   };
 
   const translateX = useSharedValue(0);
@@ -347,7 +346,7 @@ function DeckCard({
       >
         <HeroEventCard
           event={event}
-          onPress={isActive ? openEvent : undefined}
+          onPress={isActive ? openEventPressed : undefined}
           imagePriority={isActive ? 'high' : 'normal'}
           style={styles.card}
         />

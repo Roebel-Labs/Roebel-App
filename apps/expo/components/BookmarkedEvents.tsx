@@ -1,7 +1,7 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { BookmarkIcon, LocationSmallIcon } from './Icons';
 import { BookmarkActiveSvg } from './AssetIcons';
 import BookmarkSvg from '@/assets/icons/bookmark.svg';
@@ -53,7 +53,6 @@ export default function BookmarkedEvents({ events }: Props) {
 }
 
 function BookmarkedEventCard({ event }: { event: EventRecord }) {
-  const router = useRouter();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const { showSnackbar } = useSnackbar();
   const { colors } = useTheme();
@@ -76,7 +75,7 @@ function BookmarkedEventCard({ event }: { event: EventRecord }) {
 
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+      onPress={() => openEvent(event)}
       style={({ pressed }) => [styles.card, { backgroundColor: colors.background }, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`Details für ${event.title} öffnen`}

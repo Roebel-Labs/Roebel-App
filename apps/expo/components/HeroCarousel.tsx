@@ -1,8 +1,8 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
@@ -62,7 +62,6 @@ type Props = {
  * ends and the only JS work per swipe is the pagination dot flip.
  */
 export default function HeroCarousel({ events, showPagination = false, containerStyle }: Props) {
-  const router = useRouter();
   const { colors, isDark } = useTheme();
   const ambientMax = isDark ? HERO_AMBIENT_MAX_OPACITY_DARK : HERO_AMBIENT_MAX_OPACITY;
   const { width: screenWidth } = useWindowDimensions();
@@ -129,10 +128,7 @@ export default function HeroCarousel({ events, showPagination = false, container
       ));
     });
 
-  const openEvent = useCallback(
-    (id: string) => router.push({ pathname: '/event/[id]', params: { id } }),
-    [router]
-  );
+  const openEventById = useCallback((id: string) => openEvent({ id }), []);
 
   if (count === 0) return null;
 
@@ -179,7 +175,7 @@ export default function HeroCarousel({ events, showPagination = false, container
                 cardWidth={layout.cardWidth}
                 sideInset={layout.sideInset}
                 offset={offset}
-                onPress={openEvent}
+                onPress={openEventById}
               />
             );
           })}

@@ -4,6 +4,7 @@
  * for anything backed by an organisation account, a plain detail block
  * otherwise. Dragging the sheet up reveals the body.
  */
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useMemo, useRef } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
@@ -291,7 +292,7 @@ function openRoute(destLat: number, destLon: number, originLat?: number, originL
 function navigate(item: PlaceItem, router: ReturnType<typeof useRouter>) {
   switch (item.entityType) {
     case 'event':
-      router.push(`/event/${item.data.id}` as any);
+      openEvent({ id: item.data.id });
       break;
     case 'restaurant':
       router.push(`/restaurant/${item.data.slug}` as any);

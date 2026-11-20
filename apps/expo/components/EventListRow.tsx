@@ -1,7 +1,8 @@
+import { prefetchEventDetail } from '@/lib/queries/detailQueries';
+import { openEvent } from '@/lib/navigation/openDetail';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { ClockIcon, LocationSmallIcon, TicketSmallIcon } from './Icons';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
@@ -70,7 +71,6 @@ export function EventDateChip({ date, active = false }: { date: string; active?:
 }
 
 export default function EventListRow({ event, showDate = true, showDivider = true }: Props) {
-  const router = useRouter();
   const { colors, isDark } = useTheme();
 
   const startTime = formatTime(event.time);
@@ -92,7 +92,8 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
 
       <View style={styles.content}>
         <Pressable
-          onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+          onPress={() => openEvent(event)}
+          onPressIn={() => prefetchEventDetail(event.id)}
           style={({ pressed }) => pressed && styles.pressed}
           accessibilityRole="button"
           accessibilityLabel={`Details für ${event.title}${isCancelled ? ' (abgesagt)' : ''} öffnen`}

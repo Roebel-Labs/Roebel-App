@@ -1,7 +1,8 @@
+import { prefetchListingDetail } from '@/lib/queries/detailQueries';
+import { openListing } from '@/lib/navigation/openDetail';
 import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import type { MarketplaceListingRecord } from '@/lib/types';
@@ -21,7 +22,6 @@ function formatPrice(price: number, priceType: string): string {
 }
 
 function MarketplaceCard({ listing, compact = true, style }: Props) {
-  const router = useRouter();
   const { colors } = useTheme();
 
   const firstImage = listing.media_urls?.[0] || null;
@@ -30,7 +30,8 @@ function MarketplaceCard({ listing, compact = true, style }: Props) {
   if (compact) {
     return (
       <Pressable
-        onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+        onPress={() => openListing(listing)}
+        onPressIn={() => prefetchListingDetail(listing.id)}
         style={({ pressed }) => [styles.cardCompact, style, pressed && styles.pressed]}
         accessibilityRole="button"
         accessibilityLabel={listing.title}
@@ -65,7 +66,8 @@ function MarketplaceCard({ listing, compact = true, style }: Props) {
 
   return (
     <Pressable
-      onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+      onPress={() => openListing(listing)}
+        onPressIn={() => prefetchListingDetail(listing.id)}
       style={({ pressed }) => [styles.card, { backgroundColor: colors.surface }, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={listing.title}

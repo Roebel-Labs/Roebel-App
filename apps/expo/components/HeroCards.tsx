@@ -1,8 +1,8 @@
+import { openEvent } from '@/lib/navigation/openDetail';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -16,7 +16,6 @@ type Props = {
 };
 
 export default function HeroCards({ events }: Props) {
-  const router = useRouter();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const { colors } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -44,7 +43,7 @@ export default function HeroCards({ events }: Props) {
           return (
             <View key={event.id} style={styles.cardContainer}>
               <Pressable
-                onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
+                onPress={() => openEvent(event)}
                 style={[styles.card, { backgroundColor: colors.surface }]}
               >
                 <View style={styles.imageContainer}>
