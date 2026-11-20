@@ -38,7 +38,7 @@ jest.mock('react-native-reanimated', () => ({
   useSharedValue: (v: unknown) => ({ value: v }),
   useDerivedValue: (fn: () => unknown) => ({ value: fn() }),
 }));
-jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+jest.mock('expo-router', () => ({ useIsFocused: () => true }));
 jest.mock('expo-sensors', () => ({
   DeviceMotion: { setUpdateInterval: jest.fn(), addListener: jest.fn(() => ({ remove: jest.fn() })) },
 }));

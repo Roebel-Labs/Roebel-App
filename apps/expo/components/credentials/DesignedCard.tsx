@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router';
 import { Canvas, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
 import { useDerivedValue, useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { DeviceMotion } from 'expo-sensors';
