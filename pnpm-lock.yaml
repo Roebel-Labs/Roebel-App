@@ -784,6 +784,9 @@ importers:
       '@react-pdf/renderer':
         specifier: ^4.3.2
         version: 4.3.2(react@19.1.1)
+      '@roebel/card-design':
+        specifier: workspace:*
+        version: link:../../packages/card-design
       '@safe-global/api-kit':
         specifier: ^5.0.1
         version: 5.0.1(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
@@ -850,6 +853,9 @@ importers:
       ai:
         specifier: ^6.0.89
         version: 6.0.141(zod@3.25.76)
+      canvaskit-wasm:
+        specifier: ^0.40.0
+        version: 0.40.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -937,6 +943,9 @@ importers:
       shamir-secret-sharing:
         specifier: ^0.0.4
         version: 0.0.4
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -21618,8 +21627,7 @@ snapshots:
       fastfile: 0.0.20
       ffjavascript: 0.3.1
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.34.5':
     optionalDependencies:
@@ -41494,7 +41502,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-ia32': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:
