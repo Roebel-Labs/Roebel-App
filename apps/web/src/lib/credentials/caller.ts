@@ -50,6 +50,8 @@ export const DESIGN_ACTIONS: readonly CredentialAction[] = [
   "design_test_send",
   "design_publish",
   "design_assets_list",
+  "design_ai_background",
+  "design_ai_sticker",
 ];
 
 const PASSKEY_TOKEN_PREFIX = "pst1.";

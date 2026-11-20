@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import sharp from "sharp";
 import type { Caller } from "../caller";
 import { publicBaseUrl } from "../config";
-import { designOrgFor, fail, isFail, ok, type DesignDeps, type DesignResult } from "./drafts";
+import { designOrgFor, fail, isFail, ok, type DesignDeps, type DesignFail, type DesignResult } from "./drafts";
 import type { AssetKind, AssetRow } from "./store";
 
 /** Object storage of the asset bytes (Supabase bucket `images` in production). */
@@ -108,10 +108,20 @@ async function normalise(bytes: Uint8Array, mime: string): Promise<{ bytes: Uint
   }
 }
 
+/** Hooks for generated assets (designs/ai.ts). */
+export type StoreAssetOptions = {
+  /** Applied to the normalised bytes before hashing and storing (the AI Act marking: the
+   *  re-encode in `normalise` would strip a marking written earlier). */
+  mark?: (bytes: Uint8Array) => Uint8Array;
+  /** Replaces the plain insert (the limited AI insert); a returned fail is passed on. */
+  insert?: (row: AssetRow) => Promise<DesignFail | null>;
+};
+
 export async function storeAsset(
   d: AssetDeps,
   c: Caller,
   p: { accountId: string; kind: AssetKind; bytes: Uint8Array; mime: string; ai?: boolean; prompt?: string },
+  opts: StoreAssetOptions = {},
 ): Promise<DesignResult<AssetView>> {
   const org = await designOrgFor(d, c, p?.accountId);
   if (isFail(org)) return org;
@@ -124,6 +134,7 @@ export async function storeAsset(
 
   const n = await normalise(p.bytes, mime);
   if (isFail(n)) return n;
+  if (opts.mark) n.bytes = opts.mark(n.bytes);
   const sha = sha256(n.bytes);
   const existing = await d.store.getAsset(sha, org.accountId);
   if (existing) return ok(assetView(existing));
@@ -143,7 +154,12 @@ export async function storeAsset(
     createdBy: c.wallet.toLowerCase(),
     createdAt: new Date(d.now()).toISOString(),
   };
-  await d.store.insertAsset(row);
+  if (opts.insert) {
+    const refused = await opts.insert(row);
+    if (refused) return refused;
+  } else {
+    await d.store.insertAsset(row);
+  }
   return ok(assetView(row));
 }
 

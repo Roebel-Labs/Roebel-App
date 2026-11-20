@@ -40,7 +40,9 @@ export type CredentialAction =
   | "event_badge_qr"
   // Card designer (plan D2): drafts, assets, test-send and publish.
   | "design_orgs" | "design_drafts_list" | "design_draft_get" | "design_draft_save" | "design_draft_delete"
-  | "design_test_send" | "design_publish" | "design_assets_list" | "design_asset_upload";
+  | "design_test_send" | "design_publish" | "design_assets_list" | "design_asset_upload"
+  // Card designer AI help (plan D5).
+  | "design_ai_background" | "design_ai_sticker";
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
