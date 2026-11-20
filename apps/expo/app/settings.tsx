@@ -665,8 +665,8 @@ export default function SettingsScreen() {
 
 const roleStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold' },
-  subtitle: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold' },
+  subtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 4 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -677,34 +677,34 @@ const roleStyles = StyleSheet.create({
     paddingVertical: 14,
   },
   optionText: { flex: 1 },
-  optionLabel: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  optionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18, marginTop: 2 },
-  note: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  optionLabel: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  optionDesc: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18, marginTop: 2 },
+  note: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18 },
   savingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  savingText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  savingText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const membershipStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold', marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold', marginBottom: 4 },
   option: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  optionLabel: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  optionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18, marginTop: 2 },
+  optionLabel: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  optionDesc: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18, marginTop: 2 },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const deleteStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold' },
-  text: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold' },
+  text: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 4 },
   confirmDelete: {
     backgroundColor: '#EF4444',
     height: 52,
@@ -712,9 +712,9 @@ const deleteStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const styles = StyleSheet.create({
@@ -773,11 +773,11 @@ const styles = StyleSheet.create({
   },
   themeOptionLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   themeOptionDescription: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   footerNote: {
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
   },
   footerNoteText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   restoreLogRow: {
@@ -802,6 +802,6 @@ const styles = StyleSheet.create({
   },
   chevron: {
     fontSize: 18,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

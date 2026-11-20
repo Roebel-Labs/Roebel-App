@@ -93,11 +93,11 @@ const styles = StyleSheet.create({
   },
   equippedText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 11,
   },
   name: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
     paddingHorizontal: 6,
   },

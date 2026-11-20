@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   },
   editPillText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   identityRow: {
     flexDirection: 'row',
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   displayName: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     flexShrink: 1,
   },
   subRow: {
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   },
   bio: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   metaRow: {
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pillsRow: {
     flexDirection: 'row',
@@ -457,6 +457,6 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

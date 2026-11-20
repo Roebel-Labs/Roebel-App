@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   pill: {
     flexDirection: 'row',
@@ -105,6 +105,6 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

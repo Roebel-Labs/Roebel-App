@@ -132,10 +132,10 @@ function makeStyles(colors: any, isDark: boolean) {
     content: { flexGrow: 1, padding: 20, paddingBottom: 32 },
     summary: { alignItems: 'center', marginTop: 16, marginBottom: 28, gap: 12 },
     badge: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-    amount: { fontFamily: 'Inter-Bold', fontSize: 36, letterSpacing: -0.5 },
-    currencyCaption: { fontFamily: 'Inter-Medium', fontSize: 14, color: colors.textSecondary },
+    amount: { fontFamily: 'MonaSans-Bold', fontSize: 36, letterSpacing: -0.5 },
+    currencyCaption: { fontFamily: 'MonaSans-Medium', fontSize: 14, color: colors.textSecondary },
     contextBanner: { marginTop: 12, marginBottom: 12, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-    contextText: { fontFamily: 'Inter-Medium', fontSize: 14 },
+    contextText: { fontFamily: 'MonaSans-Medium', fontSize: 14 },
     card: {
       backgroundColor: colors.card,
       borderRadius: 16,
@@ -151,8 +151,8 @@ function makeStyles(colors: any, isDark: boolean) {
       gap: 16,
     },
     infoRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-    infoLabel: { fontFamily: 'Inter-Regular', fontSize: 14, color: colors.textSecondary },
-    infoValue: { fontFamily: 'Inter-SemiBold', fontSize: 15, color: colors.textPrimary, flexShrink: 1, textAlign: 'right' },
+    infoLabel: { fontFamily: 'MonaSans-Regular', fontSize: 14, color: colors.textSecondary },
+    infoValue: { fontFamily: 'MonaSans-SemiBold', fontSize: 15, color: colors.textPrimary, flexShrink: 1, textAlign: 'right' },
     linkBtn: {
       marginTop: 24,
       height: 54,
@@ -165,6 +165,6 @@ function makeStyles(colors: any, isDark: boolean) {
       borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
       borderColor: colors.border,
     },
-    linkText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#FFFFFF' },
+    linkText: { fontFamily: 'MonaSans-SemiBold', fontSize: 16, color: '#FFFFFF' },
   });
 }

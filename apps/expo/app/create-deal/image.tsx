@@ -98,12 +98,12 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   heading: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subheading: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 32,
   },
   placeholder: {
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   previewWrapper: {
     position: 'relative',

@@ -116,13 +116,13 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     color: '#ffffff',
     lineHeight: 34,
   },
   heroSubtitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255,255,255,0.7)',
     marginTop: 4,
   },
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   optionEmoji: { fontSize: 28 },
   optionText: { flex: 1, gap: 2 },
-  optionTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
-  optionSubtitle: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  optionTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold' },
+  optionSubtitle: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   optionArrow: { fontSize: 22 },
 });

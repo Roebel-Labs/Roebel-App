@@ -350,12 +350,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   privacyTitle: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 26,
     marginBottom: 10,
   },
   privacyBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginBottom: 8,
   },
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   dateField: {
     flexDirection: 'row',
@@ -382,10 +382,10 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   fieldHint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     lineHeight: 16,
     marginTop: 6,
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 19,
   },
@@ -442,12 +442,12 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   messageText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginBottom: 24,
   },

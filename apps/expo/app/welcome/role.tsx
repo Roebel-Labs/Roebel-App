@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   error: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
     paddingHorizontal: 24,
     paddingBottom: 8,
@@ -132,12 +132,12 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subheading: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 32,
     lineHeight: 22,
   },
@@ -160,11 +160,11 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 2,
   },
   cardDesc: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

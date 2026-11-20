@@ -92,7 +92,7 @@ export default function UserAvatarWithFrame({
           <Text
             style={{
               fontSize: size * 0.42,
-              fontFamily: 'Inter-SemiBold',
+              fontFamily: 'MonaSans-SemiBold',
               color: colors.textSecondary,
             }}
           >

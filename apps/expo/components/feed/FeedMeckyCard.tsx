@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   content: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
 });

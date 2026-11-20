@@ -33,7 +33,7 @@ export default function OrderCartScreen() {
         <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={{ fontSize: 18, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Warenkorb</Text>
+        <Text style={{ fontSize: 18, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>Warenkorb</Text>
       </View>
 
       <KeyboardAwareScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
@@ -43,15 +43,15 @@ export default function OrderCartScreen() {
           cart.map((item, index) => (
             <View key={index} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontFamily: 'Inter-Regular', color: colors.textPrimary }}>{item.menuItem.name}</Text>
+                <Text style={{ fontSize: 15, fontFamily: 'MonaSans-Regular', color: colors.textPrimary }}>{item.menuItem.name}</Text>
                 {item.notes ? <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2 }}>{item.notes}</Text> : null}
-                <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textSecondary, marginTop: 4 }}>{formatMenuPrice(item.menuItem.price * item.quantity)}</Text>
+                <Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: colors.textSecondary, marginTop: 4 }}>{formatMenuPrice(item.menuItem.price * item.quantity)}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Pressable onPress={() => updateCartItem(index, item.quantity - 1)} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ fontSize: 16, color: colors.textPrimary }}>-</Text>
                 </Pressable>
-                <Text style={{ fontSize: 15, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>{item.quantity}</Text>
+                <Text style={{ fontSize: 15, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>{item.quantity}</Text>
                 <Pressable onPress={() => updateCartItem(index, item.quantity + 1)} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ fontSize: 16, color: colors.textPrimary }}>+</Text>
                 </Pressable>
@@ -61,13 +61,13 @@ export default function OrderCartScreen() {
         )}
 
         <View style={{ marginTop: 24 }}>
-          <Text style={{ fontSize: 13, fontFamily: 'Inter-Medium', color: colors.textSecondary, marginBottom: 8 }}>DEIN NAME (optional)</Text>
+          <Text style={{ fontSize: 13, fontFamily: 'MonaSans-Medium', color: colors.textSecondary, marginBottom: 8 }}>DEIN NAME (optional)</Text>
           <TextInput
             placeholder="z.B. Max"
             placeholderTextColor={colors.textTertiary}
             value={guestName || ''}
             onChangeText={setGuestName}
-            style={{ backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: 'Inter-Regular', color: colors.textPrimary }}
+            style={{ backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: 'MonaSans-Regular', color: colors.textPrimary }}
           />
         </View>
 
@@ -77,8 +77,8 @@ export default function OrderCartScreen() {
       {cart.length > 0 && (
         <View style={{ position: 'absolute', bottom: 32, left: 16, right: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 }}>
-            <Text style={{ fontSize: 16, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Gesamt</Text>
-            <Text style={{ fontSize: 16, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>{formatMenuPrice(cartTotal)}</Text>
+            <Text style={{ fontSize: 16, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>Gesamt</Text>
+            <Text style={{ fontSize: 16, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>{formatMenuPrice(cartTotal)}</Text>
           </View>
           <Pressable
             onPress={handleSubmit}
@@ -88,7 +88,7 @@ export default function OrderCartScreen() {
             {isSubmitting ? (
               <ActivityIndicator color={colors.onPrimary} />
             ) : (
-              <Text style={{ color: colors.onPrimary, fontSize: 16, fontFamily: 'Inter-Medium' }}>Bestellung senden</Text>
+              <Text style={{ color: colors.onPrimary, fontSize: 16, fontFamily: 'MonaSans-Medium' }}>Bestellung senden</Text>
             )}
           </Pressable>
         </View>

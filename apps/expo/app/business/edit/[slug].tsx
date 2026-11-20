@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   imageOverlay: {
     ...StyleSheet.absoluteFill,
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   },
   changeLink: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 10,
   },
   // Logo
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   },
   logoPlaceholderText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   logoOverlay: {
     ...StyleSheet.absoluteFill,
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
   },
   pickerItemText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   // Opening Hours
   hoursContainer: {
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 80,
   },
   daySwitch: {
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
   timeInput: {
     width: 60,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -668,7 +668,7 @@ const styles = StyleSheet.create({
   },
   closedText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   // Save
   saveButton: {

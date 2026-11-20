@@ -160,18 +160,18 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#333',
   },
   name: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 48,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

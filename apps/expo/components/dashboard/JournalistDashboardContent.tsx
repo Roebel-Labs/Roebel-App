@@ -178,8 +178,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  actionTitle: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  actionSub: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  actionTitle: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  actionSub: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   emptyState: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  emptyText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  emptyText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   recentList: { marginTop: 24 },
   row: {
     marginHorizontal: 16,
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  rowTitle: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  rowMeta: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
-  rowViews: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  rowTitle: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  rowMeta: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
+  rowViews: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
 });

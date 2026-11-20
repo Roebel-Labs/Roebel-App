@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
   },
   audienceText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   feedDropdown: {
     position: 'absolute',
@@ -787,7 +787,7 @@ const styles = StyleSheet.create({
   },
   feedDropdownText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   weiterBtn: {
     paddingHorizontal: 20,
@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
   },
   weiterText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   scrollContent: {
     paddingBottom: 16,
@@ -811,17 +811,17 @@ const styles = StyleSheet.create({
   },
   authorName: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorLocation: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   textInput: {
     paddingHorizontal: 16,
     paddingTop: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
     minHeight: 120,
     textAlignVertical: 'top',
@@ -830,7 +830,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     paddingHorizontal: 16,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   linkedItemWrapper: {
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
   },
   categoryChipText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   toolbar: {
     flexDirection: 'row',
@@ -951,6 +951,6 @@ const styles = StyleSheet.create({
   },
   bottomCardLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

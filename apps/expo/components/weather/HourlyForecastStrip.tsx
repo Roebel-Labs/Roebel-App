@@ -55,7 +55,7 @@ export default function HourlyForecastStrip({ hourly }: Props) {
 const styles = StyleSheet.create({
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 12,
   },
   row: {
@@ -69,11 +69,11 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   temp: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   metric: {
     flexDirection: 'row',
@@ -82,6 +82,6 @@ const styles = StyleSheet.create({
   },
   metricText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

@@ -57,11 +57,11 @@ function EditMenuItemScreenInner() {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {!canEdit ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Nicht berechtigt.</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Nicht berechtigt.</Text>
         ) : loading ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Lädt…</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Lädt…</Text>
         ) : !item ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Gericht nicht gefunden.</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Gericht nicht gefunden.</Text>
         ) : (
           <MenuItemEditor
             restaurantId={item.restaurant_id}

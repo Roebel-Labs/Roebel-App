@@ -38,6 +38,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   emoji: { fontSize: 32, marginBottom: 16 },
-  title: { fontSize: 20, fontFamily: 'Inter-SemiBold', marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22 },
+  title: { fontSize: 20, fontFamily: 'MonaSans-SemiBold', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 15, fontFamily: 'MonaSans-Regular', textAlign: 'center', lineHeight: 22 },
 });

@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   initialsText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#333',
   },
   overflowCircle: {
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   overflowText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#555',
   },
 });

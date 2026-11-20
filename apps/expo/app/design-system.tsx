@@ -51,13 +51,13 @@ const swatchStyles = StyleSheet.create({
   },
   name: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#6b7280',
     textAlign: 'center',
   },
   hex: {
     fontSize: 9,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#9ca3af',
     textAlign: 'center',
   },
@@ -82,7 +82,7 @@ const dsSectionStyles = StyleSheet.create({
   },
   title: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -127,7 +127,7 @@ export default function DesignSystemScreen() {
         {/* Current Theme Info */}
         <View style={[styles.themeInfo, { backgroundColor: colors.surface, marginHorizontal: 16, marginTop: 16 }]}>
           <Text style={[styles.themeInfoLabel, { color: colors.textSecondary }]}>
-            Aktuelles Schema: <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium' }}>
+            Aktuelles Schema: <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium' }}>
               {THEME_LABELS[variant]}
             </Text> (Einstellung: {THEME_LABELS[preference]})
           </Text>
@@ -255,7 +255,7 @@ export default function DesignSystemScreen() {
           />
           <View style={{ height: 16 }} />
           <View style={styles.switchRow}>
-            <Text style={{ fontSize: 15, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>
+            <Text style={{ fontSize: 15, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>
               Switch Beispiel
             </Text>
             <Switch
@@ -272,10 +272,10 @@ export default function DesignSystemScreen() {
           <View style={[styles.demoCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={[styles.demoCardImage, { backgroundColor: colors.cardPlaceholder }]} />
             <View style={styles.demoCardContent}>
-              <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>
+              <Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>
                 Beispiel Karte
               </Text>
-              <Text style={{ fontSize: 12, fontFamily: 'Inter-Regular', color: colors.textSecondary, marginTop: 4 }}>
+              <Text style={{ fontSize: 12, fontFamily: 'MonaSans-Regular', color: colors.textSecondary, marginTop: 4 }}>
                 Eine Beispielkarte mit Platzhalter-Bild und Text
               </Text>
             </View>
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   },
   themeInfoLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 12,
   },
   themeButtons: {
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   },
   typoLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 2,
   },
   typoDivider: {
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   },
   spacingLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     width: 70,
   },
   spacingBar: {
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   },
   radiiLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   demoButton: {
     height: 48,
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   switchRow: {
     flexDirection: 'row',

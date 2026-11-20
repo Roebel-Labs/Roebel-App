@@ -174,21 +174,21 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   headline: {
     fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 34,
     marginBottom: 12,
     textAlign: 'center',
   },
   lede: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 24,
     textAlign: 'center',
@@ -208,11 +208,11 @@ const styles = StyleSheet.create({
   },
   versionLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   versionValue: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   tertiaryButton: {
     paddingVertical: 12,
@@ -240,6 +240,6 @@ const styles = StyleSheet.create({
   },
   tertiaryLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

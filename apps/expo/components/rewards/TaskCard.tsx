@@ -179,11 +179,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   description: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     lineHeight: 17,
   },
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     height: 20,
   },
   coinAmount: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   cta: {

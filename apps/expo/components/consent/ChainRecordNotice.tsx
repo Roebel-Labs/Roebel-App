@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flex: 1,
   },
   pointRow: {
@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
   pointText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 19,
   },
   link: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
 });

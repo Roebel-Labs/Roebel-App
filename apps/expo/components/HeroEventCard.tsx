@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   },
   dayPillText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   contentSection: {
     paddingHorizontal: 16,
@@ -206,13 +206,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 32,
     marginBottom: 6,
   },
   subline: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 16,
   },
   divider: {
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     letterSpacing: 0.5,
     flex: 1,
     marginRight: 12,

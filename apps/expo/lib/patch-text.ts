@@ -10,9 +10,9 @@ TextAny.render = function patchedRender(...args: any[]) {
     | { fontSize?: number; fontFamily?: string }
     | undefined;
 
-  if (flat && flat.fontSize && flat.fontSize > 16 && flat.fontFamily === 'Inter-Regular') {
+  if (flat && flat.fontSize && flat.fontSize > 16 && flat.fontFamily === 'MonaSans-Regular') {
     return React.cloneElement(element, {
-      style: [element.props.style, { fontFamily: 'Inter-Medium' }],
+      style: [element.props.style, { fontFamily: 'MonaSans-Medium' }],
     });
   }
   return element;

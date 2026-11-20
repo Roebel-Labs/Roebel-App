@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   entryContent: { padding: 24, gap: 8 },
   eyebrow: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 8,
@@ -452,11 +452,11 @@ const styles = StyleSheet.create({
   amountInput: {
     flex: 1,
     fontSize: 42,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   amountCurrency: {
     fontSize: 28,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   noteInput: {
     height: 52,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   primaryButton: {
     borderRadius: 16,
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   },
   helper: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginTop: 12,
   },
@@ -500,23 +500,23 @@ const styles = StyleSheet.create({
   },
   waitingTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginTop: 16,
   },
   waitingAmount: {
     fontSize: 36,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginTop: 4,
   },
   waitingSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
   },
   countdown: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 8,
   },
   resultIcon: {
@@ -530,22 +530,22 @@ const styles = StyleSheet.create({
   resultIconText: {
     fontSize: 44,
     color: '#ffffff',
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   resultAmount: {
     fontSize: 40,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginTop: 4,
     letterSpacing: -0.5,
   },
   resultTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginTop: 8,
   },
   resultBody: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 22,
   },

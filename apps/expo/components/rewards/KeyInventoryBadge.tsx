@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   count: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
   },
 });

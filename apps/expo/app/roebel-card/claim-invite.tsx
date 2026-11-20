@@ -167,13 +167,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     textAlign: 'center',
     marginBottom: 8,
   },
   body: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 32,
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   label: {
     alignSelf: 'stretch',
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     letterSpacing: 2,
     textAlign: 'center',
   },
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 8,
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   footer: {
     paddingHorizontal: 24,

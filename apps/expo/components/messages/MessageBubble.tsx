@@ -247,11 +247,11 @@ const styles = StyleSheet.create({
   },
   reactionCount: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   time: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   timeOwn: {

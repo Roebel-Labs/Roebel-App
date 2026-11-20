@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   },
   storyStartLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   storyBar: {
     paddingHorizontal: 16,
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   },
   storyHint: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingVertical: 4,
   },
@@ -525,23 +525,23 @@ const styles = StyleSheet.create({
   },
   storyPrimaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   storyPreview: {
     gap: 8,
   },
   storyPreviewTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   storyPreviewExcerpt: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   storyErrorText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   header: {
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
   },
   clearText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   messageList: {
     paddingVertical: 8,
@@ -625,12 +625,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
   },
   streamingText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 21,
   },
   dots: {
@@ -683,14 +683,14 @@ const styles = StyleSheet.create({
   },
   consentPrimaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   consentSecondary: {
     paddingVertical: 12,
   },
   consentSecondaryLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
   menuBackdrop: {
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
   },
   menuHeading: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
   },
   menuEmptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
@@ -729,11 +729,11 @@ const styles = StyleSheet.create({
   },
   conversationTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   conversationTime: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

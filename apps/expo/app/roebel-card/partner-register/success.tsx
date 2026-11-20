@@ -64,16 +64,16 @@ const styles = StyleSheet.create({
   iconText: {
     fontSize: 40,
     color: '#ffffff',
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     textAlign: 'center',
   },
   body: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 22,
   },

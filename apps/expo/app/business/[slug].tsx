@@ -324,7 +324,7 @@ export default function BusinessDetailScreen() {
                   <Text
                     style={[
                       styles.dayLabel,
-                      { color: isToday ? colors.primary : colors.textPrimary, fontFamily: isToday ? 'Inter-SemiBold' : 'Inter-Regular' },
+                      { color: isToday ? colors.primary : colors.textPrimary, fontFamily: isToday ? 'MonaSans-SemiBold' : 'MonaSans-Regular' },
                     ]}
                   >
                     {label}
@@ -332,7 +332,7 @@ export default function BusinessDetailScreen() {
                   <Text
                     style={[
                       styles.hoursValue,
-                      { color: isToday ? colors.primary : colors.textSecondary, fontFamily: isToday ? 'Inter-SemiBold' : 'Inter-Regular' },
+                      { color: isToday ? colors.primary : colors.textSecondary, fontFamily: isToday ? 'MonaSans-SemiBold' : 'MonaSans-Regular' },
                     ]}
                   >
                     {dayHours && !dayHours.closed ? `${dayHours.open} – ${dayHours.close}` : 'Geschlossen'}
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   },
   editPillText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   identityRow: {
     flexDirection: 'row',
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   },
   displayName: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   metaRow: {
     flexDirection: 'row',
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   statusDot: {
     width: 6,
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   },
   bio: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   actionRow: {
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   // Sections — same rhythm as ProfileOfferRows
   section: {
@@ -552,12 +552,12 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   contactValue: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   hoursRow: {
     flexDirection: 'row',
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   },
   ownerButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   paymentsCta: {
     borderWidth: 1,
@@ -603,11 +603,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   paymentsCtaTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
   },
   paymentsCtaBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
   },
 });

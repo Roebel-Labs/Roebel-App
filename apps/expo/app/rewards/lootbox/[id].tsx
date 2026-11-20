@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     height: 18,
   },
   rcrcBadgeText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   content: {
@@ -384,12 +384,12 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 28,
     textAlign: 'center',
   },
   description: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -406,13 +406,13 @@ const styles = StyleSheet.create({
   },
   costIcon: { width: 28, height: 28 },
   costLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   costValue: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
     marginTop: 2,
   },
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   },
   keyPillText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 12,
   },
   primaryCTA: {
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   footerHint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     textAlign: 'center',
     marginTop: 4,

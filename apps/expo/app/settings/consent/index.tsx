@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   lede: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   },
   bulkPrimaryLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bulkSecondary: {
     flex: 1,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   },
   bulkSecondaryLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   metaBlock: {
     marginTop: 24,
@@ -169,11 +169,11 @@ const styles = StyleSheet.create({
   },
   metaLine: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   metaLink: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomSpacer: { height: 40 },
 });

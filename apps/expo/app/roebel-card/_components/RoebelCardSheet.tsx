@@ -273,11 +273,11 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   balanceValue: {
     fontSize: 36,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 44,
     letterSpacing: -0.5,
   },
@@ -306,19 +306,19 @@ const styles = StyleSheet.create({
   },
   pillLabel: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 
   sectionHeading: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
   },
 
   loader: { marginTop: 16 },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingVertical: 8,
   },
 
@@ -344,13 +344,13 @@ const styles = StyleSheet.create({
   },
   historyIconGlyph: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   historyCenter: { flex: 1, gap: 2 },
-  historyName: { fontSize: 15, fontFamily: 'Inter-Medium' },
-  historyMeta: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  historyName: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
+  historyMeta: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   historyAmount: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

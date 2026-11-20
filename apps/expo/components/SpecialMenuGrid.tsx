@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   gridCardName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'left',
   },
   featuredCard: {
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   featuredName: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 24,
   },
   featuredIconContainer: {

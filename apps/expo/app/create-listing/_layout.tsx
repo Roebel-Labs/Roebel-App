@@ -75,6 +75,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

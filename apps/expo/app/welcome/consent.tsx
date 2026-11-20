@@ -322,18 +322,18 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   heading: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 32,
     marginBottom: 24,
   },
   body: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 16,
   },
@@ -345,12 +345,12 @@ const styles = StyleSheet.create({
   },
   link: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
   linkSep: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   footer: {
     paddingHorizontal: 24,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   acceptProgressRow: {
     flexDirection: 'row',
@@ -379,6 +379,6 @@ const styles = StyleSheet.create({
   },
   declineText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

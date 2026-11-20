@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   },
   heroPlaceholderName: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   infoSection: {
     paddingHorizontal: 16,
@@ -111,12 +111,12 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 26,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
   },
   description: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   menuSection: {
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   noMenuText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     padding: 32,
   },

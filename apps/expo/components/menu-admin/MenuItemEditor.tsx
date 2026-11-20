@@ -169,7 +169,7 @@ export default function MenuItemEditor({ restaurantId, categoryId, item, onSaved
         disabled={saving}
         style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: saving ? 0.5 : 1 }]}
       >
-        <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>{saving ? 'Wird gespeichert…' : 'Gericht speichern'}</Text>
+        <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium' }}>{saving ? 'Wird gespeichert…' : 'Gericht speichern'}</Text>
       </Pressable>
 
       <SidesEditor menuItemId={savedItemId} />
@@ -177,7 +177,7 @@ export default function MenuItemEditor({ restaurantId, categoryId, item, onSaved
 
       {savedItemId && (
         <Pressable onPress={remove} style={[styles.btnDanger, { borderColor: colors.error }]}>
-          <Text style={{ color: colors.error, fontFamily: 'Inter-Medium' }}>Gericht löschen</Text>
+          <Text style={{ color: colors.error, fontFamily: 'MonaSans-Medium' }}>Gericht löschen</Text>
         </Pressable>
       )}
     </View>
@@ -186,14 +186,14 @@ export default function MenuItemEditor({ restaurantId, categoryId, item, onSaved
 
 const styles = StyleSheet.create({
   wrap: { gap: 10 },
-  label: { fontSize: 14, fontFamily: 'Inter-Medium', marginTop: 6 },
-  hint: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  label: { fontSize: 14, fontFamily: 'MonaSans-Medium', marginTop: 6 },
+  hint: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
   input: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
   },
   multiline: { minHeight: 80, textAlignVertical: 'top' },

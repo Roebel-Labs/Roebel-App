@@ -328,18 +328,18 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 2,
   },
   title: {
     fontSize: 17,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 22,
     marginBottom: 2,
   },
   artist: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 12,
   },
   controls: {
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   },
   time: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     minWidth: 34,
     textAlign: 'right',
   },

@@ -100,12 +100,12 @@ export default function WeeklyEarnedChart({ points, labels, changePct }: WeeklyE
 function makeStyles(colors: any) {
 	return StyleSheet.create({
 		card: { backgroundColor: colors.card, borderRadius: 24, padding: 20, borderWidth: 1, borderColor: colors.border },
-		label: { fontFamily: "Inter-Medium", fontSize: 14, color: colors.textSecondary },
+		label: { fontFamily: "MonaSans-Medium", fontSize: 14, color: colors.textSecondary },
 		valueRow: { flexDirection: "row", alignItems: "baseline", gap: 10, marginTop: 2 },
-		value: { fontFamily: "Inter-Bold", fontSize: 30, color: colors.textPrimary },
-		unit: { fontFamily: "Inter-SemiBold", fontSize: 16, color: colors.primary },
-		pct: { fontFamily: "Inter-SemiBold", fontSize: 14 },
+		value: { fontFamily: "MonaSans-Bold", fontSize: 30, color: colors.textPrimary },
+		unit: { fontFamily: "MonaSans-SemiBold", fontSize: 16, color: colors.primary },
+		pct: { fontFamily: "MonaSans-SemiBold", fontSize: 14 },
 		axis: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-		axisLabel: { fontFamily: "Inter-Regular", fontSize: 11, color: colors.textTertiary },
+		axisLabel: { fontFamily: "MonaSans-Regular", fontSize: 11, color: colors.textTertiary },
 	});
 }

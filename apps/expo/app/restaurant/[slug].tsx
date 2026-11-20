@@ -57,7 +57,7 @@ export default function RestaurantDetailScreen() {
             </View>
           )}
           <View style={styles.floatingBackContainer}><Pressable onPress={() => router.back()} style={[styles.floatingBackButton, { backgroundColor: colors.background }, shadows.backButton]}><ArrowLeftIcon size={24} color={colors.tabIconActive} /></Pressable></View>
-          {openStatus && (<View style={[styles.statusBadge, { backgroundColor: openStatus.isOpen ? colors.successBackground : colors.errorBackground }]}><Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: openStatus.isOpen ? colors.success : colors.error }}>{openStatus.isOpen ? 'Geöffnet' : 'Geschlossen'}</Text></View>)}
+          {openStatus && (<View style={[styles.statusBadge, { backgroundColor: openStatus.isOpen ? colors.successBackground : colors.errorBackground }]}><Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: openStatus.isOpen ? colors.success : colors.error }}>{openStatus.isOpen ? 'Geöffnet' : 'Geschlossen'}</Text></View>)}
         </View>
 
         <View style={styles.infoSection}>
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   },
   heroPlaceholderName: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   statusBadge: {
     position: 'absolute',
@@ -144,12 +144,12 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 26,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
   },
   description: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 16,
   },
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   },
   contactText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   specialMenuSection: {
     paddingTop: 32,
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   noMenuText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     padding: 32,
   },

@@ -184,8 +184,8 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Bold', marginBottom: 8 },
+  subtitle: { fontSize: 15, fontFamily: 'MonaSans-Regular', marginBottom: 32 },
   sectionCard: {
     borderRadius: 16,
     padding: 16,
@@ -199,12 +199,12 @@ const styles = StyleSheet.create({
   },
   sectionCardTitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  sectionCardEdit: { fontSize: 13, fontFamily: 'Inter-Medium' },
-  sectionValue: { fontSize: 15, fontFamily: 'Inter-Medium' },
-  sectionMeta: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4 },
+  sectionCardEdit: { fontSize: 13, fontFamily: 'MonaSans-Medium' },
+  sectionValue: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
+  sectionMeta: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 4 },
   bottomSpacer: { height: 96 },
 });

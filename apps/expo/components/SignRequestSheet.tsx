@@ -184,11 +184,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 22,
   },
   subline: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
     marginTop: 6,
     lineHeight: 21,
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     marginVertical: 18,
   },
   sectionLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginBottom: 12,
   },
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
     flex: 1,
   },
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   roleLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 16,
   },
   actionDivider: {

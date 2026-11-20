@@ -85,7 +85,7 @@ export default function AccountSwitchSheet({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontFamily: 'Inter-SemiBold', marginBottom: 16 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-SemiBold', marginBottom: 16 },
   list: { flex: 1 },
   listContent: { paddingBottom: 12, gap: 8 },
   row: {
@@ -100,12 +100,12 @@ const styles = StyleSheet.create({
   emojiWrap: { alignItems: 'center', justifyContent: 'center' },
   emoji: { fontSize: 20 },
   info: { flex: 1, gap: 2 },
-  name: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  type: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  name: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  type: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   statusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  statusText: { fontSize: 11, fontFamily: 'Inter-Medium' },
-  check: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  statusText: { fontSize: 11, fontFamily: 'MonaSans-Medium' },
+  check: { fontSize: 18, fontFamily: 'MonaSans-SemiBold' },
   divider: { height: 1, marginVertical: 12 },
   logout: { paddingVertical: 14, alignItems: 'center' },
-  logoutText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  logoutText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });

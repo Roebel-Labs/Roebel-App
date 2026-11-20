@@ -92,6 +92,6 @@ const styles = StyleSheet.create({
   },
   check: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 });

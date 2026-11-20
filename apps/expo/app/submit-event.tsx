@@ -1303,7 +1303,7 @@ export default function SubmitEventScreen() {
                     style={[
                       styles.categoryItemText,
                       { color: colors.textPrimary },
-                      form.category === cat && { fontFamily: 'Inter-Medium', color: colors.primary },
+                      form.category === cat && { fontFamily: 'MonaSans-Medium', color: colors.primary },
                     ]}
                   >
                     {cat}
@@ -1408,7 +1408,7 @@ const styles = StyleSheet.create({
   },
   modeToggleLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   modeToggleSwitch: {
     transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
@@ -1422,7 +1422,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 24,
   },
   field: {
@@ -1432,7 +1432,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   input: {
@@ -1441,7 +1441,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   textArea: {
     minHeight: 100,
@@ -1464,11 +1464,11 @@ const styles = StyleSheet.create({
   },
   pickerText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pickerPlaceholder: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   imageContainer: {
     marginTop: 8,
@@ -1486,7 +1486,7 @@ const styles = StyleSheet.create({
   },
   imagePickerText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   imagePreview: {
     position: 'relative',
@@ -1510,7 +1510,7 @@ const styles = StyleSheet.create({
   },
   removeImageText: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   selectedPlaceDetails: {
     marginTop: 8,
@@ -1518,11 +1518,11 @@ const styles = StyleSheet.create({
   },
   selectedPlace: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   selectedCoordinates: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   buttonRow: {
     gap: 12,
@@ -1553,7 +1553,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginTop: 16,
   },
@@ -1569,13 +1569,13 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textAlign: 'center',
   },
   successText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 24,
@@ -1617,7 +1617,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 24,
@@ -1635,7 +1635,7 @@ const styles = StyleSheet.create({
   },
   categoryItemText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   checkmark: {
     fontSize: 18,
@@ -1663,7 +1663,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     flex: 1,
   },
   errorBanner: {
@@ -1686,7 +1686,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
     flex: 1,
   },
@@ -1700,7 +1700,7 @@ const styles = StyleSheet.create({
   },
   errorBannerDismissText: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 20,
   },
   // Toggle Styles for Recurring Events
@@ -1731,7 +1731,7 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   // AI Button Styles
   aiButton: {
@@ -1755,12 +1755,12 @@ const styles = StyleSheet.create({
   // Location Hint
   locationHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   prefillHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 8,
     marginTop: 4,
   },
@@ -1786,7 +1786,7 @@ const styles = StyleSheet.create({
   imagePreviewCloseText: {
     fontSize: 28,
     color: '#ffffff',
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   imagePreviewFullImage: {
     width: screenWidth,
@@ -1809,7 +1809,7 @@ const styles = StyleSheet.create({
   },
   imagePreviewCancelText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
   },
   imagePreviewConfirmButton: {
@@ -1820,7 +1820,7 @@ const styles = StyleSheet.create({
   },
   imagePreviewConfirmText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
   },
 });

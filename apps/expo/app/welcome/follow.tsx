@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   body: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   center: { gap: 24 },
-  heading: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subheading: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 20, lineHeight: 22 },
-  empty: { fontSize: 15, fontFamily: 'Inter-Regular' },
+  heading: { fontSize: 26, fontFamily: 'MonaSans-Bold', marginBottom: 8 },
+  subheading: { fontSize: 15, fontFamily: 'MonaSans-Regular', marginBottom: 20, lineHeight: 22 },
+  empty: { fontSize: 15, fontFamily: 'MonaSans-Regular' },
 });

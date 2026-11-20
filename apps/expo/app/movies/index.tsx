@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   },
   infoBannerTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   infoBannerText: {
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 80,
   },
   infoValue: {

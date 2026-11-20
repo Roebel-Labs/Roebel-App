@@ -119,6 +119,6 @@ const styles = StyleSheet.create({
   },
   temperature: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

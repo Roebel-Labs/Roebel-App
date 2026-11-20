@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: "Inter-Regular",
+    fontFamily: "MonaSans-Regular",
   },
   errorContainer: {
     padding: 12,
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    fontFamily: "Inter-Regular",
+    fontFamily: "MonaSans-Regular",
   },
   inputContainer: {
     borderTopWidth: 1,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    fontFamily: "Inter-Regular",
+    fontFamily: "MonaSans-Regular",
     maxHeight: 100,
   },
   sendButton: {
@@ -332,6 +332,6 @@ const styles = StyleSheet.create({
   successText: {
     flex: 1,
     fontSize: 14,
-    fontFamily: "Inter-Medium",
+    fontFamily: "MonaSans-Medium",
   },
 })

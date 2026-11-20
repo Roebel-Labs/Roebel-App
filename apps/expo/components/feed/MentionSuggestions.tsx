@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   },
   initial: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   text: {
     flex: 1,
@@ -88,10 +88,10 @@ const styles = StyleSheet.create({
   },
   handle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   subtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

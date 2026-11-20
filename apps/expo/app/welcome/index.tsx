@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 60,
     lineHeight: 64,
     letterSpacing: -1.2,
@@ -201,13 +201,13 @@ const styles = StyleSheet.create({
   },
   cardHeadline: {
     marginTop: 8,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 32,
     lineHeight: 38,
     textAlign: 'center',
   },
   cardHeadlineSmall: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 24,
     lineHeight: 30,
     textAlign: 'center',
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   textButtonLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 15,
     textDecorationLine: 'underline',
   },
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   wordsLinkLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 15,
     textAlign: 'center',
     textDecorationLine: 'underline',

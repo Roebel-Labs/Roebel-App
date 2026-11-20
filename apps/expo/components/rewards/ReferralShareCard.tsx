@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   caption: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
@@ -135,12 +135,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   code: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 28,
     letterSpacing: 1,
   },
   copyHint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
   },
   buttons: {
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   secondaryBtn: {
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   linkRow: {
@@ -181,11 +181,11 @@ const styles = StyleSheet.create({
   },
   linkText: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
   },
   linkAction: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 12,
   },
 });

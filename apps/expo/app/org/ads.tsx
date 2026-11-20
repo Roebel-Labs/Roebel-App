@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   dealActions: {
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   },
   dealActionText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomPadding: { height: 40 },
 });

@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
   },
   tableLabel: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 16,
   },
   urlText: {

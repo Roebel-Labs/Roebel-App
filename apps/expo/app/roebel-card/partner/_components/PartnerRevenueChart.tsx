@@ -86,7 +86,7 @@ export default function PartnerRevenueChart({ charges, height = 96 }: Props) {
                 styles.label,
                 {
                   color: isToday ? colors.textPrimary : colors.textTertiary,
-                  fontFamily: isToday ? 'Inter-SemiBold' : 'Inter-Medium',
+                  fontFamily: isToday ? 'MonaSans-SemiBold' : 'MonaSans-Medium',
                 },
               ]}
             >

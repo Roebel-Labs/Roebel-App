@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   subtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   hoursLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dayLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 100,
   },
   daySwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
   timeInput: {
     width: 60,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   timeSeparator: { fontSize: 14 },
   closedText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   saveButton: {
     height: 48,
@@ -336,11 +336,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   emptyBody: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
 });

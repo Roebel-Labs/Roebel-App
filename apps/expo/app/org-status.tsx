@@ -239,11 +239,11 @@ const styles = StyleSheet.create({
   },
   orgName: {
     fontSize: 16,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   orgMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   timeline: {
     paddingHorizontal: 24,
@@ -281,11 +281,11 @@ const styles = StyleSheet.create({
   contentLast: {},
   stepTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   stepSubtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
 });

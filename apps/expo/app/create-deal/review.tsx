@@ -148,7 +148,7 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 24 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Bold', marginBottom: 24 },
   sectionCard: {
     borderRadius: 16,
     padding: 16,
@@ -162,16 +162,16 @@ const styles = StyleSheet.create({
   },
   sectionCardTitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  sectionCardEdit: { fontSize: 13, fontFamily: 'Inter-Medium' },
+  sectionCardEdit: { fontSize: 13, fontFamily: 'MonaSans-Medium' },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   typeEmoji: { fontSize: 20 },
-  typeLabel: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  infoName: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  infoDescription: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4 },
+  typeLabel: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  infoName: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  infoDescription: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 4 },
   photoThumb: { width: 80, height: 80, borderRadius: 8 },
   bottomSpacer: { height: 96 },
 });

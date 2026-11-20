@@ -48,7 +48,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
       color: colors.textPrimary,
       fontSize: 15,
       lineHeight: 24,
-      fontFamily: 'Inter-Regular',
+      fontFamily: 'MonaSans-Regular',
     },
     p: {
       marginVertical: 8,
@@ -58,7 +58,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h1: {
       fontSize: 28,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 24,
       marginBottom: 16,
@@ -66,7 +66,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h2: {
       fontSize: 24,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 20,
       marginBottom: 12,
@@ -74,7 +74,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h3: {
       fontSize: 20,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 16,
       marginBottom: 8,
@@ -82,7 +82,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h4: {
       fontSize: 18,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 12,
       marginBottom: 6,
@@ -90,7 +90,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h5: {
       fontSize: 16,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 10,
       marginBottom: 6,
@@ -98,14 +98,14 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     h6: {
       fontSize: 14,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textSecondary,
       marginTop: 8,
       marginBottom: 4,
       lineHeight: 20,
     },
     strong: {
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
     },
     em: {
@@ -172,7 +172,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
     },
     th: {
       padding: 12,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       fontSize: 14,
       backgroundColor: colors.surfaceSecondary,
@@ -197,7 +197,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
           contentWidth={width - 40} // Account for horizontal padding (20 × 2)
           source={{ html: content }}
           tagsStyles={htmlStyles}
-          systemFonts={['Inter-Regular', 'Inter-Medium', 'Inter-Medium', 'Inter-Bold']}
+          systemFonts={['MonaSans-Regular', 'MonaSans-Medium', 'MonaSans-Medium', 'MonaSans-Bold']}
         />
       ) : (
         <MarkdownRenderer content={content} />
@@ -219,12 +219,12 @@ const styles = StyleSheet.create({
   },
   fallbackTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 6,
   },
   fallbackBody: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
 });

@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
     flex: 1,
     marginRight: 12,
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#00498B',
   },
   closeButton: {

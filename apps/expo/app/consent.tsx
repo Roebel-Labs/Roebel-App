@@ -205,20 +205,20 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   headline: {
     fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 34,
     marginBottom: 12,
   },
   lede: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 24,
   },
@@ -240,12 +240,12 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 22,
   },
   subnote: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 19,
   },
   footer: {
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   secondaryButton: {
     borderRadius: 16,
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tertiaryButton: {
     paddingVertical: 12,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   tertiaryLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   linksRow: {
     flexDirection: 'row',
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
   link: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
   linkSep: {

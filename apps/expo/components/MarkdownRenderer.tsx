@@ -22,7 +22,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     // Headings
     heading1: {
       fontSize: 28,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 24,
       marginBottom: 16,
@@ -30,7 +30,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     },
     heading2: {
       fontSize: 24,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 20,
       marginBottom: 12,
@@ -38,7 +38,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     },
     heading3: {
       fontSize: 20,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 16,
       marginBottom: 8,
@@ -46,7 +46,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     },
     heading4: {
       fontSize: 18,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 12,
       marginBottom: 6,
@@ -54,7 +54,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     },
     heading5: {
       fontSize: 16,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       marginTop: 10,
       marginBottom: 6,
@@ -62,7 +62,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     },
     heading6: {
       fontSize: 14,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textSecondary,
       marginTop: 8,
       marginBottom: 4,
@@ -78,7 +78,7 @@ function createMarkdownStyles(colors: ColorTokens) {
 
     // Emphasis
     strong: {
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
     },
     em: {
@@ -202,7 +202,7 @@ function createMarkdownStyles(colors: ColorTokens) {
     tbody: {},
     th: {
       padding: 12,
-      fontFamily: 'Inter-Medium',
+      fontFamily: 'MonaSans-Medium',
       color: colors.textPrimary,
       fontSize: 14,
       borderRightWidth: 1,

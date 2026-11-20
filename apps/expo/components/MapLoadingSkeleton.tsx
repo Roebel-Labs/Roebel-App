@@ -108,5 +108,5 @@ const styles = StyleSheet.create({
   pinShadow: { width: 16, height: 6, borderRadius: 12, marginTop: 4, backgroundColor: 'rgba(0, 0, 0, 0.15)' },
   marker: { position: 'absolute', width: 10, height: 10, borderRadius: 9999 },
   statusContainer: { position: 'absolute', bottom: 120, left: 0, right: 0, alignItems: 'center' },
-  statusText: { fontSize: 16, fontFamily: 'Inter-Medium' },
+  statusText: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
 });

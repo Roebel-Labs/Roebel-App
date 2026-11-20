@@ -448,8 +448,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 32,
   },
-  emptyTitle: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 4 },
-  emptySubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 12 },
+  emptyTitle: { fontSize: 16, fontFamily: 'MonaSans-Medium', marginBottom: 4 },
+  emptySubtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginBottom: 12 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
   qrFab: {

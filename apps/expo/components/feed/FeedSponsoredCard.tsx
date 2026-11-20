@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   logoInitial: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   headerInfo: {
     flex: 1,
@@ -128,11 +128,11 @@ const styles = StyleSheet.create({
   },
   businessName: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   sponsoredLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   dealBadge: {
     paddingHorizontal: 8,
@@ -141,16 +141,16 @@ const styles = StyleSheet.create({
   },
   dealBadgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   title: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 20,
   },
   description: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   image: {

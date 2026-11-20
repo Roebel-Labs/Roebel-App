@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   },
   listRank: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 20,
     textAlign: 'center',
   },
@@ -232,11 +232,11 @@ const styles = StyleSheet.create({
   },
   listItemTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   listItemStatus: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 1,
   },
   listItemStats: {
@@ -245,11 +245,11 @@ const styles = StyleSheet.create({
   },
   listItemStat: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   listItemStatLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   boostList: {
     paddingHorizontal: 16,
@@ -268,11 +268,11 @@ const styles = StyleSheet.create({
   },
   boostCardTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   boostCardExpiry: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   endBoostButton: {
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   endBoostText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomPadding: {
     height: 40,

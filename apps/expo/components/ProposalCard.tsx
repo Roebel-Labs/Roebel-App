@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 12,
     marginBottom: 12,
     lineHeight: 24,
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   },
   metadataText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   separator: {
     fontSize: 12,
@@ -152,6 +152,6 @@ const styles = StyleSheet.create({
   },
   voteStatsText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

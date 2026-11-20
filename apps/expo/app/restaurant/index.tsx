@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   },
   headerTitleCentered: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flex: 1,
     textAlign: 'center',
   },
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   emptyContainer: {
     padding: 48,
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   grid: {

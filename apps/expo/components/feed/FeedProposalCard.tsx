@@ -104,12 +104,12 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     letterSpacing: 0.6,
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
   },
   metaRow: {
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   dot: {
     fontSize: 12,

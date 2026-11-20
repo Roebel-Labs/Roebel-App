@@ -78,11 +78,11 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   title: {
     fontSize: 17,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 22,
   },
   metaItem: {
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     flexShrink: 1,
   },
 });

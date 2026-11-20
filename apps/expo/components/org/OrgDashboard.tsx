@@ -34,8 +34,8 @@ const statStyles = StyleSheet.create({
     gap: 4,
   },
   emoji: { fontSize: 24 },
-  value: { fontSize: 22, fontFamily: 'Inter-SemiBold' },
-  label: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  value: { fontSize: 22, fontFamily: 'MonaSans-SemiBold' },
+  label: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
 });
 
 interface QuickActionProps {
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
   businessName: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   statsRow: {
     flexDirection: 'row',
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   quickLabel: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   quickArrow: {
     fontSize: 20,

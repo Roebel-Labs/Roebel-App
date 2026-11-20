@@ -126,9 +126,9 @@ export default function FollowIntroSheet() {
 
 const styles = StyleSheet.create({
   content: { flex: 1, paddingBottom: 16 },
-  title: { fontSize: 20, lineHeight: 26, fontFamily: 'Inter-Bold', marginBottom: 2 },
-  body: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 12 },
+  title: { fontSize: 20, lineHeight: 26, fontFamily: 'MonaSans-Bold', marginBottom: 2 },
+  body: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 12 },
   list: { flex: 1 },
   button: { borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
-  buttonText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  buttonText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });

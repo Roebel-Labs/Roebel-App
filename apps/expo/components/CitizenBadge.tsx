@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
   },
   notVerifiedBadge: {
@@ -60,6 +60,6 @@ const styles = StyleSheet.create({
   },
   notVerifiedText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

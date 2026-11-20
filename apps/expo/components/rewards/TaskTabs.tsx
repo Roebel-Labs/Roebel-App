@@ -56,7 +56,7 @@ function TabButton({
           styles.label,
           {
             color: active ? colors.primary : colors.textSecondary,
-            fontFamily: active ? 'Inter-SemiBold' : 'Inter-Medium',
+            fontFamily: active ? 'MonaSans-SemiBold' : 'MonaSans-Medium',
           },
         ]}
       >
