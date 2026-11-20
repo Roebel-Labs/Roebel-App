@@ -24,6 +24,7 @@ import { fontFamily } from '@/constants/theme';
 import type { MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import { LockIcon } from '@/components/miniapp/hostIcons';
+import { useMiniAppUnread } from '@/lib/miniapp-unread';
 
 const BTN_RADIUS = 100; // fully-rounded pill (World-App Get/Open style)
 
@@ -33,8 +34,33 @@ export function installLabel(installed: boolean, locked = false): string {
   return installed ? 'Öffnen' : 'Laden';
 }
 
-export function AppIcon({ app, size }: { app: MiniApp; size: number }) {
+/** Red dot when the app has unread notifications (same signal as the home-screen widget). */
+const UNREAD_DOT = '#FF3B30';
+
+export function AppIcon({ app, size, unread = false }: { app: MiniApp; size: number; unread?: boolean }) {
   const { colors } = useTheme();
+  if (unread) {
+    const dot = Math.max(8, Math.round(size * 0.18));
+    return (
+      <View style={{ width: size, height: size }}>
+        <AppIcon app={app} size={size} />
+        <View
+          accessibilityLabel="Neue Benachrichtigung"
+          style={{
+            position: 'absolute',
+            top: -dot / 3,
+            right: -dot / 3,
+            width: dot,
+            height: dot,
+            borderRadius: dot / 2,
+            backgroundColor: UNREAD_DOT,
+            borderWidth: 2,
+            borderColor: colors.background,
+          }}
+        />
+      </View>
+    );
+  }
   return (
     <View
       style={{
@@ -64,11 +90,13 @@ export function MiniAppGridTile({
   onPress,
   width,
   iconSize = 64,
+  unread = false,
 }: {
   app: MiniApp;
   onPress: () => void;
   width: number;
   iconSize?: number;
+  unread?: boolean;
 }) {
   const { colors } = useTheme();
   return (
@@ -76,7 +104,7 @@ export function MiniAppGridTile({
       onPress={onPress}
       style={({ pressed }) => [styles.tile, { width }, pressed && { opacity: 0.7 }]}
     >
-      <AppIcon app={app} size={iconSize} />
+      <AppIcon app={app} size={iconSize} unread={unread} />
       <Text style={[styles.tileName, { color: colors.textPrimary }]} numberOfLines={1}>
         {app.name}
       </Text>
@@ -199,6 +227,7 @@ export function MiniAppRowCard({
   columnMode?: boolean;
 }) {
   const { colors } = useTheme();
+  const unread = useMiniAppUnread();
   return (
     <Pressable
       onPress={onPress}
@@ -210,7 +239,7 @@ export function MiniAppRowCard({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <AppIcon app={app} size={56} />
+      <AppIcon app={app} size={56} unread={unread.has(app.slug)} />
       <View style={styles.rowBody}>
         <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
           {app.name}

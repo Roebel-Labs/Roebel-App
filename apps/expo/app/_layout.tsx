@@ -59,6 +59,7 @@ import AnimatedSplash from '@/components/AnimatedSplash';
 import { bootState } from '@/lib/navigation/bootPathname';
 import PasskeyRecoveryWatch from '@/components/passkey/PasskeyRecoveryWatch';
 import PhraseReentryWatch from '@/components/passkey/PhraseReentryWatch';
+import WidgetSyncer from '@/components/WidgetSyncer';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -280,6 +281,7 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <PostHogTelemetry />
       <RewardsTaskTriggers />
+      <WidgetSyncer />
       <ReferralDeepLinkHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false }}>

@@ -4,7 +4,6 @@
  * (lib/widget-platform.{ios,android}.ts). Never throws — a failed sync leaves the
  * last payload on the home screen.
  */
-import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
@@ -13,6 +12,9 @@ import { fetchLiveMiniApps, type MiniApp } from './miniapps';
 import { getInstalledMiniAppSlugs } from './miniapp-installs';
 import { buildPayload, resolveSelection, WIDGET_MAX_APPS, type WidgetPayload } from './widget-payload';
 import { pushToPlatform } from './widget-platform';
+import { clearUnreadMiniApp, setUnreadMiniApps } from './miniapp-unread';
+
+export { useMiniAppUnread } from './miniapp-unread';
 
 export const SELECTION_KEY = 'widget.miniapps.v1';
 export const PAYLOAD_KEY = 'widget.payload.v1';
@@ -92,27 +94,7 @@ export async function markMiniAppNotificationsRead(wallet: string, slug: string)
   } catch {
     // The dot simply stays until the next successful open.
   }
-  unreadCache.delete(slug);
-  notifyUnread();
-}
-
-let unreadCache = new Set<string>();
-const unreadListeners = new Set<() => void>();
-function notifyUnread(): void {
-  unreadListeners.forEach((l) => l());
-}
-
-/** Unread mini-app slugs from the last sync — drives the in-app dots. */
-export function useMiniAppUnread(): Set<string> {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const l = () => force((n) => n + 1);
-    unreadListeners.add(l);
-    return () => {
-      unreadListeners.delete(l);
-    };
-  }, []);
-  return unreadCache;
+  clearUnreadMiniApp(slug);
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────
@@ -181,8 +163,7 @@ async function runSync(wallet: string | null): Promise<WidgetPayload | null> {
       getInstalledMiniAppSlugs().catch(() => [] as string[]),
       wallet ? fetchUnreadMiniAppSlugs(wallet) : Promise.resolve(new Set<string>()),
     ]);
-    unreadCache = unread;
-    notifyUnread();
+    setUnreadMiniApps(unread);
 
     const apps = resolveSelection(selected, installed, live);
     const icons: Record<string, string | null> = {};
