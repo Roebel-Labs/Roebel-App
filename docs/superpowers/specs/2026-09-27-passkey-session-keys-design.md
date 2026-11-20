@@ -1,5 +1,35 @@
 # Passkey session keys — design
 
+> **Owner decisions 2026-11-21 (override everything below where they differ).**
+> Plan: `docs/superpowers/plans/2026-11-21-passkey-session-keys-mint.md`.
+> - **MINT ONLY.** Two sessions: `roebel/muenzen/personalMint` and `roebel/muenzen/groupMint` (Röbel group).
+>   The `roebel/muenzen/send` session, its caps (50 / 100) and the send UI copy below are **OUT**. Sending Münzen,
+>   trust, votes and everything else stay on the passkey. Fork-proven: `test_sendIsOutOfScope` (a send signed with
+>   either mint permission → `PolicyViolation`).
+> - **30-day sessions** (TimeFramePolicy), v1 software secp256k1 key in expo-secure-store (as below).
+> - **Rollout ON for all passkey accounts** (not preview-only): the upgrade is offered at the first Münzen claim,
+>   migration + grant = one fingerprint. Remote kill switch `app_settings.passkey_session_keys_enabled` (default true):
+>   off → the app claims with the passkey as today (on the 7579 root path for migrated Safes, fork-proven by
+>   `test_rootOpClaimAfterMigration`) and the sponsor denies upgrade / grant / session ops. **Revoke stays sponsored
+>   even with the switch off.**
+> - **Receiver hooks:** Safe7579 as fallback handler still answers `onERC721Received` / `onERC1155Received` /
+>   `onERC1155BatchReceived` with the magic values (`test_receiverHooksAfterMigration`).
+> - **Golden vector:** `contracts/passkey-accounts/test/fixtures/session-keys-vector.json`
+>   (`test_writeSessionKeysVector`, byte-deterministic; the Expo and web builders reproduce it).
+> - **Grant call-gas cap 3,000,000** (`test_grantGasFitsSponsorCap`). Measured 2026-11-21 (`handleOps`, sponsored,
+>   Gnosis fork, root ops pay the FCL P-256 fallback; suite 14/14, whole repo suite 53/53):
+>
+>   | Op (2 sessions) | Gas |
+>   |---|---|
+>   | migrate + grant 2 sessions (passkey, callGasLimit 3.0M) | 2,287,100 |
+>   | migrate only (passkey) | 479,538 |
+>   | grant 2 sessions on a migrated Safe (passkey) | 2,125,771 |
+>   | renew: uninstall + reinstall 2 sessions (passkey) | 1,640,642 |
+>   | revoke both sessions (passkey) | 387,686 |
+>   | session `personalMint` (no passkey) | 232,305 |
+>   | session `groupMint` (no passkey) | 234,374 |
+>   | root claim personalMint + groupMint, kill-switch fallback (passkey, EXEC_SINGLE / EXEC_BATCH) | 381,666 / 452,642 |
+
 **Status:** SPEC + FORK PROOF only (2026-09-27). No app wiring, no deploys, no broadcasts.
 **Branch:** `feat/session-keys` (preview-only, like `feat/passkey-accounts`; never merged to `main` without Max's go).
 **Fork proof:** `contracts/passkey-accounts/test/SessionKeys.t.sol` (10/10 pass, whole suite 35/35).
@@ -88,7 +118,7 @@ Rules read 32 bytes at `4 + offset` of the `legacy.execute(target, value, data)`
 | all | 0x00 target = Hub · 0x20 value = 0 · 0x40 bytes offset = 0x60 (forces the canonical layout) · 7579 `valueLimitPerUse = 0` |
 | `roebel/muenzen/personalMint` | 0x60 data.length = 4 · 0x80 = `personalMint` selector + 28 zero bytes |
 | `roebel/muenzen/groupMint` | 0x80 = selector ++ first 28 bytes of `abi.encode(group)` · 0x84 group = Röbel group `0xAc2C…470c` |
-| `roebel/muenzen/send` | 0x80 = selector ++ first 28 bytes of `abi.encode(legacy)` · 0x84 from = legacy · 0xc4 id = Röbel group · 0xe4 amount **LTE 50 Münzen per transfer, isLimited 100 Münzen per session** |
+| ~~`roebel/muenzen/send`~~ **OUT (2026-11-21)** | 0x80 = selector ++ first 28 bytes of `abi.encode(legacy)` · 0x84 from = legacy · 0xc4 id = Röbel group · 0xe4 amount **LTE 50 Münzen per transfer, isLimited 100 Münzen per session** |
 
 - **Value 0** everywhere (outer 7579 value and inner `legacy.execute` value), fork-proven.
 - **Expiry 30 days:** TimeFramePolicy returns `validUntil`; the EntryPoint rejects afterwards with `AA22 expired or not due`.
@@ -210,11 +240,11 @@ threshold 2, admin of legacy `0xc49dE63C…Fb28`. The proof migrates exactly thi
   - Title: **„Alltägliches ohne Fingerabdruck"**
   - Body: **„Die App darf 30 Tage lang:**
     - **Röbel Münzen abholen**
-    - **bis zu 50 Röbel Münzen pro Überweisung senden, insgesamt höchstens 100**
+    - ~~**bis zu 50 Röbel Münzen pro Überweisung senden, insgesamt höchstens 100**~~ **OUT (2026-11-21, mint only)**
     - **… nur auf diesem Gerät."**
   - Note: „Für alles andere (Abstimmen, Bestätigungen, Kontoänderungen) fragen wir weiter nach deinem Fingerabdruck."
   - Button: **„Erlauben"** (one fingerprint). Secondary: „Nicht jetzt".
-- **Active state:** „Aktiv bis 27.10.2026 · noch 60 von 100 Röbel Münzen", with the button **„Jetzt beenden"**
+- **Active state:** „Aktiv bis 27.10.2026 · noch 60 von 100 Röbel Münzen" (**OUT 2026-11-21:** the send cap part; final copy in the plan, Task 11), with the button **„Jetzt beenden"**
   (one fingerprint, revokes this device's sessions). After expiry: „Abgelaufen · Erneut erlauben".
 - **Recovery:** after `finalizeRecovery`, the first thing the new passkey does is **revoke all sessions**
   (proof: sessions survive recovery). Copy: „Alle Geräte-Freigaben wurden beendet."

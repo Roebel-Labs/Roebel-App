@@ -27,7 +27,6 @@ import {
     ERC7739Data,
     Session,
     ISmartSession,
-    LimitUsage,
     ParamRule,
     ParamRules,
     ActionConfig,
@@ -49,8 +48,8 @@ import {
 ///     still the Safe owner, and Safe7579 falls back to Safe.checkSignatures for nonce key 0.
 ///  2. A SESSION KEY (secp256k1, OwnableValidator as ISessionValidator) sends sponsored ops with
 ///     NO passkey signature, scoped by UniActionPolicy (legacy.execute → Hub.personalMint / groupMint
-///     into the Röbel group / safeTransferFrom of Röbel Münzen with a per-transfer + per-session cap)
-///     and TimeFramePolicy (30-day expiry, enforced by the EntryPoint via validUntil).
+///     into the Röbel group; MINT ONLY per the owner decision of 2026-11-21, sending stays on the
+///     passkey) and TimeFramePolicy (30-day expiry, enforced by the EntryPoint via validUntil).
 ///  3. Everything else fails; revocation is one passkey op; renewal is one passkey op;
 ///     social recovery still works; the NetizenVerifyingPaymaster sponsors every op unchanged.
 contract SessionKeysTest is PasskeySafeBase {
@@ -82,21 +81,23 @@ contract SessionKeysTest is PasskeySafeBase {
     uint256 internal constant OTHER_KEY = 0xBAD_5E55;
     uint256 internal constant NEW_PASSKEY_PK = 0xC0FFEE2;
     uint256 internal constant SESSION_DAYS = 30;
-    uint256 internal constant PER_TRANSFER_CAP = 50 ether; // 50 Röbel Münzen (18 decimals)
-    uint256 internal constant SESSION_TRANSFER_CAP = 100 ether;
-    uint128 internal constant GRANT_CALL_GAS = 3_500_000; // keeps maxCost under the 0.01 xDAI voucher cap at 2 gwei
+    /// = SESSION_CAPS.grantCallGasLimit of the web sponsor policy (keeps maxCost under the voucher cap at 2 gwei)
+    uint128 internal constant GRANT_CALL_GAS = 3_000_000;
+
+    // ---- golden vector (Tasks 3 + 4 reproduce every byte) ----
+    string internal constant VECTOR_PATH = "./test/fixtures/session-keys-vector.json";
+    uint48 internal constant VECTOR_VALID_UNTIL = 1_800_000_000;
+    uint256 internal constant VECTOR_GROUP_MINT_AMOUNT = 1e18;
+    uint256 internal constant VECTOR_ROOT_NONCE = 0; // fixed (Max's live root nonce moves); hash-only op
 
     // UniActionPolicy conditions
     uint8 internal constant EQUAL = 0;
-    uint8 internal constant GTE = 3;
-    uint8 internal constant LTE = 4;
 
     address internal safe = MAX_SAFE;
     address internal sessionSigner;
     uint48 internal validUntil;
     bytes32 internal pidMint;
     bytes32 internal pidGroupMint;
-    bytes32 internal pidSend;
 
     ICirclesHub internal hub = ICirclesHub(HUB);
 
@@ -181,18 +182,6 @@ contract SessionKeysTest is PasskeySafeBase {
         return _config(rules);
     }
 
-    function _sendConfig() internal pure returns (ActionConfig memory) {
-        ParamRule[] memory rules = _legacyRules(7);
-        rules[3] = _rule(EQUAL, 0x80, _selWindow(ICirclesHub.safeTransferFrom.selector, MAX_LEGACY));
-        rules[4] = _rule(EQUAL, 0x84, bytes32(uint256(uint160(MAX_LEGACY)))); // from = own balance
-        rules[5] = _rule(EQUAL, 0xc4, bytes32(uint256(uint160(GROUP)))); // id = Röbel Münzen
-        ParamRule memory cap = _rule(LTE, 0xe4, bytes32(PER_TRANSFER_CAP)); // amount per transfer
-        cap.isLimited = true; // ... and cumulative over the session
-        cap.usage = LimitUsage({limit: SESSION_TRANSFER_CAP, used: 0});
-        rules[6] = cap;
-        return _config(rules);
-    }
-
     function _session(bytes32 salt, ActionConfig memory cfg, address signer, uint48 until)
         internal
         pure
@@ -214,13 +203,11 @@ contract SessionKeysTest is PasskeySafeBase {
     }
 
     function _sessions(address signer, uint48 until) internal returns (Session[] memory s) {
-        s = new Session[](3);
+        s = new Session[](2);
         s[0] = _session(keccak256("roebel/muenzen/personalMint"), _mintConfig(), signer, until);
         s[1] = _session(keccak256("roebel/muenzen/groupMint"), _groupMintConfig(), signer, until);
-        s[2] = _session(keccak256("roebel/muenzen/send"), _sendConfig(), signer, until);
         pidMint = ISmartSession(SMART_SESSIONS).getPermissionId(s[0]);
         pidGroupMint = ISmartSession(SMART_SESSIONS).getPermissionId(s[1]);
-        pidSend = ISmartSession(SMART_SESSIONS).getPermissionId(s[2]);
     }
 
     function _smartSessionsInitData(Session[] memory s) internal pure returns (bytes memory) {
@@ -236,13 +223,16 @@ contract SessionKeysTest is PasskeySafeBase {
     }
 
     /// The migration: ONE passkey-signed, sponsored op through the CURRENT Safe4337Module path.
-    function _migrationCallData(Session[] memory s) internal view returns (bytes memory) {
+    function _prev4337() internal view returns (address prev4337) {
         (address[] memory mods,) = ISafeAdmin(safe).getModulesPaginated(SENTINEL, 10);
-        address prev4337;
         for (uint256 i; i < mods.length; i++) {
             if (mods[i] == SAFE_4337_MODULE) prev4337 = i == 0 ? SAFE7579 : mods[i - 1]; // 7579 lands at the head
         }
         assertTrue(prev4337 != address(0), "4337 module not found");
+    }
+
+    function _migrationCallData(Session[] memory s) internal view returns (bytes memory) {
+        address prev4337 = _prev4337();
 
         ModuleInit[] memory validators = new ModuleInit[](s.length == 0 ? 0 : 1);
         if (s.length != 0) validators[0] = ModuleInit(SMART_SESSIONS, _smartSessionsInitData(s));
@@ -347,13 +337,80 @@ contract SessionKeysTest is PasskeySafeBase {
         return _sessionOp(SESSION_KEY, pidMint, EXEC_SINGLE, _viaLegacy(HUB, abi.encodeCall(ICirclesHub.personalMint, ())));
     }
 
-    function _sendOp(address to, uint256 amount) internal returns (PackedUserOperation memory) {
-        return _sessionOp(
-            SESSION_KEY,
-            pidSend,
-            EXEC_SINGLE,
-            _viaLegacy(HUB, abi.encodeCall(ICirclesHub.safeTransferFrom, (MAX_LEGACY, to, uint256(uint160(GROUP)), amount, "")))
+    function _groupMintData(uint256 amount) internal pure returns (bytes memory) {
+        address[] memory avatars = new address[](1);
+        avatars[0] = MAX_LEGACY;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+        return abi.encodeCall(ICirclesHub.groupMint, (GROUP, avatars, amounts, ""));
+    }
+
+    function _groupMintOp(uint256 amount) internal returns (PackedUserOperation memory) {
+        return _sessionOp(SESSION_KEY, pidGroupMint, EXEC_SINGLE, _viaLegacy(HUB, _groupMintData(amount)));
+    }
+
+    /// Session-op callData: Safe7579.execute(EXEC_SINGLE, legacy ++ 0 ++ legacy.execute(Hub, 0, inner)).
+    function _sessionClaimCallData(bytes memory innerHubData) internal pure returns (bytes memory) {
+        return abi.encodeCall(ISafe7579.execute, (EXEC_SINGLE, _viaLegacy(HUB, innerHubData)));
+    }
+
+    /// Grant on a migrated Safe (7579 root op). replace = SmartSession already installed:
+    /// EXEC_BATCH [self.uninstallModule(SmartSession, (SENTINEL, "")), self.installModule(SmartSession, init)];
+    /// else EXEC_SINGLE self.installModule(SmartSession, init).
+    function _grantCallData(Session[] memory s, bool replace) internal view returns (bytes memory) {
+        bytes memory install =
+            abi.encodeCall(ISafe7579.installModule, (MODULE_TYPE_VALIDATOR, SMART_SESSIONS, _smartSessionsInitData(s)));
+        if (!replace) return abi.encodeCall(ISafe7579.execute, (EXEC_SINGLE, abi.encodePacked(safe, uint256(0), install)));
+        Execution[] memory ex = new Execution[](2);
+        ex[0] = Execution(
+            safe, 0, abi.encodeCall(ISafe7579.uninstallModule, (MODULE_TYPE_VALIDATOR, SMART_SESSIONS, abi.encode(SENTINEL, bytes(""))))
         );
+        ex[1] = Execution(safe, 0, install);
+        return abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)));
+    }
+
+    /// Revoke = EXEC_BATCH of SmartSession.removeSession(pid) (EXEC_SINGLE for one pid).
+    function _revokeCallData(bytes32[] memory pids) internal pure returns (bytes memory) {
+        if (pids.length == 1) {
+            return abi.encodeCall(
+                ISafe7579.execute,
+                (EXEC_SINGLE, abi.encodePacked(SMART_SESSIONS, uint256(0), abi.encodeCall(ISmartSession.removeSession, (pids[0]))))
+            );
+        }
+        Execution[] memory ex = new Execution[](pids.length);
+        for (uint256 i; i < pids.length; i++) {
+            ex[i] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pids[i])));
+        }
+        return abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)));
+    }
+
+    function _bothPids() internal view returns (bytes32[] memory pids) {
+        pids = new bytes32[](2);
+        pids[0] = pidMint;
+        pids[1] = pidGroupMint;
+    }
+
+    /// legacy.executeBatch([Hub, Hub], [0, 0], [personalMint(), groupMint(Röbel, [legacy], [amount], "")])
+    function _legacyClaimBatch(uint256 amount) internal pure returns (bytes memory) {
+        address[] memory t = new address[](2);
+        t[0] = HUB;
+        t[1] = HUB;
+        uint256[] memory v = new uint256[](2);
+        bytes[] memory d = new bytes[](2);
+        d[0] = abi.encodeCall(ICirclesHub.personalMint, ());
+        d[1] = _groupMintData(amount);
+        return abi.encodeCall(IThirdwebAccount.executeBatch, (t, v, d));
+    }
+
+    /// Kill-switch fallback claim on a migrated Safe (root op). The app's encode7579Execute emits
+    /// EXEC_SINGLE for one call; the batch form (one Execution) is proven equivalent on the fork.
+    function _rootClaimCallData(uint256 amount, bool batchMode) internal pure returns (bytes memory) {
+        if (!batchMode) {
+            return abi.encodeCall(ISafe7579.execute, (EXEC_SINGLE, abi.encodePacked(MAX_LEGACY, uint256(0), _legacyClaimBatch(amount))));
+        }
+        Execution[] memory ex = new Execution[](1);
+        ex[0] = Execution(MAX_LEGACY, 0, _legacyClaimBatch(amount));
+        return abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)));
     }
 
 
@@ -442,7 +499,7 @@ contract SessionKeysTest is PasskeySafeBase {
     function test_migrateMaxSafeAndGrant_onePasskeyOp() public {
         address[] memory guardiansBefore = ISocialRecoveryGuardians(SOCIAL_RECOVERY).getGuardians(safe);
         uint256 gasUsed = _migrate(true);
-        console2.log("GAS migrate + grant 3 sessions (1 passkey op, sponsored, FCL):", gasUsed);
+        console2.log("GAS migrate + grant 2 sessions (1 passkey op, sponsored, FCL):", gasUsed);
 
         assertTrue(ISafe(safe).isModuleEnabled(SAFE7579), "Safe7579 is a module");
         assertEq(address(uint160(uint256(vm.load(safe, FALLBACK_HANDLER_SLOT)))), SAFE7579, "Safe7579 is the handler");
@@ -455,7 +512,7 @@ contract SessionKeysTest is PasskeySafeBase {
         assertTrue(IThirdwebAccount(MAX_LEGACY).isAdmin(safe), "still legacy admin");
         assertTrue(ISafe7579(safe).isModuleInstalled(MODULE_TYPE_VALIDATOR, SMART_SESSIONS, ""), "SmartSession installed");
         bytes32[] memory pids = ISmartSession(SMART_SESSIONS).getPermissionIDs(safe);
-        assertEq(pids.length, 3, "3 sessions granted");
+        assertEq(pids.length, 2, "2 sessions granted");
     }
 
     // =====================================================================
@@ -479,39 +536,9 @@ contract SessionKeysTest is PasskeySafeBase {
 
         // groupMint the fresh personal CRC into Röbel Münzen, second session op (no passkey)
         uint256 group0 = _groupBal();
-        address[] memory avatars = new address[](1);
-        avatars[0] = MAX_LEGACY;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = personal1 / 2;
-        PackedUserOperation memory op = _sessionOp(
-            SESSION_KEY,
-            pidGroupMint,
-            EXEC_SINGLE,
-            _viaLegacy(HUB, abi.encodeCall(ICirclesHub.groupMint, (GROUP, avatars, amounts, "")))
-        );
-        uint256 gasGroup = _ok(op);
+        uint256 gasGroup = _ok(_groupMintOp(personal1 / 2));
         console2.log("GAS session op legacy.execute(Hub.groupMint) (sponsored):", gasGroup);
         assertGt(_groupBal(), group0, "Roebel Muenzen minted with the session key only");
-    }
-
-    function test_sessionKeySendsMuenzenWithinCaps() public {
-        _migrate(true);
-        // NB: makeAddr("alice") has code on Gnosis mainnet (rejects ERC-1155), so use a fresh EOA
-        address alice = makeAddr("roebel-session-recipient");
-        assertEq(alice.code.length, 0, "recipient must be an EOA");
-        uint256 g0 = _groupBal();
-        assertGe(g0, SESSION_TRANSFER_CAP, "fork balance covers the test");
-
-        uint256 gasSend = _ok(_sendOp(alice, PER_TRANSFER_CAP));
-        console2.log("GAS session op legacy.execute(Hub.safeTransferFrom) (sponsored):", gasSend);
-        assertEq(hub.balanceOf(alice, uint256(uint160(GROUP))), PER_TRANSFER_CAP, "50 Muenzen sent");
-
-        // over the per-transfer cap
-        _expectReject(_sendOp(alice, PER_TRANSFER_CAP + 1), POLICY_VIOLATION);
-        // second 50 fills the session cap (100), any further Münzen exceed it
-        _ok(_sendOp(alice, PER_TRANSFER_CAP));
-        _expectReject(_sendOp(alice, 1), POLICY_VIOLATION);
-        assertEq(hub.balanceOf(alice, uint256(uint160(GROUP))), SESSION_TRANSFER_CAP);
     }
 
     // =====================================================================
@@ -520,14 +547,7 @@ contract SessionKeysTest is PasskeySafeBase {
 
     function test_disallowedCallsFail() public {
         _migrate(true);
-        bytes memory groupMintData;
-        {
-            address[] memory avatars = new address[](1);
-            avatars[0] = MAX_LEGACY;
-            uint256[] memory amounts = new uint256[](1);
-            amounts[0] = 1;
-            groupMintData = abi.encodeCall(ICirclesHub.groupMint, (GROUP, avatars, amounts, ""));
-        }
+        bytes memory groupMintData = _groupMintData(1);
 
         // a) right target, wrong permission: the mint session cannot groupMint
         _expectReject(_sessionOp(SESSION_KEY, pidMint, EXEC_SINGLE, _viaLegacy(HUB, groupMintData)), POLICY_VIOLATION);
@@ -538,7 +558,7 @@ contract SessionKeysTest is PasskeySafeBase {
         );
         // c) disallowed inner target: legacy.execute(someToken, 0, transfer) / legacy.execute(safe, …)
         _expectReject(
-            _sessionOp(SESSION_KEY, pidSend, EXEC_SINGLE, _viaLegacy(address(0xBEEF), abi.encodeCall(ICirclesHub.personalMint, ()))),
+            _sessionOp(SESSION_KEY, pidGroupMint, EXEC_SINGLE, _viaLegacy(address(0xBEEF), abi.encodeCall(ICirclesHub.personalMint, ()))),
             POLICY_VIOLATION
         );
         // d) disallowed outer selector: legacy.executeBatch
@@ -619,7 +639,7 @@ contract SessionKeysTest is PasskeySafeBase {
         _expectReject(
             _sessionOp(
                 SESSION_KEY,
-                pidSend,
+                pidGroupMint,
                 EXEC_SINGLE,
                 _viaLegacy(HUB, abi.encodeCall(ICirclesHub.safeTransferFrom, (address(0xF00), address(0xBEEF), uint256(uint160(GROUP)), 1, "")))
             ),
@@ -650,18 +670,13 @@ contract SessionKeysTest is PasskeySafeBase {
         _migrate(true);
         _ok(_mintOp());
 
-        Execution[] memory ex = new Execution[](3);
-        ex[0] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidMint)));
-        ex[1] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidGroupMint)));
-        ex[2] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidSend)));
-        uint256 gasRevoke =
-            _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)))));
-        console2.log("GAS revoke all 3 sessions (1 passkey op, sponsored, FCL):", gasRevoke);
+        uint256 gasRevoke = _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, _revokeCallData(_bothPids())));
+        console2.log("GAS revoke both sessions (1 passkey op, sponsored, FCL):", gasRevoke);
 
         assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 0, "no session left");
         vm.warp(block.timestamp + 1 days);
         _expectReject(_mintOp(), INVALID_PERMISSION_ID);
-        _expectReject(_sendOp(makeAddr("alice"), 1), INVALID_PERMISSION_ID);
+        _expectReject(_groupMintOp(1), INVALID_PERMISSION_ID);
     }
 
     /// Renewal (30 days later, or a new device): ONE passkey op re-installs SmartSession with the
@@ -674,17 +689,9 @@ contract SessionKeysTest is PasskeySafeBase {
 
         uint48 until2 = uint48(block.timestamp + SESSION_DAYS * 1 days);
         Session[] memory s = _sessions(sessionSigner, until2);
-        Execution[] memory ex = new Execution[](2);
-        ex[0] = Execution(
-            safe, 0, abi.encodeCall(ISafe7579.uninstallModule, (MODULE_TYPE_VALIDATOR, SMART_SESSIONS, abi.encode(SENTINEL, bytes(""))))
-        );
-        ex[1] = Execution(
-            safe, 0, abi.encodeCall(ISafe7579.installModule, (MODULE_TYPE_VALIDATOR, SMART_SESSIONS, _smartSessionsInitData(s)))
-        );
-        uint256 gasRenew =
-            _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)))));
-        console2.log("GAS renew: uninstall + reinstall 3 sessions (1 passkey op, sponsored, FCL):", gasRenew);
-        assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 3);
+        uint256 gasRenew = _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, _grantCallData(s, true)));
+        console2.log("GAS renew: uninstall + reinstall 2 sessions (1 passkey op, sponsored, FCL):", gasRenew);
+        assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 2);
         _ok(_mintOp());
     }
 
@@ -697,14 +704,8 @@ contract SessionKeysTest is PasskeySafeBase {
         _expectFail(_mintOp(), "AA24 signature error");
 
         Session[] memory s = _sessions(sessionSigner, validUntil);
-        uint256 gasGrant = _ok(
-            _rootOp(
-                PASSKEY_PK,
-                SHARED_SIGNER,
-                abi.encodeCall(ISafe7579.installModule, (MODULE_TYPE_VALIDATOR, SMART_SESSIONS, _smartSessionsInitData(s)))
-            )
-        );
-        console2.log("GAS grant 3 sessions on a migrated Safe (1 passkey op, sponsored, FCL):", gasGrant);
+        uint256 gasGrant = _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, _grantCallData(s, false)));
+        console2.log("GAS grant 2 sessions on a migrated Safe (1 passkey op, sponsored, FCL):", gasGrant);
         _ok(_mintOp());
     }
 
@@ -744,11 +745,7 @@ contract SessionKeysTest is PasskeySafeBase {
         );
 
         // ... and the NEW passkey revokes everything with one op (the recovery flow must do this).
-        Execution[] memory ex = new Execution[](3);
-        ex[0] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidMint)));
-        ex[1] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidGroupMint)));
-        ex[2] = Execution(SMART_SESSIONS, 0, abi.encodeCall(ISmartSession.removeSession, (pidSend)));
-        _ok(_rootOp(NEW_PASSKEY_PK, newSigner, abi.encodeCall(ISafe7579.execute, (EXEC_BATCH, abi.encode(ex)))));
+        _ok(_rootOp(NEW_PASSKEY_PK, newSigner, _revokeCallData(_bothPids())));
         _expectReject(_mintOp(), INVALID_PERMISSION_ID);
     }
 
@@ -773,6 +770,329 @@ contract SessionKeysTest is PasskeySafeBase {
         );
         vm.expectRevert();
         ISafe7579(safe).isValidSignature(h, sig);
+    }
+
+    // =====================================================================
+    // 7. Mint-only scope (owner decision 2026-11-21): no session may send
+    // =====================================================================
+
+    function test_sendIsOutOfScope() public {
+        _migrate(true);
+        address to = makeAddr("roebel-session-recipient");
+        bytes memory send =
+            abi.encodeCall(ICirclesHub.safeTransferFrom, (MAX_LEGACY, to, uint256(uint160(GROUP)), 1 ether, ""));
+        _expectReject(_sessionOp(SESSION_KEY, pidGroupMint, EXEC_SINGLE, _viaLegacy(HUB, send)), POLICY_VIOLATION);
+        _expectReject(_sessionOp(SESSION_KEY, pidMint, EXEC_SINGLE, _viaLegacy(HUB, send)), POLICY_VIOLATION);
+        assertEq(hub.balanceOf(to, uint256(uint160(GROUP))), 0);
+    }
+
+    // =====================================================================
+    // 8. Kill-switch fallback: the passkey (root) claims on a migrated Safe
+    // =====================================================================
+
+    function test_rootOpClaimAfterMigration() public {
+        _migrate(true);
+        // batch mode (one Execution), as the plan specifies
+        vm.warp(block.timestamp + 1 hours);
+        (uint256 iss,,) = hub.calculateIssuance(MAX_LEGACY);
+        assertGt(iss, 0, "issuance to claim");
+        uint256 p0 = _personalBal();
+        uint256 g0 = _groupBal();
+        uint256 gasBatch = _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, _rootClaimCallData(iss / 2, true)));
+        console2.log("GAS root claim personalMint+groupMint, EXEC_BATCH (1 passkey op, sponsored, FCL):", gasBatch);
+        assertGt(_personalBal(), p0, "personal CRC up");
+        assertGt(_groupBal(), g0, "Roebel Muenzen up");
+
+        // single mode (what encode7579Execute emits for one call; the vector's rootClaimCallData)
+        vm.warp(block.timestamp + 1 hours);
+        (iss,,) = hub.calculateIssuance(MAX_LEGACY);
+        assertGt(iss, 0, "issuance to claim (2)");
+        p0 = _personalBal();
+        g0 = _groupBal();
+        uint256 gasSingle = _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, _rootClaimCallData(iss / 2, false)));
+        console2.log("GAS root claim personalMint+groupMint, EXEC_SINGLE (1 passkey op, sponsored, FCL):", gasSingle);
+        assertGt(_personalBal(), p0, "personal CRC up (2)");
+        assertGt(_groupBal(), g0, "Roebel Muenzen up (2)");
+    }
+
+    // =====================================================================
+    // 9. Safe7579 as fallback handler still answers the token receiver hooks
+    // =====================================================================
+
+    function test_receiverHooksAfterMigration() public {
+        _migrate(true);
+        assertEq(address(uint160(uint256(vm.load(safe, FALLBACK_HANDLER_SLOT)))), SAFE7579, "handler = Safe7579");
+        (bool ok, bytes memory ret) = safe.staticcall(
+            abi.encodeWithSignature("onERC721Received(address,address,uint256,bytes)", address(this), address(this), 1, "")
+        );
+        assertTrue(ok, "onERC721Received reverted");
+        assertEq(abi.decode(ret, (bytes4)), bytes4(0x150b7a02), "ERC-721 receiver magic");
+        (ok, ret) = safe.staticcall(
+            abi.encodeWithSignature(
+                "onERC1155Received(address,address,uint256,uint256,bytes)", address(this), address(this), 1, 1, ""
+            )
+        );
+        assertTrue(ok, "onERC1155Received reverted");
+        assertEq(abi.decode(ret, (bytes4)), bytes4(0xf23a6e61), "ERC-1155 receiver magic");
+        uint256[] memory ids = new uint256[](1);
+        uint256[] memory vals = new uint256[](1);
+        (ok, ret) = safe.staticcall(
+            abi.encodeWithSignature(
+                "onERC1155BatchReceived(address,address,uint256[],uint256[],bytes)", address(this), address(this), ids, vals, ""
+            )
+        );
+        assertTrue(ok, "onERC1155BatchReceived reverted");
+        assertEq(abi.decode(ret, (bytes4)), bytes4(0xbc197c81), "ERC-1155 batch receiver magic");
+    }
+
+    // =====================================================================
+    // 10. Grant gas fits the sponsor cap (SESSION_CAPS.grantCallGasLimit = 3_000_000)
+    // =====================================================================
+
+    function test_grantGasFitsSponsorCap() public {
+        assertEq(GRANT_CALL_GAS, 3_000_000);
+        uint256 gasUsed = _migrate(true); // callGasLimit = GRANT_CALL_GAS
+        console2.log("GAS handleOps migrate + grant 2 sessions at callGasLimit 3_000_000:", gasUsed);
+        assertLt(gasUsed, 2_800_000, "migrate + grant fits under the grant call-gas cap");
+        assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 2);
+    }
+
+    // =====================================================================
+    // 11. Golden vector for the Expo + web builders
+    // =====================================================================
+
+    function _hx(bytes memory b) internal pure returns (string memory) {
+        return vm.toLowercase(vm.toString(b));
+    }
+
+    function _ha(address a) internal pure returns (string memory) {
+        return vm.toLowercase(vm.toString(a));
+    }
+
+    function _hw(bytes32 w) internal pure returns (string memory) {
+        return vm.toString(w);
+    }
+
+    function _kv(string memory k, string memory v) internal pure returns (string memory) {
+        return string.concat('"', k, '":"', v, '"');
+    }
+
+    function _stubPaymasterAndData() internal pure returns (bytes memory) {
+        return abi.encodePacked(PAYMASTER, PM_VERIFICATION_GAS, PM_POST_OP_GAS, new bytes(320));
+    }
+
+    function _opJson(PackedUserOperation memory op) internal pure returns (string memory) {
+        string memory a = string.concat(
+            _kv("sender", _ha(op.sender)), ",",
+            _kv("nonce", vm.toString(op.nonce)), ",",
+            _kv("initCode", _hx(op.initCode)), ",",
+            _kv("callData", _hx(op.callData)), ",",
+            _kv("accountGasLimits", _hw(op.accountGasLimits)), ",",
+            _kv("verificationGasLimit", vm.toString(uint256(op.accountGasLimits) >> 128)), ",",
+            _kv("callGasLimit", vm.toString(uint256(uint128(uint256(op.accountGasLimits))))), ","
+        );
+        string memory b = string.concat(
+            _kv("preVerificationGas", vm.toString(op.preVerificationGas)), ",",
+            _kv("gasFees", _hw(op.gasFees)), ",",
+            _kv("maxPriorityFeePerGas", vm.toString(uint256(op.gasFees) >> 128)), ",",
+            _kv("maxFeePerGas", vm.toString(uint256(uint128(uint256(op.gasFees))))), ",",
+            _kv("paymasterAndData", _hx(op.paymasterAndData))
+        );
+        return string.concat(a, b);
+    }
+
+    struct Vec {
+        address[] modulesBefore;
+        address prev4337;
+        bytes32 saltMint;
+        bytes32 saltGroupMint;
+        bytes initData;
+        bytes migration;
+        bytes grantInstall;
+        bytes grantReplace;
+        bytes revoke;
+        bytes personalMintCd;
+        bytes groupMintCd;
+        bytes rootClaim;
+        PackedUserOperation rootOp;
+        bytes32 rootHash;
+        PackedUserOperation sessionOp;
+        bytes32 userOpHash;
+        bytes ecdsa;
+        bytes32 h1271;
+        bytes32 safeMsg;
+        bytes safeSig;
+        bytes prefixed;
+    }
+
+    function test_writeSessionKeysVector() public {
+        sessionSigner = vm.addr(SESSION_KEY);
+        validUntil = VECTOR_VALID_UNTIL;
+        assertGt(uint256(VECTOR_VALID_UNTIL), block.timestamp, "vector validUntil must be in the future");
+        Vec memory x;
+
+        (x.modulesBefore,) = ISafeAdmin(safe).getModulesPaginated(SENTINEL, 10);
+        x.prev4337 = _prev4337();
+        Session[] memory sess = _sessions(sessionSigner, validUntil);
+        assertEq(pidMint, keccak256(abi.encode(OWNABLE_VALIDATOR, sess[0].sessionValidatorInitData, sess[0].salt)), "pid formula");
+        x.saltMint = sess[0].salt;
+        x.saltGroupMint = sess[1].salt;
+        x.initData = _smartSessionsInitData(sess);
+        x.migration = _migrationCallData(sess);
+
+        // the vector's migration batch is what actually migrates the Safe on the fork
+        _migrate(true);
+        bytes32[] memory onChain = ISmartSession(SMART_SESSIONS).getPermissionIDs(safe);
+        assertEq(onChain.length, 2);
+        assertTrue(
+            (onChain[0] == pidMint && onChain[1] == pidGroupMint) || (onChain[0] == pidGroupMint && onChain[1] == pidMint),
+            "on-chain pids == vector pids"
+        );
+
+        x.grantInstall = _grantCallData(sess, false);
+        x.grantReplace = _grantCallData(sess, true);
+        x.revoke = _revokeCallData(_bothPids());
+        x.personalMintCd = _sessionClaimCallData(abi.encodeCall(ICirclesHub.personalMint, ()));
+        x.groupMintCd = _sessionClaimCallData(_groupMintData(VECTOR_GROUP_MINT_AMOUNT));
+        x.rootClaim = _rootClaimCallData(VECTOR_GROUP_MINT_AMOUNT, false);
+
+        _vectorRootOp(x);
+        _vectorSessionOp(x);
+
+        // ---- grant (replace) and revoke bytes run on the fork as root ops ----
+        _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, x.grantReplace));
+        assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 2, "replace keeps 2 sessions");
+        _ok(_rootOp(PASSKEY_PK, SHARED_SIGNER, x.revoke));
+        assertEq(ISmartSession(SMART_SESSIONS).getPermissionIDs(safe).length, 0, "revoke clears both");
+
+        // ---- ERC-1271 after migration ----
+        x.h1271 = keccak256("roebel.app email proof");
+        x.safeMsg = _safeMessageHash(x.h1271);
+        x.safeSig =
+            WebAuthnHelper.safeContractSignature(SHARED_SIGNER, _webAuthnSign(PASSKEY_PK, x.safeMsg).webAuthnSignature);
+        x.prefixed = abi.encodePacked(address(0), x.safeSig);
+        assertEq(ISafe7579(safe).isValidSignature(x.h1271, x.prefixed), bytes4(0x1626ba7e), "prefixed 1271");
+
+        vm.writeFile(VECTOR_PATH, _vectorJson(x));
+    }
+
+    /// Root op (hash-only, fixed nonce, stub paymasterAndData).
+    function _vectorRootOp(Vec memory x) internal view {
+        x.rootOp = _buildOp(safe, VECTOR_ROOT_NONCE, "", x.rootClaim);
+        x.rootOp.paymasterAndData = _stubPaymasterAndData();
+        x.rootOp.signature = abi.encodePacked(uint48(0), uint48(0));
+        (bytes memory operationData,,,) = ISafe7579(SAFE7579).getSafeOp(x.rootOp, ENTRY_POINT);
+        x.rootHash = keccak256(operationData);
+        assertEq(x.rootHash, _safeOpHash7579(x.rootOp), "vector SafeOp(7579) hash == Safe7579.getSafeOp");
+    }
+
+    /// Session op (personalMint, fresh session nonce, stub paymasterAndData), accepted by SmartSession.
+    function _vectorSessionOp(Vec memory x) internal {
+        uint256 sessionNonce = entryPoint.getNonce(safe, _sessionNonceKey());
+        assertEq(sessionNonce, uint256(_sessionNonceKey()) << 64, "fresh session nonce");
+        x.sessionOp = _buildOp(safe, sessionNonce, "", x.personalMintCd);
+        x.sessionOp.paymasterAndData = _stubPaymasterAndData();
+        x.userOpHash = entryPoint.getUserOpHash(x.sessionOp);
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(SESSION_KEY, x.userOpHash);
+        x.ecdsa = abi.encodePacked(r, sg, v);
+        x.sessionOp.signature = abi.encodePacked(MODE_USE, pidMint, x.ecdsa);
+        assertEq(entryPoint.getUserOpHash(x.sessionOp), x.userOpHash, "signature is not part of the userOpHash");
+
+        uint256 snap = vm.snapshotState();
+        vm.prank(safe);
+        (bool ok, bytes memory ret) = SMART_SESSIONS.call(
+            abi.encodeWithSignature(
+                "validateUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32)",
+                x.sessionOp,
+                x.userOpHash
+            )
+        );
+        vm.revertToState(snap);
+        assertTrue(ok, "SmartSession validateUserOp");
+        uint256 vd = abi.decode(ret, (uint256));
+        assertEq(uint160(vd), 0, "session signature valid");
+        assertEq(uint48(vd >> 160), VECTOR_VALID_UNTIL, "validUntil from TimeFramePolicy");
+    }
+
+    function _vectorJson(Vec memory x) internal pure returns (string memory) {
+        string memory mods = "[";
+        for (uint256 i; i < x.modulesBefore.length; i++) {
+            mods = string.concat(mods, i == 0 ? '"' : ',"', _ha(x.modulesBefore[i]), '"');
+        }
+        mods = string.concat(mods, "]");
+        string memory head = string.concat(
+            '{"_description":"Session keys (mint-only) golden vector, written by test/SessionKeys.t.sol::test_writeSessionKeysVector on a Gnosis fork against the real Safe7579/SmartSession bytecode. migrationCallData migrated the real Safe, grantReplaceCallData and revokeCallData ran as root ops, grantInstallCallData is the shape proven by test_grantOnMigratedSafeWithOnePasskeyOp, the sessionOp passed SmartSession.validateUserOp. rootOp/sessionOp use a FIXED stub paymasterAndData (paymaster ++ uint128 150000 ++ uint128 50000 ++ 320 zero bytes); rootOp nonce is fixed (0). safeOpHash7579 = Safe7579.getSafeOp with validAfter=validUntil=0. All keys are TEST-ONLY. Hex is lowercase; integers are decimal strings.",',
+            _kv("chainId", "100"), ",",
+            _kv("entryPoint", _ha(ENTRY_POINT)), ","
+        );
+        string memory addrs = string.concat(
+            '"addresses":{',
+            _kv("safe7579", _ha(SAFE7579)), ",",
+            _kv("smartSessions", _ha(SMART_SESSIONS)), ",",
+            _kv("ownableValidator", _ha(OWNABLE_VALIDATOR)), ",",
+            _kv("uniActionPolicy", _ha(UNI_ACTION_POLICY)), ",",
+            _kv("timeFramePolicy", _ha(TIME_FRAME_POLICY)), ",",
+            _kv("multiSendCallOnly", _ha(MULTI_SEND_CALL_ONLY)), ",",
+            _kv("safe4337Module", _ha(SAFE_4337_MODULE)), ",",
+            _kv("hub", _ha(HUB)), ",",
+            _kv("roebelGroup", _ha(GROUP)), "},"
+        );
+        string memory inputs = string.concat(
+            '"inputs":{',
+            _kv("safe", _ha(MAX_SAFE)), ",",
+            _kv("legacy", _ha(MAX_LEGACY)), ",",
+            _kv("signer", _ha(vm.addr(SESSION_KEY))), ",",
+            _kv("sessionPrivateKey", _hw(bytes32(SESSION_KEY))), ",",
+            _kv("validUntil", vm.toString(uint256(VECTOR_VALID_UNTIL))), ",",
+            _kv("prev4337", _ha(x.prev4337)), ",",
+            '"modulesBefore":', mods, "},"
+        );
+        return string.concat(head, addrs, inputs, _vectorJsonBody(x));
+    }
+
+    function _vectorJsonBody(Vec memory x) internal pure returns (string memory) {
+        string memory ids = string.concat(
+            '"salts":{', _kv("personalMint", _hw(x.saltMint)), ",", _kv("groupMint", _hw(x.saltGroupMint)), "},",
+            '"permissionIds":{',
+            _kv("personalMint", _hw(_pidOf(x.saltMint))), ",",
+            _kv("groupMint", _hw(_pidOf(x.saltGroupMint))), "},"
+        );
+        string memory cds = string.concat(
+            _kv("smartSessionInitData", _hx(x.initData)), ",",
+            _kv("migrationCallData", _hx(x.migration)), ",",
+            _kv("grantInstallCallData", _hx(x.grantInstall)), ",",
+            _kv("grantReplaceCallData", _hx(x.grantReplace)), ",",
+            _kv("revokeCallData", _hx(x.revoke)), ",",
+            _kv("sessionNonceKey", vm.toString(uint256(_sessionNonceKey()))), ","
+        );
+        string memory cds2 = string.concat(
+            _kv("personalMintSessionCallData", _hx(x.personalMintCd)), ",",
+            _kv("groupMintAmount", vm.toString(VECTOR_GROUP_MINT_AMOUNT)), ",",
+            _kv("groupMintSessionCallData", _hx(x.groupMintCd)), ",",
+            _kv("rootClaimCallData", _hx(x.rootClaim)), ","
+        );
+        string memory ops = string.concat(
+            '"rootOp":{', _opJson(x.rootOp), ",", _kv("safeOpHash7579", _hw(x.rootHash)), "},",
+            '"sessionOp":{', _opJson(x.sessionOp), ",",
+            _kv("userOpHash", _hw(x.userOpHash)), ",",
+            _kv("ecdsa", _hx(x.ecdsa)), ",",
+            _kv("signature", _hx(x.sessionOp.signature)), "},"
+        );
+        string memory e1271 = string.concat(
+            '"erc1271":{',
+            _kv("hash", _hw(x.h1271)), ",",
+            _kv("safeMessageHash", _hw(x.safeMsg)), ",",
+            _kv("safeSignature", _hx(x.safeSig)), ",",
+            _kv("prefixedSignature", _hx(x.prefixed)), "}}"
+        );
+        return string.concat(ids, cds, cds2, ops, e1271);
+    }
+
+    /// permissionId = keccak256(abi.encode(OwnableValidator, abi.encode(1, [signer]), salt)) for the vector signer.
+    function _pidOf(bytes32 salt) internal pure returns (bytes32) {
+        address[] memory owners = new address[](1);
+        owners[0] = vm.addr(SESSION_KEY);
+        return keccak256(abi.encode(OWNABLE_VALIDATOR, abi.encode(uint256(1), owners), salt));
     }
 
     function _safeMessageHash(bytes32 h) internal view returns (bytes32) {
