@@ -21,6 +21,7 @@ import {
   SAFE_PROXY_RUNTIME_CODE,
   WEBAUTHN_VERIFIERS,
 } from "../safe-address";
+import { SAFE7579 } from "../safe7579";
 
 export const KEY = { x: vector.x as Hex, y: vector.y as Hex };
 export const SAFE = getAddress(vector.safeAddress) as Hex;
@@ -61,6 +62,8 @@ export interface FakeWorld {
   recoveryRequests: Map<string, { executeAfter: bigint; newThreshold: bigint; newOwners: Hex[] }>;
   /** MACI.polls(pollId) by decimal poll id. */
   polls: Map<string, Hex>;
+  /** getModulesPaginated `next` cursor per lowercased Safe (default SENTINEL = the page is complete). */
+  modulesNext: Map<string, Hex>;
 }
 
 export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
@@ -71,6 +74,16 @@ export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
   w.modules.add(k(safe, PASSKEY_SAFE.socialRecoveryModule));
   w.owners.set(safe.toLowerCase(), [PASSKEY_SAFE.sharedSigner]);
   w.sharedConfig.set(safe.toLowerCase(), { x: BigInt(key.x), y: BigInt(key.y), verifiers: WEBAUTHN_VERIFIERS });
+}
+
+/**
+ * Migrates a deployed passkey Safe to the Safe7579 layout (the session-upgrade result):
+ * fallback handler + module Safe7579, Safe4337Module disabled, SRM kept, owner unchanged.
+ */
+export function migrateTo7579(w: FakeWorld, safe: Hex) {
+  w.storage.set(k(safe, FALLBACK_HANDLER_SLOT), word(SAFE7579));
+  w.modules.delete(k(safe, PASSKEY_SAFE.safe4337Module));
+  w.modules.add(k(safe, SAFE7579));
 }
 
 /** A deployed expert-path Safe: same proxy / singleton / handler / modules, owned by the ECDSA key `owner`. */
@@ -104,6 +117,7 @@ export function defaultWorld(): FakeWorld {
     thresholds: new Map(),
     recoveryRequests: new Map(),
     polls: new Map(),
+    modulesNext: new Map(),
   };
   makePasskeySafe(w, SAFE);
   return w;
@@ -170,6 +184,12 @@ export function fakeChain(mutate?: (w: FakeWorld) => void): FakeChain {
       reads.push("isGuardian");
       return w.guardians.get(wallet.toLowerCase())?.has(guardian.toLowerCase()) ?? false;
     },
+    async getModulesPaginated(safe) {
+      reads.push("getModulesPaginated");
+      const prefix = `${safe.toLowerCase()}:`;
+      const modules = [...w.modules].filter((m) => m.startsWith(prefix)).map((m) => getAddress(m.slice(prefix.length)) as Hex);
+      return { modules, next: w.modulesNext.get(safe.toLowerCase()) ?? ("0x0000000000000000000000000000000000000001" as Hex) };
+    },
     async getRecoveryRequest(wallet) {
       reads.push("getRecoveryRequest");
       return w.recoveryRequests.get(wallet.toLowerCase()) ?? { executeAfter: 0n, newThreshold: 0n, newOwners: [] };
@@ -196,6 +216,7 @@ export function brokenChain(): ChainReader {
     isAdmin: fail,
     isModuleEnabled: fail,
     getOwners: fail,
+    getModulesPaginated: fail,
     getSharedSignerConfiguration: fail,
     getWebAuthnSigner: fail,
     hasCitizenNFT: fail,

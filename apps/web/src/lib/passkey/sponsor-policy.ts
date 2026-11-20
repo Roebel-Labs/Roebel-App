@@ -104,6 +104,15 @@
  *  3. callData = Safe4337Module.executeUserOp[WithErrorString], value 0, one
  *     CALL or a DELEGATECALL into MultiSendCallOnly 1.4.1 whose inner txs are
  *     CALLs with value 0.
+ *     OR (a passkey Safe migrated to Safe7579, see safe7579.ts) callData =
+ *     Safe7579.execute(EXEC_SINGLE | EXEC_BATCH, canonical payload): never
+ *     delegatecall, default execType only; every execution has value 0, does
+ *     not target the sender itself and goes through the same call classifier.
+ *     The callData layout must equal the sender's on-chain layout: a "4337"
+ *     Safe (handler + module Safe4337Module) or a "7579" Safe (handler +
+ *     module Safe7579, Safe4337Module NOT enabled, modules exactly {Safe7579,
+ *     SRM}). Deploy ops and expert-path (ECDSA) Safes are 4337 only.
+ *  4. Nonce key (nonce >> 64) == 0: root ops only (the passkey / Safe owner).
  *
  * Allowed calls per mode:
  *  A: legacy.setPermissionsForSigner (add the SENDER as admin, in its validity
@@ -175,6 +184,14 @@ import {
   safeFactoryData,
 } from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
+import { SAFE7579, decodeSafe7579Execute, nonceKeyOf } from "./safe7579";
+import {
+  MULTI_SEND_CALL_ONLY,
+  OWNABLE_VALIDATOR,
+  SMART_SESSIONS,
+  TIME_FRAME_POLICY,
+  UNI_ACTION_POLICY,
+} from "./session-keys-builders";
 import {
   EVERYDAY_CONTRACTS,
   ORG_SAFE,
@@ -214,6 +231,13 @@ export const MINIAPP_FORBIDDEN_TARGETS: readonly Hex[] = Array.from(
       ...Object.values(ADDRESSES),
       ...Object.values(PASSKEY_SAFE),
       CITIZEN_NFT,
+      // Device-session stack (Safe7579 adapter, SmartSession and its validator / policies).
+      SAFE7579,
+      SMART_SESSIONS,
+      OWNABLE_VALIDATOR,
+      UNI_ACTION_POLICY,
+      TIME_FRAME_POLICY,
+      MULTI_SEND_CALL_ONLY,
       zeroAddress,
     ].map((a) => a.toLowerCase() as Hex),
   ),
@@ -342,6 +366,8 @@ export interface ChainReader {
   isGuardian(wallet: Hex, guardian: Hex): Promise<boolean>;
   /** MACI.polls(pollId) on the Röbel MACI core (zero address when unknown). */
   maciPoll(pollId: bigint): Promise<Hex>;
+  /** Safe.getModulesPaginated(SENTINEL, 10): the first page of enabled Safe modules and the next cursor. */
+  getModulesPaginated(safe: Hex): Promise<{ modules: readonly Hex[]; next: Hex }>;
   /** SocialRecoveryModule.getRecoveryRequest(wallet). */
   getRecoveryRequest(wallet: Hex): Promise<{ executeAfter: bigint; newThreshold: bigint; newOwners: readonly Hex[] }>;
   /** legacy.verifySignerPermissionRequest(req, sig); null when the CALL REVERTS (e.g. a malformed
@@ -472,7 +498,12 @@ interface ScanState {
   detaches: Array<{ req: SignerPermissionRequest; signature: Hex }>;
   /** Mode F: set when the request names a mini app; every call must be one of its rules. */
   miniApp?: { id: string; rules: CallRule[] };
+  /** Which account layout the callData was built for (set by checkCallData); must equal the sender's on-chain layout. */
+  layout?: SafeLayout;
 }
+
+/** "4337": Safe4337Module handler + module (as deployed). "7579": migrated to the Safe7579 adapter. */
+export type SafeLayout = "4337" | "7579";
 
 /** Mode F: one call (direct, or nested in legacy.execute / executeBatch) must be declared. */
 function checkMiniAppCall(to: Hex, value: bigint, data: Hex, st: ScanState): Check {
@@ -749,9 +780,30 @@ export function decodeMultiSendPacked(
   return txs;
 }
 
+/** Safe7579.execute root op: every execution a plain call with value 0, never to the sender itself. */
+function check7579CallData(executions: ReadonlyArray<{ target: Hex; value: bigint; data: Hex }>, st: ScanState): Check {
+  for (let i = 0; i < executions.length; i++) {
+    const e = executions[i];
+    if (e.value !== 0n) return deny("7579 execution value must be 0");
+    if (isAddressEqual(e.target, st.sender)) return deny("a 7579 execution may not target the sender Safe itself");
+    st.index = i;
+    const r = checkAllowedCall(e.target, e.data, st);
+    if (!r.ok) return r;
+  }
+  return PASS;
+}
+
 function checkCallData(callData: Hex, st: ScanState): Check {
+  const exec7579 = decodeSafe7579Execute(callData);
+  if (exec7579) {
+    st.layout = "7579";
+    return check7579CallData(exec7579.executions, st);
+  }
   const outer = tryDecode(() => decodeFunctionData({ abi: safe4337Abi, data: callData }));
-  if (!outer) return deny("callData is not Safe4337Module.executeUserOp[WithErrorString]");
+  if (!outer) {
+    return deny("callData is not Safe4337Module.executeUserOp[WithErrorString] nor Safe7579.execute (single / batch, default execType)");
+  }
+  st.layout = "4337";
   const [to, value, data, operation] = outer.args;
   if (value !== 0n) return deny("outer value must be 0");
 
@@ -870,8 +922,20 @@ async function isCitizen(account: Hex, v3: V3Config, chain: ChainReader): Promis
   return read(() => chain.hasCitizenNFT(citizenV3, account));
 }
 
-/** The deployed Safe has the sovereign passkey-Safe shape; on success also yields its single owner. */
-async function deployedSafeShape(safe: Hex, chain: ChainReader): Promise<{ ok: true; owner: Hex } | { ok: false; reason: string }> {
+/** Safe module-list sentinel (start / end of the linked list). */
+const SAFE_MODULES_SENTINEL: Hex = "0x0000000000000000000000000000000000000001";
+
+/**
+ * The deployed Safe has the sovereign passkey-Safe shape; on success also yields its single
+ * owner and its layout:
+ *  - "4337": fallback handler Safe4337Module, Safe4337Module + SRM enabled (as deployed);
+ *  - "7579": fallback handler Safe7579, Safe7579 + SRM enabled, Safe4337Module NOT enabled,
+ *    and the enabled modules are exactly {Safe7579, SRM} (one page, next == SENTINEL).
+ */
+async function deployedSafeShape(
+  safe: Hex,
+  chain: ChainReader,
+): Promise<{ ok: true; owner: Hex; layout: SafeLayout } | { ok: false; reason: string }> {
   const code = await read(() => chain.getCode(safe));
   if ((code ?? "0x").toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) {
     return deny("sender is not a passkey Safe (not a SafeProxy 1.4.1)");
@@ -884,16 +948,36 @@ async function deployedSafeShape(safe: Hex, chain: ChainReader): Promise<{ ok: t
     read(() => chain.getOwners(safe)),
   ]);
   if (!wordIsAddress(singleton, PASSKEY_SAFE.singletonL2)) return deny("sender singleton is not Safe L2 1.4.1");
-  if (!wordIsAddress(handler, PASSKEY_SAFE.safe4337Module)) return deny("sender fallback handler is not Safe4337Module");
-  if (moduleOn !== true) return deny("Safe4337Module is not an enabled module of the sender");
+  let layout: SafeLayout;
+  if (wordIsAddress(handler, PASSKEY_SAFE.safe4337Module)) {
+    if (moduleOn !== true) return deny("Safe4337Module is not an enabled module of the sender");
+    layout = "4337";
+  } else if (wordIsAddress(handler, SAFE7579)) {
+    if (moduleOn !== false) return deny("a Safe7579 sender must not have Safe4337Module enabled");
+    const [adapterOn, page] = await Promise.all([
+      read(() => chain.isModuleEnabled(safe, SAFE7579)),
+      read(() => chain.getModulesPaginated(safe)),
+    ]);
+    if (adapterOn !== true) return deny("Safe7579 is not an enabled module of the sender");
+    const expected = [SAFE7579, PASSKEY_SAFE.socialRecoveryModule];
+    const exact =
+      isAddressEqual(page.next, SAFE_MODULES_SENTINEL) &&
+      page.modules.length === expected.length &&
+      expected.every((m) => page.modules.filter((x) => isAddressEqual(x, m)).length === 1);
+    if (!exact) return deny("a Safe7579 sender must have exactly the modules Safe7579 and SocialRecoveryModule");
+    layout = "7579";
+  } else {
+    return deny("sender fallback handler is not Safe4337Module or Safe7579");
+  }
   if (srmOn !== true) return deny("SocialRecoveryModule is not an enabled module of the sender");
   if (owners.length !== 1) return deny("sender must have exactly one owner");
-  return { ok: true, owner: owners[0] };
+  return { ok: true, owner: owners[0], layout };
 }
 
 /**
  * A deployed sovereign passkey Safe: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1,
- * fallback handler Safe4337Module, Safe4337Module and SocialRecoveryModule enabled,
+ * fallback handler + module Safe4337Module (or, migrated, Safe7579 with Safe4337Module
+ * disabled and modules exactly {Safe7579, SRM}), SocialRecoveryModule enabled,
  * exactly one owner. Says nothing about WHICH key owns it.
  */
 export async function checkDeployedSafeShape(safe: Hex, chain: ChainReader): Promise<Check> {
@@ -911,18 +995,28 @@ async function checkEcdsaOwnerIsKey(owner: Hex, chain: ChainReader): Promise<Che
   return deny("ecdsaOwner is a contract, not a plain key");
 }
 
-/** Deployed expert Safe: the sovereign shape AND getOwners() == [ecdsaOwner], a plain key. */
-async function checkDeployedEcdsaSafe(sender: Hex, owner: Hex, chain: ChainReader): Promise<Check> {
+/** Deployed expert Safe: the sovereign 4337 shape AND getOwners() == [ecdsaOwner], a plain key. */
+async function checkDeployedEcdsaSafe(sender: Hex, owner: Hex, layout: SafeLayout, chain: ChainReader): Promise<Check> {
+  if (layout !== "4337") return deny("an expert-path Safe only has the Safe4337Module layout");
   const shape = await deployedSafeShape(sender, chain);
   if (!shape.ok) return shape;
+  if (shape.layout !== "4337") return deny("an expert-path Safe only has the Safe4337Module layout");
   if (!isAddressEqual(shape.owner, owner)) return deny("sender owner is not ecdsaOwner");
   return checkEcdsaOwnerIsKey(owner, chain);
 }
 
-/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
-async function checkDeployedPasskeySafe(sender: Hex, key: { x: Hex; y: Hex }, chain: ChainReader): Promise<Check> {
+/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y), in the callData's layout. */
+async function checkDeployedPasskeySafe(
+  sender: Hex,
+  key: { x: Hex; y: Hex },
+  layout: SafeLayout,
+  chain: ChainReader,
+): Promise<Check> {
   const shape = await deployedSafeShape(sender, chain);
   if (!shape.ok) return shape;
+  if (shape.layout !== layout) {
+    return deny(`callData layout ${layout} does not match the sender's on-chain layout ${shape.layout}`);
+  }
   const owner = shape.owner;
   const x = BigInt(key.x);
   const y = BigInt(key.y);
@@ -943,14 +1037,18 @@ async function checkDeployedPasskeySafe(sender: Hex, key: { x: Hex; y: Hex }, ch
   return PASS;
 }
 
-async function checkSender(op: SponsorUserOp, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+async function checkSender(op: SponsorUserOp, ctx: SponsorContext, st: ScanState, chain: ChainReader): Promise<Check> {
   const proof = proofOf(ctx);
+  const layout = st.layout;
+  if (!layout) return deny("callData layout unknown");
+  // A freshly deployed Safe is always the Safe4337Module layout (checkFactory pins its setup).
+  if (op.factory && layout !== "4337") return deny("a deploy op must use the Safe4337Module layout");
   if (proof.kind === "ecdsa") {
     // Deploy ops were proven structurally (checkFactory); the owner must still be a plain key.
-    return op.factory ? checkEcdsaOwnerIsKey(proof.owner, chain) : checkDeployedEcdsaSafe(op.sender, proof.owner, chain);
+    return op.factory ? checkEcdsaOwnerIsKey(proof.owner, chain) : checkDeployedEcdsaSafe(op.sender, proof.owner, layout, chain);
   }
   // Deploy ops were proven structurally (checkFactory).
-  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, proof, chain);
+  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, proof, layout, chain);
 }
 
 /** A handover for a legacy account deployed in THIS op: its only admin is the
@@ -1001,7 +1099,7 @@ async function evaluateLegacyMode(
   }
   if (!citizen) return deny("legacy account holds no CitizenNFT");
 
-  const sender = await checkSender(op, ctx, chain);
+  const sender = await checkSender(op, ctx, st, chain);
   if (!sender.ok) return sender;
 
   for (const h of st.handovers) {
@@ -1046,7 +1144,7 @@ async function evaluateDetachMode(
   if (!isLegacyProxyCode(legacyCode)) return deny(`${legacy} is not a legacy thirdweb account`);
   if (!citizen) return deny("legacy account holds no CitizenNFT");
 
-  const sender = await checkSender(op, ctx, chain);
+  const sender = await checkSender(op, ctx, st, chain);
   if (!sender.ok) return sender;
 
   const [senderIsAdmin, signerIsAdmin, guardians, threshold] = await Promise.all([
@@ -1098,7 +1196,7 @@ async function evaluateSafeEveryday(
   st: ScanState,
   chain: ChainReader,
 ): Promise<PolicyResult> {
-  const sender = await checkSender(op, ctx, chain);
+  const sender = await checkSender(op, ctx, st, chain);
   if (!sender.ok) return sender;
   const citizen = await isCitizen(op.sender, ctx.v3 ?? {}, chain);
   if (!citizen) {
@@ -1131,7 +1229,7 @@ async function evaluateRecoveryMode(
   if (st.recoveryWallets.some((w) => !isAddressEqual(w, wallet))) return deny("all recovery calls must name the same wallet");
   if (isAddressEqual(wallet, op.sender)) return deny("a Safe cannot sponsor its own recovery");
 
-  const sender = await checkSender(op, ctx, chain);
+  const sender = await checkSender(op, ctx, st, chain);
   if (!sender.ok) return sender;
 
   // The wallet is a citizen identity: directly, or via the legacy account it administers.
@@ -1208,8 +1306,13 @@ function recoveryOwnersAre(callData: Hex, wallet: Hex, signer: Hex): boolean {
   return ok;
 }
 
-/** Visits the plain calls of an (already structurally validated) callData. */
+/** Visits the plain calls of an (already structurally validated) callData, in either layout. */
 function forEachCall(callData: Hex, visit: (to: Hex, data: Hex) => void): void {
+  const exec7579 = decodeSafe7579Execute(callData);
+  if (exec7579) {
+    for (const e of exec7579.executions) visit(e.target, e.data);
+    return;
+  }
   const outer = decodeFunctionData({ abi: safe4337Abi, data: callData });
   const [to, , data, operation] = outer.args;
   if (operation === 0) return visit(to, data);
@@ -1230,13 +1333,13 @@ async function evaluateMiniAppMode(
   if (legacy) {
     const code = await read(() => chain.getCode(legacy));
     if (!isLegacyProxyCode(code)) return deny(`${legacy} is not a legacy thirdweb account`);
-    const sender = await checkSender(op, ctx, chain);
+    const sender = await checkSender(op, ctx, st, chain);
     if (!sender.ok) return sender;
     const isAdmin = await read(() => chain.isAdmin(legacy, op.sender));
     if (isAdmin !== true) return deny(`sender is not an admin of ${legacy}`);
     return { ok: true, mode: "miniapp", budgetKey: legacy, miniAppId: app.id };
   }
-  const sender = await checkSender(op, ctx, chain);
+  const sender = await checkSender(op, ctx, st, chain);
   if (!sender.ok) return sender;
   return { ok: true, mode: "miniapp", budgetKey: op.sender, miniAppId: app.id };
 }
@@ -1259,6 +1362,8 @@ export async function evaluateSponsorPolicy(
   if (proof.kind === "ecdsa" && ctx.legacy) return deny("an expert-path Safe cannot drive a legacy account");
   const factory = checkFactory(op, proof);
   if (!factory.ok) return factory;
+  // Root ops only (nonce key 0 = the Safe owner). Device-session keys are not sponsored here.
+  if (nonceKeyOf(op.nonce) !== 0n) return deny("nonce key not allowed (only key 0, the root / passkey path)");
   const st: ScanState = {
     sender: op.sender,
     x: proof.kind === "passkey" ? BigInt(proof.x) : 0n,
@@ -1308,14 +1413,14 @@ export async function evaluateSponsorPolicy(
   // No legacy: identity = the sender Safe itself (mode B), or - for an op that
   // is only confirmRecovery calls - a guardian helping a citizen (mode C).
   if (await isCitizen(op.sender, ctx.v3 ?? {}, chain)) {
-    const sender = await checkSender(op, ctx, chain);
+    const sender = await checkSender(op, ctx, st, chain);
     if (!sender.ok) return sender;
     return { ok: true, mode: "safe", budgetKey: op.sender };
   }
   if (!st.identityOnly && st.confirms) return evaluateRecoveryMode(op, ctx, st, chain);
   // Guest (non-citizen Safe): its own guardian management, a confirmRecovery may ride along.
   if (st.guardianManagement && !st.legacyShapes && !st.everyday) {
-    const sender = await checkSender(op, ctx, chain);
+    const sender = await checkSender(op, ctx, st, chain);
     if (!sender.ok) return sender;
     return { ok: true, mode: "safe", budgetKey: op.sender, guest: true };
   }

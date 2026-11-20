@@ -22,7 +22,10 @@ const legacyAbi = parseAbi([
 const safeAbi = parseAbi([
   "function isModuleEnabled(address module) view returns (bool)",
   "function getOwners() view returns (address[])",
+  "function getModulesPaginated(address start, uint256 pageSize) view returns (address[] array, address next)",
 ]);
+/** Safe module linked-list sentinel: getModulesPaginated starts here. */
+const MODULES_SENTINEL: Hex = "0x0000000000000000000000000000000000000001";
 const sharedSignerAbi = parseAbi([
   "struct Signer { uint256 x; uint256 y; uint176 verifiers; }",
   "function getConfiguration(address account) view returns (Signer signer)",
@@ -61,6 +64,15 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
     isModuleEnabled: (safe, module) =>
       client.readContract({ address: safe, abi: safeAbi, functionName: "isModuleEnabled", args: [module] }),
     getOwners: (safe) => client.readContract({ address: safe, abi: safeAbi, functionName: "getOwners" }),
+    async getModulesPaginated(safe) {
+      const [modules, next] = await client.readContract({
+        address: safe,
+        abi: safeAbi,
+        functionName: "getModulesPaginated",
+        args: [MODULES_SENTINEL, 10n],
+      });
+      return { modules, next };
+    },
     getSharedSignerConfiguration: (safe) =>
       client.readContract({
         address: PASSKEY_SAFE.sharedSigner,
