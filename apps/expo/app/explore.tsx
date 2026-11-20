@@ -37,7 +37,6 @@ import ExploreCategoryChips from '@/components/ExploreCategoryChips';
 import HeroCarousel from '@/components/HeroCarousel';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
-import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/components/HorizontalEventCard';
 import NewsSection from '@/components/NewsSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
@@ -60,7 +59,7 @@ import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 import { ShimmerGroup } from '@/components/feed/Shimmer';
 import { useNavCompanionStyle, useNavHideStyle } from '@/hooks/useScrollChrome';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
-import { ExploreEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
+import { ExploreEntrySkeleton, RailSectionSkeleton } from '@/components/skeleton/EntrySkeletons';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
@@ -145,25 +144,9 @@ async function fetchExploreRestaurants() {
 
 // Section skeleton: title bar + horizontal row of card-shaped placeholders,
 // mirroring the horizontal-rail layout every explore section uses.
-function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | number }) {
-  return (
-    <ShimmerGroup style={styles.skeletonSection}>
-      <Skeleton width={titleWidth} height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
-      <View style={styles.skeletonRow}>
-        {[16, 12].map((marginLeft) => (
-          <View key={marginLeft} style={{ marginLeft, width: POSTER_CARD_WIDTH }}>
-            <Skeleton
-              width={POSTER_CARD_WIDTH}
-              height={Math.round(POSTER_CARD_WIDTH / POSTER_ASPECT_RATIO)}
-              borderRadius={POSTER_RADIUS}
-            />
-            <Skeleton width="70%" height={16} borderRadius={4} style={{ marginTop: 12 }} />
-            <Skeleton width="55%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
-          </View>
-        ))}
-      </View>
-    </ShimmerGroup>
-  );
+function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: `${number}%` }) {
+  // Exact rail geometry (ThisWeekEventsHorizontal + HorizontalEventCard): no jump on load.
+  return <RailSectionSkeleton titleWidth={titleWidth} />;
 }
 
 export default function ExploreScreen() {

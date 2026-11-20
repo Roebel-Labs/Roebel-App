@@ -1,71 +1,50 @@
 /**
- * Entry skeletons of the three main screens, measured from the real
- * components (ExploreSearchBar, ExploreCategoryChips, HeroEventCard,
- * CredentialCardStack, IdentityRow, ProfileActionGrid, ProfileMenu, posts) so
- * the fade to content reads as the page developing, not a different page.
- * All bones share one top-to-bottom sweep (SkeletonScope).
+ * Entry skeletons of the three main screens — geometry taken 1:1 from the real
+ * components so nothing moves when content replaces them (Max 2026-11-21):
+ *
+ *   Erkunden  ExploreSearchBar + ExploreCategoryChips are rendered for REAL
+ *             (static, no data), then HeroCarouselSkeleton (= hero block incl.
+ *             pagination space) and RailSectionSkeleton (= ThisWeekEventsHorizontal
+ *             + HorizontalEventCard).
+ *   Profil    exact CredentialCardStack zone for the real card count, ProfileSheet
+ *             paddings, IdentityRow, 3-column ProfileActionGrid, ProfileMenu rows.
+ *   Austausch FeedList top padding, HomeStoryBar row, FeedPostSkeleton.
+ *
+ * Text bones (TextBone) hold an invisible copy of the real text style, so line
+ * heights match by construction. All bones share one top-to-bottom sweep.
  */
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { Bone, SkeletonScope } from '@/components/skeleton/Skeleton';
-import { HERO_CAROUSEL_CARD_HEIGHT, HERO_CAROUSEL_GAP, HERO_CAROUSEL_PEEK, heroCarouselLayout } from '@/lib/hero-carousel-layout';
-import { CARD_PEEK_FRONT, CARD_PEEK_STEP, STACK_TOP } from '@/components/profile/CredentialCardStack';
-import { POSTER_ASPECT_RATIO } from '@/constants/poster';
+import { Bone, SkeletonScope, TextBone } from '@/components/skeleton/Skeleton';
+import { HeroCarouselSkeleton } from '@/components/SkeletonLoader';
+import ExploreSearchBar from '@/components/ExploreSearchBar';
+import ExploreCategoryChips from '@/components/ExploreCategoryChips';
+import FeedPostSkeleton from '@/components/feed/FeedPostSkeleton';
+import { CARD_PEEK_STEP, STACK_TOP, stackHeight } from '@/components/profile/CredentialCardStack';
+import { TILE_RADIUS, TILE_SIZE } from '@/components/profile/ProfileActionTile';
+import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/constants/poster';
+import { CARD_ASPECT } from '@/components/profile/credential-art';
 
-/** Erkunden: search bar, category tiles, hero card with its neighbours, one rail. */
-export function ExploreEntrySkeleton() {
-  const { width } = useWindowDimensions();
-  const { colors, isDark } = useTheme();
-  const { cardWidth } = heroCarouselLayout(width);
-  const railCard = Math.round((width - 16 - 12) / 2.3);
+const noop = () => {};
+
+/** One event rail exactly like ThisWeekEventsHorizontal with HorizontalEventCard items. */
+export function RailSectionSkeleton({ titleWidth = '40%' }: { titleWidth?: `${number}%` | number }) {
+  const posterHeight = Math.round(POSTER_CARD_WIDTH / POSTER_ASPECT_RATIO);
   return (
-    <SkeletonScope>
-      <Bone height={48} radius={12} style={styles.search} />
-      <View style={styles.chips}>
-        {[0, 1, 2, 3, 4].map((i) => (
-          <View key={i} style={styles.chip}>
-            <Bone width={48} height={48} radius={12} />
-            {/* Labels wrap to two 13 px lines (hyphenated) — same 26 px as the real tiles. */}
-            <View style={styles.chipLabel}>
-              <Bone width={46} height={9} radius={4} />
-              <Bone width={30} height={9} radius={4} />
-            </View>
-          </View>
-        ))}
+    <SkeletonScope style={rail.container}>
+      <View style={rail.header}>
+        <TextBone textStyle={rail.sectionTitle} width={titleWidth} />
       </View>
-      <View style={styles.heroRow}>
-        <Bone width={HERO_CAROUSEL_PEEK} height={HERO_CAROUSEL_CARD_HEIGHT * 0.92} radius={24} />
-        <View
-          style={[
-            styles.heroCard,
-            { width: cardWidth, height: HERO_CAROUSEL_CARD_HEIGHT, borderColor: isDark ? colors.border : colors.borderSecondary },
-          ]}
-        >
-          <Bone radius={18} style={styles.heroImage} />
-          <View style={styles.heroContent}>
-            <Bone width="80%" height={26} radius={6} />
-            <Bone width="52%" height={26} radius={6} style={{ marginTop: 8 }} />
-            <Bone width="38%" height={14} radius={4} style={{ marginTop: 12 }} />
-            <View style={[styles.hairline, { backgroundColor: colors.borderSecondary }]} />
-            <View style={styles.heroBottom}>
-              <View style={styles.flexLines}>
-                <Bone width="72%" height={12} radius={4} />
-                <Bone width="46%" height={12} radius={4} />
-              </View>
-              <Bone width={104} height={48} radius={12} />
+      <View style={rail.list}>
+        {[0, 1].map((i) => (
+          <View key={i} style={{ width: POSTER_CARD_WIDTH }}>
+            <Bone width={POSTER_CARD_WIDTH} height={posterHeight} radius={POSTER_RADIUS} />
+            <View style={rail.caption}>
+              <TextBone textStyle={rail.title} width="72%" />
+              <TextBone textStyle={rail.meta} width="56%" />
+              <TextBone textStyle={rail.meta} width="40%" />
             </View>
-          </View>
-        </View>
-        <Bone width={HERO_CAROUSEL_PEEK} height={HERO_CAROUSEL_CARD_HEIGHT * 0.92} radius={24} />
-      </View>
-      <Bone width="38%" height={22} radius={6} style={styles.railTitle} />
-      <View style={styles.rail}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ width: railCard }}>
-            <Bone width={railCard} height={Math.round(railCard / POSTER_ASPECT_RATIO)} radius={14} />
-            <Bone width="78%" height={15} radius={4} style={{ marginTop: 12 }} />
-            <Bone width="52%" height={12} radius={4} style={{ marginTop: 8 }} />
           </View>
         ))}
       </View>
@@ -73,52 +52,79 @@ export function ExploreEntrySkeleton() {
   );
 }
 
+/** Erkunden: real search bar + category row, then hero block and the first rail. */
+export function ExploreEntrySkeleton() {
+  return (
+    <View pointerEvents="none">
+      <ExploreSearchBar onPress={noop} />
+      <ExploreCategoryChips />
+      <View style={explore.hero}>
+        <HeroCarouselSkeleton />
+      </View>
+      <RailSectionSkeleton titleWidth="35%" />
+    </View>
+  );
+}
+
 /** Profil: the peeking credential cards, then the sheet with identity row, tiles and menu. */
-export function ProfileEntrySkeleton({ sheetColor }: { sheetColor: string }) {
+export function ProfileEntrySkeleton({ sheetColor, cardCount = 0 }: { sheetColor: string; cardCount?: number }) {
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   const cardWidth = width - 32;
-  const peeks = 2;
-  const stackHeight = STACK_TOP + CARD_PEEK_STEP * (peeks - 1) + CARD_PEEK_FRONT;
+  const cardHeight = Math.round(cardWidth / CARD_ASPECT);
+  const count = cardCount;
   return (
     <SkeletonScope>
-      <View style={{ height: stackHeight + 120 }}>
-        {Array.from({ length: peeks }, (_, i) => {
-          const front = i === peeks - 1;
+      {/* = CredentialCardStack zone: STACK_TOP + stackHeight(count), cards overflow below.
+          No cards (org / guest): no zone, the sheet is "flat" with marginTop 12. */}
+      {count > 0 ? (
+      <View style={[profile.zone, { height: STACK_TOP + stackHeight(count) }]}>
+        {Array.from({ length: count }, (_, i) => {
+          const front = i === count - 1;
           const w = front ? cardWidth : Math.round(cardWidth * 0.93);
           return (
             <Bone
               key={i}
               width={w}
-              height={Math.round(cardWidth / 1.593)}
+              height={cardHeight}
               radius={18}
               style={{ position: 'absolute', top: STACK_TOP + i * CARD_PEEK_STEP, left: 16 + (cardWidth - w) / 2 }}
             />
           );
         })}
       </View>
-      <View style={[styles.sheet, { backgroundColor: sheetColor, marginTop: -120 + 8 }]}>
-        <View style={styles.identity}>
+      ) : null}
+      {/* = ProfileSheet (paddingTop 20, rounded top, above the cards). */}
+      <View style={[profile.sheet, { backgroundColor: sheetColor }, count === 0 && { marginTop: 12 }]}>
+        <View style={profile.identity}>
           <Bone width={48} height={48} radius={24} />
-          <View style={styles.flexLines}>
-            <Bone width="55%" height={17} radius={5} />
-            <Bone width="35%" height={12} radius={4} />
+          <View style={profile.texts}>
+            <TextBone textStyle={profile.name} width="55%" />
+            <TextBone textStyle={profile.sub} width="32%" />
           </View>
-          <Bone width={112} height={44} radius={22} />
+          <Bone width={150} height={44} radius={22} />
         </View>
-        <View style={styles.tiles}>
-          {[0, 1, 2, 3].map((i) => (
-            <View key={i} style={styles.tile}>
-              <Bone width={52} height={52} radius={16} />
-              <Bone width={48} height={10} radius={4} style={{ marginTop: 8 }} />
+        <View style={profile.grid}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <View key={i} style={profile.cell}>
+              <Bone width={TILE_SIZE} height={TILE_SIZE} radius={TILE_RADIUS} />
+              <TextBone textStyle={profile.tileLabel} width={64} lines={2} />
             </View>
           ))}
         </View>
-        <View style={styles.menu}>
-          {[62, 48, 70, 54, 44, 58].map((w, i) => (
-            <View key={i} style={styles.menuRow}>
-              <Bone width={20} height={20} radius={6} />
-              <Bone width={`${w}%`} height={15} radius={4} />
-            </View>
+        <View style={profile.menu}>
+          {[2, 5].map((rows, g) => (
+            <React.Fragment key={g}>
+              {g > 0 ? <View style={[profile.divider, { backgroundColor: colors.border }]} /> : null}
+              <View style={profile.group}>
+                {Array.from({ length: rows }, (_, i) => (
+                  <View key={i} style={profile.menuRow}>
+                    <Bone width={20} height={20} radius={6} />
+                    <TextBone textStyle={profile.menuLabel} width={`${46 + ((i * 17 + g * 9) % 28)}%`} />
+                  </View>
+                ))}
+              </View>
+            </React.Fragment>
           ))}
         </View>
       </View>
@@ -126,61 +132,59 @@ export function ProfileEntrySkeleton({ sheetColor }: { sheetColor: string }) {
   );
 }
 
-function PostBones() {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.post, { borderBottomColor: colors.border }]}>
-      <View style={styles.identityPost}>
-        <Bone width={40} height={40} radius={20} />
-        <View style={styles.flexLines}>
-          <Bone width={140} height={14} radius={4} />
-          <Bone width={90} height={11} radius={4} />
-        </View>
-      </View>
-      <Bone width="100%" height={14} radius={4} />
-      <Bone width="78%" height={14} radius={4} />
-      <Bone height={220} radius={14} style={{ marginTop: 4 }} />
-      <View style={styles.actions}>
-        {[0, 1, 2, 3].map((i) => (
-          <Bone key={i} width={40} height={16} radius={4} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** Austausch: a column of posts below the floating header. */
+/** Austausch: FeedList's top padding, the story row, then posts. */
 export function FeedEntrySkeleton() {
   return (
-    <SkeletonScope>
-      <PostBones />
-      <PostBones />
-      <PostBones />
+    <SkeletonScope style={feed.page}>
+      <View style={feed.stories}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Bone key={i} width={90} height={140} radius={14} />
+        ))}
+      </View>
+      <FeedPostSkeleton />
+      <FeedPostSkeleton />
     </SkeletonScope>
   );
 }
 
-const styles = StyleSheet.create({
-  search: { marginHorizontal: 16, marginTop: 8, marginBottom: 12 },
-  chips: { flexDirection: 'row', paddingHorizontal: 16, gap: 16, marginBottom: 4 },
-  chipLabel: { height: 26, marginTop: 8, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  chip: { width: 64, alignItems: 'center' },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: HERO_CAROUSEL_GAP, paddingTop: 4, paddingBottom: 16, overflow: 'hidden' },
-  heroCard: { borderRadius: 24, borderWidth: 1, padding: 8 },
-  heroImage: { flex: 1, width: '100%' },
-  heroContent: { paddingHorizontal: 16, paddingVertical: 24 },
-  hairline: { height: 1, marginVertical: 16 },
-  heroBottom: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  flexLines: { flex: 1, gap: 6 },
-  railTitle: { marginHorizontal: 16, marginTop: 8, marginBottom: 12 },
-  rail: { flexDirection: 'row', gap: 12, paddingLeft: 16 },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, minHeight: 800 },
+// ---- styles copied from the real components (keep in sync) ----
+
+/** ThisWeekEventsHorizontal + HorizontalEventCard. */
+const rail = StyleSheet.create({
+  container: { marginTop: 24, marginBottom: 8 },
+  header: { paddingHorizontal: 16, marginBottom: 12, flexDirection: 'row' },
+  sectionTitle: { fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Medium' },
+  list: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, overflow: 'hidden' },
+  caption: { paddingTop: 12, gap: 4 },
+  title: { fontSize: 17, lineHeight: 22, fontFamily: 'MonaSans-Medium' },
+  meta: { fontSize: 14, lineHeight: 19, fontFamily: 'MonaSans-Regular' },
+});
+
+/** app/explore.tsx `styles.hero` around HeroCarousel. */
+const explore = StyleSheet.create({
+  hero: {},
+});
+
+/** ProfileSheet, IdentityRow, ProfileActionGrid/Tile, ProfileMenu/ProfileMenuItem. */
+const profile = StyleSheet.create({
+  zone: { overflow: 'visible', zIndex: 1 },
+  sheet: { paddingTop: 20, zIndex: 2, borderTopLeftRadius: 24, borderTopRightRadius: 24, minHeight: 900 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
-  tiles: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 24 },
-  tile: { alignItems: 'center' },
-  menu: { paddingHorizontal: 16, marginTop: 28, gap: 24 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  post: { paddingHorizontal: 16, paddingVertical: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  identityPost: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  actions: { flexDirection: 'row', gap: 28, marginTop: 2 },
+  texts: { flex: 1, gap: 2 },
+  name: { fontSize: 17, fontFamily: 'MonaSans-SemiBold' },
+  sub: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, paddingHorizontal: 12, marginTop: 24 },
+  cell: { width: '33.333%', alignItems: 'center', paddingHorizontal: 4, gap: 8 },
+  tileLabel: { fontFamily: 'MonaSans-Medium', fontSize: 12, lineHeight: 15, textAlign: 'center' },
+  menu: { paddingHorizontal: 16, marginTop: 24 },
+  group: { gap: 8 },
+  divider: { height: 1, marginVertical: 16 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 16, gap: 12 },
+  menuLabel: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
+});
+
+/** FeedList (paddingTop topPadding + 8 — the overlay already starts at topPadding) + HomeStoryBar. */
+const feed = StyleSheet.create({
+  page: { paddingTop: 8 },
+  stories: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 12, overflow: 'hidden' },
 });

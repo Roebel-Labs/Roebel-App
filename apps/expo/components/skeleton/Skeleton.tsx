@@ -13,7 +13,7 @@
  * thread (reanimated); each bone measures itself once on layout.
  */
 import React, { createContext, useContext, useEffect, useRef } from 'react';
-import { AccessibilityInfo, StyleSheet, View, useWindowDimensions, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions, type DimensionValue, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -71,10 +71,12 @@ type BoneProps = {
   height?: DimensionValue;
   radius?: number;
   style?: StyleProp<ViewStyle>;
+  /** Sizing content (e.g. invisible text so a bone takes a real line height). */
+  children?: React.ReactNode;
 };
 
 /** A skeleton block lit by the scope's band (or its own, outside a scope). */
-export function Bone({ width, height, radius = 8, style }: BoneProps) {
+export function Bone({ width, height, radius = 8, style, children }: BoneProps) {
   const { colors, isDark } = useTheme();
   const scope = useContext(SweepContext);
   const own = useSweepProgress();
@@ -106,6 +108,7 @@ export function Bone({ width, height, radius = 8, style }: BoneProps) {
       }}
       style={[styles.bone, { borderRadius: radius, backgroundColor: colors.skeleton }, width !== undefined && { width }, height !== undefined && { height }, style]}
     >
+      {children}
       <AnimatedGradient
         pointerEvents="none"
         colors={['rgba(255,255,255,0)', highlight, 'rgba(255,255,255,0)']}
@@ -120,4 +123,31 @@ export function Bone({ width, height, radius = 8, style }: BoneProps) {
 const styles = StyleSheet.create({
   bone: { overflow: 'hidden' },
   band: { position: 'absolute', left: 0, right: 0, top: 0, height: BAND },
+  ghostText: { color: 'transparent' },
 });
+
+/**
+ * A bone exactly as tall as the real text it stands in for: it holds an invisible copy of that
+ * text style, so line height and font metrics match by construction (no jump when content lands).
+ */
+export function TextBone({
+  textStyle,
+  width,
+  lines = 1,
+  radius = 6,
+  style,
+}: {
+  textStyle: StyleProp<TextStyle>;
+  width: DimensionValue;
+  lines?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <Bone width={width} radius={radius} style={style}>
+      <Text style={[textStyle, styles.ghostText]} numberOfLines={lines} accessible={false}>
+        {Array.from({ length: lines }, () => 'Ag').join('\n')}
+      </Text>
+    </Bone>
+  );
+}

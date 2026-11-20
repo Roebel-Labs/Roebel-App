@@ -112,7 +112,10 @@ export function HeroCarouselSkeleton() {
   const { width } = useWindowDimensions();
   const { cardWidth } = heroCarouselLayout(width);
   const { colors } = useTheme();
+  // = app/explore styles.hero (paddingTop 4, paddingBottom 8) around HeroCarousel, whose
+  // pagination adds marginTop 14 + 8 px dots: the block is exactly as tall as the real one.
   return (
+    <View style={styles.heroBlock}>
     <ShimmerGroup style={styles.heroCarouselSkeleton}>
       <View
         style={[styles.heroCarouselPeek, styles.heroPeekCard, { width: HERO_CAROUSEL_PEEK, height: HERO_CAROUSEL_CARD_HEIGHT * 0.92, backgroundColor: colors.skeleton }]}
@@ -122,6 +125,12 @@ export function HeroCarouselSkeleton() {
         style={[styles.heroCarouselPeek, styles.heroPeekCard, { width: HERO_CAROUSEL_PEEK, height: HERO_CAROUSEL_CARD_HEIGHT * 0.92, backgroundColor: colors.skeleton }]}
       />
     </ShimmerGroup>
+      <View style={styles.heroPagination}>
+        <View style={[styles.heroDot, styles.heroDotActive, { backgroundColor: colors.skeleton }]} />
+        <View style={[styles.heroDot, { backgroundColor: colors.skeleton }]} />
+        <View style={[styles.heroDot, { backgroundColor: colors.skeleton }]} />
+      </View>
+    </View>
   );
 }
 
@@ -491,15 +500,18 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
   },
+  heroBlock: { paddingTop: 4, paddingBottom: 8 },
   heroCarouselSkeleton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: HERO_CAROUSEL_GAP,
-    paddingTop: 4,
-    paddingBottom: 16,
+    height: HERO_CAROUSEL_CARD_HEIGHT,
     overflow: 'hidden',
   },
+  heroPagination: { marginTop: 14, height: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  heroDot: { width: 8, height: 8, borderRadius: 4 },
+  heroDotActive: { width: 20 },
   heroCarouselPeek: {
     opacity: 0.6,
   },

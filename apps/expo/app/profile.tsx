@@ -406,7 +406,7 @@ export default function ProfileScreen() {
 
         {/* First open: matched skeleton until the profile is there; back from a detail page: blur → sharp. */}
         <ScreenTransition tab="profile"
-          skeleton={<ProfileEntrySkeleton sheetColor={colors.background} />}
+          skeleton={<ProfileEntrySkeleton sheetColor={colors.background} cardCount={!isConnected || isOrg ? 0 : creds.profile.cards.length} />}
           ready={!isConnected || !!user}
           topInset={headerHeight}
           backgroundColor={colors.backdrop}
