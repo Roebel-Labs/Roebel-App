@@ -118,7 +118,7 @@ function MenuItemDetailScreenInner() {
             <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} size="full" style={styles.hero} />
           ) : (
             <View style={styles.heroPlaceholder}>
-              <Text style={{ color: colors.textTertiary, fontFamily: 'Inter-Medium', fontSize: 16 }}>
+              <Text style={{ color: colors.textTertiary, fontFamily: 'MonaSans-Medium', fontSize: 16 }}>
                 Kein Bild
               </Text>
             </View>
@@ -224,16 +224,16 @@ const styles = StyleSheet.create({
   floatingBack: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   headBlock: { paddingHorizontal: 16, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Medium' },
-  price: { fontSize: 17, fontFamily: 'Inter-Medium', marginTop: 6 },
-  description: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginTop: 12 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Medium' },
+  price: { fontSize: 17, fontFamily: 'MonaSans-Medium', marginTop: 6 },
+  description: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginTop: 12 },
   thumbsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 16 },
-  hint: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
+  hint: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 8 },
   section: { paddingHorizontal: 16, paddingTop: 28 },
   sectionTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 12 },
   relCard: { width: 140 },
   relImg: { width: 140, height: 140, borderRadius: 12 },
-  relName: { fontSize: 14, fontFamily: 'Inter-Medium', marginTop: 8 },
+  relName: { fontSize: 14, fontFamily: 'MonaSans-Medium', marginTop: 8 },
   relMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  relPrice: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  relPrice: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
 });

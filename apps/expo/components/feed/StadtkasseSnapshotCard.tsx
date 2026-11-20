@@ -85,11 +85,11 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   label: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: -2,
   },
   removeBtn: {

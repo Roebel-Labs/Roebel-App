@@ -253,15 +253,15 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   time: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   aiTag: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 4,
     paddingHorizontal: 4,
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   imageRow: {
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   },
   replyText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   likeButton: {
     flexDirection: 'row',
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   },
   likeCount: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   editActionsRow: {
     flexDirection: 'row',
@@ -325,6 +325,6 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

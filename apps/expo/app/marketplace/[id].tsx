@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   },
   priceBadgeText: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   // Content Overlay
   contentOverlay: {
@@ -556,12 +556,12 @@ const styles = StyleSheet.create({
   // Title
   title: {
     fontSize: 26,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 6,
   },
   metaLine: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 20,
   },
   // Seller row
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   sellerName: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   contactPill: {
     flexDirection: 'row',
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   },
   contactPillText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   // Info Cards
   infoCards: {
@@ -621,12 +621,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   infoValue: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   infoSubvalue: {
     fontSize: 13,
@@ -668,12 +668,12 @@ const styles = StyleSheet.create({
   },
   sellerLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   sellerAddress: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   // Contact CTA
   contactButton: {
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
   },
   moreSectionTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
     paddingHorizontal: 24,
   },

@@ -131,12 +131,12 @@ export function FollowCounts({ accountId, showFollowing = false, canOpenList = f
 export default FollowersDrawer;
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontFamily: 'Inter-SemiBold', paddingHorizontal: 20, paddingVertical: 12 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-SemiBold', paddingHorizontal: 20, paddingVertical: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 10 },
-  name: { flex: 1, fontSize: 15, fontFamily: 'Inter-Medium' },
+  name: { flex: 1, fontSize: 15, fontFamily: 'MonaSans-Medium' },
   pad: { padding: 16 },
-  empty: { fontSize: 14, fontFamily: 'Inter-Regular', paddingHorizontal: 20, paddingVertical: 16 },
-  more: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  empty: { fontSize: 14, fontFamily: 'MonaSans-Regular', paddingHorizontal: 20, paddingVertical: 16 },
+  more: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
   countsRow: { flexDirection: 'row', alignItems: 'center' },
-  counts: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  counts: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
 });

@@ -71,11 +71,11 @@ const styles = StyleSheet.create({
   },
   pointsValue: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   pointsLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   infoSection: {
     alignItems: 'flex-end',
@@ -88,11 +88,11 @@ const styles = StyleSheet.create({
   },
   tierText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     color: '#ffffff',
   },
   streak: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

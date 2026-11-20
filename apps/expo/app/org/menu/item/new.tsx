@@ -50,7 +50,7 @@ function NewMenuItemScreenInner() {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {!canEdit ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Nicht berechtigt.</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Nicht berechtigt.</Text>
         ) : restaurantId && categoryId ? (
           <MenuItemEditor
             restaurantId={restaurantId}
@@ -58,7 +58,7 @@ function NewMenuItemScreenInner() {
             onSaved={(it) => router.replace({ pathname: '/org/menu/item/[id]', params: { id: it.id } } as any)}
           />
         ) : (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>
             {!categoryId ? 'Keine Kategorie angegeben.' : 'Restaurant lädt…'}
           </Text>
         )}

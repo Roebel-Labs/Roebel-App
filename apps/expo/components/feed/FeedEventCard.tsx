@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   },
   authorInitial: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   headerInfo: {
     flex: 1,
@@ -161,11 +161,11 @@ const styles = StyleSheet.create({
   },
   authorName: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   eventKindLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   indented: {
     marginLeft: 46,
@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
   },
   dateDay: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
   },
   dateLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
   },
   noImageDateRow: {
@@ -225,12 +225,12 @@ const styles = StyleSheet.create({
   },
   dateDayInline: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 20,
   },
   dateLabelInline: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   info: {
     paddingHorizontal: 16,
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
   },
   meta: {
@@ -254,6 +254,6 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

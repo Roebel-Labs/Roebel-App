@@ -83,7 +83,7 @@ export default function SearchSegmentedTabs<T extends string>({
                 styles.label,
                 {
                   color: isActive ? colors.textPrimary : colors.textSecondary,
-                  fontFamily: isActive ? 'Inter-SemiBold' : 'Inter-Medium',
+                  fontFamily: isActive ? 'MonaSans-SemiBold' : 'MonaSans-Medium',
                 },
               ]}
             >

@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 21,
   },
   badges: {
@@ -95,17 +95,17 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     color: '#ffffff',
   },
   description: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   price: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   footer: {
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   quantity: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   addButton: {
     width: 48,
@@ -133,6 +133,6 @@ const styles = StyleSheet.create({
   },
   addIcon: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

@@ -162,11 +162,11 @@ function Field({ label, children, required = false, colors }: { label: string; c
 
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 12 },
-  title: { fontSize: 24, fontFamily: 'Inter-SemiBold' },
+  title: { fontSize: 24, fontFamily: 'MonaSans-SemiBold' },
   subtitle: { marginBottom: 8 },
-  label: { fontFamily: 'Inter-SemiBold' },
+  label: { fontFamily: 'MonaSans-SemiBold' },
   input: { borderRadius: 10, borderWidth: 1, padding: 10 },
   submitBtn: { padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-  submitText: { fontFamily: 'Inter-SemiBold' },
+  submitText: { fontFamily: 'MonaSans-SemiBold' },
   hint: { marginTop: 12 }
 });

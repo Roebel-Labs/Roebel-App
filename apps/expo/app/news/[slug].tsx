@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   },
   tagsLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 12,
   },
   tagsRow: {
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   authorName: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorRole: {
     fontSize: 14,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   },
   relatedTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 16,
   },
 });

@@ -144,6 +144,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  actionTitle: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  actionSub: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  actionTitle: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  actionSub: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
 });

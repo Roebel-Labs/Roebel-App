@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   message: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     lineHeight: 30,
     color: NAVY,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   subtitle: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 16,
     lineHeight: 24,
     color: SUBTITLE,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   ctaText: { color: NAVY, fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 17 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   // Monospace so the pixel-decode doesn't shift width as glyphs resolve.
-  loadingLabel: { color: NAVY, fontFamily: 'GeistMono-Medium', fontSize: 14.5, letterSpacing: 0.3 },
+  loadingLabel: { color: NAVY, fontFamily: 'MonaSansMono-Medium', fontSize: 14.5, letterSpacing: 0.3 },
 });
 
 /**

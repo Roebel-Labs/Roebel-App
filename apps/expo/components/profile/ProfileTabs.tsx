@@ -40,7 +40,7 @@ export default function ProfileTabs<K extends ProfileTabKey>({ tabs, active, onC
               style={[
                 styles.label,
                 { color: isActive ? colors.textPrimary : colors.textTertiary },
-                isActive && { fontFamily: 'Inter-SemiBold' },
+                isActive && { fontFamily: 'MonaSans-SemiBold' },
               ]}
             >
               {tab.label}
@@ -71,10 +71,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   count: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   indicator: {
     position: 'absolute',

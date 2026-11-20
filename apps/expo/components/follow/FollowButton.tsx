@@ -60,7 +60,7 @@ export default function FollowButton({ accountId, muteWallet, ownAccountIds = []
 
 const styles = StyleSheet.create({
   pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignSelf: 'flex-start' },
-  label: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  label: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
   menuRow: { paddingHorizontal: 20, paddingVertical: 16 },
-  menuText: { fontSize: 16, fontFamily: 'Inter-Medium' },
+  menuText: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
 });

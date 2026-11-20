@@ -34,13 +34,13 @@ const styles = StyleSheet.create({
   },
   stamp: { width: 140, height: 140 },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     lineHeight: 28,
     textAlign: 'center',
   },
   body: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',

@@ -83,7 +83,7 @@ export default function FeedTabBar({ activeTab, onTabChange, scrollProgress, unr
                   styles.tabLabel,
                   {
                     color: isActive ? colors.primary : colors.textTertiary,
-                    fontFamily: isActive ? 'Inter-Medium' : 'Inter-Regular',
+                    fontFamily: isActive ? 'MonaSans-Medium' : 'MonaSans-Regular',
                   },
                 ]}
               >

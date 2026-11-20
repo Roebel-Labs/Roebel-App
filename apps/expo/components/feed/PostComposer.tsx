@@ -433,7 +433,7 @@ export default function PostComposer({
                       style={{
                         color: pollType === 'single' ? colors.primary : colors.textSecondary,
                         fontSize: 12,
-                        fontFamily: 'Inter-Medium',
+                        fontFamily: 'MonaSans-Medium',
                       }}
                     >
                       Einzelwahl
@@ -454,7 +454,7 @@ export default function PostComposer({
                       style={{
                         color: pollType === 'multi' ? colors.primary : colors.textSecondary,
                         fontSize: 12,
-                        fontFamily: 'Inter-Medium',
+                        fontFamily: 'MonaSans-Medium',
                       }}
                     >
                       Mehrfachwahl
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   headerTitle: {
     fontSize: 16,
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   },
   submitText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   authorRow: {
     flexDirection: 'row',
@@ -544,11 +544,11 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorName: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   categoryScroll: {
     maxHeight: 40,
@@ -566,13 +566,13 @@ const styles = StyleSheet.create({
   },
   categoryChipText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   textInput: {
     paddingHorizontal: 16,
     paddingTop: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     paddingHorizontal: 16,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   imagePreviewGrid: {
@@ -629,11 +629,11 @@ const styles = StyleSheet.create({
   },
   pollTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   pollRemove: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pollOptionRow: {
     flexDirection: 'row',
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 12,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pollRemoveOption: {
     fontSize: 18,
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   },
   addOptionText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   pollTypeRow: {
     flexDirection: 'row',

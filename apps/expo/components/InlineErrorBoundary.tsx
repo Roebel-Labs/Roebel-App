@@ -82,12 +82,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     color: '#991b1b',
     marginBottom: 8,
   },
   message: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     color: '#7f1d1d',
     marginBottom: 12,
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     borderColor: '#fecaca',
   },
   stack: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 10,
     color: '#7f1d1d',
   },

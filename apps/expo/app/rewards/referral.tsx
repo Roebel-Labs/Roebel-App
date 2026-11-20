@@ -329,12 +329,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     textAlign: 'center',
   },
   subtitle: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   placeholderText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     textAlign: 'center',
   },
@@ -361,11 +361,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   redeemTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   redeemHint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     lineHeight: 18,
   },
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
     letterSpacing: 2,
   },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   redeemMsg: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 13,
     marginTop: 2,
   },
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 11,
     textAlign: 'center',
   },
@@ -431,13 +431,13 @@ const statStyles = StyleSheet.create({
     gap: 2,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   value: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 20,
   },
 });
@@ -456,7 +456,7 @@ const stepStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   n: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   textWrap: {
@@ -464,11 +464,11 @@ const stepStyles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   body: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
   },
 });

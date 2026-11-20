@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   avatarInitial: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   info: {
     flex: 1,
@@ -193,12 +193,12 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flexShrink: 1,
   },
   badge: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   metaRow: {
     flexDirection: 'row',
@@ -207,14 +207,14 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   dot: {
     fontSize: 12,
   },
   time: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   moreBtn: {
     marginLeft: 'auto',

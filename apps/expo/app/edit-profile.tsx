@@ -430,28 +430,28 @@ export default function EditProfileScreen() {
 
       <BottomDrawer visible={circlesError.visible} onClose={() => setCirclesError({ visible: false })}>
         <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28, gap: 10 }}>
-          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 18, color: colors.textPrimary }}>
+          <Text style={{ fontFamily: 'MonaSans-SemiBold', fontSize: 18, color: colors.textPrimary }}>
             Veröffentlichen hat nicht geklappt
           </Text>
-          <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+          <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
             Das kann verschiedene Gründe haben — probiere bitte Folgendes:
           </Text>
           <View style={{ gap: 8, marginTop: 2 }}>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+            <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
               • Dein Konto ist evtl. noch nicht bereit. Warte einen Moment und versuche es erneut.
             </Text>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+            <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
               • Du musst zuerst bei Röbel Münzen mitmachen (ein registrierter Circles-Avatar), bevor dein Profil sichtbar werden kann.
             </Text>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+            <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
               • Setze einen Namen und ein Profilbild, bevor du veröffentlichst.
             </Text>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+            <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
               • Bei einer Netzwerkstörung: in ein paar Minuten erneut versuchen.
             </Text>
           </View>
           {!!circlesError.message && (
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textTertiary, marginTop: 4 }} numberOfLines={3}>
+            <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 12, color: colors.textTertiary, marginTop: 4 }} numberOfLines={3}>
               Details: {circlesError.message}
             </Text>
           )}
@@ -463,14 +463,14 @@ export default function EditProfileScreen() {
             onPress={() => { setCirclesError({ visible: false }); router.push('/rewards' as any); }}
             accessibilityRole="button"
           >
-            <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 15, color: colors.onPrimary }}>Zu Röbel Münzen</Text>
+            <Text style={{ fontFamily: 'MonaSans-SemiBold', fontSize: 15, color: colors.onPrimary }}>Zu Röbel Münzen</Text>
           </Pressable>
           <Pressable
             style={{ height: 44, alignItems: 'center', justifyContent: 'center' }}
             onPress={() => setCirclesError({ visible: false })}
             accessibilityRole="button"
           >
-            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 14, color: colors.textSecondary }}>Verstanden</Text>
+            <Text style={{ fontFamily: 'MonaSans-Medium', fontSize: 14, color: colors.textSecondary }}>Verstanden</Text>
           </Pressable>
         </View>
       </BottomDrawer>
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
   },
   changePhotoText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 12,
   },
   statusBadge: {
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
   },
   fieldHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 6,
   },
   circlesCard: {
@@ -590,16 +590,16 @@ const styles = StyleSheet.create({
   },
   circlesTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   circlesDesc: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   circlesNote: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 12,
   },
   saveButton: {

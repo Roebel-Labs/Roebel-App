@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   fskText: {
     color: '#ffffff', // Intentionally white on dark overlay badge
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   contentContainer: {
     paddingVertical: 12,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
     lineHeight: 22,
   },

@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   },
   gameTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 8,
     textAlign: 'center',
   },

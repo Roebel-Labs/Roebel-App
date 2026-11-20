@@ -64,12 +64,12 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subheading: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 40,
   },
   stepsContainer: {
@@ -92,11 +92,11 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   stepDesc: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   footer: {

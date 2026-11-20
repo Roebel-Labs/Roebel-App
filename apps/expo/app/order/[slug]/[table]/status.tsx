@@ -30,7 +30,7 @@ export default function OrderStatusScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Text style={{ fontSize: 20, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Deine Bestellungen</Text>
+        <Text style={{ fontSize: 20, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>Deine Bestellungen</Text>
         <Text style={{ fontSize: 14, color: colors.textSecondary, marginTop: 2 }}>
           {restaurant?.name} — Tisch {session?.table_number}
         </Text>
@@ -46,7 +46,7 @@ export default function OrderStatusScreen() {
               <View key={order.id} style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <View style={{ backgroundColor: statusColor.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                    <Text style={{ color: statusColor.text, fontSize: 13, fontFamily: 'Inter-Medium' }}>
+                    <Text style={{ color: statusColor.text, fontSize: 13, fontFamily: 'MonaSans-Medium' }}>
                       {ORDER_STATUS_LABELS[order.status]}
                     </Text>
                   </View>
@@ -61,8 +61,8 @@ export default function OrderStatusScreen() {
                   </View>
                 ))}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.borderSecondary }}>
-                  <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Summe</Text>
-                  <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>{formatMenuPrice(order.total)}</Text>
+                  <Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>Summe</Text>
+                  <Text style={{ fontSize: 14, fontFamily: 'MonaSans-Medium', color: colors.textPrimary }}>{formatMenuPrice(order.total)}</Text>
                 </View>
               </View>
             );
@@ -72,10 +72,10 @@ export default function OrderStatusScreen() {
 
       <View style={{ padding: 16, gap: 10 }}>
         <Pressable onPress={handleBack} style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}>
-          <Text style={{ color: colors.onPrimary, fontSize: 15, fontFamily: 'Inter-Medium' }}>Weitere Bestellung aufgeben</Text>
+          <Text style={{ color: colors.onPrimary, fontSize: 15, fontFamily: 'MonaSans-Medium' }}>Weitere Bestellung aufgeben</Text>
         </Pressable>
         <Pressable onPress={handleLeave} style={{ borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 15, fontFamily: 'Inter-Regular' }}>Sitzung verlassen</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 15, fontFamily: 'MonaSans-Regular' }}>Sitzung verlassen</Text>
         </Pressable>
       </View>
     </SafeAreaView>

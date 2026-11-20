@@ -104,12 +104,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   headline: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     textAlign: 'center',
   },
   body: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   finePrint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     lineHeight: 16,
     textAlign: 'center',
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
 });

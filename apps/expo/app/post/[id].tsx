@@ -1032,7 +1032,7 @@ const styles = StyleSheet.create({
   },
   postContent: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
   },
   pinnedRow: {
@@ -1043,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   pinnedText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   postSticker: {
     width: 200,
@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   likersText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   commentsHeader: {
     paddingTop: 14,
@@ -1069,7 +1069,7 @@ const styles = StyleSheet.create({
   },
   commentsTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   noComments: {
     padding: 32,
@@ -1077,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   noCommentsText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   footerLoader: {
@@ -1103,6 +1103,6 @@ const styles = StyleSheet.create({
   },
   loginPromptText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

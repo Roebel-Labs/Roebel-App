@@ -1209,7 +1209,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
   },
   stepCard: {
@@ -1222,7 +1222,7 @@ const styles = StyleSheet.create({
   },
   stepBody: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   primaryButton: {
@@ -1246,7 +1246,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   buttonsContainer: {
@@ -1283,7 +1283,7 @@ const styles = StyleSheet.create({
   statusLine: {
     marginTop: 12,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   loadingRow: {
@@ -1304,7 +1304,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   gateWrap: {
@@ -1312,7 +1312,7 @@ const styles = StyleSheet.create({
   },
   gateIntro: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginHorizontal: 16,
     lineHeight: 20,
@@ -1337,7 +1337,7 @@ const styles = StyleSheet.create({
   },
   basescanLink: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textDecorationLine: 'underline',
   },
 });

@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   },
   count: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   heartIconWrap: {
     width: 22,

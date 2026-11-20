@@ -155,7 +155,7 @@ export default function OrgBlogListScreen() {
               style={{
                 color: filter === f ? colors.onPrimary : colors.textPrimary,
                 fontSize: 12,
-                fontFamily: 'Inter-Medium',
+                fontFamily: 'MonaSans-Medium',
               }}
             >
               {f === 'all'
@@ -266,7 +266,7 @@ function StatusBadge({ status }: { status: BlogArticle['status'] }) {
         borderRadius: 8,
       }}
     >
-      <Text style={{ color: config.fg, fontSize: 11, fontFamily: 'Inter-Medium' }}>
+      <Text style={{ color: config.fg, fontSize: 11, fontFamily: 'MonaSans-Medium' }}>
         {config.label}
       </Text>
     </View>
@@ -284,7 +284,7 @@ function ActionLink({
 }) {
   return (
     <Pressable onPress={onPress} hitSlop={8} style={{ marginRight: 12 }}>
-      <Text style={{ color, fontSize: 12, fontFamily: 'Inter-Medium' }}>{label}</Text>
+      <Text style={{ color, fontSize: 12, fontFamily: 'MonaSans-Medium' }}>{label}</Text>
     </Pressable>
   );
 }
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  bannerText: { color: '#92400E', fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  bannerText: { color: '#92400E', fontSize: 12, fontFamily: 'MonaSans-Regular', lineHeight: 18 },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -341,8 +341,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  cardTitle: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  cardMeta: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  cardMeta: { fontSize: 11, fontFamily: 'MonaSans-Regular' },
   cardActions: { flexDirection: 'row', marginTop: 8 },
 });

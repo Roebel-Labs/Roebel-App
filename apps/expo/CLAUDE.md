@@ -10,7 +10,7 @@
   - Body/UI: `MonaSans-Regular` / `-Medium` / `-SemiBold` / `-Bold` (tokens `regular`/`medium`/`semiBold`/`bold`)
   - Headlines: `MonaSansSemiCondensed-Bold` (token `heading`)
   - Mono: `MonaSansMono-Regular` (token `mono`)
-  - Legacy `Inter-*` / `GeistMono-*` keys still work — they are aliased to the Mona Sans files in `hooks/useFonts.ts`, so existing hardcoded `fontFamily: 'Inter-Regular'` renders Mona Sans. Prefer the tokens in new code.
+  - Fonts are embedded at build time (`expo-font` plugin in `app.config.ts`). The legacy `Inter-*` / `GeistMono-*` aliases are GONE (embedded fonts cannot be aliased) — always use the Mona Sans names or the theme tokens; an unknown family silently falls back to the system font.
 - A previous NativeWind migration attempt broke the app and was reverted. Do NOT attempt NativeWind migration.
 
 ## Figma

@@ -101,13 +101,13 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 16,
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   subtitle: {
     marginTop: 8,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 21,
     textAlign: 'center',
   },

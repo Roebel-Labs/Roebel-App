@@ -49,9 +49,9 @@ function makeStyles(colors: any) {
 	return StyleSheet.create({
 		card: { marginTop: 16, backgroundColor: colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: colors.border },
 		row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-		label: { fontFamily: "Inter-Medium", fontSize: 14, color: colors.textSecondary },
-		eur: { fontFamily: "Inter-Bold", fontSize: 26, color: colors.textPrimary, marginTop: 2 },
-		chevron: { fontFamily: "Inter-Regular", fontSize: 28, color: colors.textTertiary },
-		hint: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textTertiary, marginTop: 10 },
+		label: { fontFamily: "MonaSans-Medium", fontSize: 14, color: colors.textSecondary },
+		eur: { fontFamily: "MonaSans-Bold", fontSize: 26, color: colors.textPrimary, marginTop: 2 },
+		chevron: { fontFamily: "MonaSans-Regular", fontSize: 28, color: colors.textTertiary },
+		hint: { fontFamily: "MonaSans-Regular", fontSize: 12, color: colors.textTertiary, marginTop: 10 },
 	});
 }

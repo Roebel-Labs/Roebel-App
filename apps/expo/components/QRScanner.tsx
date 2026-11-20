@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   diagText: {
     color: '#ffffff',
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   overlay: {
     flex: 1,
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   },
   instructionText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 16,
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#ffffff',
     textAlign: 'center',
     padding: 32,

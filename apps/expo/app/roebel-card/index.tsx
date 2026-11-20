@@ -463,21 +463,21 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 40,
     lineHeight: 44,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     textAlign: 'center',
   },
   orgSubtitle: {
     marginTop: 16,
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingHorizontal: 8,
   },
   balanceLine: {
     marginTop: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   ctaWrapper: {
     marginTop: 32,
@@ -513,13 +513,13 @@ const styles = StyleSheet.create({
   thanksText: {
     marginTop: 12,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   errorText: {
     marginTop: 12,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   imageWrapper: {
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   },
   claimInviteText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
     textAlign: 'center',
   },
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   },
   sachbezugText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   bottomBar: {
@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
   },
   learnMoreText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
 });

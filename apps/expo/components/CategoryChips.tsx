@@ -70,7 +70,7 @@ export default function CategoryChips({ categories, selectedCategory, onCategory
             <Text style={[
               styles.chipText,
               { color: colors.textPrimary },
-              isSelected && { fontFamily: 'Inter-Medium' }
+              isSelected && { fontFamily: 'MonaSans-Medium' }
             ]}>
               {chip.label}
             </Text>
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     lineHeight: 14, // Tighter line height for multi-line labels
     flexShrink: 1, // Allow text to shrink if needed

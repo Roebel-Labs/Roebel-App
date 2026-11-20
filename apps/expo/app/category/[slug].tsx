@@ -163,13 +163,13 @@ const styles = StyleSheet.create({
   categoryTitle: {
     paddingHorizontal: 16,
     fontSize: 26,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   categoryDescription: {
     paddingHorizontal: 16,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     opacity: 0.7,
     lineHeight: 24,
     marginBottom: 24,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   },
   emptyEventsText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
 });

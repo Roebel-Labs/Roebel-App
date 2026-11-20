@@ -519,12 +519,12 @@ const styles = StyleSheet.create({
   },
   plusText: {
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 28,
   },
   createLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 15,
   },
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   storyOrgLetter: {
     color: '#ffffff',
     fontSize: 9,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   cardGradient: {
     position: 'absolute',
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: '#ffffff',
     fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 13,
   },
 });

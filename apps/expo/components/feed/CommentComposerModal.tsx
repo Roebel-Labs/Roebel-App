@@ -274,11 +274,11 @@ const styles = StyleSheet.create({
   },
   submitLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   replyingTo: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingHorizontal: 16,
     paddingBottom: 8,
     marginLeft: 52,
@@ -303,12 +303,12 @@ const styles = StyleSheet.create({
   },
   avatarInitial: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   input: {
     flex: 1,
     fontSize: 17,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
     textAlignVertical: 'top',
     paddingTop: 6,
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   counter: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingRight: 6,
   },
 });

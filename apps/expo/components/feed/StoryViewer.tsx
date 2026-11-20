@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
   overlayText: {
     fontSize: 30,
     lineHeight: 38,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     letterSpacing: -0.4,
   },
   progressRow: {
@@ -1298,7 +1298,7 @@ const styles = StyleSheet.create({
   headerAvatarLetter: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   headerInfo: {
     flex: 1,
@@ -1311,7 +1311,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     color: 'rgba(255,255,255,0.75)',
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 1,
   },
   closeBtn: {
@@ -1370,7 +1370,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     lineHeight: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomGradient: {
     position: 'absolute',
@@ -1396,19 +1396,19 @@ const styles = StyleSheet.create({
   pillText: {
     color: '#000000',
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   bottomTitle: {
     color: '#ffffff',
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 28,
     marginBottom: 6,
   },
   bottomMeta: {
     color: 'rgba(255,255,255,0.75)',
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 20,
   },
   ctaBtn: {

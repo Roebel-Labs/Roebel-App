@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   labelSmall: {
     fontSize: 11,

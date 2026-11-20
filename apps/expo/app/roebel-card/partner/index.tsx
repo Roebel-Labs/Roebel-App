@@ -193,7 +193,7 @@ function ReadyState({
           </Text>
           <Text style={[styles.chartAccent, { color: colors.textSecondary }]}>
             Offen{' '}
-            <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-SemiBold' }}>
+            <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-SemiBold' }}>
               {formatEuros(partner.pending_balance_cents)}
             </Text>
           </Text>
@@ -542,12 +542,12 @@ const styles = StyleSheet.create({
   stateEmoji: { fontSize: 56, marginBottom: 8 },
   stateTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     textAlign: 'center',
   },
   stateBody: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 16,
@@ -561,15 +561,15 @@ const styles = StyleSheet.create({
   },
   statePrimaryText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   statusBanner: {
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },
-  statusTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
-  statusSubtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4, opacity: 0.9 },
+  statusTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold' },
+  statusSubtitle: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 4, opacity: 0.9 },
   kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -585,12 +585,12 @@ const styles = StyleSheet.create({
   },
   kpiValue: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     letterSpacing: -0.3,
   },
   kpiLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   chartCard: {
     borderRadius: 16,
@@ -605,17 +605,17 @@ const styles = StyleSheet.create({
   },
   chartEyebrow: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   chartAccent: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   sectionHeading: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginTop: 8,
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  emptyText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  emptyText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   chargeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -647,9 +647,9 @@ const styles = StyleSheet.create({
   },
   chargeRowLeft: { flex: 1, gap: 4 },
   chargeRowRight: { alignItems: 'flex-end', gap: 4 },
-  chargeAmount: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  chargeNote: { fontSize: 12, fontFamily: 'Inter-Regular' },
-  chargeDate: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  chargeAmount: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  chargeNote: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
+  chargeDate: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
   statusPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     color: '#ffffff',
   },
   quietRow: {
@@ -671,6 +671,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 4,
   },
-  quietTitle: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  quietSubtitle: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  quietTitle: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  quietSubtitle: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
 });

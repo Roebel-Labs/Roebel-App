@@ -218,6 +218,6 @@ const styles = StyleSheet.create({
   },
   rowText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

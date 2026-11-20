@@ -869,7 +869,7 @@ function PublicAccountScreenInner() {
                   },
                 ]}
               >
-                <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 15 }}>
+                <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium', fontSize: 15 }}>
                   Auf Karte ansehen →
                 </Text>
               </Pressable>
@@ -1272,7 +1272,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   subTypeText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tabsWrap: {
     marginTop: 20,
@@ -1388,17 +1388,17 @@ const styles = StyleSheet.create({
   },
   sectionCount: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   bioText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   linkText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   membersRow: {
     flexDirection: 'row',
@@ -1407,7 +1407,7 @@ const styles = StyleSheet.create({
   },
   membersCount: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   hList: {
     gap: 12,
@@ -1429,12 +1429,12 @@ const styles = StyleSheet.create({
   },
   mediaCardTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 18,
   },
   mediaCardMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   locationButton: {
     paddingHorizontal: 16,
@@ -1445,7 +1445,7 @@ const styles = StyleSheet.create({
   },
   openStatus: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   hoursList: {
     gap: 6,
@@ -1457,12 +1457,12 @@ const styles = StyleSheet.create({
   },
   hoursDay: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 40,
   },
   hoursTime: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   ctaButton: {
     borderWidth: 1,
@@ -1481,12 +1481,12 @@ const styles = StyleSheet.create({
   },
   gastroCategoryName: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   gastroEmpty: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingVertical: 12,
   },
   gastroItemRow: {
@@ -1497,7 +1497,7 @@ const styles = StyleSheet.create({
   },
   gastroItemName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   gastroMetaRow: {
     flexDirection: 'row',
@@ -1507,11 +1507,11 @@ const styles = StyleSheet.create({
   },
   gastroItemPrice: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   gastroItemDesc: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   gastroThumb: {

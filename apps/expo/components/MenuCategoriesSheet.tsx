@@ -38,7 +38,7 @@ export default function MenuCategoriesSheet({ visible, categories, activeIndex, 
                 style={[
                   styles.rowText,
                   { color: active ? colors.primary : colors.textPrimary },
-                  active && { fontFamily: 'Inter-Medium' },
+                  active && { fontFamily: 'MonaSans-Medium' },
                 ]}
               >
                 {item.name}
@@ -56,10 +56,10 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
   },
-  title: { fontSize: 16, fontFamily: 'Inter-Medium' },
+  title: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
   row: {
     paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  rowText: { fontSize: 16, fontFamily: 'Inter-Regular' },
+  rowText: { fontSize: 16, fontFamily: 'MonaSans-Regular' },
 });

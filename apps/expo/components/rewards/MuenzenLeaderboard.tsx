@@ -288,13 +288,13 @@ const styles = StyleSheet.create({
     left: -7,
   },
   podiumName: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
     marginTop: 8,
     maxWidth: '100%',
   },
   podiumAmount: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
   },
   avatarRing: {
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarFallbackText: {
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   amountRow: {
     flexDirection: 'row',
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   rowRank: {
     width: 22,
     textAlign: 'center',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
   },
   rowAvatarWrap: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rowName: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
     flexShrink: 1,
   },
@@ -368,16 +368,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   youPillText: {
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     fontSize: 11,
     color: '#FFFFFF',
   },
   rowSubtitle: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
   },
   rowAmount: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   emptyState: {
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 32 },
   emptyText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     textAlign: 'center',
   },

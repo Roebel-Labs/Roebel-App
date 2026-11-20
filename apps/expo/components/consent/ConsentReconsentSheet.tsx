@@ -143,18 +143,18 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 6,
   },
   headline: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 28,
     marginBottom: 12,
   },
   intro: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   primary: {
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   secondary: {
     paddingVertical: 14,
@@ -192,6 +192,6 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

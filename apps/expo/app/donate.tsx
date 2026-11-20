@@ -312,7 +312,7 @@ function DetailRow({
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.detailLabel}>{label}</Text>
         <Text
-          style={[styles.detailValue, mono && { fontFamily: "GeistMono-Regular", fontSize: 12 }]}
+          style={[styles.detailValue, mono && { fontFamily: "MonaSansMono-Regular", fontSize: 12 }]}
           numberOfLines={1}
         >
           {value}
@@ -338,7 +338,7 @@ function makeStyles(colors: any) {
     backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
     headerTitle: { fontFamily: "MonaSansSemiCondensed-SemiBold", fontSize: 17, color: colors.textPrimary },
     content: { paddingHorizontal: 16, paddingBottom: 24 },
-    lead: { fontFamily: "Inter-Regular", fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginBottom: 16 },
+    lead: { fontFamily: "MonaSans-Regular", fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginBottom: 16 },
     loadingBox: { paddingVertical: 40, alignItems: "center" },
     card: {
       backgroundColor: colors.card,
@@ -348,8 +348,8 @@ function makeStyles(colors: any) {
       padding: 16,
       marginBottom: 12,
     },
-    cardTitle: { fontFamily: "Inter-SemiBold", fontSize: 16, color: colors.textPrimary, marginBottom: 6 },
-    cardBody: { fontFamily: "Inter-Regular", fontSize: 14, lineHeight: 21, color: colors.textSecondary, marginBottom: 12 },
+    cardTitle: { fontFamily: "MonaSans-SemiBold", fontSize: 16, color: colors.textPrimary, marginBottom: 6 },
+    cardBody: { fontFamily: "MonaSans-Regular", fontSize: 14, lineHeight: 21, color: colors.textSecondary, marginBottom: 12 },
     presetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
     presetBtn: {
       borderWidth: 1,
@@ -360,7 +360,7 @@ function makeStyles(colors: any) {
       backgroundColor: colors.background,
     },
     presetBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    presetText: { fontFamily: "Inter-SemiBold", fontSize: 14, color: colors.textPrimary },
+    presetText: { fontFamily: "MonaSans-SemiBold", fontSize: 14, color: colors.textPrimary },
     presetTextActive: { color: colors.primaryForeground ?? "#FFFFFF" },
     input: {
       borderWidth: 1,
@@ -368,7 +368,7 @@ function makeStyles(colors: any) {
       borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 12,
-      fontFamily: "Inter-Regular",
+      fontFamily: "MonaSans-Regular",
       fontSize: 14,
       color: colors.textPrimary,
       backgroundColor: colors.background,
@@ -381,8 +381,8 @@ function makeStyles(colors: any) {
       alignItems: "center",
       justifyContent: "center",
     },
-    primaryBtnText: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
-    finePrint: { fontFamily: "Inter-Regular", fontSize: 11, lineHeight: 16, color: colors.textTertiary, marginTop: 10, textAlign: "center" },
+    primaryBtnText: { fontFamily: "MonaSans-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
+    finePrint: { fontFamily: "MonaSans-Regular", fontSize: 11, lineHeight: 16, color: colors.textTertiary, marginTop: 10, textAlign: "center" },
     detailRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -395,8 +395,8 @@ function makeStyles(colors: any) {
       marginBottom: 8,
       backgroundColor: colors.background,
     },
-    detailLabel: { fontFamily: "Inter-Regular", fontSize: 11, color: colors.textTertiary, marginBottom: 2 },
-    detailValue: { fontFamily: "Inter-SemiBold", fontSize: 14, color: colors.textPrimary },
+    detailLabel: { fontFamily: "MonaSans-Regular", fontSize: 11, color: colors.textTertiary, marginBottom: 2 },
+    detailValue: { fontFamily: "MonaSans-SemiBold", fontSize: 14, color: colors.textPrimary },
     copyBtn: {
       borderWidth: 1,
       borderColor: colors.border,
@@ -404,10 +404,10 @@ function makeStyles(colors: any) {
       paddingHorizontal: 10,
       paddingVertical: 6,
     },
-    copyBtnText: { fontFamily: "Inter-Medium", fontSize: 12, color: colors.textPrimary },
+    copyBtnText: { fontFamily: "MonaSans-Medium", fontSize: 12, color: colors.textPrimary },
     cryptoToggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    cryptoChevron: { fontFamily: "Inter-SemiBold", fontSize: 18, color: colors.textSecondary },
+    cryptoChevron: { fontFamily: "MonaSans-SemiBold", fontSize: 18, color: colors.textSecondary },
     note: { marginTop: 4, padding: 14, borderRadius: 12, backgroundColor: colors.surface },
-    noteText: { fontFamily: "Inter-Regular", fontSize: 12, lineHeight: 18, color: colors.textTertiary },
+    noteText: { fontFamily: "MonaSans-Regular", fontSize: 12, lineHeight: 18, color: colors.textTertiary },
   });
 }

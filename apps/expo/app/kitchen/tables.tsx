@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   addInputBtn: {
     borderRadius: 10,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   gridCardNumber: {
     fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginTop: 16,
   },
   gridCardFooter: {
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   },
   gridCardAddLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   qrContainer: {

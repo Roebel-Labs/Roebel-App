@@ -114,7 +114,7 @@ function MenuAdminIndexInner() {
                   {counts[cat.id] ?? 0} Gerichte{cat.is_active ? '' : ' · ausgeblendet'}
                 </Text>
               </View>
-              <Text style={{ color: colors.textTertiary, fontFamily: 'Inter-Medium', fontSize: 18 }}>›</Text>
+              <Text style={{ color: colors.textTertiary, fontFamily: 'MonaSans-Medium', fontSize: 18 }}>›</Text>
             </Pressable>
           ))
         )}
@@ -125,14 +125,14 @@ function MenuAdminIndexInner() {
               onPress={() => router.push('/org/menu/category/new' as any)}
               style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
             >
-              <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>+ Neue Kategorie</Text>
+              <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium' }}>+ Neue Kategorie</Text>
             </Pressable>
             {categories.length > 0 && (
               <Pressable
                 onPress={() => router.push({ pathname: '/org/menu/item/new', params: { categoryId: categories[0].id } } as any)}
                 style={[styles.btnGhost, { borderColor: colors.borderSecondary }]}
               >
-                <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-Medium' }}>+ Neues Gericht</Text>
+                <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-Medium' }}>+ Neues Gericht</Text>
               </Pressable>
             )}
           </View>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 40 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  empty: { fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  empty: { fontSize: 14, fontFamily: 'MonaSans-Regular', textAlign: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -178,8 +178,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
-  rowTitle: { fontSize: 16, fontFamily: 'Inter-Medium' },
-  rowMeta: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  rowTitle: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
+  rowMeta: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   actions: { padding: 16, gap: 10 },
   btnPrimary: { paddingVertical: 14, borderRadius: 9999, alignItems: 'center' },
   btnGhost: { paddingVertical: 14, borderRadius: 9999, alignItems: 'center', borderWidth: 1 },

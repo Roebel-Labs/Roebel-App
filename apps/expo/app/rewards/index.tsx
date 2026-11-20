@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
   },
   scroll: { flex: 1 },
@@ -945,11 +945,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   srText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 16,
   },
   ctaSub: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     marginTop: 3,
   },
@@ -973,8 +973,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inviteText: { flex: 1, gap: 2 },
-  inviteTitle: { fontFamily: 'Inter-SemiBold', fontSize: 16 },
-  inviteSub: { fontFamily: 'Inter-Regular', fontSize: 13, lineHeight: 18 },
+  inviteTitle: { fontFamily: 'MonaSans-SemiBold', fontSize: 16 },
+  inviteSub: { fontFamily: 'MonaSans-Regular', fontSize: 13, lineHeight: 18 },
   inviteChevron: { transform: [{ rotate: '180deg' }] },
   cardsRow: {
     flexDirection: 'row',
@@ -988,16 +988,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   squareTitle: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 16,
   },
   squareValue: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 16,
     marginTop: 4,
   },
   squareSub: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     marginTop: 1,
   },
@@ -1028,7 +1028,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   sectionSubtitle: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
   },
   taskList: { gap: 10, marginTop: 4 },
@@ -1041,7 +1041,7 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 32 },
   emptyText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 13,
     textAlign: 'center',
   },
@@ -1056,10 +1056,10 @@ const styles = StyleSheet.create({
   },
   referralMecky: { width: 64, height: 64 },
   referralText: { flex: 1, gap: 2 },
-  referralTitle: { fontFamily: 'Inter-SemiBold', fontSize: 15 },
-  referralSubtitle: { fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 },
+  referralTitle: { fontFamily: 'MonaSans-SemiBold', fontSize: 15 },
+  referralSubtitle: { fontFamily: 'MonaSans-Regular', fontSize: 12, marginTop: 2 },
   referralCode: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 13,
     marginTop: 4,
   },

@@ -41,6 +41,6 @@ export default function WayBackSheet({
 
 const styles = StyleSheet.create({
   container: { paddingTop: 8, gap: 12 },
-  title: { fontSize: 20, fontFamily: 'Inter-Medium', textAlign: 'center' },
+  title: { fontSize: 20, fontFamily: 'MonaSans-Medium', textAlign: 'center' },
   message: { fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 8 },
 });

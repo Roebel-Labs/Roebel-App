@@ -159,14 +159,14 @@ export default function ReceiveSheet({ visible, address, name, username, onClose
 
 const styles = StyleSheet.create({
   inner: { alignItems: 'center', paddingTop: 4 },
-  name: { fontFamily: 'Inter-Bold', fontSize: 22, marginBottom: 22 },
+  name: { fontFamily: 'MonaSans-Bold', fontSize: 22, marginBottom: 22 },
   qrCard: { padding: 16, backgroundColor: '#FFFFFF', borderRadius: 24 },
   qr: { backgroundColor: 'transparent' },
   row: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 20, gap: 10 },
-  rowLabel: { fontFamily: 'Inter-SemiBold', fontSize: 15 },
-  rowValue: { fontFamily: 'Inter-Regular', fontSize: 14, marginTop: 2 },
+  rowLabel: { fontFamily: 'MonaSans-SemiBold', fontSize: 15 },
+  rowValue: { fontFamily: 'MonaSans-Regular', fontSize: 14, marginTop: 2 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   divider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 24, gap: 12 },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth + 1, borderRadius: 1 },
-  dividerLabel: { fontFamily: 'Inter-Medium', fontSize: 12 },
+  dividerLabel: { fontFamily: 'MonaSans-Medium', fontSize: 12 },
 });

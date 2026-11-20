@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   iconLetter: {
     color: '#fff',
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   info: {
     flex: 1,
@@ -104,15 +104,15 @@ const styles = StyleSheet.create({
   },
   kicker: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   description: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   openBtn: {
     paddingHorizontal: 16,
@@ -123,6 +123,6 @@ const styles = StyleSheet.create({
   },
   openBtnText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

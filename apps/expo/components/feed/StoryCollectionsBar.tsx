@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: '#ffffff',
     fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 13,
   },
 });

@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   fallbackText: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
     color: '#1F2937',
     textAlign: 'center',
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   revocationBannerText: {
     flex: 1,
     color: '#FFFFFF',
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 13,
     lineHeight: 18,
   },

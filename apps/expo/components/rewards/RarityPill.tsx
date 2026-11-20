@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },

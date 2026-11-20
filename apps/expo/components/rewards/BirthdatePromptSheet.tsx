@@ -139,12 +139,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headline: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     textAlign: 'center',
   },
   body: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   cta: {
     width: '100%',
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
 });

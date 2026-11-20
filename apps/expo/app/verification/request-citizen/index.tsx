@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
   heading: {
     fontSize: 28,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 34,
     marginBottom: 24,
   },
@@ -145,12 +145,12 @@ const styles = StyleSheet.create({
   stepText: { flex: 1 },
   stepTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
   },
   stepDesc: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 19,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 8, paddingTop: 12 },

@@ -320,15 +320,15 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorName: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   previewContent: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   previewPoll: {
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   pollLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   pollOptionPreview: {
@@ -347,14 +347,14 @@ const styles = StyleSheet.create({
   },
   pollOptionText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   guidelinesSection: {
     gap: 10,
   },
   guidelinesTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 2,
   },
   guidelineRow: {
@@ -365,12 +365,12 @@ const styles = StyleSheet.create({
   guidelineText: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   disclaimer: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
     textAlign: 'center',
   },

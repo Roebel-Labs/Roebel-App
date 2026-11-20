@@ -406,12 +406,12 @@ const styles = StyleSheet.create({
   },
   countdownLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
   },
   countdownTime: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   countdownEmoji: {
     fontSize: 28,
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   },
   timelineHeaderText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     letterSpacing: 1,
   },
   stageRow: {
@@ -463,21 +463,21 @@ const styles = StyleSheet.create({
   },
   stageTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   stageSubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   stageTertiary: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   endedNote: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontStyle: 'italic',
     marginTop: 4,
   },

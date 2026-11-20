@@ -57,11 +57,11 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   title: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginTop: 4,
   },
   barRow: {
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   againstBar: {},
   barText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   ctaButton: {
     marginTop: 8,

@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     marginBottom: 20,
   },
@@ -162,11 +162,11 @@ const styles = StyleSheet.create({
   },
   voteTypeLabel: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   voteTypeValue: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   infoCard: {
     borderRadius: 12,
@@ -175,16 +175,16 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 6,
   },
   infoValue: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   warning: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#EF4444',
     textAlign: 'center',
     marginBottom: 24,

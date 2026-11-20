@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     padding: 0,
   },
   placeholderOverlay: {
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   },
   clearText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 16,
     textAlign: 'center',
     textAlignVertical: 'center',
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   content: {
     flex: 1,
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   noResults: {
     alignItems: 'center',
@@ -537,11 +537,11 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   noResultsSubtext: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   resultsContainer: {
     gap: 8,
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   resultSectionTitle: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   },
   appSectionTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   appSectionGrid: {

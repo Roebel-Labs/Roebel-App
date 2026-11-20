@@ -139,7 +139,7 @@ function makeStyles(colors: any) {
     backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
     headerTitle: { fontFamily: 'MonaSansSemiCondensed-SemiBold', fontSize: 17, color: colors.textPrimary },
     content: { paddingHorizontal: 16, paddingBottom: 24 },
-    lead: { fontFamily: "Inter-Regular", fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginBottom: 16 },
+    lead: { fontFamily: "MonaSans-Regular", fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginBottom: 16 },
     card: {
       backgroundColor: colors.card,
       borderRadius: 16,
@@ -148,9 +148,9 @@ function makeStyles(colors: any) {
       padding: 16,
       marginBottom: 12,
     },
-    cardTitle: { fontFamily: "Inter-SemiBold", fontSize: 16, color: colors.textPrimary, marginBottom: 6 },
-    cardBody: { fontFamily: "Inter-Regular", fontSize: 14, lineHeight: 21, color: colors.textSecondary },
+    cardTitle: { fontFamily: "MonaSans-SemiBold", fontSize: 16, color: colors.textPrimary, marginBottom: 6 },
+    cardBody: { fontFamily: "MonaSans-Regular", fontSize: 14, lineHeight: 21, color: colors.textSecondary },
     note: { marginTop: 4, padding: 14, borderRadius: 12, backgroundColor: colors.surface },
-    noteText: { fontFamily: "Inter-Regular", fontSize: 12, lineHeight: 18, color: colors.textTertiary },
+    noteText: { fontFamily: "MonaSans-Regular", fontSize: 12, lineHeight: 18, color: colors.textTertiary },
   });
 }

@@ -115,7 +115,7 @@ export default function PostPollView({ poll, walletAddress }: Props) {
                   styles.optionText,
                   {
                     color: colors.textPrimary,
-                    fontFamily: isSelected ? 'Inter-Medium' : 'Inter-Regular',
+                    fontFamily: isSelected ? 'MonaSans-Medium' : 'MonaSans-Regular',
                   },
                 ]}
                 numberOfLines={1}
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   percentage: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginLeft: 8,
   },
   footer: {
@@ -181,6 +181,6 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

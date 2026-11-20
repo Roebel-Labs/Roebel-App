@@ -93,12 +93,12 @@ export default function CategoryEditor({ restaurantId, category, onSaved, onDele
         disabled={saving}
         style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: saving ? 0.5 : 1 }]}
       >
-        <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>{saving ? 'Wird gespeichert…' : 'Speichern'}</Text>
+        <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium' }}>{saving ? 'Wird gespeichert…' : 'Speichern'}</Text>
       </Pressable>
 
       {category && (
         <Pressable onPress={remove} style={[styles.btnGhost, { borderColor: colors.error }]}>
-          <Text style={{ color: colors.error, fontFamily: 'Inter-Medium' }}>Kategorie löschen</Text>
+          <Text style={{ color: colors.error, fontFamily: 'MonaSans-Medium' }}>Kategorie löschen</Text>
         </Pressable>
       )}
     </View>
@@ -107,13 +107,13 @@ export default function CategoryEditor({ restaurantId, category, onSaved, onDele
 
 const styles = StyleSheet.create({
   section: { gap: 10, paddingVertical: 8 },
-  label: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  label: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   input: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 15,
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },

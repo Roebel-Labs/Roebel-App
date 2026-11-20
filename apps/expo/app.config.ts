@@ -76,7 +76,29 @@ const config: ExpoConfig = {
     // "Unresolved reference" on newer style APIs (EAS build 280dbb81).
     '@rnmapbox/maps',
     'expo-secure-store',
-    'expo-font',
+    [
+      // Embed the fonts in the binary so nothing waits for them at launch
+      // (hooks/useFonts.ts skips runtime loading when they are present).
+      // File name == PostScript name for every file, so the same
+      // fontFamily string resolves on iOS and Android.
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/Mona-Sans/MonaSans-Regular.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-Medium.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-SemiBold.ttf',
+          './assets/fonts/Mona-Sans/MonaSans-Bold.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Regular.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Medium.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-SemiBold.ttf',
+          './assets/fonts/Mona-SemiCondensed/MonaSansSemiCondensed-Bold.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Regular.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Medium.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-SemiBold.ttf',
+          './assets/fonts/Mona-Mono/MonaSansMono-Bold.ttf',
+        ],
+      },
+    ],
     'expo-web-browser',
     [
       'expo-location',
