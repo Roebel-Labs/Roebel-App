@@ -14,6 +14,8 @@ jest.mock('../miniapps', () => ({
     { slug: 'b', name: 'B', iconUrl: null, primaryColor: '#222', featured: true },
   ]),
 }));
+// Mittagstisch / Diese Woche sync has its own queries (widget-content tests); keep this suite on Mini Apps.
+jest.mock('../widget-content-sync', () => ({ syncContentWidgets: jest.fn(async () => {}) }));
 jest.mock('../miniapp-installs', () => ({ getInstalledMiniAppSlugs: jest.fn(async () => []) }));
 jest.mock('../widget-platform', () => ({ pushToPlatform: jest.fn(async (p: any) => mockPushed.push(p)) }));
 jest.mock('expo-file-system', () => ({

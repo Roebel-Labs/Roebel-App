@@ -5,6 +5,10 @@
  * (24 % radius, primary color behind it, first letter without icon), name below,
  * 4-column grid sized to the widget, last tile "Alle" opens the store.
  */
+// The widget library calls these components as plain functions; the React Compiler's
+// memo hook would make every render throw "Invalid Hook Call" (blank widget).
+'use no memo';
+
 import React from 'react';
 import { FlexWidget, ImageWidget, OverlapWidget, TextWidget } from 'react-native-android-widget';
 import { WIDGET_SETTINGS_URL, WIDGET_STORE_URL, type WidgetApp, type WidgetPayload } from '@/lib/widget-payload';

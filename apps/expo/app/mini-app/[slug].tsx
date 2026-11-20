@@ -66,6 +66,7 @@ import {
   type IdentityGrant,
   type IdentityState,
 } from '@/lib/miniapp-identity';
+import { readV1Choice, saveV1Choice, v1ConnectItems, type V1Choice } from '@/lib/miniapp-connection';
 
 /** Dark stage behind the sheet — same chrome as the MiniAppHost. */
 const CHROME_BG = '#0F1013';
@@ -77,6 +78,54 @@ const BTN_RADIUS = 10;
  * "Zugriff": for a version-2 app the person has opened before, every requested item with its
  * current grant. Each switch (and "Alles entziehen") stores the new grant on the node at once.
  */
+/**
+ * Zugriff for a version-1 app: the connect choice stored on this device (lib/miniapp-connection),
+ * changeable any time, including "connect later" after the dialog was closed.
+ */
+function MiniAppV1AccessSection({ app, reloadKey }: { app: MiniApp; reloadKey: boolean }) {
+  const { colors } = useTheme();
+  const account = useActiveAccount();
+  const { isInstalled } = useInstalledMiniApps();
+  const wallet = account?.address?.toLowerCase() ?? null;
+  const opened = isInstalled(app.slug);
+  const [choice, setChoice] = useState<V1Choice | null>(null);
+  useEffect(() => {
+    if (!wallet || !opened || reloadKey) return;
+    let cancelled = false;
+    void readV1Choice(app.id, wallet).then((c) => {
+      if (!cancelled) setChoice(c ?? { profile: false, address: false });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet, opened, app.id, reloadKey]);
+  if (!wallet || !choice) return null;
+  const set = (key: 'profile' | 'address', v: boolean) => {
+    const next = { ...choice, [key]: v };
+    setChoice(next);
+    void saveV1Choice(app.id, wallet, next);
+  };
+  return (
+    <View style={styles.block}>
+      <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>Zugriff</Text>
+      {v1ConnectItems().map((item) => (
+        <View key={item.key} style={styles.accessRow}>
+          <View style={styles.accessText}>
+            <Text style={[styles.accessTitle, { color: colors.textPrimary }]}>{item.title}</Text>
+            <Text style={[styles.permText, { color: colors.textSecondary }]}>{item.detail}</Text>
+          </View>
+          <Switch
+            value={choice[item.key as 'profile' | 'address']}
+            onValueChange={(v) => set(item.key as 'profile' | 'address', v)}
+            trackColor={{ true: colors.primary, false: colors.surfaceSecondary }}
+            accessibilityLabel={item.title}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function MiniAppAccessSection({ app, reloadKey }: { app: MiniApp; reloadKey: boolean }) {
   const { colors } = useTheme();
   const account = useActiveAccount();
@@ -440,7 +489,11 @@ export default function MiniAppDetailScreen() {
               )}
 
               {/* Zugriff (version 2): what this app may know, withdrawable */}
-              <MiniAppAccessSection app={app} reloadKey={hostVisible} />
+              {app.manifestVersion === 2 || app.preview ? (
+                <MiniAppAccessSection app={app} reloadKey={hostVisible} />
+              ) : (
+                <MiniAppV1AccessSection app={app} reloadKey={hostVisible} />
+              )}
 
               {/* Links */}
               <View style={styles.block}>

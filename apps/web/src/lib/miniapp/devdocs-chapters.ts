@@ -4,10 +4,54 @@
  * Read through devdocs.ts, the single source for the website, llms.txt, llms-full.txt and the MCP.
  */
 
+export const CONNECT_CHAPTER = `## The connect dialog — build for every answer (read this first)
+
+Every mini app, version 1 and version 2, opens with the Röbel connect dialog the first time a
+signed-in person starts it: "Verbinden mit <App>", the list "Diese App sieht" with one check per
+item, and the button "Verbinden". The person can uncheck any item, or close the dialog with ✕.
+The answer is asked once per app and account and can be changed at any time on the app's detail
+page ("Zugriff"). Your app must work for every combination. Treat each item as optional.
+
+What your app receives, per item:
+
+| Item | Shared | Not shared (or not answered yet) |
+|---|---|---|
+| Name und Bild (\`profile\`) | \`user.displayName\`, \`user.avatarUrl\` | both missing |
+| Öffentliche ID (\`address\`) | \`user.id\` = account address; \`wallet.getAccount()\` returns it; signing, \`auth.signIn\`, \`auth.getToken\` (version 1) and \`roebel.pay\` work | \`user.id\` = a pseudonym (stable per app, different in every app); \`wallet.getAccount()\` → \`null\`; \`eth_accounts\` → \`[]\`; signing, \`auth.signIn\` and \`roebel.pay\` reject with \`unauthorized\` |
+| A credential (version 2) | listed in \`sdk.credentials.list()\` | absent from the list |
+| Nothing at all / dialog closed | — | \`sdk.getContext().user\` is \`null\` (same as signed out) |
+
+Rules for agents building a mini app:
+
+1. Start in a useful signed-out state. Show content first; ask for nothing on the first screen.
+2. Never block the whole app because an item is missing. Disable only the feature that needs it
+   and say why in one German sentence, e.g. "Zum Abstimmen brauchst du die Freigabe deiner
+   öffentlichen ID. Ändern kannst du das auf der Seite der Mini-App unter ‚Zugriff'."
+3. Name missing → show a neutral greeting ("Hallo!") and a placeholder avatar, never "undefined".
+4. Use \`user.id\` as your key for per-person data; it is stable for this app whether it is the
+   address or the pseudonym. Do not assume it starts with \`0x\`.
+5. Before any wallet action call \`wallet.getAccount()\`; on \`null\` show the hint from rule 2
+   instead of starting the action. Catch \`unauthorized\` from signing and \`roebel.pay\`.
+6. Version 2: request a credential only when the person opens the feature that needs it
+   (\`sdk.credentials.request([...])\`), not on start. React to \`credentialsChanged\`.
+7. Never store or show the account address in your UI. Never tell the person to "connect a wallet".
+8. Test with the mock: \`window.__NETIZEN_MOCK__ = { context: { user: null } }\`, then with a user
+   without \`displayName\`, then with a pseudonymous \`id\` and \`account: null\`.
+
+\`\`\`js
+const ctx = await sdk.getContext();
+const user = ctx.user;                       // null = not connected / signed out
+const name = user?.displayName ?? 'Hallo!';
+const account = await sdk.wallet.getAccount(); // null = no öffentliche ID shared
+voteButton.disabled = !account;
+if (!account) hint.textContent = 'Zum Abstimmen brauchst du die Freigabe deiner öffentlichen ID.';
+\`\`\``;
+
 export const IDENTITY_CHAPTER = `## Identity and consent (manifest version "2")
 
-A version-2 manifest says what the app may ask the person to share. Version "1" keeps the old
-behaviour and gets none of this.
+A version-2 manifest says which items the connect dialog lists for your app (see "The connect
+dialog" above). A version-1 manifest gets the dialog too, with exactly two items: "Name und
+Bild" and "Öffentliche ID".
 
 \`\`\`json
 {
@@ -23,23 +67,19 @@ behaviour and gets none of this.
 }
 \`\`\`
 
-- \`profile\` — display name and picture. \`address\` — the account address (only for apps that
-  work on chain). \`credentials\` — up to 12 entries, each with a German \`reason\` of 1–120
-  characters that the person reads on the consent sheet.
-- The first time the app opens, the Röbel app shows one consent sheet: every item with its
-  reason, each switchable, "Erlauben" or "Nicht jetzt". A declined item is simply absent: no
-  name, no picture, \`address\` null, the credential missing from \`sdk.credentials.list()\`.
-  A later manifest version asks again only for what is new.
+- \`profile\` — display name and picture. \`address\` — the öffentliche ID (account address; only
+  for apps that work on chain). \`credentials\` — up to 12 entries, each with a German \`reason\`
+  of 1–120 characters.
+- Version 2 stores the answer on the Röbel node, so it follows the person to other devices; a
+  later manifest version asks again only for what is new. Version 1 stores it on the device.
 - Without \`address\` the app gets a pseudonym: a stable id that is different for every mini app,
   so two apps cannot link the same person.
-- \`sdk.getContext().user\` for version 1: \`{ id: <account address>, displayName, avatarUrl, isCitizen }\`.
-  For version 2: \`id\` is the pseudonym (the address only if shared), name and picture only if
-  \`profile\` was allowed, \`isCitizen\` only if the citizen credential was shared; \`null\` when the
-  person is signed out. It stays display-only — never use it for authorisation.
-- Private credentials: the app learns only that the person holds it, nothing else. The sheet
-  says so ("Die App erfährt nur, dass du Mitglied bist.").
-- Withdrawal: everything can be switched off again on the app's detail page ("Zugriff"); the
-  app receives \`credentialsChanged\`.
+- \`sdk.getContext().user\` is display-only — never use it for authorisation. To know who the
+  person is on your server, use the user token (chapter "Verifying the person on your server").
+- Private credentials: the app learns only that the person holds it ("Die App erfährt nur, dass
+  du Mitglied bist.").
+- Withdrawal and later consent: everything can be switched on or off on the app's detail page
+  ("Zugriff"); version-2 apps receive \`credentialsChanged\`.
 - Review: the Röbel team checks that what the manifest asks for matches what the app does.
   Ask for the least you need.`;
 
@@ -204,6 +244,8 @@ A version-2 manifest says whom the app is for and which org it belongs to:
 
 /** The chapters in reading order, with the one-line description llms.txt shows. */
 export const DOCS_CHAPTERS = [
+
+  { id: "connect", text: CONNECT_CHAPTER, summary: "The connect dialog every mini app opens with: what you get per answer and the fallback rules — read first" },
 
   { id: "identity", text: IDENTITY_CHAPTER, summary: "Identity and consent: manifest version 2 identity, consent sheet, pseudonym, context.user, withdrawal" },
 
