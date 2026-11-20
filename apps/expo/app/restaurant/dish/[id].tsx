@@ -169,7 +169,7 @@ function SpecialMenuDishScreenInner() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  heroFallbackWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  heroFallbackWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   heroFallback: { width: 140, height: 140 },
   floatingBack: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   headBlock: { paddingHorizontal: 20, paddingTop: 24 },

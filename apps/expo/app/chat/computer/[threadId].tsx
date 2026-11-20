@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   gap: { marginLeft: 10 },
   stage: { flex: 1, justifyContent: 'center' },
   screen: { width: '100%', backgroundColor: '#0E0E10', overflow: 'hidden' },
-  loading: { ...StyleSheet.absoluteFillObject },
+  loading: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   webview: { flex: 1, backgroundColor: '#000000' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
   mascot: { opacity: 0.55, marginBottom: 14 },

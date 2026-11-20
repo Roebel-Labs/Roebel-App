@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
 
@@ -22,8 +22,10 @@ const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export const ENTRY_MIN_MS = 350;
 const ENTRY_FADE_MS = 220;
-const RETURN_MS = 420;
-const RETURN_INTENSITY = 40;
+/** The detail screen slides out on top for ~350 ms: hold the full blur that long, then sharpen. */
+const RETURN_HOLD_MS = 320;
+const RETURN_MS = 520;
+const RETURN_INTENSITY = 55;
 
 type Props = {
   /** The screen's skeleton (components/skeleton/EntrySkeletons). */
@@ -74,21 +76,32 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
         firstFocus.current = false;
         return undefined;
       }
-      if (reduceMotion.current || !GLASS_BLUR_AVAILABLE) return undefined;
+      if (reduceMotion.current) return undefined;
       blur.value = 1;
       setReturning(true);
-      blur.value = withTiming(0, { duration: RETURN_MS, easing: Easing.out(Easing.cubic) }, (done) => {
-        if (done) runOnJS(setReturning)(false);
-      });
+      blur.value = withDelay(
+        RETURN_HOLD_MS,
+        withTiming(0, { duration: RETURN_MS, easing: Easing.inOut(Easing.cubic) }, (done) => {
+          if (done) runOnJS(setReturning)(false);
+        }),
+      );
       return undefined;
     }, [blur]),
   );
   const blurProps = useAnimatedProps(() => ({ intensity: blur.value * RETURN_INTENSITY }));
+  // Android blurs only by sampling the screen's GlassBackdrop; without one it would be a flat tint.
+  const canBlur = GLASS_BLUR_AVAILABLE && (Platform.OS !== 'android' || !!target?.current);
+  const frost = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.6)';
   const blurStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, blur.value * 1.6) }));
 
   return (
     <>
-      {returning ? (
+      {returning && !canBlur ? (
+        // No real blur here (Android screen without a blur target, or no expo-blur): a frosted
+        // wash of the page colour that clears on the same curve.
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: frost }, blurStyle]} />
+      ) : null}
+      {returning && canBlur ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
           <AnimatedBlurView
             style={StyleSheet.absoluteFill}

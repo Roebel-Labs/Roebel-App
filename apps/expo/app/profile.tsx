@@ -56,7 +56,7 @@ import Animated from 'react-native-reanimated';
 import GlassIconButton from '@/components/GlassIconButton';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
 import { ProfileEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
-import { useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
+import { useNavCompanionStyle, useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
 
 /** How far the header's fade reaches below the bar itself. */
 const HEADER_FADE = 28;
@@ -94,6 +94,7 @@ export default function ProfileScreen() {
   const [headerHeight, setHeaderHeight] = useState(56);
   const chrome = useScrollChrome();
   const navHideStyle = useNavHideStyle(chrome.visible);
+  const companionStyle = useNavCompanionStyle(chrome.visible);
   // The nav clearance lives INSIDE the sheet, so the sheet's own color runs to
   // the very bottom (padding on the scroll content showed a backdrop strip).
   const sheetBottomPad = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
@@ -405,7 +406,8 @@ export default function ProfileScreen() {
             being cut by a hard bar. */}
         <View
           pointerEvents="box-none"
-          style={styles.headerOverlay}
+          // Absolute children ignore the SafeAreaView padding: start below the status bar.
+          style={[styles.headerOverlay, { top: insets.top }]}
           onLayout={(e) => {
             const h = Math.round(e.nativeEvent.layout.height);
             setHeaderHeight((prev) => (prev === h ? prev : h));
@@ -427,7 +429,7 @@ export default function ProfileScreen() {
         </View>
 
         {hasAnyNFT && (
-          <Animated.View style={[styles.qrFab, navHideStyle]}>
+          <Animated.View style={[styles.qrFab, companionStyle]}>
             <GlassIconButton
               size={56}
               tint={colors.primary}

@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
   notFoundBack: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
 
   // Hero
-  heroPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  heroPlaceholder: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   heroCounter: {
     position: 'absolute',
     right: 16,
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridTile: { aspectRatio: 1, borderRadius: 16, overflow: 'hidden' },
   gridMore: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',

@@ -58,7 +58,7 @@ import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 import { ShimmerGroup } from '@/components/feed/Shimmer';
-import { useNavHideStyle } from '@/hooks/useScrollChrome';
+import { useNavCompanionStyle, useNavHideStyle } from '@/hooks/useScrollChrome';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
 import { ExploreEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
 
@@ -183,6 +183,7 @@ export default function ExploreScreen() {
   const lastScrollY = useSharedValue(0);
   const fabVisible = useSharedValue(true);
   const navHideStyle = useNavHideStyle(fabVisible);
+  const miniPlayerStyle = useNavCompanionStyle(fabVisible);
   // When the user taps a result/tile inside the search modal we close the modal
   // and navigate, but flag it to reopen once Explore regains focus — so pressing
   // back from the subpage returns to the search page, not the bare feed.
@@ -514,7 +515,10 @@ export default function ExploreScreen() {
       {!editing && <MapFAB visible={fabVisible} bottomOffset={audioTrack ? 64 : 0} />}
 
       {/* Now-playing bar, floating just above the glass nav */}
-      <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
+      {/* Glides down into the nav's place while the nav is hidden. */}
+      <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, miniPlayerStyle]}>
+        <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
+      </Animated.View>
 
       {/* Bottom Navigation — slides away with the Karte pill on scroll-down, like Austausch */}
       <Animated.View style={[styles.navOverlay, navHideStyle]}>

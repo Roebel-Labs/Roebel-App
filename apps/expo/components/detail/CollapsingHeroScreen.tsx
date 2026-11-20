@@ -56,7 +56,7 @@ export type DetailAction = {
   renderIcon: (color: string) => React.ReactNode;
 };
 
-const BUTTON = 44;
+const BUTTON = 48;
 const INSET_OPEN = 20;
 const INSET_COLLAPSED = 16;
 const BUTTON_GAP = 8;
@@ -433,13 +433,13 @@ const styles = StyleSheet.create({
   },
   rightGroup: { flexDirection: 'row', gap: BUTTON_GAP },
   button: { width: BUTTON, height: BUTTON },
-  glassShadow: { ...StyleSheet.absoluteFillObject, borderRadius: BUTTON / 2 },
+  glassShadow: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: BUTTON / 2 },
   glassClip: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: BUTTON / 2,
     borderWidth: 1,
     overflow: 'hidden',
   },
   buttonHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  iconLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  iconLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
 });

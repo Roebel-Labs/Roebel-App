@@ -770,8 +770,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   liveBox: { width: '100%', backgroundColor: '#000', overflow: 'hidden', borderRadius: FLYER_RADIUS },
-  liveScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  liveCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  liveScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
+  liveCenter: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 10 },
   livePlay: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   liveLabel: { color: '#fff', fontSize: 15, fontFamily: fontFamily.semiBold },
   flyerWrap: {

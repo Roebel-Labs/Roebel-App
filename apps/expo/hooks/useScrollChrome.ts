@@ -47,3 +47,14 @@ export function useNavHideStyle(visible: SharedValue<boolean>) {
     transform: [{ translateY: withTiming(visible.value ? 0 : distance, SLIDE) }],
   }));
 }
+
+/**
+ * Slide for things that float just above the nav (mini player, FABs): when the
+ * nav slides away they glide down into its place instead of hanging in the air
+ * (or disappearing), and rise again with it.
+ */
+export function useNavCompanionStyle(visible: SharedValue<boolean>) {
+  return useAnimatedStyle(() => ({
+    transform: [{ translateY: withTiming(visible.value ? 0 : BOTTOM_NAV_HEIGHT, SLIDE) }],
+  }));
+}

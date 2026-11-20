@@ -96,7 +96,7 @@ export function GeneratedImageCard({ part, onPress, style }: GeneratedImageCardP
 const styles = StyleSheet.create({
   left: { alignSelf: 'flex-start' },
   image: { borderRadius: RADIUS, overflow: 'hidden' },
-  labelOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  labelOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 14 },
   caption: { fontFamily: chatFont.medium, fontSize: 12, marginTop: 5, marginLeft: 6 },
   failed: {

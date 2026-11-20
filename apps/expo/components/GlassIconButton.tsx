@@ -19,7 +19,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
 
-export const GLASS_ICON_BUTTON_SIZE = 44;
+export const GLASS_ICON_BUTTON_SIZE = 48;
 
 type Props = {
   onPress: () => void;
