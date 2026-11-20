@@ -32,7 +32,7 @@ importers:
     devDependencies:
       '@changesets/cli':
         specifier: ^2.29.0
-        version: 2.30.0(@types/node@22.19.15)
+        version: 2.30.0(@types/node@24.19.2)
       prettier:
         specifier: ^3.5.0
         version: 3.8.1
@@ -703,9 +703,15 @@ importers:
       '@hugeicons/react':
         specifier: 1.1.10
         version: 1.1.10(react@19.2.3)
+      '@roebel/card-design':
+        specifier: workspace:*
+        version: link:../../packages/card-design
       '@supabase/supabase-js':
         specifier: ^2.75.0
-        version: 2.100.1(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        version: 2.100.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      canvaskit-wasm:
+        specifier: ^0.40.0
+        version: 0.40.0
       livekit-client:
         specifier: 2.23.0
         version: 2.23.0(@types/dom-mediacapture-record@1.0.22)
@@ -720,7 +726,7 @@ importers:
         version: 19.2.3(react@19.2.3)
       ws:
         specifier: ^8.20.1
-        version: 8.20.1
+        version: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -1103,7 +1109,7 @@ importers:
         version: 2.5.0(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       maci-contracts:
         specifier: 2.5.0
-        version: 2.5.0(t73qi4olluwzfmcjdfuf73su6q)
+        version: 2.5.0(w7ujolpp7jdlpsyctlpz7uyuni)
       maci-crypto:
         specifier: 2.5.0
         version: 2.5.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -1125,7 +1131,7 @@ importers:
         version: 3.1.3(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))
       '@nomicfoundation/hardhat-toolbox':
         specifier: ^5.0.0
-        version: 5.0.0(hgj4z7d2ikbar7skiivalhq57q)
+        version: 5.0.0(3t7lppbpm5msg3qe2a4yfovgei)
       '@types/node':
         specifier: ^20
         version: 20.19.37
@@ -7634,9 +7640,6 @@ packages:
 
   '@types/chai-as-promised@7.1.8':
     resolution: {integrity: sha512-ThlRVIJhr69FLlh6IctTXFkmhtP3NpMZ2QGq69StYLyKZFp/HOp1VdKZj7RvfNWYYcJ1xlbLGLLWj1UvP5u/Gw==}
-
-  '@types/chai@4.3.20':
-    resolution: {integrity: sha512-/pC9HAB5I/xMlc5FP77qjCnI16ChlJfW0tGa0IUcFn38VJrTV6DeZ60NU5KZBtaOZqjdpwTWohz5HU1RrhiYxQ==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -17834,13 +17837,13 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
-  wrap-ansi@9.0.2:
-    resolution: {integrity: sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==}
-    engines: {node: '>=18'}
-
   wrap-ansi@8.1.0:
     resolution: {integrity: sha512-si7QWI6zUMq56bESFvagtmzMdGOtoxfR+Sez11Mobfc7tm+VkUckk9bW2UeffTGVUbOksxmSw0AA2gs8g71NCQ==}
     engines: {node: '>=12'}
+
+  wrap-ansi@9.0.2:
+    resolution: {integrity: sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==}
+    engines: {node: '>=18'}
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
@@ -19805,7 +19808,7 @@ snapshots:
     dependencies:
       '@changesets/types': 6.1.0
 
-  '@changesets/cli@2.30.0(@types/node@22.19.15)':
+  '@changesets/cli@2.30.0(@types/node@24.19.2)':
     dependencies:
       '@changesets/apply-release-plan': 7.1.0
       '@changesets/assemble-release-plan': 6.0.9
@@ -19821,7 +19824,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3(@types/node@22.19.15)
+      '@inquirer/external-editor': 1.0.3(@types/node@24.19.2)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       enquirer: 2.4.1
@@ -22131,6 +22134,13 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.19.15
 
+  '@inquirer/external-editor@1.0.3(@types/node@24.19.2)':
+    dependencies:
+      chardet: 2.1.1
+      iconv-lite: 0.7.2
+    optionalDependencies:
+      '@types/node': 24.19.2
+
   '@inquirer/figures@1.0.15': {}
 
   '@inquirer/input@2.3.0':
@@ -23350,7 +23360,7 @@ snapshots:
       ethereumjs-util: 7.1.5
       hardhat: 2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10)
 
-  '@nomicfoundation/hardhat-toolbox@5.0.0(hgj4z7d2ikbar7skiivalhq57q)':
+  '@nomicfoundation/hardhat-toolbox@5.0.0(3t7lppbpm5msg3qe2a4yfovgei)':
     dependencies:
       '@nomicfoundation/hardhat-chai-matchers': 2.1.2(@nomicfoundation/hardhat-ethers@3.1.3(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10)))(chai@4.5.0)(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))
       '@nomicfoundation/hardhat-ethers': 3.1.3(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))
@@ -23359,7 +23369,7 @@ snapshots:
       '@nomicfoundation/hardhat-verify': 2.1.3(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))
       '@typechain/ethers-v6': 0.5.1(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(typechain@8.3.2(typescript@6.0.3))(typescript@6.0.3)
       '@typechain/hardhat': 9.1.0(@typechain/ethers-v6@0.5.1(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(typechain@8.3.2(typescript@6.0.3))(typescript@6.0.3))(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))(typechain@8.3.2(typescript@6.0.3))
-      '@types/chai': 4.3.20
+      '@types/chai': 5.2.3
       '@types/mocha': 10.0.10
       '@types/node': 20.19.37
       chai: 4.5.0
@@ -28918,7 +28928,7 @@ snapshots:
   '@typechain/ethers-v6@0.5.1(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(typechain@8.3.2(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
       ethers: 6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      lodash: 4.17.23
+      lodash: 4.18.1
       ts-essentials: 7.0.3(typescript@6.0.3)
       typechain: 8.3.2(typescript@6.0.3)
       typescript: 6.0.3
@@ -28979,9 +28989,7 @@ snapshots:
 
   '@types/chai-as-promised@7.1.8':
     dependencies:
-      '@types/chai': 4.3.20
-
-  '@types/chai@4.3.20': {}
+      '@types/chai': 5.2.3
 
   '@types/chai@5.2.3':
     dependencies:
@@ -32153,9 +32161,9 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.21.0:
+  axios@1.21.0(debug@4.4.3):
     dependencies:
-      follow-redirects: 1.16.2
+      follow-redirects: 1.16.2(debug@4.4.3)
       form-data: 4.0.6
       https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
@@ -34652,13 +34660,13 @@ snapshots:
   eth-gas-reporter@0.2.27(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
       '@solidity-parser/parser': 0.14.5
-      axios: 1.14.0(debug@4.4.3)
+      axios: 1.21.0(debug@4.4.3)
       cli-table3: 0.5.1
       colors: 1.4.0
       ethereum-cryptography: 1.2.0
       ethers: 5.8.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       fs-readdir-recursive: 1.1.0
-      lodash: 4.17.23
+      lodash: 4.18.1
       markdown-table: 1.1.3
       mocha: 10.8.2
       req-cwd: 2.0.0
@@ -34667,6 +34675,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - debug
+      - supports-color
       - utf-8-validate
 
   eth-json-rpc-filters@6.0.1:
@@ -35927,7 +35936,9 @@ snapshots:
     optionalDependencies:
       debug: 4.4.3(supports-color@8.1.1)
 
-  follow-redirects@1.16.2: {}
+  follow-redirects@1.16.2(debug@4.4.3):
+    optionalDependencies:
+      debug: 4.4.3(supports-color@8.1.1)
 
   fontfaceobserver@2.3.0: {}
 
@@ -36433,6 +36444,7 @@ snapshots:
       - '@codechecks/client'
       - bufferutil
       - debug
+      - supports-color
       - utf-8-validate
 
   hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10):
@@ -38225,10 +38237,10 @@ snapshots:
       - react-native-b4a
       - utf-8-validate
 
-  maci-contracts@2.5.0(t73qi4olluwzfmcjdfuf73su6q):
+  maci-contracts@2.5.0(w7ujolpp7jdlpsyctlpz7uyuni):
     dependencies:
       '@nomicfoundation/hardhat-ethers': 3.1.3(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(hardhat@2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10))
-      '@nomicfoundation/hardhat-toolbox': 5.0.0(hgj4z7d2ikbar7skiivalhq57q)
+      '@nomicfoundation/hardhat-toolbox': 5.0.0(3t7lppbpm5msg3qe2a4yfovgei)
       '@openzeppelin/contracts': 5.2.0
       '@openzeppelin/merkle-tree': 1.0.8
       circomlibjs: 0.1.7(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -39254,7 +39266,7 @@ snapshots:
 
   node-emoji@1.11.0:
     dependencies:
-      lodash: 4.17.23
+      lodash: 4.18.1
 
   node-exports-info@1.6.0:
     dependencies:
@@ -40323,9 +40335,10 @@ snapshots:
 
   posthog-node@4.18.0(debug@4.4.3):
     dependencies:
-      axios: 1.14.0(debug@4.4.3)
+      axios: 1.21.0(debug@4.4.3)
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   posthog-react-native@4.43.5(3umzfzxo7m3stkqrf3px6p3qhq):
     dependencies:
@@ -42201,7 +42214,7 @@ snapshots:
       globby: 10.0.2
       hardhat: 2.28.6(bufferutil@4.1.0)(ts-node@10.9.2(@types/node@20.19.37)(typescript@6.0.3))(typescript@6.0.3)(utf-8-validate@5.0.10)
       jsonschema: 1.5.0
-      lodash: 4.17.23
+      lodash: 4.18.1
       mocha: 10.8.2
       node-emoji: 1.11.0
       pify: 4.0.1
@@ -43289,7 +43302,7 @@ snapshots:
       fs-extra: 7.0.1
       glob: 7.1.7
       js-sha3: 0.8.0
-      lodash: 4.17.23
+      lodash: 4.18.1
       mkdirp: 1.0.4
       prettier: 2.8.8
       ts-command-line-args: 2.5.1
@@ -44225,7 +44238,7 @@ snapshots:
 
   wait-on@9.5.1:
     dependencies:
-      axios: 1.21.0
+      axios: 1.21.0(debug@4.4.3)
       joi: 18.3.2
       lodash: 4.18.1
       rxjs: 7.8.2
@@ -44412,15 +44425,16 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  wrap-ansi@9.0.2:
-    dependencies:
-      ansi-styles: 6.2.3
-      string-width: 7.2.0
-
   wrap-ansi@8.1.0:
     dependencies:
       ansi-styles: 6.2.3
       string-width: 5.1.2
+      strip-ansi: 7.2.0
+
+  wrap-ansi@9.0.2:
+    dependencies:
+      ansi-styles: 6.2.3
+      string-width: 7.2.0
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
@@ -44459,8 +44473,6 @@ snapshots:
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 5.0.10
-
-  ws@8.20.1: {}
 
   ws@8.20.1(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     optionalDependencies:

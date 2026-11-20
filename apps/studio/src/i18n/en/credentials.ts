@@ -133,6 +133,15 @@ const en: Record<string, string> = {
   'Abzeichen jetzt anlegen': 'Create the badge now',
   'Noch keine Teilnehmenden': 'No attendees yet',
   '{a} Teilnehmende · {i} eingeladen · {c} angenommen': '{a} attendees · {i} invited · {c} accepted',
+  // Card designer (D3)
+  'Änderungen nicht veröffentlicht': 'Changes not published',
+  'Neuer Ausweis': 'New credential',
+  'Ohne Namen': 'Untitled',
+  Gestalten: 'Design',
+  'Entwurf löschen': 'Delete draft',
+  'Entwurf löschen?': 'Delete draft?',
+  '„{name}“ wird gelöscht. Das kann nicht rückgängig gemacht werden.': '“{name}” will be deleted. This cannot be undone.',
+  'Das Bild ist zu groß (höchstens 8 MB).': 'The image is too large (8 MB at most).',
 };
 
 export default en;

@@ -12,6 +12,10 @@ export interface TabContext {
   /** Reports an error; a lost session switches the section to the sign-in hint. */
   onError: (e: unknown) => void;
   reloadOrgs: () => void;
+  /** The register is on and the org is in it: types can be listed and designs published. */
+  register: boolean;
+  /** The card designer is switched on (drafts work without the register). */
+  designer: boolean;
 }
 
 export function CredTab({ tab, ctx }: { tab: string; ctx: TabContext }) {
