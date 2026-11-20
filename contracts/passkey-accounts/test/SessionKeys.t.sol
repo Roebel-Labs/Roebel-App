@@ -466,6 +466,8 @@ contract SessionKeysTest is PasskeySafeBase {
         _migrate(true);
         uint256 deposit0 = paymaster.getDeposit();
         uint256 personal0 = _personalBal();
+        // Max claims hourly on the live chain; step past the current hour so issuance > 0
+        vm.warp(block.timestamp + 1 hours);
         (uint256 issuance,,) = hub.calculateIssuance(MAX_LEGACY);
         assertGt(issuance, 0, "Max has Muenzen to claim on the fork");
 
