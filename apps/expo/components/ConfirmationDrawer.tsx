@@ -114,7 +114,7 @@ export default function ConfirmationDrawer({
 
           {/* Cancel Button */}
           <Pressable
-            style={[styles.cancelButton, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
+            style={[styles.cancelButton, { backgroundColor: colors.sheet, borderColor: colors.borderSecondary }]}
             onPress={onCancel}
             disabled={isLoading}
             android_ripple={{ color: colors.borderSecondary }}

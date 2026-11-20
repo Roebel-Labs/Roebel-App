@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   Pressable,
@@ -11,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import SheetModal from '@/components/ui/SheetModal';
 import { useTheme } from '@/context/ThemeContext';
 import { useLocation } from '@/context/LocationContext';
 import { submitHelpRequest, type HelpRequestType } from '@/lib/supabase-pois';
@@ -94,12 +94,11 @@ export default function VerlorenSheet({ visible, onClose, walletAddress, userNam
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <SheetModal visible={visible} onRequestClose={onClose} onBackdropPress={onClose} statusBarTranslucent={false}>
       <View
         style={[
           styles.sheet,
-          { backgroundColor: colors.background, paddingBottom: Math.max(36, insets.bottom) },
+          { backgroundColor: colors.sheet, paddingBottom: Math.max(36, insets.bottom) },
         ]}
       >
         <View style={styles.handle} />
@@ -174,15 +173,11 @@ export default function VerlorenSheet({ visible, onClose, walletAddress, userNam
           <Text style={[styles.closeText, { color: colors.textSecondary }]}>Schließen</Text>
         </Pressable>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
     position: 'absolute',
     bottom: 0,

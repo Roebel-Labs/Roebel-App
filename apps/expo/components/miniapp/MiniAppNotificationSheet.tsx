@@ -10,9 +10,10 @@
  * decision (lib/miniapp-notifications.ts).
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import SheetModal from '@/components/ui/SheetModal';
 import { fontFamily } from '@/constants/theme';
 import { CloseIcon, VerifiedIcon } from '@/components/miniapp/hostIcons';
 import { AppIcon } from '@/components/miniapp/MiniAppCard';
@@ -37,17 +38,15 @@ export default function MiniAppNotificationSheet({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
-      <Pressable style={styles.backdrop} onPress={busy ? undefined : onDismiss}>
-        <Pressable
+    <SheetModal visible={visible} onRequestClose={onDismiss} onBackdropPress={busy ? undefined : onDismiss}>
+        <View
           style={[
             styles.card,
             {
-              backgroundColor: colors.card,
+              backgroundColor: colors.sheet,
               marginBottom: Math.max(insets.bottom, 12) + 12,
             },
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           {/* Icon + ✕ */}
           <View style={styles.topRow}>
@@ -93,18 +92,12 @@ export default function MiniAppNotificationSheet({
               {busy ? 'Wird gespeichert…' : 'Benachrichtigungen aktivieren'}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </View>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
   // Floating card: inset from every edge, rounded on ALL corners.
   card: {
     marginHorizontal: 12,

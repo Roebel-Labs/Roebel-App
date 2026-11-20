@@ -201,8 +201,8 @@ function ReplacedSessionNotice() {
   if (!key || replacedKey !== key) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => undefined}>
-      <View style={styles.backdrop}>
-        <View style={[styles.notice, { backgroundColor: colors.surface }]} accessibilityRole="alert">
+      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
+        <View style={[styles.notice, { backgroundColor: colors.sheet }]} accessibilityRole="alert">
           <Text style={[styles.noticeText, { color: colors.textPrimary }]}>
             Dieses Konto wurde auf einem anderen Gerät wiederhergestellt. Auf diesem Gerät bist du jetzt abgemeldet.
           </Text>
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   body: { fontFamily: fontFamily.medium, fontSize: 16, lineHeight: 22, color: '#fff' },
   error: { fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 20, color: '#fff' },
   button: { backgroundColor: '#fff', borderColor: '#fff' },
-  backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { flex: 1, justifyContent: 'center', padding: 24 },
   notice: { borderRadius: 16, padding: 20, gap: 16 },
   noticeText: { fontFamily: fontFamily.semiBold, fontSize: 18, lineHeight: 25 },
 });

@@ -8,12 +8,13 @@
  * the choice later on the app's detail page.
  */
 import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ConsentKey } from '@netizen-labs/miniapp-sdk/host';
 import { useTheme } from '@/context/ThemeContext';
+import SheetModal from '@/components/ui/SheetModal';
 import { fontFamily } from '@/constants/theme';
 import { CloseIcon } from '@/components/miniapp/hostIcons';
 import { CONSENT_COPY, type ConsentItem } from '@/lib/miniapp-identity';
@@ -70,9 +71,8 @@ export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, 
   const inkOn = isDark ? '#111114' : '#FFFFFF';
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={locked ? undefined : onLater}>
-      <View style={styles.backdrop}>
-        <View style={[styles.card, { backgroundColor: colors.card, marginBottom: Math.max(insets.bottom, 12) + 12 }]}>
+    <SheetModal visible={visible} onRequestClose={locked ? undefined : onLater}>
+        <View style={[styles.card, { backgroundColor: colors.sheet, marginBottom: Math.max(insets.bottom, 12) + 12 }]}>
           <View style={styles.topRow}>
             <View style={[styles.icon, { backgroundColor: colors.surfaceSecondary }]}>
               {iconUrl ? (
@@ -147,17 +147,11 @@ export default function MiniAppConsentSheet({ visible, appName, iconUrl, items, 
             </Pressable>
           )}
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
   card: {
     marginHorizontal: 12,
     borderRadius: 28,

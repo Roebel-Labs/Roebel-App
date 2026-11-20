@@ -62,11 +62,11 @@ export default function VoteConfirmationDrawer({
       animationType="fade"
       onRequestClose={onCancel}
     >
-      <Pressable style={styles.overlay} onPress={onCancel}>
+      <Pressable style={[styles.overlay, { backgroundColor: colors.scrim }]} onPress={onCancel}>
         <Pressable
           style={[
             styles.drawer,
-            { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) },
+            { backgroundColor: colors.sheet, paddingBottom: Math.max(32, insets.bottom) },
           ]}
           onPress={(e) => e.stopPropagation()}
         >
@@ -130,7 +130,6 @@ export default function VoteConfirmationDrawer({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   drawer: {

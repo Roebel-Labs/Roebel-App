@@ -34,11 +34,11 @@ export default function NotificationPromptDrawer({
       statusBarTranslucent
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onDismiss} />
+        <Pressable style={[styles.backdrop, { backgroundColor: colors.scrim }]} onPress={onDismiss} />
         <View
           style={[
             styles.drawer,
-            { backgroundColor: colors.background, paddingBottom: Math.max(40, insets.bottom) },
+            { backgroundColor: colors.sheet, paddingBottom: Math.max(40, insets.bottom) },
           ]}
         >
           <View style={[styles.handle, { backgroundColor: colors.borderSecondary }]} />
@@ -79,7 +79,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   drawer: {
     borderTopLeftRadius: 24,

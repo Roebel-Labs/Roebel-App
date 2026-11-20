@@ -66,12 +66,12 @@ export function ConsentReconsentSheet() {
 
   return (
     <Modal visible animationType="none" transparent statusBarTranslucent>
-      <Animated.View style={[styles.backdrop, { opacity: fade }]}>
+      <Animated.View style={[styles.backdrop, { backgroundColor: colors.scrim }, { opacity: fade }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleConfirm} />
         <Animated.View
           style={[
             styles.sheet,
-            { backgroundColor: colors.background, transform: [{ translateY: translate }] },
+            { backgroundColor: colors.sheet, transform: [{ translateY: translate }] },
           ]}
         >
           <SafeAreaView edges={['bottom']}>
@@ -119,7 +119,6 @@ export function ConsentReconsentSheet() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {

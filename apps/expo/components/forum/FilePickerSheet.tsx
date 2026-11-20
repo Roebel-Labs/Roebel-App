@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import SheetModal from '@/components/ui/SheetModal';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { ALLOWED_ATTACHMENT_MIMES } from '@/lib/forum-attachments';
@@ -25,9 +26,8 @@ export default function FilePickerSheet({ visible, onClose, onPicked, onError }:
   const { colors } = useTheme();
   const html = useMemo(() => buildFilePickerHtml(ALLOWED_ATTACHMENT_MIMES), []);
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+    <SheetModal visible={visible} onRequestClose={onClose} statusBarTranslucent={false}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheet }]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Datei anhängen</Text>
             <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Schließen">
@@ -59,13 +59,11 @@ export default function FilePickerSheet({ visible, onClose, onPicked, onError }:
             />
           )}
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, gap: 8, height: 280 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 17, fontFamily: fontFamily.semiBold },

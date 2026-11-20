@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   Pressable,
   TextInput,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import SheetModal from '@/components/ui/SheetModal';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { parseTalerAmount } from '@/lib/roebel-taler';
@@ -110,15 +110,12 @@ export default function MuenzenSendSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose}>
-        <View />
-      </Pressable>
+    <SheetModal visible={visible} onRequestClose={handleClose} onBackdropPress={handleClose} statusBarTranslucent={false}>
       <View
         style={[styles.sheetWrap, { paddingBottom: keyboardHeight }]}
         pointerEvents="box-none"
       >
-        <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheet, borderColor: colors.border }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -183,15 +180,11 @@ export default function MuenzenSendSheet({
           </Pressable>
         </View>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheetWrap: {
     flex: 1,
     justifyContent: 'flex-end',

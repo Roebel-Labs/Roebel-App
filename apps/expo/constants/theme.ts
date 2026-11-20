@@ -81,6 +81,10 @@ export const lightColors = {
   surface: '#F7F7F7',
   surfaceSecondary: '#f5f5f5',
   feedBackground: '#F0F0F0',
+  /** Bottom sheets and dialogs — elevated above the page (lighter than it in dark mode). */
+  sheet: '#ffffff',
+  /** Dimming overlay behind sheets and dialogs. */
+  scrim: 'rgba(0, 0, 0, 0.38)',
 
   // Text
   textPrimary: '#000000',
@@ -160,6 +164,9 @@ export const dimColors = {
   surface: '#3c4043',
   surfaceSecondary: '#2d2e31',
   feedBackground: '#18191B',
+  /** Sheets/dialogs sit a few steps above the #18191B page. */
+  sheet: '#26272A',
+  scrim: 'rgba(0, 0, 0, 0.55)',
 
   // Text
   textPrimary: '#e8eaed',
@@ -240,6 +247,9 @@ export const darkColors = {
   surface: '#202327',
   surfaceSecondary: '#16181C',
   feedBackground: '#000000',
+  /** iOS elevated system background — lifts sheets off pure black. */
+  sheet: '#1C1C1E',
+  scrim: 'rgba(0, 0, 0, 0.6)',
 
   // Borders
   border: '#2F3336',

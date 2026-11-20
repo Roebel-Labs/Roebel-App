@@ -96,11 +96,11 @@ export default function PendingChargeModal({ charge, walletAddress, onResolved }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={handleDecline}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
         <View
           style={[
             styles.sheet,
-            { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) },
+            { backgroundColor: colors.sheet, paddingBottom: Math.max(32, insets.bottom) },
           ]}
         >
           <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Zahlungsanfrage</Text>
@@ -167,7 +167,6 @@ function formatCountdown(seconds: number): string {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
   sheet: {

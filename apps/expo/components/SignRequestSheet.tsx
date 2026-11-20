@@ -62,7 +62,7 @@ export default function SignRequestSheet({
           styles.roleCard,
           {
             borderColor: selected ? colors.textPrimary : colors.borderSecondary,
-            backgroundColor: selected ? colors.surface : colors.background,
+            backgroundColor: selected ? colors.surface : colors.sheet,
           },
         ]}
         accessibilityRole="radio"

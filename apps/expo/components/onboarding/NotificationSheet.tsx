@@ -96,13 +96,13 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: colors.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityLabel="Schließen" />
         <Animated.View
           style={[
             styles.sheet,
             {
-              backgroundColor: colors.background,
+              backgroundColor: colors.sheet,
               transform: [{ translateY }],
               paddingBottom: insets.bottom + 24,
             },
@@ -220,7 +220,6 @@ const toggleStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {

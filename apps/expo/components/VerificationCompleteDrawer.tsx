@@ -65,7 +65,7 @@ export default function VerificationCompleteDrawer({
 
           {/* Secondary Button - Dismiss */}
           <Pressable
-            style={[styles.secondaryButton, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
+            style={[styles.secondaryButton, { backgroundColor: colors.sheet, borderColor: colors.borderSecondary }]}
             onPress={onDismiss}
             android_ripple={{ color: colors.borderSecondary }}
           >

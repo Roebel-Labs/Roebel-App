@@ -39,7 +39,7 @@ type Props = {
   keyboardAware?: boolean;
   /** Horizontal content padding. Defaults to 24; full-width lists can pass 16. */
   contentPaddingHorizontal?: number;
-  /** Fixed sheet colours for screens that are always dark (live room); default = theme. */
+  /** Fixed sheet colours for screens that are always dark (live room); default = theme `sheet`. */
   backgroundColor?: string;
   handleColor?: string;
 };
@@ -59,6 +59,11 @@ export default function BottomDrawer({
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const lastGestureDy = useRef(0);
+  const scrimOpacity = translateY.interpolate({
+    inputRange: [0, SCREEN_HEIGHT * 0.6],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   const isDynamic = snapPoint === undefined;
   const drawerHeight = snapPoint !== undefined ? SCREEN_HEIGHT * snapPoint : undefined;
@@ -152,8 +157,13 @@ export default function BottomDrawer({
       statusBarTranslucent
     >
       <OverlayContainer keyboardAware={keyboardAware}>
-        {/* Backdrop */}
-        <Pressable style={styles.backdrop} onPress={closeDrawer} />
+        {/* Scrim — opacity follows the sheet (open, drag, close), so it
+            fades in and out with it instead of popping. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.backdrop, { backgroundColor: colors.scrim, opacity: scrimOpacity }]}
+        />
+        <Pressable style={styles.backdrop} onPress={closeDrawer} accessibilityLabel="Schließen" />
 
         {/* Drawer */}
         <Animated.View
@@ -164,7 +174,7 @@ export default function BottomDrawer({
               : { height: drawerHeight },
             {
               transform: [{ translateY }],
-              backgroundColor: backgroundColor ?? colors.background,
+              backgroundColor: backgroundColor ?? colors.sheet,
             },
           ]}
         >
@@ -205,7 +215,6 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   backdrop: {
     ...StyleSheet.absoluteFill,

@@ -84,7 +84,7 @@ export default function SuccessDrawer({
             {/* Secondary Button */}
             {hasSecondaryAction && (
               <Pressable
-                style={[styles.secondaryButton, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
+                style={[styles.secondaryButton, { backgroundColor: colors.sheet, borderColor: colors.borderSecondary }]}
                 onPress={onSecondaryAction}
                 android_ripple={{ color: colors.borderSecondary }}
               >
@@ -99,7 +99,7 @@ export default function SuccessDrawer({
         {/* Simple Dismiss Button if no actions */}
         {!hasPrimaryAction && !hasSecondaryAction && (
           <Pressable
-            style={[styles.simpleButton, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
+            style={[styles.simpleButton, { backgroundColor: colors.sheet, borderColor: colors.borderSecondary }]}
             onPress={onDismiss}
             android_ripple={{ color: colors.borderSecondary }}
           >

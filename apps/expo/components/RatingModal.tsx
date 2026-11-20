@@ -37,11 +37,11 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
         <View
           style={[
             styles.sheet,
-            { backgroundColor: colors.background, paddingBottom: Math.max(28, insets.bottom) },
+            { backgroundColor: colors.sheet, paddingBottom: Math.max(28, insets.bottom) },
           ]}
         >
           <Text style={[styles.title, { color: colors.textPrimary }]}>{accountName} bewerten</Text>
@@ -98,7 +98,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 28, gap: 16 },
   title: { fontSize: 18, fontFamily: 'MonaSans-Medium' },
   body: { fontSize: 14, fontFamily: 'MonaSans-Regular' },

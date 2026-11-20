@@ -9,7 +9,6 @@
  */
 import React from 'react';
 import {
-  Modal,
   View,
   Text,
   Pressable,
@@ -17,6 +16,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import SheetModal from '@/components/ui/SheetModal';
 import { fontFamily } from '@/constants/theme';
 
 export type WalletConfirmKind = 'transaction' | 'personal_sign' | 'typed_data';
@@ -58,17 +58,12 @@ export default function WalletConfirmSheet({
     request?.cta ?? (request?.kind === 'transaction' ? 'Bezahlen' : 'Signieren');
 
   return (
-    <Modal
+    <SheetModal
       visible={visible && !!request}
-      transparent
-      animationType="slide"
       onRequestClose={onReject}
+      onBackdropPress={busy ? undefined : onReject}
     >
-      <Pressable style={styles.backdrop} onPress={busy ? undefined : onReject}>
-        <Pressable
-          style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={(e) => e.stopPropagation()}
-        >
+        <View style={[styles.sheet, { backgroundColor: colors.sheet, borderColor: colors.border }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
           {request && (
@@ -159,18 +154,12 @@ export default function WalletConfirmSheet({
               </View>
             </>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </View>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

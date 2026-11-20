@@ -79,7 +79,7 @@ export default function BirthdatePromptSheet({
           onPress={openPicker}
           style={[
             styles.dateField,
-            { backgroundColor: colors.background, borderColor: colors.borderSecondary },
+            { backgroundColor: colors.sheet, borderColor: colors.borderSecondary },
           ]}
           accessibilityRole="button"
           accessibilityLabel="Geburtsdatum auswählen"

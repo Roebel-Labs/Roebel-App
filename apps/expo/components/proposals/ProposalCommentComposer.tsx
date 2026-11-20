@@ -206,13 +206,13 @@ export default function ProposalCommentComposer({
       onShow={handleShow}
       onRequestClose={onClose}
     >
-      <Pressable style={styles.scrim} onPress={handleScrimPress} />
+      <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={handleScrimPress} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.kbWrap}
         pointerEvents="box-none"
       >
-        <View style={[styles.dock, { backgroundColor: colors.background, paddingBottom: dockPaddingBottom }]}>
+        <View style={[styles.dock, { backgroundColor: colors.sheet, paddingBottom: dockPaddingBottom }]}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Kommentar schreiben</Text>
 
           {selectedEmoji && (
@@ -364,7 +364,6 @@ export default function ProposalCommentComposer({
 const styles = StyleSheet.create({
   scrim: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   kbWrap: {
     flex: 1,
