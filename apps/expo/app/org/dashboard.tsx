@@ -10,16 +10,15 @@ import GenericDashboardContent from '@/components/dashboard/GenericDashboardCont
 import JournalistDashboardContent from '@/components/dashboard/JournalistDashboardContent';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { SUB_TYPE_LABELS, isExternPending } from '@/lib/types';
-import { useCredentialsGate } from '@/lib/credreg/gate';
+import { useOrgCredentialsVisible } from '@/lib/credreg/org-visibility';
 
 export default function OrgDashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount, roleInActiveAccount } = useAccount();
+  const { activeAccount } = useAccount();
   const subType = activeAccount?.sub_type;
-  const credentialsGate = useCredentialsGate();
-  const showCredentials =
-    credentialsGate === true && (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin');
+  // Gate open, owner/admin, and the org is on chain; other orgs keep today's dashboard.
+  const showCredentials = useOrgCredentialsVisible();
   const [refreshing, setRefreshing] = React.useState(false);
 
   const handleRefresh = async () => {
