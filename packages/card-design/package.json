@@ -9,7 +9,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./canvaskit": "./src/adapters/canvaskit.ts",
-    "./rn-skia": "./src/adapters/rn-skia.ts"
+    "./rn-skia": "./src/adapters/rn-skia.ts",
+    "./fonts/*": "./fonts/*",
+    "./assets/*": "./assets/*"
   },
   "files": [
     "src",
