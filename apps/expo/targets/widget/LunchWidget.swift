@@ -74,17 +74,36 @@ struct LunchEntry: TimelineEntry {
   let page: Int
 }
 
+/// Widget gallery content (a real Röbel Mittagstisch, bundled photos) when no payload exists yet.
+private let sampleLunch = LunchEntry(
+  date: Date(),
+  restaurants: [
+    LunchRestaurant(name: "Bistro zur Waage", dishes: [
+      LunchDish(id: "s1", name: "Hackbraten mit Salzkartoffeln u. Speckbohnen", price: "7,50 €", day: "Heute",
+                image: "asset:previewDish1", url: "roebel://explore"),
+      LunchDish(id: "s2", name: "Kartoffelsuppe mit Bockwurst", price: "7,50 €", day: "Heute",
+                image: "asset:previewDish2", url: "roebel://explore"),
+      LunchDish(id: "s3", name: "Hamburger Schnitzel mit Bratkartoffeln", price: "7,50 €", day: "Morgen",
+                image: "asset:previewDish3", url: "roebel://explore"),
+      LunchDish(id: "s4", name: "Spaghetti mit Schinken-Tomatensahnesoße", price: "7,50 €", day: "Morgen",
+                image: "asset:previewDish4", url: "roebel://explore"),
+    ]),
+    LunchRestaurant(name: "Müritz Terrasse", dishes: []),
+    LunchRestaurant(name: "Delizia", dishes: []),
+  ],
+  page: 0
+)
+
 struct LunchProvider: TimelineProvider {
   private func entry() -> LunchEntry {
     LunchEntry(date: Date(), restaurants: loadLunch(), page: storedPage())
   }
 
-  func placeholder(in context: Context) -> LunchEntry {
-    LunchEntry(date: Date(), restaurants: [], page: 0)
-  }
+  func placeholder(in context: Context) -> LunchEntry { sampleLunch }
 
   func getSnapshot(in context: Context, completion: @escaping (LunchEntry) -> Void) {
-    completion(entry())
+    let e = entry()
+    completion(context.isPreview && e.restaurants.isEmpty ? sampleLunch : e)
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<LunchEntry>) -> Void) {
@@ -104,7 +123,7 @@ struct DishTileView: View {
       GeometryReader { geo in
         ZStack {
           Color("widgetTileFallback")
-          if let b64 = dish.image, let data = Data(base64Encoded: b64), let img = UIImage(data: data) {
+          if let img = widgetImage(dish.image) {
             Image(uiImage: img).resizable().scaledToFill()
           }
         }
@@ -118,7 +137,7 @@ struct DishTileView: View {
       if !meta.isEmpty {
         Text(meta)
           .font(.system(size: 11))
-          .foregroundColor(.secondary)
+            .foregroundColor(Color("widgetSub"))
           .lineLimit(1)
       }
     }
@@ -129,14 +148,22 @@ struct LunchWidgetView: View {
   @Environment(\.widgetFamily) var family
   let entry: LunchEntry
 
-  private var columns: Int { family == .systemSmall ? 1 : 2 }
-  private var rows: Int { family == .systemLarge ? 2 : 1 }
+  /// Same as lunchLayout in apps/expo/lib/widget-layout.ts: small 1 photo, medium 2,
+  /// large 2 × 2, extra large (iPad) 3 × 2.
+  private var columns: Int {
+    switch family {
+    case .systemSmall: return 1
+    case .systemExtraLarge: return 3
+    default: return 2
+    }
+  }
+  private var rows: Int { family == .systemLarge || family == .systemExtraLarge ? 2 : 1 }
 
   var body: some View {
     if entry.restaurants.isEmpty {
       Text("Heute kein Mittagstisch")
         .font(.system(size: 13, weight: .semibold))
-        .foregroundColor(.secondary)
+        .foregroundColor(Color("widgetSub"))
         .multilineTextAlignment(.center)
         .widgetURL(lunchURL)
     } else {
@@ -151,29 +178,42 @@ struct LunchWidgetView: View {
   }
 
   private func header(_ name: String, idx: Int, count: Int) -> some View {
-    HStack(spacing: 4) {
+    HStack(alignment: .center, spacing: 4) {
       Link(destination: lunchURL) {
         Text(name)
-          .font(.system(size: 14, weight: .bold))
+          .font(.system(size: 14, weight: .semibold))
           .foregroundColor(Color("widgetText"))
           .lineLimit(1)
       }
       Spacer(minLength: 4)
-      if count > 1 {
-        Button(intent: LunchStepIntent(step: -1)) {
-          Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(Color("$accent"))
-        Text("\(idx + 1)/\(count)")
-          .font(.system(size: 11))
-          .foregroundColor(.secondary)
-        Button(intent: LunchStepIntent(step: 1)) {
-          Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold))
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(Color("$accent"))
+      if count > 1 { pager(idx: idx, count: count) }
+    }
+    .frame(height: 24)
+  }
+
+  /// ‹ 1/3 › — chevrons black (light) / white (dark), the counter centred between them.
+  private func pager(idx: Int, count: Int) -> some View {
+    HStack(alignment: .center, spacing: 2) {
+      Button(intent: LunchStepIntent(step: -1)) {
+        Image(systemName: "chevron.left")
+          .font(.system(size: 13, weight: .bold))
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .foregroundColor(Color("widgetArrow"))
+      Text("\(idx + 1)/\(count)")
+        .font(.system(size: 11, weight: .medium))
+        .foregroundColor(Color("widgetSub"))
+        .frame(height: 24)
+      Button(intent: LunchStepIntent(step: 1)) {
+        Image(systemName: "chevron.right")
+          .font(.system(size: 13, weight: .bold))
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .foregroundColor(Color("widgetArrow"))
     }
   }
 
@@ -209,6 +249,6 @@ struct LunchWidget: Widget {
     }
     .configurationDisplayName("Mittagstisch")
     .description("Heutige Gerichte der Röbeler Restaurants.")
-    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
   }
 }

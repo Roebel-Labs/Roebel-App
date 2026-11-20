@@ -2,9 +2,11 @@
 //
 // Reads the payload the app writes into the shared App Group (key "widget.payload.v1",
 // see apps/expo/lib/widget-payload.ts for the shape) and draws the same tiles as the
-// Mini-Apps section on Erkunden: rounded icon, name below, 4-column grid, the last tile
-// is "Alle" (store). The timeline never refreshes itself — the app reloads it after
-// every sync (ExtensionStorage.reloadWidget).
+// Mini-Apps section on Erkunden: rounded icon, name below. The recently opened apps
+// come first, the store tile ("Mini-Apps entdecken") is always last. Grid and icon size
+// follow miniAppsGrid in apps/expo/lib/widget-layout.ts: few items grow to fill the
+// widget, many shrink into a grid. The timeline never refreshes itself — the app reloads
+// it after every sync (ExtensionStorage.reloadWidget).
 import SwiftUI
 import UIKit
 import WidgetKit
@@ -12,7 +14,6 @@ import WidgetKit
 private let appGroup = "group.com.maxbrych.roebelonchain.widgets"
 private let payloadKey = "widget.payload.v1"
 private let storeURL = URL(string: "roebel://mini-apps")!
-private let settingsURL = URL(string: "roebel://settings/widget")!
 
 struct WidgetApp: Decodable, Identifiable {
   let slug: String
@@ -43,13 +44,27 @@ private func loadApps() -> [WidgetApp] {
   return payload.apps
 }
 
+/// Widget gallery content (real Röbel mini apps, bundled icons) when no payload exists yet.
+private let sampleApps: [WidgetApp] = [
+  ("roebel-wertstoffhof-abfalltouren", "ABFALLzeiten", "previewAppAbfall"),
+  ("buergerbus-roebel", "Bürgerbus Röbel", "previewAppBus"),
+  ("stadtfuehrung-roebel-mueritz", "Stadtführung", "previewAppStadt"),
+  ("roebel-quiz", "Röbel-Quiz", "previewAppQuiz"),
+  ("roebel-verwaltung-politik", "Verwaltung & Politik", "previewAppPolitik"),
+  ("roebel-sitzungen-store-v3", "Ausschuss-Sitzungen", "previewAppSitzungen"),
+  ("mueritzphone", "MüritzPhone", "previewAppPhone"),
+].map { slug, name, asset in
+  WidgetApp(slug: slug, name: name, color: "#00498B", icon: "asset:\(asset)", unread: false, url: "roebel://mini-apps")
+}
+
 struct Provider: TimelineProvider {
   func placeholder(in context: Context) -> MiniAppsEntry {
-    MiniAppsEntry(date: Date(), apps: [])
+    MiniAppsEntry(date: Date(), apps: sampleApps)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (MiniAppsEntry) -> Void) {
-    completion(MiniAppsEntry(date: Date(), apps: loadApps()))
+    let apps = loadApps()
+    completion(MiniAppsEntry(date: Date(), apps: context.isPreview && apps.isEmpty ? sampleApps : apps))
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<MiniAppsEntry>) -> Void) {
@@ -80,7 +95,7 @@ struct AppIconView: View {
     ZStack(alignment: .topTrailing) {
       ZStack {
         Color(hex: app.color) ?? Color("widgetTileFallback")
-        if let b64 = app.icon, let data = Data(base64Encoded: b64), let img = UIImage(data: data) {
+        if let img = widgetImage(app.icon, maxSide: 192) {
           Image(uiImage: img).resizable().scaledToFill()
         } else {
           Text(String(app.name.prefix(1)).uppercased())
@@ -105,9 +120,10 @@ struct AppIconView: View {
 
 struct TileLabel: View {
   let text: String
+  var size: CGFloat = 11
   var body: some View {
     Text(text)
-      .font(.system(size: 11, weight: .medium))
+      .font(.system(size: size, weight: .medium))
       .foregroundColor(Color("widgetText"))
       .lineLimit(1)
       .truncationMode(.tail)
@@ -117,60 +133,64 @@ struct TileLabel: View {
 struct AppTile: View {
   let app: WidgetApp
   let size: CGFloat
+  let label: CGFloat?
   var body: some View {
     VStack(spacing: 4) {
       AppIconView(app: app, size: size)
-      TileLabel(text: app.name)
+      if let label { TileLabel(text: app.name, size: label) }
     }
   }
 }
 
 struct StoreTile: View {
   let size: CGFloat
+  let label: CGFloat?
+  let text: String
   var body: some View {
     VStack(spacing: 4) {
       Image("storeIcon").resizable().scaledToFit().frame(width: size, height: size)
-      TileLabel(text: "Alle")
+      if let label { TileLabel(text: text, size: label) }
     }
+  }
+}
+
+/// Port of miniAppsGrid (apps/expo/lib/widget-layout.ts) for the inner widget size.
+struct MiniAppsGrid {
+  let cols: Int
+  let rows: Int
+  let icon: CGFloat
+  let labels: Bool
+  let labelSize: CGFloat
+  let apps: Int
+
+  init(appCount: Int, size: CGSize) {
+    let w = max(0, size.width)
+    let h = max(0, size.height)
+    let labels = h >= 58
+    let maxCols = min(6, max(1, Int(w / (labels ? 60 : 52))))
+    let maxRows = min(4, max(1, Int(h / (labels ? 60 : 44))))
+    let apps = min(max(0, appCount), maxCols * maxRows - 1)
+    let items = apps + 1
+    let below: CGFloat = labels ? 24 : 6
+    var best = (cols: 1, rows: 1, icon: CGFloat(-1))
+    for cols in 1...max(1, min(items, maxCols)) {
+      let rows = Int(ceil(Double(items) / Double(cols)))
+      if rows > maxRows { continue }
+      let icon = min(w / CGFloat(cols) - 12, h / CGFloat(rows) - below)
+      if icon > best.icon + 0.5 { best = (cols, rows, icon) }
+    }
+    self.cols = best.cols
+    self.rows = best.rows
+    self.icon = min(84, max(24, best.icon.rounded(.down)))
+    self.labels = labels
+    self.labelSize = self.icon >= 64 ? 13 : 11
+    self.apps = apps
   }
 }
 
 struct MiniAppsWidgetView: View {
   @Environment(\.widgetFamily) var family
   let entry: MiniAppsEntry
-
-  private var columns: Int { family == .systemSmall ? 2 : 4 }
-  private var rows: Int { family == .systemLarge ? 4 : 2 }
-  private let rowSpacing: CGFloat = 6
-  /// Label (11 pt, one line) + the gap above it.
-  private let labelHeight: CGFloat = 18
-
-  /// Icon size from the real widget size (it differs per device): fill the rows
-  /// without clipping, never wider than the column, capped like the Erkunden grid.
-  private func iconSize(_ size: CGSize) -> CGFloat {
-    let byHeight = (size.height - rowSpacing * CGFloat(rows - 1)) / CGFloat(rows) - labelHeight
-    let byWidth = size.width / CGFloat(columns) - 12
-    return max(24, min(56, byHeight, byWidth))
-  }
-
-  var body: some View {
-    if entry.apps.isEmpty {
-      VStack(spacing: 8) {
-        Image("storeIcon").resizable().scaledToFit().frame(width: 40, height: 40)
-        Text("Mini Apps auswählen")
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(Color("widgetText"))
-          .multilineTextAlignment(.center)
-      }
-      .widgetURL(settingsURL)
-    } else {
-      GeometryReader { geo in
-        grid(icon: iconSize(geo.size), width: geo.size.width)
-      }
-      // Small widgets have a single tap target: open the store.
-      .widgetURL(family == .systemSmall ? storeURL : nil)
-    }
-  }
 
   private enum Slot: Identifiable {
     case app(WidgetApp)
@@ -183,35 +203,44 @@ struct MiniAppsWidgetView: View {
     }
   }
 
-  private func grid(icon: CGFloat, width: CGFloat) -> some View {
-    let slots: [Slot] = entry.apps.prefix(columns * rows - 1).map { Slot.app($0) } + [.store]
-    let colWidth = width / CGFloat(columns)
-    return VStack(alignment: .leading, spacing: rowSpacing) {
-      ForEach(0..<Int(ceil(Double(slots.count) / Double(columns))), id: \.self) { r in
-        HStack(spacing: 0) {
-          ForEach(slots[(r * columns)..<min(slots.count, r * columns + columns)]) { slot in
-            tile(slot, icon: icon).frame(width: colWidth)
+  var body: some View {
+    GeometryReader { geo in
+      let grid = MiniAppsGrid(appCount: entry.apps.count, size: geo.size)
+      let slots: [Slot] = entry.apps.prefix(grid.apps).map { Slot.app($0) } + [.store]
+      let colWidth = geo.size.width / CGFloat(grid.cols)
+      let rowHeight = geo.size.height / CGFloat(grid.rows)
+      VStack(spacing: 0) {
+        ForEach(0..<grid.rows, id: \.self) { r in
+          HStack(spacing: 0) {
+            ForEach(slots[min(slots.count, r * grid.cols)..<min(slots.count, r * grid.cols + grid.cols)]) { slot in
+              tile(slot, grid: grid, colWidth: colWidth).frame(width: colWidth, height: rowHeight)
+            }
           }
+          .frame(maxWidth: .infinity)
         }
       }
-      Spacer(minLength: 0)
+      .frame(width: geo.size.width, height: geo.size.height)
     }
+    // Small widgets have a single tap target: open the store.
+    .widgetURL(family == .systemSmall || entry.apps.isEmpty ? storeURL : nil)
   }
 
   @ViewBuilder
-  private func tile(_ slot: Slot, icon: CGFloat) -> some View {
+  private func tile(_ slot: Slot, grid: MiniAppsGrid, colWidth: CGFloat) -> some View {
+    let label: CGFloat? = grid.labels ? grid.labelSize : nil
     switch slot {
     case .app(let app):
       if family == .systemSmall {
-        AppTile(app: app, size: icon)
+        AppTile(app: app, size: grid.icon, label: label)
       } else {
-        Link(destination: URL(string: app.url) ?? storeURL) { AppTile(app: app, size: icon) }
+        Link(destination: URL(string: app.url) ?? storeURL) { AppTile(app: app, size: grid.icon, label: label) }
       }
     case .store:
+      let text = grid.apps == 0 || colWidth >= 120 ? "Mini-Apps entdecken" : "Entdecken"
       if family == .systemSmall {
-        StoreTile(size: icon)
+        StoreTile(size: grid.icon, label: label, text: text)
       } else {
-        Link(destination: storeURL) { StoreTile(size: icon) }
+        Link(destination: storeURL) { StoreTile(size: grid.icon, label: label, text: text) }
       }
     }
   }
@@ -226,7 +255,7 @@ struct MiniAppsWidget: Widget {
         .containerBackground(Color("$widgetBackground"), for: .widget)
     }
     .configurationDisplayName("Mini Apps")
-    .description("Deine Röbel Mini Apps auf einen Blick.")
-    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    .description("Deine zuletzt geöffneten Mini Apps auf einen Blick.")
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
   }
 }
