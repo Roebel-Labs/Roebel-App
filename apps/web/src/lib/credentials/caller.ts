@@ -40,6 +40,18 @@ export const ORG_ACTIONS: readonly CredentialAction[] = [
   "event_badge_qr",
 ];
 
+/** Actions of /api/credentials/designs (card designer: Studio and app). */
+export const DESIGN_ACTIONS: readonly CredentialAction[] = [
+  "design_orgs",
+  "design_drafts_list",
+  "design_draft_get",
+  "design_draft_save",
+  "design_draft_delete",
+  "design_test_send",
+  "design_publish",
+  "design_assets_list",
+];
+
 const PASSKEY_TOKEN_PREFIX = "pst1.";
 
 type HeaderBag = { get(n: string): string | null };
