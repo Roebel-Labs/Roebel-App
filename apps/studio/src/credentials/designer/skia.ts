@@ -26,7 +26,26 @@ export function makeSurface(ck: CanvasKit, canvas: HTMLCanvasElement): Surface |
   return gl ?? ck.MakeSWCanvasSurface(canvas);
 }
 
+/** Bundled files load from file:// in the desktop app, where fetch() refuses the scheme; XHR reads them. */
+function xhrBytes(url: string): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', url);
+    x.responseType = 'arraybuffer';
+    x.onload = () => (x.response ? resolve(new Uint8Array(x.response as ArrayBuffer)) : reject(new Error('empty')));
+    x.onerror = () => reject(new Error(`cannot read ${url}`));
+    x.send();
+  });
+}
+
 async function fetchBytes(url: string): Promise<Uint8Array> {
+  let local = false;
+  try {
+    local = new URL(url, globalThis.location?.href).protocol === 'file:';
+  } catch {
+    local = false;
+  }
+  if (local) return xhrBytes(url);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
