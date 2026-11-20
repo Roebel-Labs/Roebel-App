@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { Canvas, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
-import { useDerivedValue, useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { DeviceMotion } from 'expo-sensors';
 import { CARD_RADIUS, designSize, drawHeight, type CardDesign, type FieldValues, type RenderMode } from '@roebel/card-design';
 import { useTheme } from '@/context/ThemeContext';
@@ -66,10 +66,23 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
   const still = useMemo(() => (draw ? draw(undefined, REST_PHASE) : null), [draw]);
   // A resting picture that is replaced (new design, size, images) is freed.
   useEffect(() => () => disposeLater(still), [still]);
-  // The tilting picture; null = the resting one. The Canvas reads the derived value, so it never
-  // sees null (I3: the shared value used to start as null while the fonts were loading).
+  // The tilting picture. The Canvas reads it ONLY while `live` (it then always holds a real
+  // picture); otherwise it draws `still` directly. Never derive it in a worklet that captures
+  // `still`: a Skia object copied into a worklet closure arrives as an invalid value and
+  // drawPicture crashes the app outside every error boundary (Pixel 2026-11-20, profile).
   const picture = useSharedValue<SkPicture | null>(null);
-  const shown = useDerivedValue(() => picture.value ?? still, [still]);
+  const [live, setLive] = useState(false);
+  // The picture currently held by `picture`. Freed only when it is replaced by a newer tilt
+  // picture or the card unmounts — never on tilt stop, when the Canvas may still draw it for a
+  // frame or two before the re-render to `still` lands.
+  const heldRef = useRef<SkPicture | null>(null);
+  useEffect(
+    () => () => {
+      disposeLater(heldRef.current);
+      heldRef.current = null;
+    },
+    [],
+  );
 
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -80,7 +93,7 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
     let drawn: Tilt = tilt;
     let baseline: number | null = null;
     let frame: number | null = null;
-    let current: SkPicture | null = null;
+    let started = false;
     const flush = () => {
       frame = null;
       const d = drawRef.current;
@@ -90,9 +103,13 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
       drawn = q;
       const pic = d(q, phaseForTilt(q));
       if (!pic) return;
-      const old = current;
-      current = pic;
+      const old = heldRef.current;
+      heldRef.current = pic;
       picture.value = pic;
+      if (!started) {
+        started = true;
+        setLive(true);
+      }
       disposeLater(old);
     };
     DeviceMotion.setUpdateInterval(MOTION_INTERVAL);
@@ -106,10 +123,9 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
     return () => {
       sub.remove();
       if (frame !== null) cancelAnimationFrame(frame);
-      // Back to the resting sheen when the card stops following the phone.
-      picture.value = null;
-      disposeLater(current);
-      current = null;
+      // Back to the resting sheen when the card stops following the phone. The last tilt picture
+      // stays held (see heldRef) so the Canvas can never draw a freed picture.
+      setLive(false);
     };
   }, [tilting, picture]);
 
@@ -123,7 +139,7 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
       {still ? (
         <Canvas style={{ width, height }}>
           {/* Only the tilting card reads the shared value; the others keep their one picture. */}
-          <Picture picture={animate === 'tilt' ? (shown as unknown as SkPicture) : still} />
+          <Picture picture={animate === 'tilt' && live ? (picture as unknown as SkPicture) : still} />
         </Canvas>
       ) : fallback ? (
         fallback
