@@ -37,9 +37,14 @@ export function TypesTab({ ctx }: { ctx: TabContext }) {
   const { token, org, onError, register, designer } = ctx;
 
   const load = useCallback(() => {
-    if (register) fetchTypes(token, org.accountId).then(setTypes, onError);
+    // A failed list shows as empty (with the error notice) instead of skeletons forever.
+    const failed = (set: (v: []) => void) => (e: unknown) => {
+      set([]);
+      onError(e);
+    };
+    if (register) fetchTypes(token, org.accountId).then(setTypes, failed(setTypes));
     else setTypes([]);
-    if (designer) fetchDrafts(token, org.accountId).then(setDrafts, onError);
+    if (designer) fetchDrafts(token, org.accountId).then(setDrafts, failed(setDrafts));
     else setDrafts([]);
   }, [token, org.accountId, onError, register, designer]);
   useEffect(load, [load]);

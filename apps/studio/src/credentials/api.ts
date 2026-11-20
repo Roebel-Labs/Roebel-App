@@ -50,25 +50,45 @@ async function failure(res: Response): Promise<CredentialsApiError> {
   return new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Fehler {status}', { status: res.status }), j?.data);
 }
 
-async function post(route: CredRoute, action: string, payload: Record<string, unknown>, token: string): Promise<Response> {
-  let res: Response;
+/** How long a request may take before it counts as failed (a hung request never leaves the screen busy). */
+export const REQUEST_TIMEOUT_MS = 20_000;
+/** AI images wait up to a minute for the generator. */
+export const AI_REQUEST_TIMEOUT_MS = 90_000;
+/** Image uploads (up to 8 MB), letter PDFs and publishing (renders the card). */
+export const UPLOAD_TIMEOUT_MS = 60_000;
+
+/** fetch with a time limit; a timeout or a network failure becomes a CredentialsApiError. */
+async function fetchWithin(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    res = await fetch(`${apiBase()}/api/credentials/${route}`, {
+    return await fetch(url, { ...init, signal: ctl.signal });
+  } catch {
+    if (ctl.signal.aborted) throw new CredentialsApiError(0, 'timeout', t('Der Server antwortet gerade nicht. Bitte versuche es gleich noch einmal.'));
+    throw new CredentialsApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function post(route: CredRoute, action: string, payload: Record<string, unknown>, token: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+  const res = await fetchWithin(
+    `${apiBase()}/api/credentials/${route}`,
+    {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       // `client: 'studio'` lets the server record the action as prepared in Studio (viaOf).
       body: JSON.stringify({ action, payload: { ...payload, client: 'studio' } }),
-    });
-  } catch {
-    throw new CredentialsApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
-  }
+    },
+    timeoutMs,
+  );
   if (!res.ok) throw await failure(res);
   return res;
 }
 
 /** POST /api/credentials/<route> with { action, payload }; returns the `data` of { ok: true, data }. */
-export async function credCall<T>(route: CredRoute, action: string, payload: Record<string, unknown>, token: string): Promise<T> {
-  const res = await post(route, action, payload, token);
+export async function credCall<T>(route: CredRoute, action: string, payload: Record<string, unknown>, token: string, timeoutMs?: number): Promise<T> {
+  const res = await post(route, action, payload, token, timeoutMs);
   const j = (await res.json().catch(() => null)) as { ok?: boolean; data?: T; code?: string; message?: string } | null;
   if (!j || j.ok === false) throw new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Unerwartete Antwort vom Server.'));
   return j.data as T;
@@ -79,7 +99,7 @@ export async function credCall<T>(route: CredRoute, action: string, payload: Rec
 /** Public switch of the register (plan 4 Task 1). Anything but a clear answer counts as off. */
 export async function fetchStatus(): Promise<CredentialsStatus> {
   try {
-    const res = await fetch(`${apiBase()}/api/credentials/status`, { headers: { Accept: 'application/json' } });
+    const res = await fetchWithin(`${apiBase()}/api/credentials/status`, { headers: { Accept: 'application/json' } }, REQUEST_TIMEOUT_MS);
     if (!res.ok) return { enabled: false, configured: false, designer: false };
     const j = (await res.json()) as Partial<CredentialsStatus> & { data?: Partial<CredentialsStatus> };
     const s = j.data ?? j;
@@ -112,7 +132,7 @@ export const prepareRevocation = (token: string, p: { accountId: string; invitat
 
 /** The printable letters of a batch (personal links as QR codes), as a PDF. */
 export async function downloadLetters(token: string, accountId: string, batchId: string): Promise<Blob> {
-  const res = await post('org', 'letters', { accountId, batchId }, token);
+  const res = await post('org', 'letters', { accountId, batchId }, token, UPLOAD_TIMEOUT_MS);
   return res.blob();
 }
 
@@ -143,7 +163,8 @@ export const prepareMembersPublic = (token: string, accountId: string, membersPu
 // ---- card designer (D2) ----------------------------------------------------------------
 
 /** POST /api/credentials/designs with { action, payload }; same error mapping as credCall. */
-export const designCall = <T>(action: string, payload: Record<string, unknown>, token: string) => credCall<T>('designs', action, payload, token);
+export const designCall = <T>(action: string, payload: Record<string, unknown>, token: string, timeoutMs?: number) =>
+  credCall<T>('designs', action, payload, token, timeoutMs);
 
 export const fetchDesignOrgs = (token: string) => designCall<DesignOrg[]>('design_orgs', {}, token);
 
@@ -159,15 +180,15 @@ export const fetchDesignAssets = (token: string, accountId: string) => designCal
 
 export const sendDraftTest = (token: string, draftId: string) => designCall<{ sentAt: string }>('design_test_send', { draftId }, token);
 
-export const publishDraft = (token: string, draftId: string) => designCall<{ actionId: string; version: number; sha: string }>('design_publish', { draftId }, token);
+export const publishDraft = (token: string, draftId: string) => designCall<{ actionId: string; version: number; sha: string }>('design_publish', { draftId }, token, UPLOAD_TIMEOUT_MS);
 
 /** AI background (D5); can take up to a minute. */
 export const generateDesignBackground = (token: string, accountId: string, prompt: string, tileable = false) =>
-  designCall<AiBackgroundResult>('design_ai_background', { accountId, prompt, tileable }, token);
+  designCall<AiBackgroundResult>('design_ai_background', { accountId, prompt, tileable }, token, AI_REQUEST_TIMEOUT_MS);
 
 /** AI sticker with its background removed (D5); `notice` when removal was not possible. */
 export const generateDesignSticker = (token: string, accountId: string, prompt: string) =>
-  designCall<AiStickerResult>('design_ai_sticker', { accountId, prompt }, token);
+  designCall<AiStickerResult>('design_ai_sticker', { accountId, prompt }, token, AI_REQUEST_TIMEOUT_MS);
 
 /** Multipart upload of a design image (logo, sticker, background, image). */
 export async function uploadDesignAsset(token: string, accountId: string, kind: AssetKind, file: File): Promise<AssetView> {
@@ -175,16 +196,11 @@ export async function uploadDesignAsset(token: string, accountId: string, kind: 
   form.append('accountId', accountId);
   form.append('kind', kind);
   form.append('file', file, file.name);
-  let res: Response;
-  try {
-    res = await fetch(`${apiBase()}/api/credentials/designs/assets`, {
-      method: 'POST',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-      body: form,
-    });
-  } catch {
-    throw new CredentialsApiError(0, 'network', t('Server nicht erreichbar. Internetverbindung prüfen.'));
-  }
+  const res = await fetchWithin(
+    `${apiBase()}/api/credentials/designs/assets`,
+    { method: 'POST', headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, body: form },
+    UPLOAD_TIMEOUT_MS,
+  );
   if (!res.ok) throw await failure(res);
   const j = (await res.json().catch(() => null)) as { ok?: boolean; data?: AssetView; code?: string; message?: string } | null;
   if (!j || j.ok === false || !j.data) throw new CredentialsApiError(res.status, j?.code ?? 'failed', j?.message ?? t('Unerwartete Antwort vom Server.'));

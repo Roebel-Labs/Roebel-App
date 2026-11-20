@@ -149,6 +149,8 @@ const en: Record<string, string> = {
   'Wird erzeugt … (bis zu einer Minute)': 'Generating … (up to a minute)',
   'Mit KI erzeugt': 'AI-generated',
   KI: 'AI',
+  'Deine letzten Änderungen sind nicht gespeichert. Trotzdem zurück?': 'Your latest changes are not saved. Go back anyway?',
+  'Der Server antwortet gerade nicht. Bitte versuche es gleich noch einmal.': 'The server is not responding right now. Please try again in a moment.',
 };
 
 export default en;

@@ -236,8 +236,11 @@ function Editor({ ctx, initial, onClose }: { ctx: TabContext; initial: Loaded; o
 
   const urls = useMemo(() => Object.fromEntries(assets.map((a) => [a.sha, a.url])), [assets]);
 
+  // "Zurück": save first; a conflict or a failed save asks before the changes are left behind.
   const leave = async () => {
     await autosave.flush();
+    const s = autosave.currentStatus();
+    if ((s === 'conflict' || s === 'error') && !window.confirm(t('Deine letzten Änderungen sind nicht gespeichert. Trotzdem zurück?'))) return;
     onClose();
   };
 
