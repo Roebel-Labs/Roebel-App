@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/SkeletonLoader';
 import { transformedImageUrl } from '@/lib/image-url';
 import type { PostMediaItem } from '@/lib/utils/post-media';
 import PostVideoPlayer from './PostVideoPlayer';
+import { useRailLockTouchHandlers } from './HorizontalRailLock';
 
 export type PendingMedia = { key: string; type: 'image' | 'video'; label?: string };
 
@@ -62,6 +63,9 @@ function PostMediaCarousel({
   const [outerWidth, setOuterWidth] = useState(0);
   const [aspects, setAspects] = useState<Record<string, number>>({});
   const [activeIndex, setActiveIndex] = useState(0);
+  // In the Austausch feed: locks the tab pager while a finger is on the
+  // slider, so swiping through media never flips the tab (e.g. to Umfragen).
+  const railLockHandlers = useRailLockTouchHandlers();
 
   const columnWidth = Math.max(0, outerWidth - bleedLeft - bleedRight);
   const maxSlideWidth = columnWidth > 0 ? columnWidth * MAX_COLUMN_FRACTION : height;
@@ -117,6 +121,7 @@ function PostMediaCarousel({
     >
       <ScrollView
         horizontal
+        {...railLockHandlers}
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
         snapToOffsets={snapOffsets}

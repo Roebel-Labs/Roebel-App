@@ -76,11 +76,6 @@ type Props = {
    */
   onRepost?: (target: PostRecord, isReposted: boolean) => void;
   listHeader?: React.ReactNode;
-  /**
-   * Fires with true while a finger is down on a horizontal rail inside the
-   * list (Mittagstisch), false when it lifts — FeedHome locks the pager meanwhile.
-   */
-  onRailTouchActive?: (active: boolean) => void;
   /** Shared value tracking the floating header translateY. Updated on scroll. */
   headerTranslateY?: SharedValue<number>;
   /** Total height of the floating header — used as the upper clamp for the translate. */
@@ -202,7 +197,6 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     onNewestContent,
     showProposalHero = false,
     onOpenUmfragen,
-    onRailTouchActive,
   },
   ref,
 ) {
@@ -542,10 +536,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         case 'special_menu_section':
           return (
             <View style={styles.moduleWrapFullBleed}>
-              <FeedSpecialMenuSection
-                menus={item.data as SpecialMenuWithItems[]}
-                onRailTouchActive={onRailTouchActive}
-              />
+              <FeedSpecialMenuSection menus={item.data as SpecialMenuWithItems[]} />
             </View>
           );
 
@@ -646,7 +637,6 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       forumMyVote,
       setForumVoteLocal,
       onOpenUmfragen,
-      onRailTouchActive,
     ],
   );
 

@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
+import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   articles: NewsArticle[];
@@ -15,6 +16,8 @@ const renderNewsCard = ({ item }: { item: NewsArticle }) => <NewsCard article={i
 const articleKey = (article: NewsArticle) => article.id;
 
 function NewsSection({ articles }: Props) {
+  // In the Austausch feed: locks the tab pager while a finger is on this rail.
+  const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -49,6 +52,7 @@ function NewsSection({ articles }: Props) {
       </View>
       <FlatList
         horizontal
+        {...railLockHandlers}
         data={recentArticles}
         renderItem={renderNewsCard}
         keyExtractor={articleKey}

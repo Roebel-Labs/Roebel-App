@@ -31,6 +31,7 @@ import StoryViewer, {
   type StoryGroup,
   type StorySlideInput,
 } from './StoryViewer';
+import { useRailLockTouchHandlers } from './HorizontalRailLock';
 import { ShimmerGroup, ShimmerBlock } from './Shimmer';
 
 // Shared background track playing under all event stories — title shown in
@@ -94,16 +95,9 @@ function prefetchStoryImages(
   }
 }
 
-type Props = {
-  /**
-   * Fires with true while a finger is down on the horizontal rail, false
-   * when it lifts. FeedHome uses this to lock the feed pager so a story
-   * swipe never falls through and switches the tab instead.
-   */
-  onRailTouchActive?: (active: boolean) => void;
-};
-
-export default function HomeStoryBar({ onRailTouchActive }: Props) {
+export default function HomeStoryBar() {
+  // Locks the feed pager while a finger is on the rail (see HorizontalRailLock).
+  const railLockHandlers = useRailLockTouchHandlers();
   const { colors } = useTheme();
   const router = useRouter();
   const { isCitizen } = useUser();
@@ -338,9 +332,7 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
-        onTouchStart={() => onRailTouchActive?.(true)}
-        onTouchEnd={() => onRailTouchActive?.(false)}
-        onTouchCancel={() => onRailTouchActive?.(false)}
+        {...railLockHandlers}
       >
         {/* First-load skeletons — shimmering placeholder cards matching real
             card geometry while the events/collections queries resolve. */}

@@ -10,14 +10,10 @@ import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { transformedImageUrl } from '@/lib/image-url';
 import { dishDayLabel, resolveDishDay, toIsoDay } from '@/lib/special-menu-days';
 import type { SpecialMenuItemRecord, SpecialMenuWithItems } from '@/lib/types';
+import { useRailLockTouchHandlers } from './HorizontalRailLock';
 
 type Props = {
   menus: SpecialMenuWithItems[];
-  /**
-   * Fires with true while a finger is down on the rail, false when it lifts.
-   * FeedHome locks the feed pager meanwhile, so a dish swipe never flips the tab.
-   */
-  onRailTouchActive?: (active: boolean) => void;
   /** Side gutter of title and first card: 24 in the feed, 16 on Erkunden. */
   gutter?: number;
   containerStyle?: StyleProp<ViewStyle>;
@@ -41,7 +37,9 @@ const dishKey = (dish: Dish) => dish.item.id;
  * serving day first. Dishes of past days are hidden; dishes without a day
  * go last. Tapping a dish opens its detail page (photo, day, comments).
  */
-export default function FeedSpecialMenuSection({ menus, onRailTouchActive, gutter = 24, containerStyle }: Props) {
+export default function FeedSpecialMenuSection({ menus, gutter = 24, containerStyle }: Props) {
+  // Locks the feed pager while a finger is on the rail (see HorizontalRailLock).
+  const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -139,9 +137,7 @@ export default function FeedSpecialMenuSection({ menus, onRailTouchActive, gutte
         keyExtractor={dishKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: gutter }}
-        onTouchStart={() => onRailTouchActive?.(true)}
-        onTouchEnd={() => onRailTouchActive?.(false)}
-        onTouchCancel={() => onRailTouchActive?.(false)}
+        {...railLockHandlers}
         {...RAIL_LIST_PROPS}
       />
     </View>
