@@ -534,24 +534,44 @@ export async function prepareMembersPublicAction(
 
 // ── read ──────────────────────────────────────────────────────────────────────
 
+export const ORG_CHAIN_CHECK_MS = 5_000;
+
+/** Resolves to `fallback` when `p` rejects or takes longer than `ms`. */
+async function withTimeout<T, F>(p: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<F>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  try {
+    return await Promise.race([p.catch(() => fallback), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function listOrgs(d: Deps, c: Caller): Promise<Result<OrgListEntry[]>> {
   const roles = (await d.store.rolesForWallet(c.wallet)).filter((r) => r.role === "owner" || r.role === "admin");
   const accounts = await d.store.getAccounts([...new Set(roles.map((r) => r.accountId))]);
-  const out: OrgListEntry[] = [];
-  for (const a of accounts) {
-    if (a.accountType !== "organisation") continue;
-    const o = await orgContextFor(d.store, a.id, c.wallet);
-    if ("error" in o) continue;
-    out.push({
-      accountId: a.id,
-      name: a.name,
-      avatarUrl: a.avatarUrl,
-      subType: a.subType,
-      role: o.role,
-      membersMayBePublic: membersMayBePublic(o),
-      onChain: await chainReadiness(d.reader, o, c.wallet as Address),
-    });
-  }
+  // In parallel, and each chain check bounded: an owner of many orgs (or a slow RPC) must not
+  // keep Studio and the app waiting. A check that does not answer in time counts as not
+  // registered, so nothing can be published on a guess.
+  const rows = await Promise.all(
+    accounts.map(async (a): Promise<OrgListEntry | null> => {
+      if (a.accountType !== "organisation") return null;
+      const o = await orgContextFor(d.store, a.id, c.wallet);
+      if ("error" in o) return null;
+      return {
+        accountId: a.id,
+        name: a.name,
+        avatarUrl: a.avatarUrl,
+        subType: a.subType,
+        role: o.role,
+        membersMayBePublic: membersMayBePublic(o),
+        onChain: await withTimeout(chainReadiness(d.reader, o, c.wallet as Address), ORG_CHAIN_CHECK_MS, "org_not_registered" as const),
+      };
+    }),
+  );
+  const out = rows.filter((r): r is OrgListEntry => r !== null);
   return ok(out.sort((x, y) => x.name.localeCompare(y.name, "de")));
 }
 
