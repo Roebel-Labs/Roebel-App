@@ -4,6 +4,10 @@
  * periodic updates re-sync for the last signed-in wallet so unread dots appear even while
  * the app is closed; everything else redraws from the stored payload.
  */
+// The widget library calls these components as plain functions; the React Compiler's
+// memo hook would make every render throw "Invalid Hook Call" (blank widget).
+'use no memo';
+
 import React from 'react';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { getStoredWidgetWallet, readStoredPayload, syncWidget } from '@/lib/widget-sync';
