@@ -34,6 +34,11 @@ describe('resolveSelection', () => {
     expect(resolveSelection(null, [], live).map((a) => a.slug)).toEqual(['d']);
   });
 
+  it('without a choice, nothing installed and nothing featured shows the newest live apps', () => {
+    const plain = ['a', 'b', 'c'].map((s) => app(s));
+    expect(resolveSelection(null, [], plain).map((a) => a.slug)).toEqual(['a', 'b', 'c']);
+  });
+
   it('an explicit empty choice stays empty', () => {
     expect(resolveSelection([], ['a'], live)).toEqual([]);
   });
