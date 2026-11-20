@@ -19,7 +19,7 @@ type Props = {
   animate?: 'tilt' | 'static';
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
-  /** Shown instead when Skia cannot draw this card (fonts failed to load, nothing recorded). */
+  /** Shown instead while the fonts load and when Skia cannot draw this card (fonts failed, nothing recorded). */
   fallback?: ReactNode;
 };
 
@@ -125,7 +125,7 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
           {/* Only the tilting card reads the shared value; the others keep their one picture. */}
           <Picture picture={animate === 'tilt' ? (shown as unknown as SkPicture) : still} />
         </Canvas>
-      ) : (failed || (skia && !still)) && fallback ? (
+      ) : fallback ? (
         fallback
       ) : (
         <View style={[styles.placeholder, { width, height, borderRadius: radius, backgroundColor: colors.surface }]} />

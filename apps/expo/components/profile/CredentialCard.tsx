@@ -10,6 +10,7 @@ import { cardHolderValues, type Holder } from '@/lib/card-design/holder-values';
 // Skia (and Reanimated) load only when a card has a design and the binary has Skia; a card Skia
 // cannot draw shows its old picture.
 import SafeDesignedCard from '@/components/credentials/SafeDesignedCard';
+import { COMMUNITY_DESIGNS } from '@/lib/card-design/community';
 
 type Props = {
   /** A built-in card by kind (today's cards), or any card of the profile model. */
@@ -92,13 +93,22 @@ export default function CredentialCard({ kind, card, width, style, shadow = true
 
   if (!card || card.source === 'builtin' || builtin) {
     const k = (builtin ?? 'guest') as CredentialKind;
+    const art = <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />;
     return (
       <View
         style={[{ width, height, borderRadius: radius }, shadow && softShadow(2, isDark), style]}
         accessibilityRole="image"
         accessibilityLabel={CREDENTIAL_COPY[k].title}
       >
-        <Image source={CREDENTIAL_ART[k]} style={[styles.image, { width, height, borderRadius: radius }]} resizeMode="cover" />
+        {/* The tilting card is drawn from its design so the sheen follows the phone; the PNG is the
+            fallback (no Skia in this binary, still loading, or drawing failed) and every static card. */}
+        {animate === 'tilt' ? (
+          <View style={[styles.inner, { borderRadius: radius }]}>
+            <SafeDesignedCard design={COMMUNITY_DESIGNS[k]} width={width} mode="holder" animate="tilt" fallback={art} />
+          </View>
+        ) : (
+          art
+        )}
       </View>
     );
   }

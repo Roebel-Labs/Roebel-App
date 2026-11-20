@@ -61,8 +61,8 @@ export default function CredentialCardStack({ cards, onPress, holder = null, ani
         accessibilityLabel={`${front.title} anzeigen`}
         style={[styles.zone, { height: STACK_TOP + stackHeight(cards.length) }]}
       >
-        {placed.map(({ card, width, left, top }) => (
-          <CredentialCard key={card.key} card={card} width={width} style={[styles.card, { top, left }]} />
+        {placed.map(({ card, width, left, top, isFront }) => (
+          <CredentialCard key={card.key} card={card} width={width} style={[styles.card, { top, left }]} animate={isFront && animateFront ? 'tilt' : 'static'} />
         ))}
       </PressableScale>
     );
