@@ -6,28 +6,33 @@ import { RESERVED_TYPE_IDS } from "@netizen-labs/credential-registry";
 import type { Hex } from "viem";
 import { publicBaseUrl } from "./config";
 import type { ActionStatus, CredentialStore, Kind, TypeRow } from "./store";
+import type { CardDesign } from "@roebel/card-design";
+import { designImageUrl } from "./designs/public";
+import type { DesignStore, VersionRow } from "./designs/store";
 
 export type TypeMetadata = {
   name: string;
   description: string;
   image: string | null;
-  properties: { kind: string; organisation: string | null; recognised: boolean; benefits: string[] };
+  properties: { kind: string; organisation: string | null; recognised: boolean; benefits: string[]; design?: CardDesign };
 };
 
 export function metadataUrl(typeId: Hex): string {
   return `${publicBaseUrl()}/api/credentials/types/${typeId.toLowerCase()}/metadata`;
 }
 
-export function typeMetadataJson(t: TypeRow, org: { name: string } | null): TypeMetadata {
+/** With a live card design version (plan D2), `image` is its preview and `properties.design` the design. */
+export function typeMetadataJson(t: TypeRow, org: { name: string } | null, live: VersionRow | null = null): TypeMetadata {
   return {
     name: t.name,
     description: t.description ?? "",
-    image: t.imageUrl ?? null,
+    image: live ? designImageUrl(live.sha) : t.imageUrl ?? null,
     properties: {
       kind: t.kind ?? "unknown",
       organisation: org?.name ?? null,
       recognised: t.recognised,
       benefits: [...t.benefits],
+      ...(live ? { design: live.design } : {}),
     },
   };
 }
@@ -101,14 +106,15 @@ const LIVE_ACTION: readonly ActionStatus[] = ["awaiting_confirmation", "submitte
  * done) and 404 otherwise (never prepared, cancelled, expired or failed), which keeps abandoned
  * drafts unpublished without ever breaking an on-chain URI.
  */
-export async function metadataFor(store: CredentialStore, typeId: Hex, nowMs = Date.now()): Promise<TypeMetadata | null> {
+export async function metadataFor(store: CredentialStore, typeId: Hex, nowMs = Date.now(), designs?: DesignStore): Promise<TypeMetadata | null> {
   const reserved = reservedMetadataFor(typeId);
   if (reserved) return reserved;
   const type = await store.getType(typeId);
   if (!type) return null;
   if (type.chainStatus === "draft" && !(await hasLiveCreateAction(store, type, nowMs))) return null;
   const org = type.accountId ? await store.getAccount(type.accountId) : null;
-  return typeMetadataJson(type, org ? { name: org.name } : null);
+  const live = designs ? await designs.liveVersionOfType(type.typeId) : null;
+  return typeMetadataJson(type, org ? { name: org.name } : null, live);
 }
 
 async function hasLiveCreateAction(store: CredentialStore, t: TypeRow, nowMs: number): Promise<boolean> {
