@@ -1,6 +1,10 @@
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), dismissTo: jest.fn() } }));
+(globalThis as { requestAnimationFrame: (cb: () => void) => number }).requestAnimationFrame = (cb) => {
+  cb();
+  return 0;
+};
 import { router } from 'expo-router';
-import { goToTab, tabSwitchAction } from '../navigation/goToTab';
+import { goToTab, onTabArrival, tabSwitchAction } from '../navigation/goToTab';
 
 describe('tabSwitchAction', () => {
   it('does nothing when the section is already on screen', () => {
@@ -25,5 +29,14 @@ describe('goToTab', () => {
     expect(router.push).toHaveBeenCalledWith('/explore');
     goToTab('home', '/profile');
     expect(router.dismissTo).toHaveBeenCalledWith('/');
+  });
+
+  it('tells the target section before navigating (skeleton up first)', () => {
+    const seen: string[] = [];
+    const off = onTabArrival((t) => seen.push(t));
+    goToTab('home', '/explore');
+    goToTab('home', '/');
+    off();
+    expect(seen).toEqual(['home']);
   });
 });

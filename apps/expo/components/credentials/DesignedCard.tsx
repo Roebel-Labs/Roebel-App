@@ -64,25 +64,19 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
 
   // The resting picture: what static cards show, and where a tilting card starts and returns to.
   const still = useMemo(() => (draw ? draw(undefined, REST_PHASE) : null), [draw]);
-  // A resting picture that is replaced (new design, size, images) is freed.
-  useEffect(() => () => disposeLater(still), [still]);
+  // NOT freed in an effect cleanup: a screen hidden by a tab switch runs its cleanups but keeps
+  // its state, so on return the Canvas drew a freed picture and Skia crashed the app ("Invalid
+  // prop value", Pixel 2026-11-20). Resting pictures are left to the garbage collector.
   // The tilting picture. The Canvas reads it ONLY while `live` (it then always holds a real
   // picture); otherwise it draws `still` directly. Never derive it in a worklet that captures
   // `still`: a Skia object copied into a worklet closure arrives as an invalid value and
   // drawPicture crashes the app outside every error boundary (Pixel 2026-11-20, profile).
   const picture = useSharedValue<SkPicture | null>(null);
   const [live, setLive] = useState(false);
-  // The picture currently held by `picture`. Freed only when it is replaced by a newer tilt
-  // picture or the card unmounts — never on tilt stop, when the Canvas may still draw it for a
-  // frame or two before the re-render to `still` lands.
+  // The picture currently held by `picture`. Freed only when a newer tilt picture has replaced
+  // it in the shared value (mid-tilt, 60/s — left to GC that would pile up); never on tilt stop,
+  // unmount or hide (see above).
   const heldRef = useRef<SkPicture | null>(null);
-  useEffect(
-    () => () => {
-      disposeLater(heldRef.current);
-      heldRef.current = null;
-    },
-    [],
-  );
 
   const drawRef = useRef(draw);
   drawRef.current = draw;

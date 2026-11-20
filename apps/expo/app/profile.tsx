@@ -402,7 +402,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* First open: matched skeleton until the profile is there; back from a detail page: blur → sharp. */}
-        <ScreenTransition
+        <ScreenTransition tab="profile"
           skeleton={<ProfileEntrySkeleton sheetColor={colors.background} />}
           ready={!isConnected || !!user}
           topInset={headerHeight}

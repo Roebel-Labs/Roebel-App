@@ -499,7 +499,7 @@ export default function ExploreScreen() {
       </GlassBackdrop>
 
       {/* First open: matched skeleton until the hero data is there; back from a detail page: blur → sharp. */}
-      <ScreenTransition skeleton={<ExploreEntrySkeleton />} ready={!popularQuery.isPending} />
+      <ScreenTransition tab="explore" skeleton={<ExploreEntrySkeleton />} ready={!popularQuery.isPending} />
 
       {/* Search Modal */}
       <SearchModal

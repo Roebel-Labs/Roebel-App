@@ -16,6 +16,7 @@ import { useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
+import { onTabArrival, type MainTab } from '@/lib/navigation/goToTab';
 import GlassSurface, { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
@@ -36,9 +37,14 @@ type Props = {
   topInset?: number;
   /** Overlay fill behind the skeleton; defaults to the theme background. */
   backgroundColor?: string;
+  /**
+   * The main section this screen is. A tab switch to it (bottom nav) shows the skeleton beat
+   * again, Airbnb-style — raised BEFORE the screen is revealed (goToTab signals first).
+   */
+  tab?: MainTab;
 };
 
-export default function ScreenTransition({ skeleton, ready, topInset = 0, backgroundColor }: Props) {
+export default function ScreenTransition({ skeleton, ready, topInset = 0, backgroundColor, tab }: Props) {
   const { colors, isDark } = useTheme();
   const target = useGlassTarget();
 
@@ -58,6 +64,19 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
   }, [ready, entryShown, entryOpacity]);
   const entryStyle = useAnimatedStyle(() => ({ opacity: entryOpacity.value }));
 
+  // ---- Tab arrival (bottom nav switch to this section) ----
+  const arrivedByTab = useRef(false);
+  useEffect(() => {
+    if (!tab) return undefined;
+    return onTabArrival((target) => {
+      if (target !== tab) return;
+      arrivedByTab.current = true;
+      mountedAt.current = Date.now();
+      entryOpacity.value = 1;
+      setEntryShown(true);
+    });
+  }, [tab, entryOpacity]);
+
   // ---- Return blur (every focus after the first) ----
   const firstFocus = useRef(true);
   const [returning, setReturning] = useState(false);
@@ -74,6 +93,11 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
     useCallback(() => {
       if (firstFocus.current) {
         firstFocus.current = false;
+        return undefined;
+      }
+      // A tab switch shows the skeleton beat instead of the return blur.
+      if (arrivedByTab.current) {
+        arrivedByTab.current = false;
         return undefined;
       }
       if (reduceMotion.current) return undefined;

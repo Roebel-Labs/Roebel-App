@@ -688,7 +688,7 @@ export default function FeedHome() {
 
       {/* First open: post skeleton beat (the tabs show their own while loading);
           back from a detail page: blur → sharp. Below the floating header. */}
-      <ScreenTransition skeleton={<FeedEntrySkeleton />} ready topInset={headerHeight} />
+      <ScreenTransition tab="home" skeleton={<FeedEntrySkeleton />} ready topInset={headerHeight} />
 
       {appHeader}
 

@@ -30,9 +30,29 @@ export function tabSwitchAction(tab: MainTab, pathname: string): 'none' | 'push'
   return pathname === '/' ? 'push' : 'dismissTo';
 }
 
+type ArrivalListener = (tab: MainTab) => void;
+const arrivalListeners = new Set<ArrivalListener>();
+
+/**
+ * Screens listen for "a tab switch is about to land on me" so they can raise
+ * their skeleton BEFORE they become visible (ScreenTransition). A section that
+ * stays mounted (Austausch) would otherwise show stale content first.
+ */
+export function onTabArrival(listener: ArrivalListener): () => void {
+  arrivalListeners.add(listener);
+  return () => {
+    arrivalListeners.delete(listener);
+  };
+}
+
 export function goToTab(tab: MainTab, pathname: string): void {
   const action = tabSwitchAction(tab, pathname);
-  if (action === 'push') router.push(TAB_PATH[tab]);
-  // Pops to the section when it is in the stack, else replaces the current screen.
-  else if (action === 'dismissTo') router.dismissTo(TAB_PATH[tab]);
+  if (action === 'none') return;
+  arrivalListeners.forEach((l) => l(tab));
+  // One frame for the target's skeleton to render before it is revealed.
+  requestAnimationFrame(() => {
+    if (action === 'push') router.push(TAB_PATH[tab]);
+    // Pops to the section when it is in the stack, else replaces the current screen.
+    else router.dismissTo(TAB_PATH[tab]);
+  });
 }
