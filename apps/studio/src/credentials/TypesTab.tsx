@@ -1,10 +1,11 @@
 // Typen: the org's credential types and card design drafts. With the designer on, new types start in
 // the card designer from a template; the old form stays for types without a design (and retiring).
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { Confirm, MoreMenu } from '../persona/common';
 import { SkCards } from '../ui/Skeleton';
 import { deleteDraft, fetchDrafts, fetchTypes } from './api';
+import { Designer } from './designer/Designer';
 import { PendingCard } from './PendingCard';
 import { TypeEditor } from './TypeEditor';
 import { KIND_LABELS, STUDIO_TEMPLATES, type TemplateId } from './templates';
@@ -15,7 +16,7 @@ type View =
   | { kind: 'list' }
   | { kind: 'pick' }
   | { kind: 'edit'; template?: TemplateId | 'eigener'; type?: TypeRow }
-  | { kind: 'design'; draftId?: string; template?: string };
+  | { kind: 'design'; draftId?: string };
 
 /** State badges of a draft: never claims "published" before the phone confirmed it. */
 export function draftTags(d: DraftView): string[] {
@@ -26,7 +27,7 @@ export function draftTags(d: DraftView): string[] {
   return tags;
 }
 
-export function TypesTab({ ctx, renderDesigner }: { ctx: TabContext; renderDesigner?: (p: { draftId?: string; template?: string; onClose: () => void }) => ReactNode }) {
+export function TypesTab({ ctx }: { ctx: TabContext }) {
   const [types, setTypes] = useState<TypeRow[] | null>(null);
   const [drafts, setDrafts] = useState<DraftView[] | null>(null);
   const [view, setView] = useState<View>({ kind: 'list' });
@@ -43,10 +44,9 @@ export function TypesTab({ ctx, renderDesigner }: { ctx: TabContext; renderDesig
   }, [token, org.accountId, onError, register, designer]);
   useEffect(load, [load]);
 
-  if (view.kind === 'design' && renderDesigner)
-    return <>{renderDesigner({ draftId: view.draftId, template: view.template, onClose: () => (setView({ kind: 'list' }), load()) })}</>;
+  if (view.kind === 'design') return <Designer key={view.draftId ?? 'new'} ctx={ctx} draftId={view.draftId} onClose={() => (setView({ kind: 'list' }), load())} />;
 
-  if (view.kind === 'pick' || (view.kind === 'design' && !renderDesigner))
+  if (view.kind === 'pick')
     return (
       <div>
         <h2 className="pz-h3">{t('Vorlage wählen')}</h2>
