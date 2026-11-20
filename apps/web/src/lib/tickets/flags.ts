@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** app_settings keys that gate the Stripe Connect ticket surfaces. */
-export type TicketFlagKey = "stripe_tickets_enabled" | "stripe_connect_enabled";
+export type TicketFlagKey = "stripe_tickets_enabled" | "stripe_connect_enabled" | "mollie_enabled";
 
 /**
  * Server-side twin of the Expo gate in apps/expo/lib/supabase-app-settings.ts. The client

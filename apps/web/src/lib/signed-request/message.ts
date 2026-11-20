@@ -41,7 +41,7 @@ export type CredentialAction =
 
 export type TicketAction =
   | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
-  | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order";
+  | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order" | "payments_onboard" | "payments_status";
 
 export function buildSignedMessage(
   scope: string, action: string, wallet: string, timestampSec: number, payload: Record<string, unknown>,
