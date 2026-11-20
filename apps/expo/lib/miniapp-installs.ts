@@ -41,6 +41,11 @@ async function load(): Promise<Set<string>> {
   return loadPromise;
 }
 
+/** All installed slugs, hydrating from storage first (used by the home-screen widget). */
+export async function getInstalledMiniAppSlugs(): Promise<string[]> {
+  return [...(await load())];
+}
+
 /** Synchronous check against the hydrated cache (false until hydrated). */
 export function isMiniAppInstalled(slug: string): boolean {
   return cache?.has(slug) ?? false;

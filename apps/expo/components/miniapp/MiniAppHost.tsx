@@ -44,6 +44,7 @@ import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import { sendTransaction } from 'thirdweb';
 import { useActiveAccount } from 'thirdweb/react';
+import { markMiniAppNotificationsRead, syncWidget } from '@/lib/widget-sync';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -236,6 +237,20 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const signalsRef = useRef<HostSignals | null>(null);
 
   const walletLc = account?.address?.toLowerCase() ?? null;
+
+  // Home-screen widget + in-app dots: opening clears this app's unread notifications,
+  // closing re-syncs the widget (names, icons, other apps' dots).
+  const wasVisible = useRef(false);
+  useEffect(() => {
+    if (visible && !wasVisible.current) {
+      if (walletLc && !app.preview) {
+        void markMiniAppNotificationsRead(walletLc, app.slug).then(() => syncWidget(walletLc));
+      }
+    } else if (!visible && wasVisible.current) {
+      void syncWidget(walletLc);
+    }
+    wasVisible.current = visible;
+  }, [visible, walletLc, app.slug, app.preview]);
 
   // --- identity (manifest version 2) ------------------------------------------
   // Version-1 apps and the dev preview never load an identity state: their gate is settled from

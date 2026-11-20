@@ -19,6 +19,7 @@ import { MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { useMatchCredentials } from '@/lib/miniapp-credentials';
 import { openDecision } from '@/lib/miniapp-open';
+import { useMiniAppUnread } from '@/lib/miniapp-unread';
 
 const GRID_GAP = 12;
 const GRID_COLUMNS = 3;
@@ -32,6 +33,7 @@ export default function MiniAppsEntry() {
   const { width } = useWindowDimensions();
   const { isInstalled } = useInstalledMiniApps();
   const { held, ready } = useMatchCredentials();
+  const unread = useMiniAppUnread();
   // Installed apps launch straight into the host from the grid.
   const [runningApp, setRunningApp] = useState<MiniApp | null>(null);
   const [hostVisible, setHostVisible] = useState(false);
@@ -99,6 +101,7 @@ export default function MiniAppsEntry() {
               app={app}
               width={tileW}
               iconSize={iconSize}
+              unread={unread.has(app.slug)}
               onPress={() => openApp(app)}
             />
           ))}

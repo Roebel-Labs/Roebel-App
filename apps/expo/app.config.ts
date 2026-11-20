@@ -210,9 +210,35 @@ const config: ExpoConfig = {
         }
       }
     ],
+    // Home-screen widget "Mini Apps" (targets/widget). Reads the App Group below.
+    '@bacons/apple-targets',
+    // Android home-screen widget "Mini Apps" (widgets/, task handler in index.js).
+    [
+      'react-native-android-widget',
+      {
+        widgets: [
+          {
+            name: 'MiniApps',
+            label: 'Mini Apps',
+            description: 'Deine Röbel Mini Apps auf einen Blick.',
+            minWidth: '110dp',
+            minHeight: '110dp',
+            targetCellWidth: 4,
+            targetCellHeight: 2,
+            maxResizeWidth: '520dp',
+            maxResizeHeight: '520dp',
+            resizeMode: 'horizontal|vertical',
+            // 30 min (the Android minimum): re-sync so unread dots appear while the app is closed.
+            updatePeriodMillis: 1800000,
+          },
+        ],
+      },
+    ],
   ],
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
+    // Team from the AASA file (apps/web/public/.well-known); @bacons/apple-targets signs the widget with it.
+    appleTeamId: '88879TXSXK',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
     // Bump BY HAND every release, like versionCode below. eas.json no longer
     // auto-increments this: with a dynamic config EAS can only write back to
@@ -221,6 +247,12 @@ const config: ExpoConfig = {
     // builds sharing one number, and App Store Connect rejects duplicates.
     // Last submitted: 34 (v3.7.0). 35/40 = 3.8.0 preview builds only, never submitted.
     buildNumber: '37',
+    // Shared with the widget extension (targets/widget): the app writes the widget
+    // payload here (lib/widget-platform.ios.ts). The first EAS build after adding it asks
+    // to create the App Group + the widget target's provisioning profile.
+    entitlements: {
+      'com.apple.security.application-groups': ['group.com.maxbrych.roebelonchain.widgets'],
+    },
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',

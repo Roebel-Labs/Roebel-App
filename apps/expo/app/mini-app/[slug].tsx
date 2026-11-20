@@ -8,7 +8,7 @@
  * but both open buttons are disabled and MiniAppLockNote shows the reason and
  * the way in. This is where deep links, pinned blocks and notifications land.
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -52,7 +52,8 @@ import MiniAppLockNote from '@/components/miniapp/MiniAppLockNote';
 import { useMatchCredentials } from '@/lib/miniapp-credentials';
 import { openDecision } from '@/lib/miniapp-open';
 import { PERMISSION_LABELS } from '@/lib/miniapp-permissions';
-import { useActiveAccount } from 'thirdweb/react';
+import { useActiveAccount, useActiveWalletConnectionStatus } from 'thirdweb/react';
+import { AUTO_OPEN_WALLET_TIMEOUT_MS, shouldAutoOpen } from '@/lib/miniapp-autoopen';
 import { consentKeys, type ConsentKey } from '@netizen-labs/miniapp-sdk/host';
 import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import {
@@ -151,7 +152,8 @@ function MiniAppAccessSection({ app, reloadKey }: { app: MiniApp; reloadKey: boo
 }
 
 export default function MiniAppDetailScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, open: openParam } = useLocalSearchParams<{ slug: string; open?: string }>();
+  const walletStatus = useActiveWalletConnectionStatus();
   const { colors } = useTheme();
   const router = useRouter();
   const goBack = useGoBack();
@@ -190,6 +192,22 @@ export default function MiniAppDetailScreen() {
     if (canOpen) setHostVisible(true);
   }, [canOpen]);
   const closeHost = useCallback(() => setHostVisible(false), []);
+
+  // Widget links (?open=1) launch the host directly, once the account has reconnected.
+  const [walletWaitOver, setWalletWaitOver] = useState(false);
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (openParam !== '1') return;
+    const t = setTimeout(() => setWalletWaitOver(true), AUTO_OPEN_WALLET_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [openParam]);
+  useEffect(() => {
+    if (autoOpened.current) return;
+    if (shouldAutoOpen({ openParam, decision, walletStatus, timedOut: walletWaitOver })) {
+      autoOpened.current = true;
+      setHostVisible(true);
+    }
+  }, [openParam, decision, walletStatus, walletWaitOver]);
 
   const handleShare = useCallback(() => {
     if (!app) return;

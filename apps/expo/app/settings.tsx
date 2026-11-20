@@ -210,10 +210,19 @@ export default function SettingsScreen() {
               description={option.description}
               isSelected={preference === option.value}
               onPress={() => setPreference(option.value)}
-              isLast={index === themeOptions.length - 1}
+              isLast={false}
               colors={colors}
             />
           ))}
+          <Pressable style={styles.themeOptionRow} onPress={() => router.push('/settings/widget' as any)}>
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>Widget</Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Mini Apps auf dem Homescreen
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
         </Section>
 
         <Section title="BENACHRICHTIGUNGEN" colors={colors}>

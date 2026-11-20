@@ -131,3 +131,18 @@ signal; no background-wake pushes). Same dot on mini-app icons inside the app
 
 - Add to the 3.10.0 build list (`project_store_build_310_pending`). Native → no OTA to 3.9.0.
 - First EAS iOS build will ask to create credentials for the widget target.
+
+## Status (2026-11-20)
+
+Built on `feat/miniapp-widgets` (plan `docs/superpowers/plans/2026-11-20-mini-app-widgets.md`), merged
+to main for the 3.10.0 store build. Native → only works in binaries ≥ 3.10.0 (JS requires the
+native modules lazily, so an older runtime never crashes).
+
+- iOS: `apps/expo/targets/widget/` (SwiftUI), App Group `group.com.maxbrych.roebelonchain.widgets`,
+  `ios.appleTeamId` 88879TXSXK. The first EAS iOS build asks to register the App Group and the
+  widget target's bundle id (`com.maxbrych.roebelonchain.widget`) + profile.
+- Android: `apps/expo/widgets/` + task handler registered in `index.js`; receiver `.widget.MiniApps`.
+- Settings: `app/settings/widget.tsx` (Einstellungen → Erscheinungsbild → Widget).
+- Verified: jest (payload, sync, autoopen, Android layout; full suite green except 2 suites already
+  failing on main), iOS prebuild + `xcodebuild -target RoebelWidget` (simulator) succeeds, Android
+  prebuild manifest. Not yet seen on a device — test on the 3.10.0 preview build.

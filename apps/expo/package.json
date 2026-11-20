@@ -28,6 +28,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.75",
     "@anthropic-ai/sdk": "^0.71.0",
+    "@bacons/apple-targets": "5.0.0",
     "@coinbase/wallet-mobile-sdk": "^1.1.2",
     "@config-plugins/react-native-webrtc": "15.0.2",
     "@expo/dom-webview": "~56.0.6",
@@ -125,6 +126,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-aes-gcm-crypto": "0.2.2",
+    "react-native-android-widget": "0.26.0",
     "react-native-gesture-handler": "~2.31.2",
     "react-native-get-random-values": "1.11.0",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
