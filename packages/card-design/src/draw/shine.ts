@@ -1,11 +1,10 @@
-// The card's reflection: one runtime shader shared by the card-wide shine and
-// every layer with `shine: true`. Reads as real light on a laminated card
-// rather than a white stripe (Max 2026-11-20):
-//   - a soft specular hotspot that moves OPPOSITE the tilt, like a reflection
-//     of a light above the phone (broad glow + hot core),
-//   - a wide, soft diagonal sweep with a faint trailing glint,
-//   - a pastel thin-film tint that shifts with the viewing angle,
-//   - a fresnel brightening along the rim that grows with the tilt.
+// Holographic foil (Max 2026-11-20: "a reflecting hologram, not a lens flare,
+// not just moving linearly left to right"). One runtime shader shared by the
+// card-wide shine and every layer with `shine: true`:
+//   - rainbow interference bands whose position AND angle follow both tilt axes,
+//   - a fine diffraction micro-texture that shimmers as the phone moves,
+//   - strongest where the light hits (soft spot moving opposite the tilt),
+//   - a small specular glint and a faint rim; nearly invisible at rest.
 // Output is premultiplied (colour * alpha), drawn src-over on the card.
 
 export const SHINE_SKSL = `
@@ -14,36 +13,35 @@ uniform float2 tilt;
 uniform float intensity;
 uniform float2 size;
 
-float3 filmTint(float t) {
-  float3 c = 0.5 + 0.5 * cos(6.28318 * (t + float3(0.0, 0.33, 0.67)));
-  return mix(float3(1.0), c, 0.2);
+float3 spectrum(float t) {
+  return 0.5 + 0.5 * cos(6.28318 * (t + float3(0.0, 0.33, 0.67)));
 }
 
 half4 main(float2 p) {
   float2 uv = p / size;
   float aspect = size.x / size.y;
+  float2 q = float2(uv.x * aspect, uv.y);
 
-  float2 light = float2(0.5 - tilt.x * 0.6, 0.3 - tilt.y * 0.55);
-  float2 q = (uv - light) * float2(aspect, 1.0);
-  float r2 = dot(q, q);
-  float glow = exp(-r2 / 0.20);
-  float core = exp(-r2 / 0.022);
+  float2 light = float2(0.5 - tilt.x * 0.55, 0.45 - tilt.y * 0.6);
+  float2 dl = (uv - light) * float2(aspect, 1.0);
+  float r2 = dot(dl, dl);
+  float spot = exp(-r2 / 0.30);
 
-  float d = uv.x * 0.78 + uv.y * 0.62;
-  float c = mix(-0.45, 1.85, phase) + tilt.x * 0.35 + tilt.y * 0.22;
-  float u = (d - c) / 0.36;
-  float band = exp(-u * u);
-  float v = (d - c - 0.17) / 0.07;
-  float glint = exp(-v * v);
+  float ang = 0.9 + tilt.x * 0.3 - tilt.y * 0.2;
+  float2 dir = float2(cos(ang), sin(ang));
+  float t = dot(q, dir) * 1.6 + tilt.x * 0.9 - tilt.y * 0.8 + phase * 0.5;
+  float micro = sin(q.x * 38.0 + q.y * 22.0 + tilt.y * 6.0 + tilt.x * 4.0) * 0.5 + 0.5;
+  float3 holo = spectrum(t + micro * 0.08);
+  float sheen = 0.55 + 0.45 * sin(t * 9.42477);
 
+  float tiltAmount = clamp(length(tilt) * 1.4, 0.0, 1.0);
+  float a = (0.10 + 0.24 * spot) * (0.6 + 0.4 * sheen) * (0.4 + 0.6 * tiltAmount);
+  float glint = exp(-r2 / 0.006);
   float2 e = min(uv, 1.0 - uv);
-  float edgeDist = min(e.x * aspect, e.y);
-  float rim = 1.0 - smoothstep(0.0, 0.07, edgeDist);
-  float tiltAmount = clamp(length(tilt), 0.0, 1.0);
-
-  float a = glow * 0.12 + core * 0.15 + band * 0.17 + glint * 0.08 + rim * 0.06 * (0.35 + tiltAmount);
-  a = clamp(a * intensity, 0.0, 0.8);
-  float3 col = filmTint(d * 1.1 - c * 0.7 + tilt.x * 0.25 + tilt.y * 0.15);
+  float rim = 1.0 - smoothstep(0.0, 0.06, min(e.x * aspect, e.y));
+  a = a + glint * 0.06 + rim * 0.05 * tiltAmount;
+  a = clamp(a * intensity, 0.0, 0.75);
+  float3 col = mix(holo, float3(1.0), glint * 0.7);
   return half4(half3(col * a), half(a));
 }
 `;

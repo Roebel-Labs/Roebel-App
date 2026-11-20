@@ -26,7 +26,11 @@ export function ExploreEntrySkeleton() {
         {[0, 1, 2, 3, 4].map((i) => (
           <View key={i} style={styles.chip}>
             <Bone width={48} height={48} radius={12} />
-            <Bone width={44} height={10} radius={4} style={{ marginTop: 8 }} />
+            {/* Labels wrap to two 13 px lines (hyphenated) — same 26 px as the real tiles. */}
+            <View style={styles.chipLabel}>
+              <Bone width={46} height={9} radius={4} />
+              <Bone width={30} height={9} radius={4} />
+            </View>
           </View>
         ))}
       </View>
@@ -158,7 +162,8 @@ export function FeedEntrySkeleton() {
 
 const styles = StyleSheet.create({
   search: { marginHorizontal: 16, marginTop: 8, marginBottom: 12 },
-  chips: { flexDirection: 'row', paddingHorizontal: 16, gap: 16, marginBottom: 12 },
+  chips: { flexDirection: 'row', paddingHorizontal: 16, gap: 16, marginBottom: 4 },
+  chipLabel: { height: 26, marginTop: 8, alignItems: 'center', justifyContent: 'center', gap: 4 },
   chip: { width: 64, alignItems: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: HERO_CAROUSEL_GAP, paddingTop: 4, paddingBottom: 16, overflow: 'hidden' },
   heroCard: { borderRadius: 24, borderWidth: 1, padding: 8 },

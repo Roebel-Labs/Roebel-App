@@ -17,7 +17,9 @@ import PencilIcon from '@/assets/icons/pencil.svg';
 
 type AnimatedScalar = { readonly value: number };
 
-const COLLAPSED_WIDTH = 56;
+/** A bit larger than the classic 56 (Max 2026-11-20). */
+const FAB_SIZE = 62;
+const COLLAPSED_WIDTH = FAB_SIZE;
 const EXPANDED_WIDTH = 178;
 
 type Props = {
@@ -66,7 +68,7 @@ export default function FeedFAB({ onPress, visibilityScale, label, accessibility
 
   return (
     <Animated.View
-      style={[styles.container, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 24 }, animatedStyle]}
+      style={[styles.container, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 12 }, animatedStyle]}
     >
       <Pressable
         onPress={onPress}
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
     // Shadow lives on this non-clipped wrapper, not on the pill below — on
     // iOS, a view with `overflow: 'hidden'` clips its own drop shadow along
     // with its content, so the FAB would otherwise render shadowless.
-    borderRadius: 28,
+    borderRadius: FAB_SIZE / 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -106,8 +108,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   fab: {
-    height: 56,
-    borderRadius: 28,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

@@ -14,7 +14,7 @@
  * Loading: hero + body become Bone skeletons inside ONE SkeletonScope, so a
  * single shimmer band passes top to bottom.
  */
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -44,7 +44,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { GlassFill, glassChrome } from '@/components/GlassIconButton';
-import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import { GLASS_BLUR_AVAILABLE, GlassBackdrop, GlassProvider, useGlassTarget } from '@/components/GlassSurface';
 import { BlurView } from 'expo-blur';
 import { SkeletonScope, Bone } from '@/components/skeleton/Skeleton';
 import { ArrowLeftIcon } from '@/components/Icons';
@@ -64,6 +64,38 @@ const INSET_OPEN = 20;
 const INSET_COLLAPSED = 16;
 const BUTTON_GAP = 8;
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+
+/**
+ * The hero's progressive frost. Rendered INSIDE the screen's GlassProvider so it can sample the
+ * hero GlassBackdrop on Android; mounted only once that target is attached (expo-blur reads the
+ * target once at mount — an empty ref leaves it on a flat tint forever).
+ */
+function HeroFrost({ blurProps, isDark }: { blurProps: Partial<React.ComponentProps<typeof BlurView>>; isDark: boolean }) {
+  const target = useGlassTarget();
+  const [ready, setReady] = useState(Platform.OS === 'ios');
+  useEffect(() => {
+    if (target?.current) setReady(true);
+  }, [target]);
+  if (!ready || !GLASS_BLUR_AVAILABLE) return null;
+  return (
+    <AnimatedBlurView
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      animatedProps={blurProps}
+      tint={
+        Platform.OS === 'ios'
+          ? isDark
+            ? 'systemChromeMaterialDark'
+            : 'systemChromeMaterial'
+          : isDark
+            ? 'systemUltraThinMaterialDark'
+            : 'default'
+      }
+      blurMethod="dimezisBlurViewSdk31Plus"
+      blurTarget={Platform.OS === 'android' ? target ?? undefined : undefined}
+    />
+  );
+}
 
 type Props = {
   heroHeight: number;
@@ -169,14 +201,12 @@ export default function CollapsingHeroScreen({
     }
     return { transform: [{ translateY: y * 0.35 }, { scale: 1 }] };
   });
-  const blurStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, collapseEnd], [0, 1], Extrapolation.CLAMP),
-  }));
   const heroBlurProps = useAnimatedProps(() => ({
     intensity: interpolate(scrollY.value, [0, collapseEnd], [0, 100], Extrapolation.CLAMP),
   }));
+  // A light theme wash only at the very end, so the frost — not a colour — carries the effect.
   const washStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, collapseEnd], [0, 0.55], Extrapolation.CLAMP),
+    opacity: interpolate(scrollY.value, [collapseEnd * 0.55, collapseEnd], [0, 0.28], Extrapolation.CLAMP),
   }));
   const headerStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [collapseStart, collapseEnd], [0, 1], Extrapolation.CLAMP),
@@ -226,21 +256,10 @@ export default function CollapsingHeroScreen({
               {cleanHero}
               {heroOverlay}
             </GlassBackdrop>
-            {/* Frost: exactly the standard bottom bar's glass material over the hero
-                (Android samples the hero's GlassBackdrop; iOS dissolves by intensity,
-                since a parent opacity would switch a UIVisualEffectView off). */}
-            {Platform.OS === 'ios' ? (
-              <AnimatedBlurView
-                pointerEvents="none"
-                style={StyleSheet.absoluteFill}
-                animatedProps={heroBlurProps}
-                tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
-              />
-            ) : (
-              <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
-                <GlassSurface androidExperimentalBlur />
-              </Animated.View>
-            )}
+            {/* Progressive frost: the blur STRENGTH ramps 0 → full with the scroll (the nav's
+                expo-blur material; Android samples the hero's GlassBackdrop). No full-strength
+                layer fading in under washes — that read as a flat surface overlay. */}
+            <HeroFrost blurProps={heroBlurProps} isDark={isDark} />
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }, washStyle]} />
           </Animated.View>
         )}
@@ -360,7 +379,11 @@ function CollapsingGlassButton({
   renderIcon: (color: string) => React.ReactNode;
 }) {
   const { colors, variant } = useTheme();
-  const glassDark = tone === 'dark' || isDark;
+  // The glass is the standard frosted material, light in light mode — so the glass follows the
+  // theme and icons are always the text colour (black in light mode; Max 2026-11-20). `tone` is
+  // kept for API compatibility only.
+  void tone;
+  const glassDark = isDark;
   const { rim, shadow } = glassChrome(glassDark);
   const glassIconColor = glassDark ? '#FFFFFF' : colors.textPrimary;
   const headerIconColor = colors.textPrimary;

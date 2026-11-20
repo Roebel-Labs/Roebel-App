@@ -52,7 +52,7 @@ import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import GlassIconButton from '@/components/GlassIconButton';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
 import { ProfileEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
@@ -95,6 +95,9 @@ export default function ProfileScreen() {
   const chrome = useScrollChrome();
   const navHideStyle = useNavHideStyle(chrome.visible);
   const companionStyle = useNavCompanionStyle(chrome.visible);
+  const headerFadeStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(chrome.y.value, [8, 56], [0, 1], Extrapolation.CLAMP),
+  }));
   // The nav clearance lives INSIDE the sheet, so the sheet's own color runs to
   // the very bottom (padding on the scroll content showed a backdrop strip).
   const sheetBottomPad = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
@@ -421,12 +424,16 @@ export default function ProfileScreen() {
             setHeaderHeight((prev) => (prev === h ? prev : h));
           }}
         >
-          <LinearGradient
-            pointerEvents="none"
-            colors={[colors.backdrop, colors.backdrop, withAlpha(colors.backdrop, 0)]}
-            locations={[0, 0.55, 1]}
-            style={[StyleSheet.absoluteFill, { bottom: -HEADER_FADE }]}
-          />
+          {/* Hidden at the top (it laid over the card stack and skewed its perspective); fades in
+              once content starts to scroll under the bar. */}
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -HEADER_FADE }, headerFadeStyle]}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={[colors.backdrop, colors.backdrop, withAlpha(colors.backdrop, 0)]}
+              locations={[0, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
           <ProfileHeader
             title={isConnected ? profileHeaderTitle(activeAccount) : 'Profil'}
             switcherVisible={isConnected && ownedAccounts.length > 1}

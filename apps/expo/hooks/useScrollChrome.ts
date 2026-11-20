@@ -22,21 +22,25 @@ const SLIDE = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
 /** Direction latch + scroll handler. `visible` is true while the chrome shows. */
 export function useScrollChrome(): {
   visible: SharedValue<boolean>;
+  /** Current scroll offset (UI thread), for scroll-linked styles. */
+  y: SharedValue<number>;
   onScroll: ReturnType<typeof useAnimatedScrollHandler>;
 } {
   const visible = useSharedValue(true);
   const lastY = useSharedValue(0);
+  const y = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      const y = e.contentOffset.y;
-      const dy = y - lastY.value;
-      lastY.value = y;
-      if (y <= 0) visible.value = true;
+      const offset = e.contentOffset.y;
+      y.value = offset;
+      const dy = offset - lastY.value;
+      lastY.value = offset;
+      if (offset <= 0) visible.value = true;
       else if (dy > JITTER) visible.value = false;
       else if (dy < -JITTER) visible.value = true;
     },
   });
-  return { visible, onScroll };
+  return { visible, y, onScroll };
 }
 
 /** Slide style for the bottom nav overlay, driven by a `visible` latch. */

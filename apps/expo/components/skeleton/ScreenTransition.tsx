@@ -17,16 +17,16 @@ import { BlurView } from 'expo-blur';
 import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { onTabArrival, type MainTab } from '@/lib/navigation/goToTab';
-import GlassSurface, { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
+import { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export const ENTRY_MIN_MS = 350;
 const ENTRY_FADE_MS = 220;
-/** The detail screen slides out on top for ~350 ms: hold the full blur that long, then sharpen. */
-const RETURN_HOLD_MS = 320;
-const RETURN_MS = 520;
-const RETURN_INTENSITY = 100;
+/** Detail screens fade out (no slide) in ~220 ms: a short hold, then the blur loosens. */
+const RETURN_HOLD_MS = 80;
+const RETURN_MS = 650;
+const RETURN_INTENSITY = 42;
 
 type Props = {
   /** The screen's skeleton (components/skeleton/EntrySkeletons). */
@@ -105,7 +105,7 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
       setReturning(true);
       blur.value = withDelay(
         RETURN_HOLD_MS,
-        withTiming(0, { duration: RETURN_MS, easing: Easing.inOut(Easing.cubic) }, (done) => {
+        withTiming(0, { duration: RETURN_MS, easing: Easing.out(Easing.cubic) }, (done) => {
           if (done) runOnJS(setReturning)(false);
         }),
       );
@@ -125,21 +125,18 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
         // wash of the page colour that clears on the same curve.
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: frost }, blurStyle]} />
       ) : null}
-      {returning && canBlur && Platform.OS === 'ios' ? (
-        // iOS: the system chrome material dissolves by its own intensity (a parent opacity
-        // would switch a UIVisualEffectView off mid-fade).
+      {returning && canBlur ? (
+        // A moderate blur that loosens to sharp — strength animates, not opacity (Max's
+        // reference: content stays recognisable, no heavy frost). Android samples the screen's
+        // GlassBackdrop with the nav's light material.
         <AnimatedBlurView
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
           animatedProps={blurProps}
-          tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
+          tint={Platform.OS === 'ios' ? (isDark ? 'systemThinMaterialDark' : 'systemThinMaterialLight') : isDark ? 'systemUltraThinMaterialDark' : 'default'}
+          blurMethod="dimezisBlurViewSdk31Plus"
+          blurTarget={Platform.OS === 'android' ? target ?? undefined : undefined}
         />
-      ) : null}
-      {returning && canBlur && Platform.OS !== 'ios' ? (
-        // Android: exactly the standard bottom bar's frosted glass over the page, fading out.
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
-          <GlassSurface androidExperimentalBlur />
-        </Animated.View>
       ) : null}
       {entryShown ? (
         <Animated.View

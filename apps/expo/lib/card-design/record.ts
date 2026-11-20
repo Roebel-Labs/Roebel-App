@@ -21,8 +21,9 @@ export function recordDesign<P = unknown>(Skia: PictureSkiaLike, api: SkiaApi, d
 
 export type Tilt = { x: number; y: number };
 
-/** Radians of tilt that count as "full" (-1..1). */
+/** Radians of tilt that count as "full" (-1..1). Up/down (beta) reacts more than left/right. */
 const FULL_TILT = 0.5;
+const FULL_TILT_Y = 0.32;
 /** Exponential smoothing per sample (60 Hz): higher follows faster. */
 export const TILT_SMOOTHING = 0.14;
 
@@ -34,7 +35,7 @@ const clamp1 = (v: number) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v))
  * phone at any angle starts with a centred sheen.
  */
 export function nextTilt(prev: Tilt, rotation: { beta: number; gamma: number }, baseline: number, k = TILT_SMOOTHING): Tilt {
-  const target = { x: clamp1(rotation.gamma / FULL_TILT), y: clamp1((rotation.beta - baseline) / FULL_TILT) };
+  const target = { x: clamp1(rotation.gamma / FULL_TILT), y: clamp1((rotation.beta - baseline) / FULL_TILT_Y) };
   return { x: prev.x + (target.x - prev.x) * k, y: prev.y + (target.y - prev.y) * k };
 }
 

@@ -32,12 +32,18 @@ jest.mock('@/lib/card-design/assets', () => ({
   // The org logo (a sha) never arrives: offline.
   useDesignImages: () => new Map(),
 }));
-jest.mock('react-native-reanimated', () => ({
-  __esModule: true,
-  useReducedMotion: () => false,
-  useSharedValue: (v: unknown) => ({ value: v }),
-  useDerivedValue: (fn: () => unknown) => ({ value: fn() }),
-}));
+jest.mock('react-native-reanimated', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: { View },
+    Easing: { out: () => () => 0, quad: () => 0 },
+    useReducedMotion: () => false,
+    useSharedValue: (v: unknown) => ({ value: v }),
+    useAnimatedStyle: () => ({}),
+    withTiming: (v: unknown) => v,
+  };
+});
 jest.mock('expo-router', () => ({ useIsFocused: () => true }));
 jest.mock('expo-sensors', () => ({
   DeviceMotion: { setUpdateInterval: jest.fn(), addListener: jest.fn(() => ({ remove: jest.fn() })) },

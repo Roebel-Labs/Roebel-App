@@ -53,7 +53,10 @@ export default function GlassIconButton({
   style,
 }: Props) {
   const { isDark, variant } = useTheme();
-  const dark = tone === 'dark' || isDark;
+  // Standard frosted material follows the theme; `tone` no longer darkens it (white icons on a
+  // light glass in light mode). Kept in the props for existing callers.
+  void tone;
+  const dark = isDark;
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 

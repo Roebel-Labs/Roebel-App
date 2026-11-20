@@ -286,7 +286,9 @@ function ThemedLayout() {
       <ReferralDeepLinkHandler />
       {/* Sheet stage: the whole navigator shrinks behind open bottom sheets (iOS page-sheet depth). */}
       <SheetStageView style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
-        <TransitionStack screenOptions={{ headerShown: false }}>
+        {/* Screens fade instead of sliding (Max 2026-11-20): back from a detail page reveals the
+            main page with its blur → sharp (ScreenTransition), no slide-out. */}
+        <TransitionStack screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
           <TransitionStack.Screen
             name="submit"
             options={{ headerShown: true, title: 'Veranstaltung einreichen', animation: 'none' }}
