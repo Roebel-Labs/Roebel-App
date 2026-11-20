@@ -13,6 +13,7 @@ import { getInstalledMiniAppSlugs } from './miniapp-installs';
 import { buildPayload, resolveSelection, WIDGET_MAX_APPS, type WidgetPayload } from './widget-payload';
 import { pushToPlatform } from './widget-platform';
 import { clearUnreadMiniApp, setUnreadMiniApps } from './miniapp-unread';
+import { syncContentWidgets } from './widget-content-sync';
 
 export { useMiniAppUnread } from './miniapp-unread';
 
@@ -131,22 +132,25 @@ let inFlight: Promise<WidgetPayload | null> | null = null;
 let queued: string | null | undefined;
 
 /**
- * Rebuilds the payload and hands it to the OS widget. Concurrent calls coalesce: one
- * run at a time, the latest wallet runs once more afterwards.
+ * Rebuilds every widget payload (Mini Apps, Mittagstisch, Diese Woche) and hands them
+ * to the OS. Concurrent calls coalesce: one run at a time, the latest wallet runs once
+ * more afterwards. Resolves with the Mini Apps payload.
  */
 export function syncWidget(wallet: string | null): Promise<WidgetPayload | null> {
   if (inFlight) {
     queued = wallet;
     return inFlight;
   }
-  inFlight = runSync(wallet).finally(() => {
-    inFlight = null;
-    if (queued !== undefined) {
-      const next = queued;
-      queued = undefined;
-      void syncWidget(next);
-    }
-  });
+  inFlight = Promise.all([runSync(wallet), syncContentWidgets()])
+    .then(([payload]) => payload)
+    .finally(() => {
+      inFlight = null;
+      if (queued !== undefined) {
+        const next = queued;
+        queued = undefined;
+        void syncWidget(next);
+      }
+    });
   return inFlight;
 }
 

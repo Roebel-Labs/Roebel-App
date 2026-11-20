@@ -1,5 +1,5 @@
 /**
- * iOS home-screen widget "Mini Apps" (WidgetKit + SwiftUI), linked into the Xcode
+ * iOS home-screen widgets "Mini Apps", "Mittagstisch" and "Diese Woche" (WidgetKit + SwiftUI), linked into the Xcode
  * project at prebuild by @bacons/apple-targets. The app writes the payload into the
  * shared App Group (lib/widget-platform.ios.ts); the widget only reads it.
  * @type {import('@bacons/apple-targets/app.plugin').ConfigFunction}
@@ -10,7 +10,7 @@ module.exports = (config) => ({
   displayName: 'Röbel',
   bundleIdentifier: '.widget',
   deploymentTarget: '17.0',
-  frameworks: ['SwiftUI', 'WidgetKit'],
+  frameworks: ['SwiftUI', 'WidgetKit', 'AppIntents'],
   colors: {
     $widgetBackground: { light: '#ffffff', dark: '#18191B' },
     $accent: '#00498B',
