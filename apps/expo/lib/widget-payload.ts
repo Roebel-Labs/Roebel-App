@@ -31,7 +31,8 @@ export function widgetDeepLink(slug: string): string {
 
 /**
  * The apps the widget shows. An explicit choice (even an empty one) wins and keeps its
- * order; without one, the installed apps in store order, else the featured apps.
+ * order; without one, the installed apps in store order, else the featured apps,
+ * else the newest live apps.
  * Apps that are no longer live are dropped.
  */
 export function resolveSelection(
@@ -47,6 +48,9 @@ export function resolveSelection(
     const inst = new Set(installed);
     apps = live.filter((a) => inst.has(a.slug));
     if (apps.length === 0) apps = live.filter((a) => a.featured);
+    // Nothing installed and nothing featured (the usual case for a new user):
+    // never leave the widget empty — show the store's newest live apps.
+    if (apps.length === 0) apps = live;
   }
   return apps.slice(0, WIDGET_MAX_APPS);
 }
