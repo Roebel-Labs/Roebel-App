@@ -6,6 +6,7 @@ import type { BlendModeName, CanvasLike, FontSet, PaintOptions, SkiaApi, SkImage
 import { drawDesign, drawHeight, type DrawOptions } from '../draw/draw';
 import { parseHex } from '../draw/presets';
 import { loadFontSet } from '../fonts';
+import { BUILTIN_ASSETS } from '../builtin';
 
 export function createCanvasKitApi(ck: CanvasKit): SkiaApi {
   const effects = new Map<string, RuntimeEffect | null>();
@@ -127,6 +128,34 @@ export async function readPackageFile(relative: string): Promise<Uint8Array> {
   return new Uint8Array(await readFile(new URL(`../../${relative}`, import.meta.url)));
 }
 
+/**
+ * Bytes of a built-in asset (`builtin:<name>`). Node reads the package file; a
+ * browser fetches it relative to this module (bundlers must ship assets/builtin).
+ */
+export async function builtinAssetBytes(id: string): Promise<Uint8Array> {
+  const rel = BUILTIN_ASSETS[id];
+  if (!rel) throw new Error(`unknown built-in asset ${id}`);
+  if (isNode) return readPackageFile(rel);
+  const res = await fetch(new URL(`../../${rel}`, import.meta.url));
+  if (!res.ok) throw new Error(`built-in asset ${id}: HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/** Decodes the built-in assets a design references that are not already in `images`. */
+async function withBuiltins(api: SkiaApi, design: CardDesign, images: Map<string, SkImageLike>): Promise<Map<string, SkImageLike>> {
+  const ids = new Set<string>();
+  if (design.background.kind === 'image') ids.add(design.background.assetId);
+  for (const l of design.layers) if (l.type === 'image') ids.add(l.assetId);
+  const missing = [...ids].filter((id) => !images.has(id) && id in BUILTIN_ASSETS);
+  if (missing.length === 0) return images;
+  const out = new Map(images);
+  for (const id of missing) {
+    const img = api.makeImage(await builtinAssetBytes(id));
+    if (img) out.set(id, img);
+  }
+  return out;
+}
+
 const defaultFonts = new WeakMap<CanvasKit, Promise<FontSet>>();
 
 /** The curated font set read from the package's fonts/ directory (Node only). */
@@ -147,13 +176,15 @@ export type RenderPngOptions = Omit<DrawOptions, 'fonts' | 'images'> & {
 
 /**
  * Renders a design to PNG bytes. In Node, fonts default to the package's fonts.
+ * Built-in assets the design uses are decoded automatically unless given in `images`.
  * In the browser pass `ck` and `fonts` explicitly.
  */
 export async function renderPng(design: CardDesign, opts: RenderPngOptions): Promise<Uint8Array> {
   const ck = opts.ck ?? (await loadCanvasKit());
   const api = createCanvasKitApi(ck);
   const fonts = opts.fonts ?? (await nodeFontSet(ck, api));
-  const images = opts.images ?? new Map<string, SkImageLike>();
+  const given = opts.images ?? new Map<string, SkImageLike>();
+  const images = await withBuiltins(api, design, given);
   const width = Math.round(opts.width);
   const height = drawHeight(design, width);
   const surface = ck.MakeSurface(width, height);
@@ -170,5 +201,6 @@ export async function renderPng(design: CardDesign, opts: RenderPngOptions): Pro
     return png;
   } finally {
     surface.delete();
+    for (const [id, img] of images) if (!given.has(id)) api.dispose(img);
   }
 }
