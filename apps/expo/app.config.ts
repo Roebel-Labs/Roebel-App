@@ -212,6 +212,28 @@ const config: ExpoConfig = {
     ],
     // Home-screen widget "Mini Apps" (targets/widget). Reads the App Group below.
     '@bacons/apple-targets',
+    // Android home-screen widget "Mini Apps" (widgets/, task handler in index.js).
+    [
+      'react-native-android-widget',
+      {
+        widgets: [
+          {
+            name: 'MiniApps',
+            label: 'Mini Apps',
+            description: 'Deine Röbel Mini Apps auf einen Blick.',
+            minWidth: '110dp',
+            minHeight: '110dp',
+            targetCellWidth: 4,
+            targetCellHeight: 2,
+            maxResizeWidth: '520dp',
+            maxResizeHeight: '520dp',
+            resizeMode: 'horizontal|vertical',
+            // 30 min (the Android minimum): re-sync so unread dots appear while the app is closed.
+            updatePeriodMillis: 1800000,
+          },
+        ],
+      },
+    ],
   ],
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
