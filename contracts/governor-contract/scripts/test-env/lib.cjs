@@ -26,6 +26,7 @@ const PRODUCTION_ADDRESSES = [
   "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3", // MaciAttesterGovernor (prod)
   "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa", // Attester Safe (prod owner)
   "0x320b4ea2f4E31b81245e684D08AF593DE05E9919", // OrgRegistry (prod, NSP-14)
+  "0xF06BAa9396ef57E660D3549897d5ca8fb788b8E1", // CredentialRegistry (prod)
 ].map((a) => a.toLowerCase());
 
 /** Throw if an address we are about to WRITE to belongs to the production stack. */
