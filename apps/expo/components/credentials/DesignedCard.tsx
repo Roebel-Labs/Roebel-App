@@ -17,6 +17,11 @@ type Props = {
   values?: FieldValues;
   /** 'tilt': the sheen follows the phone (only while the screen is focused); 'static': drawn once. */
   animate?: 'tilt' | 'static';
+  /**
+   * With 'tilt': the card also leans a few degrees against the phone (default). Off where touch
+   * targets sit on the card (the designer's editing surface) so they stay aligned.
+   */
+  lean?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
   /** Shown instead while the fonts load and when Skia cannot draw this card (fonts failed, nothing recorded). */
@@ -48,7 +53,7 @@ function disposeLater(p: unknown) {
  * A card drawn from its design with Skia. Missing images are left out and fetched again on the
  * next focus; while the fonts load, a quiet placeholder of the card's shape is shown.
  */
-export default function DesignedCard({ design, width, mode, values, animate = 'static', style, accessibilityLabel, fallback }: Props) {
+export default function DesignedCard({ design, width, mode, values, animate = 'static', lean = true, style, accessibilityLabel, fallback }: Props) {
   const { colors } = useTheme();
   const focused = useIsFocused();
   const reduced = useReducedMotion();
@@ -140,7 +145,7 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
 
   return (
     <Animated.View
-      style={[{ width, height, borderRadius: radius }, style, animate === 'tilt' ? leanStyle : null]}
+      style={[{ width, height, borderRadius: radius }, style, animate === 'tilt' && lean ? leanStyle : null]}
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}
       testID="designed-card"
