@@ -43,3 +43,9 @@ export async function pushEventsToPlatform(payload: EventsPayload): Promise<void
     console.warn('[widget] Android events push failed:', e);
   }
 }
+
+/** Android widgets read AsyncStorage, which already holds the recent list (lib/miniapp-installs.ts). */
+export function pushRecentToPlatform(_slugs: string[]): void {}
+export function readRecentFromPlatform(): string[] {
+  return [];
+}

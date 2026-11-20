@@ -9,9 +9,16 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from './supabase';
 import { fetchLiveMiniApps, type MiniApp } from './miniapps';
-import { getInstalledMiniAppSlugs } from './miniapp-installs';
-import { buildPayload, resolveSelection, WIDGET_MAX_APPS, type WidgetPayload } from './widget-payload';
-import { pushToPlatform } from './widget-platform';
+import { getRecentMiniAppSlugs } from './miniapp-installs';
+import {
+  buildPayload,
+  dedupeSlugs,
+  mergeWidgetApps,
+  resolveSelection,
+  WIDGET_MAX_APPS,
+  type WidgetPayload,
+} from './widget-payload';
+import { pushRecentToPlatform, pushToPlatform, readRecentFromPlatform } from './widget-platform';
 import { clearUnreadMiniApp, setUnreadMiniApps } from './miniapp-unread';
 import { syncContentWidgets } from './widget-content-sync';
 
@@ -22,7 +29,7 @@ export const PAYLOAD_KEY = 'widget.payload.v1';
 export const WALLET_KEY = 'widget.wallet.v1';
 const ICON_SIZE = 96;
 
-/** null = the user never chose (widget falls back to installed / featured apps). */
+/** null = the user never chose (widget shows the recently opened apps). */
 export async function getWidgetSelection(): Promise<string[] | null> {
   try {
     const raw = await AsyncStorage.getItem(SELECTION_KEY);
@@ -132,7 +139,7 @@ let inFlight: Promise<WidgetPayload | null> | null = null;
 let queued: string | null | undefined;
 
 /**
- * Rebuilds every widget payload (Mini Apps, Mittagstisch, Diese Woche) and hands them
+ * Rebuilds every widget payload (Mini Apps, Mittagstisch, Events) and hands them
  * to the OS. Concurrent calls coalesce: one run at a time, the latest wallet runs once
  * more afterwards. Resolves with the Mini Apps payload.
  */
@@ -162,17 +169,22 @@ async function runSync(wallet: string | null): Promise<WidgetPayload | null> {
     } catch {
       return null; // offline: keep what the widget shows
     }
-    const [selected, installed, unread] = await Promise.all([
+    const [selected, appRecent, unread, previous] = await Promise.all([
       getWidgetSelection(),
-      getInstalledMiniAppSlugs().catch(() => [] as string[]),
+      getRecentMiniAppSlugs().catch(() => [] as string[]),
       wallet ? fetchUnreadMiniAppSlugs(wallet) : Promise.resolve(new Set<string>()),
+      readStoredPayload(),
     ]);
     setUnreadMiniApps(unread);
+    const recent = dedupeSlugs(appRecent, readRecentFromPlatform()).slice(0, WIDGET_MAX_APPS * 2);
 
-    const apps = resolveSelection(selected, installed, live);
+    const apps = resolveSelection(selected, recent, live);
     const icons: Record<string, string | null> = {};
     await Promise.all(apps.map(async (a) => (icons[a.slug] = await loadIcon(a.iconUrl))));
-    const payload = buildPayload(apps, icons, unread, Date.now());
+    const fresh = buildPayload(apps, icons, unread, Date.now());
+    // Opened apps stay: a failed / empty server answer never empties the widget.
+    const payload: WidgetPayload = { ...fresh, apps: mergeWidgetApps(fresh.apps, previous?.apps, selected, recent) };
+    pushRecentToPlatform(recent);
 
     await AsyncStorage.multiSet([
       [PAYLOAD_KEY, JSON.stringify(payload)],

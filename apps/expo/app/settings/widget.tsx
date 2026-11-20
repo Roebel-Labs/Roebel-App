@@ -1,6 +1,6 @@
 /**
  * Profil → Einstellungen → Widget: which mini apps the home-screen widget shows, and in
- * what order (max 15 — the widget's last tile is always "Alle"). Every change is saved
+ * what order (max 15 — the widget’s last tile is always the store tile "Mini-Apps entdecken"). Every change is saved
  * and pushed to the widget at once. Also the landing page of the empty widget
  * (roebel://settings/widget).
  */
@@ -18,7 +18,7 @@ import ArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
 import ArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
 import { AppIcon } from '@/components/miniapp/MiniAppCard';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
-import { getInstalledMiniAppSlugs } from '@/lib/miniapp-installs';
+import { getRecentMiniAppSlugs } from '@/lib/miniapp-installs';
 import { getWidgetSelection, setWidgetSelection } from '@/lib/widget-sync';
 import { resolveSelection, WIDGET_MAX_APPS } from '@/lib/widget-payload';
 
@@ -56,8 +56,8 @@ export default function WidgetSettingsScreen() {
   useEffect(() => {
     if (!live || selected) return;
     let cancelled = false;
-    void Promise.all([getWidgetSelection(), getInstalledMiniAppSlugs()]).then(([stored, installed]) => {
-      if (!cancelled) setSelected(resolveSelection(stored, installed, live).map((a) => a.slug));
+    void Promise.all([getWidgetSelection(), getRecentMiniAppSlugs()]).then(([stored, recent]) => {
+      if (!cancelled) setSelected(resolveSelection(stored, recent, live).map((a) => a.slug));
     });
     return () => {
       cancelled = true;
@@ -107,7 +107,7 @@ export default function WidgetSettingsScreen() {
 
         <Section
           title="Im Widget"
-          hint={`${chosen.length} von ${WIDGET_MAX_APPS} · Die letzte Kachel „Alle“ öffnet immer den Mini-App-Store.`}
+          hint={`${chosen.length} von ${WIDGET_MAX_APPS} · Ohne Auswahl zeigt das Widget deine zuletzt geöffneten Mini Apps. Die letzte Kachel „Mini-Apps entdecken“ öffnet immer den Mini-App-Store.`}
           colors={colors}
         >
           {chosen.length === 0 ? (

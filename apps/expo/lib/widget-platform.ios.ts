@@ -39,3 +39,28 @@ export async function pushLunchToPlatform(payload: LunchPayload, _page: number):
 export async function pushEventsToPlatform(payload: EventsPayload): Promise<void> {
   pushIos(EVENTS_PAYLOAD_KEY, JSON.stringify(payload), 'EventsThisWeek');
 }
+
+const RECENT_KEY = 'widget.recent.v1';
+
+/**
+ * Second copy of the recently opened mini apps next to the widget payload (App Group), so
+ * the widget's apps survive even if the app's own storage is lost.
+ */
+export function pushRecentToPlatform(slugs: string[]): void {
+  try {
+    const { ExtensionStorage } = require('@bacons/apple-targets') as typeof import('@bacons/apple-targets');
+    new ExtensionStorage(WIDGET_APP_GROUP).set(RECENT_KEY, JSON.stringify(slugs));
+  } catch {
+    // Older binary without the App Group.
+  }
+}
+
+export function readRecentFromPlatform(): string[] {
+  try {
+    const { ExtensionStorage } = require('@bacons/apple-targets') as typeof import('@bacons/apple-targets');
+    const parsed = JSON.parse(new ExtensionStorage(WIDGET_APP_GROUP).get(RECENT_KEY) ?? '[]') as unknown;
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
