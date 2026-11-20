@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -271,8 +271,10 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.backdrop }]} edges={['top', 'left', 'right']}>
       <GlassProvider>
-        {/* Android: no blur sampling here — it froze the tilting card's Skia view (see GlassBackdrop). */}
-        <GlassBackdrop style={styles.content} sampling={Platform.OS !== 'android'}>
+        {/* Only the sheets below are blur sources (GlassBackdrop around each ProfileSheet): the
+            glass nav/QR frost real content, while the tilting credential cards above stay
+            OUTSIDE any blur target — a Skia TextureView inside one never updates on Android. */}
+        <View style={styles.content}>
           <Animated.ScrollView
             style={styles.content}
             onScroll={chrome.onScroll}
@@ -283,6 +285,7 @@ export default function ProfileScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
             {!isConnected ? (
+              <GlassBackdrop style={styles.sheetBackdrop}>
               <ProfileSheet flat style={{ paddingBottom: sheetBottomPad }}>
                 <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
                   <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Noch keinen Account</Text>
@@ -299,7 +302,9 @@ export default function ProfileScreen() {
                 <RewardsCTABanner variant="guest" />
                 <ProfileMenu variant="guest" />
               </ProfileSheet>
+              </GlassBackdrop>
             ) : isOrg ? (
+              <GlassBackdrop style={styles.sheetBackdrop}>
               <ProfileSheet flat style={{ paddingBottom: sheetBottomPad }}>
                 <OrgIdentityRow
                   name={activeAccount?.name || 'Organisation'}
@@ -322,6 +327,7 @@ export default function ProfileScreen() {
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
                 <ProfileMenu variant="org" />
               </ProfileSheet>
+              </GlassBackdrop>
             ) : (
               <>
                 {creds.loader}
@@ -351,6 +357,7 @@ export default function ProfileScreen() {
                   </Pressable>
                 )}
                 <CredentialCardStack cards={creds.profile.cards} onPress={openCard} holder={holder} animateFront={!shownCard} />
+                <GlassBackdrop style={styles.sheetBackdrop}>
                 <ProfileSheet style={{ paddingBottom: sheetBottomPad }}>
                   <IdentityRow
                     name={displayName}
@@ -388,10 +395,11 @@ export default function ProfileScreen() {
                   )}
                   <ProfileMenu variant="personal" gridless={!showGrid} />
                 </ProfileSheet>
+                </GlassBackdrop>
               </>
             )}
           </Animated.ScrollView>
-        </GlassBackdrop>
+        </View>
 
         {/* First open: matched skeleton until the profile is there; back from a detail page: blur → sharp. */}
         <ScreenTransition
@@ -502,6 +510,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1 },
   navOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  sheetBackdrop: { zIndex: 2 },
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   bannerWrap: { marginTop: 16 },
   emptyState: {

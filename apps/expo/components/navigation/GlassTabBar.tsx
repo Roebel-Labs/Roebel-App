@@ -188,8 +188,9 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
             />
           ) : (
             <>
+              {/* Exactly the standard bar's frosted material — no extra wash on top
+                  (it turned the glass into a flat fill). */}
               <GlassSurface androidExperimentalBlur />
-              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: palette.wash }]} />
             </>
           )}
 

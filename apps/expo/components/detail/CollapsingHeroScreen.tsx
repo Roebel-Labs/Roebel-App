@@ -33,6 +33,7 @@ import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
+  useAnimatedProps,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -43,6 +44,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { GlassFill, glassChrome } from '@/components/GlassIconButton';
+import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import { BlurView } from 'expo-blur';
 import { SkeletonScope, Bone } from '@/components/skeleton/Skeleton';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { DETAIL_HEADER_BAR, getCollapseRanges } from './collapseRanges';
@@ -60,7 +63,7 @@ const BUTTON = 48;
 const INSET_OPEN = 20;
 const INSET_COLLAPSED = 16;
 const BUTTON_GAP = 8;
-const BLUR_RADIUS = 25;
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 type Props = {
   heroHeight: number;
@@ -169,6 +172,9 @@ export default function CollapsingHeroScreen({
   const blurStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [0, collapseEnd], [0, 1], Extrapolation.CLAMP),
   }));
+  const heroBlurProps = useAnimatedProps(() => ({
+    intensity: interpolate(scrollY.value, [0, collapseEnd], [0, 100], Extrapolation.CLAMP),
+  }));
   const washStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [0, collapseEnd], [0, 0.55], Extrapolation.CLAMP),
   }));
@@ -216,13 +222,25 @@ export default function CollapsingHeroScreen({
           <Bone width="100%" height={heroHeight} radius={0} />
         ) : (
           <Animated.View style={[StyleSheet.absoluteFill, heroLayerStyle]}>
-            {cleanHero}
-            {heroOverlay}
-            {imageUri ? (
+            <GlassBackdrop style={StyleSheet.absoluteFill}>
+              {cleanHero}
+              {heroOverlay}
+            </GlassBackdrop>
+            {/* Frost: exactly the standard bottom bar's glass material over the hero
+                (Android samples the hero's GlassBackdrop; iOS dissolves by intensity,
+                since a parent opacity would switch a UIVisualEffectView off). */}
+            {Platform.OS === 'ios' ? (
+              <AnimatedBlurView
+                pointerEvents="none"
+                style={StyleSheet.absoluteFill}
+                animatedProps={heroBlurProps}
+                tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
+              />
+            ) : (
               <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
-                <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={BLUR_RADIUS} />
+                <GlassSurface androidExperimentalBlur />
               </Animated.View>
-            ) : null}
+            )}
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }, washStyle]} />
           </Animated.View>
         )}
@@ -245,6 +263,7 @@ export default function CollapsingHeroScreen({
   );
 
   return (
+    <GlassProvider>
     <View style={[styles.root, { backgroundColor: pageBg }]}>
       <Animated.ScrollView
         {...scrollViewProps}
@@ -310,6 +329,7 @@ export default function CollapsingHeroScreen({
 
       {footer}
     </View>
+    </GlassProvider>
   );
 }
 

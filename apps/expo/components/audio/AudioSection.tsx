@@ -18,7 +18,8 @@ import { RAIL_LIST_PROPS } from '@/components/railListProps';
 
 export const AUDIO_SHOWS_QUERY_KEY = ['explore', 'audio-shows'] as const;
 
-const CARD_SIZE = 148;
+/** Same as the marketplace rail cards (190, square image) — Max 2026-11-20. */
+const CARD_SIZE = 190;
 
 function AudioCard({ show }: { show: AudioShowWithEpisodes }) {
   const router = useRouter();

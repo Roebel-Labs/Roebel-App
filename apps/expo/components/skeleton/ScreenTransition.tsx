@@ -16,7 +16,7 @@ import { useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
-import { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
+import GlassSurface, { GLASS_BLUR_AVAILABLE, useGlassTarget } from '@/components/GlassSurface';
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
@@ -25,7 +25,7 @@ const ENTRY_FADE_MS = 220;
 /** The detail screen slides out on top for ~350 ms: hold the full blur that long, then sharpen. */
 const RETURN_HOLD_MS = 320;
 const RETURN_MS = 520;
-const RETURN_INTENSITY = 55;
+const RETURN_INTENSITY = 100;
 
 type Props = {
   /** The screen's skeleton (components/skeleton/EntrySkeletons). */
@@ -101,16 +101,20 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
         // wash of the page colour that clears on the same curve.
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: frost }, blurStyle]} />
       ) : null}
-      {returning && canBlur ? (
+      {returning && canBlur && Platform.OS === 'ios' ? (
+        // iOS: the system chrome material dissolves by its own intensity (a parent opacity
+        // would switch a UIVisualEffectView off mid-fade).
+        <AnimatedBlurView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          animatedProps={blurProps}
+          tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
+        />
+      ) : null}
+      {returning && canBlur && Platform.OS !== 'ios' ? (
+        // Android: exactly the standard bottom bar's frosted glass over the page, fading out.
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
-          <AnimatedBlurView
-            style={StyleSheet.absoluteFill}
-            animatedProps={blurProps}
-            tint={isDark ? 'dark' : 'light'}
-            // Android: sample the screen's GlassBackdrop (mounted only for this short motion).
-            blurMethod="dimezisBlurViewSdk31Plus"
-            blurTarget={Platform.OS === 'android' ? target ?? undefined : undefined}
-          />
+          <GlassSurface androidExperimentalBlur />
         </Animated.View>
       ) : null}
       {entryShown ? (
