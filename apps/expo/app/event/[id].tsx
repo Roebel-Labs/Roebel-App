@@ -97,6 +97,9 @@ const OrganizerPhoneButton: React.FC<{ phone: string; color: string }> = ({ phon
   </Pressable>
 );
 
+/** Status-bar gap + top bar (back / share) of the hero — kept clear of the entry skeleton. */
+const EVENT_CHROME_HEIGHT = 6 + 44 + 4;
+
 export default function EventDetails() {
   const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
   const router = useRouter();
@@ -726,6 +729,12 @@ export default function EventDetails() {
         <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
       </ScrollView>
 
+      {/* Entry skeleton: below the top bar (back/share stay live), under the
+          sticky footer. Aligned to the screen so the flyer bone matches. */}
+      <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + EVENT_CHROME_HEIGHT} alignToScreenTop>
+        <EventDetailSkeleton />
+      </ScreenShimmer>
+
       {/* Sticky footer: the primary action floats over the scrolling content. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
         <LinearGradient
@@ -756,9 +765,6 @@ export default function EventDetails() {
           onError={(message) => showSnackbar({ message, duration: 4000 })}
         />
       )}
-      <ScreenShimmer shimmer={entryShimmer}>
-        <EventDetailSkeleton />
-      </ScreenShimmer>
     </View>
   );
 }

@@ -26,14 +26,24 @@ type Props = {
   shimmer: EntryShimmer;
   /** The screen's skeleton layout (see ScreenSkeletons). */
   children: React.ReactNode;
-  /** Space kept clear at the top (a floating header the skeleton must not cover). */
+  /**
+   * Space kept clear at the top: the header / back button / top bar stay
+   * visible and tappable above the overlay. The overlay never covers
+   * navigation chrome — render it BEFORE floating chrome in JSX.
+   */
   topInset?: number;
+  /**
+   * Keep the skeleton aligned to the screen top and clip its part under
+   * `topInset` — for full-bleed screens (event flyer, org photo) whose
+   * skeleton draws its own chrome row that the real chrome replaces.
+   */
+  alignToScreenTop?: boolean;
   /** Overlay fill; defaults to the theme background. */
   backgroundColor?: string;
   style?: StyleProp<ViewStyle>;
 };
 
-export default function ScreenShimmer({ shimmer, children, topInset = 0, backgroundColor, style }: Props) {
+export default function ScreenShimmer({ shimmer, children, topInset = 0, alignToScreenTop = false, backgroundColor, style }: Props) {
   const { colors } = useTheme();
   const { visible, reduceMotion } = shimmer;
   const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -62,6 +72,7 @@ export default function ScreenShimmer({ shimmer, children, topInset = 0, backgro
       pointerEvents={visible ? 'auto' : 'none'}
       style={[
         StyleSheet.absoluteFill,
+        styles.overlay,
         { top: topInset, backgroundColor: backgroundColor ?? colors.background, opacity },
         style,
       ]}
@@ -69,7 +80,9 @@ export default function ScreenShimmer({ shimmer, children, topInset = 0, backgro
       importantForAccessibility="no-hide-descendants"
     >
       <StaticContext.Provider value={reduceMotion}>
-        {reduceMotion ? children : <ShimmerGroup>{children}</ShimmerGroup>}
+        <View style={[styles.fill, alignToScreenTop && { marginTop: -topInset }]}>
+          {reduceMotion ? children : <ShimmerGroup>{children}</ShimmerGroup>}
+        </View>
       </StaticContext.Provider>
     </Animated.View>
   );
@@ -88,4 +101,6 @@ export function Bone({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = StyleSheet.create({
   bone: { borderRadius: 8 },
+  overlay: { overflow: 'hidden' },
+  fill: { flex: 1 },
 });

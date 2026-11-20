@@ -121,6 +121,9 @@ function formatEventDate(date: string | null | undefined, time: string | null): 
 }
 
 
+/** Status-bar gap + the hero's round back/share buttons — kept clear of the entry skeleton. */
+const ACCOUNT_CHROME_HEIGHT = 8 + 44 + 8;
+
 export default function PublicAccountScreen() {
   return (
     <InlineErrorBoundary label="account-screen">
@@ -529,15 +532,16 @@ function PublicAccountScreenInner() {
           onOpenMap={hasValidCoords ? openMap : undefined}
           onEditHours={() => goToOwnerScreen('/org/opening-hours')}
         />
+        {/* Entry skeleton below the hero's back/share row (it stays live). */}
+        <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + ACCOUNT_CHROME_HEIGHT} alignToScreenTop>
+          <AccountPageSkeleton onBack={goBack} />
+        </ScreenShimmer>
         <RatingModal
           visible={ratingModalOpen}
           accountId={account.id}
           accountName={account.name}
           onClose={closeRatingModal}
         />
-        <ScreenShimmer shimmer={entryShimmer}>
-          <AccountPageSkeleton onBack={goBack} />
-        </ScreenShimmer>
       </View>
     );
   }
@@ -1093,6 +1097,11 @@ function PublicAccountScreenInner() {
         )}
       </ScrollView>
 
+      {/* Entry skeleton below the hero's back/share row (it stays live). */}
+      <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + ACCOUNT_CHROME_HEIGHT} alignToScreenTop>
+        <AccountPageSkeleton onBack={goBack} />
+      </ScreenShimmer>
+
       {/* Sticky category bar — rendered OUTSIDE the ScrollView as an
           absolute overlay so its taps aren't fought over by the parent
           ScrollView's gesture recognizer (which was the root cause of
@@ -1142,9 +1151,6 @@ function PublicAccountScreenInner() {
           onClose={() => setSearchModalOpen(false)}
         />
       )}
-      <ScreenShimmer shimmer={entryShimmer}>
-        <AccountPageSkeleton onBack={goBack} />
-      </ScreenShimmer>
     </SafeAreaView>
   );
 }
