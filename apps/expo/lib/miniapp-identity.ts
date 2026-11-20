@@ -157,6 +157,12 @@ export const CONSENT_COPY = {
   addressDetail:
     'Damit die App Transaktionen für dich vorbereiten kann. Ohne sie bekommt die App nur eine anonyme Kennung, die bei jeder Mini-App anders ist.',
   privateNote: 'Diese Mitgliedschaft ist privat. Die App erfährt nur, dass du Mitglied bist.',
+  v1AddressDetail: 'Damit die App weiß, welches Konto du bist, und Aktionen für dich vorbereiten kann.',
+  connectTitle: 'Verbinden',
+  connectLead: 'Bestätige, welche Angaben die App sehen darf. Du kannst das später jederzeit auf der Seite der Mini-App ändern.',
+  seesTitle: 'Diese App sieht',
+  connectCta: 'Verbinden',
+  connected: 'Verbunden',
 } as const;
 
 /** The consent sheet's rows for `keys`, in that order. Unknown credential types are left out. */
