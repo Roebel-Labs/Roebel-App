@@ -2,6 +2,10 @@
  * Settings → Passkey & Wiederherstellung (preview-gated screen): "Schlüssel sichern" and
  * "Nachrichten auf Passkey übertragen". Works from a thirdweb session (via this device's
  * migration record) and from a passkey session. Mounted only once the passkey is connected.
+ *
+ * `words` (a 12-word session): "Schlüssel sichern" backs the keys up under the account's own key
+ * (derived-keys-runtime `backupKeysForSession`, unlocked by the 12 words) with words copy; the
+ * messages card is hidden (it moves the inbox onto a passkey, which this account does not have).
  */
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,13 +16,13 @@ import { useXmtp } from '@/context/XmtpContext';
 import { fontFamily } from '@/constants/theme';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import type { PasskeySession } from '@/lib/passkey/session';
-import { describeCompletion } from '@/lib/passkey/key-completion';
+import { describeCompletion, describeWordsBackup } from '@/lib/passkey/key-completion';
 import type { Account } from 'thirdweb/wallets';
 import ThirdwebConfirm from './ThirdwebConfirm';
 
 type Status = { tone: 'info' | 'error' | 'success'; text: string } | null;
 
-export default function KeysAndMessagesSection() {
+export default function KeysAndMessagesSection({ words = false }: { words?: boolean }) {
   const { colors } = useTheme();
   const account = useActiveAccount();
   const { linkPasskey } = useXmtp();
@@ -39,6 +43,12 @@ export default function KeysAndMessagesSection() {
     setBusy('keys');
     setKeysStatus(null);
     try {
+      const own = passkeySessionOf<PasskeySession>(account);
+      if (words && own) {
+        const rt = await import('@/lib/passkey/derived-keys-runtime');
+        setKeysStatus(describeWordsBackup(await rt.backupKeysForSession(own)));
+        return;
+      }
       const s = await session();
       if (!s) throw new Error('Auf diesem Gerät ist kein verbundener Passkey eingerichtet.');
       const rt = await import('@/lib/passkey/key-completion-runtime');
@@ -46,7 +56,18 @@ export default function KeysAndMessagesSection() {
       setNeedsThirdweb(r.status === 'needsThirdweb');
       setKeysStatus(describeCompletion(r));
     } catch (e) {
-      setKeysStatus({ tone: 'error', text: e instanceof Error ? e.message : 'Sichern fehlgeschlagen.' });
+      const name = e instanceof Error ? e.name : '';
+      const text =
+        name === 'PhraseMismatchError'
+          ? (e as Error).message
+          : name === 'PhraseUnavailableError'
+          ? 'Deine 12 Wörter sind auf diesem Gerät nicht mehr lesbar. Bitte gib sie noch einmal ein.'
+          : name === 'PhraseCancelledError'
+            ? 'Abgebrochen.'
+            : e instanceof Error
+              ? e.message
+              : 'Sichern fehlgeschlagen.';
+      setKeysStatus({ tone: 'error', text });
     } finally {
       setBusy(null);
     }
@@ -75,8 +96,9 @@ export default function KeysAndMessagesSection() {
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Schlüssel sichern</Text>
         <Text style={[styles.small, { color: colors.textSecondary }]}>
-          Dein Abstimmungs- und Nostr-Schlüssel (und deine Bürger-Bestätigung) werden verschlüsselt gesichert. Entsperren kann sie nur dein
-          Passkey – so funktionieren sie auch auf einem neuen Gerät.
+          {words
+            ? 'Dein Abstimmungs- und Nostr-Schlüssel (und deine Bürger-Bestätigung) werden verschlüsselt gesichert. Entsperren kann sie nur, wer deine 12 Wörter hat – so funktionieren sie auch auf einem neuen Gerät.'
+            : 'Dein Abstimmungs- und Nostr-Schlüssel (und deine Bürger-Bestätigung) werden verschlüsselt gesichert. Entsperren kann sie nur dein Passkey – so funktionieren sie auch auf einem neuen Gerät.'}
         </Text>
         <Pressable
           onPress={() => onBackup()}
@@ -90,6 +112,7 @@ export default function KeysAndMessagesSection() {
         {needsThirdweb && <ThirdwebConfirm disabled={!!busy} onConfirmed={(tw) => void onBackup(tw)} />}
       </View>
 
+      {words ? null : (
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Nachrichten auf Passkey übertragen</Text>
         <Text style={[styles.small, { color: colors.textSecondary }]}>
@@ -106,6 +129,7 @@ export default function KeysAndMessagesSection() {
         </Pressable>
         {msgStatus && <Text style={[styles.small, { color: tone(msgStatus) }]}>{msgStatus.text}</Text>}
       </View>
+      )}
     </View>
   );
 }

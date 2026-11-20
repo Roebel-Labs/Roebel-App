@@ -21,9 +21,30 @@ import {
   SDK_REFERENCE,
   SDK_VERSION,
 } from "./ai/htmlPrompt";
+import { DOCS_CHAPTERS, type DocsChapterId } from "./devdocs-chapters";
+import { WELL_KNOWN_PATH } from "./manifestFile";
 import { MINI_APPS_SITE_DOMAIN } from "./siteDomain";
 
 export const DOCS_BASE_URL = "https://www.roebel.app";
+
+/** Every tool of the MCP server (src/app/api/[transport]/route.ts); a test keeps them in sync. */
+export const MCP_TOOLS = [
+  "get_started",
+  "get_docs",
+  "get_llms_full",
+  "validate_html",
+  "list_my_apps",
+  "get_app",
+  "publish_html_app",
+  "submit_external_app",
+  "register_app_url",
+  "update_app_manifest",
+  "get_app_analytics",
+  "get_app_content",
+  "set_app_content",
+  "import_images_from_url",
+  "delete_app_content",
+] as const;
 
 /** Where a published single-file app is served (its own dedicated origin). */
 const SERVED_AT = `https://<slug>.${MINI_APPS_SITE_DOMAIN}`;
@@ -65,16 +86,15 @@ C) **Hosted app (Lovable, v0, Vercel, own server)**
    Submit the URL in the dashboard (tab "Gehostete URL") or via MCP \`submit_external_app\`.
 
 D) **MCP server** — ${DOCS_BASE_URL}/api/mcp (Streamable HTTP)
-   Tools: get_started, get_docs, validate_html, list_my_apps, get_app,
-   publish_html_app, submit_external_app, update_app_manifest, get_app_analytics.
+   Tools (${MCP_TOOLS.length}): ${MCP_TOOLS.join(", ")}.
    Auth: \`Authorization: Bearer nz_<api-key>\` — create keys at
-   ${DOCS_BASE_URL}/dashboard/mini-apps/api. (Fallback during rollout: your
-   wallet address as the bearer token.)
+   ${DOCS_BASE_URL}/dashboard/mini-apps/api.
+   The MCP accepts only \`nz_\` API keys; a wallet address is refused.
    Claude Code: \`claude mcp add --transport http netizen ${DOCS_BASE_URL}/api/mcp --header "Authorization: Bearer nz_KEY"\`
 
-## Mock mode (SDK v0.2) — develop anywhere
+## Mock mode — develop anywhere
 
-If no Röbel host answers the bridge handshake within 1.5s (plain browser tab,
+The SDK re-sends its hello every 400 ms. If no Röbel host answers within 2 s (plain browser tab,
 vite/next dev server, Lovable preview iframe), the SDK switches to a local mock:
 ready() resolves, getContext() returns a demo user, getMuenzenBalance() returns
 demo data, grantReward() resolves { granted: false }, track() no-ops, signing
@@ -88,6 +108,27 @@ Every submission lands as status "pending" in the admin review queue; admins
 test it in a live playground and set it "live". Reward budgets start at 0 and
 are granted by admins — grantReward on an unreviewed app rejects
 "budget_exceeded". Analytics arrive automatically via sdk.track + host events.`;
+
+const USER_TOKEN = `## User token
+
+\`sdk.auth.getToken()\` returns \`{ token }\` or \`null\`. Handle \`null\`: the host
+returns it when the person has not signed in, or when getting a token would
+need a fingerprint prompt the host avoids on reads. Do not retry in a loop.
+
+- The token is an ES256 JWT (\`typ\` \`miniapp+jwt\`), valid for 10 minutes and for
+  this app only (audience \`miniapp:<slug>\`). A token from another app is refused.
+- A server that calls ${DOCS_BASE_URL}/api/mini-apps/rewards,
+  /api/mini-apps/data (user scope), /api/mini-apps/notifications or
+  /api/mini-apps/muenzen-balance must send it as
+  \`Authorization: Bearer <token>\`. Your front end forwards the token to your
+  server. \`muenzen-balance\` also takes an \`app\` query parameter (id or slug).
+- A wallet address alone will stop working. While tokens are optional a bare
+  wallet is still accepted and each such call is logged; once tokens are
+  required it is refused with 401. A bad or expired token is always 401.
+- Verify the token on your own server with \`verifyUserToken\` from
+  \`@netizen-labs/miniapp-verify\` (SDK 0.4.0, see the verify chapter).
+- \`auth.getToken\`, \`auth.signIn\` and \`roebel.pay\` work in the Röbel app from
+  version 3.10.0; an older app answers \`unsupported\`. Ask \`sdk.supports()\` first.`;
 
 const SINGLE_FILE_GUIDE = `## Single-file HTML apps (path B) — exact requirements
 
@@ -107,6 +148,11 @@ ${BOILERPLATE}
 
 const PUBLISH_API = `## Publishing API (what the dashboard/MCP call for you)
 
+- Self-hosted apps (path 0): serve the manifest at
+  \`https://<your-app-domain>${WELL_KNOWN_PATH}\`, then POST
+  ${DOCS_BASE_URL}/api/mini-apps/register { url } (or MCP \`register_app_url\`).
+  The store indexes that file; recipe: ${DOCS_BASE_URL}/mini-apps/publish.md
+
 - POST ${DOCS_BASE_URL}/api/mini-apps/publish
   headers: x-wallet-address: 0x… (or use the MCP with an API key)
   body: { html: "<!doctype html>…", manifest: { name, slug, description,
@@ -120,12 +166,18 @@ const PUBLISH_API = `## Publishing API (what the dashboard/MCP call for you)
 - Categories: community | governance | finance | utility | games | education | news | culture | environment
 - Permissions (request only what you use): wallet | rewards | notifications | circles | share`;
 
-export type DocsSection = "sdk" | "design" | "screens" | "copy" | "publish" | "all";
+export type DocsSection = "sdk" | "design" | "screens" | "copy" | "publish" | DocsChapterId | "all";
+
+/** Every section the MCP get_docs tool accepts, "all" last. */
+export const DOCS_SECTIONS = ["sdk", "screens", "design", "copy", "publish", ...DOCS_CHAPTERS.map((c) => c.id), "all"] as [
+  DocsSection,
+  ...DocsSection[],
+];
 
 export function getDocsSection(section: DocsSection): string {
   switch (section) {
     case "sdk":
-      return SDK_REFERENCE;
+      return `${SDK_REFERENCE}\n\n${USER_TOKEN}`;
     case "design":
       return DESIGN_SYSTEM;
     case "screens":
@@ -136,11 +188,23 @@ export function getDocsSection(section: DocsSection): string {
       return `${PUBLISH_API}\n\n${SINGLE_FILE_GUIDE}`;
     case "all":
       return buildLlmsFullTxt();
+    default:
+      return DOCS_CHAPTERS.find((c) => c.id === section)?.text ?? "";
   }
 }
 
 export function buildLlmsFullTxt(): string {
-  return [INTRO, SDK_REFERENCE, SCREEN_RULES, DESIGN_SYSTEM, COPY_RULES, SINGLE_FILE_GUIDE, PUBLISH_API].join(
+  return [
+    INTRO,
+    SDK_REFERENCE,
+    USER_TOKEN,
+    ...DOCS_CHAPTERS.map((c) => c.text),
+    SCREEN_RULES,
+    DESIGN_SYSTEM,
+    COPY_RULES,
+    SINGLE_FILE_GUIDE,
+    PUBLISH_API,
+  ].join(
     "\n\n---\n\n",
   );
 }
@@ -158,6 +222,10 @@ export function buildLlmsIndexTxt(): string {
 - [Full developer guide](${DOCS_BASE_URL}/mini-apps/llms-full.txt): everything —
   SDK reference, bridge, screens contract, design system, copy rules,
   single-file boilerplate, publishing API, MCP server.
+
+## Chapters (all part of llms-full.txt; MCP get_docs {section})
+
+${DOCS_CHAPTERS.map((c) => `- ${c.id}: ${c.summary}`).join("\n")}
 
 ## Tools
 

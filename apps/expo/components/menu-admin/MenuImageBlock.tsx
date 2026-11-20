@@ -100,7 +100,7 @@ export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onC
           disabled={uploading || generating}
           style={[styles.btn, { borderColor: colors.borderSecondary, opacity: uploading || generating ? 0.5 : 1 }]}
         >
-          <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-Medium' }}>
+          <Text style={{ color: colors.textPrimary, fontFamily: 'MonaSans-Medium' }}>
             {imageUrl ? 'Eigenes Bild ersetzen' : 'Eigenes Bild hochladen'}
           </Text>
         </Pressable>
@@ -122,7 +122,7 @@ export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onC
           { backgroundColor: colors.primary, opacity: uploading || generating ? 0.5 : 1 },
         ]}
       >
-        <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>
+        <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium' }}>
           {imageUrl ? 'KI-Bild neu generieren' : 'KI-Bild generieren'}
         </Text>
       </Pressable>
@@ -132,7 +132,7 @@ export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onC
 
 const styles = StyleSheet.create({
   section: { paddingTop: 8, paddingBottom: 12, gap: 10 },
-  label: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  label: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   previewWrap: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   preview: { width: '100%', height: '100%' },
-  placeholder: { fontSize: 14, fontFamily: 'Inter-Regular' },
+  placeholder: { fontSize: 14, fontFamily: 'MonaSans-Regular' },
   overlay: {
     position: 'absolute',
     inset: 0 as any,
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  overlayText: { color: '#fff', fontFamily: 'Inter-Medium', fontSize: 13 },
+  overlayText: { color: '#fff', fontFamily: 'MonaSans-Medium', fontSize: 13 },
   actionsRow: { flexDirection: 'row', gap: 8 },
   btn: {
     flex: 1,
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
   },
 });

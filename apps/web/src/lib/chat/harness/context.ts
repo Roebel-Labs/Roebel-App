@@ -7,6 +7,7 @@ import { db } from "../store";
 import type { ChatPart } from "../types";
 import { CONTEXT_MEMORIES, memoriesForBot } from "./memory";
 import type { MemoryItem } from "./memory";
+import { personaSystemBlock } from "../persona/runtime";
 import { getTenant } from "./tenants";
 import type { HarnessContext, HarnessProfile, HarnessTurn, TenantConfig } from "./types";
 
@@ -151,6 +152,11 @@ export async function buildHarnessContext(input: {
 
 /** Harness system block for a bot turn (memories only when the bot has the memory pack). */
 export async function harnessSystemBlock(ctx: HarnessContext, opts: { withMemory: boolean }): Promise<string> {
-  const memories = opts.withMemory ? await loadMemories(ctx.wallet, ctx.botId) : [];
-  return formatHarnessContext({ tenant: ctx.tenant, profile: ctx.profile, memories });
+  // The personal wiki (persona/runtime.ts) rides on the same switch as memory.
+  const [memories, persona] = await Promise.all([
+    opts.withMemory ? loadMemories(ctx.wallet, ctx.botId) : Promise.resolve([]),
+    opts.withMemory ? personaSystemBlock(ctx.wallet) : Promise.resolve(null),
+  ]);
+  const base = formatHarnessContext({ tenant: ctx.tenant, profile: ctx.profile, memories });
+  return persona ? `${base}\n\n${persona}` : base;
 }

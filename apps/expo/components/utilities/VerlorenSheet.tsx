@@ -204,12 +204,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 18,
   },
   optionRow: {
@@ -228,12 +228,12 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 2,
   },
   optionMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   closeBtn: {
     alignSelf: 'center',
@@ -242,6 +242,6 @@ const styles = StyleSheet.create({
   },
   closeText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

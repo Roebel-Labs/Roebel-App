@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'left',
     flex: 1,
   },
@@ -205,12 +205,12 @@ const styles = StyleSheet.create({
   },
   dateDay: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 20,
   },
   dateLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 13,
     marginTop: 1,
   },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flex: 1,
     paddingRight: 8,
     lineHeight: 18,
@@ -244,13 +244,13 @@ const styles = StyleSheet.create({
   },
   location: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     opacity: 0.7,
     flex: 1,
   },
   timeText: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     opacity: 0.7,
   },
   bookmarkBtn: {

@@ -71,6 +71,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

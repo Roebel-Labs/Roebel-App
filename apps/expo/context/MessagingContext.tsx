@@ -41,11 +41,11 @@ export function useMessaging() {
 }
 
 /**
- * XMTP-only inbox for personal chats (2026-07-12 policy): personal-peer rows
- * show ONLY XMTP previews/unread and rows without an XMTP conversation are
- * hidden entirely — legacy Supabase-only chats no longer appear. Org rows
- * keep their Supabase previews. Inbound XMTP DMs without a registry row get
- * one created (Röbel peers only — unknown external wallets are ignored).
+ * Dual-rail inbox: every registry row is listed with its Supabase preview;
+ * when this device has an XMTP client, the XMTP DM for the same peer
+ * overlays a newer preview and adds its unread count. Inbound XMTP DMs
+ * without a registry row get one created (Röbel peers only — unknown
+ * external wallets are ignored).
  */
 async function mergeXmtpInbox(
   handle: XmtpClientHandle,
@@ -54,33 +54,22 @@ async function mergeXmtpInbox(
   adoptedWallets: Set<string>,
   allowAdoption: boolean
 ): Promise<{ rows: ConversationWithLastMessage[]; xmtpUnread: number; adopted: boolean }> {
-  // The personal inbox is PURE XMTP (2026-07-12): only conversations with an
-  // XMTP counterpart appear — legacy Supabase chats AND org chats are hidden.
-  // (Org threads still open via marketplace/support deep links; they return
-  // to the inbox once org accounts move to XMTP groups.)
   let entries: XmtpInboxEntry[] = [];
   try {
     entries = await listXmtpInbox(handle);
   } catch (err) {
     console.warn('[xmtp] inbox list failed', err);
-    return { rows: [], xmtpUnread: 0, adopted: false };
-  }
-  if (entries.length === 0) {
-    return { rows: [], xmtpUnread: 0, adopted: false };
+    return { rows, xmtpUnread: 0, adopted: false };
   }
 
   let xmtpUnread = 0;
   let adopted = false;
   const merged = rows.map((r) => ({ ...r }));
-  const matchedRowIds = new Set<string>();
 
   for (const entry of entries) {
-    // Some legacy pairs have MORE THAN ONE registry row (duplicate
-    // `conversations` rows). Attach the XMTP thread to the OLDEST row — the
-    // one findOrCreateConversation returns — so navigation and the inbox
-    // agree; every other row for the same wallet stays unmatched and is
-    // filtered out below (this is what used to show a second, stale
-    // "Supabase" chat next to the XMTP one).
+    // Some legacy pairs have MORE THAN ONE registry row. Attach the XMTP
+    // thread to the OLDEST row — the one findOrCreateConversation returns —
+    // so navigation and the inbox agree.
     const candidates = merged.filter((r) => r.peerOwnerWallet === entry.peerWallet);
     const row =
       candidates.length > 1
@@ -108,26 +97,24 @@ async function mergeXmtpInbox(
       continue;
     }
 
-    matchedRowIds.add(row.id);
-
-    // Personal chats are XMTP-only: preview comes from the XMTP side alone
-    // (legacy Supabase previews are discarded).
-    row.lastMessage = null;
-    row.hasUnread = false;
+    // Preview: whichever rail carried the newest message.
     if (entry.lastMessage) {
       const mapped = mapXmtpMessage(
         entry.lastMessage,
         { conversationId: row.id, myAccountId, peerAccountId: row.peerAccountId },
         handle
       );
-      if (mapped) {
+      if (
+        mapped &&
+        (!row.lastMessage || Date.parse(mapped.created_at) > Date.parse(row.lastMessage.created_at))
+      ) {
         if (mapped.payment) mapped.content = '💰 Röbel Münzen';
         row.lastMessage = mapped;
       }
     }
 
-    // Unread: XMTP-only. Skip the local-db count when the newest XMTP
-    // message can't be unread anyway.
+    // Unread: Supabase side is already in row.hasUnread; add the XMTP side.
+    // Skip the local-db count when the newest XMTP message can't be unread.
     const last = entry.lastMessage;
     const lastFromPeer = last && last.senderInboxId !== handle.inboxId;
     const lastIsNew =
@@ -142,18 +129,38 @@ async function mergeXmtpInbox(
     }
   }
 
-  // Only the rows an XMTP thread was attached to survive — everything else
-  // (legacy Supabase personal chats, duplicate registry rows for the same
-  // peer, org chats) is hidden from the inbox.
-  const visible = merged.filter((r) => matchedRowIds.has(r.id));
+  return { rows: merged, xmtpUnread, adopted };
+}
 
+/**
+ * Duplicate registry rows for the same peer: keep every row that carries a
+ * message (Supabase messages are per row, hiding one would hide them) and
+ * drop empty duplicates; a peer with only empty rows keeps the oldest.
+ */
+function collapseDuplicateRows(rows: ConversationWithLastMessage[]): ConversationWithLastMessage[] {
+  const byPeer = new Map<string, ConversationWithLastMessage[]>();
+  for (const r of rows) {
+    const list = byPeer.get(r.peerAccountId) ?? [];
+    list.push(r);
+    byPeer.set(r.peerAccountId, list);
+  }
+  const visible: ConversationWithLastMessage[] = [];
+  for (const list of byPeer.values()) {
+    const withMessages = list.filter((r) => r.lastMessage);
+    if (withMessages.length > 0) {
+      visible.push(...withMessages);
+    } else {
+      visible.push(
+        list.reduce((a, b) => (Date.parse(a.created_at) <= Date.parse(b.created_at) ? a : b))
+      );
+    }
+  }
   visible.sort((a, b) => {
     const ta = a.lastMessage?.created_at ?? a.created_at;
     const tb = b.lastMessage?.created_at ?? b.created_at;
     return Date.parse(tb) - Date.parse(ta);
   });
-
-  return { rows: visible, xmtpUnread, adopted };
+  return visible;
 }
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
@@ -205,35 +212,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         }
         convos = result.rows;
         if (accountIdRef.current === accountId) setXmtpUnread(result.xmtpUnread);
-      } else {
-        // No XMTP client (not yet activated): the personal inbox is pure
-        // XMTP, so nothing is listed until activation.
-        if (accountTypeRef.current === 'personal') {
-          convos = [];
-        }
-        if (accountIdRef.current === accountId) setXmtpUnread(0);
+      } else if (accountIdRef.current === accountId) {
+        // No XMTP client on this device (not activated, chain-locked, old
+        // build): the Supabase rail alone is the inbox.
+        setXmtpUnread(0);
       }
-
-      // Personal accounts: the badge is XMTP-only (the get_unread_count RPC
-      // would count hidden legacy Supabase messages).
-      if (accountTypeRef.current === 'personal' && accountIdRef.current === accountId) {
-        setBaseUnread(0);
-      }
+      convos = collapseDuplicateRows(convos);
 
       // Guard against stale loads after an account switch.
       if (accountIdRef.current === accountId) {
-        // Personal inbox before XMTP has booted is a placeholder [] (forced
-        // above), not authoritative data. Applying it would blank the
-        // cache-hydrated snapshot on screen and persist an empty list over
-        // the last-known-good cache on every cold start (XMTP boot lags the
-        // Supabase fetch). Skip both — the "XMTP ready" effect re-runs
-        // loadConversations with the real merged list moments later.
-        const isPersonalAwaitingXmtp =
-          accountTypeRef.current === 'personal' && !handle;
-        if (!isPersonalAwaitingXmtp) {
-          setConversations(convos);
-          void saveCachedInbox(accountId, convos);
-        }
+        setConversations(convos);
+        void saveCachedInbox(accountId, convos);
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -245,9 +234,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUnreadCount = useCallback(async (accountId: string) => {
-    // Personal accounts derive their badge in loadConversations (XMTP +
-    // visible org rows) — the RPC would count hidden legacy messages.
-    if (accountTypeRef.current === 'personal') return;
+    // Supabase-rail unread; the XMTP side is added in loadConversations.
     try {
       const count = await fetchUnread(accountId);
       if (accountIdRef.current === accountId) {

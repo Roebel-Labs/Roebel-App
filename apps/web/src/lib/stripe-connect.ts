@@ -27,14 +27,8 @@ export function isConnectConfigured(): boolean {
   return !!readConnectKey();
 }
 
-/** Platform fee for one paid order: bps of amount + fixed part, capped so the org always nets ≥ 1 ct. */
-export function platformFeeCents(amountCents: number): number {
-  if (!Number.isInteger(amountCents) || amountCents <= 0) return 0;
-  const bps = Number(process.env.STRIPE_PLATFORM_FEE_BPS ?? "200");
-  const fixed = Number(process.env.STRIPE_PLATFORM_FEE_FIXED_CENTS ?? "10");
-  const raw = Math.round((amountCents * (Number.isFinite(bps) ? bps : 0)) / 10000) + (Number.isFinite(fixed) ? fixed : 0);
-  return Math.max(0, Math.min(raw, amountCents - 1));
-}
+// Platform fee lives in lib/payments/fees.ts (provider-neutral PLATFORM_FEE_* with STRIPE_* fallback).
+export { platformFeeCents } from "./payments/fees";
 
 export function webBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_WEB_BASE_URL ?? "https://www.roebel.app").replace(/\/$/, "");

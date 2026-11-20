@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   scroll: {
     flex: 1,
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   retryButton: {

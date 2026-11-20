@@ -10,6 +10,7 @@ import { identityModeFor, type GuardianConfirmPlan, type IdentityMode } from './
 import {
   readGuardians,
   readRecoveryApprovals,
+  readRecoveryNonce,
   readRecoveryRequest,
   readThreshold,
   readWebAuthnSigner,
@@ -19,10 +20,23 @@ import { parseV3Config, readIdentityTokens } from './migration-v3';
 import type { MigrationRecord } from './migration';
 import { secureKeyValueStorage } from './migration-runtime';
 import { resolvePeople, withLabel, type Person, type ProfileRow } from './people';
-import type { RecoveryDeps, RecoveryStorage } from './recovery-flow';
+import { ownerKindForCode, type RecoveryStorage, type WordsRecoveryDeps } from './recovery-flow';
 import { createLookupChain, findLinkedLegacies } from './recovery-lookup';
-import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp, type SponsoredCall } from './userop';
-import { createPasskey } from './webauthn';
+import { phraseStore } from './phrase-store-runtime';
+import { isWordsOwner } from './session';
+import { sessionSignerFor } from './session-signer';
+import {
+  DEFAULT_GNOSIS_RPC_URL,
+  isSafeDeployed,
+  passkeyOpSigner,
+  sendSafeUserOp,
+  type SafeOpSigner,
+  type SponsoredCall,
+  type UserOpDeps,
+} from './userop';
+import { createPasskey, signWithPasskey, type PasskeyAssertion } from './webauthn';
+import { randomBytes } from './random';
+import { markWordsRecoveryDone, savePendingVaultKey, type WordsLookupChain } from './words-recovery';
 
 /** Gnosis' own RPC accepts address-less topic filters on eth_getLogs (publicnode refuses them). */
 export const GNOSIS_LOGS_RPC_URL = process.env.EXPO_PUBLIC_GNOSIS_LOGS_RPC_URL || 'https://rpc.gnosischain.com';
@@ -177,19 +191,43 @@ export async function readIdentityMode(record: MigrationRecord): Promise<Identit
 // Sponsored ops
 // ---------------------------------------------------------------------------
 
-/** One fingerprint-signed op from this device's own Safe (guardian management / cancel). */
-export async function sendOwnSafeOp(record: MigrationRecord, mode: IdentityMode, calls: SponsoredCall[]): Promise<Hex> {
+/**
+ * The op signer of this device's Safe owner: the passkey (`sign`, default the native prompt), or
+ * for a 12-word record (expert path) the words' account key behind ONE device unlock per op.
+ */
+export function opSignerForRecord(
+  record: MigrationRecord,
+  sign: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion> = signWithPasskey,
+): SafeOpSigner {
+  if (isWordsOwner(record)) {
+    const session = { ...record, identity: record.safe };
+    return sessionSignerFor(session, {
+      signPasskey: () => Promise.reject(new Error('a 12-word account never asks for a passkey')),
+      getPrf: async () => null,
+      phrase: phraseStore,
+    }).opSigner;
+  }
+  return passkeyOpSigner({ credentialId: record.credentialId, x: record.x, y: record.y, owner: record.owner }, sign);
+}
+
+/** One op from this device's own Safe (guardian management / cancel): one fingerprint or device unlock. */
+export async function sendOwnSafeOp(
+  record: MigrationRecord,
+  mode: IdentityMode,
+  calls: SponsoredCall[],
+  userOpDeps?: UserOpDeps,
+): Promise<Hex> {
   const deployed = await isSafeDeployed(record.safe);
-  const { txHash } = await sendPasskeyUserOp({
-    credentialId: record.credentialId,
-    x: record.x,
-    y: record.y,
-    calls,
-    deployed,
-    sender: record.safe,
-    owner: record.owner,
-    ...(mode.mode === 'legacy' ? { legacy: mode.legacy } : {}),
-  });
+  const { txHash } = await sendSafeUserOp(
+    {
+      signer: opSignerForRecord(record, userOpDeps?.sign),
+      calls,
+      deployed,
+      sender: record.safe,
+      ...(mode.mode === 'legacy' ? { legacy: mode.legacy } : {}),
+    },
+    userOpDeps,
+  );
   return txHash;
 }
 
@@ -211,7 +249,28 @@ export const recoveryStorage: RecoveryStorage = {
   removeItem: (key) => SecureStore.deleteItemAsync(key),
 };
 
-export function createRecoveryDeps(): RecoveryDeps {
+/** Recovery words → candidate wallets (words-recovery.ts `findWalletsByWords`). */
+export const wordsLookupChain: WordsLookupChain = {
+  guardianLogsFor: (guardians) => lookupChain.guardianLogsFor(guardians),
+  readGuardians: (w) => readGuardians(w),
+  readThreshold: (w) => readThreshold(w),
+  isPasskeySafe: (w) => lookupChain.isPasskeySafe(w),
+  linkedLegacies: (w) => findLinkedLegacies(w, lookupChain),
+};
+
+/**
+ * What a recovery of `wallet` installs (E9): its single owner without contract code, or with an
+ * EIP-7702 designator, is a plain key → an expert account, recovered to new 12 words. Read
+ * errors propagate (never guess the kind).
+ */
+export async function readRecoveryOwnerKind(wallet: Address): Promise<'passkey' | 'ecdsa'> {
+  const owners = await readSafeOwners(wallet);
+  if (owners.length !== 1) return 'passkey';
+  return ownerKindForCode(await readClient.getCode({ address: owners[0] }));
+}
+
+/** Deps for both recovery methods (the words path also reads guardians + nonce and keeps the vault key). */
+export function createRecoveryDeps(): WordsRecoveryDeps {
   return {
     storage: recoveryStorage,
     createPasskey,
@@ -221,7 +280,20 @@ export function createRecoveryDeps(): RecoveryDeps {
     readRequest: (w) => readRecoveryRequest(w),
     readOwners: readSafeOwners,
     isSafeDeployed: (s) => isSafeDeployed(s),
-    sendPasskeyUserOp: (a) => sendPasskeyUserOp(a),
+    sendUserOp: (a) => sendSafeUserOp(a),
+    signPasskey: signWithPasskey,
+    phrase: phraseStore,
+    random: randomBytes,
+    // The session slot signin-runtime reads (not imported: signin-runtime imports this module).
+    sessionStorage: { setItem: (key, value) => SecureStore.setItemAsync(key, value) },
+    readGuardians: (w) => readGuardians(w),
+    readNonce: (w) => readRecoveryNonce(w),
+    saveVaultKey: async (k, wallet) => {
+      // Loaded lazily: derived-keys-runtime imports this module (no cycle at load time).
+      const { wordsVaultKeyStorage } = await import('./derived-keys-runtime');
+      await savePendingVaultKey(wordsVaultKeyStorage, wallet, k);
+    },
+    wordsDone: (s) => markWordsRecoveryDone(s, secureKeyValueStorage),
   };
 }
 
@@ -229,7 +301,7 @@ export const sameAddress = (a: Address | null | undefined, b: Address | null | u
   !!a && !!b && isAddressEqual(a, b);
 
 /**
- * The guardian's on-chain confirmation (one fingerprint). My Safe may be counterfactual: the op
+ * The guardian's on-chain confirmation (one fingerprint, or one device unlock for a 12-word account). My Safe may be counterfactual: the op
  * deploys it. A legacy-account guardian confirms through `legacy.execute` (sponsor mode "legacy").
  */
 export async function sendGuardianConfirm(
@@ -237,14 +309,11 @@ export async function sendGuardianConfirm(
   plan: Extract<GuardianConfirmPlan, { kind: 'safe' | 'legacy' }>,
 ): Promise<Hex> {
   const deployed = await isSafeDeployed(record.safe);
-  const { txHash } = await sendPasskeyUserOp({
-    credentialId: record.credentialId,
-    x: record.x,
-    y: record.y,
+  const { txHash } = await sendSafeUserOp({
+    signer: opSignerForRecord(record),
     calls: plan.calls,
     deployed,
     sender: record.safe,
-    owner: record.owner,
     ...(plan.kind === 'legacy' ? { legacy: plan.legacy } : plan.recoveryLegacy ? { recoveryLegacy: plan.recoveryLegacy } : {}),
   });
   return txHash;

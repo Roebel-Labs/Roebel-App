@@ -262,7 +262,7 @@ function createMarkdownStyles(colors: ColorTokens) {
       lineHeight: 22,
     },
     strong: {
-      fontFamily: 'Inter-SemiBold',
+      fontFamily: 'MonaSans-SemiBold',
       color: colors.textPrimary,
     },
     em: {
@@ -412,12 +412,12 @@ const recapStyles = StyleSheet.create({
   label: {
     width: 104,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   value: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });
 
@@ -1585,12 +1585,12 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   loadingSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
     marginTop: 8,
@@ -1627,13 +1627,13 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textAlign: 'center',
   },
   successSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     lineHeight: 22,

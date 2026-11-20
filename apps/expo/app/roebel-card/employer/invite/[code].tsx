@@ -100,16 +100,16 @@ const styles = StyleSheet.create({
   iconText: {
     fontSize: 40,
     color: '#ffffff',
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     textAlign: 'center',
   },
   body: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -122,12 +122,12 @@ const styles = StyleSheet.create({
   },
   codeText: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     letterSpacing: 2,
   },
   linkText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   footer: {

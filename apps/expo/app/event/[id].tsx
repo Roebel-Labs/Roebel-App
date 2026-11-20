@@ -50,6 +50,12 @@ import { fontFamily } from '@/constants/theme';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
 import { isTicketSalesEnabled } from '@/lib/supabase-app-settings';
 import { fetchTicketTypes, formatCents, type TicketTypeRow } from '@/lib/tickets';
+import { useLiveShowForEvent } from '@/lib/live';
+import LiveEventMedia, { isStreaming, useEventLiveShow } from '@/components/live/LiveEventMedia';
+import { useAccount } from '@/context/AccountContext';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import EventBadgeOrganiser from '@/components/credentials/EventBadgeOrganiser';
+import EventBadgeAttendee from '@/components/credentials/EventBadgeAttendee';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -95,6 +101,8 @@ export default function EventDetails() {
   const goBack = useGoBack();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const liveSlug = useLiveShowForEvent(typeof id === 'string' ? id : null);
+  const liveShow = useEventLiveShow(typeof id === 'string' ? id : null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
@@ -112,6 +120,8 @@ export default function EventDetails() {
   const { showSnackbar } = useSnackbar();
   const { user } = useUser();
   const activeAccount = useActiveAccount();
+  const { activeAccount: activeOrg, roleInActiveAccount } = useAccount();
+  const credentialsGate = useCredentialsGate();
   const { loadPreviews } = useInterest();
   const scrollRef = useRef<ScrollView>(null);
   const experienceSectionRef = useRef<ExperienceSectionHandle>(null);
@@ -329,7 +339,8 @@ export default function EventDetails() {
     (startTime ? ` • ${startTime}${endTime ? ` – ${endTime}` : ''} Uhr` : '');
   const priceLine = event.ticket_price == null ? null : currency(event.ticket_price);
   const minTicketPrice = ticketTypes.length > 0 ? Math.min(...ticketTypes.map((t) => t.price_cents)) : 0;
-  const showLivestream = !!(event.livestream_active && event.livestream_url);
+  // Events with a live room (live_shows row) open the app-native player; the YouTube embed stays for the rest.
+  const showLivestream = !liveSlug && !!(event.livestream_active && event.livestream_url);
   const hasAmbient = !!event.image_url;
 
   // Flyer box: full width inside the gutters unless that would make a tall
@@ -390,7 +401,35 @@ export default function EventDetails() {
             </Pressable>
           </View>
 
-          {showLivestream ? (
+          {liveSlug ? (
+            // Live room: the stream on top (flyer + start time until it goes live); a tap opens the live room.
+            <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } })}
+                style={[styles.liveBox, { height: (maxFlyerWidth * 9) / 16 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Livestream öffnen"
+              >
+                {event.image_url ? (
+                  <Image source={{ uri: event.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                ) : null}
+                <View style={styles.liveScrim} />
+                <View style={styles.liveCenter}>
+                  <View style={styles.livePlay}>
+                    <PlayIcon size={26} color="#111" />
+                  </View>
+                  <Text style={styles.liveLabel}>
+                    {liveShow?.status === 'live'
+                      ? 'Livestream ansehen'
+                      : liveShow?.starts_at
+                        ? `Livestream ab ${new Date(liveShow.starts_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Uhr`
+                        : 'Livestream'}
+                  </Text>
+                </View>
+                {isStreaming(liveShow) ? <LiveEventMedia show={liveShow} large /> : null}
+              </Pressable>
+            </View>
+          ) : showLivestream ? (
             <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
               <View style={styles.flyer}>
                 <YouTubeEmbed
@@ -519,6 +558,25 @@ export default function EventDetails() {
         </View>
 
         <View style={styles.sections}>
+          {credentialsGate === true && typeof id === 'string' ? (
+            event.account_id &&
+            activeOrg?.id === event.account_id &&
+            (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin') ? (
+              <EventBadgeOrganiser eventId={id} orgAccountId={event.account_id} />
+            ) : (
+              <EventBadgeAttendee eventId={id} />
+            )
+          ) : null}
+          {liveSlug ? (
+            <Pressable
+              style={[styles.livestreamCta, { backgroundColor: colors.primary }]}
+              onPress={() => router.push({ pathname: '/live/[slug]' as any, params: { slug: liveSlug } })}
+              accessibilityRole="button"
+            >
+              <PlayIcon size={20} color={colors.onPrimary} />
+              <Text style={[styles.livestreamCtaText, { color: colors.onPrimary }]}>Live ansehen</Text>
+            </Pressable>
+          ) : null}
           {showLivestream && (
             <Pressable
               style={[styles.livestreamCta, { backgroundColor: colors.primary }]}
@@ -721,6 +779,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  liveBox: { width: '100%', backgroundColor: '#000', overflow: 'hidden', borderRadius: FLYER_RADIUS },
+  liveScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  liveCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  livePlay: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  liveLabel: { color: '#fff', fontSize: 15, fontFamily: fontFamily.semiBold },
   flyerWrap: {
     alignSelf: 'center',
     marginTop: 10,

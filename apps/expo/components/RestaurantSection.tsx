@@ -9,12 +9,15 @@ import { useTheme } from '@/context/ThemeContext';
 import { useShuffled } from '@/hooks/useShuffled';
 import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
+import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   restaurants: RestaurantRecord[];
 };
 
 function RestaurantSection({ restaurants: fetched }: Props) {
+  // In the Austausch feed: locks the tab pager while a finger is on this rail.
+  const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
   const { colors } = useTheme();
   // Random order per visit so the rail doesn't always open on the same places.
@@ -66,6 +69,7 @@ function RestaurantSection({ restaurants: fetched }: Props) {
       </View>
       <FlatList
         horizontal
+        {...railLockHandlers}
         data={restaurants}
         renderItem={renderItem}
         keyExtractor={restaurantKey}

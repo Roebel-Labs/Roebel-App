@@ -126,11 +126,11 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   progressValue: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   rowDivider: {
     height: 1,
@@ -144,13 +144,13 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     marginBottom: 6,
   },
   infoText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 19,
   },

@@ -88,11 +88,11 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   body: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   actions: {
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   secondaryAction: {
     paddingVertical: 8,
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   dismissAction: {
     marginLeft: 'auto',
@@ -127,6 +127,6 @@ const styles = StyleSheet.create({
   dismissLabel: {
     fontSize: 22,
     lineHeight: 24,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

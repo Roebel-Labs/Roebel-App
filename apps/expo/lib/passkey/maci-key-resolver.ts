@@ -127,7 +127,7 @@ export async function chooseMaciKeyFromThirdweb(tw: MaciThirdwebSource, d: MaciS
   throw new MaciKeyLostError();
 }
 
-export type MaciResolverDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap'> &
+export type MaciResolverDeps = Pick<ResolveDeps, 'storage' | 'getPrf' | 'wrap' | 'unwrap' | 'wordsVaultKey'> &
   MaciSignUpDeps & {
     identity: string;
     remote?: RemoteBackup;
@@ -169,6 +169,7 @@ function memoRead(remote: RemoteBackup): RemoteBackup {
       return read;
     },
     write: (blobs, replace) => remote.write(blobs, replace),
+    ...(remote.writeWithoutPrompt ? { writeWithoutPrompt: remote.writeWithoutPrompt } : {}),
   };
 }
 
@@ -196,6 +197,7 @@ export async function resolveMaciKeyForIdentity(d: MaciResolverDeps): Promise<Ma
       generate: () => enc.encode(d.generate()),
       wrap: d.wrap,
       unwrap: d.unwrap,
+      wordsVaultKey: d.wordsVaultKey,
     });
     return { status: 'ready', keypair: JSON.parse(dec.decode(r.secret)) as SerializedKeypair, source: r.source };
   } catch (e) {
@@ -222,6 +224,7 @@ export async function resolveMaciKeyForIdentity(d: MaciResolverDeps): Promise<Ma
         remote,
         wrap: d.wrap,
         unwrap: d.unwrap,
+        wordsVaultKey: d.wordsVaultKey,
       });
       backedUp = report.saved.includes('maci');
       if (report.conflicts.includes('maci')) backupError = 'Auf dem Server liegt bereits ein anderer Abstimmungsschlüssel.';

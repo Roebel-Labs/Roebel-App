@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   verifiedIcon: {
     fontSize: 24,
@@ -153,13 +153,13 @@ const styles = StyleSheet.create({
   },
   verifiedTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#2E7D32',
     marginBottom: 2,
   },
   verifiedSubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#388E3C',
   },
   pendingIcon: {
@@ -167,13 +167,13 @@ const styles = StyleSheet.create({
   },
   pendingTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#E65100',
     marginBottom: 2,
   },
   pendingSubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#F57C00',
   },
   registerIcon: {
@@ -181,13 +181,13 @@ const styles = StyleSheet.create({
   },
   registerTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     color: '#1565C0',
     marginBottom: 2,
   },
   registerSubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: '#1976D2',
   },
   arrow: {

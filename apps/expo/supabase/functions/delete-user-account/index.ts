@@ -220,7 +220,8 @@ serve(async (req: Request) => {
     //    delete manually before the user row goes. Source: information_schema
     //    sweep on 2026-05-22; extended 2026-07-31 from the migrations that
     //    landed since (nostr identity bridge, workspace, muenzen tips, mecky
-    //    conversations/outreach). `nostr_identities` is the wallet↔npub
+    //    conversations/outreach; credential_invitations + credential_actions are
+    //    swept separately in 3a). `nostr_identities` is the wallet↔npub
     //    bridge — deleting it is what makes the on-chain/Nostr trail
     //    effectively anonymous (EDPB 02/2025 §103) and drops the npub from
     //    the relay allow-list on the next sync pass. Rows whose stored case
@@ -263,6 +264,69 @@ serve(async (req: Request) => {
         // Skip "table not in PostgREST cache" and similar non-fatal errors,
         // but surface real failures so we can debug.
         console.error(`Failed to clear ${table}.${column}:`, error.message);
+      }
+    }
+
+    // 3a. Credential register (plan credreg-2): erase the person from the
+    //     invitation mirror. The row stays so the organisation's count is right.
+    //     `credential_actions` rows still awaiting confirmation are cancelled and
+    //     scrubbed in place (their prepared batches reference them).
+    //     The migration may not be applied yet, so a missing table must not
+    //     fail the deletion; log without PII.
+    {
+      const { error: invErr } = await db
+        .from('credential_invitations')
+        .update({
+          display_name: null,
+          contact_email: null,
+          claim_key_enc: null,
+          token_enc: null,
+          token_hash: null,
+          proof: [],
+          salt: '',
+        })
+        .eq('recipient_wallet', claimedWallet);
+      if (invErr) console.error('credential_invitations sweep failed:', invErr.code ?? 'unknown');
+      // Awaiting actions prepared by this wallet cannot be deleted: a prepared
+      // batch references them (FK without ON DELETE). Cancel the batches, scrub
+      // their invitations, then cancel and scrub the actions in place.
+      const { data: acts, error: actSelErr } = await db
+        .from('credential_actions')
+        .select('id')
+        .eq('prepared_by', claimedWallet)
+        .eq('status', 'awaiting_confirmation');
+      if (actSelErr) {
+        console.error('credential_actions sweep failed:', actSelErr.code ?? 'unknown');
+      } else if ((acts ?? []).length > 0) {
+        const actIds = (acts ?? []).map((a) => a.id);
+        const { data: bats, error: batSelErr } = await db
+          .from('credential_batches')
+          .update({ status: 'cancelled' })
+          .in('action_id', actIds)
+          .eq('status', 'prepared')
+          .select('id');
+        if (batSelErr) console.error('credential_batches sweep failed:', batSelErr.code ?? 'unknown');
+        const batIds = (bats ?? []).map((b) => b.id);
+        if (batIds.length > 0) {
+          const { error: scrubErr } = await db
+            .from('credential_invitations')
+            .update({
+              display_name: null,
+              contact_email: null,
+              claim_key_enc: null,
+              token_enc: null,
+              token_hash: null,
+              proof: [],
+              salt: '',
+            })
+            .in('batch_id', batIds);
+          if (scrubErr) console.error('credential_invitations batch sweep failed:', scrubErr.code ?? 'unknown');
+        }
+        const { error: actErr } = await db
+          .from('credential_actions')
+          .update({ status: 'cancelled', prepared_by: 'deleted', summary: {}, steps: [] })
+          .in('id', actIds);
+        if (actErr) console.error('credential_actions sweep failed:', actErr.code ?? 'unknown');
       }
     }
 

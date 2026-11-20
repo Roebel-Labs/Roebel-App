@@ -17,6 +17,8 @@ import { loadCitizenDraft, clearCitizenDraft } from '@/lib/onboarding-storage';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
+import WayBackSheet from '@/components/passkey/WayBackSheet';
+import { checkWayBack, WAY_BACK_OFFLINE_MESSAGE } from '@/lib/passkey/way-back';
 import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { InformationCircleIcon } from '@/components/Icons';
 const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
@@ -39,6 +41,7 @@ export default function RequestCitizenScreen() {
   const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
+  const [wayBack, setWayBack] = useState<{ label: string; route: string } | null>(null);
 
   // Prefill from the onboarding draft (saved when the auto-submit at the end of
   // the welcome wizard failed) so the user never types their data twice.
@@ -77,6 +80,16 @@ export default function RequestCitizenScreen() {
     }
 
     try {
+      // An independent account needs a way back before it becomes a citizen (provider logins pass).
+      const way = await checkWayBack(account);
+      if (way.ok === null) {
+        setErrorDrawer({ visible: true, message: WAY_BACK_OFFLINE_MESSAGE });
+        return;
+      }
+      if (way.ok === false) {
+        setWayBack(way.option);
+        return;
+      }
       const result = await createRequest(
         { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
         DEFAULT_CITIZEN_REASON
@@ -295,6 +308,7 @@ export default function RequestCitizenScreen() {
         </Pressable>
       </View>
 
+      <WayBackSheet visible={wayBack !== null} option={wayBack ?? { label: '', route: '/settings/passkey' }} onClose={() => setWayBack(null)} />
       <ErrorDrawer
         visible={errorDrawer.visible}
         message={errorDrawer.message}
@@ -336,12 +350,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   privacyTitle: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 26,
     marginBottom: 10,
   },
   privacyBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -349,7 +363,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginBottom: 8,
   },
@@ -359,7 +373,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   dateField: {
     flexDirection: 'row',
@@ -368,10 +382,10 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   fieldHint: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 12,
     lineHeight: 16,
     marginTop: 6,
@@ -392,7 +406,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 19,
   },
@@ -428,12 +442,12 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   messageText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginBottom: 24,
   },

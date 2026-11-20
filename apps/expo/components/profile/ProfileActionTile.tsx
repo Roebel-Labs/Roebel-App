@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 12,
     lineHeight: 15,
     textAlign: 'center',

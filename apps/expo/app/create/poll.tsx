@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   },
   weiterText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   scrollContent: {
     padding: 16,
@@ -295,19 +295,19 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorName: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   authorLocation: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   questionInput: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
     minHeight: 80,
     textAlignVertical: 'top',
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   },
   optionsLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 2,
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   addOptionBtn: {
     flexDirection: 'row',
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   },
   addOptionText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   pollTypeSection: {
     gap: 10,
@@ -365,6 +365,6 @@ const styles = StyleSheet.create({
   },
   pollTypeText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

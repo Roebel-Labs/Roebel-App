@@ -43,13 +43,13 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 24,
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
   },
   description: {
     marginTop: 12,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 21,
     textAlign: 'center',
   },

@@ -233,3 +233,18 @@ interface INetizenVerifyingPaymaster {
     ) external view returns (bytes32);
     function usedVoucherNonces(address sender, bytes32 voucherNonce) external view returns (bool);
 }
+
+/// @dev Circles v2 Hub at 0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8 (subset used by SafeCircles.t.sol).
+interface ICirclesHub {
+    function trust(address trustReceiver, uint96 expiry) external;
+    function registerHuman(address inviter, bytes32 metadataDigest) external;
+    function personalMint() external;
+    function isHuman(address human) external view returns (bool);
+    function balanceOf(address account, uint256 id) external view returns (uint256);
+}
+
+/// @dev Circles v2 NameRegistry at 0xA27566fD89162cC3D40Cb59c87AAaA49B85F3474 (subset).
+interface ICirclesNameRegistry {
+    function updateMetadataDigest(bytes32 metadataDigest) external;
+    function getMetadataDigest(address avatar) external view returns (bytes32);
+}

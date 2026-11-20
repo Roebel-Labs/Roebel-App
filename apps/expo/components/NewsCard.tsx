@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   },
   titleCompact: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     lineHeight: 24,
   },

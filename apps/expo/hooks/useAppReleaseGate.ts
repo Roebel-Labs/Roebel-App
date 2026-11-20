@@ -18,6 +18,7 @@ type UseAppReleaseGateResult = {
   body: string;
   ctaLabel: string;
   dismissLabel: string;
+  imageUrl: string | null;
   dismiss: () => void;
 };
 
@@ -100,6 +101,7 @@ export function useAppReleaseGate(): UseAppReleaseGateResult {
   const body = config?.body_de || DEFAULT_BODY;
   const ctaLabel = config?.cta_label_de || DEFAULT_CTA;
   const dismissLabel = config?.dismiss_label_de || DEFAULT_DISMISS;
+  const imageUrl = config?.image_url || null;
 
   const outOfDate =
     !!config &&
@@ -117,6 +119,7 @@ export function useAppReleaseGate(): UseAppReleaseGateResult {
     body,
     ctaLabel,
     dismissLabel,
+    imageUrl,
     dismiss,
   };
 }

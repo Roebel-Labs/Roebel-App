@@ -38,6 +38,9 @@ export const V3_ATTESTER = "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7" as Hex;
 const word = (a: Hex) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}` as Hex;
 const k = (...parts: Array<string | bigint>) => parts.map((p) => String(p).toLowerCase()).join(":");
 
+/** The `webauthnSigners` key for the WebAuthn signer of `key` (production verifiers). */
+export const signerKey = (key: { x: Hex; y: Hex }) => k(BigInt(key.x), BigInt(key.y), WEBAUTHN_VERIFIERS);
+
 export interface FakeWorld {
   codes: Map<string, Hex>;
   storage: Map<string, Hex>;
@@ -68,6 +71,16 @@ export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
   w.modules.add(k(safe, PASSKEY_SAFE.socialRecoveryModule));
   w.owners.set(safe.toLowerCase(), [PASSKEY_SAFE.sharedSigner]);
   w.sharedConfig.set(safe.toLowerCase(), { x: BigInt(key.x), y: BigInt(key.y), verifiers: WEBAUTHN_VERIFIERS });
+}
+
+/** A deployed expert-path Safe: same proxy / singleton / handler / modules, owned by the ECDSA key `owner`. */
+export function makeEcdsaSafe(w: FakeWorld, safe: Hex, owner: Hex) {
+  w.codes.set(safe.toLowerCase(), SAFE_PROXY_RUNTIME_CODE);
+  w.storage.set(k(safe, word("0x00")), word(PASSKEY_SAFE.singletonL2));
+  w.storage.set(k(safe, FALLBACK_HANDLER_SLOT), word(PASSKEY_SAFE.safe4337Module));
+  w.modules.add(k(safe, PASSKEY_SAFE.safe4337Module));
+  w.modules.add(k(safe, PASSKEY_SAFE.socialRecoveryModule));
+  w.owners.set(safe.toLowerCase(), [owner]);
 }
 
 export function defaultWorld(): FakeWorld {

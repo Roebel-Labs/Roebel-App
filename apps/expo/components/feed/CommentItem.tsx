@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,9 @@ import type { PostCommentRecord } from '@/lib/types/feed';
 import HeartIcon from '@/assets/icons/heart-02.svg';
 import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
 
+// Standard Röbel Münzen coin (same asset as the chat + Belohnungen screens).
+const COIN = require('@/assets/illustration/gamification/single.png');
+
 type Props = {
   comment: PostCommentRecord;
   isOwner?: boolean;
@@ -23,6 +26,8 @@ type Props = {
   onDelete?: (comment: PostCommentRecord) => void;
   onReply?: (comment: PostCommentRecord) => void;
   onToggleLike?: (comment: PostCommentRecord) => void;
+  /** Thank the author with Röbel Münzen. Hidden on own, org and Mecky comments. */
+  onTip?: (comment: PostCommentRecord) => void;
   /** Compact, inset rendering for a reply inside a thread. */
   isReply?: boolean;
 };
@@ -34,6 +39,7 @@ export default function CommentItem({
   onDelete,
   onReply,
   onToggleLike,
+  onTip,
   isReply = false,
 }: Props) {
   const { colors } = useTheme();
@@ -60,6 +66,12 @@ export default function CommentItem({
 
   const liked = comment.liked_by_me ?? false;
   const likesCount = comment.likes_count ?? 0;
+
+  // Tips go to the author's personal wallet, so org comments (no single
+  // recipient) and Mecky are excluded; the total stays visible to everyone.
+  const tipsTotal = Number(comment.tips_total ?? 0) || 0;
+  const canTip = !!onTip && !isOwner && !isMecky && !isOrgComment;
+  const tipsLabel = tipsTotal.toLocaleString('de-DE', { maximumFractionDigits: 2 });
 
   return (
     <View style={[styles.container, { borderBottomColor: colors.border }, isReply && styles.replyContainer]}>
@@ -170,6 +182,29 @@ export default function CommentItem({
               )}
             </Pressable>
           )}
+          {(canTip || tipsTotal > 0) && (
+            <Pressable
+              onPress={() => onTip?.(comment)}
+              disabled={!canTip}
+              style={styles.likeButton}
+              hitSlop={6}
+              accessibilityRole={canTip ? 'button' : 'text'}
+              accessibilityLabel={
+                canTip
+                  ? `${displayName} mit Röbel Münzen danken`
+                  : `${tipsLabel} Röbel Münzen erhalten`
+              }
+            >
+              <RNImage
+                source={COIN}
+                style={[styles.tipCoin, tipsTotal === 0 && styles.tipCoinIdle]}
+                resizeMode="contain"
+              />
+              {tipsTotal > 0 && (
+                <Text style={[styles.likeCount, { color: colors.textSecondary }]}>{tipsLabel}</Text>
+              )}
+            </Pressable>
+          )}
         </View>
 
         {showActions && (
@@ -218,15 +253,15 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   time: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   aiTag: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 4,
     paddingHorizontal: 4,
@@ -235,7 +270,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   imageRow: {
@@ -265,16 +300,23 @@ const styles = StyleSheet.create({
   },
   replyText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
+  tipCoin: {
+    width: 18,
+    height: 18,
+  },
+  tipCoinIdle: {
+    opacity: 0.55,
+  },
   likeCount: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   editActionsRow: {
     flexDirection: 'row',
@@ -283,6 +325,6 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

@@ -12,7 +12,11 @@ import type { PreferredRole } from '@/context/WelcomeWizardContext';
 import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { useSettingsKind } from '@/components/passkey/useSettingsKind';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
+import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
+import * as Updates from 'expo-updates';
 import BottomDrawer from '@/components/BottomDrawer';
 import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -98,19 +102,33 @@ export default function SettingsScreen() {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
 
-  // Preview-only (flag + non-production channel): passkey sovereign accounts, tranche 1.
-  const [showPasskey, setShowPasskey] = useState(false);
+  // The bots (Mecky chat suite) are not released yet: remote flag + non-production channel,
+  // the same gate the former profile card had. Moved here off the profile on 2026-11-05.
+  const [showBots, setShowBots] = useState(false);
   useEffect(() => {
+    let onChannel = false;
+    try {
+      onChannel = Updates.channel !== 'production';
+    } catch {
+      onChannel = false;
+    }
+    if (!onChannel) return;
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    fetchChatSuiteEnabled()
       .then((ok) => {
-        if (!cancelled) setShowPasskey(ok);
+        if (!cancelled) setShowBots(ok);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Passkey settings row: which screen (if any) applies to this device (lib/passkey/settings-kind.ts).
+  const { kind: passkeyKind } = useSettingsKind();
+  const showPasskey = passkeyKind === 'sovereign' || passkeyKind === 'migration';
+  // A 12-word account has no passkey: the row is named after what it holds (preflight E8).
+  const wordsSession = isWordsOwner(passkeySessionOf<PasskeySession>(activeAccount));
 
   const canRequestAttester = hasCitizenNFT && !hasAttesterNFT;
   const currentRoleLabel =
@@ -192,10 +210,19 @@ export default function SettingsScreen() {
               description={option.description}
               isSelected={preference === option.value}
               onPress={() => setPreference(option.value)}
-              isLast={index === themeOptions.length - 1}
+              isLast={false}
               colors={colors}
             />
           ))}
+          <Pressable style={styles.themeOptionRow} onPress={() => router.push('/settings/widget' as any)}>
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>Widget</Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Mini Apps auf dem Homescreen
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
         </Section>
 
         <Section title="BENACHRICHTIGUNGEN" colors={colors}>
@@ -274,10 +301,12 @@ export default function SettingsScreen() {
             >
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
-                  Passkey & Wiederherstellung
+                  {wordsSession ? 'Konto & Wiederherstellung' : 'Passkey & Wiederherstellung'}
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
-                  Vorschau: Passkey als zusätzlichen Verwalter deines Kontos einrichten.
+                  {passkeyKind === 'sovereign'
+                    ? 'Dein unabhängiges Konto absichern.'
+                    : 'Passkey als zusätzlichen Verwalter deines Kontos einrichten.'}
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
@@ -299,6 +328,20 @@ export default function SettingsScreen() {
                   {canRequestAttester
                     ? 'Bescheiniger beantragen oder Mitgliedschaft entziehen.'
                     : 'Entziehung im Browser beantragen — eigene Rolle oder anderes Mitglied.'}
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          </Section>
+        ) : null}
+
+        {showBots ? (
+          <Section title="BOTS" colors={colors}>
+            <Pressable style={styles.themeOptionRow} onPress={() => router.push('/chat' as any)}>
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>Deine Bots</Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Mecky und die anderen Agenten: Chats öffnen und neue Fragen stellen.
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
@@ -380,7 +423,7 @@ export default function SettingsScreen() {
           </View>
           {isDeveloperMode && (
             <Pressable
-              style={styles.themeOptionRow}
+              style={[styles.themeOptionRow, { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }]}
               onPress={() => router.push('/settings/dev-mini-app' as any)}
             >
               <View style={styles.themeOptionTextContainer}>
@@ -389,6 +432,35 @@ export default function SettingsScreen() {
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
                   URL eingeben und im Mini-App-Host öffnen.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          )}
+          {isDeveloperMode && (
+            <Pressable
+              style={[styles.themeOptionRow, { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }]}
+              onPress={() => router.push('/settings/dev-elli-map' as any)}
+            >
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Elli 3D-Karte testen
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  3D-Karte mit fahrendem Elli-Auto – nur Testdaten.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          )}
+          {isDeveloperMode && (
+            <Pressable style={styles.themeOptionRow} onPress={() => router.push('/live/testlauf' as any)}>
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Livestream testen
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Öffnet einen Test-Livestream mit allen Funktionen – nichts hier ist echt.
                 </Text>
               </View>
               <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
@@ -420,6 +492,15 @@ export default function SettingsScreen() {
             Im Modus „System" passt sich die App automatisch an die Einstellungen Ihres Geräts an.
           </Text>
         </View>
+
+        <Pressable
+          style={styles.restoreLogRow}
+          onPress={() => router.push('/settings/restore-log' as any)}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.footerNoteText, { color: colors.textTertiary }]}>Anmelde-Protokoll</Text>
+          <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+        </Pressable>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -584,8 +665,8 @@ export default function SettingsScreen() {
 
 const roleStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold' },
-  subtitle: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold' },
+  subtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 4 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -596,34 +677,34 @@ const roleStyles = StyleSheet.create({
     paddingVertical: 14,
   },
   optionText: { flex: 1 },
-  optionLabel: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  optionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18, marginTop: 2 },
-  note: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  optionLabel: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  optionDesc: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18, marginTop: 2 },
+  note: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18 },
   savingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  savingText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  savingText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const membershipStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold', marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold', marginBottom: 4 },
   option: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  optionLabel: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  optionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18, marginTop: 2 },
+  optionLabel: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  optionDesc: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18, marginTop: 2 },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const deleteStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold' },
-  text: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Bold' },
+  text: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginBottom: 4 },
   confirmDelete: {
     backgroundColor: '#EF4444',
     height: 52,
@@ -631,9 +712,9 @@ const deleteStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
   cancel: { alignItems: 'center', paddingTop: 6 },
-  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  cancelText: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
 });
 
 const styles = StyleSheet.create({
@@ -692,11 +773,11 @@ const styles = StyleSheet.create({
   },
   themeOptionLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   themeOptionDescription: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
   },
   footerNote: {
@@ -705,14 +786,22 @@ const styles = StyleSheet.create({
   },
   footerNoteText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
+  },
+  restoreLogRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   bottomSpacer: {
     height: 40,
   },
   chevron: {
     fontSize: 18,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

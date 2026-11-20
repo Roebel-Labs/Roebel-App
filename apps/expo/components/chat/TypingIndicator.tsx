@@ -1,69 +1,57 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BotAvatar, BotEyesLayer } from './BotAvatar';
+import { BotAvatar } from './BotAvatar';
 
 export type TypingIndicatorProps = {
   spec: BotAvatarSpec;
+  /** Bot name (Mecky's picture, initial-tile letter). */
+  name?: string;
   /** Default 29 (ref 13). */
   size?: number;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Bot is thinking: the mascot's eyes glance around and blink (ref 13). */
-export function TypingIndicator({ spec, size = 29, style }: TypingIndicatorProps) {
-  const glance = useSharedValue(0);
-  const blink = useSharedValue(1);
+/** Bot is thinking: its picture gently breathes (scale + a little bounce). */
+export function TypingIndicator({ spec, name, size = 29, style }: TypingIndicatorProps) {
+  const pulse = useSharedValue(0);
 
   useEffect(() => {
-    glance.value = withRepeat(
+    pulse.value = withRepeat(
       withSequence(
-        withTiming(-1, { duration: 420, easing: Easing.inOut(Easing.quad) }),
-        withDelay(260, withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) })),
-        withDelay(260, withTiming(0, { duration: 380, easing: Easing.inOut(Easing.quad) })),
-      ),
-      -1,
-      false,
-    );
-    blink.value = withRepeat(
-      withSequence(
-        withDelay(1500, withTiming(0.1, { duration: 90 })),
-        withTiming(1, { duration: 120 }),
+        withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 620, easing: Easing.inOut(Easing.quad) }),
       ),
       -1,
       false,
     );
     return () => {
-      cancelAnimation(glance);
-      cancelAnimation(blink);
+      cancelAnimation(pulse);
     };
-  }, [glance, blink]);
+  }, [pulse]);
 
-  const eyes = useAnimatedStyle(() => ({
-    transform: [{ translateX: glance.value * size * 0.08 }, { scaleY: blink.value }],
+  const anim = useAnimatedStyle(() => ({
+    transform: [{ translateY: -pulse.value * size * 0.06 }, { scale: 1 + pulse.value * 0.06 }],
+    opacity: 0.82 + pulse.value * 0.18,
   }));
 
   return (
-    <View
-      style={[{ width: size, height: size }, styles.wrap, style]}
+    <Animated.View
+      style={[{ width: size, height: size }, styles.wrap, anim, style]}
       accessibilityRole="progressbar"
       accessibilityLabel="Schreibt …"
     >
-      <BotAvatar spec={spec} size={size} hideEyes />
-      <Animated.View style={[StyleSheet.absoluteFill, eyes]} pointerEvents="none">
-        <BotEyesLayer spec={spec} size={size} />
-      </Animated.View>
-    </View>
+      <BotAvatar spec={spec} name={name} size={size} />
+    </Animated.View>
   );
 }
 

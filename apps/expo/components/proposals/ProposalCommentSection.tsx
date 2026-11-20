@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   trigger: {
     flexDirection: 'row',
@@ -276,12 +276,12 @@ const styles = StyleSheet.create({
   },
   triggerAvatarText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   triggerPlaceholder: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   gateBar: {
     flexDirection: 'row',
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   },
   gateText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   loadingContainer: {
     paddingVertical: 24,
@@ -308,11 +308,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   emptySubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   list: {
     gap: 0,
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   loadMoreText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   loadingMore: {
     paddingVertical: 12,

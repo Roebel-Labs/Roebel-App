@@ -78,3 +78,25 @@ test("slugify", () => {
   assert.equal(slugify("x".repeat(80)).length, 60);
   assert.equal(slugify("!!!"), "app");
 });
+
+test("the file parser accepts miniapp.version 2 and still refuses 3", () => {
+  const p = parseManifestFile(
+    {
+      ...base,
+      miniapp: { ...base.miniapp, version: "2", identity: { profile: true, credentials: [{ type: "citizen", reason: "Abstimmen" }] } },
+    },
+    origin,
+  );
+  assert.equal(p.manifest.version, "2");
+  assert.deepEqual(p.manifest.identity, {
+    profile: true,
+    address: false,
+    credentials: [{ type: "citizen", reason: "Abstimmen" }],
+  });
+  assert.throws(() => parseManifestFile({ ...base, miniapp: { ...base.miniapp, version: "3" } }, origin), /version/);
+});
+
+test("a version 1 file keeps its hash shape (no version key in the manifest)", () => {
+  const p = parseManifestFile(base, origin);
+  assert.equal("version" in p.manifest, false);
+});

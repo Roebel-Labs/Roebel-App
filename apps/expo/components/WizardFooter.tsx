@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   nextButton: {
     borderRadius: 16,
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   },
   nextText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   disabled: {
     opacity: 0.5,

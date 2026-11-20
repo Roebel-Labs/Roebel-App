@@ -105,7 +105,7 @@ export default function ThumbsVote({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  count: { fontFamily: 'Inter-Medium' },
+  count: { fontFamily: 'MonaSans-Medium' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -115,5 +115,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  pillCount: { fontFamily: 'Inter-Medium', fontSize: 13 },
+  pillCount: { fontFamily: 'MonaSans-Medium', fontSize: 13 },
 });

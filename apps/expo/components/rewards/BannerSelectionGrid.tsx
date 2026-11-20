@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
   tileLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tileFooter: {
     gap: 4,

@@ -7,6 +7,7 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
+import { isVideoUrl } from '@/lib/utils/post-media';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
 
@@ -87,7 +88,9 @@ export default function AccountPostsList({ accountId }: Props) {
     <View>
       {safePosts.map((post) => {
         const mediaUrls = Array.isArray(post.media_urls)
-          ? (post.media_urls.filter((u) => typeof u === 'string' && u.length > 0) as string[])
+          ? (post.media_urls.filter(
+              (u) => typeof u === 'string' && u.length > 0 && !isVideoUrl(u),
+            ) as string[])
           : [];
         const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
         const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
@@ -135,7 +138,7 @@ const styles = StyleSheet.create({
   },
   content: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 21,
   },
   empty: {
@@ -144,6 +147,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

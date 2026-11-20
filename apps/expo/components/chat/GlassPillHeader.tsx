@@ -9,6 +9,8 @@ import { chatFont, chatSize, haloShadow, useChatTokens } from './tokens';
 export type GlassPillHeaderProps = {
   /** One spec = single avatar; several = group stack. */
   avatars: BotAvatarSpec[];
+  /** Bot names in the same order as `avatars` (Mecky's picture, initial-tile letters). */
+  names?: (string | undefined)[];
   title: string;
   online?: boolean;
   onPress?: () => void;
@@ -18,7 +20,7 @@ export type GlassPillHeaderProps = {
 };
 
 /** White pill with avatar + bot name, next to the back circle (ref 4). */
-export function GlassPillHeader({ avatars, title, online, onPress, tone = 'light', style }: GlassPillHeaderProps) {
+export function GlassPillHeader({ avatars, names, title, online, onPress, tone = 'light', style }: GlassPillHeaderProps) {
   const t = useChatTokens();
   const dark = tone === 'dark';
   return (
@@ -39,9 +41,9 @@ export function GlassPillHeader({ avatars, title, online, onPress, tone = 'light
     >
       <View style={styles.avatar}>
         {avatars.length > 1 ? (
-          <BotAvatarStack specs={avatars} size={24} />
+          <BotAvatarStack specs={avatars} names={names} size={24} />
         ) : avatars[0] ? (
-          <BotAvatar spec={avatars[0]} size={dark ? 26 : 25} online={online} />
+          <BotAvatar spec={avatars[0]} name={names?.[0]} size={dark ? 26 : 25} online={online} />
         ) : null}
       </View>
       <Text numberOfLines={1} style={[styles.title, { color: dark ? '#FFFFFF' : t.textPrimary }, dark && styles.titleDark]}>

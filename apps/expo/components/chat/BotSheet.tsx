@@ -1,11 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { BotAvatarSpec, ChatBot } from '@/lib/chat/types';
-import { BotAvatar, BOT_COLOR_LIST, BOT_SHAPES } from './BotAvatar';
+import { BotAvatar } from './BotAvatar';
+import { characterById } from '@/lib/chat/characters';
+import { useChatAccount } from '@/context/ChatContext';
+import { ChatApiError, uploadAgentPicture } from '@/lib/chat/api';
+import { AgentPictureError, useAgentPicturePicker } from './useAgentPicturePicker';
 import { BlackPillButton } from './BlackPillButton';
 import { GlassCircleButton } from './GlassCircleButton';
 import { RoutinesSection } from './RoutinesSection';
@@ -43,7 +47,10 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
   const [instructions, setInstructions] = useState('');
   const [avatar, setAvatar] = useState<BotAvatarSpec | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const account = useChatAccount();
+  const pickPicture = useAgentPicturePicker();
 
   /** Fills the form from `b` and toggles edit mode. */
   const resetForm = (b: ChatBot, edit: boolean) => {
@@ -51,6 +58,7 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
     setName(b.name);
     setInstructions(b.instructions ?? '');
     setAvatar(b.avatar);
+    setUploading(false);
     setError(null);
   };
 
@@ -66,8 +74,33 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
   const canEdit = !bot.isPreset && !!onSave;
   const shownAvatar = editing && avatar ? avatar : bot.avatar;
 
+  /** Own picture for a bot without a character: pick, upload, keep it in the form until "Speichern". */
+  const changePicture = async () => {
+    if (!account || uploading || saving) return;
+    setError(null);
+    try {
+      const uri = await pickPicture();
+      if (!uri) return;
+      setUploading(true);
+      const uploaded = await uploadAgentPicture(account, uri);
+      setAvatar((a) => {
+        const base = a ?? bot.avatar;
+        const { character: _dropped, ...rest } = base;
+        return { ...rest, imageUrl: uploaded.url };
+      });
+    } catch (err) {
+      setError(
+        err instanceof AgentPictureError || (err instanceof ChatApiError && err.message)
+          ? (err as Error).message
+          : 'Das Bild konnte nicht hochgeladen werden.',
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const save = async () => {
-    if (!onSave || !avatar) return;
+    if (!onSave || !avatar || uploading) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError('Bitte gib deinem Bot einen Namen.');
@@ -136,14 +169,14 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
                 }}
                 style={[styles.switchItem, b.id === bot.id ? { borderColor: t.textPrimary } : { borderColor: 'transparent' }]}
               >
-                <BotAvatar spec={b.avatar} size={34} />
+                <BotAvatar spec={b.avatar} name={b.name} size={34} />
               </Pressable>
             ))}
           </View>
         ) : null}
 
         <View style={styles.hero}>
-          <BotAvatar spec={shownAvatar} size={96} />
+          <BotAvatar spec={shownAvatar} name={editing ? name : bot.name} size={96} />
         </View>
 
         {editing ? (
@@ -158,50 +191,28 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
               accessibilityLabel="Name des Bots"
             />
 
-            <Text style={[styles.label, { color: t.textSecondary }]}>Form</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerRow}>
-              {BOT_SHAPES.map((shape) => {
-                const active = avatar?.shape === shape;
-                return (
-                  <Pressable
-                    key={shape}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Form ${shape}`}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setAvatar((a) => (a ? { ...a, shape } : a));
-                    }}
-                    style={[
-                      styles.shapeItem,
-                      { backgroundColor: active ? t.chipBackground : 'transparent', borderColor: active ? t.textPrimary : 'transparent' },
-                    ]}
-                  >
-                    <BotAvatar spec={{ shape, color: avatar?.color ?? bot.avatar.color, eyes: avatar?.eyes ?? bot.avatar.eyes }} size={38} />
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Text style={[styles.label, { color: t.textSecondary }]}>Farbe</Text>
-            <View style={styles.swatches}>
-              {BOT_COLOR_LIST.map((color) => {
-                const active = avatar?.color === color;
-                return (
-                  <Pressable
-                    key={color}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Farbe ${color}`}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setAvatar((a) => (a ? { ...a, color } : a));
-                    }}
-                    style={[styles.swatchRing, { borderColor: active ? t.textPrimary : 'transparent' }]}
-                  >
-                    <View style={[styles.swatch, { backgroundColor: color }]} />
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* An illustrated character keeps its artwork (changed under "Meine Agenten"); others get an own picture. */}
+            {characterById(bot.avatar.character) ? null : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Bild ändern"
+                disabled={uploading || !account}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  void changePicture();
+                }}
+                style={({ pressed }) => [styles.pictureBtn, { backgroundColor: t.chipBackground, opacity: pressed ? 0.7 : 1 }]}
+              >
+                {uploading ? (
+                  <ActivityIndicator size="small" color={t.textSecondary} />
+                ) : (
+                  <Feather name="image" size={16} color={t.textPrimary} />
+                )}
+                <Text style={[styles.pictureBtnText, { color: t.textPrimary }]}>
+                  {uploading ? 'Wird hochgeladen …' : 'Bild ändern'}
+                </Text>
+              </Pressable>
+            )}
 
             <Text style={[styles.label, { color: t.textSecondary }]}>Anweisungen</Text>
             <BottomSheetTextInput
@@ -221,7 +232,7 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
               label="Speichern"
               onPress={save}
               loading={saving}
-              variant={name.trim() ? 'primary' : 'disabled'}
+              variant={name.trim() && !uploading ? 'primary' : 'disabled'}
               style={styles.saveBtn}
             />
           </>
@@ -277,11 +288,17 @@ const styles = StyleSheet.create({
   },
   label: { fontFamily: chatFont.medium, fontSize: 14, marginTop: 20, marginBottom: 10 },
   labelInBox: { marginTop: 0, marginBottom: 6 },
-  pickerRow: { gap: 6, paddingRight: 8 },
-  shapeItem: { width: 52, height: 52, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  swatchRing: { width: 38, height: 38, borderRadius: 19, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  swatch: { width: 28, height: 28, borderRadius: 14 },
+  pictureBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 7,
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  pictureBtnText: { fontFamily: chatFont.medium, fontSize: 15 },
   instructions: {
     fontFamily: chatFont.regular,
     fontSize: 16,

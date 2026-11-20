@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 40 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120 },
-  subheading: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 16 },
+  subheading: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginBottom: 16 },
   empty: { padding: 40, alignItems: 'center' },
   card: { marginBottom: 24 },
   cover: { width: '100%', height: 180, borderRadius: 12 },
@@ -207,8 +207,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   coverPlaceholderText: { fontSize: 28 },
-  title: { fontSize: 18, fontFamily: 'Inter-Medium', marginTop: 12 },
-  excerpt: { fontSize: 14, fontFamily: 'Inter-Regular', marginTop: 4 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-Medium', marginTop: 12 },
+  excerpt: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginTop: 4 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,6 +216,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
-  metaAuthor: { fontSize: 13, fontFamily: 'Inter-Regular', flex: 1 },
-  metaDate: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  metaAuthor: { fontSize: 13, fontFamily: 'MonaSans-Regular', flex: 1 },
+  metaDate: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
 });

@@ -641,7 +641,7 @@ function BreakdownRow({
         style={[
           styles.breakdownLabel,
           { color: bold ? colors.textPrimary : colors.textSecondary },
-          bold && { fontFamily: 'Inter-SemiBold' },
+          bold && { fontFamily: 'MonaSans-SemiBold' },
         ]}
       >
         {label}
@@ -650,7 +650,7 @@ function BreakdownRow({
         style={[
           styles.breakdownValue,
           { color: colors.textPrimary },
-          bold && { fontFamily: 'Inter-Bold' },
+          bold && { fontFamily: 'MonaSans-Bold' },
         ]}
       >
         {value}
@@ -828,18 +828,18 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   closeButton: {
     width: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeIcon: { fontSize: 20, fontFamily: 'Inter-Regular' },
-  backIcon: { fontSize: 32, fontFamily: 'Inter-Regular', lineHeight: 32 },
+  closeIcon: { fontSize: 20, fontFamily: 'MonaSans-Regular' },
+  backIcon: { fontSize: 32, fontFamily: 'MonaSans-Regular', lineHeight: 32 },
   subtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   // Amount scroll — flexShrink: 1 lets the ScrollView shrink inside the
@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
   },
   denomText: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   customRow: {
     borderWidth: 2,
@@ -883,7 +883,7 @@ const styles = StyleSheet.create({
   },
   customLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   customInputWrap: {
     flexDirection: 'row',
@@ -894,15 +894,15 @@ const styles = StyleSheet.create({
     minWidth: 80,
     textAlign: 'right',
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   customCurrency: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   helperError: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: -4,
     marginLeft: 16,
   },
@@ -914,7 +914,7 @@ const styles = StyleSheet.create({
   },
   donationLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
@@ -932,11 +932,11 @@ const styles = StyleSheet.create({
   },
   donationChipText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   donationChipSub: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 
   // Sachbezug
@@ -947,11 +947,11 @@ const styles = StyleSheet.create({
   },
   sachbezugAmount: {
     fontSize: 48,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   sachbezugLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   wenigerLink: {
@@ -960,7 +960,7 @@ const styles = StyleSheet.create({
   },
   wenigerText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   sachbezugChips: {
     flexDirection: 'row',
@@ -977,7 +977,7 @@ const styles = StyleSheet.create({
   },
   sachbezugChipText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 
   // Breakdown
@@ -993,11 +993,11 @@ const styles = StyleSheet.create({
   },
   breakdownLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   breakdownValue: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   breakdownDivider: {
     height: 1,
@@ -1024,8 +1024,8 @@ const styles = StyleSheet.create({
   vereinAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   vereinEmoji: { fontSize: 22 },
   vereinText: { flex: 1, gap: 2 },
-  vereinName: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
-  vereinSubtitle: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  vereinName: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
+  vereinSubtitle: { fontSize: 12, fontFamily: 'MonaSans-Regular' },
   radio: {
     width: 20,
     height: 20,
@@ -1038,7 +1038,7 @@ const styles = StyleSheet.create({
   },
   vereineEmpty: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingHorizontal: 16,
     marginTop: 4,
@@ -1055,7 +1055,7 @@ const styles = StyleSheet.create({
   },
   legal: {
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 16,
   },

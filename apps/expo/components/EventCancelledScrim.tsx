@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   text: {
     color: '#ffffff',
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },

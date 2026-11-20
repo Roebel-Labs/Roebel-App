@@ -8,7 +8,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Skeleton } from '@/components/SkeletonLoader';
-import { useTheme } from '@/context/ThemeContext';
 
 function PulseRow({ children }: { children: React.ReactNode }) {
   const opacity = useSharedValue(0.6);
@@ -26,11 +25,10 @@ function PulseRow({ children }: { children: React.ReactNode }) {
 }
 
 export default function ConversationRowSkeleton() {
-  const { colors } = useTheme();
   return (
     <PulseRow>
-      <View style={[styles.row, { borderBottomColor: colors.border }]}>
-        <Skeleton width={48} height={48} borderRadius={24} />
+      <View style={styles.row}>
+        <Skeleton width={56} height={56} borderRadius={20} />
         <View style={styles.body}>
           <View style={styles.topRow}>
             <Skeleton width="50%" height={15} borderRadius={4} />
@@ -47,10 +45,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 15,
   },
   body: {
     flex: 1,

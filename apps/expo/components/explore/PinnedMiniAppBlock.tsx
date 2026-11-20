@@ -2,7 +2,9 @@
  * A mini app the user pinned to Erkunden (layout id `miniapp:<slug>`).
  * One wide card: icon, name, description, "Öffnen". Same launch rules as
  * MiniAppsEntry — installed apps open straight into the host, others go to
- * the store page. A slug that is no longer live renders nothing.
+ * the store page. A slug that is no longer live renders nothing. A locked app
+ * (required audience not matched on this device) shows "Gesperrt" and opens
+ * its detail page, never the host.
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -14,11 +16,15 @@ import { fontFamily } from '@/constants/theme';
 import { fetchLiveMiniApps } from '@/lib/miniapps';
 import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
+import { LockIcon } from '@/components/miniapp/hostIcons';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { openDecision } from '@/lib/miniapp-open';
 
 export default function PinnedMiniAppBlock({ slug }: { slug: string }) {
   const { colors } = useTheme();
   const router = useRouter();
   const { isInstalled } = useInstalledMiniApps();
+  const { held, ready } = useMatchCredentials();
   const [hostVisible, setHostVisible] = useState(false);
   const [hostMounted, setHostMounted] = useState(false);
 
@@ -29,16 +35,18 @@ export default function PinnedMiniAppBlock({ slug }: { slug: string }) {
     meta: { persist: true },
   });
   const app = data?.find((a) => a.slug === slug);
+  const decision = app ? openDecision(app, held, ready) : 'wait';
+  const locked = decision === 'locked';
 
   const open = useCallback(() => {
     if (!app) return;
-    if (isInstalled(app.slug)) {
+    if (isInstalled(app.slug) && decision === 'open') {
       setHostMounted(true);
       setHostVisible(true);
     } else {
       router.push(`/mini-app/${app.slug}` as any);
     }
-  }, [app, isInstalled, router]);
+  }, [app, decision, isInstalled, router]);
 
   const closeHost = useCallback(() => setHostVisible(false), []);
 
@@ -67,11 +75,18 @@ export default function PinnedMiniAppBlock({ slug }: { slug: string }) {
             <Text style={[styles.desc, { color: colors.textSecondary }]} numberOfLines={2}>{app.description}</Text>
           ) : null}
         </View>
-        <View style={[styles.cta, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Öffnen</Text>
-        </View>
+        {locked ? (
+          <View style={[styles.cta, { backgroundColor: colors.surfaceSecondary }]}>
+            <LockIcon size={14} color={colors.textPrimary} />
+            <Text style={[styles.ctaText, { color: colors.textPrimary }]}>Gesperrt</Text>
+          </View>
+        ) : (
+          <View style={[styles.cta, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.ctaText, { color: colors.onPrimary }]}>Öffnen</Text>
+          </View>
+        )}
       </Pressable>
-      {hostMounted && <MiniAppHost app={app} visible={hostVisible} onClose={closeHost} />}
+      {hostMounted && !locked && <MiniAppHost app={app} visible={hostVisible} onClose={closeHost} />}
     </View>
   );
 }
@@ -90,6 +105,14 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   name: { fontFamily: fontFamily.semiBold, fontSize: 16 },
   desc: { fontFamily: fontFamily.regular, fontSize: 13, marginTop: 2 },
-  cta: { paddingHorizontal: 14, height: 34, borderRadius: 17, justifyContent: 'center' },
+  cta: {
+    paddingHorizontal: 14,
+    height: 34,
+    borderRadius: 17,
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   ctaText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
 });

@@ -100,12 +100,12 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     flexShrink: 1,
   },
   bio: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   locationRow: {
@@ -116,6 +116,6 @@ const styles = StyleSheet.create({
   },
   neighborhood: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

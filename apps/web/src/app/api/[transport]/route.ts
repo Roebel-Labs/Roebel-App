@@ -6,10 +6,8 @@
  * publish Röbel mini apps: docs, validation, listing, single-file publishing,
  * external-URL submission, manifest updates, analytics.
  *
- * Auth: `Authorization: Bearer nz_<api-key>` (dashboard → API & MCP). During
- * rollout (until the developer_api_keys migration is applied) a wallet address
- * as bearer token is accepted — the same MVP trust tier as the dashboard's
- * x-wallet-address header. Docs/validate tools work unauthenticated.
+ * Auth: `Authorization: Bearer nz_<api-key>` (dashboard → API & MCP). A bare
+ * wallet address is not accepted. Docs/validate tools work unauthenticated.
  *
  * Claude Code:
  *   claude mcp add --transport http netizen https://www.roebel.app/api/mcp \
@@ -22,7 +20,6 @@ import { publishHtmlMiniApp } from "@/lib/miniapp/ai/publishHtml";
 import { manifestDraftSchema } from "@/lib/miniapp/ai/manifest";
 import {
   getApp,
-  getOrCreateDeveloper,
   listApps,
   listVersions,
   queryAnalytics,
@@ -31,15 +28,16 @@ import {
 } from "@/lib/miniapp/data";
 import { deleteData, listData, setData } from "@/lib/miniapp/dataStore";
 import { importImagesFromWebsite } from "@/lib/miniapp/images/importFromWebsite";
-import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
+import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL, DOCS_SECTIONS } from "@/lib/miniapp/devdocs";
 import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
+import { resolveMcpDeveloper } from "@/lib/miniapp/mcpAuth";
 import { validateManifest } from "@/lib/miniapp/manifest";
 import { indexOrigin } from "@/lib/miniapp/indexing";
 import { wellKnownUrlFor } from "@/lib/miniapp/safeFetch";
 import { checkRegisterLimits, REGISTER_LIMIT_MESSAGES } from "@/lib/miniapp/registerLimits";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
-import type { DeveloperRow, MiniAppRow } from "@/lib/miniapp/types";
+import type { MiniAppRow } from "@/lib/miniapp/types";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -48,13 +46,7 @@ export const runtime = "nodejs";
 
 async function verifyToken(_req: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined;
-  let dev: DeveloperRow | null = null;
-  if (bearerToken.startsWith("nz_")) {
-    dev = await verifyApiKey(bearerToken);
-  } else if (/^0x[0-9a-fA-F]{40}$/.test(bearerToken)) {
-    // Rollout fallback — same trust tier as the dashboard's wallet header.
-    dev = await getOrCreateDeveloper(bearerToken);
-  }
+  const dev = await resolveMcpDeveloper(bearerToken, { verifyApiKey });
   if (!dev) return undefined;
   return {
     token: bearerToken,
@@ -68,7 +60,7 @@ function requireDev(extra: { authInfo?: AuthInfo }): { developerId: string; wall
   const info = extra.authInfo?.extra as { developerId?: string; wallet?: string } | undefined;
   if (!info?.developerId) {
     throw new Error(
-      `Nicht angemeldet. Sende "Authorization: Bearer nz_<API-Key>" — Key erstellen unter ${DOCS_BASE_URL}/dashboard/mini-apps/api (Übergangsweise geht auch die Wallet-Adresse als Token).`,
+      `Nicht angemeldet. Sende "Authorization: Bearer nz_<API-Key>" — Key erstellen unter ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
     );
   }
   return { developerId: info.developerId, wallet: info.wallet ?? "" };
@@ -156,14 +148,15 @@ const handler = createMcpHandler(
             `4. publish_html_app {html, manifest} — creates/updates your app, serves it at https://<slug>.${MINI_APPS_SITE_DOMAIN}, status "pending" until an admin approves.\n\n` +
             `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n` +
             `Self-hosted (recommended for Vercel/Lovable/own server): serve /.well-known/roebel-miniapp.json, then register_app_url {url} — recipe ${DOCS_BASE_URL}/mini-apps/publish.md.\n\n` +
+            `Identity, verification, credentials, wallet, gasless calls, badges and store targeting: get_docs {section:"identity"|"verify"|"credentials"|"wallet"|"gasless"|"issuer"|"store"}.\n\n` +
             `Auth for publishing tools: Authorization: Bearer nz_<api-key> — create at ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
         ),
     );
 
     server.tool(
       "get_docs",
-      "Developer documentation. Sections: sdk (SDK reference), screens (mandatory screen structure), design (design system), copy (German copy rules), publish (single-file boilerplate + publishing API), all (everything).",
-      { section: z.enum(["sdk", "screens", "design", "copy", "publish", "all"]).default("all") },
+      "Developer documentation. Sections: sdk (SDK reference), screens (mandatory screen structure), design (design system), copy (German copy rules), publish (single-file boilerplate + publishing API), identity (manifest v2 identity + consent), verify (verify the person on your server), credentials (credential references + sdk.credentials), wallet (provider, limits, errors, pay, events), gasless (declared contracts + gas budget), issuer (badges via an org delegate key), store (audience + org), all (everything).",
+      { section: z.enum(DOCS_SECTIONS).default("all") },
       async ({ section }) => text(getDocsSection(section)),
     );
 

@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

@@ -50,6 +50,15 @@ import { fetchOrgListings } from '@/lib/supabase-marketplace';
 import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articles';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import { fetchOrgPublic } from '@/lib/credreg/api';
+import type { OrgPublicView } from '@/lib/credreg/types';
+import OrgCredentialsPublic, { replacesMemberSection } from '@/components/org/OrgCredentialsPublic';
+import { fetchMiniAppsOfOrg, type MiniApp } from '@/lib/miniapps';
+import { useInstalledMiniApps } from '@/lib/miniapp-installs';
+import { useMatchCredentials } from '@/lib/miniapp-credentials';
+import { openDecision } from '@/lib/miniapp-open';
+import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
 import { hasMenuPrice, isRestaurantOpen } from '@/lib/utils';
 import {
   subTypeFeatures,
@@ -204,6 +213,15 @@ function PublicAccountScreenInner() {
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [orgLocation, setOrgLocation] = useState<OrgLocation | null>(null);
+  // Mini apps this org confirmed (lib/miniapp-org-binding.ts); the rail shows only when there are any.
+  const [orgMiniApps, setOrgMiniApps] = useState<MiniApp[]>([]);
+  const { isInstalled: isMiniAppInstalled } = useInstalledMiniApps();
+  const { held: miniAppHeld, ready: miniAppReady } = useMatchCredentials();
+  const isMiniAppLocked = useCallback(
+    (app: MiniApp) => openDecision(app, miniAppHeld, miniAppReady) === 'locked',
+    [miniAppHeld, miniAppReady],
+  );
+  const openOrgMiniApp = useCallback((app: MiniApp) => router.push(`/mini-app/${app.slug}` as any), [router]);
 
   useEffect(() => {
     if (!id) return;
@@ -242,6 +260,9 @@ function PublicAccountScreenInner() {
           resolveOrgLocation(account, members).catch(() => null),
         ]);
         if (cancelled) return;
+        void fetchMiniAppsOfOrg(account.id).then((list) => {
+          if (!cancelled) setOrgMiniApps(list);
+        });
         setPosts(postsRes.data);
         setEvents(eventsRes as EventRecord[]);
         setBlogArticles(blogRes.filter((a) => a.status === 'published'));
@@ -291,6 +312,22 @@ function PublicAccountScreenInner() {
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+  const credentialsGate = useCredentialsGate();
+  // Public register view (offices, public members, badges); only fetched behind the open gate.
+  const [orgPublic, setOrgPublic] = useState<{ id: string; view: OrgPublicView | null } | null>(null);
+  const publicAccountId = typeof id === 'string' ? id : null;
+  useEffect(() => {
+    if (credentialsGate !== true || !publicAccountId) return;
+    let alive = true;
+    void fetchOrgPublic(publicAccountId).then((view) => {
+      if (alive) setOrgPublic({ id: publicAccountId, view });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [credentialsGate, publicAccountId]);
+  const orgPublicView = credentialsGate === true && orgPublic?.id === publicAccountId ? orgPublic.view : null;
+  const registerMembers = replacesMemberSection(orgPublicView, credentialsGate);
   // Max keeps owner/admin rights on many orgs to manage them, but should not
   // be presented as part of their team on the public org page.
   const visibleMembers = useMemo(
@@ -351,7 +388,7 @@ function PublicAccountScreenInner() {
   const supportsOpeningHours = subTypeFeatures(account.sub_type).openingHours;
 
   const goToOwnerScreen = async (
-    pathname: '/org/settings' | '/org/opening-hours' | '/edit-org',
+    pathname: '/org/settings' | '/org/opening-hours' | '/edit-org' | '/org/credentials',
   ) => {
     try {
       await switchAccount(account.id);
@@ -511,8 +548,22 @@ function PublicAccountScreenInner() {
         </View>
       ) : null}
 
+      {/* Owners/admins: entry to "Mitglieder & Ausweise" (credential register) */}
+      {canEdit && credentialsGate === true ? (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Pressable onPress={() => goToOwnerScreen('/org/credentials')} accessibilityRole="button" accessibilityLabel="Mitglieder & Ausweise">
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder & Ausweise</Text>
+            <Text style={[styles.membersCount, { color: colors.primary }]}>Verwalten</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Credential register (open question 1): offices, public members, the org's badges. With
+          register types its member list replaces the account_owners stack below. */}
+      {orgPublicView ? <OrgCredentialsPublic data={orgPublicView} showMembers={registerMembers} /> : null}
+
       {/* Members */}
-      {visibleMembers.length > 0 && (
+      {!registerMembers && visibleMembers.length > 0 && (
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder</Text>
           <View style={styles.membersRow}>
@@ -592,6 +643,24 @@ function PublicAccountScreenInner() {
         </View>
         </InlineErrorBoundary>
       ) : null}
+
+      {/* Mini-Apps this org confirmed */}
+      {orgMiniApps.length > 0 && (
+        <InlineErrorBoundary label="org-mini-apps">
+        <View style={[styles.section, styles.sectionFlush, { borderTopColor: colors.border }]}>
+          <View style={[styles.sectionHeaderRow, styles.sectionHeaderInset]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mini-Apps</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{orgMiniApps.length}</Text>
+          </View>
+          <MiniAppColumnRail
+            apps={orgMiniApps}
+            isInstalled={isMiniAppInstalled}
+            isLocked={isMiniAppLocked}
+            onOpen={openOrgMiniApp}
+          />
+        </View>
+        </InlineErrorBoundary>
+      )}
 
       {/* Events */}
       {safeEvents.length > 0 && (
@@ -800,7 +869,7 @@ function PublicAccountScreenInner() {
                   },
                 ]}
               >
-                <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 15 }}>
+                <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium', fontSize: 15 }}>
                   Auf Karte ansehen →
                 </Text>
               </Pressable>
@@ -1203,7 +1272,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -1279,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   subTypeText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   tabsWrap: {
     marginTop: 20,
@@ -1297,6 +1366,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  // The mini-app rail brings its own 16px gutter; the header keeps the section's inset.
+  sectionFlush: { paddingHorizontal: 0 },
+  sectionHeaderInset: { paddingHorizontal: 16 },
   sectionHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1316,17 +1388,17 @@ const styles = StyleSheet.create({
   },
   sectionCount: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   bioText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   linkText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   membersRow: {
     flexDirection: 'row',
@@ -1335,7 +1407,7 @@ const styles = StyleSheet.create({
   },
   membersCount: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   hList: {
     gap: 12,
@@ -1357,12 +1429,12 @@ const styles = StyleSheet.create({
   },
   mediaCardTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 18,
   },
   mediaCardMeta: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   locationButton: {
     paddingHorizontal: 16,
@@ -1373,7 +1445,7 @@ const styles = StyleSheet.create({
   },
   openStatus: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   hoursList: {
     gap: 6,
@@ -1385,12 +1457,12 @@ const styles = StyleSheet.create({
   },
   hoursDay: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 40,
   },
   hoursTime: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   ctaButton: {
     borderWidth: 1,
@@ -1409,12 +1481,12 @@ const styles = StyleSheet.create({
   },
   gastroCategoryName: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
   },
   gastroEmpty: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingVertical: 12,
   },
   gastroItemRow: {
@@ -1425,7 +1497,7 @@ const styles = StyleSheet.create({
   },
   gastroItemName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   gastroMetaRow: {
     flexDirection: 'row',
@@ -1435,11 +1507,11 @@ const styles = StyleSheet.create({
   },
   gastroItemPrice: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   gastroItemDesc: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
   gastroThumb: {

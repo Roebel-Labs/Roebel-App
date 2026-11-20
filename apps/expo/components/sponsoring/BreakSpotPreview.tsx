@@ -42,7 +42,7 @@ function inkFor(bg: string): string {
 /**
  * A looping mock of the full-screen break ad as it airs in the DanceCup livestream: the logo
  * spot (logo large on its own background colour), or the produced spot (slow push-ins over the
- * org's own dishes, then the logo end card). Pure preview: the real spot is rendered by the
+ * org's own dishes, then the same logo card as the end card, logo only). Pure preview: the real spot is rendered by the
  * stream production.
  */
 export default function BreakSpotPreview({ kind, orgName, logoUrl, logoColor, dishes }: Props) {
@@ -115,13 +115,12 @@ function LogoCard({ t, orgName, logoUrl, bg, caption, from }: {
 function CustomSpot({ t, orgName, logoUrl, bg, dishes }: { t: SharedValue<number>; orgName: string; logoUrl: string | null; bg: string; dishes: DishPhoto[] }) {
   const count = dishes.length || PLACEHOLDERS.length;
   const slot = SEQ_END / count;
-  const offer = dishes[0] ? [dishes[0].name, formatPrice(dishes[0].price)].filter(Boolean).join(' · ') : null;
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
         <Slide key={i} t={t} index={i} start={i * slot} end={(i + 1) * slot} dish={dishes[i] ?? null} placeholder={PLACEHOLDERS[i % PLACEHOLDERS.length]} />
       ))}
-      <LogoCard t={t} orgName={orgName} logoUrl={logoUrl} bg={bg} caption={offer ? `Heute: ${offer}` : null} from={SEQ_END} />
+      <LogoCard t={t} orgName={orgName} logoUrl={logoUrl} bg={bg} caption={null} from={SEQ_END} />
     </>
   );
 }

@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   info: {
     padding: 10,
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     lineHeight: 18,
   },
   metaRow: {
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   badge: {
     paddingHorizontal: 6,
@@ -124,11 +124,11 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   cta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 4,
   },
 });

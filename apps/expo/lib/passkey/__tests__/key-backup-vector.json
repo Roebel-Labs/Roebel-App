@@ -12,5 +12,12 @@
   "readMessage": "Röbel: Schlüssel-Sicherung\nAktion: lesen\nKonto: 0xc49de63ccfee46c6c5c3e393293f66779799fb28\nZeit: 1790000000\nNur verschlüsselte Daten. Entsperren kann nur dein Passkey.",
   "writeMessage": "Röbel: Schlüssel-Sicherung\nAktion: speichern\nKonto: 0xc49de63ccfee46c6c5c3e393293f66779799fb28\nInhalt: aa9a7c55019334e02009460474628f65d3ca3ce64162b0e524e7dc73b1fefcc6\nZeit: 1790000000\nNur verschlüsselte Daten. Entsperren kann nur dein Passkey.",
   "readMessageHash": "0x90640fbb4e01f1b47e8142664de2c7476d973fa27888a798f756c8bb55ebb141",
-  "writeMessageHash": "0xb6918d444519850b07d60b9ab2ae01008f382c84fd2de82ca06ca039af81cd48"
+  "writeMessageHash": "0xb6918d444519850b07d60b9ab2ae01008f382c84fd2de82ca06ca039af81cd48",
+  "wordsCase": {
+    "_description": "Second case: words slots (maci_w, nostr_w, salt_w) and the wrapped vault key (wvk) after the primary slots, in the order maci, nostr, salt, maci_w, nostr_w, salt_w, wvk.",
+    "blobs": { "wvk": "pkv1:c", "maci_w": "pkv1:b", "maci": "pkv1:a" },
+    "replace": false,
+    "content": "maci=pkv1:a\nmaci_w=pkv1:b\nwvk=pkv1:c\nreplace=0",
+    "contentHash": "d0b26cc2c7d94ecf34e93ef136d47e5877dbf022d69d30b13ece4e7fb2e07606"
+  }
 }

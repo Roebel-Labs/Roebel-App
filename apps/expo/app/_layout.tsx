@@ -22,6 +22,7 @@ import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { AudioPlayerProvider } from '@/context/AudioPlayerContext';
+import { LivePlayerProvider } from '@/components/live/player/LivePlayerProvider';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { RelationsProvider } from '@/context/RelationsContext';
@@ -49,6 +50,7 @@ import { WalletBootProvider } from '@/context/WalletBootContext';
 import { GnosisWalletProvider } from '@/context/GnosisWalletContext';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
+import CollectQueueFlusher from '@/components/credentials/CollectQueueFlusher';
 import { ConsentGate } from '@/components/consent/ConsentGate';
 import { ObserveConsentGate } from '@/components/consent/ObserveConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
@@ -56,6 +58,8 @@ import { AppUpdateGate } from '@/components/AppUpdateGate';
 import AnimatedSplash from '@/components/AnimatedSplash';
 import { bootState } from '@/lib/navigation/bootPathname';
 import PasskeyRecoveryWatch from '@/components/passkey/PasskeyRecoveryWatch';
+import PhraseReentryWatch from '@/components/passkey/PhraseReentryWatch';
+import WidgetSyncer from '@/components/WidgetSyncer';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -277,6 +281,7 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <PostHogTelemetry />
       <RewardsTaskTriggers />
+      <WidgetSyncer />
       <ReferralDeepLinkHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false }}>
@@ -331,8 +336,20 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/passkey-detach" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/recovery-words" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
+          {/* Live room: black video on top, the rest follows the app theme; slides up. A card push, not a modal, so the
+              login screen it links to stacks on top of it. */}
+          <TransitionStack.Screen
+            name="live/[slug]"
+            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: colors.background } }}
+          />
+          {/* Live dazuschalten (phone guest via LiveKit, 3.9.0+ binaries only — the screen guards itself). */}
+          <TransitionStack.Screen
+            name="live/join/[slug]"
+            options={{ headerShown: false, animation: 'slide_from_bottom', contentStyle: { backgroundColor: colors.background } }}
+          />
           {/* Hören: full-screen player slides up as a sheet over whatever is playing. */}
           <TransitionStack.Screen
             name="audio/player"
@@ -342,6 +359,8 @@ function ThemedLayout() {
       </View>
       {/* Preview-only: gate checked first, renders nothing in production. */}
       <PasskeyRecoveryWatch />
+      {/* Words sessions only: the 12 words were invalidated -> ask for them again (never a logout). */}
+      <PhraseReentryWatch />
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
@@ -438,11 +457,16 @@ function Layout() {
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
                               <AudioPlayerProvider>
+                              {/* Live room: one shared video player + the floating mini player (renders over the stack). */}
+                              <LivePlayerProvider>
                                 <ConsentGate />
                                 <ObserveConsentGate />
                                 <AppUpdateGate />
+                                {/* Event QR scans queued offline are sent once the device is online again. */}
+                                <CollectQueueFlusher />
                                 <ThemedLayout />
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
+                              </LivePlayerProvider>
                               </AudioPlayerProvider>
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>

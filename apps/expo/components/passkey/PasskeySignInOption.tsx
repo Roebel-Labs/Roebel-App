@@ -4,14 +4,16 @@
  *
  * Renders NOTHING unless the passkey preview gate is open (production returns before any network
  * read), so the Anmelden sheet on production looks exactly as before. The thirdweb options below
- * it are untouched.
+ * it are untouched. With the 'words' surface open, a text button under "Mit Passkey anmelden"
+ * opens the 12-word sign-in (expert path).
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSetActiveWallet } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import type { PasskeySession } from '@/lib/passkey/session';
 import type { SignInResult } from '@/lib/passkey/signin';
 
@@ -27,24 +29,34 @@ type Props = {
   initiallyOpen?: boolean;
   /** Called once the gate check finished (true = the option is shown). */
   onAvailability?: (allowed: boolean) => void;
+  /** Called right before this option navigates away (the login drawer closes itself). */
+  onNavigate?: () => void;
 };
 
-export default function PasskeySignInOption({ onSignedIn, beforeActivate, initiallyOpen = false, onAvailability }: Props) {
+export default function PasskeySignInOption({ onSignedIn, beforeActivate, initiallyOpen = false, onAvailability, onNavigate }: Props) {
   const { colors } = useTheme();
+  const router = useRouter();
   const setActiveWallet = useSetActiveWallet();
   const [allowed, setAllowed] = useState(false);
+  const [wordsAllowed, setWordsAllowed] = useState(false);
   const [open, setOpen] = useState(initiallyOpen);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    isPasskeyPreviewAllowed()
+    isPasskeySurfaceAllowed('signup')
       .catch(() => false)
       .then((ok) => {
         if (cancelled) return;
         setAllowed(ok);
         onAvailability?.(ok);
+        if (!ok) return;
+        isPasskeySurfaceAllowed('words')
+          .catch(() => false)
+          .then((words) => {
+            if (!cancelled) setWordsAllowed(words);
+          });
       });
     return () => {
       cancelled = true;
@@ -89,7 +101,7 @@ export default function PasskeySignInOption({ onSignedIn, beforeActivate, initia
       >
         <Text style={[styles.title, { color: colors.textPrimary }]}>Unabhängiges Konto</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Nur du hast den Schlüssel.
+          Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Wir haben keinen Schlüssel zu deinem Konto.
         </Text>
       </Pressable>
 
@@ -107,6 +119,19 @@ export default function PasskeySignInOption({ onSignedIn, beforeActivate, initia
               <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Mit Passkey anmelden</Text>
             )}
           </Pressable>
+          {wordsAllowed && (
+            <Pressable
+              onPress={() => {
+                onNavigate?.();
+                router.push('/passkey/words-signin' as any);
+              }}
+              disabled={!!busy}
+              accessibilityRole="button"
+              style={styles.textButton}
+            >
+              <Text style={[styles.textButtonLabel, { color: colors.primary }]}>Mit 12 Wörtern anmelden</Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={() => run('signUp')}
             disabled={!!busy}
@@ -140,6 +165,8 @@ const styles = StyleSheet.create({
   actions: { marginTop: 12, gap: 10 },
   button: { minHeight: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   secondary: { borderWidth: 1, backgroundColor: 'transparent' },
+  textButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  textButtonLabel: { fontFamily: fontFamily.semiBold, fontSize: 15, textDecorationLine: 'underline' },
   buttonText: { fontFamily: fontFamily.semiBold, fontSize: 16, textAlign: 'center' },
   error: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },

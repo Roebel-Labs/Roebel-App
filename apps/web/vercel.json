@@ -29,6 +29,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/app-update-draft",
+      "schedule": "0 5 * * 4"
+    },
+    {
       "path": "/api/cron/newsletter-draft",
       "schedule": "0 6 * * 5"
     },
@@ -49,7 +53,31 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/chat/cron/persona",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/event-requests",
+      "schedule": "10 * * * *"
+    },
+    {
+      "path": "/api/cron/event-sources",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/cron/vorhaben",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/passkey/recovery-alerts",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/credentials-sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/credentials-badges",
       "schedule": "*/5 * * * *"
     }
   ]

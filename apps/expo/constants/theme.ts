@@ -15,9 +15,9 @@
  *   - headlines .... Mona Sans SemiCondensed (Bold)
  *   - mono ......... Mona Sans Mono
  *
- * NOTE: legacy `Inter-*` family keys are aliased to the Mona Sans files in
- * `hooks/useFonts.ts`, so existing components keep working. Use these tokens
- * (e.g. `fontFamily.heading`) in new code.
+ * Fonts are embedded at build time (expo-font plugin, app.config.ts). The
+ * legacy `Inter-*` aliases are gone — use these tokens (e.g.
+ * `fontFamily.heading`) or the Mona Sans names directly.
  */
 export const fontFamily = {
   // Body / UI

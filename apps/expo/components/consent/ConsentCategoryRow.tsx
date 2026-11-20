@@ -98,11 +98,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   lockBadge: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
@@ -111,12 +111,12 @@ const styles = StyleSheet.create({
   },
   purpose: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   meta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   learnMore: {
     alignSelf: 'flex-start',
@@ -124,6 +124,6 @@ const styles = StyleSheet.create({
   },
   learnMoreText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

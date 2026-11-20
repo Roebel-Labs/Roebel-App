@@ -140,8 +140,8 @@ function Checkbox({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   headerSection: { paddingHorizontal: 24, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 16 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Bold', marginBottom: 8 },
+  subtitle: { fontSize: 15, fontFamily: 'MonaSans-Regular', marginBottom: 16 },
   agbScroll: {
     flex: 1,
     marginHorizontal: 24,
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   agbContent: { padding: 16 },
   agbText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   checkboxesWrap: {
@@ -177,12 +177,12 @@ const styles = StyleSheet.create({
   checkmark: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   checkboxLabel: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
 });

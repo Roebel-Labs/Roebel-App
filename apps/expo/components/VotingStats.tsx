@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   titleRow: {
     flexDirection: 'row',
@@ -219,11 +219,11 @@ const styles = StyleSheet.create({
   talliedBadgeText: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   basescanLink: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textDecorationLine: 'underline',
   },
   statusCard: {
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   voteRow: {
@@ -247,11 +247,11 @@ const styles = StyleSheet.create({
   },
   voteLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   votePercentage: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   progressBarContainer: {
     height: 8,
@@ -265,11 +265,11 @@ const styles = StyleSheet.create({
   },
   voteCount: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   totalLine: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 4,
   },
 });

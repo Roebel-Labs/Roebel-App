@@ -32,6 +32,7 @@ import UserPostsList from '@/components/profile/UserPostsList';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import UserEventsList from '@/components/profile/UserEventsList';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
+import PublicCredentials from '@/components/profile/PublicCredentials';
 import { fetchPersonalListingsByWallet } from '@/lib/supabase-marketplace';
 import type { UserRecord, MarketplaceListingRecord } from '@/lib/types';
 
@@ -295,6 +296,9 @@ export default function PublicUserProfileScreen() {
               ))}
             </View>
           )}
+
+          {/* Public cards and badges from the credential register (nothing while the gate is closed). */}
+          <PublicCredentials address={profile.wallet_address} />
         </View>
 
         {/* ── Zu verkaufen row (personal listings only; account_id IS NULL) ── */}
@@ -352,7 +356,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -391,7 +395,7 @@ const styles = StyleSheet.create({
   },
   editPillText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   identityRow: {
     flexDirection: 'row',
@@ -412,7 +416,7 @@ const styles = StyleSheet.create({
   },
   displayName: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     flexShrink: 1,
   },
   subRow: {
@@ -422,7 +426,7 @@ const styles = StyleSheet.create({
   },
   bio: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
   },
   metaRow: {
@@ -438,7 +442,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   pillsRow: {
     flexDirection: 'row',
@@ -453,6 +457,6 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

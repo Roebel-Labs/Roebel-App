@@ -11,6 +11,7 @@ import {
   Star,
   Coins,
   ExternalLink,
+  Fuel,
   Pencil,
   RotateCcw,
 } from "lucide-react";
@@ -38,6 +39,29 @@ import { Playground } from "@/components/mini-apps/Playground";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import type { MiniAppRow, MiniAppVersionRow } from "@/lib/miniapp/types";
 import { timeAgo } from "@/components/admin/muenzen/format";
+import {
+  identityFromManifest,
+  identityReviewItems,
+  needsIdentityReview,
+} from "@/lib/miniapp/identityReview";
+import type { MiniAppIdentityRequest } from "@netizen-labs/miniapp-sdk";
+import { formatEther } from "viem";
+
+/** wei (numeric column → string or number) → xDAI for display. */
+const ORG_BINDING_LABEL: Record<string, string> = {
+  none: "keine Zuordnung",
+  requested: "wartet auf Bestätigung durch den Verein",
+  confirmed: "vom Verein bestätigt",
+  rejected: "vom Verein abgelehnt",
+};
+
+function xdai(wei: string | number | null | undefined): string {
+  try {
+    return formatEther(BigInt(String(wei ?? 0)));
+  } catch {
+    return "0";
+  }
+}
 
 // Manifest keys (camelCase, as stored on a version) <-> live row columns.
 const DIFF_FIELDS: { label: string; key: string; col: keyof MiniAppRow }[] = [
@@ -71,6 +95,21 @@ function pendingDiff(app: MiniAppRow, versions: MiniAppVersionRow[]) {
   });
 }
 
+/**
+ * The identity section under review (`next`) and the one that is live now (`live`). A pending
+ * version is reviewed against the row when the app is live; otherwise everything is new.
+ */
+function identityUnderReview(app: MiniAppRow, versions: MiniAppVersionRow[]) {
+  const rowIdentity = app.manifest_version === "2" ? (app.identity ?? null) : null;
+  const pending = versions
+    .filter((v) => v.status === "pending")
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  const isLive = app.status === "live" || app.status === "suspended";
+  const live: MiniAppIdentityRequest | null = isLive ? rowIdentity : null;
+  const next: MiniAppIdentityRequest | null = pending ? identityFromManifest(pending.manifest) : rowIdentity;
+  return { live, next };
+}
+
 const nf = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 
 export default function MiniAppAdminDetail({
@@ -82,16 +121,19 @@ export default function MiniAppAdminDetail({
   const { data, loading, error, refresh } = useMiniAppApi<{
     app: MiniAppRow;
     versions: MiniAppVersionRow[];
+    orgName?: string | null;
   }>(`${id}`);
 
   const app = data?.app;
 
   const [notes, setNotes] = useState("");
   const [budget, setBudget] = useState("");
+  const [gasBudget, setGasBudget] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editingManifest, setEditingManifest] = useState(false);
   const [ownerWallet, setOwnerWallet] = useState("");
+  const [identityReviewed, setIdentityReviewed] = useState(false);
 
   async function act(label: string, fn: () => Promise<unknown>, successMessage?: string) {
     setBusy(label);
@@ -113,6 +155,10 @@ export default function MiniAppAdminDetail({
   if (loading || !app) {
     return <div className="h-40 animate-pulse rounded-[10px] border border-border bg-muted/40" />;
   }
+
+  const identity = identityUnderReview(app, data?.versions ?? []);
+  const identityItems = identityReviewItems(identity.live, identity.next);
+  const identityNeedsConfirm = needsIdentityReview(identity.next);
 
   return (
     <div className="space-y-6">
@@ -156,6 +202,58 @@ export default function MiniAppAdminDetail({
         </DetailCard>
       )}
 
+      {identityItems.length > 0 && (
+        <DetailCard title="Identität & Nachweise">
+          <ul className="space-y-2 text-sm">
+            {identityItems.map((item) => (
+              <li key={item.key} className="break-words">
+                <span className="font-medium">{item.label}</span>
+                {item.isNew && (
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    neu
+                  </span>
+                )}
+                {item.reason && <p className="text-xs text-muted-foreground">{item.reason}</p>}
+              </li>
+            ))}
+          </ul>
+          {identityNeedsConfirm && (
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={identityReviewed}
+                onChange={(e) => setIdentityReviewed(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>{"Die App fragt nur ab, was sie für ihre Funktion braucht."}</span>
+            </label>
+          )}
+        </DetailCard>
+      )}
+
+      {(app.audience || app.org_account_id) && (
+        <DetailCard title="Zielgruppe & Verein">
+          <dl className="space-y-2 text-sm">
+            {app.audience && (
+              <div>
+                <dt className="font-medium">
+                  {app.audience.mode === "required" ? "Nur für (Pflicht)" : "Empfohlen für"}
+                </dt>
+                <dd className="break-words text-muted-foreground">{app.audience.anyOf.join(", ")}</dd>
+              </div>
+            )}
+            {app.org_account_id && (
+              <div>
+                <dt className="font-medium">Verein</dt>
+                <dd className="text-muted-foreground">
+                  {data?.orgName ?? "Unbekanntes Konto"} · {ORG_BINDING_LABEL[app.org_binding ?? "none"]}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </DetailCard>
+      )}
+
       {/* Review actions */}
       <div className="grid gap-4 lg:grid-cols-3">
         <DetailCard title="Freigabe">
@@ -170,12 +268,17 @@ export default function MiniAppAdminDetail({
             <Button
               size="sm"
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              disabled={busy != null}
+              disabled={busy != null || (identityNeedsConfirm && !identityReviewed)}
               onClick={() =>
                 act(
                   "approve",
                   () =>
-                    miniAppWrite("review", "POST", { id: app.id, decision: "approve", notes }),
+                    miniAppWrite("review", "POST", {
+                      id: app.id,
+                      decision: "approve",
+                      notes,
+                      identityReviewed,
+                    }),
                   `"${app.name}" freigegeben — die App ist jetzt live.`,
                 )
               }
@@ -257,6 +360,57 @@ export default function MiniAppAdminDetail({
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Nicht freigegebene Apps haben Budget 0 → jede Belohnung wird abgelehnt.
+          </p>
+        </DetailCard>
+
+        <DetailCard title="Gas-Budget">
+          {(app.contracts ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Keine Verträge angemeldet. Nur Manifest-Version 2 kann Verträge für gasfreie Aufrufe anmelden.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {(app.contracts ?? []).map((c) => (
+                <li key={c.address} className="rounded-md border p-2 text-sm">
+                  <div className="font-medium">{c.label}</div>
+                  <div className="font-mono text-xs text-muted-foreground" title={c.address}>
+                    {c.address}
+                  </div>
+                  <div className="mt-1 font-mono text-xs">{c.functions.join(", ")}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <InfoRow label="Budget">{xdai(app.gas_budget_wei)} xDAI</InfoRow>
+          <InfoRow label="Verbraucht">{xdai(app.gas_spent_wei)} xDAI</InfoRow>
+          <div className="mt-2 flex gap-2">
+            <Input
+              inputMode="decimal"
+              placeholder="Neues Budget in xDAI"
+              value={gasBudget}
+              onChange={(e) => setGasBudget(e.target.value)}
+              className="h-9 text-sm"
+            />
+            <Button
+              size="sm"
+              disabled={busy != null || gasBudget.trim() === ""}
+              onClick={() =>
+                act(
+                  "gas-budget",
+                  async () => {
+                    await miniAppWrite("gas-budget", "PATCH", { id: app.id, budgetXdai: gasBudget.trim() });
+                    setGasBudget("");
+                  },
+                  `Gas-Budget auf ${gasBudget.trim()} xDAI gesetzt.`,
+                )
+              }
+            >
+              <Fuel className="mr-1 h-4 w-4" /> Setzen
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Bezahlt gasfreie Aufrufe genau dieser Funktionen. Neue Apps haben 0 → nichts wird übernommen. Gezählt wird
+            der reservierte Höchstbetrag je Vorgang, das Budget sinkt also schneller als der echte Verbrauch.
           </p>
         </DetailCard>
 
@@ -424,6 +578,7 @@ export default function MiniAppAdminDetail({
         <Playground
           app={app}
           html={data?.versions?.find((v) => typeof v.html === "string" && v.html)?.html ?? null}
+          identity={identity.next}
         />
       </div>
 

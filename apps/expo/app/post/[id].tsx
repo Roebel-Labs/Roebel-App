@@ -31,6 +31,7 @@ import {
   deleteComment,
   updateComment,
   toggleCommentLike,
+  recordCommentTip,
   getUserLikedPostIds,
   getUserRepostedPostIds,
   getPostLikers,
@@ -47,8 +48,8 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import CommentThread from '@/components/feed/CommentThread';
 import AvatarStack from '@/components/AvatarStack';
 import { Image } from 'expo-image';
-import PostImageGrid from '@/components/feed/PostImageGrid';
-import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
+import PostMedia from '@/components/feed/PostMedia';
+import { getPostMedia } from '@/lib/utils/post-media';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
 import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
@@ -74,6 +75,8 @@ import { filterMutedComments } from '@/lib/inbox-visibility';
 import PostComposer from '@/components/feed/PostComposer';
 import ReportDrawer from '@/components/feed/ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
+import MuenzenSendSheet from '@/components/messages/MuenzenSendSheet';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -87,6 +90,9 @@ export default function PostDetailScreen() {
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
   const requireAuth = useRequireAuth();
+  const { send: sendTaler } = useRoebelTaler();
+  // Comment the viewer is about to thank with Röbel Münzen.
+  const [tipTarget, setTipTarget] = useState<PostCommentRecord | null>(null);
   // Pause the post video while another screen (profile, likes …) is on top.
   const isFocused = useIsFocused();
 
@@ -419,6 +425,32 @@ export default function PostDetailScreen() {
     }
   };
 
+  const handleTipComment = (comment: PostCommentRecord) => {
+    requireAuth(() => setTipTarget(comment));
+  };
+
+  // Transfer first (gasless group-token transfer), then record the tip: the
+  // DB row drives the visible total and the author's push notification.
+  const handleSendTip = async (amountRaw: bigint, amountDecimal: number) => {
+    const comment = tipTarget;
+    if (!comment || !walletAddress) throw new Error('Nicht angemeldet');
+    const txHash = await sendTaler(comment.wallet_address, amountRaw);
+    updateCommentInState(comment.id, (c) => ({
+      ...c,
+      tips_total: (Number(c.tips_total ?? 0) || 0) + amountDecimal,
+    }));
+    recordCommentTip({
+      commentId: comment.id,
+      senderWallet: walletAddress,
+      recipientWallet: comment.wallet_address,
+      amount: amountDecimal,
+      txHash,
+    }).catch((err) => console.error('Tip sent but not recorded:', err));
+    showSnackbar({
+      message: `${amountDecimal.toLocaleString('de-DE', { maximumFractionDigits: 2 })} Röbel Münzen gesendet`,
+    });
+  };
+
   const handleToggleReplies = async (comment: PostCommentRecord) => {
     const cid = comment.id;
     if (expandedThreads.has(cid)) {
@@ -609,7 +641,8 @@ export default function PostDetailScreen() {
     );
   }
 
-  const mediaUrls = post.media_urls?.filter(Boolean) || [];
+  const media = getPostMedia(post);
+  const mediaUrls = media.filter((m) => m.type === 'image').map((m) => m.url);
   // Display name of the post author (never a wallet) — the default
   // "Antwort an …" target in the full-screen composer.
   const postAuthorIsOrg = post.author?.account?.account_type === 'organisation';
@@ -669,13 +702,16 @@ export default function PostDetailScreen() {
         />
       )}
 
-      {mediaUrls.length > 0 && (
-        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
-      )}
-
-      {post.video_url && (
-        <PostVideoPlayer videoUrl={post.video_url} isVisible={isFocused} autoPlay startUnmuted />
-      )}
+      {/* Slider bleeds through the section's 16px padding to both edges. */}
+      <PostMedia
+        items={media}
+        isVisible={isFocused}
+        autoPlay
+        startUnmuted
+        onPressImage={setZoomImageUrl}
+        bleedLeft={16}
+        bleedRight={16}
+      />
 
       {post.sticker && (
         <Image
@@ -759,6 +795,7 @@ export default function PostDetailScreen() {
       onEdit={handleEditComment}
       onDelete={handleDeleteComment}
       onToggleLike={handleToggleCommentLike}
+      onTip={handleTipComment}
       meckyThinking={meckyThinking.has(item.id)}
     />
   );
@@ -881,6 +918,14 @@ export default function PostDetailScreen() {
         onMute={authorActions.onMute}
       />
 
+      <MuenzenSendSheet
+        visible={!!tipTarget}
+        onClose={() => setTipTarget(null)}
+        title="Mit Röbel Münzen danken"
+        peerName={tipTarget?.author?.username || 'Unbekannt'}
+        onSend={handleSendTip}
+      />
+
       <ReportDrawer
         visible={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
@@ -987,7 +1032,7 @@ const styles = StyleSheet.create({
   },
   postContent: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 24,
   },
   pinnedRow: {
@@ -998,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   pinnedText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   postSticker: {
     width: 200,
@@ -1016,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   likersText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   commentsHeader: {
     paddingTop: 14,
@@ -1024,7 +1069,7 @@ const styles = StyleSheet.create({
   },
   commentsTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   noComments: {
     padding: 32,
@@ -1032,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   noCommentsText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
   },
   footerLoader: {
@@ -1058,6 +1103,6 @@ const styles = StyleSheet.create({
   },
   loginPromptText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

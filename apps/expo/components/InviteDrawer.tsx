@@ -376,7 +376,7 @@ export default function InviteDrawer({ visible, onClose, accountId, existingMemb
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  title: { fontSize: 18, fontFamily: 'Inter-SemiBold', marginBottom: 16 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-SemiBold', marginBottom: 16 },
   tabs: {
     flexDirection: 'row',
     borderRadius: 10,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  tabText: { fontSize: 13, fontFamily: 'Inter-Medium' },
+  tabText: { fontSize: 13, fontFamily: 'MonaSans-Medium' },
   tabContent: { flex: 1 },
   searchInput: {
     borderWidth: 1,
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 12,
   },
   selectedUser: {
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  selectedUserName: { flex: 1, fontSize: 14, fontFamily: 'Inter-Medium' },
+  selectedUserName: { flex: 1, fontSize: 14, fontFamily: 'MonaSans-Medium' },
   removeSelected: { fontSize: 16, paddingHorizontal: 8 },
   searchResults: { maxHeight: 150, marginBottom: 12 },
   searchResultRow: {
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  searchResultName: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  searchResultName: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   smallAvatar: { width: 32, height: 32, borderRadius: 16 },
   smallAvatarPlaceholder: {
     width: 32,
@@ -427,8 +427,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noResults: { textAlign: 'center', padding: 16, fontSize: 13, fontFamily: 'Inter-Regular' },
-  label: { fontSize: 13, fontFamily: 'Inter-SemiBold', marginBottom: 8 },
+  noResults: { textAlign: 'center', padding: 16, fontSize: 13, fontFamily: 'MonaSans-Regular' },
+  label: { fontSize: 13, fontFamily: 'MonaSans-SemiBold', marginBottom: 8 },
   rolePicker: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   roleOption: {
     flex: 1,
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
   },
-  expiryText: { fontSize: 12, fontFamily: 'Inter-Medium' },
+  expiryText: { fontSize: 12, fontFamily: 'MonaSans-Medium' },
   primaryButton: {
     paddingVertical: 14,
     borderRadius: 12,
@@ -471,11 +471,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
   },
-  linkText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  linkText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   linkActions: { flexDirection: 'row', gap: 10 },
   linkNote: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginTop: 12,
   },

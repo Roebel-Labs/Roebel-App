@@ -1,8 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin"
+import { APP_UPDATE_CATEGORY } from "@/lib/app-updates/commits"
+
+/** After a long pause the issue still only covers recent weeks, not months of old news. */
+const MAX_WINDOW_DAYS = 14
 
 export interface NewsletterSourceData {
   windowStart: string
   news: Array<{ title: string; excerpt: string | null; category: string | null; slug: string; cover_image_url: string | null }>
+  /** "Was ist neu" posts (news articles in category App-Update), kept apart from town news. */
+  appUpdates: Array<{ title: string; excerpt: string | null; slug: string }>
   events: Array<{ id: string; title: string; date: string; time: string | null; location: string | null }>
   proposals: Array<{ title: string; summary: string | null; state: string; for_votes: number; against_votes: number }>
   listings: Array<{ title: string; category: string | null }>
@@ -37,13 +43,16 @@ export async function gatherNewsletterContent(): Promise<NewsletterSourceData> {
   } catch {
     // Tabelle fehlt / transienter Fehler → 7-Tage-Fallback
   }
-  const windowStart =
-    lastSentAt ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const day = 24 * 60 * 60 * 1000
+  const earliest = Date.now() - MAX_WINDOW_DAYS * day
+  const windowStart = new Date(
+    Math.max(lastSentAt ? new Date(lastSentAt).getTime() : Date.now() - 7 * day, earliest)
+  ).toISOString()
 
   const today = new Date().toISOString().slice(0, 10)
   const in14Days = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const [news, events, proposals, listings, businesses, posts] = await Promise.all([
+  const [articles, events, proposals, listings, businesses, posts] = await Promise.all([
     safe("news", async () => {
       const { data, error } = await supabase
         .from("news_articles")
@@ -51,7 +60,7 @@ export async function gatherNewsletterContent(): Promise<NewsletterSourceData> {
         .eq("status", "published")
         .gte("published_at", windowStart)
         .order("published_at", { ascending: false })
-        .limit(10)
+        .limit(20)
       if (error) throw error
       return data ?? []
     }),
@@ -117,5 +126,11 @@ export async function gatherNewsletterContent(): Promise<NewsletterSourceData> {
     }),
   ])
 
-  return { windowStart, news, events, proposals, listings, businesses, posts }
+  const news = articles.filter((a) => a.category !== APP_UPDATE_CATEGORY).slice(0, 10)
+  const appUpdates = articles
+    .filter((a) => a.category === APP_UPDATE_CATEGORY)
+    .slice(0, 3)
+    .map((a) => ({ title: a.title, excerpt: a.excerpt, slug: a.slug }))
+
+  return { windowStart, news, appUpdates, events, proposals, listings, businesses, posts }
 }

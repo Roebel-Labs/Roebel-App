@@ -6,12 +6,46 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionData, parseAbi, recoverTypedDataAddress, type Hex } from "viem";
 import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
-import { parseSponsorUserOp, toPackedUserOperation, type ChainReader } from "../sponsor-policy";
-import { PRODUCTION_SPONSOR_SIGNERS, handleSponsorRequest } from "../sponsor-handler";
-import type { SponsorBudget } from "../sponsor-budget";
+import {
+  ADDRESSES,
+  CAPS,
+  evaluateSponsorPolicy,
+  parseSponsorUserOp,
+  toPackedUserOperation,
+  type ChainReader,
+} from "../sponsor-policy";
+import { EVERYDAY_CONTRACTS, citizenNftAbi, hubAbi } from "../everyday-allowlist";
+import { predictSafeAddress } from "../safe-address";
+import { NOW, deployOp, op as policyOp, outer, srm as srmHelpers, viaMultiSend } from "./policy-helpers";
+import { PRODUCTION_SPONSOR_SIGNERS, guestGroupCap, handleSponsorRequest } from "../sponsor-handler";
+import {
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
+  DEFAULT_ONBOARDING_DAILY_WEI,
+  GUEST_GROUP_KEY,
+  InMemorySponsorBudget,
+  type ReserveLimits,
+  type SponsorBudget,
+} from "../sponsor-budget";
 import { hashStableFields, requiredPrefund, voucherTypedData } from "../voucher";
-import { safeFactoryData, PASSKEY_SAFE } from "../safe-address";
-import { GOOD_SIG, KEY, LEGACY, SAFE, V3_CITIZEN, brokenChain, fakeChain } from "./fake-chain";
+import { ecdsaSafeFactoryData, safeFactoryData, PASSKEY_SAFE } from "../safe-address";
+import ecdsaVector from "./ecdsa-safe-vector.json";
+import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
+import { rulesFor } from "../../miniapp/contracts";
+import { InMemoryMiniAppGasBudget, type GasVerdict, type MiniAppGasBudget } from "../miniapp-gas-budget";
+import {
+  GOOD_SIG,
+  GUARDIAN,
+  KEY,
+  LEGACY,
+  RECOVERED_SIGNER,
+  SAFE,
+  V3_CITIZEN,
+  brokenChain,
+  fakeChain,
+  makeEcdsaSafe,
+  makePasskeySafe,
+  signerKey,
+} from "./fake-chain";
 
 // Anvil/Hardhat well-known test key #0 - publicly known, test-only.
 const TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -30,15 +64,17 @@ const erc20 = parseAbi(["function transfer(address to, uint256 amount)"]);
 
 class RecordingBudget implements SponsorBudget {
   calls: Array<{ key: string; cost: bigint }> = [];
+  limits: Array<ReserveLimits | undefined> = [];
   constructor(private allow = true) {}
-  async reserve(key: string, cost: bigint) {
+  async reserve(key: string, cost: bigint, limits?: ReserveLimits) {
     this.calls.push({ key, cost });
+    this.limits.push(limits);
     return this.allow;
   }
 }
 
 let chain: ChainReader = fakeChain();
-let budget = new RecordingBudget();
+let budget: SponsorBudget & { calls: Array<{ key: string; cost: bigint }> } = new RecordingBudget();
 const POST = (r: Request) => handleSponsorRequest(r, { chain, budget });
 
 const executeCall = encodeFunctionData({
@@ -348,4 +384,350 @@ test("a family guardian's confirmRecovery (no legacy) is billed to the wallet be
   const res = await POST(req(body(userOp(confirmCall), { legacy: undefined })));
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   assert.equal(budget.calls[0].key, WALLET.toLowerCase());
+});
+
+// ---- the global guest cap ----
+
+const srmGuest = parseAbi([
+  "function addGuardianWithThreshold(address guardian, uint256 threshold)",
+  "function confirmRecovery(address wallet, address[] newOwners, uint256 newThreshold, bool execute)",
+]);
+/** A non-citizen passkey Safe adding a guardian: the guest guardian-management result (mode safe, no tier). */
+const addGuardianCall = encodeFunctionData({
+  abi: safe4337,
+  functionName: "executeUserOp",
+  args: [
+    PASSKEY_SAFE.socialRecoveryModule,
+    0n,
+    encodeFunctionData({ abi: srmGuest, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }),
+    0,
+  ],
+});
+const guestBody = () => body(userOp(addGuardianCall), { legacy: undefined });
+const guestLimits = { perKeyDailyWei: DEFAULT_ONBOARDING_DAILY_WEI, group: { key: GUEST_GROUP_KEY, dailyWei: DEFAULT_GUEST_GLOBAL_DAILY_WEI } };
+
+test("a guest Safe adding a guardian is reserved with the onboarding key cap and the guest group", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const res = await POST(req(guestBody()));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls, [{ key: SAFE.toLowerCase(), cost: requiredPrefund(toPackedUserOperation(parseSponsorUserOp(userOp(addGuardianCall)))) }]);
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI sets the guest group cap (malformed = default)", async () => {
+  enable();
+  try {
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "123";
+    let recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 123n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "lots";
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+});
+
+test("a guest recovery (wallet without citizenship) is reserved against the guest group too", async () => {
+  enable();
+  const WALLET = "0x9999999999999999999999999999999999999999" as Hex;
+  const OTHER_KEY = { x: `0x${"cc".repeat(32)}` as Hex, y: `0x${"dd".repeat(32)}` as Hex };
+  chain = fakeChain((w) => {
+    makePasskeySafe(w, WALLET, OTHER_KEY);
+    w.guardians.set(WALLET.toLowerCase(), new Set([SAFE.toLowerCase()]));
+    w.webauthnSigners.set(signerKey(KEY), RECOVERED_SIGNER);
+  });
+  const recording = new RecordingBudget();
+  budget = recording;
+  const confirm = encodeFunctionData({
+    abi: safe4337,
+    functionName: "executeUserOp",
+    args: [
+      PASSKEY_SAFE.socialRecoveryModule,
+      0n,
+      encodeFunctionData({ abi: srmGuest, functionName: "confirmRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n, false] }),
+      0,
+    ],
+  });
+  const res = await POST(req(body(userOp(confirm), { legacy: undefined })));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  // Charged to the submitting Safe, never to the guest wallet being recovered.
+  assert.equal(recording.calls[0].key, SAFE.toLowerCase());
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("a third party's recovery op against a guest Safe is reserved on the SENDER's key, not the wallet's", async () => {
+  enable();
+  const WALLET = "0x9999999999999999999999999999999999999999" as Hex;
+  const OTHER_KEY = { x: `0x${"cc".repeat(32)}` as Hex, y: `0x${"dd".repeat(32)}` as Hex };
+  // SAFE (the sender) is NOT a guardian of WALLET: the op would revert on chain, the paymaster pays.
+  chain = fakeChain((w) => {
+    makePasskeySafe(w, WALLET, OTHER_KEY);
+    w.guardians.set(WALLET.toLowerCase(), new Set([GUARDIAN.toLowerCase()]));
+    w.webauthnSigners.set(signerKey(KEY), RECOVERED_SIGNER);
+  });
+  const recording = new RecordingBudget();
+  budget = recording;
+  const exec = encodeFunctionData({
+    abi: safe4337,
+    functionName: "executeUserOp",
+    args: [
+      PASSKEY_SAFE.socialRecoveryModule,
+      0n,
+      encodeFunctionData({ abi: srmHelpers, functionName: "executeRecovery", args: [WALLET, [RECOVERED_SIGNER], 1n] }),
+      0,
+    ],
+  });
+  const res = await POST(req(body(userOp(exec), { legacy: undefined })));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls.map((c) => c.key), [SAFE.toLowerCase()]);
+  assert.notEqual(recording.calls[0].key, WALLET.toLowerCase());
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("the guest group cap is clamped strictly below the overall global cap", async () => {
+  enable();
+  try {
+    process.env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI = "1000";
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "1000"; // equal = misconfigured
+    let recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 999n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "5000"; // above = misconfigured
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 999n);
+    process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = "400"; // below = unchanged
+    recording = new RecordingBudget();
+    budget = recording;
+    await POST(req(guestBody()));
+    assert.equal(recording.limits[0]?.group?.dailyWei, 400n);
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI;
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+  assert.equal(guestGroupCap({ PASSKEY_SPONSOR_GLOBAL_DAILY_WEI: "0", PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI: "10" }), 0n);
+  assert.equal(guestGroupCap({}), DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+});
+
+test("a citizen op carries no guest limits (unchanged)", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const res = await POST(req(body()));
+  assert.equal(res.status, 200);
+  assert.deepEqual(recording.limits, [undefined]);
+  // A citizen Safe managing its guardians is not a guest either.
+  chain = fakeChain((w) => w.citizens.add(SAFE.toLowerCase()));
+  const r2 = await POST(req(guestBody()));
+  assert.equal(r2.status, 200);
+  assert.deepEqual(recording.limits, [undefined, undefined]);
+});
+
+test("a guest whose reservation is refused gets 429 budget_exhausted, a throwing budget 503", async () => {
+  enable();
+  budget = new RecordingBudget(false);
+  let res = await POST(req(guestBody()));
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), { error: "budget_exhausted" });
+  budget = {
+    calls: [],
+    async reserve() {
+      throw new Error("db down");
+    },
+  };
+  const { result } = await captureErrors(() => POST(req(guestBody())));
+  res = result;
+  assert.equal(res.status, 503);
+});
+
+test("the guest cap reached stops guests only: a citizen's op in the same second still passes", async () => {
+  enable();
+  const cost = requiredPrefund(toPackedUserOperation(parseSponsorUserOp(userOp(addGuardianCall))));
+  process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI = (cost * 10n).toString();
+  process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI = cost.toString(); // room for exactly one guest op
+  try {
+    const now = Date.now();
+    budget = Object.assign(new InMemorySponsorBudget({ perKeyDailyWei: cost * 100n, globalDailyWei: cost * 100n, now: () => now }), {
+      calls: [],
+    });
+    assert.equal((await POST(req(guestBody()))).status, 200);
+    const second = await POST(req(guestBody()));
+    assert.equal(second.status, 429);
+    assert.deepEqual(await second.json(), { error: "budget_exhausted" });
+    // Same clock reading: the citizen's op is not touched by the guest total.
+    const citizen = await POST(req(body()));
+    assert.equal(citizen.status, 200, JSON.stringify(await citizen.clone().json()));
+  } finally {
+    delete process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI;
+    delete process.env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI;
+  }
+});
+
+// ---- owner numbers: what typical guest ops reserve ----
+
+test("prints the prefund of typical guest ops", async () => {
+  const fresh = { x: `0x${"aa".repeat(32)}` as Hex, y: `0x${"bb".repeat(32)}` as Hex };
+  const freshSafe = predictSafeAddress(fresh);
+  const signUpCalls = viaMultiSend([
+    { to: ADDRESSES.socialRecoveryModule, data: encodeFunctionData({ abi: srmHelpers, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }) },
+    { to: EVERYDAY_CONTRACTS.citizenNft, data: encodeFunctionData({ abi: citizenNftAbi, functionName: "createAttestationRequest", args: ["Max, Röbel"] }) },
+  ]);
+  const mintCall = outer(EVERYDAY_CONTRACTS.circlesHub, encodeFunctionData({ abi: hubAbi, functionName: "personalMint" }));
+  for (const gwei of [1_500_000_000n, 3_000_000_000n]) {
+    // (a) the first op: deploy + guardian + citizenship request. op()'s gas limits, but the
+    //     deployment needs verification gas, so verificationGasLimit sits at the sponsor's cap
+    //     (CAPS.verificationGasLimit = 1M): the most a deploy op can reserve.
+    const a = deployOp(fresh, freshSafe, signUpCalls, { maxFeePerGas: gwei, verificationGasLimit: CAPS.verificationGasLimit });
+    // (b) a deployed Safe's daily personalMint with op()'s gas limits as they are.
+    const b = policyOp(mintCall, { maxFeePerGas: gwei });
+    // Both are real guest ops the policy sponsors.
+    const va = await evaluateSponsorPolicy(a, { ...fresh, nowSeconds: NOW }, fakeChain());
+    const vb = await evaluateSponsorPolicy(b, { ...KEY, nowSeconds: NOW }, fakeChain());
+    assert.ok(va.ok && va.guest === true, JSON.stringify(va));
+    assert.ok(vb.ok && vb.guest === true, JSON.stringify(vb));
+    const pa = requiredPrefund(toPackedUserOperation(a));
+    const pb = requiredPrefund(toPackedUserOperation(b));
+    assert.ok(pa > 0n && pb > 0n);
+    assert.ok(pb < pa, `${pb} < ${pa}`);
+    const xdai = (w: bigint) => (Number(w) / 1e18).toFixed(6);
+    console.log(
+      `[guest prefund @ ${Number(gwei) / 1e9} gwei] (a) deploy+guardian+citizenship ${pa} wei = ${xdai(pa)} xDAI; ` +
+        `(b) personalMint ${pb} wei = ${xdai(pb)} xDAI`,
+    );
+  }
+});
+
+// ---- expert path: the body names `ecdsaOwner` instead of (x, y) ----
+
+const ECDSA_OWNER = ecdsaVector.owner as Hex;
+const ESAFE = ecdsaVector.safeAddress as Hex;
+const ecdsaBody = (uo: object, over: object = {}) => ({ chainId: 100, userOp: uo, ecdsaOwner: ECDSA_OWNER, ...over });
+
+test("expert path: the first op of a words account is sponsored as a guest, keyed to its Safe", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  budget = recording;
+  const uo = userOp(addGuardianCall, { sender: ESAFE, factory: PASSKEY_SAFE.proxyFactory, factoryData: ecdsaSafeFactoryData(ECDSA_OWNER) });
+  const res = await POST(req(ecdsaBody(uo)));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.deepEqual(recording.calls.map((c) => c.key), [ESAFE.toLowerCase()]);
+  assert.deepEqual(recording.limits, [guestLimits]);
+});
+
+test("expert path: a deployed words Safe passes; the passkey Safe under the words proof does not", async () => {
+  enable();
+  chain = fakeChain((w) => makeEcdsaSafe(w, ESAFE, ECDSA_OWNER));
+  assert.equal((await POST(req(ecdsaBody(userOp(addGuardianCall, { sender: ESAFE }))))).status, 200);
+  // The words proof for the passkey Safe, and the passkey proof for the words Safe.
+  assert.equal((await POST(req(ecdsaBody(userOp(addGuardianCall))))).status, 403);
+  assert.equal((await POST(req(body(userOp(addGuardianCall, { sender: ESAFE }), { legacy: undefined })))).status, 403);
+});
+
+test("expert path: both proofs or a malformed owner are a bad request; legacy with ecdsaOwner is refused", async () => {
+  enable();
+  chain = fakeChain((w) => makeEcdsaSafe(w, ESAFE, ECDSA_OWNER));
+  const uo = userOp(addGuardianCall, { sender: ESAFE });
+  assert.equal((await POST(req(ecdsaBody(uo, { x: KEY.x, y: KEY.y })))).status, 400);
+  assert.equal((await POST(req(ecdsaBody(uo, { x: KEY.x })))).status, 400);
+  assert.equal((await POST(req(ecdsaBody(uo, { ecdsaOwner: "0x12" })))).status, 400);
+  const res = await POST(req(ecdsaBody(uo, { legacy: LEGACY })));
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).reason, /an expert-path Safe cannot drive a legacy account/);
+});
+
+// ---- sponsor mode "miniapp": the mini-app gas budget, never the citizens' budget ----
+
+const MINI_TARGET = "0x9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a" as Hex;
+const MINI_APP_ID = "3f2504e0-4f89-41d3-9a0c-0305e82c3399";
+const miniRules = rulesFor([{ address: MINI_TARGET, label: "Trainingsbuch", functions: ["checkIn(uint256)"] }]);
+const miniCheckIn = encodeFunctionData({ abi: parseAbi(["function checkIn(uint256)"]), functionName: "checkIn", args: [1n] });
+const miniBody = () => body(userOp(outer(MINI_TARGET, miniCheckIn)), { legacy: undefined, miniApp: MINI_APP_ID });
+
+class RecordingGas implements MiniAppGasBudget {
+  calls: Array<{ id: string; person: string; cost: bigint }> = [];
+  constructor(private inner: MiniAppGasBudget | GasVerdict = "ok") {}
+  async reserve(id: string, person: string, cost: bigint): Promise<GasVerdict> {
+    this.calls.push({ id, person, cost });
+    return typeof this.inner === "string" ? this.inner : this.inner.reserve(id, person, cost);
+  }
+}
+
+const miniDeps = (gas: MiniAppGasBudget, rules: CallRule[] | null = miniRules) => ({
+  rules: async (id: string) => (id === MINI_APP_ID ? rules : null),
+  budget: gas,
+});
+
+test("a mini-app op charges the mini-app budget and leaves the citizens' budget untouched", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  const gas = new RecordingGas();
+  const res = await handleSponsorRequest(req(miniBody()), { chain, budget: recording, miniApps: miniDeps(gas) });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.ok((await res.json()).paymasterAndData);
+  assert.equal(recording.calls.length, 0);
+  assert.equal(gas.calls.length, 1);
+  assert.equal(gas.calls[0].id, MINI_APP_ID);
+  assert.equal(gas.calls[0].person, SAFE.toLowerCase());
+  assert.ok(gas.calls[0].cost > 0n);
+});
+
+test("an exhausted mini-app budget answers 429 with scope app; an everyday op in the same run still gets a voucher", async () => {
+  enable();
+  const citizens = new RecordingBudget();
+  const gas = new RecordingGas(new InMemoryMiniAppGasBudget({ appBudgetWei: () => 0n }));
+  const deps = { chain, budget: citizens, miniApps: miniDeps(gas) };
+  const mini = await handleSponsorRequest(req(miniBody()), deps);
+  assert.equal(mini.status, 429);
+  assert.deepEqual(await mini.json(), { error: "budget_exhausted", scope: "app" });
+  const everyday = await handleSponsorRequest(req(body()), deps);
+  assert.equal(everyday.status, 200, JSON.stringify(await everyday.clone().json()));
+  assert.equal(citizens.calls.length, 1);
+  assert.equal(gas.calls.length, 1);
+});
+
+test("person and global verdicts map to their scopes", async () => {
+  enable();
+  for (const [verdict, scope] of [["person_budget", "person"], ["global_budget", "global"]] as const) {
+    const res = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(new RecordingGas(verdict)) });
+    assert.equal(res.status, 429);
+    assert.deepEqual(await res.json(), { error: "budget_exhausted", scope });
+  }
+});
+
+test("a mini app without approved contracts is 403", async () => {
+  enable();
+  const gas = new RecordingGas();
+  const noRules = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(gas, null) });
+  assert.equal(noRules.status, 403);
+  assert.deepEqual(await noRules.json(), { error: "not_sponsorable", reason: "mini app has no approved contracts" });
+  const noDeps = await handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget() });
+  assert.equal(noDeps.status, 403);
+  assert.equal(gas.calls.length, 0);
+});
+
+test("an undeclared call under a mini app is 403 and charges nothing", async () => {
+  enable();
+  const citizens = new RecordingBudget();
+  const gas = new RecordingGas();
+  const res = await handleSponsorRequest(req(body(userOp(), { miniApp: MINI_APP_ID })), { chain, budget: citizens, miniApps: miniDeps(gas) });
+  assert.equal(res.status, 403);
+  assert.equal(citizens.calls.length + gas.calls.length, 0);
+});
+
+test("a throwing mini-app gas store fails closed with 503", async () => {
+  enable();
+  const broken: MiniAppGasBudget = { reserve: async () => { throw new Error("db down"); } };
+  const { result } = await captureErrors(() =>
+    handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(broken) }),
+  );
+  assert.equal(result.status, 503);
 });

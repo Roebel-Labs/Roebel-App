@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   searchResults: {
     paddingHorizontal: 16,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   searchResultPrice: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   scrollContent: {
     flex: 1,
@@ -328,11 +328,11 @@ const styles = StyleSheet.create({
   },
   emptyStateTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   emptyStateSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,

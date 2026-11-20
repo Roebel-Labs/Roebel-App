@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   bannerCounter: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 4,
   },

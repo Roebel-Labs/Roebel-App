@@ -10,8 +10,10 @@
 // CLIENT-ONLY (touches `window`). Do not import from a server component.
 "use client";
 
+import { toFunctionSelector } from "viem";
 import {
   createHostBridge,
+  type DeclaredContract,
   type HostBridge,
   type HostHandlers,
   type MiniAppContext,
@@ -24,9 +26,11 @@ import type {
   GrantRewardParams,
   MiniAppPermission,
   NetizenEvent,
-  PayParams,
   WalletAccount,
 } from "@netizen-labs/miniapp-sdk";
+import { gateWalletRequest } from "./walletGate";
+import { confirmText } from "./confirmText";
+import { createUserFetch } from "./userFetch";
 
 export interface WebHostApp {
   id: string;
@@ -36,6 +40,8 @@ export interface WebHostApp {
   permissions: MiniAppPermission[];
   /** Approved apps enforce their permission set; in the Playground pass `undefined` to allow-all. */
   enforcePermissions?: boolean;
+  /** Version-2 `contracts` declaration: the confirmation names declared calls, flags the rest. */
+  contracts?: DeclaredContract[];
 }
 
 export interface WebHostUser {
@@ -67,6 +73,18 @@ export interface WebMiniAppHostOptions {
    * mutating calls (rewards/analytics) for an app that isn't registered yet.
    */
   overrides?: Partial<HostHandlers>;
+  /**
+   * Mini-app user token for user-scoped calls (balance, rewards, user data).
+   * When it resolves to a token, those fetches send `Authorization: Bearer <token>`.
+   * Omitted / null → the calls go out without a token, as before.
+   */
+  getUserToken?: () => Promise<string | null>;
+  /**
+   * Called with the token after a user-scoped call carrying it got a 401, so the token
+   * cache can drop it (e.g. `invalidateUserToken` from lib/miniapp/clientToken). The call
+   * is not retried without the token.
+   */
+  onUserTokenRejected?: (token: string) => void;
 }
 
 export interface WebMiniAppHost {
@@ -77,17 +95,6 @@ export interface WebMiniAppHost {
   destroy: () => void;
 }
 
-const SIGNING_METHODS = new Set([
-  "eth_sendTransaction",
-  "personal_sign",
-  "eth_sign",
-  "eth_signTypedData",
-  "eth_signTypedData_v4",
-]);
-
-function rejected(): never {
-  throw { code: "user_rejected", message: "Vom Nutzer abgelehnt." };
-}
 function unsupported(msg: string): never {
   throw { code: "unsupported", message: msg };
 }
@@ -106,9 +113,23 @@ function originOf(url: string): string {
  * The mini app must load with `src={app.homeUrl}` for origin filtering to work.
  */
 export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHost {
-  const { iframe, app, user, walletProvider, account, authToken, onCall, confirmSign, overrides } =
-    opts;
+  const {
+    iframe,
+    app,
+    user,
+    walletProvider,
+    account,
+    authToken,
+    onCall,
+    confirmSign,
+    overrides,
+    getUserToken,
+    onUserTokenRejected,
+  } = opts;
   const targetOrigin = originOf(app.homeUrl);
+
+  /** User-scoped calls: `x-roebel-host: web`, the user token when there is one, 401 → drop it. */
+  const userFetch = createUserFetch({ getUserToken, onUserTokenRejected });
 
   const post = (message: BridgeMessage) => {
     // The iframe may not be same-origin; postMessage with the app's origin.
@@ -141,15 +162,17 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     }),
 
     walletGetAccount: () => account ?? null,
+    // Reads and wallet_sendCalls go to the reviewer's wallet provider as they are; signing
+    // methods only after the confirmation, which names declared calls and flags the rest.
     walletRequest: async (req: Eip1193RequestArgs) => {
       if (!walletProvider) unsupported("Keine Wallet verbunden.");
-      if (SIGNING_METHODS.has(req.method)) {
-        const ok = confirmSign ? await confirmSign(req) : window.confirm(
-          `Mini App möchte signieren:\n${req.method}\n\nBestätigen?`,
-        );
-        if (!ok) rejected();
-      }
-      return walletProvider.request(req);
+      return gateWalletRequest(req, {
+        confirm: async (r) =>
+          confirmSign
+            ? confirmSign(r)
+            : window.confirm(confirmText(app, r, (sig) => toFunctionSelector(`function ${sig}`))),
+        forward: (r) => walletProvider.request(r),
+      });
     },
 
     authGetToken: () => (authToken ? { token: authToken } : null),
@@ -165,8 +188,8 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
 
     getMuenzenBalance: async () => {
       if (!account?.address) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
-      const res = await fetch(
-        `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}`,
+      const res = await userFetch(
+        `/api/mini-apps/muenzen-balance?wallet=${encodeURIComponent(account.address)}&app=${encodeURIComponent(app.id)}`,
       );
       if (!res.ok) return { balance: "0", decimals: 18, symbol: "RÖ" as const };
       return (await res.json()) as { balance: string; decimals: number; symbol: "RÖ" };
@@ -175,7 +198,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     grantReward: async (p: GrantRewardParams) => {
       const recipient = account?.address;
       if (!recipient) unsupported("Keine Wallet für die Belohnung verbunden.");
-      const res = await fetch("/api/mini-apps/rewards", {
+      const res = await userFetch("/api/mini-apps/rewards", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -205,16 +228,9 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       };
     },
 
-    pay: async (p: PayParams) => {
-      // User-signed transfer must go through the wallet provider (confirm sheet).
-      if (!walletProvider || !account?.address) unsupported("Keine Wallet verbunden.");
-      const ok = confirmSign
-        ? await confirmSign({ method: "eth_sendTransaction", params: [p] })
-        : window.confirm(`Röbel-Münzen senden: ${p.amount} RÖ an ${p.to}?`);
-      if (!ok) rejected();
-      // Actual transfer construction is host-specific; the web Playground surfaces
-      // this via the wallet provider. Left to the shell to complete for real sends.
-      unsupported("Zahlungen sind in der Web-Vorschau nicht verfügbar.");
+    // roebel.pay needs the app's name lookup, balance and transfer: only the Röbel app has them.
+    pay: async (): Promise<{ txHash: string }> => {
+      unsupported("Zahlungen lassen sich nur in der App testen.");
     },
 
     notificationsSend: async (p: { title: string; body: string; targetUrl?: string }) => {
@@ -271,7 +287,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     },
     dataUserGet: async (p: { key: string }) => {
       if (!account?.address) unsupported("Keine Wallet verbunden.");
-      const res = await fetch(
+      const res = await userFetch(
         `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=user&wallet=${account.address}&key=${encodeURIComponent(p.key)}`,
         { cache: "no-store" },
       );
@@ -280,7 +296,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
     },
     dataUserSet: async (p: { key: string; value: unknown }) => {
       if (!account?.address) unsupported("Keine Wallet verbunden.");
-      const res = await fetch("/api/mini-apps/data", {
+      const res = await userFetch("/api/mini-apps/data", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

@@ -37,6 +37,7 @@ contract between the app (`apps/expo/lib/passkey/`) and the verifiers and sponso
 | Migrated (Safe = co-admin of the thirdweb account) | the **legacy** thirdweb account | `AdminUpdated(signer = Safe)` emitters, re-checked with `isAdmin` (`recovery-lookup.findLinkedLegacies`). With several, the one holding CitizenNFTv2 wins. |
 | Passkey-only | the **Safe** | no linked legacy |
 | After the v3 `moveTo` | the **Safe** | the Safe holds CitizenNFTv3 (only when `EXPO_PUBLIC_PASSKEY_CITIZEN_NFT_V3` is set) |
+| Expert path (12 words, `ownerType: 'ecdsa'`) | the **expert Safe** (single owner = the words' key `m/44'/60'/0'/0/0`) | `findSafesByOwner(address 0)` (app-shaped Safe with that single owner; after a guardian recovery the OLD address), else `predictEcdsaSafeAddress(address 0)` for never-used words. Never a legacy account. |
 
 ## 2. Signatures (what verifiers receive)
 
@@ -54,6 +55,12 @@ contract between the app (`apps/expo/lib/passkey/`) and the verifiers and sponso
 | Safe (deployed) | plain Safe contract signature | standard: `client.verifyHash({ address: safe, hash, signature })` on Gnosis (ERC-1271) |
 | Safe (counterfactual, before its first on-chain action) | ERC-6492 wrapper: factory `SafeProxyFactory 0x4e1DCf7A…`, calldata `createProxyWithNonce(singleton, initializer, 0)` | standard viem universal verification (ERC-6492) |
 | legacy thirdweb account | **Safe-admin envelope** `SAFE_ADMIN_SIGNATURE_MAGIC ++ abi.encode(address safe, bytes safeSignature)`, MAGIC = `keccak256("roebel.safe-admin-signature.v1")` = `0xc147971c4ed41e39ec9a286f1686117a7a3e33a2a5a6bcd0ec1881c11ac60de5` | rule (b) of `apps/web/src/lib/auth/account-signature-core.ts`: `safeSignature` valid for `safe` over the same hash AND `legacy.isAdmin(safe)` on Gnosis |
+
+| Expert Safe (12 words, deployed) | plain Safe signature: ONE 65-byte ECDSA signature (r ++ s ++ v, v 27/28) by the words' key over `safeMessageHash(safe, hash)` | standard ERC-1271 on Gnosis (fork-proven, `EcdsaSafe.t.sol::test_erc1271`) |
+| Expert Safe (counterfactual) | ERC-6492 wrapper around it: factory `SafeProxyFactory`, calldata = the expert Safe deployment (`ecdsaSafeFactoryData`) | standard viem universal verification (ERC-6492) |
+
+Expert-path signatures come from `session-signer.ts` (`sessionSignerFor`): one device-unlock read of the phrase
+per signature instead of a WebAuthn assertion; the envelope, the 6492 wrapping and the verifiers are unchanged.
 
 The legacy thirdweb `Account.isValidSignature` is ECDSA-only, so it can never validate a Safe signature. Every
 verifier that authenticates a migrated person therefore needs rule (b). The app's encoder is pinned to the server's
@@ -121,6 +128,10 @@ All on Gnosis (100). Selectors computed with viem `toFunctionSelector`.
 | CitizenNFTv2 | `0x59aA…5dE5` | `approveRequest(uint256,bool)` / `rejectRequest(uint256,bool)` | `0x767e0b9c` / `0x1effb912` | `hooks/useVerification.ts:332,401` |
 | AttesterNFTv2 | `0xC587…db82` | `approveRequest(uint256)` / `rejectRequest(uint256)` | `0xd7d1bbdb` / `0x2d7788db` | `hooks/useVerification.ts:339,407` |
 | MaciAttesterGovernor | `0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3` | `castVote(uint256,uint8)` | `0x56781388` | `components/VoteButtonsEnhanced.tsx:80` (**dead code**, nothing imports it) |
+| CredentialRegistry | env `CREDENTIAL_REGISTRY_ADDRESS` (unset = nothing sponsored) | holder, **onboarding tier**: `claim(uint64,(uint8,bytes32,address,uint64,bytes32),bytes32[],bytes)` / `selfClaim(bytes32)` / `renounce(bytes32)` | `0x22ff7228` / `0xb6a96c0a` / `0xabd7688e` | credential register (plan credreg-2/3) |
+| CredentialRegistry | same | issuer, citizen tier: `createType(bytes32,bytes32,uint8,uint8,(string,uint64,uint64,uint64,uint32,bool))` / `updateType(bytes32,(string,uint64,uint64,uint64,uint32,bool))` / `retireType(bytes32)` | `0xba1ad2da` / `0xd44ea56a` / `0x7f5ee2a9` | credential register |
+| CredentialRegistry | same | issuer, citizen tier: `setDelegate(bytes32,address,bool)` / `setOrgPrivateOnly(bytes32,bool)` | `0xc74d8c05` / `0xb0fc692d` | credential register |
+| CredentialRegistry | same | issuer, citizen tier: `addBatch(bytes32,bytes32,uint32)` / `revokeBatch(uint64)` / `revokeLeaves(uint64,bytes32[])` | `0x52a597e1` / `0x1db538be` / `0x2efe83ae` | credential register (also from an org Safe) |
 | Deliberate | `0xB208C359A206A0C35a7D4D99DEf63d9F6143de9B` | `join`, `addArgument`, `stakePro`/`stakeCon`, `tallyTree`, `createDebate` | `0x049878f3`, `0xd79083bc`, `0x87cb96f4`/`0x38ac4721`, `0x6700c92e`, `0x8ee9f901` | `lib/deliberate/chain.ts` (**dormant**) |
 
 Writes the sponsor will (correctly) refuse, and what the person sees:
@@ -176,6 +187,21 @@ done.
 - The thirdweb login is **not** signed out and stays an admin until the "thirdweb trennen" step (§8g, §9), the only
   place that builds an `isAdmin: 2` request.
 
+**12 words (expert path, `words` surface; `words-account.ts`, screens `passkey/words-signup.tsx`,
+`passkey/words-signin.tsx`):**
+- *Konto erstellen:* new phrase (16 bytes of secure randomness) → stored behind the device unlock → record +
+  session for the counterfactual expert Safe → the words are shown ONCE and confirmed (three of them; "Später"
+  skips; the citizenship request then needs the confirmation or one guardian). Leaving on that screen loses nothing: Settings →
+  "Meine 12 Wörter" shows them again after the unlock.
+- *Mit 12 Wörtern anmelden:* typed words → address 0 → the Safe it owns on chain (a recovered account keeps its
+  OLD address), else the Safe the words derive (never-used words open their own, empty account). Recovery words of
+  a passkey account (plan 2's pool) are sent to "Konto wiederherstellen" instead (E5); words that both own a Safe
+  and are recovery words get the support message. The words are stored and marked confirmed.
+- *Gespeichertes Konto auf diesem Gerät öffnen:* the stored words, one device unlock, same lookup, nothing stored
+  again.
+- *Konto wiederherstellen* of an expert account (guardians): ends in NEW words (PASSKEY_ACCOUNTS_STATE.md, "Expert
+  path").
+
 ### userHandle — deviation from the brief
 
 The brief asked for `userHandle = Safe address` at creation. That is impossible: the Safe address derives from the
@@ -188,9 +214,16 @@ device without the record uses public-key recovery instead (above).
 1. `passkeyChannelAllowed()` is synchronous, with no network and no storage. It is false on the `production`
    channel, and false in release builds without a channel. **Production therefore skips step 2 entirely and boots
    exactly as before.**
-2. If a `passkey_session_v1` exists, activate the adapter wallet (no biometric prompt) and stop.
+2. If a `passkey_session_v1` exists, activate the adapter wallet (no biometric prompt) and stop. A words session
+   (`ownerType: 'ecdsa'`) boots the same way: the session needs no secret and the phrase is NOT read at boot; it
+   is read (one device unlock) only when the first signature is needed. If the system invalidated it (biometrics
+   changed), the person stays signed in and is sent to re-enter the words.
 3. Otherwise, or if step 2 throws, run the **unchanged** thirdweb loop (`wallet.autoConnect({ client })` per
    `wallets`, then `setActiveWallet`).
+   Sources are ordered `SessionSource`s (`lib/passkey/boot.ts`, `passkeySessionSource`). **A failed sovereign boot is
+   not a logout:** a stored session that cannot be restored (corrupt, storage error, failing lazy import) is
+   reported as failed, retried in the background (`retrySource`), and never handed to the thirdweb loop.
+   Sources are built only after `passkeyChannelAllowed()`, so production < 3.8.0 never loads passkey code.
 4. The `app_settings.passkey_accounts_enabled` flag is deliberately not checked at boot. Turning the flag off hides
    the sign-in option but never signs out someone already on a passkey session.
 
@@ -224,13 +257,16 @@ a provider, so migrated accounts keep theirs. The optimistic cached-user hydrati
 
 ## 7. Known gaps
 
-- A Safe recovered to a new key (owner = per-key signer) can only sign in on the device that ran the recovery (it
-  has the record). Discoverable sign-in elsewhere assumes the SharedSigner Safe for the recovered key. Resolving
-  "signer → Safe" (Safe `AddedOwner` logs) is not built.
-- The settings migration screen still assumes a thirdweb login for its own "Passkey einrichten" flow. For a
-  passkey-only person it shows its existing error.
-- Circles for a passkey-only (Safe) identity: registration and invite flows were built for thirdweb accounts (see
-  `docs/CIRCLES_ROEBEL_MUENZEN_STATE.md`).
+- ~~A Safe recovered to a new key can only sign in on the device that ran the recovery.~~ **Closed** (Sovereign
+  sign-up plan 1, Task 6): `findSafesByOwner` in `lib/passkey/recovery-lookup.ts`, used by `resolveCredentialKey` in
+  `signin.ts`. Residuals: the history signal can be forged (a lockout at worst, never a wrong account); the full scan
+  grows ~52 windows per month, so an index or pinned block is needed eventually; a lookup RPC error fails sign-in
+  with "try again".
+- ~~The settings migration screen still assumes a thirdweb login.~~ **Closed** (Task 7): `settingsKind` picks
+  `MigrationSettings` or `SovereignAccountSettings`; the passkey-only person no longer sees the thirdweb flow.
+- ~~Circles for a passkey-only (Safe) identity.~~ **Closed** (Task 8): fork proof `SafeCircles.t.sol` (a Safe joins
+  Circles and mints), the app walk found no thirdweb dependency, guests claim with `personalMint` only
+  (`lib/muenzen-claim.ts`).
 
 ## 8. Server side (web + edge, built 2026-09-27, not deployed)
 
@@ -284,10 +320,28 @@ handover check (on-chain semantics), `lib/shamir/tally-session.ts` (runs in the 
   MultiSendCallOnly). The sender must already be an admin (`isAdmin(legacy, sender)`), `legacy` must carry the
   thirdweb proxy code and hold CitizenNFTv2 (or v3). A direct call from the Safe while `legacy` is named is refused
   (wrong `msg.sender`).
+- **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe (guest
+  tier, since 2026-11-17):** `CitizenNFTv2.createAttestationRequest(string)`, `Hub.registerHuman`, `Hub.personalMint`,
+  `NameRegistry.updateMetadataDigest`, guardian management (add/revoke guardian with threshold, `changeThreshold`,
+  `cancelRecovery`; `confirmRecovery` only alongside it) and recovery of a guest Safe with >= 1 guardian (shape-checked).
+  Never for guests: `groupMint`, `trust`, `safeTransferFrom`, legacy shapes. Budget per Safe
+  `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day, never above the normal cap) **and** all guests
+  together `PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI` (default 0.02 xDAI, must stay below the overall global cap: guests
+  count there too). The 0.002 default does not fit a guest's first op (deploy + guardian + request = 0.00234 xDAI at
+  1.5 gwei; `personalMint` on a deployed Safe 0.00159): the owner sets the onboarding cap (suggested 0.006 xDAI)
+  before opening sign-up. A deploy op (factory + factoryData) may carry the first op.
 - **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe
   (onboarding tier):** only `CitizenNFTv2.createAttestationRequest(string)`, budget
   `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day per Safe, never above the normal cap). A deploy op
-  (factory + factoryData) may carry it.
+  (factory + factoryData) may carry it. The CredentialRegistry holder calls (`claim`, `selfClaim`, `renounce`) are
+  onboarding-tier too, so a guest can pick up a credential, alone or in one op with `createAttestationRequest`.
+- **CredentialRegistry** (`CREDENTIAL_REGISTRY_ADDRESS`, compared case-insensitively; unset or malformed = no register
+  call is sponsored): holder calls onboarding-tier, issuer calls (`createType`, `updateType`, `retireType`,
+  `setDelegate`, `setOrgPrivateOnly`, `addBatch`, `revokeBatch`, `revokeLeaves`) citizen-tier; an org Safe may make
+  the issuer calls through `execTransaction` (direct or MultiSendCallOnly), like its OrgRegistry calls. Never
+  sponsored: `prune` and `rebindType` (permissionless), `setRecognised`, `proposeSources`/`applySources`/
+  `cancelSources`, ownership functions. Value 0 as everywhere. The contract does the authorisation; the allowlist
+  only bounds what the paymaster pays for.
 - **Allowlist** = the table in §3 minus the dead/dormant rows, with argument rules: `groupMint` only into the Röbel
   group; `safeTransferFrom` only `from == identity` and `id == uint256(RöbelGroup)`; value 0 everywhere.
   `registerHuman` and `trust` are citizen-tier. Not sponsored: native sends, mini-app transactions, governor
@@ -334,8 +388,13 @@ validation). Unset or missing Supabase env = the old in-memory budget.
 - **Off by default.** Both routes return 503 `disabled` unless `PASSKEY_KEY_BACKUP_ENABLED=1`. They also need
   Supabase (`NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`). There is deliberately **no in-memory
   fallback**: a backup that vanishes on a cold start would tell people their keys are safe when they are not.
-- **Contents.** The table `passkey_key_backups` (`identity_address`, `slot` ∈ maci/nostr/salt, `blob` = `pkv1:…`)
-  holds ciphertext only. It is useless without the passkey's PRF.
+- **Contents.** The table `passkey_key_backups` (`identity_address`, `slot`, `blob` = `pkv1:…`) holds ciphertext
+  only. It is useless without the passkey's PRF (or, for the `_w` slots, the recovery words). There are **seven
+  slots**: `maci`, `nostr`, `salt` (wrapped under the passkey PRF), `maci_w`, `nostr_w`, `salt_w` (the same secrets
+  wrapped under the words vault key) and `wvk` (the vault key wrapped under the PRF, plus the 5 public word
+  addresses). Words switched off = the off marker blob in `wvk` and the `_w` slots. Recipe:
+  `PASSKEY_ACCOUNTS_STATE.md` "Wiederherstellungswörter". Migration `20261117c_passkey_key_backup_words_slots.sql`
+  (not applied).
 - **Proof.** Every request carries a signature by the identity over a fixed text, checked with
   `verifyAccountSignature` (Safe 1271/6492, Safe-admin envelope, thirdweb admin):
   - read: `Röbel: Schlüssel-Sicherung / Aktion: lesen / Konto / Zeit / …`

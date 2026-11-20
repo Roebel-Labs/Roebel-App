@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import useOrgMembers from '@/hooks/useOrgMembers';
+import { useCredentialsGate } from '@/lib/credreg/gate';
 import OrgRoleBadge from '@/components/OrgRoleBadge';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import InviteDrawer from '@/components/InviteDrawer';
@@ -25,6 +26,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function OrgManageScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const credentialsGate = useCredentialsGate();
   const { activeAccount } = useAccount();
   const accountId = activeAccount?.id;
 
@@ -317,6 +319,19 @@ export default function OrgManageScreen() {
               );
           }
         }}
+        ListHeaderComponent={
+          canManage && credentialsGate === true ? (
+            <Pressable
+              onPress={() => router.push('/org/credentials' as any)}
+              style={[styles.credentialsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Mitglieder & Ausweise"
+            >
+              <Text style={[styles.credentialsTitle, { color: colors.textPrimary }]}>Mitglieder & Ausweise</Text>
+              <Text style={[styles.credentialsText, { color: colors.textSecondary }]}>Ausweise ausstellen, erneuern und widerrufen</Text>
+            </Pressable>
+          ) : null
+        }
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.primary} />
@@ -352,6 +367,9 @@ export default function OrgManageScreen() {
 }
 
 const styles = StyleSheet.create({
+  credentialsRow: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12, gap: 2 },
+  credentialsTitle: { fontSize: 15, fontFamily: 'MonaSans-SemiBold' },
+  credentialsText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -393,12 +411,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  memberInitials: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  memberInitials: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   memberInfo: { flex: 1 },
-  memberName: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
-  memberJoined: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  memberName: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
+  memberJoined: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   menuButton: { paddingHorizontal: 8, paddingVertical: 4 },
-  menuDots: { fontSize: 20, fontFamily: 'Inter-Bold' },
+  menuDots: { fontSize: 20, fontFamily: 'MonaSans-Bold' },
   overflowMenu: {
     position: 'absolute',
     right: 14,
@@ -418,17 +436,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  overflowText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  overflowText: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   revokeButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
   },
-  revokeText: { fontSize: 11, fontFamily: 'Inter-Medium' },
+  revokeText: { fontSize: 11, fontFamily: 'MonaSans-Medium' },
   sectionHeader: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginTop: 16,
     marginBottom: 4,
   },
@@ -437,8 +455,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
   },
-  leaveText: { fontSize: 14, fontFamily: 'Inter-Medium', color: '#EF4444' },
+  leaveText: { fontSize: 14, fontFamily: 'MonaSans-Medium', color: '#EF4444' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
-  emptyText: { fontSize: 14, fontFamily: 'Inter-Regular' },
+  emptyText: { fontSize: 14, fontFamily: 'MonaSans-Regular' },
 });

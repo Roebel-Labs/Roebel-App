@@ -1,4 +1,5 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { hasPostVideo } from '@/lib/utils/post-media';
 import {
   View,
   StyleSheet,
@@ -298,7 +299,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         }
         if (item.item?.type === 'post' || item.item?.type === 'mecky') {
           const post = item.item.data as PostRecord;
-          if (post?.video_url) {
+          if (post && hasPostVideo(post)) {
             nextVideoIds.add(post.id);
           }
           // Impressions count the ORIGINAL on repost rows.
@@ -534,7 +535,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
         case 'special_menu_section':
           return (
-            <View style={styles.moduleWrap}>
+            <View style={styles.moduleWrapFullBleed}>
               <FeedSpecialMenuSection menus={item.data as SpecialMenuWithItems[]} />
             </View>
           );
@@ -791,6 +792,10 @@ const styles = StyleSheet.create({
   // look inside the otherwise edge-to-edge X-style list.
   moduleWrap: {
     paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  // Horizontal rails that scroll edge to edge (no side gutter to clip them).
+  moduleWrapFullBleed: {
     paddingVertical: 8,
   },
   skeletonList: {

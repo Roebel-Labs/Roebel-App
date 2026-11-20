@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, Map, MapPin, Vote, Smartphone, BookOpen, Users, KeyRound, ShieldCheck, Coins, Landmark, LayoutGrid, SquareKanban, Mail, Tent, Images, AudioLines, Headphones, Gauge } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, Map, MapPin, Vote, Smartphone, BookOpen, Users, KeyRound, ShieldCheck, Coins, Landmark, LayoutGrid, SquareKanban, Mail, Tent, Images, AudioLines, Headphones, Gauge, Radio } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -132,6 +132,12 @@ export function AdminSidebar() {
       badgeKey: "events",
     },
     {
+      name: "Anfragen",
+      href: "/admin/dashboard/events/anfragen",
+      icon: <Megaphone className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
       name: "Plakate",
       href: "/admin/dashboard/events/poster",
       icon: <Images className="h-5 w-5" />,
@@ -160,6 +166,12 @@ export function AdminSidebar() {
       href: "/admin/dashboard/movies",
       icon: <Film className="h-5 w-5" />,
       badgeKey: "movies",
+    },
+    {
+      name: "Livestream",
+      href: "/admin/dashboard/live",
+      icon: <Radio className="h-5 w-5" />,
+      badgeKey: null,
     },
     {
       name: "Hören",

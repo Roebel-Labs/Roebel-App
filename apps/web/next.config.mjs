@@ -26,7 +26,8 @@ const nextConfig = {
   // unrelated package. Naming it removes that dependency on a coincidence.
   transpilePackages: [
     "@netizen-labs/miniapp-sdk", "@netizen-labs/workspace", "@netizen-labs/record-client",
-    "@netizen-labs/nostr", "@netizen-labs/protocol",
+    "@netizen-labs/nostr", "@netizen-labs/protocol", "@netizen-labs/credential-registry",
+    "@roebel/card-design",
   ],
   // Keep heavy server-only packages OUT of the webpack bundle (loaded from
   // node_modules at runtime instead). @safe-global/protocol-kit pulls in
@@ -49,7 +50,19 @@ const nextConfig = {
     "mcp-handler",
     "@modelcontextprotocol/sdk",
     "@vercel/functions",
+    // Card designer preview rendering (lib/credentials/designs/render.ts): the wasm build loads
+    // its .wasm from disk next to the package, so it stays a node_modules package.
+    "canvaskit-wasm",
   ],
+  // The design routes read canvaskit.wasm, the curated fonts and the built-in art from disk at
+  // runtime (render.ts resolves them from process.cwd()), which the tracer cannot see.
+  outputFileTracingIncludes: {
+    "/api/credentials/designs": [
+      "./node_modules/canvaskit-wasm/bin/canvaskit.wasm",
+      "../../packages/card-design/fonts/*.ttf",
+      "../../packages/card-design/assets/builtin/*.png",
+    ],
+  },
   images: {
     remotePatterns: [
       {
@@ -144,6 +157,29 @@ const nextConfig = {
             key: 'Content-Type',
             value: 'application/wasm',
           },
+        ],
+      },
+      {
+        // Ortis Studio (Electron renderer, origin file:// or localhost) is a client of the chat
+        // API. Auth is the Bearer header only; with `*` browsers never send cookies, so the
+        // cookie-authenticated pairing approval stays same-origin.
+        source: '/api/chat/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'authorization, content-type, x-roebel-device' },
+          { key: 'Access-Control-Max-Age', value: '600' },
+        ],
+      },
+      {
+        // Credential register API: same clients as the chat API (app, Ortis Studio, browser
+        // pairing session); Bearer header auth only, so `*` never carries cookies.
+        source: '/api/credentials/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'authorization, content-type, x-roebel-device' },
+          { key: 'Access-Control-Max-Age', value: '600' },
         ],
       },
       {

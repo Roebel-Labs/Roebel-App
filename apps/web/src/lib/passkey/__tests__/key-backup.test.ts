@@ -8,7 +8,15 @@ import assert from "node:assert/strict";
 import { verifyMessage, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { handleKeyBackupGet, handleKeyBackupPut, type KeyBackupDeps } from "../key-backup-handler";
-import { buildKeyBackupProofMessage, keyBackupContent, keyBackupContentHash, type KeyBackupSlot } from "../key-backup-proof";
+import {
+  KEY_BACKUP_SLOTS,
+  KEY_BACKUP_VAULT_SLOT,
+  KEY_BACKUP_WORDS_SLOTS,
+  buildKeyBackupProofMessage,
+  keyBackupContent,
+  keyBackupContentHash,
+  type KeyBackupBlobKey,
+} from "../key-backup-proof";
 import { InMemoryKeyBackupStore, KeyBackupStoreError, type KeyBackupStore } from "../key-backup-store";
 import { PASSKEY_KEY_BACKUP_TABLE, SupabaseKeyBackupStore } from "../key-backup-store-supabase";
 import vector from "./key-backup-vector.json";
@@ -32,7 +40,7 @@ const post = (body: unknown) => new Request("http://x/api", { method: "POST", bo
 async function readProof(signer = owner, timestamp = NOW) {
   return { timestamp, signature: await signer.signMessage({ message: buildKeyBackupProofMessage({ action: "read", identity: ID, timestamp }) }) };
 }
-async function writeProof(blobs: Partial<Record<KeyBackupSlot, string>>, replace = false, signer = owner, timestamp = NOW) {
+async function writeProof(blobs: Partial<Record<KeyBackupBlobKey, string>>, replace = false, signer = owner, timestamp = NOW) {
   const message = buildKeyBackupProofMessage({ action: "write", identity: ID, timestamp, contentHash: keyBackupContentHash(blobs, replace) });
   return { timestamp, signature: await signer.signMessage({ message }) };
 }
@@ -46,6 +54,40 @@ test("vector: proof texts are byte-exact with apps/expo (key-backup-vector.json)
     buildKeyBackupProofMessage({ action: "write", identity: id, timestamp: vector.timestamp, contentHash: vector.contentHash }),
     vector.writeMessage,
   );
+});
+
+test("vector second case: words slots + vault key follow the primary slots", () => {
+  const blobs = { maci: "pkv1:a", maci_w: "pkv1:b", wvk: "pkv1:c" };
+  assert.equal(keyBackupContent(blobs, false), "maci=pkv1:a\nmaci_w=pkv1:b\nwvk=pkv1:c\nreplace=0");
+  assert.equal(keyBackupContent(vector.wordsCase.blobs, false), vector.wordsCase.content);
+  assert.equal(keyBackupContentHash(blobs, false), vector.wordsCase.contentHash);
+  assert.deepEqual([...KEY_BACKUP_SLOTS], ["maci", "nostr", "salt"]);
+  assert.deepEqual([...KEY_BACKUP_WORDS_SLOTS], ["maci_w", "nostr_w", "salt_w"]);
+  assert.equal(KEY_BACKUP_VAULT_SLOT, "wvk");
+});
+
+test("words slots + wvk are stored and read back; replace overwrites stale words copies; unknown slot maci_x → 400", async () => {
+  const d = deps();
+  const W1 = `pkv1:${"C".repeat(60)}`;
+  const W2 = `pkv1:${"D".repeat(60)}`;
+  const WVK = `pkv1:${"E".repeat(60)}`;
+  let blobs: Record<string, string> = { maci: MACI, maci_w: W1, salt_w: W1, wvk: WVK };
+  let r = await handleKeyBackupPut(post({ identity: ID, blobs, proof: await writeProof(blobs) }), d);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { ok: true, stored: ["maci", "maci_w", "salt_w", "wvk"] });
+  r = await handleKeyBackupGet(post({ identity: ID, proof: await readProof() }), d);
+  assert.deepEqual(await r.json(), { blobs });
+  // New words: without replace the different _w blob is refused, with replace it is overwritten.
+  blobs = { maci_w: W2, wvk: WVK };
+  r = await handleKeyBackupPut(post({ identity: ID, blobs, proof: await writeProof(blobs) }), d);
+  assert.deepEqual([r.status, await r.json()], [409, { error: "exists", slots: ["maci_w"] }]);
+  r = await handleKeyBackupPut(post({ identity: ID, blobs, replace: true, proof: await writeProof(blobs, true) }), d);
+  assert.equal(r.status, 200);
+  r = await handleKeyBackupGet(post({ identity: ID, proof: await readProof() }), d);
+  assert.equal((await r.json()).blobs.maci_w, W2);
+  const bad = { maci_x: MACI };
+  r = await handleKeyBackupPut(post({ identity: ID, blobs: bad, proof: await writeProof(bad as never) }), d);
+  assert.equal(r.status, 400);
 });
 
 test("disabled → 503 before anything else", async () => {
@@ -149,7 +191,7 @@ test("SupabaseKeyBackupStore touches only passkey_key_backups and upserts on (id
         select: () => q,
         eq: (_c: string, v: string) => {
           calls.push({ table, op: "select", arg: v });
-          return Promise.resolve({ data: [{ slot: "maci", blob: MACI }, { slot: "junk", blob: "x" }], error: null });
+          return Promise.resolve({ data: [{ slot: "maci", blob: MACI }, { slot: "nostr_w", blob: NOSTR }, { slot: "wvk", blob: NOSTR }, { slot: "junk", blob: "x" }], error: null });
         },
         upsert: (rows: unknown, opts: unknown) => {
           calls.push({ table, op: "upsert", arg: rows, opts });
@@ -160,7 +202,7 @@ test("SupabaseKeyBackupStore touches only passkey_key_backups and upserts on (id
     },
   };
   const s = new SupabaseKeyBackupStore(db as any);
-  assert.deepEqual(await s.get("0xABCDEF0000000000000000000000000000000001"), { maci: MACI });
+  assert.deepEqual(await s.get("0xABCDEF0000000000000000000000000000000001"), { maci: MACI, nostr_w: NOSTR, wvk: NOSTR });
   await s.put("0xABCDEF0000000000000000000000000000000001", { nostr: NOSTR });
   assert.ok(calls.every((c) => c.table === PASSKEY_KEY_BACKUP_TABLE));
   assert.equal(calls[0].arg, "0xabcdef0000000000000000000000000000000001");

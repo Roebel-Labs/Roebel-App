@@ -26,6 +26,10 @@ import { getAccountRole, canEditEvents, AccountRole } from '@/lib/supabase-accou
 import { getViewCount } from '@/lib/supabase-event-views';
 import { getInterestCount } from '@/lib/supabase-interests';
 import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
+import EventBadgeSetupSection from '@/components/credentials/EventBadgeSetupSection';
+import { useCredentialsGate } from '@/lib/credreg/gate';
+import { fetchEventBadge, setupEventBadge } from '@/lib/credreg/api';
+import { afterBadgeSetup, badgeOffWarning, badgeSetupPayload, SETUP_LABELS, type BadgeSetupForm } from '@/lib/credreg/event-page';
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -58,6 +62,36 @@ export default function EditEventScreen() {
   const [ticketPrice, setTicketPrice] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
+  // "Abzeichen für Teilnehmende": owners/admins of the event's org with the credential gate open.
+  const credentialsGate = useCredentialsGate();
+  const badgeSectionVisible = credentialsGate === true && (role === 'owner' || role === 'admin');
+  const [badgeForm, setBadgeForm] = useState<BadgeSetupForm>({ enabled: false, name: '', artUrl: null, limit: '' });
+  const [badgeInitiallyOn, setBadgeInitiallyOn] = useState(false);
+  const [badgeLoaded, setBadgeLoaded] = useState(false);
+  const [badgeChain, setBadgeChain] = useState<{ chain: 'draft' | 'onchain' } | null>(null);
+  const [eventAccountId, setEventAccountId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!badgeSectionVisible || !account || !id || badgeLoaded) return;
+    let alive = true;
+    void fetchEventBadge(account, id).then((r) => {
+      if (!alive || !r.ok) return;
+      setBadgeLoaded(true);
+      const b = r.data.badge;
+      if (!b) return;
+      setBadgeInitiallyOn(true);
+      setBadgeChain({ chain: b.chain });
+      setBadgeForm({
+        enabled: true,
+        name: b.name,
+        artUrl: b.imageUrl && b.imageUrl !== imageUrl ? b.imageUrl : null,
+        limit: b.supplyCap > 0 ? String(b.supplyCap) : '',
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [badgeSectionVisible, account, id, badgeLoaded, imageUrl]);
+
   useEffect(() => {
     async function load() {
       if (!id) return;
@@ -88,6 +122,7 @@ export default function EditEventScreen() {
       setWebsiteUrl(event.website_url ?? '');
       setTicketPrice(event.ticket_price != null ? String(event.ticket_price) : '');
       setImageUrl(event.image_url);
+      setEventAccountId(event.account_id ?? null);
 
       // Fetch role + stats
       if (account?.address && event.account_id) {
@@ -129,6 +164,13 @@ export default function EditEventScreen() {
       return;
     }
 
+    const sendBadge = badgeSectionVisible && badgeLoaded && (badgeForm.enabled || badgeInitiallyOn);
+    const badge = badgeSetupPayload(badgeForm, { eventId: id, title, posterUrl: imageUrl });
+    if (sendBadge && !badge.ok) {
+      Alert.alert('Abzeichen', badge.message);
+      return;
+    }
+
     setSaving(true);
 
     const { error } = await supabase
@@ -151,19 +193,45 @@ export default function EditEventScreen() {
       })
       .eq('id', id);
 
-    setSaving(false);
-
     if (error) {
+      setSaving(false);
       Alert.alert('Fehler', 'Änderungen konnten nicht gespeichert werden.');
       return;
     }
+
+    // The badge goes in after the event itself was saved; a failure never fails the event.
+    if (sendBadge && badge.ok && account) {
+      const r = await setupEventBadge(account, badge.payload);
+      if (!r.ok) Alert.alert('Abzeichen', SETUP_LABELS.saveFailed);
+      const approve = afterBadgeSetup(r, eventAccountId ?? '');
+      if (approve) {
+        setSaving(false);
+        showSnackbar({ message: 'Änderungen gespeichert — bitte das Beenden des Abzeichens bestätigen', duration: 4000 });
+        router.replace(approve as never);
+        return;
+      }
+    }
+    setSaving(false);
 
     showSnackbar({
       message: 'Änderungen gespeichert — wird erneut geprüft',
       duration: 4000,
     });
     router.back();
-  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice]);
+  }, [id, title, description, date, time, endTime, location, category, organizerName, organizerEmail, organizerPhone, websiteUrl, ticketPrice, badgeSectionVisible, badgeLoaded, badgeForm, badgeInitiallyOn, imageUrl, account, badgeChain, eventAccountId]);
+
+  // Switching off a badge that is in the register retires it: say so before saving.
+  const onSavePress = useCallback(() => {
+    const warning = badgeSectionVisible && badgeLoaded && badgeInitiallyOn ? badgeOffWarning(badgeChain, badgeForm) : null;
+    if (!warning) {
+      void handleSave();
+      return;
+    }
+    Alert.alert('Abzeichen beenden?', warning, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Beenden', style: 'destructive', onPress: () => void handleSave() },
+    ]);
+  }, [badgeSectionVisible, badgeLoaded, badgeInitiallyOn, badgeChain, badgeForm, handleSave]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -400,11 +468,15 @@ export default function EditEventScreen() {
             />
           </FormField>
 
+          {editable && badgeSectionVisible && badgeLoaded && (
+            <EventBadgeSetupSection value={badgeForm} onChange={setBadgeForm} eventTitle={title} posterUri={imageUrl} />
+          )}
+
           {/* Action buttons */}
           {editable && (
             <View style={styles.actions}>
               <Pressable
-                onPress={handleSave}
+                onPress={onSavePress}
                 disabled={saving}
                 style={({ pressed }) => [
                   styles.saveBtn,
@@ -465,7 +537,7 @@ const fieldStyles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });
 
@@ -521,7 +593,7 @@ const styles = StyleSheet.create({
   },
   statsTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   statsRow: {
     flexDirection: 'row',
@@ -534,7 +606,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   form: {
     gap: 16,
@@ -545,7 +617,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   textArea: {
     minHeight: 100,
@@ -569,7 +641,7 @@ const styles = StyleSheet.create({
   },
   categoryChipText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   actions: {
     gap: 12,

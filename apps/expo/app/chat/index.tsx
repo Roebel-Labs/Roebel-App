@@ -24,10 +24,9 @@ import { useChatActions, useChatBootstrap, useInspiration } from '@/context/Chat
 import { ChatApiError } from '@/lib/chat/api';
 import { threadTitle } from '@/lib/chat/format';
 import type { BotAvatarSpec, ChatBot, ChatThread } from '@/lib/chat/types';
+import { AGENT_CHARACTERS } from '@/lib/chat/characters';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 import {
-  BOT_COLOR_LIST,
-  BOT_EYES,
-  BOT_SHAPES,
   BlackPillButton,
   BotAvatar,
   InspirationEntryRow,
@@ -42,17 +41,11 @@ import {
   useChatTokens,
 } from '@/components/chat';
 
-function pick<T>(list: readonly T[]): T {
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-function randomAvatar(): BotAvatarSpec {
-  return {
-    shape: pick(BOT_SHAPES),
-    color: pick(BOT_COLOR_LIST),
-    eyes: pick(BOT_EYES),
-  };
-}
+/** Pictures teased on the onboarding's "build your own" slide: Mecky plus three characters. */
+const BUILD_TEASER: BotAvatarSpec[] = [
+  MECKY_AVATAR_SPEC,
+  ...AGENT_CHARACTERS.slice(0, 3).map((c): BotAvatarSpec => ({ shape: 'circle', eyes: 'dots', color: c.color, character: c.id })),
+];
 
 function errorText(err: unknown): string {
   if (err instanceof ChatApiError) return err.message;
@@ -64,7 +57,6 @@ export default function ChatIndexScreen() {
   const t = useChatTokens();
   const boot = useChatBootstrap();
   const [skippedOnboarding, setSkippedOnboarding] = useState(false);
-  const [createMode, setCreateMode] = useState(false);
 
   let body: React.ReactNode;
   if (!boot.isConnected) body = <LoginGate />;
@@ -72,22 +64,9 @@ export default function ChatIndexScreen() {
   else if (!boot.hasSession) body = <Welcome onStart={boot.startSession} error={boot.error} />;
   else if (boot.status === 'error') body = <ErrorState message={boot.error} onRetry={boot.refresh} />;
   else if (boot.status !== 'ready') body = <CenterLoader />;
-  else if (createMode || (boot.threads.length === 0 && !skippedOnboarding))
-    body = (
-      <Onboarding
-        presets={boot.presets}
-        startOnCreate={createMode}
-        onSkip={() => {
-          setCreateMode(false);
-          setSkippedOnboarding(true);
-        }}
-        onDone={() => setCreateMode(false)}
-      />
-    );
-  else
-    body = (
-      <ChatList threads={boot.threads} presets={boot.presets} bots={boot.bots} onNewBot={() => setCreateMode(true)} />
-    );
+  else if (boot.threads.length === 0 && !skippedOnboarding)
+    body = <Onboarding presets={boot.presets} onSkip={() => setSkippedOnboarding(true)} />;
+  else body = <ChatList threads={boot.threads} presets={boot.presets} bots={boot.bots} />;
 
   return <View style={[styles.root, { backgroundColor: t.background }]}>{body}</View>;
 }
@@ -182,29 +161,16 @@ function Welcome({ onStart, error }: { onStart: () => Promise<boolean>; error: s
 
 // ─── Onboarding pager (refs 2, 3) ────────────────────────────────────────────
 
-function Onboarding({
-  presets,
-  startOnCreate,
-  onSkip,
-  onDone,
-}: {
-  presets: ChatBot[];
-  startOnCreate: boolean;
-  onSkip: () => void;
-  onDone: () => void;
-}) {
+function Onboarding({ presets, onSkip }: { presets: ChatBot[]; onSkip: () => void }) {
   const t = useChatTokens();
   const router = useRouter();
   const { openMenu: openSheetMenu } = useChatSheets();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
-  const { createBot, createThread } = useChatActions();
+  const { createThread } = useChatActions();
   const pagerRef = useRef<PagerView>(null);
-  const nameRef = useRef<TextInput>(null);
   const lastIndex = presets.length;
-  const [index, setIndex] = useState(startOnCreate ? lastIndex : 0);
-  const [name, setName] = useState('');
-  const [avatar] = useState<BotAvatarSpec>(randomAvatar);
+  const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const onCreateSlide = index === lastIndex;
 
@@ -215,7 +181,6 @@ function Onboarding({
 
   const openThread = async (botIds: string[]) => {
     const res = await createThread(botIds);
-    onDone();
     router.push(`/chat/${res.thread.id}` as Href);
   };
 
@@ -232,30 +197,17 @@ function Onboarding({
     }
   };
 
-  const createOwn = async () => {
-    const trimmed = name.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    try {
-      const bot = await createBot({ name: trimmed, avatar });
-      await openThread([bot.id]);
-      setName('');
-    } catch (err) {
-      showSnackbar({ message: errorText(err) });
-    } finally {
-      setBusy(false);
-    }
+  // Own agents are built on the agent screen: own picture or a character, name, task and how it works.
+  const createOwn = () => {
+    Haptics.selectionAsync().catch(() => {});
+    router.push('/chat/agents/new' as Href);
   };
 
   const openMenu = (e: GestureResponderEvent) =>
     openSheetMenu({
       anchor: e,
       items: [
-        [
-          startOnCreate
-            ? { label: 'Abbrechen', icon: 'close-outline', onPress: onSkip }
-            : { label: 'Überspringen', icon: 'play-skip-forward-outline', onPress: onSkip },
-        ],
+        [{ label: 'Überspringen', icon: 'play-skip-forward-outline', onPress: onSkip }],
         [{ label: 'Mecky Ultra', icon: 'diamond-outline', onPress: () => router.push('/chat/ultra' as Href) }],
       ],
     });
@@ -272,17 +224,13 @@ function Onboarding({
       <PagerView
         ref={pagerRef}
         style={styles.flex}
-        initialPage={startOnCreate ? lastIndex : 0}
-        onPageSelected={(e) => {
-          const i = e.nativeEvent.position;
-          setIndex(i);
-          if (i === lastIndex) setTimeout(() => nameRef.current?.focus(), 250);
-        }}
+        initialPage={0}
+        onPageSelected={(e) => setIndex(e.nativeEvent.position)}
       >
         {presets.map((p) => (
           <View key={p.id} style={styles.slide}>
             <View style={styles.slideHero}>
-              <BotAvatar spec={p.avatar} size={120} />
+              <BotAvatar spec={p.avatar} name={p.name} size={120} />
             </View>
             <View style={styles.slideCopy}>
               <Text style={[styles.slideName, { color: t.textPrimary }]}>{p.name}</Text>
@@ -293,22 +241,19 @@ function Onboarding({
           </View>
         ))}
         <View key="create" style={[styles.slide, styles.createSlide]}>
-          <BotAvatar spec={avatar} size={58} />
-          <TextInput
-            ref={nameRef}
-            value={name}
-            onChangeText={setName}
-            placeholder="Benenne deinen Bot"
-            placeholderTextColor={t.placeholder}
-            maxLength={40}
-            returnKeyType="done"
-            onSubmitEditing={createOwn}
-            selectionColor={t.link}
-            style={[styles.createInput, { color: t.textPrimary }]}
-            accessibilityLabel="Name deines Bots"
-          />
+          <View style={styles.teaserRow}>
+            {BUILD_TEASER.map((spec, i) => (
+              <BotAvatar
+                key={i}
+                spec={spec}
+                size={58}
+                style={[styles.teaserItem, i > 0 ? styles.teaserOverlap : null, { borderColor: t.background }]}
+              />
+            ))}
+          </View>
+          <Text style={[styles.createTitle, { color: t.textPrimary }]}>Bau dir deinen eigenen Agenten</Text>
           <Text style={[styles.createHint, { color: t.textSecondary }]}>
-            Starte bei null und sag ihm, was er tun soll
+            Mit eigenem Bild oder einer Figur, einem Namen und einer Aufgabe
           </Text>
         </View>
       </PagerView>
@@ -316,12 +261,7 @@ function Onboarding({
       <View style={[styles.onboardingFooter, { paddingBottom: onCreateSlide ? 16 : insets.bottom + 8 }]}>
         <PagerDots count={presets.length + 1} index={index} style={styles.dots} />
         {onCreateSlide ? (
-          <BlackPillButton
-            label="Erstellen"
-            onPress={createOwn}
-            loading={busy}
-            variant={name.trim() ? 'primary' : 'disabled'}
-          />
+          <BlackPillButton label="Agent erstellen" onPress={createOwn} />
         ) : (
           <>
             <BlackPillButton label="Chat starten" onPress={startPreset} loading={busy} />
@@ -341,12 +281,10 @@ function ChatList({
   threads,
   presets,
   bots,
-  onNewBot,
 }: {
   threads: ChatThread[];
   presets: ChatBot[];
   bots: ChatBot[];
-  onNewBot: () => void;
 }) {
   const t = useChatTokens();
   const router = useRouter();
@@ -397,6 +335,11 @@ function ChatList({
                 anchor: e,
                 items: [
                   [
+                    { label: 'Meine Agenten', icon: 'people-outline', onPress: () => router.push('/chat/agents' as Href) },
+                    { label: 'Dein Tag', icon: 'sunny-outline', onPress: () => router.push('/chat/today' as Href) },
+                    { label: 'Bibliothek', icon: 'folder-open-outline', onPress: () => router.push('/chat/library' as Href) },
+                  ],
+                  [
                     { label: 'Gedächtnis', icon: 'bulb-outline', onPress: () => router.push('/chat/settings/memory' as Href) },
                     { label: 'Aktivität', icon: 'pulse-outline', onPress: () => router.push('/chat/settings/activity' as Href) },
                     { label: 'Verbindungen', icon: 'link-outline', onPress: () => router.push('/chat/settings/connections' as Href) },
@@ -437,7 +380,14 @@ function ChatList({
           paddingTop: 8,
           paddingBottom: insets.bottom + 24,
         }}
-        ListHeaderComponent={query.trim() ? null : <ForYouEntry />}
+        ListHeaderComponent={
+          query.trim() ? null : (
+            <>
+              <ChatShortcuts />
+              <ForYouEntry />
+            </>
+          )
+        }
         renderItem={({ item }) => (
           <Animated.View entering={FadeIn.duration(180)}>
             <ChatListRow
@@ -446,6 +396,7 @@ function ChatList({
               time={item.lastMessageAt ? formatListTime(item.lastMessageAt) : ''}
               preview={item.lastMessagePreview}
               avatars={item.bots.map((b) => b.avatar)}
+              names={item.bots.map((b) => b.name)}
               online={item.hasActiveRoutine}
               unread={item.unread}
               onPress={() => router.push(`/chat/${item.id}` as Href)}
@@ -466,9 +417,9 @@ function ChatList({
           visible
           onClose={() => setSheetOpen(false)}
           bots={[...presets, ...bots]}
-          onNewBot={() => {
+          onNewAgent={() => {
             setSheetOpen(false);
-            onNewBot();
+            router.push('/chat/agents/new' as Href);
           }}
         />
       ) : null}
@@ -480,12 +431,13 @@ function NewChatSheet({
   visible,
   onClose,
   bots,
-  onNewBot,
+  onNewAgent,
 }: {
   visible: boolean;
   onClose: () => void;
   bots: ChatBot[];
-  onNewBot: () => void;
+  /** Opens the agent builder (own picture or an illustrated character). */
+  onNewAgent: () => void;
 }) {
   const t = useChatTokens();
   const router = useRouter();
@@ -546,16 +498,16 @@ function NewChatSheet({
       <BottomSheetScrollView contentContainerStyle={styles.sheetList}>
         <Pressable
           accessibilityRole="button"
-          onPress={onNewBot}
+          onPress={onNewAgent}
           style={({ pressed }) => [styles.pickRow, pressed ? { opacity: 0.6 } : null]}
         >
           <View style={[styles.newBotCircle, { backgroundColor: t.chipBackground }]}>
             <Feather name="plus" size={22} color={t.icon} />
           </View>
           <View style={styles.pickBody}>
-            <Text style={[styles.pickName, { color: t.textPrimary }]}>Neuer Bot</Text>
+            <Text style={[styles.pickName, { color: t.textPrimary }]}>Neuer Agent</Text>
             <Text style={[styles.pickDesc, { color: t.textSecondary }]} numberOfLines={1}>
-              Starte bei null und sag ihm, was er tun soll
+              Eigenes Bild oder eine Figur, Name und Aufgabe
             </Text>
           </View>
         </Pressable>
@@ -569,7 +521,7 @@ function NewChatSheet({
               onPress={() => toggle(b.id)}
               style={({ pressed }) => [styles.pickRow, pressed ? { opacity: 0.6 } : null]}
             >
-              <BotAvatar spec={b.avatar} size={42} />
+              <BotAvatar spec={b.avatar} name={b.name} size={42} />
               <View style={styles.pickBody}>
                 <Text style={[styles.pickName, { color: t.textPrimary }]}>{b.name}</Text>
                 {b.description ? (
@@ -604,6 +556,39 @@ function NewChatSheet({
         />
       </View>
     </BottomSheet>
+  );
+}
+
+const SHORTCUTS: { label: string; icon: keyof typeof Feather.glyphMap; href: string }[] = [
+  { label: 'Agenten', icon: 'users', href: '/chat/agents' },
+  { label: 'Dein Tag', icon: 'sun', href: '/chat/today' },
+  { label: 'Bibliothek', icon: 'folder', href: '/chat/library' },
+];
+
+/** Entry points above the threads: the agent roster, the daily briefing and the library. */
+function ChatShortcuts() {
+  const t = useChatTokens();
+  const router = useRouter();
+  return (
+    <View style={styles.shortcuts}>
+      {SHORTCUTS.map((s) => (
+        <Pressable
+          key={s.href}
+          accessibilityRole="button"
+          accessibilityLabel={s.label}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            router.push(s.href as Href);
+          }}
+          style={({ pressed }) => [styles.shortcut, { backgroundColor: t.chipBackground, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Feather name={s.icon} size={16} color={t.textPrimary} />
+          <Text numberOfLines={1} style={[styles.shortcutText, { color: t.textPrimary }]}>
+            {s.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -707,13 +692,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   createSlide: { justifyContent: 'center' },
-  createInput: {
-    fontFamily: chatFont.medium,
+  teaserRow: { flexDirection: 'row', alignItems: 'center' },
+  teaserItem: { borderWidth: 3, borderRadius: 32, width: 64, height: 64, padding: 0 },
+  teaserOverlap: { marginLeft: -14 },
+  createTitle: {
+    fontFamily: chatFont.semiBold,
     fontSize: 24,
     textAlign: 'center',
-    alignSelf: 'stretch',
-    marginTop: 34,
-    paddingVertical: 6,
+    marginTop: 28,
   },
   createHint: {
     fontFamily: chatFont.regular,
@@ -750,6 +736,19 @@ const styles = StyleSheet.create({
     fontSize: 17,
     paddingVertical: 0,
   },
+  shortcuts: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10 },
+  shortcut: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+  },
+  shortcutText: { fontFamily: chatFont.medium, fontSize: 15, letterSpacing: -0.1, flexShrink: 1 },
   empty: { paddingTop: 80, paddingHorizontal: 40, alignItems: 'center' },
   emptyText: {
     fontFamily: chatFont.regular,

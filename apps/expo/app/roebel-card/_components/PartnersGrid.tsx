@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   grid: {
     flexDirection: 'row',
@@ -148,11 +148,11 @@ const styles = StyleSheet.create({
   },
   avatarFallback: {
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   tileTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -161,5 +161,5 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  emptyText: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  emptyText: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
 });

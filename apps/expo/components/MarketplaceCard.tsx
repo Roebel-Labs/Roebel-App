@@ -156,24 +156,24 @@ const styles = StyleSheet.create({
   },
   titleCompact: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 19,
     marginBottom: 4,
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
     marginBottom: 6,
   },
   priceCompact: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 6,
   },
   price: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginBottom: 6,
   },
   neighborhood: {
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
   conditionText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });
 

@@ -161,14 +161,14 @@ const styles = StyleSheet.create({
   },
   nameCompact: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 19,
     marginBottom: 8,
     textAlign: 'center',
   },
   name: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
     marginBottom: 6,
   },
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   address: {
     fontSize: 12,

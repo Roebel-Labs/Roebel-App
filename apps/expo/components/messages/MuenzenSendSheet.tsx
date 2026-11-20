@@ -19,6 +19,8 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   peerName: string;
+  /** Sheet heading; defaults to the chat wording. */
+  title?: string;
   /** Executes the transfer + receipt message. Throws on failure. */
   onSend: (amountRaw: bigint, amountDecimal: number) => Promise<void>;
 };
@@ -30,7 +32,13 @@ const QUICK_AMOUNTS = ['1', '5', '10'];
  * transfer mechanics of the wallet's Senden screen (gasless group-token
  * transfer), scoped to the chat peer.
  */
-export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }: Props) {
+export default function MuenzenSendSheet({
+  visible,
+  onClose,
+  peerName,
+  title = 'Röbel Münzen senden',
+  onSend,
+}: Props) {
   const { colors } = useTheme();
   const { groupBalance, groupBalanceRaw } = useRoebelTaler();
   const [amount, setAmount] = useState('');
@@ -112,7 +120,7 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
       >
         <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Röbel Münzen senden</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
             an {peerName}
           </Text>
@@ -209,7 +217,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
     marginBottom: 16,
   },
@@ -218,7 +226,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textAlign: 'center',
   },
   quickRow: {
@@ -234,16 +242,16 @@ const styles = StyleSheet.create({
   },
   quickChipText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   balance: {
     marginLeft: 'auto',
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   error: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 10,
   },
   sendButton: {
@@ -255,6 +263,6 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 });

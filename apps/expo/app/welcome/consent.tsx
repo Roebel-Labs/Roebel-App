@@ -20,6 +20,7 @@ import ChainRecordNotice from '@/components/consent/ChainRecordNotice';
 import { useCreateCitizenRequest, REQUEST_STAGE_LABEL, DEFAULT_CITIZEN_REASON } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useSnackbar } from '@/context/SnackbarContext';
+import { checkWayBack, WAY_BACK_OFFLINE_MESSAGE, WAY_BACK_REASON } from '@/lib/passkey/way-back';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -145,6 +146,19 @@ export default function WelcomeConsentScreen() {
       // from the citizen-data step is never typed twice. Never blocks onboarding.
       if (roleAtSubmit === 'buerger' && citizenDataAtSubmit && !hasCitizenNFT && !activePendingRequest) {
         try {
+          // An independent account needs a way back first; the data stays as a draft. The screen
+          // is replaced right after this, so the reason goes out as a snackbar, not a sheet.
+          const way = await checkWayBack(account);
+          if (way.ok !== true) {
+            await saveCitizenDraft(citizenDataAtSubmit);
+            showSnackbar({
+              message:
+                way.ok === null
+                  ? `${WAY_BACK_OFFLINE_MESSAGE} Deine Angaben sind vorausgefüllt, starte den Antrag später im Profil.`
+                  : `${WAY_BACK_REASON} Richte ihn unter Einstellungen ein, danach startest du den Antrag im Profil.`,
+            });
+            return;
+          }
           await createRequest(citizenDataAtSubmit, DEFAULT_CITIZEN_REASON);
           // Post-success refresh is best-effort — the verification context
           // self-corrects on its next natural refresh; a failure here must
@@ -308,18 +322,18 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   heading: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     lineHeight: 32,
     marginBottom: 24,
   },
   body: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 16,
   },
@@ -331,12 +345,12 @@ const styles = StyleSheet.create({
   },
   link: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textDecorationLine: 'underline',
   },
   linkSep: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   footer: {
     paddingHorizontal: 24,
@@ -352,7 +366,7 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   acceptProgressRow: {
     flexDirection: 'row',
@@ -365,6 +379,6 @@ const styles = StyleSheet.create({
   },
   declineText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

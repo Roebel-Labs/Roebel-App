@@ -7,26 +7,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalHash, parseManifestFile, slugify, type ParsedManifestFile } from "./manifestFile";
 import { fetchManifestJson, isBlockedIp, wellKnownUrlFor } from "./safeFetch";
 import { pickSlug, planIndex, type IndexPlan } from "./indexPlan";
-import { createVersion, getOrCreateDeveloper } from "./data";
+import { createVersion, getOrCreateDeveloper, withIdentityColumnFallback } from "./data";
+import { manifestStoreFields } from "./manifest";
+import { bindingPatch } from "./orgBinding";
 import { MiniAppError, type MiniAppRow } from "./types";
 
 function db() {
   return createAdminClient();
 }
 
-function storeFields(p: ParsedManifestFile) {
-  const m = p.manifest;
-  return {
-    name: m.name,
-    icon_url: m.iconUrl || null,
-    home_url: m.homeUrl,
-    description: m.description || null,
-    category: m.category,
-    tags: m.tags,
-    screenshots: m.screenshots,
-    permissions: m.permissions,
-    primary_color: m.primaryColor,
-  };
+/** Store columns of a parsed manifest plus the org binding change against `prev` (null = new app). */
+function storeFields(p: ParsedManifestFile, prev: MiniAppRow | null) {
+  const fields = manifestStoreFields(p.manifest);
+  return { ...fields, ...bindingPatch(prev, fields) };
 }
 
 async function hostIsPublic(host: string): Promise<boolean> {
@@ -178,10 +171,9 @@ export async function indexOrigin(
     planIndex(null, parsed, hash, slug);
 
     const dev = await getOrCreateDeveloper(parsed.owner);
-    const { data: app, error } = await supabase
-      .from("mini_apps")
-      .insert({
-        ...storeFields(parsed),
+    const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(
+      {
+        ...storeFields(parsed, null),
         developer_id: dev.id,
         slug,
         status: "pending",
@@ -191,15 +183,16 @@ export async function indexOrigin(
         manifest_url: url,
         last_indexed_at: now,
         index_error: null,
-      })
-      .select("*")
-      .single();
+      },
+      (row) => supabase.from("mini_apps").insert(row).select("*").single(),
+    );
     if (error) {
       if (error.code === "23505") throw new MiniAppError("conflict", "Diese Domain oder dieser slug ist schon registriert.");
       throw new MiniAppError("internal", error.message);
     }
-    await addVersion(app.id, parsed, slug, hash);
-    return { app: app as MiniAppRow, outcome: "create" };
+    const created = app as MiniAppRow;
+    await addVersion(created.id, parsed, slug, hash);
+    return { app: created, outcome: "create" };
   }
 
   // An indexed row without an owner must not be silently taken over.
@@ -213,18 +206,15 @@ export async function indexOrigin(
   const base = { last_indexed_at: now, index_error: null, manifest_url: url };
   let patch: Record<string, unknown> = base;
   if (plan.kind === "update-direct") {
-    patch = { ...base, ...storeFields(parsed), status: "pending", updated_at: now };
+    patch = { ...base, ...storeFields(parsed, found.row), status: "pending", updated_at: now };
     await addVersion(found.existing.id, parsed, found.existing.slug, hash);
   } else if (plan.kind === "stage-version") {
     patch = plan.markPendingUpdate ? { ...base, pending_update: true } : base;
     await addVersion(found.existing.id, parsed, found.existing.slug, hash);
   }
-  const { data: app, error } = await supabase
-    .from("mini_apps")
-    .update(patch)
-    .eq("id", found.existing.id)
-    .select("*")
-    .single();
+  const { data: app, error } = await withIdentityColumnFallback<MiniAppRow>(patch, (p) =>
+    supabase.from("mini_apps").update(p).eq("id", found.existing.id).select("*").single(),
+  );
   if (error) throw new MiniAppError("internal", error.message);
   return { app: app as MiniAppRow, outcome: plan.kind };
 }

@@ -62,7 +62,7 @@ function CategoryEditScreenInner() {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
         {!canEdit ? (
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Nicht berechtigt.</Text>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Nicht berechtigt.</Text>
         ) : (
           <>
             {category && activeAccount && (
@@ -81,15 +81,15 @@ function CategoryEditScreenInner() {
                   onPress={() => router.push({ pathname: '/org/menu/item/new', params: { categoryId: category.id } } as any)}
                   style={[styles.smallBtn, { backgroundColor: colors.primary }]}
                 >
-                  <Text style={{ color: '#fff', fontFamily: 'Inter-Medium', fontSize: 13 }}>+ Gericht</Text>
+                  <Text style={{ color: '#fff', fontFamily: 'MonaSans-Medium', fontSize: 13 }}>+ Gericht</Text>
                 </Pressable>
               )}
             </View>
 
             {loading ? (
-              <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>Lädt…</Text>
+              <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>Lädt…</Text>
             ) : items.length === 0 ? (
-              <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>
+              <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular' }}>
                 Noch keine Gerichte in dieser Kategorie.
               </Text>
             ) : (
@@ -105,7 +105,7 @@ function CategoryEditScreenInner() {
                       €{Number(item.price).toFixed(2)}{item.is_available === false ? ' · ausgeblendet' : ''}
                     </Text>
                   </View>
-                  <Text style={{ color: colors.textTertiary, fontFamily: 'Inter-Medium', fontSize: 18 }}>›</Text>
+                  <Text style={{ color: colors.textTertiary, fontFamily: 'MonaSans-Medium', fontSize: 18 }}>›</Text>
                 </Pressable>
               ))
             )}
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  itemsTitle: { fontSize: 16, fontFamily: 'Inter-Medium' },
+  itemsTitle: { fontSize: 16, fontFamily: 'MonaSans-Medium' },
   smallBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 9999 },
   itemRow: {
     flexDirection: 'row',
@@ -146,6 +146,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
   },
-  itemName: { fontSize: 15, fontFamily: 'Inter-Medium' },
-  itemMeta: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  itemName: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
+  itemMeta: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 2 },
 });

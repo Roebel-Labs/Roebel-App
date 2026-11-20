@@ -152,11 +152,11 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   note: { margin: 16, borderWidth: 1, borderRadius: 16, padding: 16, gap: 12 },
-  noteText: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  noteText: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20 },
   linkButton: { height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   linkText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
   tabs: { flexDirection: 'row', marginHorizontal: 16, marginTop: 12, borderWidth: 1, borderRadius: 12, padding: 4, gap: 4 },
   tab: { flex: 1, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  tabText: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  tabText: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
   component: { flex: 1, marginTop: 8 },
 });

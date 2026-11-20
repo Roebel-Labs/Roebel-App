@@ -5,6 +5,7 @@ import { ClientBridge } from './bridge';
 import { getHostEnvironment } from './env';
 import { createEip1193Provider } from './provider';
 import type {
+  Credential,
   Eip1193Provider,
   GrantRewardParams,
   GrantRewardResult,
@@ -16,7 +17,7 @@ import type {
   WalletAccount,
 } from './types';
 
-const SDK_VERSION = '0.3.1';
+const SDK_VERSION = '0.4.0';
 
 export function createClient(): NetizenSDK {
   const bridge = new ClientBridge();
@@ -50,7 +51,7 @@ export function createClient(): NetizenSDK {
 
     auth: {
       getToken: () => bridge.request<{ token: string } | null>('auth.getToken'),
-      signIn: () => bridge.request<{ token: string }>('auth.signIn'),
+      signIn: (opts) => bridge.request<{ token: string }>('auth.signIn', opts?.nonce ? { nonce: opts.nonce } : {}),
     },
 
     haptics: {
@@ -78,6 +79,19 @@ export function createClient(): NetizenSDK {
       list: (prefix) => bridge.request('data.list', prefix ? { prefix } : {}),
       getUser: (key) => bridge.request('data.userGet', { key }),
       setUser: (key, value) => bridge.request('data.userSet', { key, value }),
+    },
+
+    credentials: {
+      list: () => bridge.request<Credential[]>('credentials.list'),
+      has: (type) => bridge.request<boolean>('credentials.has', { type }),
+      request: (types) => bridge.request<{ granted: string[] }>('credentials.request', { types }),
+      onChange: (cb) => bridge.on('credentialsChanged', (data) => cb(data as Credential[])),
+    },
+
+    // Mock mode answers every method locally; an old host (no list) lets the call decide.
+    supports: (method) => {
+      const methods = bridge.hostMethods();
+      return methods === null || methods.includes(method);
     },
 
     hostEnvironment: () => getHostEnvironment(),

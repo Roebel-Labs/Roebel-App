@@ -33,8 +33,8 @@ export default function CredentialQrSheet({ visible, onClose, requestId }: Props
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, fontFamily: 'Inter-SemiBold', marginBottom: 6 },
-  sub: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  title: { fontSize: 18, fontFamily: 'MonaSans-SemiBold', marginBottom: 6 },
+  sub: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20 },
   qrWrap: { alignItems: 'center', paddingVertical: 24 },
   qrCard: { padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF' },
 });

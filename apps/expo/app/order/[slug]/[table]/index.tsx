@@ -279,18 +279,18 @@ const styles = StyleSheet.create({
   },
   logoFallback: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
   },
   restaurantName: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 16,
   },
   restaurantAddress: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 2,
     textAlign: 'center',
     paddingHorizontal: 16,
@@ -314,11 +314,11 @@ const styles = StyleSheet.create({
   },
   specialMenuChipText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   specialMenuChipPrice: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 
   // Categories
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 
   // Cart FAB
@@ -375,14 +375,14 @@ const styles = StyleSheet.create({
   },
   cartBadgeText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   cartLabel: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   cartTotal: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bookErrorCode, isAllowedMediaUrl, bookingNotifyWallets, formatEuro, BOOK_ERRORS, logoEdgeColor } from "./sponsoring";
+import { bookErrorCode, isAllowedMediaUrl, bookingNotifyWallets, formatEuro, BOOK_ERRORS, logoEdgeColor, dishNote, parseDishNote } from "./sponsoring";
 
 const SB = "https://wwbeqhkslxdxhktqzqti.supabase.co";
 
@@ -42,4 +42,14 @@ test("logoEdgeColor picks the dominant opaque border colour", () => {
   px.set([10, 10, 10, 255], (1 * w + 1) * 4); // centre pixel is ignored
   assert.equal(logoEdgeColor(px, w, h), "#DC1E28");
   assert.equal(logoEdgeColor(new Uint8Array(w * h * 4), w, h), null); // fully transparent → null
+});
+
+test("dish note round-trips, caps at 4 dishes and stays under the 500-char column limit", () => {
+  const id = "a8d5b35a-31d9-49f1-87b3-bf0e74865c88";
+  const dishes = Array.from({ length: 6 }, (_, i) => ({ id, name: `Gericht ${i} ${"x".repeat(80)}` }));
+  const note = dishNote(dishes);
+  assert.ok(note.length <= 500);
+  assert.equal(parseDishNote(note).length, 4);
+  assert.deepEqual(parseDishNote("Bitte Logo größer"), []);
+  assert.deepEqual(parseDishNote(null), []);
 });

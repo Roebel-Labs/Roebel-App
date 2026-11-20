@@ -590,10 +590,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   placeholderIcon: { fontSize: 22 },
-  placeholderText: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 4 },
+  placeholderText: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 4 },
   changePhotoText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginTop: 12,
   },
   photoHint: { fontSize: 13, marginBottom: 10, lineHeight: 18 },
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
   },
   readOnlyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   inputContainer: {
     borderRadius: 12,
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
   },
   fieldHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 6,
   },
   hoursContainer: {
@@ -667,7 +667,7 @@ const styles = StyleSheet.create({
   hoursLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dayLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     width: 100,
   },
   daySwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
   timeInput: {
     width: 60,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
   timeSeparator: { fontSize: 14 },
   closedText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   saveButton: {
     height: 48,

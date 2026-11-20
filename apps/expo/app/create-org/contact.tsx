@@ -177,17 +177,17 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 26,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   subheading: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 32,
   },
   fieldLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 20,
   },
   hoursToggleRow: {
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   hoursToggleLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   dayRow: {
     flexDirection: 'row',
@@ -222,11 +222,11 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   closedText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     flex: 1,
     textAlign: 'center',
   },
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     width: 64,
     textAlign: 'center',
   },
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   toggleClosedText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   bottomSpacer: {
     height: 96,

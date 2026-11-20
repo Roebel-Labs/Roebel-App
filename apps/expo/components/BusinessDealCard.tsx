@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   dealBadgeText: {
     color: '#000000',
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   boostedBadge: {
     position: 'absolute',
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   priceTagText: {
     color: '#000000',
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   contentCompact: {
     paddingTop: 10,
@@ -218,13 +218,13 @@ const styles = StyleSheet.create({
   },
   titleCompact: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 19,
     marginBottom: 4,
   },
   title: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 22,
     marginBottom: 6,
   },
@@ -235,12 +235,12 @@ const styles = StyleSheet.create({
   },
   businessName: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 6,
   },
   businessNameCompact: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 6,
   },
   footer: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });
 

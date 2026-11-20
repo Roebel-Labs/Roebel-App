@@ -10,7 +10,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BotAvatar, BOT_COLORS } from './BotAvatar';
+import { characterById } from '@/lib/chat/characters';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
+import { BotAvatar } from './BotAvatar';
 
 export type FloatingMascot = {
   spec: BotAvatarSpec;
@@ -22,17 +24,22 @@ export type FloatingMascot = {
   rotate?: number;
 };
 
-/** Layout of ref 1 (fractions of a 393×~850pt welcome screen). */
+/** A character's picture as a floating spec (its round 512 px tile on its colour). */
+function characterSpec(id: string): BotAvatarSpec {
+  return { shape: 'circle', eyes: 'dots', color: characterById(id)?.color ?? '#00498B', character: id };
+}
+
+/** Layout of ref 1 (fractions of a 393×~850pt welcome screen): Mecky and character pictures. */
 export const DEFAULT_MASCOTS: FloatingMascot[] = [
-  { spec: { shape: 'cloud', color: BOT_COLORS.cloudGreen, eyes: 'dashes' }, x: 0.24, y: 0.19, size: 82 },
-  { spec: { shape: 'blob', color: BOT_COLORS.pink, eyes: 'dots' }, x: 0.61, y: 0.18, size: 62, rotate: 4 },
-  { spec: { shape: 'circle', color: BOT_COLORS.brown, eyes: 'wink' }, x: 0.92, y: 0.32, size: 60 },
-  { spec: { shape: 'egg', color: BOT_COLORS.purple, eyes: 'dashes' }, x: 0.04, y: 0.37, size: 58, rotate: -10 },
-  { spec: { shape: 'drop', color: BOT_COLORS.red, eyes: 'dashes' }, x: 1.02, y: 0.5, size: 80, rotate: -70 },
-  { spec: { shape: 'circle', color: BOT_COLORS.amber, eyes: 'dashes' }, x: -0.02, y: 0.55, size: 86 },
-  { spec: { shape: 'circle', color: BOT_COLORS.teal, eyes: 'dashes' }, x: 0.93, y: 0.68, size: 58 },
-  { spec: { shape: 'squircle', color: BOT_COLORS.blue, eyes: 'dots' }, x: 0.14, y: 0.73, size: 66 },
-  { spec: { shape: 'hexagon', color: BOT_COLORS.orange, eyes: 'dashes' }, x: 0.53, y: 0.73, size: 80 },
+  { spec: characterSpec('wolke'), x: 0.24, y: 0.19, size: 82 },
+  { spec: characterSpec('lumi'), x: 0.61, y: 0.18, size: 62, rotate: 4 },
+  { spec: characterSpec('eiko'), x: 0.92, y: 0.32, size: 60 },
+  { spec: characterSpec('ida'), x: 0.04, y: 0.37, size: 58, rotate: -10 },
+  { spec: characterSpec('olli'), x: 1.02, y: 0.5, size: 80, rotate: -12 },
+  { spec: MECKY_AVATAR_SPEC, x: -0.02, y: 0.55, size: 86 },
+  { spec: characterSpec('lilo'), x: 0.93, y: 0.68, size: 58 },
+  { spec: characterSpec('otto'), x: 0.14, y: 0.73, size: 66 },
+  { spec: characterSpec('pilzi'), x: 0.53, y: 0.73, size: 80 },
 ];
 
 function Mascot({ m, index, width, height }: { m: FloatingMascot; index: number; width: number; height: number }) {
@@ -84,7 +91,7 @@ export type FloatingMascotsProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Scattered, gently drifting mascots behind the welcome copy (ref 1). Absolute-fill, non-interactive. */
+/** Scattered, gently drifting agent pictures behind the welcome copy (ref 1). Absolute-fill, non-interactive. */
 export function FloatingMascots({ mascots = DEFAULT_MASCOTS, height, style }: FloatingMascotsProps) {
   const win = useWindowDimensions();
   const h = height ?? win.height;

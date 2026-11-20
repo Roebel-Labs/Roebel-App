@@ -20,7 +20,7 @@ import { updateNewsArticle } from "@/app/actions/news"
 import { createClient } from "@/lib/supabase/client"
 import { ArrowLeft, Save, Eye } from "lucide-react"
 
-const CATEGORIES = ["Stadtnachrichten", "Veranstaltungen", "Kultur", "Politik", "Wirtschaft", "Sport", "Boxen"]
+const CATEGORIES = ["Stadtnachrichten", "Veranstaltungen", "Kultur", "Politik", "Wirtschaft", "Sport", "Boxen", "App-Update"]
 
 export default function EditNewsPage() {
   const router = useRouter()

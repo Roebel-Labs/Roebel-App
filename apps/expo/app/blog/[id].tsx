@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   contentContainer: { padding: 16 },
-  title: { fontSize: 26, lineHeight: 34, fontFamily: 'Inter-Medium', marginBottom: 16 },
+  title: { fontSize: 26, lineHeight: 34, fontFamily: 'MonaSans-Medium', marginBottom: 16 },
   authorPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -266,8 +266,8 @@ const styles = StyleSheet.create({
   },
   authorAvatar: { width: 36, height: 36, borderRadius: 18 },
   authorEmoji: { fontSize: 28 },
-  authorName: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  authorRole: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  authorName: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  authorRole: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
   metaText: { fontSize: 13 },
   excerpt: {

@@ -4,7 +4,10 @@ import {
   createKeyBackupClient,
   keyBackupContent,
   keyBackupContentHash,
+  KEY_BACKUP_SLOTS,
   KEY_BACKUP_UNAVAILABLE_MESSAGE,
+  KEY_BACKUP_VAULT_SLOT,
+  KEY_BACKUP_WORDS_SLOTS,
 } from '../key-backup';
 import v from './key-backup-vector.json';
 
@@ -22,6 +25,16 @@ describe('key backup proof text (byte-exact with apps/web key-backup-proof.ts)',
     expect(write).toBe(v.writeMessage);
     expect(hashMessage(read)).toBe(v.readMessageHash);
     expect(hashMessage(write)).toBe(v.writeMessageHash);
+  });
+
+  it('second case: words slots and the vault key follow the primary slots (key-backup-vector.json wordsCase)', () => {
+    const blobs = { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c' };
+    expect(keyBackupContent(blobs, false)).toBe('maci=pkv1:a\nmaci_w=pkv1:b\nwvk=pkv1:c\nreplace=0');
+    expect(keyBackupContent(v.wordsCase.blobs, false)).toBe(v.wordsCase.content);
+    expect(keyBackupContentHash(blobs, false)).toBe(v.wordsCase.contentHash);
+    expect(KEY_BACKUP_SLOTS).toEqual(['maci', 'nostr', 'salt']);
+    expect(KEY_BACKUP_WORDS_SLOTS).toEqual(['maci_w', 'nostr_w', 'salt_w']);
+    expect(KEY_BACKUP_VAULT_SLOT).toBe('wvk');
   });
 });
 
@@ -57,11 +70,62 @@ describe('key backup client', () => {
     await expect(t.c.read()).resolves.toEqual({ status: 'none', prf: PRF });
   });
 
+  it('read: words copies and the wrapped vault key come back too; unknown slots are dropped', async () => {
+    const t = client(() => ({ status: 200, json: { blobs: { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c', maci_x: 'pkv1:d' } } }));
+    await expect(t.c.read()).resolves.toEqual({ status: 'found', blobs: { maci: 'pkv1:a', maci_w: 'pkv1:b', wvk: 'pkv1:c' }, prf: PRF });
+  });
+
   it('read: 503 disabled = disabled; any other failure THROWS (never "no backup")', async () => {
     await expect(client(() => ({ status: 503, json: { error: 'disabled' } })).c.read()).resolves.toEqual({ status: 'disabled' });
     await expect(client(() => ({ status: 503, json: { error: 'store_unavailable' } })).c.read()).rejects.toThrow(KEY_BACKUP_UNAVAILABLE_MESSAGE);
     await expect(client(() => ({ status: 401, json: { error: 'bad_proof' } })).c.read()).rejects.toThrow(KEY_BACKUP_UNAVAILABLE_MESSAGE);
     await expect(client(() => 'throw').c.read()).rejects.toThrow(KEY_BACKUP_UNAVAILABLE_MESSAGE);
+  });
+
+  it('readWithoutPrompt: a cached token reads without signing; no token → null, nothing signed or sent', async () => {
+    const sign = jest.fn();
+    const sent: { headers: Record<string, string>; body: any }[] = [];
+    const mk = (token: { token: string; deviceId: string } | null) =>
+      createKeyBackupClient({
+        apiUrl: 'https://api.test',
+        identity: ID,
+        sign,
+        session: { peek: async () => token, get: async () => token, invalidate: async () => undefined },
+        fetch: async (_url, init) => {
+          sent.push({ headers: init.headers, body: JSON.parse(init.body) });
+          return { ok: true, status: 200, json: async () => ({ blobs: { wvk: 'pkv1:w' } }) };
+        },
+      });
+    await expect(mk({ token: 'pst1.t', deviceId: 'd' }).readWithoutPrompt!()).resolves.toEqual({ status: 'found', blobs: { wvk: 'pkv1:w' } });
+    expect(sent[0].headers.Authorization).toBe('Bearer pst1.t');
+    expect(sent[0].body).toEqual({ identity: ID });
+    await expect(mk(null).readWithoutPrompt!()).resolves.toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('writeWithoutPrompt: a cached token writes without signing; no token → null, nothing signed or sent, session.get never asked', async () => {
+    const sign = jest.fn();
+    const sent: { headers: Record<string, string>; body: any }[] = [];
+    const get = jest.fn(async () => ({ token: 'pst1.new', deviceId: 'd' }));
+    const mk = (token: { token: string; deviceId: string } | null) =>
+      createKeyBackupClient({
+        apiUrl: 'https://api.test',
+        identity: ID,
+        sign,
+        session: { peek: async () => token, get, invalidate: async () => undefined },
+        fetch: async (_url, init) => {
+          sent.push({ headers: init.headers, body: JSON.parse(init.body) });
+          return { ok: true, status: 200, json: async () => ({ ok: true }) };
+        },
+      });
+    await expect(mk({ token: 'pst1.t', deviceId: 'd' }).writeWithoutPrompt!({ maci_w: 'pkv1:w' })).resolves.toBe('stored');
+    expect(sent[0].headers.Authorization).toBe('Bearer pst1.t');
+    expect(sent[0].body).toEqual({ identity: ID, blobs: { maci_w: 'pkv1:w' } });
+    await expect(mk(null).writeWithoutPrompt!({ maci_w: 'pkv1:w' })).resolves.toBeNull();
+    expect(sent).toHaveLength(1);
+    expect(sign).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
   });
 
   it('no API url configured = disabled without signing', async () => {

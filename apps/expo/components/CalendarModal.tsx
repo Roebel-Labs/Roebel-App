@@ -127,7 +127,7 @@ export default function CalendarModal({ visible, onClose }: Props) {
             styles.dayText,
             { color: colors.textPrimary },
             !isCurrentMonth && { color: colors.disabled },
-            (isTodayDate || isSelected) && { color: colors.textPrimary, fontFamily: 'Inter-Medium' },
+            (isTodayDate || isSelected) && { color: colors.textPrimary, fontFamily: 'MonaSans-Medium' },
           ]}>
             {format(date, 'd')}
           </Text>
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   closeButton: {
     width: 40,
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   },
   closeIcon: {
     fontSize: 20,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   scrollView: {
     flex: 1,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   },
   monthTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     textTransform: 'capitalize',
   },
   navButton: {
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   weekDayText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   dayText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   eventIndicator: {
     position: 'absolute',
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   },
   eventsTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 16,
     textTransform: 'capitalize',
   },

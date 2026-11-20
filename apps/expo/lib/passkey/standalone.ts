@@ -3,6 +3,9 @@
  * guardian ("Mein Konto-Code"). Same record shape as the migration, just no `legacy`; if the
  * person later runs the migration with a thirdweb login, `runPasskeyMigration` reuses this record
  * (it never creates a second passkey). The Safe stays counterfactual until its first op.
+ *
+ * A words record (`ownerType: 'ecdsa'`, expert path) counts as absent: it is re-derivable from the
+ * phrase, so a passkey sign-up on the same phone replaces it (the phrase store is not touched).
  */
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import { MIGRATION_STORE_KEY, loadMigrationRecord, type KeyValueStorage, type MigrationRecord } from './migration';
@@ -19,7 +22,7 @@ export async function ensureStandalonePasskey(
   deps: { storage: KeyValueStorage; createPasskey: (userName: string) => Promise<PasskeyCredential> },
 ): Promise<StandaloneResult> {
   const existing = await loadMigrationRecord(deps.storage).catch(() => null);
-  if (existing) return { status: 'existing', record: existing };
+  if (existing && existing.ownerType !== 'ecdsa') return { status: 'existing', record: existing };
   let cred: PasskeyCredential;
   try {
     cred = await deps.createPasskey(name);

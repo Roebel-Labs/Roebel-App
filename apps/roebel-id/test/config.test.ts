@@ -40,6 +40,7 @@ afterEach(() => {
       key in BASE ||
       key === 'FIRST_PARTY_RPS' ||
       key === 'SIGNER_RESOURCE_URL' ||
+      key === 'MINIAPP_ISSUER_SECRET' ||
       /_(CLIENT_ID|CLIENT_SECRET|REDIRECT_URIS|POST_LOGOUT_URIS|BRANDING|BRANDING_CONTEXT)$/.test(key)
     ) {
       delete process.env[key]
@@ -412,5 +413,23 @@ describe('signer resource url (SIGNER_RESOURCE_URL)', () => {
     // service that authorizes nobody. Fail at boot instead, where it is diagnosable.
     withEnv({ SIGNER_RESOURCE_URL: 'signer.roebel.app' })
     expect(() => loadConfig()).toThrow(/SIGNER_RESOURCE_URL/)
+  })
+})
+
+// Mini-app token signing (plan miniapp-2, Task 8): optional; a short secret fails at boot.
+describe('mini-app issuer secret (MINIAPP_ISSUER_SECRET)', () => {
+  it('leaves miniappIssuerSecret undefined when unset', () => {
+    withEnv({})
+    expect(loadConfig().miniappIssuerSecret).toBeUndefined()
+  })
+
+  it('accepts a secret of at least 32 characters', () => {
+    withEnv({ MINIAPP_ISSUER_SECRET: 'x'.repeat(32) })
+    expect(loadConfig().miniappIssuerSecret).toBe('x'.repeat(32))
+  })
+
+  it('refuses to boot on a secret shorter than 32 characters', () => {
+    withEnv({ MINIAPP_ISSUER_SECRET: 'short' })
+    expect(() => loadConfig()).toThrow(/MINIAPP_ISSUER_SECRET/)
   })
 })

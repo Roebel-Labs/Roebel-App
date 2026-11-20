@@ -92,13 +92,13 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     flexShrink: 1,
     paddingRight: 12,
   },
   changeLink: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   metaRow: {
     flexDirection: 'row',
@@ -107,11 +107,11 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   txLink: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textDecorationLine: 'underline',
   },
 });

@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   item: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   separator: {
     fontSize: 13,

@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 14,
     marginHorizontal: 4,
   },
@@ -135,11 +135,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   dayLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 10,
   },
   dayLabelToday: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   coinWrap: {
     width: 34,
@@ -153,10 +153,10 @@ const styles = StyleSheet.create({
   },
   check: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   amount: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 12,
   },
 });

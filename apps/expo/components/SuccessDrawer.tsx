@@ -133,17 +133,17 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   title: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 28,
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
   },
   autoDismissText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginTop: 12,
   },
 });

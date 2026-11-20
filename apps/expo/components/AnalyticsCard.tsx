@@ -29,11 +29,11 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 24,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
   },
   label: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

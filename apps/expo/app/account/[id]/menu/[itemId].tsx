@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import MenuImage from '@/components/MenuImage';
 import { hasMenuPrice } from '@/lib/utils';
-import { View, Text, ScrollView, Pressable, StyleSheet, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import type { MenuItemRecord, MenuItemVoteSummary } from '@/lib/types';
 import { fetchMenuItemVoteSummaries } from '@/lib/supabase-menu';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
+import DishComments from '@/components/DishComments';
 
 export default function MenuItemDetailScreen() {
   return (
@@ -32,7 +33,6 @@ function MenuItemDetailScreenInner() {
   const { item, loading, userVote, isSignedIn, setVote, clearVote } = useMenuItemDetail(itemId);
   const [selectedSide, setSelectedSide] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [note, setNote] = useState('');
   const [related, setRelated] = useState<MenuItemRecord[]>([]);
   const [relatedVotes, setRelatedVotes] = useState<Record<string, MenuItemVoteSummary>>({});
 
@@ -118,7 +118,7 @@ function MenuItemDetailScreenInner() {
             <MenuImage uri={item.image_url} thumbUri={item.image_thumb_url} size="full" style={styles.hero} />
           ) : (
             <View style={styles.heroPlaceholder}>
-              <Text style={{ color: colors.textTertiary, fontFamily: 'Inter-Medium', fontSize: 16 }}>
+              <Text style={{ color: colors.textTertiary, fontFamily: 'MonaSans-Medium', fontSize: 16 }}>
                 Kein Bild
               </Text>
             </View>
@@ -181,19 +181,7 @@ function MenuItemDetailScreenInner() {
           />
         )}
 
-        {/* Special Instructions */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Special Instructions</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Add a note"
-            placeholderTextColor={colors.textTertiary}
-            multiline
-            style={[styles.noteInput, { borderColor: colors.borderSecondary, color: colors.textPrimary, backgroundColor: colors.surface }]}
-          />
-          <Text style={[styles.hint, { color: colors.textTertiary }]}>You may be charged for extras.</Text>
-        </View>
+        <DishComments target={{ kind: 'menu_item', id: item.id }} />
 
         {/* Frequently bought together */}
         {related.length > 0 && (
@@ -236,17 +224,16 @@ const styles = StyleSheet.create({
   floatingBack: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   headBlock: { paddingHorizontal: 16, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-Medium' },
-  price: { fontSize: 17, fontFamily: 'Inter-Medium', marginTop: 6 },
-  description: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginTop: 12 },
+  title: { fontSize: 26, fontFamily: 'MonaSans-Medium' },
+  price: { fontSize: 17, fontFamily: 'MonaSans-Medium', marginTop: 6 },
+  description: { fontSize: 14, fontFamily: 'MonaSans-Regular', lineHeight: 20, marginTop: 12 },
   thumbsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 16 },
-  hint: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
+  hint: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 8 },
   section: { paddingHorizontal: 16, paddingTop: 28 },
   sectionTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 12 },
-  noteInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },
   relCard: { width: 140 },
   relImg: { width: 140, height: 140, borderRadius: 12 },
-  relName: { fontSize: 14, fontFamily: 'Inter-Medium', marginTop: 8 },
+  relName: { fontSize: 14, fontFamily: 'MonaSans-Medium', marginTop: 8 },
   relMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  relPrice: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  relPrice: { fontSize: 13, fontFamily: 'MonaSans-Regular' },
 });

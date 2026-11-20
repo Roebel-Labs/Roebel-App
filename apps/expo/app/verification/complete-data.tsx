@@ -241,12 +241,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   privacyTitle: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 26,
     marginBottom: 10,
   },
   privacyBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -257,11 +257,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   whyTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 16,
   },
   whyBody: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 21,
   },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   whyItem: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
     marginBottom: 8,
   },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   infoBanner: {
     flexDirection: 'row',
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 19,
   },

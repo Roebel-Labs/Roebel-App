@@ -4,11 +4,14 @@
  * wires the real Gnosis reader and the in-memory budget in.
  *
  * Request:  { chainId: 100,
- *             x, y,       // passkey P-256 public key, 0x + 32 bytes each
+ *             x, y,       // passkey P-256 public key, 0x + 32 bytes each, OR
+ *             ecdsaOwner, // the expert-path Safe's single ECDSA owner (never both, never neither -> 400)
  *             legacy?,    // the citizen's legacy thirdweb account (the ONE account the op may drive);
  *                         // omitted when the sender Safe itself is the citizen, or for recovery ops
  *             recoveryLegacy?, // recovery ops: the legacy account the recovered wallet administers
  *             pollId?,    // everyday votes: MACI poll id (0x hex); MACI.polls(pollId) must be the vote target
+ *             miniApp?,   // a mini app's uuid: sponsor mode "miniapp" (only its declared calls), charged
+ *                         // to the mini-app gas budget (miniapp-gas-budget.ts), never the everyday budget
  *             userOp: { sender, nonce, factory?, factoryData?, callData,
  *               callGasLimit, verificationGasLimit, preVerificationGas,
  *               maxFeePerGas, maxPriorityFeePerGas,
@@ -18,7 +21,9 @@
  *           paymasterPostOpGasLimit, validUntil }
  *           | 400 { error: 'bad_request' }
  *           | 403 { error: 'not_sponsorable', reason }
+ *           | 403 { error: 'not_sponsorable', reason: 'mini app has no approved contracts' }
  *           | 429 { error: 'budget_exhausted' }
+ *           | 429 { error: 'budget_exhausted', scope: 'app' | 'person' | 'global' }  (mini-app ops)
  *           | 503 { error: 'disabled' } | 503 { error: 'chain_unavailable' }
  *           | 500 { error: 'sponsor_failed' }
  *
@@ -28,8 +33,19 @@
  *   PASSKEY_PAYMASTER_ADDRESS  the DEDICATED preview paymaster; required, no default
  *   PASSKEY_CITIZEN_NFT_V3     optional; CitizenNFTv3 (citizen check + moveTo target). Unset = v3 off
  *   PASSKEY_ATTESTER_NFT_V3    optional; AttesterNFTv3 (moveTo target). Unset = attester moveTo off
- *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per NON-citizen Safe per UTC day (everyday
- *                              onboarding tier), default 0.002 xDAI; never above the per-identity cap
+ *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI optional; per guest (NON-citizen) account per UTC day
+ *                              (every guest result), default 0.002 xDAI; never above the per-identity cap.
+ *                              The default does NOT fit a guest's first op (deploy + guardian + request
+ *                              measured 0.00234 xDAI at 1.5 gwei): the owner must set it (suggested
+ *                              0.006 xDAI) before opening sign-up
+ *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI optional; ALL guest (non-citizen) Safes together per
+ *                              UTC day, default 0.02 xDAI. MUST stay below the overall global cap:
+ *                              guests also count against the global total, so a guest cap at or above
+ *                              it would let guests use up the budget citizens need. Enforced in code
+ *                              (guestGroupCap): a value at or above the global cap is clamped to
+ *                              global cap - 1 wei
+ *   MINIAPP_GAS_PER_PERSON_DAILY_WEI optional; per person per UTC day across all mini apps, default 0.003 xDAI
+ *   MINIAPP_GAS_GLOBAL_DAILY_WEI     optional; all mini apps together per UTC day, default 0.05 xDAI
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -45,8 +61,31 @@ import {
   type ChainReader,
   type V3Config,
 } from "./sponsor-policy";
-import { DEFAULT_ONBOARDING_DAILY_WEI, weiFromEnv, type ReserveLimits, type SponsorBudget } from "./sponsor-budget";
+import {
+  DEFAULT_GLOBAL_DAILY_WEI,
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
+  DEFAULT_ONBOARDING_DAILY_WEI,
+  GUEST_GROUP_KEY,
+  weiFromEnv,
+  type ReserveLimits,
+  type SponsorBudget,
+} from "./sponsor-budget";
 import { issueSponsorship, requiredPrefund } from "./voucher";
+import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
+import type { GasVerdict, MiniAppGasBudget } from "./miniapp-gas-budget";
+
+/** Mini-app sponsorship (mode "miniapp"). */
+export interface MiniAppSponsorDeps {
+  /** The rules of a LIVE app with manifest_version '2' and at least one declared contract, else null. */
+  rules(id: string): Promise<CallRule[] | null>;
+  budget: MiniAppGasBudget;
+}
+
+const GAS_SCOPE: Record<Exclude<GasVerdict, "ok">, "app" | "person" | "global"> = {
+  app_budget: "app",
+  person_budget: "person",
+  global_budget: "global",
+};
 
 const CHAIN_ID = 100;
 const PRIVATE_KEY = /^0x[0-9a-fA-F]{64}$/;
@@ -100,9 +139,21 @@ export function v3ConfigFromEnv(env: Record<string, string | undefined> = proces
   return { citizenNft: pick("PASSKEY_CITIZEN_NFT_V3"), attesterNft: pick("PASSKEY_ATTESTER_NFT_V3") };
 }
 
+/**
+ * The guest group's daily cap, always strictly below the overall global cap (fail-safe against a
+ * misconfigured env): guests also count against the global total, so a guest cap at or above it
+ * would let guests use up the budget citizens need.
+ */
+export function guestGroupCap(env: Record<string, string | undefined> = process.env): bigint {
+  const guest = weiFromEnv(env.PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI, DEFAULT_GUEST_GLOBAL_DAILY_WEI);
+  const global = weiFromEnv(env.PASSKEY_SPONSOR_GLOBAL_DAILY_WEI, DEFAULT_GLOBAL_DAILY_WEI);
+  const ceiling = global > 0n ? global - 1n : 0n;
+  return guest < ceiling ? guest : ceiling;
+}
+
 export async function handleSponsorRequest(
   request: Request,
-  deps: { chain: ChainReader; budget: SponsorBudget },
+  deps: { chain: ChainReader; budget: SponsorBudget; miniApps?: MiniAppSponsorDeps },
 ) {
   if (process.env.PASSKEY_SPONSOR_ENABLED !== "1") return disabled();
   const config = readConfig();
@@ -120,21 +171,54 @@ export async function handleSponsorRequest(
   } catch {
     return badRequest();
   }
-  const { userOp: op, x, y, legacy, recoveryLegacy, pollId } = parsed;
+  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, miniApp: miniAppId } = parsed;
   if (parsed.chainId !== CHAIN_ID) return notSponsorable("chainId must be 100");
+
+  // Mode "miniapp": the request names a mini app; only its reviewed declaration counts.
+  let miniApp: { id: string; rules: CallRule[] } | undefined;
+  if (miniAppId !== undefined) {
+    let rules: CallRule[] | null = null;
+    try {
+      rules = deps.miniApps ? await deps.miniApps.rules(miniAppId) : null;
+    } catch (err) {
+      console.error("[passkey-sponsor] mini-app lookup failed:", errName(err));
+      return NextResponse.json({ error: "chain_unavailable" }, { status: 503 });
+    }
+    if (!rules || rules.length === 0) return notSponsorable("mini app has no approved contracts");
+    miniApp = { id: miniAppId, rules };
+  }
 
   let budgetKey: Hex;
   let limits: ReserveLimits | undefined;
   try {
     const verdict = await evaluateSponsorPolicy(
       op,
-      { x, y, legacy, recoveryLegacy, pollId, nowSeconds: Math.floor(Date.now() / 1000), v3: v3ConfigFromEnv() },
+      {
+        x,
+        y,
+        ecdsaOwner,
+        legacy,
+        recoveryLegacy,
+        pollId,
+        nowSeconds: Math.floor(Date.now() / 1000),
+        v3: v3ConfigFromEnv(),
+        ...(miniApp ? { miniApp } : {}),
+      },
       deps.chain,
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
+    // A passing mini-app request is always mode "miniapp" (the policy decides by the request alone).
+    if (miniApp && verdict.mode !== "miniapp") return notSponsorable("mini-app request outside miniapp mode");
     budgetKey = verdict.budgetKey;
-    if (verdict.tier === "onboarding") {
-      limits = { perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI) };
+    // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe -
+    // the latter keyed to the SUBMITTING Safe, see sponsor-policy mode C) gets the onboarding
+    // per-account cap AND counts against the one shared guest total.
+    // Citizen results carry no `guest` and keep the ordinary caps.
+    if (verdict.guest) {
+      limits = {
+        perKeyDailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI, DEFAULT_ONBOARDING_DAILY_WEI),
+        group: { key: GUEST_GROUP_KEY, dailyWei: guestGroupCap() },
+      };
     }
   } catch (err) {
     // Fail closed: no chain facts, no voucher.
@@ -143,12 +227,23 @@ export async function handleSponsorRequest(
   }
 
   const packed = toPackedUserOperation(op);
-  try {
-    const reserved = await deps.budget.reserve(budgetKey.toLowerCase(), requiredPrefund(packed), limits);
-    if (!reserved) return NextResponse.json({ error: "budget_exhausted" }, { status: 429 });
-  } catch (err) {
-    console.error("[passkey-sponsor] budget unavailable:", errName(err));
-    return NextResponse.json({ error: "chain_unavailable" }, { status: 503 });
+  if (miniApp && deps.miniApps) {
+    // ONLY the mini-app counters: the citizens' everyday budget (deps.budget) is never touched.
+    try {
+      const gas = await deps.miniApps.budget.reserve(miniApp.id, budgetKey.toLowerCase(), requiredPrefund(packed));
+      if (gas !== "ok") return NextResponse.json({ error: "budget_exhausted", scope: GAS_SCOPE[gas] }, { status: 429 });
+    } catch (err) {
+      console.error("[passkey-sponsor] mini-app gas budget unavailable:", errName(err));
+      return NextResponse.json({ error: "chain_unavailable" }, { status: 503 });
+    }
+  } else {
+    try {
+      const reserved = await deps.budget.reserve(budgetKey.toLowerCase(), requiredPrefund(packed), limits);
+      if (!reserved) return NextResponse.json({ error: "budget_exhausted" }, { status: 429 });
+    } catch (err) {
+      console.error("[passkey-sponsor] budget unavailable:", errName(err));
+      return NextResponse.json({ error: "chain_unavailable" }, { status: 503 });
+    }
   }
 
   try {

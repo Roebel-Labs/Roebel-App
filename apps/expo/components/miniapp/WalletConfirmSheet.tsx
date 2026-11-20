@@ -31,6 +31,10 @@ export interface WalletConfirmRequest {
   rows: { label: string; value: string; mono?: boolean }[];
   /** Optional raw payload preview (message / calldata), shown collapsed-ish. */
   raw?: string;
+  /** Shown in a warning box above the buttons (e.g. a call the mini app did not declare). */
+  warning?: string;
+  /** Label of the confirm button; defaults to Bezahlen (transaction) / Signieren. */
+  cta?: string;
 }
 
 type Props = {
@@ -51,7 +55,7 @@ export default function WalletConfirmSheet({
   const { colors } = useTheme();
 
   const ctaLabel =
-    request?.kind === 'transaction' ? 'Bezahlen' : 'Signieren';
+    request?.cta ?? (request?.kind === 'transaction' ? 'Bezahlen' : 'Signieren');
 
   return (
     <Modal
@@ -113,6 +117,20 @@ export default function WalletConfirmSheet({
                   </View>
                 ) : null}
               </ScrollView>
+
+              {request.warning ? (
+                <View
+                  style={[
+                    styles.warningBox,
+                    { backgroundColor: colors.warningBackground, borderColor: colors.warning },
+                  ]}
+                  accessibilityRole="alert"
+                >
+                  <Text style={[styles.warningText, { color: colors.textPrimary }]}>
+                    {request.warning}
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.actions}>
                 <Pressable
@@ -207,6 +225,17 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.mono,
     fontSize: 11,
     lineHeight: 15,
+  },
+  warningBox: {
+    marginTop: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+  },
+  warningText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
   },
   actions: {
     flexDirection: 'row',

@@ -23,13 +23,16 @@ export type CredentialCta = {
 
 export type CredentialBenefit = { icon: BenefitIcon; title: string; desc: string };
 
+/** A card's benefit list; reused by register cards (lib/credreg). */
+export type CredentialBenefits = CredentialBenefit[];
+
 export type CredentialCopy = {
   /** Screen-reader and explainer heading, e.g. "Bürgerausweis". */
   title: string;
   /** Short label printed on the card art, e.g. "Bürger". */
   label: string;
   intro: string;
-  benefits: CredentialBenefit[];
+  benefits: CredentialBenefits;
   cta?: CredentialCta;
 };
 

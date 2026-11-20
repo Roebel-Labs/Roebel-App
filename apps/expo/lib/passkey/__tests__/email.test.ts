@@ -1,7 +1,7 @@
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
 
 import { createPrivateKey, createPublicKey, sign as nodeSign, verify as nodeVerify } from 'crypto';
-import { concatHex, decodeAbiParameters, getAddress, hashMessage, hexToBigInt, hexToBytes, numberToHex, sliceHex, type Hex } from 'viem';
+import { concatHex, decodeAbiParameters, getAddress, hashMessage, hexToBigInt, hexToBytes, numberToHex, recoverAddress, sliceHex, type Hex } from 'viem';
 import {
   EMAIL_STATE_KEY,
   PasskeyEmailError,
@@ -17,6 +17,9 @@ import {
   signEmailProof,
 } from '../email';
 import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
+import { safeMessageHash } from '../guardians';
+import { PhraseCancelledError, PhraseUnavailableError } from '../phrase-store';
+import { wordAccount } from '../words';
 import { webAuthnSigningDigest } from '../userop';
 import { PasskeyCancelledError, type PasskeyAssertion } from '../webauthn';
 import vector from './email-proof-vector.json';
@@ -192,5 +195,77 @@ describe('device-local email state', () => {
     expect(await loadEmailState(storage, other)).toEqual({ safe: other, verified: null, pending: null });
     m.set(EMAIL_STATE_KEY, '{not json');
     expect(await loadEmailState(storage, SAFE)).toEqual({ safe: SAFE, verified: null, pending: null });
+  });
+});
+
+describe('12-word account (ecdsa): the Safe proves itself with its ECDSA owner', () => {
+  const ev = require('./ecdsa-safe-vector.json') as { phrase: string; owner: string; safeAddress: string };
+  const WSAFE = getAddress(ev.safeAddress);
+  const OWNER = getAddress(ev.owner);
+  const WORDS_SIGNER = { credentialId: '', safe: WSAFE, owner: OWNER, ownerType: 'ecdsa' as const };
+  const never = jest.fn(async () => {
+    throw new Error('the passkey must never be asked for a words account');
+  });
+
+  it('the warning-email proof of a words record verifies as an ERC-1271 signature of the Safe', async () => {
+    const proofText = buildEmailProofMessage({ action: 'add', safe: WSAFE, email: 'max@example.de', timestamp: 1_790_000_000 });
+    const read = jest.fn(async (_reason: string) => ev.phrase);
+    const sig = await signEmailProof(WORDS_SIGNER, proofText, { sign: never, phrase: { read } });
+    const account = wordAccount(ev.phrase, 0);
+    expect(account.address).toBe(OWNER);
+    const digest = safeMessageHash(WSAFE, hashMessage(proofText));
+    expect(digest).toBe(emailProofChallenge(WSAFE, proofText));
+    expect(sig).toBe(await account.sign({ hash: digest }));
+    // What Safe's checkSignatures does for a single ECDSA owner (v = 27/28): ecrecover(digest) = owner.
+    expect(await recoverAddress({ hash: digest, signature: sig })).toBe(OWNER);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(never).not.toHaveBeenCalled();
+  });
+
+  it('start + remove each cost one device unlock; a dismissed unlock is "cancelled", no request', async () => {
+    const read = jest.fn(async (_reason: string) => ev.phrase);
+    const { f, calls } = fakeFetch([{ status: 200, body: { ok: true, expiresAt: 1 } }, { status: 200, body: { ok: true } }]);
+    const d = { fetch: f, apiUrl: 'https://preview.example', sign: never, nowSec: () => 1_790_000_000, phrase: { read } };
+    await requestEmailCode(WORDS_SIGNER, 'max@example.de', d);
+    await removeWarningEmail(WORDS_SIGNER, d);
+    expect(read).toHaveBeenCalledTimes(2);
+    const removeText = buildEmailProofMessage({ action: 'remove', safe: WSAFE, timestamp: 1_790_000_000 });
+    expect(await recoverAddress({ hash: emailProofChallenge(WSAFE, removeText), signature: calls[1].body.proof.signature })).toBe(OWNER);
+
+    const cancelled = fakeFetch([]);
+    const dismissed = { ...d, fetch: cancelled.f, phrase: { read: async () => Promise.reject(new PhraseCancelledError()) } };
+    await expect(requestEmailCode(WORDS_SIGNER, 'max@example.de', dismissed)).rejects.toMatchObject({ code: 'cancelled' });
+    expect(cancelled.f).not.toHaveBeenCalled();
+  });
+
+  it('words gone from the device (biometrics changed): a German "enter the words again" error, no request', async () => {
+    const { f } = fakeFetch([]);
+    const d = { fetch: f, apiUrl: 'https://preview.example', sign: never, phrase: { read: async () => Promise.reject(new PhraseUnavailableError()) } };
+    await expect(requestEmailCode(WORDS_SIGNER, 'max@example.de', d)).rejects.toMatchObject({
+      code: 'words_unavailable',
+      message: emailErrorMessage('words_unavailable'),
+    });
+    expect(emailErrorMessage('words_unavailable')).toMatch(/12 Wörter/);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it('server refusals of a words account never mention a passkey (bad_proof, safe_not_deployed)', async () => {
+    const read = jest.fn(async (_reason: string) => ev.phrase);
+    const { f } = fakeFetch([
+      { status: 401, body: { error: 'bad_proof' } },
+      { status: 409, body: { error: 'safe_not_deployed' } },
+      { status: 409, body: { error: 'safe_not_deployed' } },
+    ]);
+    const d = { fetch: f, apiUrl: 'https://preview.example', sign: never, nowSec: () => 1_790_000_000, phrase: { read } };
+    const bad = requestEmailCode(WORDS_SIGNER, 'max@example.de', d);
+    await expect(bad).rejects.toMatchObject({ code: 'bad_proof' });
+    await expect(bad).rejects.not.toMatchObject({ message: expect.stringMatching(/Passkey/) });
+    const notDeployed = requestEmailCode(WORDS_SIGNER, 'max@example.de', d);
+    await expect(notDeployed).rejects.toMatchObject({ code: 'safe_not_deployed', message: emailErrorMessage('safe_not_deployed', 'words') });
+    await expect(removeWarningEmail(WORDS_SIGNER, d)).rejects.toMatchObject({ code: 'safe_not_deployed' });
+    expect(emailErrorMessage('safe_not_deployed', 'words')).not.toMatch(/Passkey/);
+    expect(emailErrorMessage('bad_proof', 'words')).not.toMatch(/Passkey/);
+    // The passkey wording stays for passkey accounts.
+    expect(emailErrorMessage('bad_proof')).toMatch(/Passkey/);
   });
 });

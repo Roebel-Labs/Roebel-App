@@ -16,17 +16,25 @@
  *     AccountFactory.createAccount(admin, 0x) where factory.getAddress(admin, 0x)
  *     == legacy. The sender is bound to it by `isAdmin(legacy, sender)` or a
  *     verified handover earlier in the batch. Budget key = legacy.
- *  B. identity = the sender Safe itself (no `legacy`, citizen(sender), e.g.
- *     after a v3 `moveTo`). Only Candide guardian management. Budget key = sender.
+ *  B. identity = the sender Safe itself (no `legacy`). Only Candide guardian
+ *     management (a confirmRecovery may ride along). Budget key = sender.
+ *     - citizen(sender) (e.g. after a v3 `moveTo`): { mode "safe" }.
+ *     - GUEST (a genuine passkey Safe without citizenship): the same calls,
+ *       { mode "safe", guest: true } -> guest budget. checkSender always runs.
  *  D. everyday (see everyday-allowlist.ts): the op is ONLY allowlisted Röbel
  *     citizen actions (value 0). Identity = `legacy` (calls wrapped in
  *     legacy.execute / executeBatch, the sender an admin, legacy a citizen) or
- *     the sender Safe itself (direct calls; a citizen, or a NON-citizen Safe
- *     whose calls are all onboarding-tier = CitizenNFTv2.createAttestationRequest,
- *     result tier "onboarding" -> tighter budget). A Poll.publishMessage target
- *     must equal MACI.polls(ctx.pollId). Budget key = the identity. Everyday
- *     calls may also ride along with mode A / B shapes (the mode then stays
- *     "legacy" / "safe").
+ *     the sender Safe itself (direct calls). A citizen Safe may make any
+ *     allowlisted call. A GUEST Safe only onboarding-tier calls
+ *     (CitizenNFTv2.createAttestationRequest, Hub.registerHuman, Hub.personalMint,
+ *     NameRegistry.updateMetadataDigest), optionally with its own guardian
+ *     management in the same op (the sign-up batch), never with a thirdweb shape
+ *     (handover, createAccount, moveTo, legacy.execute / executeBatch) ->
+ *     { tier "onboarding", guest: true }. One citizen-only call in a guest op
+ *     refuses the whole op. A Poll.publishMessage target must equal
+ *     MACI.polls(ctx.pollId). Budget key = the identity. Everyday calls may also
+ *     ride along with mode A / B shapes (the mode then stays "legacy" / "safe";
+ *     for a guest it is "everyday").
  *  E. detach ("thirdweb trennen", body names `legacy`): the op is EXACTLY ONE
  *     call legacy.setPermissionsForSigner(req{isAdmin: 2}, sig) removing an
  *     admin that is NOT the sender. Only when: the sender is a genuine passkey
@@ -38,21 +46,61 @@
  *     >= 1 admin remains. Every other isAdmin != 1 request (inside execute, in a
  *     batch, removing the sender, without guardians) is rejected. Budget key =
  *     legacy.
+ *  F. miniapp (the request names `miniApp`, a reviewed version-2 mini app with
+ *     declared contracts; the route passes its call rules in ctx.miniApp): EVERY
+ *     call of the op is a declared contract + function of that app
+ *     (findDeclaredCall, shared with the hosts' confirm sheet), value 0. Identity =
+ *     the sender Safe (direct calls) or `legacy` (calls wrapped in legacy.execute /
+ *     executeBatch; `legacy` a thirdweb Account proxy and isAdmin(legacy, sender)).
+ *     One undeclared call refuses the whole op, including calls every other mode
+ *     would accept (everyday, guardian management, recovery, handover, detach):
+ *     no mixing. A declared target equal to the sender, `legacy` or any
+ *     MINIAPP_FORBIDDEN_TARGETS address (Röbel's own contracts and the account
+ *     infrastructure) is refused even if the rules carry it. No citizen
+ *     requirement (guests too; the exposure is bounded by the app's gas budget,
+ *     charged by the route to the mini-app counters, never the everyday budget).
+ *     A deploy op is allowed under the factory check. Budget key = the identity.
+ *     Without ctx.miniApp an op is evaluated exactly as in modes A-E.
  *  C. recovery (no `legacy`): the op helps recover `wallet`, a citizen identity
  *     (citizen(wallet), or `recoveryLegacy` is a citizen thirdweb account with
  *     isAdmin(recoveryLegacy, wallet)) that has at least one guardian.
+ *     A non-citizen wallet is still recoverable as a guest when it has the
+ *     deployed sovereign passkey-Safe shape (checkDeployedSafeShape) and at
+ *     least one guardian -> { mode "recovery", guest: true }.
  *     The sender may be ANY genuine passkey Safe (family guardians and the
- *     recovering person's fresh Safe are not citizens). Budget key = wallet.
+ *     recovering person's fresh Safe are not citizens). Budget key = wallet
+ *     for a citizen wallet; for a GUEST wallet the budget key is the SENDER
+ *     (plus the guest group): any passkey Safe may submit a recovery op for a
+ *     guest Safe (it reverts on chain without the guardians' confirmations, but
+ *     the paymaster still pays), so charging the wallet would let a stranger
+ *     drain the victim's own daily budget and block its cancelRecovery.
  *
  * All modes:
  *  1. Fees / gas within CAPS (maxFeePerGas <= 3 gwei, priority <= maxFee).
- *  2. The sender is a genuine passkey Safe for (x, y):
+ *  2. The sender is a genuine sovereign Safe for the request's proof. The body
+ *     names EXACTLY ONE proof: the passkey key (x, y) or the expert path's
+ *     ECDSA owner `ecdsaOwner` (the account key of the 12 words); both or
+ *     neither is a bad request. A proof never passes for the other kind of Safe.
+ *     Passkey (x, y):
  *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
  *       safeFactoryData(x, y) byte-for-byte, sender == predictSafeAddress(x, y);
  *     - deployed: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1, fallback
- *       handler + enabled module Safe4337Module, getOwners() == [owner] where
+ *       handler + enabled modules Safe4337Module and SocialRecoveryModule,
+ *       getOwners() == [owner] where
  *       owner is the SharedSigner configured with (x, y) for this Safe or
  *       SafeWebAuthnSignerFactory.getSigner(x, y, verifiers) (recovered Safe).
+ *     ECDSA owner (expert path; never the zero address or the Safe sentinel 0x1):
+ *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
+ *       ecdsaSafeFactoryData(ecdsaOwner) byte-for-byte, sender ==
+ *       predictEcdsaSafeAddress(ecdsaOwner);
+ *     - deployed: the same shape (checkDeployedSafeShape) AND getOwners() ==
+ *       [ecdsaOwner];
+ *     - both: the owner's code is empty or an EIP-7702 designator (0xef0100 ++
+ *       20 bytes) - a plain key, never a contract that could sign via EIP-1271.
+ *     With `ecdsaOwner`: no `legacy` (an expert-path Safe never drives a
+ *     thirdweb account), no SafeWebAuthnSignerFactory.createSigner, and in
+ *     mode C the "submitter's own signer" is `ecdsaOwner` itself. Modes B, D
+ *     and the guest results are the same as for a passkey Safe.
  *  3. callData = Safe4337Module.executeUserOp[WithErrorString], value 0, one
  *     CALL or a DELEGATECALL into MultiSendCallOnly 1.4.1 whose inner txs are
  *     CALLs with value 0.
@@ -70,7 +118,8 @@
  *     AccountFactory.createAccount(admin, 0x) as call #0; SRM guardian
  *     management (addGuardianWithThreshold, revokeGuardianWithThreshold,
  *     changeThreshold, cancelRecovery) and confirmRecovery.
- *  B: SRM guardian management and confirmRecovery.
+ *  B: SRM guardian management and confirmRecovery (a guest: confirmRecovery
+ *     only together with guardian management).
  *  C: SRM.multiConfirmRecovery / executeRecovery with newOwners ==
  *     [getSigner(x, y)] and threshold 1 (the recovery hands the wallet to the
  *     SUBMITTER's key); SRM.finalizeRecovery when the pending request's owners
@@ -78,12 +127,14 @@
  *     sender is a guardian of the wallet; SafeWebAuthnSignerFactory.createSigner
  *     for exactly (x, y, verifiers). All calls name the same wallet != sender.
  *  An op that is only confirmRecovery calls is mode A with `legacy`, else B if
- *  the sender is a citizen, else C. Identity-only and recovery-only calls never
+ *  the sender is a citizen, else C (budget = the wallet; the sender for a guest wallet). Identity-only and recovery-only calls never
  *  mix. Any thirdweb-selector call to an address other than `legacy` is
  *  rejected: one legacy account per op.
  *
- * Registration of brand-new users (no citizenship yet) is NOT sponsored: they
- * need attesters first.
+ * Guests (no citizenship yet) are sponsored only for mode B guardian
+ * management and the onboarding tier of mode D: no value transfers, no
+ * arbitrary targets, no Münzen moved, no trust given. Citizenship itself still
+ * needs the attesters.
  *
  * Structural checks run first and never touch the chain. Any chain read
  * failure throws `ChainReadError`; callers must fail closed (never sponsor).
@@ -109,18 +160,29 @@ import {
   recoverTypedDataAddress,
   sliceHex,
   size,
+  zeroAddress,
   type Hex,
 } from "viem";
+import { findDeclaredCall, type CallRule } from "@netizen-labs/miniapp-sdk/host";
 import {
   FALLBACK_HANDLER_SLOT,
   PASSKEY_SAFE,
   SAFE_PROXY_RUNTIME_CODE,
   WEBAUTHN_VERIFIERS,
+  ecdsaSafeFactoryData,
+  predictEcdsaSafeAddress,
   predictSafeAddress,
   safeFactoryData,
 } from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
-import { classifyEverydayCall, type EverydayTier, type EverydayVerdict } from "./everyday-allowlist";
+import {
+  EVERYDAY_CONTRACTS,
+  ORG_SAFE,
+  classifyEverydayCall,
+  credentialRegistryAddress,
+  type EverydayTier,
+  type EverydayVerdict,
+} from "./everyday-allowlist";
 
 export const ADDRESSES = {
   safe4337Module: PASSKEY_SAFE.safe4337Module,
@@ -137,6 +199,33 @@ export const ADDRESSES = {
 
 /** CitizenNFTv2 on Gnosis (ERC-721, `hasCitizenNFT` mapping). */
 export const CITIZEN_NFT: Hex = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+
+/**
+ * Addresses a mini app may never have sponsored calls to (mode F), lowercased: Röbel's
+ * everyday contracts, the org-Safe infrastructure, every account-infrastructure address
+ * (ADDRESSES, PASSKEY_SAFE), CitizenNFTv2 and the zero address. The manifest validator
+ * (miniapp/contracts.ts, FORBIDDEN_CONTRACTS) uses this same list.
+ */
+export const MINIAPP_FORBIDDEN_TARGETS: readonly Hex[] = Array.from(
+  new Set(
+    [
+      ...Object.values(EVERYDAY_CONTRACTS),
+      ...(Object.values(ORG_SAFE) as Array<string | number>).filter((v): v is Hex => typeof v === "string"),
+      ...Object.values(ADDRESSES),
+      ...Object.values(PASSKEY_SAFE),
+      CITIZEN_NFT,
+      zeroAddress,
+    ].map((a) => a.toLowerCase() as Hex),
+  ),
+);
+
+/** A forbidden mini-app target, including the configured CredentialRegistry. */
+export function isMiniAppForbiddenTarget(address: string): boolean {
+  const a = address.toLowerCase();
+  if (MINIAPP_FORBIDDEN_TARGETS.includes(a as Hex)) return true;
+  const registry = credentialRegistryAddress();
+  return registry !== null && registry.toLowerCase() === a;
+}
 
 /** EIP-1167 minimal proxy to the thirdweb Account impl. Verified 2026-09-26
  * against live accounts from AccountFactory 0x85e2…DF00 getAccounts(0,3). */
@@ -176,10 +265,15 @@ export interface V3Config {
   attesterNft?: Hex;
 }
 
-/** Who the op claims to be: passkey key (32-byte hex each) + optional identity hints. */
+/**
+ * Who the op claims to be: EXACTLY ONE of the passkey key (x and y, 32-byte hex each) or the
+ * expert path's ECDSA owner (`ecdsaOwner`), plus optional identity hints. Anything else is refused.
+ */
 export interface SponsorContext {
-  x: Hex;
-  y: Hex;
+  x?: Hex;
+  y?: Hex;
+  /** Expert path: the single plain-key owner of the sender Safe (the account key of the 12 words). */
+  ecdsaOwner?: Hex;
   /** The ONE legacy thirdweb account the op may drive (mode A). */
   legacy?: Hex;
   /** Recovery (mode C): the legacy account the recovered wallet is admin of, if the wallet itself holds no CitizenNFT. */
@@ -189,15 +283,27 @@ export interface SponsorContext {
   v3?: V3Config;
   /** Everyday mode: the MACI poll id whose Poll the op votes in (MACI.polls(pollId) must equal the target). */
   pollId?: bigint;
+  /** Mode F: the mini app the request names and its declared call rules (live, version 2). */
+  miniApp?: { id: string; rules: CallRule[] };
 }
 
-export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach";
+export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach" | "miniapp";
 
 /** Detach (mode E) needs this many guardians AND this threshold on the sender Safe. */
 export const DETACH_MIN_GUARDIANS = 2n;
 export const DETACH_MIN_THRESHOLD = 2n;
 export type PolicyResult =
-  | { ok: true; mode: SponsorMode; budgetKey: Hex; /** everyday mode only; "onboarding" = non-citizen Safe, tighter budget */ tier?: EverydayTier }
+  | {
+      ok: true;
+      mode: SponsorMode;
+      budgetKey: Hex;
+      /** everyday mode only; "onboarding" = only guest-allowed calls */
+      tier?: EverydayTier;
+      /** Set whenever the budget identity is a non-citizen passkey Safe (a guest): guest budget applies. */
+      guest?: true;
+      /** miniapp mode only: the mini app whose gas budget pays. */
+      miniAppId?: string;
+    }
   | { ok: false; reason: string };
 
 export interface SignerPermissionRequest {
@@ -312,8 +418,10 @@ function tryDecode<T>(fn: () => T): T | null {
 /** Facts collected by the structural pass, verified against the chain afterwards. */
 interface ScanState {
   sender: Hex;
+  /** The passkey key; both 0n for an expert-path (ECDSA) proof, which `ecdsa` marks. */
   x: bigint;
   y: bigint;
+  ecdsa: boolean;
   legacy?: Hex;
   v3: V3Config;
   nowSeconds: number;
@@ -347,6 +455,11 @@ interface ScanState {
   onboardingOnly: boolean;
   /** Any mode A / B shape present (handover, createAccount, moveTo, SRM). */
   migration: boolean;
+  /** A thirdweb-account shape present: handover, createAccount, moveTo, or any
+   * legacy.execute / executeBatch. Never part of a guest op. */
+  legacyShapes: boolean;
+  /** SRM guardian management present (add / revoke guardian, changeThreshold, cancelRecovery). */
+  guardianManagement: boolean;
   /** Poll.publishMessage targets (verified against MACI.polls(ctx.pollId)). */
   polls: Hex[];
   /** org-Safe execTransaction targets (a Safe L2 1.4.1 proxy, or created earlier in this batch). */
@@ -357,6 +470,19 @@ interface ScanState {
   calls: number;
   /** Detach requests (isAdmin 2) submitted directly to `legacy` (mode E). */
   detaches: Array<{ req: SignerPermissionRequest; signature: Hex }>;
+  /** Mode F: set when the request names a mini app; every call must be one of its rules. */
+  miniApp?: { id: string; rules: CallRule[] };
+}
+
+/** Mode F: one call (direct, or nested in legacy.execute / executeBatch) must be declared. */
+function checkMiniAppCall(to: Hex, value: bigint, data: Hex, st: ScanState): Check {
+  if (value !== 0n) return deny("mini-app call value must be 0");
+  if (isAddressEqual(to, st.sender)) return deny("a mini app may not call the sender account itself");
+  if (st.legacy && isAddressEqual(to, st.legacy)) return deny("a mini app may not call the legacy account itself");
+  if (isMiniAppForbiddenTarget(to)) return deny("a mini app may not call Röbel's own contracts or the account infrastructure");
+  const match = findDeclaredCall(st.miniApp?.rules ?? [], to, data);
+  if (!match) return deny("call is not a declared contract function of this mini app");
+  return PASS;
 }
 
 function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): Check {
@@ -409,10 +535,12 @@ function recordEveryday(v: EverydayVerdict, st: ScanState): Check {
  * SRM.confirmRecovery (the legacy account is a guardian); an everyday
  * allowlisted action (everyday-allowlist.ts). Everything else is refused. */
 function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanState): Check {
+  if (st.miniApp) return checkMiniAppCall(target, value, data, st);
   if (size(data) >= 4) {
     const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
     if (perm?.functionName === "setPermissionsForSigner") {
       st.migration = true;
+      st.legacyShapes = true;
       return checkPermissionRequest(perm.args[0], st.sender);
     }
     const move = tryDecode(() => decodeFunctionData({ abi: v3Abi, data }));
@@ -422,6 +550,7 @@ function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanSta
       if (!isAddressEqual(move.args[0], st.sender)) return deny("moveTo must move the identity to the sender Safe");
       if (value !== 0n) return deny("moveTo value must be 0");
       st.migration = true;
+      st.legacyShapes = true;
       return PASS;
     }
     if (isAddressEqual(target, ADDRESSES.socialRecoveryModule)) {
@@ -452,6 +581,7 @@ function checkSrmCall(data: Hex, st: ScanState): Check {
     case "cancelRecovery":
       st.identityOnly = true;
       st.srm = true;
+      st.guardianManagement = true;
       return PASS;
     case "confirmRecovery": {
       const [wallet, newOwners, threshold] = d.args;
@@ -495,11 +625,36 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
   st.calls += 1;
   if (size(data) < 4) return deny("call without a function selector");
 
+  if (st.miniApp) {
+    if (!st.legacy) return checkMiniAppCall(to, 0n, data, st);
+    // Legacy identity: only legacy.execute / executeBatch on the request's legacy, every inner call declared.
+    if (!isAddressEqual(to, st.legacy)) return deny("with a legacy identity, mini-app calls must go through legacy.execute");
+    const d = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
+    if (d?.functionName === "execute") {
+      const r = checkMiniAppCall(d.args[0], d.args[1], d.args[2], st);
+      if (!r.ok) return r;
+    } else if (d?.functionName === "executeBatch") {
+      const [targets, values, datas] = d.args;
+      if (targets.length === 0 || targets.length !== values.length || targets.length !== datas.length) {
+        return deny("executeBatch array length mismatch");
+      }
+      for (let i = 0; i < datas.length; i++) {
+        const r = checkMiniAppCall(targets[i], values[i], datas[i], st);
+        if (!r.ok) return r;
+      }
+    } else {
+      return deny("in miniapp mode only legacy.execute / executeBatch may reach the legacy account");
+    }
+    st.executeNeedsAdmin = true;
+    return PASS;
+  }
+
   if (isAddressEqual(to, ADDRESSES.socialRecoveryModule)) return checkSrmCall(data, st);
 
   if (isAddressEqual(to, ADDRESSES.signerFactory)) {
     const d = tryDecode(() => decodeFunctionData({ abi: signerFactoryAbi, data }));
     if (!d) return deny("SafeWebAuthnSignerFactory function not allowlisted");
+    if (st.ecdsa) return deny("an expert-path Safe cannot create a passkey signer");
     const [x, y, verifiers] = d.args;
     if (x !== st.x || y !== st.y || verifiers !== WEBAUTHN_VERIFIERS) {
       return deny("createSigner must be for the request's own passkey (x, y)");
@@ -517,6 +672,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
     st.createAccountAdmin = d.args[0];
     st.identityOnly = true;
     st.migration = true;
+    st.legacyShapes = true;
     return PASS;
   }
 
@@ -533,6 +689,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
     return deny("thirdweb account call must target the request's legacy account");
   }
   st.identityOnly = true;
+  st.legacyShapes = true;
 
   if (d.functionName === "setPermissionsForSigner") {
     st.migration = true;
@@ -625,13 +782,52 @@ function checkCallData(callData: Hex, st: ScanState): Check {
   return PASS;
 }
 
-/** Deploy ops: the factory call must be EXACTLY the passkey Safe for (x, y). */
-function checkFactory(op: SponsorUserOp, ctx: SponsorContext): Check {
+/** The sender proof the request names: the passkey key or the expert path's ECDSA owner. */
+type SenderProof = { kind: "passkey"; x: Hex; y: Hex } | { kind: "ecdsa"; owner: Hex };
+
+const PROOF_QUANTITY = /^0x[0-9a-fA-F]{1,64}$/;
+/** Safe's owner-list sentinel; never a real owner. */
+const SAFE_SENTINEL_OWNER: Hex = "0x0000000000000000000000000000000000000001";
+
+/** Exactly one of (x and y) or `ecdsaOwner`; null for both, neither, half a key or a malformed value. */
+function senderProof(ctx: SponsorContext): SenderProof | null {
+  const hasKey = ctx.x !== undefined || ctx.y !== undefined;
+  if (ctx.ecdsaOwner !== undefined) {
+    if (hasKey) return null;
+    const owner = ctx.ecdsaOwner;
+    if (typeof owner !== "string" || !isAddress(owner, { strict: false })) return null;
+    if (BigInt(owner) === 0n || isAddressEqual(owner, SAFE_SENTINEL_OWNER)) return null;
+    return { kind: "ecdsa", owner };
+  }
+  if (typeof ctx.x !== "string" || typeof ctx.y !== "string") return null;
+  if (!PROOF_QUANTITY.test(ctx.x) || !PROOF_QUANTITY.test(ctx.y)) return null;
+  return { kind: "passkey", x: ctx.x, y: ctx.y };
+}
+
+/** For callers past the top of evaluateSponsorPolicy, which already refused an invalid proof. */
+function proofOf(ctx: SponsorContext): SenderProof {
+  const p = senderProof(ctx);
+  if (!p) throw new Error("sponsor context without a valid sender proof");
+  return p;
+}
+
+/** Deploy ops: the factory call must be EXACTLY the sovereign Safe for the request's proof. */
+function checkFactory(op: SponsorUserOp, proof: SenderProof): Check {
   const hasFactoryData = op.factoryData !== undefined && size(op.factoryData) > 0;
   if (!op.factory) return hasFactoryData ? deny("factoryData without factory") : PASS;
   if (!isAddressEqual(op.factory, ADDRESSES.safeProxyFactory)) return deny("factory is not SafeProxyFactory 1.4.1");
-  const key = { x: ctx.x, y: ctx.y };
-  if ((op.factoryData ?? "0x").toLowerCase() !== safeFactoryData(key).toLowerCase()) {
+  const factoryData = (op.factoryData ?? "0x").toLowerCase();
+  if (proof.kind === "ecdsa") {
+    if (factoryData !== ecdsaSafeFactoryData(proof.owner).toLowerCase()) {
+      return deny("factoryData is not the expert Safe deployment for ecdsaOwner");
+    }
+    if (!isAddressEqual(op.sender, predictEcdsaSafeAddress(proof.owner))) {
+      return deny("sender is not the predicted expert Safe for ecdsaOwner");
+    }
+    return PASS;
+  }
+  const key = { x: proof.x, y: proof.y };
+  if (factoryData !== safeFactoryData(key).toLowerCase()) {
     return deny("factoryData is not the passkey Safe deployment for (x, y)");
   }
   if (!isAddressEqual(op.sender, predictSafeAddress(key))) return deny("sender is not the predicted passkey Safe for (x, y)");
@@ -674,25 +870,62 @@ async function isCitizen(account: Hex, v3: V3Config, chain: ChainReader): Promis
   return read(() => chain.hasCitizenNFT(citizenV3, account));
 }
 
-/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
-async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
-  const code = await read(() => chain.getCode(sender));
+/** The deployed Safe has the sovereign passkey-Safe shape; on success also yields its single owner. */
+async function deployedSafeShape(safe: Hex, chain: ChainReader): Promise<{ ok: true; owner: Hex } | { ok: false; reason: string }> {
+  const code = await read(() => chain.getCode(safe));
   if ((code ?? "0x").toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) {
     return deny("sender is not a passkey Safe (not a SafeProxy 1.4.1)");
   }
-  const [singleton, handler, moduleOn, owners] = await Promise.all([
-    read(() => chain.getStorageAt(sender, SLOT_0)),
-    read(() => chain.getStorageAt(sender, FALLBACK_HANDLER_SLOT)),
-    read(() => chain.isModuleEnabled(sender, PASSKEY_SAFE.safe4337Module)),
-    read(() => chain.getOwners(sender)),
+  const [singleton, handler, moduleOn, srmOn, owners] = await Promise.all([
+    read(() => chain.getStorageAt(safe, SLOT_0)),
+    read(() => chain.getStorageAt(safe, FALLBACK_HANDLER_SLOT)),
+    read(() => chain.isModuleEnabled(safe, PASSKEY_SAFE.safe4337Module)),
+    read(() => chain.isModuleEnabled(safe, PASSKEY_SAFE.socialRecoveryModule)),
+    read(() => chain.getOwners(safe)),
   ]);
   if (!wordIsAddress(singleton, PASSKEY_SAFE.singletonL2)) return deny("sender singleton is not Safe L2 1.4.1");
   if (!wordIsAddress(handler, PASSKEY_SAFE.safe4337Module)) return deny("sender fallback handler is not Safe4337Module");
   if (moduleOn !== true) return deny("Safe4337Module is not an enabled module of the sender");
+  if (srmOn !== true) return deny("SocialRecoveryModule is not an enabled module of the sender");
   if (owners.length !== 1) return deny("sender must have exactly one owner");
-  const owner = owners[0];
-  const x = BigInt(ctx.x);
-  const y = BigInt(ctx.y);
+  return { ok: true, owner: owners[0] };
+}
+
+/**
+ * A deployed sovereign passkey Safe: SafeProxy 1.4.1 runtime, singleton Safe L2 1.4.1,
+ * fallback handler Safe4337Module, Safe4337Module and SocialRecoveryModule enabled,
+ * exactly one owner. Says nothing about WHICH key owns it.
+ */
+export async function checkDeployedSafeShape(safe: Hex, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(safe, chain);
+  return shape.ok ? PASS : shape;
+}
+
+/** EIP-7702 delegation designator: 0xef0100 ++ 20-byte delegate (23 bytes). */
+const EIP7702_DESIGNATOR = /^0xef0100[0-9a-fA-F]{40}$/;
+
+/** The expert owner is a plain key: no code, or only an EIP-7702 designator (still ECDSA-signing). */
+async function checkEcdsaOwnerIsKey(owner: Hex, chain: ChainReader): Promise<Check> {
+  const code = await read(() => chain.getCode(owner));
+  if (hasNoCode(code) || EIP7702_DESIGNATOR.test(code as string)) return PASS;
+  return deny("ecdsaOwner is a contract, not a plain key");
+}
+
+/** Deployed expert Safe: the sovereign shape AND getOwners() == [ecdsaOwner], a plain key. */
+async function checkDeployedEcdsaSafe(sender: Hex, owner: Hex, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(sender, chain);
+  if (!shape.ok) return shape;
+  if (!isAddressEqual(shape.owner, owner)) return deny("sender owner is not ecdsaOwner");
+  return checkEcdsaOwnerIsKey(owner, chain);
+}
+
+/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
+async function checkDeployedPasskeySafe(sender: Hex, key: { x: Hex; y: Hex }, chain: ChainReader): Promise<Check> {
+  const shape = await deployedSafeShape(sender, chain);
+  if (!shape.ok) return shape;
+  const owner = shape.owner;
+  const x = BigInt(key.x);
+  const y = BigInt(key.y);
 
   if (isAddressEqual(owner, PASSKEY_SAFE.sharedSigner)) {
     const cfg = await read(() => chain.getSharedSignerConfiguration(sender));
@@ -711,8 +944,13 @@ async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain:
 }
 
 async function checkSender(op: SponsorUserOp, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+  const proof = proofOf(ctx);
+  if (proof.kind === "ecdsa") {
+    // Deploy ops were proven structurally (checkFactory); the owner must still be a plain key.
+    return op.factory ? checkEcdsaOwnerIsKey(proof.owner, chain) : checkDeployedEcdsaSafe(op.sender, proof.owner, chain);
+  }
   // Deploy ops were proven structurally (checkFactory).
-  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, ctx, chain);
+  return op.factory ? PASS : checkDeployedPasskeySafe(op.sender, proof, chain);
 }
 
 /** A handover for a legacy account deployed in THIS op: its only admin is the
@@ -864,10 +1102,14 @@ async function evaluateSafeEveryday(
   if (!sender.ok) return sender;
   const citizen = await isCitizen(op.sender, ctx.v3 ?? {}, chain);
   if (!citizen) {
-    if (st.migration || !st.onboardingOnly) {
+    // Guest: only onboarding-tier everyday calls plus (optionally) guardian management.
+    if (st.legacyShapes || !st.onboardingOnly) {
       return deny("this action requires a citizen identity (the sender Safe holds no CitizenNFT)");
     }
-    return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "onboarding" };
+    if (st.confirms && !st.guardianManagement) {
+      return deny("a guest op may carry confirmRecovery only together with guardian management");
+    }
+    return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "onboarding", guest: true };
   }
   const polls = await checkPolls(st, ctx, chain);
   if (!polls.ok) return polls;
@@ -877,7 +1119,7 @@ async function evaluateSafeEveryday(
   return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "citizen" };
 }
 
-/** Mode C: help recover `wallet`, a citizen identity with guardians. */
+/** Mode C: help recover `wallet`, a citizen identity (or, as a guest, a sovereign passkey Safe) with guardians. */
 async function evaluateRecoveryMode(
   op: SponsorUserOp,
   ctx: SponsorContext,
@@ -905,21 +1147,41 @@ async function evaluateRecoveryMode(
       walletIsCitizen = linked === true && citizen;
     }
   }
-  if (!walletIsCitizen) return deny("the wallet being recovered is not a citizen identity");
+  // Not a citizen: still recoverable as a guest when the wallet is a sovereign passkey Safe.
+  let guest = false;
+  if (!walletIsCitizen) {
+    const shape = await checkDeployedSafeShape(wallet, chain);
+    if (!shape.ok) return deny(`the wallet being recovered is not a citizen identity nor a sovereign Safe (${shape.reason})`);
+    guest = true;
+  }
   const guardians = await read(() => chain.guardiansCount(wallet));
   if (guardians <= 0n) return deny("the wallet being recovered has no guardians");
 
   if (st.ownerBound || st.finalize) {
-    const signer = await read(() => chain.getWebAuthnSigner(BigInt(ctx.x), BigInt(ctx.y), WEBAUTHN_VERIFIERS));
+    // The submitter's own signer: the expert path's ECDSA owner itself, or the WebAuthn signer
+    // contract for (x, y) - read only on the passkey branch.
+    const proof = proofOf(ctx);
+    const signer =
+      proof.kind === "ecdsa"
+        ? proof.owner
+        : await read(() => chain.getWebAuthnSigner(BigInt(proof.x), BigInt(proof.y), WEBAUTHN_VERIFIERS));
     if (st.ownerBound && !recoveryOwnersAre(op.callData, wallet, signer)) {
-      return deny("recovery must hand the wallet to the submitter's own passkey signer");
+      return deny(
+        proof.kind === "ecdsa"
+          ? "recovery must hand the wallet to the submitter's own key (ecdsaOwner)"
+          : "recovery must hand the wallet to the submitter's own passkey signer",
+      );
     }
     if (st.finalize) {
       const rq = await read(() => chain.getRecoveryRequest(wallet));
       if (rq.executeAfter === 0n) return deny("the wallet has no pending recovery");
       if (rq.executeAfter > BigInt(ctx.nowSeconds)) return deny("the recovery period is still pending");
       if (rq.newOwners.length !== 1 || !isAddressEqual(rq.newOwners[0], signer)) {
-        return deny("the pending recovery does not hand the wallet to the submitter's passkey signer");
+        return deny(
+          proof.kind === "ecdsa"
+            ? "the pending recovery does not hand the wallet to the submitter's own key (ecdsaOwner)"
+            : "the pending recovery does not hand the wallet to the submitter's passkey signer",
+        );
       }
     }
   }
@@ -927,7 +1189,9 @@ async function evaluateRecoveryMode(
     const guardian = await read(() => chain.isGuardian(wallet, op.sender));
     if (!guardian) return deny("sender is not a guardian of the wallet");
   }
-  return { ok: true, mode: "recovery", budgetKey: wallet };
+  // A guest wallet's recovery is charged to the SENDER (see the header, mode C): a stranger's
+  // recovery op must never spend the budget the wallet needs for its own cancelRecovery.
+  return guest ? { ok: true, mode: "recovery", budgetKey: op.sender, guest: true } : { ok: true, mode: "recovery", budgetKey: wallet };
 }
 
 /** Every multiConfirmRecovery / executeRecovery in the op sets newOwners == [signer]. */
@@ -953,6 +1217,30 @@ function forEachCall(callData: Hex, visit: (to: Hex, data: Hex) => void): void {
   for (const tx of decodeMultiSendPacked(ms.args[0]) ?? []) visit(tx.to, tx.data);
 }
 
+/** Mode F: every call was declared (structural pass); bind the sender to the identity. */
+async function evaluateMiniAppMode(
+  op: SponsorUserOp,
+  ctx: SponsorContext,
+  app: { id: string; rules: CallRule[] },
+  st: ScanState,
+  chain: ChainReader,
+): Promise<PolicyResult> {
+  if (st.calls === 0) return deny("a mini-app op needs at least one call");
+  const legacy = ctx.legacy;
+  if (legacy) {
+    const code = await read(() => chain.getCode(legacy));
+    if (!isLegacyProxyCode(code)) return deny(`${legacy} is not a legacy thirdweb account`);
+    const sender = await checkSender(op, ctx, chain);
+    if (!sender.ok) return sender;
+    const isAdmin = await read(() => chain.isAdmin(legacy, op.sender));
+    if (isAdmin !== true) return deny(`sender is not an admin of ${legacy}`);
+    return { ok: true, mode: "miniapp", budgetKey: legacy, miniAppId: app.id };
+  }
+  const sender = await checkSender(op, ctx, chain);
+  if (!sender.ok) return sender;
+  return { ok: true, mode: "miniapp", budgetKey: op.sender, miniAppId: app.id };
+}
+
 /**
  * Resolves to { ok, mode, budgetKey } or { ok: false, reason }. Throws
  * ChainReadError when a chain read fails - the caller must treat that as
@@ -966,12 +1254,16 @@ export async function evaluateSponsorPolicy(
   // ---- structural: zero chain reads ----
   const gas = checkGas(op);
   if (!gas.ok) return gas;
-  const factory = checkFactory(op, ctx);
+  const proof = senderProof(ctx);
+  if (!proof) return deny("the request must name exactly one sender proof: (x, y) or ecdsaOwner");
+  if (proof.kind === "ecdsa" && ctx.legacy) return deny("an expert-path Safe cannot drive a legacy account");
+  const factory = checkFactory(op, proof);
   if (!factory.ok) return factory;
   const st: ScanState = {
     sender: op.sender,
-    x: BigInt(ctx.x),
-    y: BigInt(ctx.y),
+    x: proof.kind === "passkey" ? BigInt(proof.x) : 0n,
+    y: proof.kind === "passkey" ? BigInt(proof.y) : 0n,
+    ecdsa: proof.kind === "ecdsa",
     legacy: ctx.legacy,
     v3: ctx.v3 ?? {},
     nowSeconds: ctx.nowSeconds,
@@ -989,14 +1281,19 @@ export async function evaluateSponsorPolicy(
     directEveryday: false,
     onboardingOnly: true,
     migration: false,
+    legacyShapes: false,
+    guardianManagement: false,
     polls: [],
     orgSafes: [],
     createdSafes: [],
     calls: 0,
     detaches: [],
+    miniApp: ctx.miniApp,
   };
   const structural = checkCallData(op.callData, st);
   if (!structural.ok) return structural;
+  // Mode F is decided by the request alone: no other mode is ever tried for it.
+  if (ctx.miniApp) return evaluateMiniAppMode(op, ctx, ctx.miniApp, st, chain);
   if (st.identityOnly && st.recoveryOnly) return deny("identity calls and recovery calls cannot be mixed in one op");
   if (st.detaches.length > 0 && !ctx.legacy) return deny("a detach must name its legacy account");
 
@@ -1016,6 +1313,12 @@ export async function evaluateSponsorPolicy(
     return { ok: true, mode: "safe", budgetKey: op.sender };
   }
   if (!st.identityOnly && st.confirms) return evaluateRecoveryMode(op, ctx, st, chain);
+  // Guest (non-citizen Safe): its own guardian management, a confirmRecovery may ride along.
+  if (st.guardianManagement && !st.legacyShapes && !st.everyday) {
+    const sender = await checkSender(op, ctx, chain);
+    if (!sender.ok) return sender;
+    return { ok: true, mode: "safe", budgetKey: op.sender, guest: true };
+  }
   return deny("sender holds no CitizenNFT and the request names no legacy account");
 }
 
@@ -1083,27 +1386,47 @@ function word32(obj: Record<string, unknown>, key: string): Hex {
   return v as Hex;
 }
 
-/** The full request body: { chainId, userOp, x, y, legacy?, recoveryLegacy?, pollId? }. Throws on malformed input. */
+/**
+ * The full request body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?, pollId?, miniApp? }.
+ * `miniApp` is a mini app's uuid (returned lowercased); anything else is refused.
+ * Exactly one sender proof: the passkey key (both x and y) or the expert path's `ecdsaOwner`.
+ * Throws on malformed input, on both proofs and on neither (the route answers 400).
+ */
 export function parseSponsorRequest(input: unknown): {
   chainId: unknown;
   userOp: SponsorUserOp;
-  x: Hex;
-  y: Hex;
+  x?: Hex;
+  y?: Hex;
+  ecdsaOwner?: Hex;
   legacy?: Hex;
   recoveryLegacy?: Hex;
   pollId?: bigint;
+  miniApp?: string;
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
+  const present = (key: string) => o[key] !== undefined && o[key] !== null;
+  const hasKey = present("x") || present("y");
+  const hasOwner = present("ecdsaOwner");
+  if (hasKey && hasOwner) throw new Error("name either (x, y) or ecdsaOwner, not both");
+  if (!hasKey && !hasOwner) throw new Error("a sender proof is required: (x, y) or ecdsaOwner");
+  const proof = hasOwner ? { ecdsaOwner: address(o, "ecdsaOwner") } : { x: word32(o, "x"), y: word32(o, "y") };
   return {
     chainId: o.chainId,
     userOp: parseSponsorUserOp(o.userOp),
-    x: word32(o, "x"),
-    y: word32(o, "y"),
+    ...proof,
     legacy: optionalAddress(o, "legacy"),
     recoveryLegacy: optionalAddress(o, "recoveryLegacy"),
     pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),
+    ...(present("miniApp") ? { miniApp: miniAppId(o.miniApp) } : {}),
   };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function miniAppId(v: unknown): string {
+  if (typeof v !== "string" || !UUID.test(v)) throw new Error("miniApp must be a mini app id (uuid)");
+  return v.toLowerCase();
 }
 
 /** Packs the RPC-shaped op into the fields `hashStableFields` covers. */

@@ -1,7 +1,9 @@
 // Mini-app notification sending (spec §store-v2: opt-ins gate delivery).
 // Two callers:
 //  - Expo host runtime (sdk.notifications.send): notifies ONLY the current
-//    wallet, and only if it opted in for the app. Same trust tier as events.
+//    user, and only if they opted in for the app. The user comes from
+//    `Authorization: Bearer <mini-app user token>` (wins over `wallet`); the
+//    bare `wallet` is accepted only while MINIAPP_REQUIRE_USER_TOKEN≠1.
 //  - Dashboards (developer or admin, `broadcast: true`): notify ALL opted-in
 //    wallets of a live app; logged in mini_app_notifications.
 // Delivery = insert into `notifications` (the app-wide push hub) with
@@ -13,6 +15,7 @@ import { getParam, jsonError, resolveDeveloperReadonly } from "@/lib/miniapp/htt
 import { requireAppAccess } from "@/lib/miniapp/images/access";
 import { isAuthenticated } from "@/lib/auth/session";
 import { MiniAppError, type MiniAppRow } from "@/lib/miniapp/types";
+import { HOST_HEADER, resolveRuntimeUser, runtimeAuthDeps } from "@/lib/miniapp/runtimeAuth";
 
 export const runtime = "nodejs";
 
@@ -130,14 +133,20 @@ export async function POST(req: Request) {
     }
 
     // ── Runtime send (Expo host, current user only) ─────────────────────────
-    const wallet = (body.wallet ?? "").trim().toLowerCase();
-    if (!/^0x[0-9a-f]{40}$/.test(wallet)) {
-      throw new MiniAppError("invalid_params", "Ungültige Wallet.");
-    }
     const app = await getApp(appId);
     if (!app || app.status !== "live") {
       throw new MiniAppError("not_found", "App nicht gefunden oder nicht live.");
     }
+    const { wallet } = await resolveRuntimeUser(
+      {
+        authorization: req.headers.get("authorization"),
+        app,
+        claimedWallet: typeof body.wallet === "string" ? body.wallet : null,
+        route: "notifications",
+        host: req.headers.get(HOST_HEADER),
+      },
+      runtimeAuthDeps(),
+    );
 
     const { data: optin } = await supabase
       .from("mini_app_notification_optins")

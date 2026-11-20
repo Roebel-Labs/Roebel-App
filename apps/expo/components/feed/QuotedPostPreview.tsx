@@ -33,7 +33,7 @@ export default function QuotedPostPreview({ post, onPress }: Props) {
   if (isQuoteHidden({ id: post.id, quoted_post: post }, index)) {
     return (
       <View style={[styles.quoteHidden, { borderColor: colors.border }]}>
-        <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 14 }}>
+        <Text style={{ color: colors.textSecondary, fontFamily: 'MonaSans-Regular', fontSize: 14 }}>
           Beitrag ausgeblendet
         </Text>
       </View>
@@ -106,16 +106,16 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     flexShrink: 1,
   },
   time: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   content: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   image: {
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   deleted: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontStyle: 'italic',
   },
 });

@@ -100,6 +100,8 @@ export async function createPasskey(userName: string): Promise<PasskeyCredential
 
 /** WebAuthn assertion over `challenge` (32-byte hash). Also evaluates the PRF when available. */
 export async function signWithPasskey(credentialId: string, challenge: Hex): Promise<PasskeyAssertion> {
+  // A words (ecdsa) session or record carries credentialId '': never open the passkey sheet for it.
+  if (!credentialId) throw new Error('passkey record required');
   if (!Passkey.isSupported()) throw new PasskeyNotSupportedError();
   let result;
   try {

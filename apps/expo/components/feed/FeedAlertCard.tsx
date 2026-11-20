@@ -76,17 +76,17 @@ const styles = StyleSheet.create({
   },
   typeLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     textTransform: 'uppercase',
   },
   title: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     lineHeight: 20,
   },
   description: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 18,
   },
   locationRow: {
@@ -96,6 +96,6 @@ const styles = StyleSheet.create({
   },
   location: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

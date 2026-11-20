@@ -106,8 +106,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  actionTitle: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  actionSub: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
+  actionTitle: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
+  actionSub: { fontSize: 12, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   emptyState: {
     marginHorizontal: 16,
     marginTop: 24,
@@ -115,5 +115,5 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  emptyText: { fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  emptyText: { fontSize: 14, fontFamily: 'MonaSans-Regular', textAlign: 'center' },
 });

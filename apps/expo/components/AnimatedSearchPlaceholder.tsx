@@ -106,6 +106,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   text: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

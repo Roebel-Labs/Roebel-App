@@ -2,6 +2,9 @@
  * "Vertrauenspersonen" on the passkey screen: current guardians by name, "2 von 3 müssen
  * zustimmen", the one-tap suggestion (the people who confirmed your citizenship), add by code or
  * name, remove, and change how many must agree. Each change = one fingerprint.
+ * Recovery words are never listed as people: they show as ONE entry "Wiederherstellungswörter",
+ * and the threshold label counts people only. Guardians that may be words this phone cannot read
+ * show as ONE entry "Wiederherstellungswörter (nicht geladen)" (useGuardianManager).
  */
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -31,7 +34,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
 
   useEffect(() => setDraftThreshold(m.threshold), [m.threshold]);
 
-  const count = m.guardians.length;
+  const count = m.peopleGuardians.length;
   const working = m.busy !== null;
 
   return (
@@ -50,7 +53,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
               <Text style={[styles.thresholdLine, { color: colors.textPrimary }]}>{thresholdLabel(m.threshold, count)}</Text>
             ) : null}
 
-            {m.guardians.map((g) => {
+            {m.peopleGuardians.map((g) => {
               const person = m.people.get(g.toLowerCase());
               const name = person?.name ?? 'Unbekannte Person';
               const helperDetail = m.helpers[g.toLowerCase()]?.masked ?? null;
@@ -102,6 +105,38 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
                 </View>
               );
             })}
+
+            {m.wordGuardians.length > 0 ? (
+              <View style={[styles.row, { borderColor: colors.borderSecondary }]}>
+                <View style={styles.rowTop}>
+                  <Initials name="Wiederherstellungswörter" />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      Wiederherstellungswörter
+                    </Text>
+                    <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>Reichen allein aus. Wartezeit 3 Tage.</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
+            {m.wordsUnloaded ? (
+              <Pressable
+                onPress={() => router.push('/settings/recovery-words' as any)}
+                accessibilityRole="button"
+                style={[styles.row, { borderColor: colors.borderSecondary }]}
+              >
+                <View style={styles.rowTop}>
+                  <Initials name="Wiederherstellungswörter" />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      Wiederherstellungswörter (nicht geladen)
+                    </Text>
+                    <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>Tippe hier, um sie auf diesem Gerät zu laden.</Text>
+                  </View>
+                </View>
+              </Pressable>
+            ) : null}
 
             {m.allAttesters ? (
               <Notice
@@ -164,7 +199,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
                 {!onPasskeySession ? (
                   <Notice tone="info" text="Melde dich zuerst mit deinem Passkey an. Dann kannst du hier ein Helfer-Konto hinzufügen." />
                 ) : !m.mode ? (
-                  <Notice tone="info" text="Das geht, sobald dein Passkey mit deinem Bürgerkonto verbunden ist." />
+                  <Notice tone="info" text={record.legacy ? 'Das geht, sobald dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Das geht gerade nicht. Versuche es gleich noch einmal.'} />
                 ) : (
                   <HelperLogin
                     busy={m.busy === 'helper'}
@@ -217,7 +252,7 @@ export default function GuardiansSection({ record }: { record: MigrationRecord }
             ) : null}
 
             {!m.mode ? (
-              <Notice tone="info" text="Änderungen sind möglich, sobald dein Passkey mit deinem Bürgerkonto verbunden ist." />
+              <Notice tone="info" text={record.legacy ? 'Änderungen sind möglich, sobald dein Passkey mit deinem Bürgerkonto verbunden ist.' : 'Änderungen sind gerade nicht möglich. Versuche es gleich noch einmal.'} />
             ) : null}
           </>
         )}

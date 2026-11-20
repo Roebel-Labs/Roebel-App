@@ -69,7 +69,7 @@ function StickyCategoryBar({ categories, activeIndex, onSelect, onOpenSheet }: P
                 style={[
                   styles.labelText,
                   { color: active ? colors.textPrimary : colors.textSecondary },
-                  active && { fontFamily: 'Inter-Medium' },
+                  active && { fontFamily: 'MonaSans-Medium' },
                 ]}
               >
                 {cat.name}
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   labelText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   underline: {
     position: 'absolute',

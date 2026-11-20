@@ -10,10 +10,15 @@ import {
   prepareContractCall,
   prepareEvent,
   parseEventLogs,
+  prepareTransaction,
   readContract,
+  sendBatchTransaction,
   sendTransaction,
   waitForReceipt,
+  type PreparedTransaction,
 } from 'thirdweb';
+import type { Account } from 'thirdweb/wallets';
+import type { Address } from 'viem';
 import { gnosis } from '@/constants/gnosis';
 import { client } from '@/constants/thirdweb';
 import { useGnosisWallet } from '@/context/GnosisWalletContext';
@@ -27,6 +32,21 @@ import {
   fetchPendingRequests,
 } from '@/lib/supabase-verification';
 import type { PersonalData, CitizenIdentity } from '@/lib/verification-types';
+import { withGuestClaim, type CitizenCheck } from '@/lib/credreg/guest';
+import { readIsCitizen } from '@/lib/credreg/chain';
+
+/**
+ * Sends an attestation request. A non-citizen's request also self-claims Guest in the same
+ * operation; if that operation fails it is sent once more without Guest. Without a Guest call
+ * (gate closed, no register, already held) this is the plain `sendTransaction` as before.
+ */
+async function sendRequestWithGuest(account: Account, transaction: PreparedTransaction, isCitizen: CitizenCheck) {
+  return withGuestClaim({ address: account.address as Address, isCitizen }, async (guest) => {
+    if (!guest) return sendTransaction({ transaction, account });
+    const guestTx = prepareTransaction({ to: guest.to, data: guest.data, chain: gnosis, client });
+    return sendBatchTransaction({ transactions: [guestTx, transaction], account });
+  });
+}
 
 /**
  * Phases of the create-request flow. Drives the submit-button label so the user
@@ -96,7 +116,8 @@ export function useCreateCitizenRequest() {
         });
 
         setStage('submitting-tx');
-        const { transactionHash } = await sendTransaction({ transaction, account });
+        // The citizenship request is by definition a non-citizen's.
+        const { transactionHash } = await sendRequestWithGuest(account, transaction, false);
 
         // 3. Read the real requestId from the event log (avoids requestCount races).
         setStage('awaiting-receipt');
@@ -172,7 +193,9 @@ export function useCreateAttesterRequest() {
         });
 
         setStage('submitting-tx');
-        const { transactionHash } = await sendTransaction({ transaction, account });
+        const { transactionHash } = await sendRequestWithGuest(account, transaction, () =>
+          readIsCitizen(account.address as Address),
+        );
 
         setStage('awaiting-receipt');
         const receipt = await waitForReceipt({ client, chain: gnosis, transactionHash });

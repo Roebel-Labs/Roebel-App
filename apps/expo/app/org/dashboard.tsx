@@ -10,12 +10,16 @@ import GenericDashboardContent from '@/components/dashboard/GenericDashboardCont
 import JournalistDashboardContent from '@/components/dashboard/JournalistDashboardContent';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { SUB_TYPE_LABELS, isExternPending } from '@/lib/types';
+import { useCredentialsGate } from '@/lib/credreg/gate';
 
 export default function OrgDashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount } = useAccount();
+  const { activeAccount, roleInActiveAccount } = useAccount();
   const subType = activeAccount?.sub_type;
+  const credentialsGate = useCredentialsGate();
+  const showCredentials =
+    credentialsGate === true && (roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin');
   const [refreshing, setRefreshing] = React.useState(false);
 
   const handleRefresh = async () => {
@@ -87,6 +91,20 @@ export default function OrgDashboardScreen() {
           </View>
         )}
 
+        {showCredentials && (
+          <Pressable
+            onPress={() => router.push('/org/credentials' as any)}
+            style={[styles.credentialsTile, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Ausweise"
+          >
+            <Text style={[styles.credentialsTitle, { color: colors.textPrimary }]}>Ausweise</Text>
+            <Text style={[styles.credentialsText, { color: colors.textSecondary }]}>
+              Ausweise ausstellen, widerrufen und Aktionen bestätigen
+            </Text>
+          </Pressable>
+        )}
+
         {subType === 'restaurant' && <RestaurantDashboardContent />}
         {subType === 'unternehmen' && <UnternehmenDashboardContent />}
         {subType === 'journalist' && <JournalistDashboardContent />}
@@ -115,8 +133,8 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 40 },
   content: { flex: 1 },
   accountInfo: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 4 },
-  accountName: { fontSize: 20, fontFamily: 'Inter-SemiBold' },
-  accountType: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  accountName: { fontSize: 20, fontFamily: 'MonaSans-SemiBold' },
+  accountType: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 2 },
   externBanner: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -124,7 +142,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  externBannerTitle: { fontSize: 13, fontFamily: 'Inter-SemiBold', color: '#92400E', marginBottom: 4 },
-  externBannerBody: { fontSize: 13, fontFamily: 'Inter-Regular', color: '#92400E', lineHeight: 18 },
+  externBannerTitle: { fontSize: 13, fontFamily: 'MonaSans-SemiBold', color: '#92400E', marginBottom: 4 },
+  externBannerBody: { fontSize: 13, fontFamily: 'MonaSans-Regular', color: '#92400E', lineHeight: 18 },
+  credentialsTile: { marginHorizontal: 16, marginTop: 16, padding: 16, borderRadius: 12, borderWidth: 1, gap: 4 },
+  credentialsTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold' },
+  credentialsText: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18 },
   bottomPadding: { height: 40 },
 });

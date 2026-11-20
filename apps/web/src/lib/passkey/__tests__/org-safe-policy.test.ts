@@ -8,7 +8,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionData, getAddress, type Hex } from "viem";
 import { evaluateSponsorPolicy, type ChainReader, type SponsorContext, type SponsorUserOp } from "../sponsor-policy";
-import { EVERYDAY_CONTRACTS as C, classifyEverydayCall, orgRegistryAttesterAbi } from "../everyday-allowlist";
+import {
+  EVERYDAY_CONTRACTS as C,
+  ORG_SAFE,
+  classifyEverydayCall,
+  credentialRegistryHolderAbi,
+  credentialRegistryIssuerAbi,
+  orgRegistryAttesterAbi,
+} from "../everyday-allowlist";
 import { PASSKEY_SAFE, SAFE_PROXY_RUNTIME_CODE } from "../safe-address";
 import { CONTRACTS } from "../../../../../../packages/blockchain/src/index";
 import {
@@ -21,7 +28,7 @@ import {
   type Call,
 } from "../../../../../expo/lib/org-safe/ops";
 import { KEY, LEGACY, RECIPIENT, fakeChain } from "./fake-chain";
-import { NOW, account, execLegacy, op, outer, viaMultiSend } from "./policy-helpers";
+import { NOW, account, execLegacy, op, outer, packMultiSend, viaMultiSend } from "./policy-helpers";
 
 const CTX: SponsorContext = { ...KEY, legacy: LEGACY, nowSeconds: NOW };
 const ORG_UUID = "6f1c2c7e-0d3a-4b5e-9a51-3f7a1d2b9c10";
@@ -149,4 +156,55 @@ test("bulk: several orgs' deploy+request pairs in one op are sponsored too", asy
     }).calls,
   );
   await ok(op(outer(LEGACY, batchOf(calls)), { callGasLimit: 1_500_000n }), fakeChain());
+});
+
+// ---------------------------------------------------------------------------
+// CredentialRegistry issuer functions through the org Safe
+// ---------------------------------------------------------------------------
+
+const REGISTER = getAddress("0x7a1b2c3d4e5f60718293a4b5c6d7e8f901234567") as Hex;
+const TYPE_ID = ("0x" + "c1".repeat(32)) as Hex;
+const addBatch = encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "addBatch", args: [TYPE_ID, ("0x" + "77".repeat(32)) as Hex, 5] });
+const revokeBatch = encodeFunctionData({ abi: credentialRegistryIssuerAbi, functionName: "revokeBatch", args: [3n] });
+const selfClaim = encodeFunctionData({ abi: credentialRegistryHolderAbi, functionName: "selfClaim", args: [TYPE_ID] });
+const prune = encodeFunctionData({
+  abi: [{ type: "function", name: "prune", stateMutability: "nonpayable", inputs: [{ type: "bytes32" }, { type: "address" }], outputs: [] }],
+  functionName: "prune",
+  args: [TYPE_ID, RECIPIENT],
+});
+
+test("an org Safe may call addBatch through execTransaction and through multiSend", async () => {
+  const before = process.env.CREDENTIAL_REGISTRY_ADDRESS;
+  process.env.CREDENTIAL_REGISTRY_ADDRESS = REGISTER.toLowerCase();
+  try {
+    const safe = getAddress("0x" + "5a".repeat(20)) as Hex;
+    const direct = safeExecCall(safe, LEGACY, REGISTER, addBatch);
+    assert.equal(classifyEverydayCall(safe, 0n, direct.data, LEGACY).ok, true);
+    await ok(op(outer(LEGACY, execLegacy(direct.to, 0n, direct.data))), withOrgSafe(safe));
+
+    const batch = packMultiSend([
+      { to: REGISTER, data: addBatch },
+      { to: REGISTER, data: revokeBatch },
+    ]);
+    const viaMs = safeExecCall(safe, LEGACY, ORG_SAFE.multiSendCallOnly, batch, 1);
+    assert.equal(classifyEverydayCall(safe, 0n, viaMs.data, LEGACY).ok, true);
+    await ok(op(outer(LEGACY, execLegacy(viaMs.to, 0n, viaMs.data))), withOrgSafe(safe));
+
+    // Holder functions, prune and value-carrying entries are not org-Safe calls.
+    for (const inner of [selfClaim, prune]) {
+      assert.equal(classifyEverydayCall(safe, 0n, safeExecCall(safe, LEGACY, REGISTER, inner).data, LEGACY).ok, false);
+      const ms = packMultiSend([{ to: REGISTER, data: addBatch }, { to: REGISTER, data: inner }]);
+      assert.equal(classifyEverydayCall(safe, 0n, safeExecCall(safe, LEGACY, ORG_SAFE.multiSendCallOnly, ms, 1).data, LEGACY).ok, false);
+    }
+    const valued = packMultiSend([{ to: REGISTER, value: 1n, data: addBatch }]);
+    assert.equal(classifyEverydayCall(safe, 0n, safeExecCall(safe, LEGACY, ORG_SAFE.multiSendCallOnly, valued, 1).data, LEGACY).ok, false);
+
+    // Unset: the org Safe may not reach the register at all.
+    delete process.env.CREDENTIAL_REGISTRY_ADDRESS;
+    assert.equal(classifyEverydayCall(safe, 0n, direct.data, LEGACY).ok, false);
+    assert.equal(classifyEverydayCall(safe, 0n, viaMs.data, LEGACY).ok, false);
+  } finally {
+    if (before === undefined) delete process.env.CREDENTIAL_REGISTRY_ADDRESS;
+    else process.env.CREDENTIAL_REGISTRY_ADDRESS = before;
+  }
 });

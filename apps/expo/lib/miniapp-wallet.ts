@@ -4,7 +4,7 @@
  * A mini app talks to an injected EIP-1193 provider (`wallet.request`). The host
  * (MiniAppHost) forwards each request here:
  *  - read-only / trivial methods (`eth_chainId`, `eth_accounts`, `eth_requestAccounts`)
- *    are answered directly;
+ *    are answered directly; chain reads go through the host's RPC proxy (miniapp-rpc.ts);
  *  - signing methods (`eth_sendTransaction`, `personal_sign`, `eth_signTypedData*`)
  *    are decoded into a `WalletConfirmRequest` for the native confirm sheet, then
  *    executed against the thirdweb smart account only after the user approves.
@@ -13,9 +13,20 @@
  */
 import type { Account } from 'thirdweb/wallets';
 import { prepareTransaction, sendTransaction } from 'thirdweb';
+import { classifyWalletMethod } from '@netizen-labs/miniapp-sdk/host';
 import { client } from '@/constants/thirdweb';
 import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
+import { PROXIED_METHODS, type RpcProxy } from '@/lib/miniapp-rpc';
+import { assertHostChain, unsupportedChain, type BridgeErrorLike } from '@/lib/miniapp-chain';
+import { callsStatus, capabilities, parseSendCalls, sponsorErrorToBridge } from '@/lib/miniapp-calls';
+import {
+  buildMessageConfirm,
+  buildTransactionConfirm,
+  buildTypedDataConfirm,
+  type ConfirmApp,
+  type NameLookup,
+} from '@/lib/miniapp-confirm';
 
 // Mini apps operate on Gnosis — Röbel-Münzen (Circles v2), identity, and
 // governance all live on Gnosis (chainId 100). The active thirdweb smart
@@ -25,7 +36,16 @@ const chain = gnosis;
 /** Host chain the smart account signs on (Gnosis, chainId 100). */
 export const HOST_CHAIN_ID = chain.id;
 
-export type BridgeErrorLike = { code: string; message: string };
+export { assertHostChain, unsupportedChain, type BridgeErrorLike };
+
+/** The `chainId` of a `wallet_switchEthereumChain` / `wallet_addEthereumChain` request. */
+function requestedChain(params: unknown[]): unknown {
+  const p = params[0];
+  if (!p || typeof p !== 'object' || !('chainId' in p)) {
+    throw invalidParams('chainId fehlt.');
+  }
+  return (p as { chainId: unknown }).chainId;
+}
 
 export function userRejected(): BridgeErrorLike {
   return { code: 'user_rejected', message: 'Nutzer hat die Aktion abgelehnt.' };
@@ -39,61 +59,27 @@ function unsupported(method: string): BridgeErrorLike {
   return { code: 'unsupported', message: `Methode "${method}" wird nicht unterstützt.` };
 }
 
-/** Methods that require the native confirm sheet before execution. */
-const SIGNING_METHODS = new Set([
-  'eth_sendTransaction',
-  'personal_sign',
-  'eth_sign',
-  'eth_signTypedData',
-  'eth_signTypedData_v3',
-  'eth_signTypedData_v4',
-]);
-
+/**
+ * Methods that require the native confirm sheet before execution. The shared SDK rule
+ * decides (nothing else may); anything it does not know is refused by `handleReadOnly`.
+ */
 export function isSigningMethod(method: string): boolean {
-  return SIGNING_METHODS.has(method);
+  return classifyWalletMethod(method) === 'sign';
 }
 
-// --- shortening / formatting -----------------------------------------------
-
-export function shortAddress(addr?: string | null): string {
-  if (!addr) return 'unbekannt';
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+// --- formatting -------------------------------------------------------------
 
 function toBigIntSafe(v: unknown): bigint {
   if (typeof v === 'bigint') return v;
   if (typeof v === 'number') return BigInt(Math.trunc(v));
   if (typeof v === 'string' && v.length) {
     try {
-      return v.startsWith('0x') ? BigInt(v) : BigInt(v);
+      return BigInt(v);
     } catch {
       return 0n;
     }
   }
   return 0n;
-}
-
-/** Format a wei bigint into a short human ETH/xDAI string. */
-function formatWei(wei: bigint): string {
-  if (wei === 0n) return '0';
-  const whole = wei / 10n ** 18n;
-  const frac = (wei % 10n ** 18n).toString().padStart(18, '0').slice(0, 4).replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : `${whole}`;
-}
-
-function decodeUtf8Maybe(hexOrText: string): string {
-  if (typeof hexOrText !== 'string') return String(hexOrText);
-  if (!hexOrText.startsWith('0x')) return hexOrText;
-  try {
-    const bytes = hexOrText.slice(2).match(/.{1,2}/g) ?? [];
-    const decoded = bytes.map((b) => String.fromCharCode(parseInt(b, 16))).join('');
-    // Heuristic: if it's mostly printable, show the decoded text.
-    // eslint-disable-next-line no-control-regex
-    if (/^[\x09\x0A\x0D\x20-\x7E -￿]*$/.test(decoded)) return decoded;
-  } catch {
-    /* fall through */
-  }
-  return hexOrText;
 }
 
 // --- request parsing --------------------------------------------------------
@@ -104,6 +90,7 @@ interface RawTx {
   value?: string;
   data?: string;
   gas?: string;
+  chainId?: unknown;
 }
 
 export interface ParsedRequest {
@@ -118,76 +105,48 @@ export function normalizeParams(params: unknown[] | object | undefined): unknown
 }
 
 /**
- * Build the confirm-sheet payload for a signing request. Returns null for
- * non-signing methods.
+ * Build the confirm-sheet payload for a signing request (miniapp-confirm.ts decides what it
+ * says; no row ever shows an address). Returns null for non-signing methods. `names` resolves
+ * addresses to display names; the host prefetches them before calling this.
  */
 export function buildConfirmRequest(
-  appName: string,
+  app: ConfirmApp,
   method: string,
   params: unknown[],
-  selfAddress: string | undefined,
+  names: NameLookup,
 ): WalletConfirmRequest | null {
   if (method === 'eth_sendTransaction') {
     const tx = (params[0] ?? {}) as RawTx;
-    const value = toBigIntSafe(tx.value);
-    const rows: WalletConfirmRequest['rows'] = [
-      { label: 'Empfänger', value: shortAddress(tx.to), mono: true },
-    ];
-    if (value > 0n) {
-      rows.push({ label: 'Betrag', value: `${formatWei(value)}` });
-    }
-    if (tx.data && tx.data !== '0x') {
-      rows.push({ label: 'Aktion', value: 'Vertrags-Interaktion' });
-    }
-    return {
-      kind: 'transaction',
-      title: 'Transaktion bestätigen',
-      appName,
-      rows,
-      raw: tx.data && tx.data !== '0x' ? tx.data : undefined,
-    };
+    return buildTransactionConfirm(app, [{ to: tx.to, data: tx.data, value: tx.value }], names);
   }
-
   if (method === 'personal_sign' || method === 'eth_sign') {
     // personal_sign: [message, address]; eth_sign: [address, message]
-    const msg =
-      method === 'personal_sign' ? (params[0] as string) : (params[1] as string);
-    return {
-      kind: 'personal_sign',
-      title: 'Nachricht signieren',
-      appName,
-      rows: [{ label: 'Nachricht', value: decodeUtf8Maybe(msg ?? '') }],
-    };
+    return buildMessageConfirm(app, method === 'personal_sign' ? params[0] : params[1], names);
   }
-
   if (method.startsWith('eth_signTypedData')) {
-    const typed = params[1] ?? params[0];
-    let summary = '';
-    try {
-      const obj = typeof typed === 'string' ? JSON.parse(typed) : typed;
-      summary = obj?.primaryType ? `Typ: ${obj.primaryType}` : 'Strukturierte Daten';
-    } catch {
-      summary = 'Strukturierte Daten';
-    }
-    return {
-      kind: 'typed_data',
-      title: 'Daten signieren',
-      appName,
-      rows: [{ label: 'Inhalt', value: summary }],
-      raw: typeof typed === 'string' ? typed : JSON.stringify(typed, null, 2),
-    };
+    return buildTypedDataConfirm(app, params, names);
   }
-
   return null;
 }
 
 // --- execution --------------------------------------------------------------
 
-/** Answer read-only EIP-1193 methods without any confirm sheet. Throws for signing. */
+/**
+ * Answer read-only EIP-1193 methods without any confirm sheet. Throws for signing.
+ * The trivial methods are answered here; the chain reads in `PROXIED_METHODS` go to the
+ * host's rate-limited RPC proxy (one per open). `account` is only given when the app may
+ * see the address; reads then default `from` to it.
+ */
 export async function handleReadOnly(
   method: string,
+  params: unknown[],
   account: Account | undefined,
+  proxy: RpcProxy | undefined,
 ): Promise<unknown> {
+  if (PROXIED_METHODS.includes(method)) {
+    if (!proxy) throw unsupported(method);
+    return proxy.request(method, params, { account: account?.address });
+  }
   switch (method) {
     case 'eth_chainId':
       return `0x${HOST_CHAIN_ID.toString(16)}`;
@@ -197,27 +156,83 @@ export async function handleReadOnly(
     case 'eth_requestAccounts':
       return account?.address ? [account.address] : [];
     case 'wallet_switchEthereumChain':
-    case 'wallet_addEthereumChain':
-      // Single-chain host; treat as no-op success.
+    case 'wallet_addEthereumChain': {
+      // Single-chain host: "switching" to Gnosis is a no-op, any other chain is refused
+      // with the standard error instead of pretending to switch.
+      const chainId = requestedChain(params);
+      if (chainId === undefined) throw invalidParams('chainId fehlt.');
+      assertHostChain(chainId);
       return null;
+    }
+    case 'wallet_getCapabilities':
+      return capabilities();
+    case 'wallet_getCallsStatus': {
+      const id = params[0];
+      if (typeof id !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(id)) throw invalidParams('Ungültige Batch-ID.');
+      if (!proxy) throw unsupported(method);
+      return callsStatus(id, async (hash) => {
+        const r = await proxy.request('eth_getTransactionReceipt', [hash], {});
+        return r && typeof r === 'object' ? (r as { status?: unknown }) : null;
+      });
+    }
     default:
       throw unsupported(method);
   }
 }
 
+/** A transaction object as `Account.sendTransaction` takes it (plus the mini-app id hint). */
+type DirectTx = { to: string; data?: `0x${string}`; value: bigint; chainId: number; miniAppId?: string };
+
+function directTx(c: { to?: string; data?: string; value?: unknown }, miniAppId: string | undefined): DirectTx {
+  return {
+    to: c.to as string,
+    ...(c.data && c.data !== '0x' ? { data: c.data as `0x${string}` } : {}),
+    value: toBigIntSafe(c.value),
+    chainId: HOST_CHAIN_ID,
+    ...(miniAppId ? { miniAppId } : {}),
+  };
+}
+
+/** Runs a send and turns a sponsor refusal of a mini-app op into the bridge's German message. */
+async function withSponsorErrors<T>(miniAppId: string | undefined, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    const mapped = miniAppId ? sponsorErrorToBridge(e) : null;
+    throw mapped ?? e;
+  }
+}
+
 /**
- * Execute a signing request against the thirdweb smart account. MUST only be
- * called after the user approved the confirm sheet. Returns the EIP-1193 result
- * (tx hash for sends, signature hex for signs).
+ * Execute a signing request against the active account. MUST only be called after the user
+ * approved the confirm sheet. Returns the EIP-1193 result (tx hash for sends, `{ id }` for
+ * `wallet_sendCalls`, signature hex for signs).
+ *
+ * `opts.miniAppId` (set by the host only for a passkey session sending a version-2 app's
+ * declared calls, see `preflightCalls`): every transaction goes to `account.sendTransaction` /
+ * `sendBatchTransaction` directly with `miniAppId` and chain 100 attached (thirdweb's
+ * `prepareTransaction` would drop the unknown field), so the sponsor can check it in mode
+ * "miniapp". Without it, `eth_sendTransaction` takes today's path unchanged.
  */
 export async function executeSigning(
   method: string,
   params: unknown[],
   account: Account,
+  opts: { miniAppId?: string } = {},
 ): Promise<unknown> {
+  const { miniAppId } = opts;
+
   if (method === 'eth_sendTransaction') {
     const tx = (params[0] ?? {}) as RawTx;
+    assertHostChain(tx.chainId);
     if (!tx.to && !tx.data) throw invalidParams('Transaktion braucht `to` oder `data`.');
+    if (miniAppId) {
+      if (!tx.to) throw invalidParams('Transaktion braucht `to`.');
+      const { transactionHash } = await withSponsorErrors(miniAppId, () =>
+        account.sendTransaction(directTx(tx, miniAppId) as never),
+      );
+      return transactionHash;
+    }
     const transaction = prepareTransaction({
       client,
       chain,
@@ -227,6 +242,33 @@ export async function executeSigning(
     });
     const { transactionHash } = await sendTransaction({ account, transaction });
     return transactionHash;
+  }
+
+  if (method === 'wallet_sendCalls') {
+    const { calls } = parseSendCalls(params, account.address);
+    const txs = calls.map((c) => directTx(c, miniAppId));
+    if (txs.length === 1) {
+      if (miniAppId) {
+        const { transactionHash } = await withSponsorErrors(miniAppId, () => account.sendTransaction(txs[0] as never));
+        return { id: transactionHash };
+      }
+      // One call without a mini-app id: today's eth_sendTransaction path.
+      const transaction = prepareTransaction({
+        client,
+        chain,
+        to: txs[0].to,
+        value: txs[0].value > 0n ? txs[0].value : undefined,
+        data: txs[0].data,
+      });
+      const { transactionHash } = await sendTransaction({ account, transaction });
+      return { id: transactionHash };
+    }
+    if (typeof account.sendBatchTransaction !== 'function') {
+      throw { code: 'unsupported', message: 'Dieses Konto kann mehrere Aktionen nicht zusammen senden.' };
+    }
+    const sendBatch = account.sendBatchTransaction.bind(account);
+    const { transactionHash } = await withSponsorErrors(miniAppId, () => sendBatch(txs as never));
+    return { id: transactionHash };
   }
 
   if (method === 'personal_sign' || method === 'eth_sign') {

@@ -116,14 +116,14 @@ const styles = StyleSheet.create({
   },
   kindText: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   emoji: {
     fontSize: 28,
   },
   content: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 20,
   },
   videoPlaceholder: {
@@ -137,6 +137,6 @@ const styles = StyleSheet.create({
   },
   videoLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

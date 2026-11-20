@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 12,
     marginTop: 4,
-    fontFamily: "Inter-Medium",
+    fontFamily: "MonaSans-Medium",
   },
   markdownContainer: {
     flexShrink: 1,

@@ -2,16 +2,25 @@
  * Real-world wiring for derived-keys.ts: the passkey session behind the active account, the
  * server key backup, SecureStore, PRF, and a random generator per slot.
  *
+ * Whoever owns the Safe, ONE session signer (session-signer.ts) is built per call and does all
+ * of it: it signs the key-backup proofs and yields the vault key the blobs are wrapped under.
+ *   - passkey session: the vault key is the passkey PRF (as before);
+ *   - 12-word session (expert path, `ownerType: 'ecdsa'`): the vault key is derived from the
+ *     phrase (`wordsFromSeed(phrase).vaultKey()`), read behind the device unlock. So the three
+ *     blobs of an expert account (MACI / Nostr / salt) open with the words alone on a new phone
+ *     (spec 5.5), and a proof + unwrap cost ONE unlock, like one fingerprint on the passkey path.
+ *
  * Import this module DYNAMICALLY and only when `passkeySessionOf(account)` is non-null: it pulls
  * in react-native-passkey (native). thirdweb sessions never load it and keep their derivation
  * paths byte-for-byte.
  */
 import { bytesToHex, hashMessage, type Address, type Hex } from 'viem';
+import { WHEN_UNLOCKED_THIS_DEVICE_ONLY } from 'expo-secure-store';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { deriveMaciKeypairFromSeed } from '@/lib/maci';
 import { deriveNostrIdentity } from '@netizen-labs/nostr';
 import { loadCitizenPreimage, passkeySaltKey, saltFromSignature } from '@/lib/citizen-commitment';
-import { loadStoredIdentity } from '@/lib/nostr/identity';
+import { loadStoredIdentity, storeIdentitySecret } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
 import { passkeyApiSession } from './api-session-runtime';
 import { PASSKEY_API_URL } from './constants';
@@ -21,27 +30,57 @@ import {
   resolvePasskeySecret,
   singleFlight,
   type BackupReport,
+  type ResolveDeps,
   type ResolveResult,
 } from './derived-keys';
 import { lookupChain } from './guardians-runtime';
-import { createKeyBackupClient, type KeyBackupSlot, type RemoteBackup } from './key-backup';
+import { createKeyBackupClient, KEY_BACKUP_SLOTS, type KeyBackupSlot, type RemoteBackup } from './key-backup';
 import { unwrapSecret, wrapSecret } from './prf-vault';
 import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
-import { identityKind, type PasskeySession } from './session';
+import { identityKind, isWordsOwner, type PasskeySession } from './session';
+import { phraseStore } from './phrase-store-runtime';
+import { sessionSignerFor, type SessionSigner } from './session-signer';
 import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
-import { isSafeDeployed, sendPasskeyUserOp } from './userop';
+import { isSafeDeployed, sendSafeUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
+import { resolveVaultKey, type VaultKeyStorage } from './words-vault';
+import { resolveIdentity } from './signin';
+import {
+  loadPendingWordsRestore,
+  markWordsRecoveryDone,
+  restoreKeysWithVaultKey,
+  runPendingWordsRestore,
+  type WordsKeyRestore,
+} from './words-recovery';
+import type { RecoveryState } from './recovery-flow';
+import { loadWordsPool, saveWordsPool } from './words-guardians';
+import { loadWordsPending } from './words-setup';
+import { secureKeyValueStorage } from './migration-runtime';
+
+/** The signer of the session's Safe owner: the passkey, or the 12 words behind the device unlock. */
+export function signerForSession(session: PasskeySession): SessionSigner {
+  return sessionSignerFor(session, { signPasskey: signWithPasskey, getPrf: getPrfSecret, phrase: phraseStore });
+}
 
 const adapterDeps: AdapterDeps = {
   sign: signWithPasskey,
   isSafeDeployed: (safe) => isSafeDeployed(safe),
-  sendUserOp: (args) => sendPasskeyUserOp(args),
+  sendUserOp: (args) => sendSafeUserOp(args),
+  signerFor: signerForSession,
 };
 
 const storage = {
   getItem: (k: string) => SecureStore.getItemAsync(k),
   setItem: (k: string, v: string) => SecureStore.setItemAsync(k, v),
+};
+
+/** The words vault key: this device only, readable only while unlocked (never in a backup). */
+const VAULT_KEY_OPTIONS = { keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+export const wordsVaultKeyStorage: VaultKeyStorage = {
+  getItem: (k) => SecureStore.getItemAsync(k, VAULT_KEY_OPTIONS),
+  setItem: (k, v) => SecureStore.setItemAsync(k, v, VAULT_KEY_OPTIONS),
+  deleteItem: (k) => SecureStore.deleteItemAsync(k, VAULT_KEY_OPTIONS),
 };
 
 const enc = new TextEncoder();
@@ -63,22 +102,72 @@ export function requirePasskeySession(account: unknown): PasskeySession {
   return s;
 }
 
-export function keyBackupFor(session: PasskeySession): RemoteBackup {
+/**
+ * The key backup of the session's identity. Every proof is signed by `signer` (default: built from
+ * the session) and returns its vault key as `prf` (the name the backup code uses; it means "the
+ * vault key": passkey PRF, or the phrase's vault key for a 12-word session).
+ */
+export function keyBackupFor(session: PasskeySession, signer: SessionSigner = signerForSession(session)): RemoteBackup {
+  const deps: AdapterDeps = { ...adapterDeps, signerFor: () => signer };
   // The identity as a message signer (the adapter's signMessage) for the API session token.
-  const signer = {
+  const messageSigner = {
     address: session.identity,
-    signMessage: ({ message }: { message: string }) => signHashAsIdentity(session, hashMessage(message), adapterDeps),
+    signMessage: ({ message }: { message: string }) => signHashAsIdentity(session, hashMessage(message), deps),
   };
   return createKeyBackupClient({
     apiUrl: PASSKEY_API_URL,
     identity: session.identity,
-    sign: (message) => signHashAsIdentityWithPrf(session, hashMessage(message), adapterDeps),
+    sign: (message) => signHashAsIdentityWithPrf(session, hashMessage(message), deps),
     session: {
       peek: () => passkeyApiSession.peek(session.identity),
-      get: () => passkeyApiSession.get(signer),
+      get: () => passkeyApiSession.get(messageSigner),
       invalidate: (token) => passkeyApiSession.invalidate(token),
     },
   });
+}
+
+/** The words pool from a `wvk` blob (a second phone): saved when this device lacks it or holds another. */
+async function syncWordsPool(addresses: Address[]): Promise<void> {
+  const local = await loadWordsPool(secureKeyValueStorage).catch(() => null);
+  if (local && local.addresses.every((a, i) => a.toLowerCase() === addresses[i]?.toLowerCase())) return;
+  await saveWordsPool(secureKeyValueStorage, { addresses, confirmedAt: Date.now() });
+}
+
+/**
+ * The `wordsVaultKey` hook: the current words vault key, verified against the server's `wvk`
+ * (words-vault.ts `resolveVaultKey`; it also syncs or clears this device's copy and syncs the
+ * words pool). Stays out of the way (null, nothing touched) while this device has a words backup
+ * write pending (words-setup.ts): the server's `wvk` is stale until that write lands. Never throws.
+ */
+export const resolveWordsVaultKey: NonNullable<ResolveDeps['wordsVaultKey']> = async (ctx) => {
+  try {
+    if (await loadWordsPending(secureKeyValueStorage)) return null;
+    return await resolveVaultKey({ storage: wordsVaultKeyStorage, wvkBlob: ctx.wvkBlob, prf: ctx.prf, unwrap: unwrapSecret, savePool: syncWordsPool });
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The key-backup deps one call needs, all from ONE signer: the vault key (`getPrf`), the backup,
+ * and the recovery-words copy hook.
+ *
+ * A 12-word session gets no `wordsVaultKey` hook: its primary blobs are already wrapped under the
+ * words' vault key, so a `_w` copy would only duplicate them, and the hook's `wvk` (the passkey
+ * account's recovery words, plan 2) does not exist for it (without one, resolveVaultKey would
+ * only clear this device's copy of another account's vault key).
+ */
+export function keyDepsForSession(session: PasskeySession): {
+  getPrf: () => Promise<Hex | null>;
+  remote: RemoteBackup;
+  wordsVaultKey?: typeof resolveWordsVaultKey;
+} {
+  const signer = signerForSession(session);
+  return {
+    getPrf: () => signer.vaultKey(),
+    remote: keyBackupFor(session, signer),
+    ...(isWordsOwner(session) ? {} : { wordsVaultKey: resolveWordsVaultKey }),
+  };
 }
 
 /** Migrated person: the identity is a legacy account, or the Safe administers one (v3 moveTo). */
@@ -113,8 +202,7 @@ function resolveOnce(
     loadLocal: local.load,
     saveLocal: local.save,
     storage,
-    getPrf: () => getPrfSecret(session.credentialId),
-    remote: keyBackupFor(session),
+    ...keyDepsForSession(session),
     hasLegacyHistory: () => hasLegacyHistory(session),
     generate: SLOT_GENERATORS[slot],
     wrap: wrapSecret,
@@ -148,14 +236,14 @@ export function deviceSecretSources(identity: string) {
 }
 
 /**
- * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the passkey session's
- * identity (at most two fingerprints). Never overwrites a different server copy.
+ * "Schlüssel sichern": uploads this device's MACI / Nostr / salt secrets for the session's
+ * identity (at most two fingerprints / device unlocks; the words copies ride in the same write). Never overwrites a
+ * different server copy.
  */
 export async function backupKeysForSession(session: PasskeySession): Promise<BackupReport> {
   return backupDeviceSecrets(deviceSecretSources(session.identity), {
     storage,
-    getPrf: () => getPrfSecret(session.credentialId),
-    remote: keyBackupFor(session),
+    ...keyDepsForSession(session),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
   });
@@ -167,7 +255,7 @@ export async function readBackupStatus(
 ): Promise<{ status: 'disabled' } | { status: 'ok'; slots: KeyBackupSlot[]; prf?: Hex }> {
   const r = await keyBackupFor(session).read();
   if (r.status === 'disabled') return { status: 'disabled' };
-  return { status: 'ok', slots: r.status === 'found' ? (Object.keys(r.blobs) as KeyBackupSlot[]) : [], ...(r.prf ? { prf: r.prf } : {}) };
+  return { status: 'ok', slots: r.status === 'found' ? KEY_BACKUP_SLOTS.filter((s) => r.blobs[s] !== undefined) : [], ...(r.prf ? { prf: r.prf } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -180,3 +268,57 @@ export function signHashAsSafe(session: PasskeySession, hash: Hex): Promise<Hex>
 }
 
 export const isPasskeySafeDeployed = (safe: Address) => isSafeDeployed(safe);
+
+// ---------------------------------------------------------------------------
+// Recovery words: the keys after a words recovery (restore.tsx, once the recovery is `done`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The pending key restore of a words recovery (`wallet` = the recovered Safe): brings the MACI /
+ * Nostr / salt keys back from their words copies and backs them up under the new passkey
+ * (words-recovery.ts `restoreKeysWithVaultKey`: the backup read + one write, 2 fingerprints),
+ * with the vault key from the wallet's OWN slot. The session is the one sign-in opens for the
+ * recovered Safe (same identity rule). Clears the marker once nothing is left to retry.
+ * Throws (German) on a failed read, or with name WORDS_VAULT_KEY_MISSING when the vault key is gone.
+ * `done` = the finished recovery state (the restore screen): re-writes a lost marker.
+ */
+export async function restorePendingWordsKeys(wallet: Address, done?: RecoveryState): Promise<WordsKeyRestore> {
+  const storage = { ...secureKeyValueStorage, removeItem: (k: string) => SecureStore.deleteItemAsync(k) };
+  return runPendingWordsRestore(wallet, {
+    storage,
+    ...(done ? { remark: () => markWordsRecoveryDone(done, storage) } : {}),
+    vault: wordsVaultKeyStorage,
+    restore: async (p, vaultKey) => {
+      // Lazily: sign-in wiring is not needed by any other key path.
+      const { identityChain } = await import('./signin-runtime');
+      const { identity } = await resolveIdentity(p.wallet, identityChain);
+      const session: PasskeySession = {
+        credentialId: p.credentialId,
+        x: p.x,
+        y: p.y,
+        safe: p.wallet,
+        identity,
+        ownerType: 'webauthnSigner',
+        owner: p.signer,
+      };
+      return restoreKeysWithVaultKey({
+        vaultKey,
+        remote: keyBackupFor(session),
+        getPrf: () => getPrfSecret(session.credentialId),
+        wrap: wrapSecret,
+        unwrap: unwrapSecret,
+        pool: p.wordsPool,
+        saveLocal: async (slot, secret) => {
+          if (slot === 'maci') await SecureStore.setItemAsync(MACI_KEYPAIR_STORE_KEY, dec.decode(secret));
+          else if (slot === 'nostr') await storeIdentitySecret(secret);
+          else await SecureStore.setItemAsync(passkeySaltKey(identity), dec.decode(secret));
+        },
+      });
+    },
+  });
+}
+
+/** This phone still owes the key restore of a words recovery of `wallet` (no prompt). */
+export async function hasPendingWordsRestore(wallet: Address): Promise<boolean> {
+  return !!(await loadPendingWordsRestore(secureKeyValueStorage, wallet));
+}

@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   progressLabel: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 13,
     textAlign: 'center',
   },
@@ -266,13 +266,13 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   headline: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 22,
     lineHeight: 28,
     textAlign: 'center',
   },
   body: {
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
     fontSize: 15,
   },
   closeBtn: {
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     fontSize: 14,
   },
 });

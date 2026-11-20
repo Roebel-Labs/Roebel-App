@@ -24,10 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Plus, Search, Eye, Edit, Trash2, Star, Calendar } from "lucide-react"
+import { Plus, Search, Eye, Edit, Trash2, Star, Calendar, Sparkles } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { deleteNewsArticle, toggleFeaturedArticle, type NewsArticle } from "@/app/actions/news"
+import { draftAppUpdate } from "@/app/actions/app-updates"
 
 export default function NewsPage() {
   const router = useRouter()
@@ -36,6 +37,23 @@ export default function NewsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [drafting, setDrafting] = useState(false)
+
+  // "Was ist neu": drafts an App-Update post from the recent changes; opens it for review.
+  const handleDraftAppUpdate = async () => {
+    setDrafting(true)
+    const loadingToast = toast.loading("Entwurf wird geschrieben…", {
+      description: "Die Änderungen seit dem letzten Beitrag werden zusammengefasst.",
+    })
+    const result = await draftAppUpdate()
+    setDrafting(false)
+    if (result.success && result.articleId) {
+      toast.success(result.message, { id: loadingToast })
+      router.push(`/admin/dashboard/news/${result.articleId}/edit`)
+    } else {
+      toast.error("Kein Entwurf", { id: loadingToast, description: result.message })
+    }
+  }
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -179,10 +197,16 @@ export default function NewsPage() {
           <h1 className="text-3xl font-medium text-foreground">News & Blog</h1>
           <p className="text-muted-foreground mt-1">Verwalten Sie Nachrichten und Blogbeiträge</p>
         </div>
-        <Button onClick={() => router.push("/admin/dashboard/news/new")}>
-          <Plus className="h-4 w-4 mr-2" />
-          Neuer Artikel
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleDraftAppUpdate} disabled={drafting}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            {drafting ? "Wird geschrieben…" : "„Was ist neu“ entwerfen"}
+          </Button>
+          <Button onClick={() => router.push("/admin/dashboard/news/new")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Neuer Artikel
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

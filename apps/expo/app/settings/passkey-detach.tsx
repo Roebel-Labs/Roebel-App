@@ -1,14 +1,14 @@
 /**
- * Settings → Passkey & Wiederherstellung → "thirdweb trennen" (PREVIEW-GATED, irreversible).
+ * Settings → Passkey & Wiederherstellung → "Unabhängig werden" (PREVIEW-GATED, irreversible).
  *
  * A live checklist (lib/passkey/detach.ts evaluateDetachChecklist) must be all green; then a plain
- * German explanation, typing "TRENNEN" and a fingerprint. The thirdweb admin EOA signs its own
+ * German explanation, a confirm dialog and a fingerprint. The thirdweb admin EOA signs its own
  * removal (so this step needs an active Google/E-Mail session), the passkey Safe submits it as one
  * sponsored op (server mode "detach"), the result is verified on chain, and only then is the
  * thirdweb session cleared on this device and the app switched to the passkey session.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useSetActiveWallet } from 'thirdweb/react';
@@ -18,13 +18,13 @@ import { useTheme } from '@/context/ThemeContext';
 import { useXmtp } from '@/context/XmtpContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import { isPasskeySurfaceAllowed } from '@/lib/passkey/gate';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import {
-  DETACH_CONFIRM_WORD,
   DETACH_EXPLANATION,
   DETACH_NEEDS_THIRDWEB_MESSAGE,
   evaluateDetachChecklist,
+  isDetachConfirmed,
   sponsoredOpSucceededThisSession,
   type ChecklistId,
 } from '@/lib/passkey/detach';
@@ -33,6 +33,17 @@ import { describeCompletion } from '@/lib/passkey/key-completion';
 import type { Account } from 'thirdweb/wallets';
 import ThirdwebConfirm from '@/components/passkey/ThirdwebConfirm';
 import type { PasskeySession } from '@/lib/passkey/session';
+import { loadWordsPool, splitGuardians } from '@/lib/passkey/words-guardians';
+
+/** Checklist item 2 counts people only: recovery words are never a Vertrauensperson. */
+async function peopleCounts(safe: Address): Promise<{ count: number; threshold: number }> {
+  const [{ readGuardianState }, { secureKeyValueStorage }] = await Promise.all([
+    import('@/lib/passkey/guardians-runtime'),
+    import('@/lib/passkey/migration-runtime'),
+  ]);
+  const [state, pool] = await Promise.all([readGuardianState(safe), loadWordsPool(secureKeyValueStorage).catch(() => null)]);
+  return { count: splitGuardians(state.guardians, pool).people.length, threshold: state.threshold };
+}
 
 type Busy = ChecklistId | 'detach' | null;
 
@@ -58,16 +69,14 @@ export default function PasskeyDetachScreen() {
   const [keysNeedThirdweb, setKeysNeedThirdweb] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
-  const [typed, setTyped] = useState('');
   const [done, setDone] = useState(false);
 
   const admin = wallet && wallet.id === 'inApp' ? wallet.getAdminAccount?.() : undefined;
 
   const refresh = useCallback(async (s: PasskeySession) => {
-    const rt = await import('@/lib/passkey/detach-runtime');
     const { isPasskeySafeLinkedToInbox } = await import('@/lib/xmtp/client');
     const [g, x] = await Promise.all([
-      rt.guardianCounts(s.safe).catch(() => null),
+      peopleCounts(s.safe).catch(() => null),
       isPasskeySafeLinkedToInbox(s).catch(() => null),
     ]);
     setGuardians(g);
@@ -78,7 +87,7 @@ export default function PasskeyDetachScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ok = await isPasskeyPreviewAllowed().catch(() => false);
+      const ok = await isPasskeySurfaceAllowed('detach').catch(() => false);
       if (cancelled) return;
       setAllowed(ok);
       if (!ok) return;
@@ -148,6 +157,12 @@ export default function PasskeyDetachScreen() {
       if (r.status === 'needsThirdweb') setKeysNeedThirdweb(describeCompletion(r).text);
     });
 
+  const confirmDetach = () =>
+    Alert.alert('Unabhängig werden', DETACH_EXPLANATION, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Endgültig unabhängig werden', style: 'destructive', onPress: () => void onDetach() },
+    ]);
+
   const onDetach = () =>
     act('detach', async () => {
       if (!session || !admin) throw new Error(DETACH_NEEDS_THIRDWEB_MESSAGE);
@@ -184,7 +199,7 @@ export default function PasskeyDetachScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Google/E-Mail-Anmeldung trennen</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Unabhängig werden</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -269,25 +284,12 @@ export default function PasskeyDetachScreen() {
                 <Text style={[styles.small, { color: colors.error }]}>{DETACH_NEEDS_THIRDWEB_MESSAGE}</Text>
               ) : (
                 <>
-                  <Text style={[styles.small, { color: colors.textSecondary }]}>
-                    Tippe {DETACH_CONFIRM_WORD}, um zu bestätigen. Danach fragt dein Telefon nach deinem Fingerabdruck.
-                  </Text>
-                  <TextInput
-                    value={typed}
-                    onChangeText={setTyped}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    placeholder={DETACH_CONFIRM_WORD}
-                    placeholderTextColor={colors.textTertiary}
-                    style={[styles.input, { color: colors.textPrimary, borderColor: colors.border }]}
-                    accessibilityLabel={`Zum Bestätigen ${DETACH_CONFIRM_WORD} eingeben`}
-                  />
                   <ActionButton
-                    label="Endgültig trennen"
+                    label="Endgültig unabhängig werden"
                     danger
                     busy={busy === 'detach'}
-                    disabled={!!busy || typed.trim() !== DETACH_CONFIRM_WORD}
-                    onPress={onDetach}
+                    disabled={!!busy || !isDetachConfirmed(checklist.items.map((i) => i.ok))}
+                    onPress={confirmDetach}
                   />
                 </>
               )}
@@ -347,7 +349,6 @@ const styles = StyleSheet.create({
   body: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 21 },
   small: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 19 },
   notice: { borderRadius: 12, padding: 12 },
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: fontFamily.semiBold, fontSize: 16, letterSpacing: 2 },
   button: { borderRadius: 999, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   buttonText: { fontFamily: fontFamily.semiBold, fontSize: 15, color: '#fff' },
   box: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },

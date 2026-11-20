@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   header: {
     flexDirection: 'row',
@@ -254,12 +254,12 @@ const styles = StyleSheet.create({
   },
   condition: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     marginBottom: 2,
   },
   temperature: {
     fontSize: 20,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   details: {
     flexDirection: 'row',
@@ -273,12 +273,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     marginTop: 2,
   },
   detailValue: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
 });

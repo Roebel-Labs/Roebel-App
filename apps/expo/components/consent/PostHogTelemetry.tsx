@@ -16,6 +16,7 @@ import { useConsent } from '@/context/ConsentContext';
 import { useUser } from '@/context/UserContext';
 import { getScreenName } from '@/hooks/useAnalytics';
 import { POSTHOG_SUPPORTED, setAnalyticsClient } from '@/lib/analytics';
+import { redactSecretPath } from '@/lib/navigation/redactPath';
 
 export function PostHogTelemetry() {
   const { ready, preferences } = useConsent();
@@ -43,7 +44,8 @@ function PostHogTelemetryInner() {
   // Screen tracking
   useEffect(() => {
     if (!posthog || !pathname) return;
-    posthog.screen(getScreenName(pathname, segments), { path: pathname });
+    // Invite tokens never go to analytics.
+    posthog.screen(getScreenName(pathname, segments), { path: redactSecretPath(pathname) });
   }, [posthog, pathname, segments]);
 
   // Identify on user change; reset on logout

@@ -184,13 +184,13 @@ const styles = StyleSheet.create({
   },
   emptyStateTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyStateText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     lineHeight: 24,
   },

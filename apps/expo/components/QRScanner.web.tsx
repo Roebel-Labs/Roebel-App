@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     textAlign: 'center',
     padding: 32,
   },

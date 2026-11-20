@@ -18,6 +18,9 @@
  * demurrage step (≈0.02 %/day) if the op lands after midnight; without it the groupMint — and with
  * it the whole batch — would revert. The dust stays personal and is swept by the next claim.
  *
+ * A citizen who is saving for an invitation (lib/muenzen-invite.ts) holds back `reserve` personal
+ * Münzen: the group mint converts only what lies above it.
+ *
  * Pure: reads and the account are injected.
  */
 import { encodeFunctionData, type Address, type Hex } from 'viem';
@@ -47,9 +50,10 @@ export const CLAIM_NOTHING_MESSAGE = 'Gerade gibt es keine Röbel Münzen zum Ab
 export type ClaimTx = { chainId: 100; to: Address; value: 0n; data: Hex };
 
 /** groupMint amount: everything personal after the mint, minus the demurrage margin. */
-export function groupMintAmount(personalBalance: bigint, mintable: bigint): bigint {
+export function groupMintAmount(personalBalance: bigint, mintable: bigint, reserve = 0n): bigint {
   const total = personalBalance + mintable;
-  return total - (total * GROUP_MINT_MARGIN_BPS) / 10_000n;
+  const afterMargin = total - (total * GROUP_MINT_MARGIN_BPS) / 10_000n;
+  return afterMargin > reserve ? afterMargin - reserve : 0n;
 }
 
 /**
@@ -63,13 +67,15 @@ export function buildMuenzenClaimTxs(p: {
   member: boolean;
   personalBalance: bigint;
   mintable: bigint;
+  /** Personal Münzen held back for invitations (never converted). */
+  reserve?: bigint;
 }): ClaimTx[] {
   const txs: ClaimTx[] = [];
   if (p.mintable > 0n) {
     txs.push({ chainId: 100, to: p.hub, value: 0n, data: encodeFunctionData({ abi: hubAbi, functionName: 'personalMint' }) });
   }
   if (p.member) {
-    const amount = groupMintAmount(p.personalBalance, p.mintable);
+    const amount = groupMintAmount(p.personalBalance, p.mintable, p.reserve ?? 0n);
     if (amount > 0n) {
       txs.push({
         chainId: 100,
@@ -96,6 +102,8 @@ export type ClaimReads = {
   isGroupMember: (addr: string) => Promise<boolean>;
   personalBalance: (addr: string) => Promise<bigint>;
   mintable: (addr: string) => Promise<bigint>;
+  /** Personal Münzen to hold back for invitations; omitted = none. */
+  inviteReserve?: (addr: string) => Promise<bigint>;
 };
 
 /** Whole Münzen (18 decimals) for the success line, rounded, never below 1. */
@@ -117,12 +125,13 @@ export async function claimMuenzenAsOneBatch(
     throw new Error('claimMuenzenAsOneBatch is for passkey sessions only');
   }
   const self = account.address as Address;
-  const [member, personalBalance, mintable] = await Promise.all([
+  const [member, personalBalance, mintable, reserve] = await Promise.all([
     reads.isGroupMember(self),
     reads.personalBalance(self),
     reads.mintable(self),
+    reads.inviteReserve ? reads.inviteReserve(self) : Promise.resolve(0n),
   ]);
-  const txs = buildMuenzenClaimTxs({ ...addrs, self, member, personalBalance, mintable });
+  const txs = buildMuenzenClaimTxs({ ...addrs, self, member, personalBalance, mintable, reserve });
   if (txs.length === 0) throw new Error(CLAIM_NOTHING_MESSAGE);
   const { transactionHash } = await account.sendBatchTransaction(txs);
   return { transactionHash, mintedRaw: mintable };

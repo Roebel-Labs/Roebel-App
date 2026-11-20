@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySignedRequest, failResponse, jsonOk, jsonFail } from "@/lib/signed-request/verify";
-import { stripeConnect, isConnectLivemode, platformFeeCents, webBaseUrl } from "@/lib/stripe-connect";
-import { connectedAccountRow } from "@/lib/tickets/connect-status";
+import { webBaseUrl } from "@/lib/stripe-connect";
+import { clampMollieApplicationFee, getProvider, platformFeeCents, resolveCheckoutProvider } from "@/lib/payments";
 import { settleOrder } from "@/lib/tickets/settle";
 import { assertTicketsEnabled } from "@/lib/tickets/flags";
 
@@ -54,8 +54,10 @@ export async function POST(request: NextRequest) {
     return jsonOk({ order_id: order.id, status: "paid", url: null, expires_at: null, amount_cents: 0, fee_cents: 0 });
   }
 
-  const connected = await connectedAccountRow(admin, order.account_id);
-  if (!connected?.charges_enabled) {
+  // Rail choice (lib/payments resolveCheckoutProvider): Mollie when the org has an active Mollie
+  // account, else its Stripe account, else no paid sales.
+  const providerId = await resolveCheckoutProvider(admin, order.account_id);
+  if (!providerId) {
     await admin.from("ticket_orders").update({ status: "cancelled" }).eq("id", order.id);
     return jsonFail(409, "CONNECT_REQUIRED", "Der Veranstalter kann noch keine Zahlungen annehmen.");
   }
@@ -63,35 +65,29 @@ export async function POST(request: NextRequest) {
     admin.from("ticket_types").select("name").eq("id", ticketTypeId).maybeSingle(),
     admin.from("events").select("title").eq("id", order.event_id).maybeSingle(),
   ]);
-  const feeCents = platformFeeCents(order.amount_cents);
+  const baseFee = platformFeeCents(order.amount_cents);
+  // Mollie caps application fees (amount − €0.35 − 6 %); clamp rather than fail the checkout.
+  const feeCents = providerId === "mollie" ? clampMollieApplicationFee(baseFee, order.amount_cents) : baseFee;
   const returnTo = encodeURIComponent(`roebel://tickets/${order.id}`);
   try {
-    const session = await stripeConnect.checkout.sessions.create(
-      {
-        mode: "payment", locale: "de", submit_type: "book",
-        // Cards only: every other method Stripe could offer is either asynchronous (the buyer
-        // leaves with no ticket and the order expires before the payment confirms) or not
-        // available on a direct charge with an application fee.
-        payment_method_types: ["card"],
-        line_items: [{ quantity: order.quantity, price_data: { currency: order.currency, unit_amount: Math.round(order.amount_cents / order.quantity),
-          product_data: { name: `${tt?.name ?? "Ticket"} – ${ev?.title ?? "Veranstaltung"}` } } }],
-        ...(feeCents > 0 ? { payment_intent_data: { application_fee_amount: feeCents } } : {}),
-        expires_at: Math.floor(new Date(order.expires_at).getTime() / 1000),
-        client_reference_id: order.id,
-        customer_email: email ?? undefined,
-        metadata: { kind: "event_ticket", order_id: order.id, event_id: order.event_id },
-        success_url: `${webBaseUrl()}/tickets/return?order_id=${order.id}&return_to=${returnTo}`,
-        cancel_url: `${webBaseUrl()}/tickets/return?cancelled=true&order_id=${order.id}&return_to=${returnTo}`,
-      },
-      { stripeAccount: connected.stripe_account_id },
-    );
-    await admin.from("ticket_orders").update({
-      stripe_checkout_session_id: session.id, stripe_account_id: connected.stripe_account_id,
-      application_fee_cents: feeCents, livemode: isConnectLivemode(),
-    }).eq("id", order.id);
-    return jsonOk({ order_id: order.id, status: "pending", url: session.url, expires_at: order.expires_at, amount_cents: order.amount_cents, fee_cents: feeCents });
+    const result = await getProvider(providerId).createCheckout({
+      accountId: order.account_id, amountCents: order.amount_cents, feeCents, currency: order.currency, quantity: order.quantity,
+      description: `${tt?.name ?? "Ticket"} – ${ev?.title ?? "Veranstaltung"}`, reference: order.id, kind: "event_ticket",
+      expiresAt: order.expires_at, customerEmail: email, extraMetadata: { event_id: order.event_id },
+      returnUrl: `${webBaseUrl()}/tickets/return?order_id=${order.id}&return_to=${returnTo}`,
+      cancelUrl: `${webBaseUrl()}/tickets/return?cancelled=true&order_id=${order.id}&return_to=${returnTo}`,
+    });
+    await admin.from("ticket_orders").update(
+      providerId === "stripe"
+        ? { stripe_checkout_session_id: result.providerPaymentId, stripe_account_id: result.providerAccountId,
+            application_fee_cents: feeCents, livemode: result.livemode }
+        : { rail: "mollie", provider_payment_id: result.providerPaymentId, provider_account_id: result.providerAccountId,
+            application_fee_cents: feeCents, livemode: result.livemode },
+    ).eq("id", order.id);
+    return jsonOk({ order_id: order.id, status: "pending", url: result.url, expires_at: order.expires_at, amount_cents: order.amount_cents, fee_cents: feeCents, provider: providerId });
   } catch (err) {
     await admin.from("ticket_orders").update({ status: "cancelled" }).eq("id", order.id);
-    return jsonFail(502, "STRIPE_ERROR", err instanceof Error ? err.message : "Stripe-Fehler");
+    const code = providerId === "mollie" ? "MOLLIE_ERROR" : "STRIPE_ERROR";
+    return jsonFail(502, code, err instanceof Error ? err.message : "Zahlungsanbieter-Fehler");
   }
 }

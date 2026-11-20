@@ -1,7 +1,11 @@
 import type { MiniAppManifest } from "@netizen-labs/miniapp-sdk";
 
 /**
- * Netizen Mini App manifest — the single row the registry validates against.
+ * Netizen Mini App manifest — the template's own TypeScript source for the manifest.
+ *
+ * The registry does NOT read this file: it reads the JSON at
+ * `public/.well-known/roebel-miniapp.json` (served as /.well-known/roebel-miniapp.json). Keep the
+ * two in sync; the JSON also carries `owner` (your Röbel account address).
  *
  * The AI builder rewrites these fields per prompt. When you customize this app:
  *  - pick a unique, url-safe `slug`,
@@ -24,6 +28,13 @@ export const manifest: MiniAppManifest = {
   screenshots: [],
   permissions: ["wallet", "circles", "rewards"],
   primaryColor: "#00498B",
+  // Version 2: what the app may ask the person to share (consent sheet on first open).
+  version: "2",
+  identity: {
+    profile: true,
+    address: false,
+    credentials: [{ type: "citizen", reason: "Zeigt Bürger:innen einen eigenen Bereich." }],
+  },
 };
 
 export default manifest;

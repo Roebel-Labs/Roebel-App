@@ -24,3 +24,10 @@ test("every org sub_type gets the workspace section", () => {
 test("null sub_type (no org) does not get the workspace section", () => {
   assert.equal(subTypeFeatures(null).workspace, false);
 });
+
+test("every org sub-type has credentials: true", () => {
+  for (const sub of ORG_SUB_TYPES) {
+    assert.equal(subTypeFeatures(sub).credentials, true, `${sub} should expose credentials`);
+  }
+  assert.equal(subTypeFeatures(null).credentials, false);
+});

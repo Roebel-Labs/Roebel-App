@@ -584,6 +584,6 @@ const styles = StyleSheet.create({
   },
   infoGlyph: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
 });

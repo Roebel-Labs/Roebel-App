@@ -204,12 +204,12 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     color: '#fff',
   },
   heroSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     color: 'rgba(255,255,255,0.9)',
     marginTop: 6,
   },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
   bottomSpacer: {
     height: 32,

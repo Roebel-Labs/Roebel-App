@@ -111,6 +111,30 @@ abstract contract PasskeySafeBase is Test {
         );
     }
 
+    /// @notice Safe.setup(...) calldata for an ECDSA-owner (expert / recovery-words) Safe:
+    ///         owners=[owner], threshold 1, ONE delegatecall into SafeModuleSetup.enableModules
+    ///         (Safe4337Module + SocialRecoveryModule), fallback handler Safe4337Module. No MultiSend.
+    function _ecdsaSafeInitializer(address owner) internal pure returns (bytes memory) {
+        address[] memory modules = new address[](2);
+        modules[0] = SAFE_4337_MODULE;
+        modules[1] = SOCIAL_RECOVERY;
+        address[] memory owners = new address[](1);
+        owners[0] = owner;
+        return abi.encodeCall(
+            ISafe.setup,
+            (
+                owners,
+                1,
+                SAFE_MODULE_SETUP,
+                abi.encodeCall(ISafeModuleSetup.enableModules, (modules)),
+                SAFE_4337_MODULE,
+                address(0),
+                0,
+                payable(address(0))
+            )
+        );
+    }
+
     /// @notice CREATE2 prediction per SafeProxyFactory 1.4.1:
     ///         salt = keccak256(keccak256(initializer) ++ saltNonce),
     ///         initCodeHash = keccak256(proxyCreationCode ++ uint256(singleton)).

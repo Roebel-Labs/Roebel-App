@@ -26,7 +26,7 @@ function Avatar({ r, colors }: { r: Recipient; colors: any }) {
   const letter = (r.name || 'B').trim().charAt(0).toUpperCase();
   return (
     <View style={[styles.avatar, { backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
-      <Text style={{ color: colors.primary, fontFamily: 'Inter-Bold', fontSize: 18 }}>{letter}</Text>
+      <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Bold', fontSize: 18 }}>{letter}</Text>
     </View>
   );
 }
@@ -206,19 +206,19 @@ function makeStyles(colors: any) {
     safe: { flex: 1, backgroundColor: colors.background },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
     backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-    title: { fontFamily: 'Inter-SemiBold', fontSize: 17, color: colors.textPrimary },
-    balance: { fontFamily: 'Inter-Medium', fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 12 },
+    title: { fontFamily: 'MonaSans-SemiBold', fontSize: 17, color: colors.textPrimary },
+    balance: { fontFamily: 'MonaSans-Medium', fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 12 },
     searchWrap: { paddingHorizontal: 16, marginBottom: 8 },
-    search: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, height: 46, fontFamily: 'Inter-Regular', fontSize: 15, color: colors.textPrimary },
+    search: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, height: 46, fontFamily: 'MonaSans-Regular', fontSize: 15, color: colors.textPrimary },
     list: { paddingHorizontal: 12, gap: 2 },
     recRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 14 },
-    recName: { fontFamily: 'Inter-SemiBold', fontSize: 15, color: colors.textPrimary },
-    recSub: { fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 1 },
-    empty: { fontFamily: 'Inter-Regular', fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: 40 },
+    recName: { fontFamily: 'MonaSans-SemiBold', fontSize: 15, color: colors.textPrimary },
+    recSub: { fontFamily: 'MonaSans-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+    empty: { fontFamily: 'MonaSans-Regular', fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: 40 },
     amountWrap: { paddingHorizontal: 24, alignItems: 'center', marginTop: 12 },
     selectedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 28 },
-    amountInput: { fontFamily: 'Inter-Bold', fontSize: 52, color: colors.textPrimary, textAlign: 'center', minWidth: 120 },
-    amountUnit: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.primary, marginTop: 4 },
+    amountInput: { fontFamily: 'MonaSans-Bold', fontSize: 52, color: colors.textPrimary, textAlign: 'center', minWidth: 120 },
+    amountUnit: { fontFamily: 'MonaSans-SemiBold', fontSize: 16, color: colors.primary, marginTop: 4 },
     sendBtn: { marginTop: 40, height: 52, borderRadius: 999, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
     sendBtnText: { color: '#fff', fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 16 },
   });

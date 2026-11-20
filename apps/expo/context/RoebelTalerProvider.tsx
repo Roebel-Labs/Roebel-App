@@ -6,7 +6,7 @@ import { useGnosisWallet } from '@/context/GnosisWalletContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { runWithRetry } from '@/lib/muenzen-settlement';
 import {
-  isOnboarded, findInviter, getRoebelTalerBalance, getPersonalCrcBalance,
+  isOnboarded, getRoebelTalerBalance, getPersonalCrcBalance,
   getMintableTaler, formatTaler, prepareDailyMint, prepareOnboard,
   prepareContributeToRoebelTaler, prepareSendRoebelTaler, isGroupMember,
 } from '@/lib/roebel-taler';
@@ -14,11 +14,13 @@ import { circlesHubAddress, roebeltalerGroupAddress } from '@/constants/gnosis';
 import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount } from '@/lib/muenzen-claim';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recordMuenzenClaim } from '@/lib/muenzen-daily-mint';
+import { convertibleRaw, findMyInvitation, getInviteReserveRaw } from '@/lib/muenzen-invite';
 
 const CLAIM_READS = {
   isGroupMember,
   personalBalance: getPersonalCrcBalance,
   mintable: getMintableTaler,
+  inviteReserve: getInviteReserveRaw,
 };
 const CLAIM_ADDRS = {
   hub: circlesHubAddress as `0x${string}`,
@@ -50,6 +52,8 @@ interface RoebelTalerContextValue {
   groupBalanceRaw: bigint;
   mintable: number;
   mintableRaw: bigint;
+  /** The user's own, not yet converted Münzen — what invitations are paid from. Never optimistic. */
+  personalBalanceRaw: bigint;
   onboarded: boolean;
   loading: boolean;
   minting: boolean;
@@ -155,10 +159,14 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
       const member = await isGroupMember(gnosisAccount.address).catch(() => false);
       if (member) {
         const pcrc = await getPersonalCrcBalance(gnosisAccount.address).catch(() => 0n);
-        if (pcrc > 0n) {
+        // Saving for an invitation / open invitations hold back personal Münzen (never converted,
+        // the shared Röbel Münzen cannot be turned back). A failed reserve read converts nothing.
+        const reserve = await getInviteReserveRaw(gnosisAccount.address).catch(() => pcrc);
+        const amount = convertibleRaw(pcrc, reserve);
+        if (amount > 0n) {
           await sendTransaction({
             account: gnosisAccount,
-            transaction: prepareContributeToRoebelTaler(gnosisAccount.address, pcrc),
+            transaction: prepareContributeToRoebelTaler(gnosisAccount.address, amount),
           });
         }
       }
@@ -188,10 +196,20 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     setOnboarding(true);
     try {
       if (await isOnboarded(gnosisAccount.address)) { await refresh(); return; }
-      const inviter = await findInviter(gnosisAccount.address);
+      const { inviter, pendingInviter, inviterName } = await findMyInvitation(gnosisAccount.address).catch(() => {
+        throw new Error('Deine Einladung konnte gerade nicht geprüft werden. Bitte prüfe deine Verbindung und versuche es erneut.');
+      });
+      if (!inviter && pendingInviter) {
+        // Invited, but the inviter is still saving the Münzen the join costs them — joining now
+        // would fail on-chain. Tell the user instead.
+        throw Object.assign(
+          new Error('Deine Einladung ist da, aber noch nicht ganz angespart. Bitte versuche es in ein paar Tagen erneut.'),
+          { code: 'INVITER_SAVING' as const, inviterName },
+        );
+      }
       if (!inviter) {
         throw Object.assign(
-          new Error('Du wurdest noch nicht eingeladen. Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann hier erneut tippen.'),
+          new Error('Du wurdest noch nicht eingeladen. Bitte eine:n Nachbar:in, der oder die schon Röbel Münzen sammelt, dich einzuladen.'),
           { code: 'NOT_INVITED' as const },
         );
       }
@@ -255,6 +273,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     groupBalanceRaw: groupRaw,
     mintable: Number(formatTaler(mintableRaw)),
     mintableRaw,
+    personalBalanceRaw: personalRaw,
     onboarded,
     loading: loading || !ready,
     minting,
@@ -268,7 +287,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     refresh,
     enqueueSettlement,
     account: gnosisAccount,
-  }), [optimisticRaw, groupRaw, mintableRaw, onboarded, loading, ready, minting, onboarding,
+  }), [optimisticRaw, groupRaw, mintableRaw, personalRaw, onboarded, loading, ready, minting, onboarding,
        sending, dailyMint, passkeyClaim, claimNow, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
 
   return <RoebelTalerContext.Provider value={value}>{children}</RoebelTalerContext.Provider>;

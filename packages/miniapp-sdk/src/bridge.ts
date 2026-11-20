@@ -58,8 +58,17 @@ export class ClientBridge {
     this.settleMode = resolve;
   });
 
+  /** Methods the host announced in its hello reply; null until/unless it sent a list. */
+  private announcedMethods: readonly string[] | null = null;
+
   getMode(): BridgeMode {
     return this.mode;
+  }
+
+  /** The host's method list from `bridge.hello`. null in mock mode or when the host sent none
+   * (older hosts). */
+  hostMethods(): readonly string[] | null {
+    return this.mode === 'mock' ? null : this.announcedMethods;
   }
 
   start(): void {
@@ -98,8 +107,12 @@ export class ClientBridge {
         resolve();
       }, HELLO_TIMEOUT_MS);
       this.pending.set(id, {
-        resolve: () => {
+        resolve: (result: unknown) => {
           stopRetry();
+          const methods = (result as { methods?: unknown } | null | undefined)?.methods;
+          if (Array.isArray(methods)) {
+            this.announcedMethods = methods.filter((m): m is string => typeof m === 'string');
+          }
           this.settle('host');
           resolve();
         },

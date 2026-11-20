@@ -2,7 +2,8 @@ import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BotAvatar, BOT_COLORS } from './BotAvatar';
+import { BotAvatar } from './BotAvatar';
+import { MECKY_AVATAR_SPEC } from '@/lib/chat/avatar-picture';
 import { BlackPillButton } from './BlackPillButton';
 import { GlassCircleButton } from './GlassCircleButton';
 import { chatFont, useChatTokens } from './tokens';
@@ -21,7 +22,7 @@ export type UltraPaywallProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-const DEFAULT_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dashes' };
+const DEFAULT_AVATAR: BotAvatarSpec = MECKY_AVATAR_SPEC;
 
 /** Ultra paywall card content (ref 19). Wrap it in a sheet / modal. */
 export function UltraPaywall({
@@ -57,7 +58,7 @@ export function UltraPaywall({
       </View>
 
       <View style={styles.content}>
-        <BotAvatar spec={avatar} size={74} style={styles.avatar} />
+        <BotAvatar spec={avatar} name={botName} size={74} style={styles.avatar} />
         <Text style={[styles.title, { color: t.textPrimary }]}>{botName} läuft mit Ultra</Text>
         <Text style={[styles.subtitle, { color: t.textSecondary }]}>
           Ultra schaltet die Cloud-Agenten von {botName} mit den höchsten Nutzungslimits frei.

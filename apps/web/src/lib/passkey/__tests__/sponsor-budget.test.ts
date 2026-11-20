@@ -5,7 +5,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_GLOBAL_DAILY_WEI,
+  DEFAULT_GUEST_GLOBAL_DAILY_WEI,
   DEFAULT_PER_KEY_DAILY_WEI,
+  GUEST_GROUP_KEY,
   InMemorySponsorBudget,
   budgetFromEnv,
 } from "../sponsor-budget";
@@ -61,4 +63,45 @@ test("budgetFromEnv reads PASSKEY_SPONSOR_DAILY_WEI / PASSKEY_SPONSOR_GLOBAL_DAI
   // Garbage env falls back to the defaults (never "unlimited").
   const g = budgetFromEnv({ PASSKEY_SPONSOR_DAILY_WEI: "lots" }, () => 0);
   assert.equal(await g.reserve("a", DEFAULT_PER_KEY_DAILY_WEI + 1n), false);
+});
+
+// ---- the global guest cap (one shared daily total for every guest Safe) ----
+
+test("guest cap defaults: group key 'guests', 0.02 xDAI per UTC day", () => {
+  assert.equal(GUEST_GROUP_KEY, "guests");
+  assert.equal(DEFAULT_GUEST_GLOBAL_DAILY_WEI, 2n * 10n ** 16n);
+});
+
+test("guest cap: guests share one daily total, citizens are not touched by it", async () => {
+  const b = new InMemorySponsorBudget({ perKeyDailyWei: 1000n, globalDailyWei: 10_000n });
+  const guest = { perKeyDailyWei: 100n, group: { key: "guests", dailyWei: 150n } };
+  assert.equal(await b.reserve("0xa", 100n, guest), true);
+  assert.equal(await b.reserve("0xb", 100n, guest), false); // group would reach 200 > 150
+  assert.equal(await b.reserve("0xb", 50n, guest), true);
+  assert.equal(await b.reserve("0xc", 1n, guest), false);   // guests are full
+  assert.equal(await b.reserve("0xd", 900n), true);         // a citizen still passes
+});
+
+test("a refused guest reservation counts nowhere", async () => {
+  const b = new InMemorySponsorBudget({ perKeyDailyWei: 1000n, globalDailyWei: 120n });
+  assert.equal(await b.reserve("0xa", 130n, { group: { key: "guests", dailyWei: 500n } }), false);
+  assert.equal(await b.reserve("0xa", 120n, { group: { key: "guests", dailyWei: 500n } }), true);
+});
+
+test("a guest refused by its own key cap leaves the group total untouched", async () => {
+  const b = new InMemorySponsorBudget({ perKeyDailyWei: 1000n, globalDailyWei: 10_000n, now: () => 0 });
+  const guest = { perKeyDailyWei: 100n, group: { key: "guests", dailyWei: 150n } };
+  assert.equal(await b.reserve("0xa", 101n, guest), false); // over the key cap
+  assert.equal(await b.reserve("0xb", 100n, guest), true);
+  assert.equal(await b.reserve("0xc", 50n, guest), true);   // the refused 101 was never counted
+});
+
+test("the guest total resets with the UTC day", async () => {
+  let now = 0;
+  const b = new InMemorySponsorBudget({ perKeyDailyWei: 1000n, globalDailyWei: 10_000n, now: () => now });
+  const guest = { group: { key: "guests", dailyWei: 100n } };
+  assert.equal(await b.reserve("0xa", 100n, guest), true);
+  assert.equal(await b.reserve("0xb", 1n, guest), false);
+  now += DAY;
+  assert.equal(await b.reserve("0xb", 100n, guest), true);
 });

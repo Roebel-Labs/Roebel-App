@@ -17,6 +17,8 @@ type Props = {
   onEdit: (comment: PostCommentRecord) => void;
   onDelete: (comment: PostCommentRecord) => void;
   onToggleLike: (comment: PostCommentRecord) => void;
+  /** Opens the Röbel Münzen tip sheet for a comment. */
+  onTip?: (comment: PostCommentRecord) => void;
   /** An @Mecky question in this thread is still being answered. */
   meckyThinking?: boolean;
 };
@@ -33,6 +35,7 @@ export default function CommentThread({
   onEdit,
   onDelete,
   onToggleLike,
+  onTip,
   meckyThinking = false,
 }: Props) {
   const { colors } = useTheme();
@@ -53,6 +56,7 @@ export default function CommentThread({
         onDelete={onDelete}
         onReply={onReply}
         onToggleLike={onToggleLike}
+        onTip={onTip}
       />
 
       {replyCount > 0 && (
@@ -86,6 +90,7 @@ export default function CommentThread({
             onDelete={onDelete}
             onReply={onReply}
             onToggleLike={onToggleLike}
+            onTip={onTip}
           />
         ))}
 
@@ -119,7 +124,7 @@ const styles = StyleSheet.create({
   },
   expanderText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSans-SemiBold',
   },
   thinking: {
     flexDirection: 'row',
@@ -137,7 +142,7 @@ const styles = StyleSheet.create({
   },
   thinkingText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   loader: {
     paddingVertical: 8,

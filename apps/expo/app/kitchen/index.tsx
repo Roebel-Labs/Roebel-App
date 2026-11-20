@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   sessionTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
   },
   sessionMeta: {
     flexDirection: 'row',
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   },
   newSessionLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
   },
   tableButtonRow: {
@@ -342,6 +342,6 @@ const styles = StyleSheet.create({
   closeSessionText: {
     color: '#DC2626',
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
   },
 });

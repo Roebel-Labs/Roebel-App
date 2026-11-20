@@ -4,11 +4,11 @@
 // farcaster.json so one data source can feed both files. No server-only deps:
 // unit-tested with tsx.
 import { createHash } from "node:crypto";
-import { validateManifest } from "./manifest";
+import { MANIFEST_VERSIONS, validateManifest } from "./manifest";
 import { MiniAppError, type MiniAppManifest } from "./types";
 
 export const WELL_KNOWN_PATH = "/.well-known/roebel-miniapp.json";
-const SUPPORTED_VERSIONS = new Set(["1"]);
+const SUPPORTED_VERSIONS = new Set<string>(MANIFEST_VERSIONS);
 const OWNER_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export interface ParsedManifestFile {
@@ -58,7 +58,7 @@ export function parseManifestFile(raw: unknown, origin: string): ParsedManifestF
 
   const version = String(m.version ?? "1");
   if (!SUPPORTED_VERSIONS.has(version)) {
-    fail(`miniapp.version "${version}" wird nicht unterstützt (erlaubt: 1).`);
+    fail(`miniapp.version "${version}" wird nicht unterstützt (erlaubt: ${MANIFEST_VERSIONS.join(", ")}).`);
   }
 
   let homeOrigin = "";

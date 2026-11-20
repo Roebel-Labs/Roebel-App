@@ -22,6 +22,9 @@ export type EmailContact = {
   alertsEnabled: boolean;
 };
 
+/** Recovery alerts are claimed once per (wallet, recovery nonce) and channel. */
+export type AlertChannel = "email" | "push";
+
 export interface PasskeyEmailStore {
   getChallenge(safe: string): Promise<EmailChallenge | null>;
   /** Replaces any open challenge for this Safe. */
@@ -40,11 +43,17 @@ export interface PasskeyEmailStore {
   /** Recovery-alert scan cursor: the last fully processed block. */
   getCursor(id: string): Promise<bigint | null>;
   setCursor(id: string, block: bigint): Promise<void>;
-  /** Claims the alert for (wallet, nonce); false when it was already claimed (sent). */
-  claimAlert(wallet: string, nonce: bigint, executeAfter: bigint): Promise<boolean>;
-  /** Releases a claim whose email could not be sent, so the next run retries it. */
-  releaseAlert(wallet: string, nonce: bigint): Promise<void>;
+  /** Claims the alert for (wallet, nonce, channel); false when it was already claimed (sent). Default channel 'email'. */
+  claimAlert(wallet: string, nonce: bigint, executeAfter: bigint, channel?: AlertChannel): Promise<boolean>;
+  /** Releases a claim whose alert could not be sent, so the next run retries it. Default channel 'email'. */
+  releaseAlert(wallet: string, nonce: bigint, channel?: AlertChannel): Promise<void>;
+  /** Counts one more failed send of (wallet, nonce, channel); returns the new total (survives a release). */
+  countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel): Promise<number>;
 }
+
+/** Key of the failure counter of one alert (kept beside the scan cursor; no extra table). */
+export const alertFailureId = (wallet: string, nonce: bigint, channel: AlertChannel) =>
+  `alert-failures:${wallet.toLowerCase()}:${nonce}:${channel}`;
 
 export class InMemoryEmailStore implements PasskeyEmailStore {
   readonly challenges = new Map<string, EmailChallenge>();
@@ -91,14 +100,20 @@ export class InMemoryEmailStore implements PasskeyEmailStore {
   async setCursor(id: string, block: bigint) {
     this.cursors.set(id, block);
   }
-  async claimAlert(wallet: string, nonce: bigint) {
-    const key = `${wallet.toLowerCase()}:${nonce}`;
+  async claimAlert(wallet: string, nonce: bigint, _executeAfter?: bigint, channel: AlertChannel = "email") {
+    const key = `${wallet.toLowerCase()}:${nonce}:${channel}`;
     if (this.alerts.has(key)) return false;
     this.alerts.add(key);
     return true;
   }
-  async releaseAlert(wallet: string, nonce: bigint) {
-    this.alerts.delete(`${wallet.toLowerCase()}:${nonce}`);
+  async releaseAlert(wallet: string, nonce: bigint, channel: AlertChannel = "email") {
+    this.alerts.delete(`${wallet.toLowerCase()}:${nonce}:${channel}`);
+  }
+  async countAlertFailure(wallet: string, nonce: bigint, channel: AlertChannel) {
+    const id = alertFailureId(wallet, nonce, channel);
+    const n = (this.cursors.get(id) ?? 0n) + 1n;
+    this.cursors.set(id, n);
+    return Number(n);
   }
 }
 

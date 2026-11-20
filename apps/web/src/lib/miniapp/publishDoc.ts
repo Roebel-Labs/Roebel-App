@@ -30,6 +30,16 @@ Plain HTML:
 \`\`\`
 Full SDK reference: ${base}/mini-apps/llms-full.txt
 
+## User token
+\`sdk.auth.getToken()\` returns \`{ token }\` or \`null\` (handle \`null\`). The token
+is valid for 10 minutes and for this app only. A server that calls
+${base}/api/mini-apps/rewards, /data (user scope), /notifications or
+/muenzen-balance must send it as \`Authorization: Bearer <token>\`. A wallet
+address alone will stop working. Verify it on your own server with
+\`verifyUserToken\` from \`@netizen-labs/miniapp-verify\`. \`auth.getToken\`,
+\`auth.signIn\` and \`roebel.pay\` work in the Röbel app from version 3.10.0;
+ask \`sdk.supports()\` first.
+
 ## 2. Allow embedding
 The app runs inside an iframe/WebView. Do not send \`X-Frame-Options: DENY|SAMEORIGIN\`,
 and if you set a CSP, use \`frame-ancestors *\`.
@@ -67,6 +77,34 @@ For Next.js, Vite and Lovable that means the file \`public/.well-known/roebel-mi
 - \`iconUrl\`: square PNG, ideally 1024×1024.
 - Optional \`slug\` (a–z, 0–9, "-"); otherwise one is derived from the name.
 
+Version 2 (identity, gasless contracts, audience, org; details: ${base}/mini-apps/llms-full.txt):
+\`\`\`json
+{
+  "owner": "0x…",
+  "miniapp": {
+    "version": "2",
+    "name": "Vereinsheim",
+    "homeUrl": "https://<your-app-domain>/",
+    "iconUrl": "https://<your-app-domain>/icon.png",
+    "description": "Trainingszeiten und Check-in für Mitglieder.",
+    "category": "community",
+    "tags": ["verein"],
+    "screenshots": [],
+    "permissions": ["wallet"],
+    "primaryColor": "#00498B",
+    "identity": {
+      "profile": true,
+      "address": false,
+      "credentials": [{ "type": "org:3f2504e0-4f89-41d3-9a0c-0305e82c3301", "reason": "Nur Mitglieder sehen den Trainingsplan." }]
+    },
+    "contracts": [{ "address": "0x1111111111111111111111111111111111111111", "label": "Check-in", "functions": ["checkIn(uint256)"] }],
+    "audience": { "mode": "required", "anyOf": ["org:3f2504e0-4f89-41d3-9a0c-0305e82c3301"] },
+    "org": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+  }
+}
+\`\`\`
+The org confirms \`org\` in the app; a lock is a courtesy, so check credentials on your server.
+
 ## 5. Validate, then register
 \`\`\`bash
 curl -s "${base}/api/mini-apps/validate?url=https://<your-app-domain>"
@@ -81,6 +119,6 @@ Fix every error from \`validate\` before registering, and tell the builder about
 ## Updating later
 Change the manifest, deploy, and call \`register\` again (or wait for the daily re-index).
 Changes to a live app go live after review; the current version stays visible until then.
-MCP alternative: tool \`register_app_url\` on ${base}/api/mcp.
+MCP alternative: tool \`register_app_url\` on ${base}/api/mcp (only \`nz_\` API keys are accepted).
 `;
 }

@@ -19,13 +19,13 @@ import { isCitizenTokenRegistered, lookupMaciSignUp, thirdwebMaciSource } from '
 import { deriveCommitmentSalt, loadCitizenPreimage } from '@/lib/citizen-commitment';
 import { deriveAndStoreIdentity } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
-import { deviceSecretSources, keyBackupFor } from './derived-keys-runtime';
+import { deviceSecretSources, keyBackupFor, resolveWordsVaultKey } from './derived-keys-runtime';
 import { MACI_KEYPAIR_STORE_KEY } from './derived-keys';
 import { completeKeyBackup, type CompletionResult, type ThirdwebKeySource } from './key-completion';
 import { deriveMaciSlotFromThirdweb } from './maci-key-resolver';
 import type { KeyBackupSlot } from './key-backup';
 import { unwrapSecret, wrapSecret } from './prf-vault';
-import type { PasskeySession } from './session';
+import { requirePasskeyOwner, type PasskeySession } from './session';
 import { getPrfSecret } from './webauthn';
 
 const enc = new TextEncoder();
@@ -143,6 +143,7 @@ export async function completeKeysForSession(
   session: PasskeySession,
   opts: { activeAccount?: unknown; thirdwebAccount?: Account | null } = {},
 ): Promise<CompletionResult> {
+  requirePasskeyOwner(session); // passkey PRF + thirdweb re-derivation: never a words session
   return completeKeyBackup({
     identity: session.identity,
     remote: keyBackupFor(session),
@@ -151,6 +152,7 @@ export async function completeKeysForSession(
     getPrf: () => getPrfSecret(session.credentialId),
     wrap: wrapSecret,
     unwrap: unwrapSecret,
+    wordsVaultKey: resolveWordsVaultKey,
     hasCommitment: () => hasCommitment(session.identity),
     thirdweb: async () => {
       const acc = opts.thirdwebAccount ?? (await silentThirdwebAccount(opts.activeAccount));

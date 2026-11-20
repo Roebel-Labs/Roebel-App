@@ -101,7 +101,7 @@ export default function RestaurantDashboardContent() {
               {menuCounts.categories} Kategorien · {menuCounts.items} Gerichte · KI-Bilder
             </Text>
           </View>
-          <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 20 }}>›</Text>
+          <Text style={{ color: colors.primary, fontFamily: 'MonaSans-Medium', fontSize: 20 }}>›</Text>
         </Pressable>
       )}
 
@@ -151,6 +151,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  tileTitle: { fontSize: 15, fontFamily: 'Inter-Medium' },
-  tileSubtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  tileTitle: { fontSize: 15, fontFamily: 'MonaSans-Medium' },
+  tileSubtitle: { fontSize: 13, fontFamily: 'MonaSans-Regular', marginTop: 2 },
 });

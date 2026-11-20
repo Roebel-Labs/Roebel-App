@@ -40,12 +40,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSans-Bold',
     marginBottom: 8,
   },
   description: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSans-Regular',
     lineHeight: 22,
     marginBottom: 24,
   },
