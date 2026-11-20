@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeftIcon, BookmarkIcon } from '@/components/Icons';
+import GlassIconButton from '@/components/GlassIconButton';
 import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import EventCard from '@/components/EventCard';
@@ -81,14 +82,13 @@ export default function CategoryDetail() {
           </View>
 
           {/* Back Button */}
-          <Pressable
+          <GlassIconButton
             onPress={() => router.back()}
-            style={[styles.heroBackButton, { top: insets.top + 8, backgroundColor: colors.background }, shadows.backButton]}
-            accessibilityRole="button"
             accessibilityLabel="Zurück"
+            style={[styles.heroBackButton, { top: insets.top + 8 }]}
           >
-            <ArrowLeftIcon size={20} color={colors.textPrimary} />
-          </Pressable>
+            <ArrowLeftIcon size={22} color={colors.textPrimary} />
+          </GlassIconButton>
         </View>
 
         {/* Content Section */}
@@ -122,16 +122,6 @@ export default function CategoryDetail() {
   );
 }
 
-const shadows = StyleSheet.create({
-  backButton: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-});
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -151,11 +141,6 @@ const styles = StyleSheet.create({
   heroBackButton: {
     position: 'absolute',
     left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 9999,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   contentSection: {
     paddingTop: 24,

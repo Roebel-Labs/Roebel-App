@@ -40,8 +40,6 @@ import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import { MiniAppHeroCard } from '@/components/miniapp/MiniAppCard';
 import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
 import MiniAppStoreSkeleton from '@/components/miniapp/MiniAppSkeleton';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useAccount } from '@/context/AccountContext';
@@ -54,7 +52,6 @@ const NEW_APPS_COUNT = 6;
 
 export default function MiniAppsStoreScreen() {
   const { colors } = useTheme();
-  const entryShimmer = useEntryShimmer();
   const router = useRouter();
   const goBack = useGoBack();
   const { width } = useWindowDimensions();
@@ -307,11 +304,6 @@ export default function MiniAppsStoreScreen() {
             </>
           )}
         </ScrollView>
-      )}
-      {!loading && (
-        <ScreenShimmer shimmer={entryShimmer}>
-          <MiniAppStoreSkeleton />
-        </ScreenShimmer>
       )}
       </View>
 

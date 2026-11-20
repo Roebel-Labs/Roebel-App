@@ -14,6 +14,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRelations } from '@/context/RelationsContext';
 import FollowButton from '@/components/follow/FollowButton';
+import GlassIconButton from '@/components/GlassIconButton';
 import { FollowCounts } from '@/components/follow/FollowersDrawer';
 import { fetchPersonalAccountId } from '@/lib/supabase-follows';
 import { supabase } from '@/lib/supabase';
@@ -180,15 +181,9 @@ export default function PublicUserProfileScreen() {
         {/* ── Cover banner with back chevron + optional edit pill ── */}
         <View style={styles.bannerWrap}>
           <ProfileCoverBanner assetUrl={bannerUrl} />
-          <Pressable
-            onPress={goBack}
-            style={[styles.backPill, { backgroundColor: colors.background }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
+          <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" style={styles.backPill}>
+            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+          </GlassIconButton>
           {isOwner && (
             <Pressable
               onPress={() => router.push('/edit-profile' as any)}
@@ -368,16 +363,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   editPill: {
     position: 'absolute',

@@ -48,6 +48,7 @@ import {
 } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
+import GlassIconButton from '@/components/GlassIconButton';
 import MiniAppLockNote from '@/components/miniapp/MiniAppLockNote';
 import { useMatchCredentials } from '@/lib/miniapp-credentials';
 import { openDecision } from '@/lib/miniapp-open';
@@ -335,22 +336,12 @@ export default function MiniAppDetailScreen() {
             >
               {/* Floating circular actions */}
               <View style={styles.actionsRow}>
-                <Pressable
-                  onPress={goBack}
-                  style={[styles.circleBtn, { backgroundColor: colors.surfaceSecondary }]}
-                  hitSlop={8}
-                  accessibilityLabel="Zurück"
-                >
-                  <ArrowLeft size={20} color={colors.textPrimary} />
-                </Pressable>
-                <Pressable
-                  onPress={handleShare}
-                  style={[styles.circleBtn, { backgroundColor: colors.surfaceSecondary }]}
-                  hitSlop={8}
-                  accessibilityLabel="Teilen"
-                >
-                  <ShareIcon size={18} color={colors.textPrimary} />
-                </Pressable>
+                <GlassIconButton onPress={goBack} accessibilityLabel="Zurück">
+                  <ArrowLeft size={22} color={colors.textPrimary} />
+                </GlassIconButton>
+                <GlassIconButton onPress={handleShare} accessibilityLabel="Teilen">
+                  <ShareIcon size={20} color={colors.textPrimary} />
+                </GlassIconButton>
               </View>
 
               {/* Identity */}
@@ -628,13 +619,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 16,
-  },
-  circleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   identity: {
     flexDirection: 'row',

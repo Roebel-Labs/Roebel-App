@@ -67,8 +67,6 @@ import CommentComposerModal from '@/components/feed/CommentComposerModal';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton, { CommentSkeleton } from '@/components/feed/FeedPostSkeleton';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import PostOptionsDrawer from '@/components/feed/PostOptionsDrawer';
 import { usePostAuthorActions } from '@/hooks/usePostAuthorActions';
@@ -97,8 +95,6 @@ export default function PostDetailScreen() {
   const [tipTarget, setTipTarget] = useState<PostCommentRecord | null>(null);
   // Pause the post video while another screen (profile, likes …) is on top.
   const isFocused = useIsFocused();
-  const entryShimmer = useEntryShimmer();
-  const [headerHeight, setHeaderHeight] = useState(0);
 
   const [post, setPost] = useState<PostRecord | null>(null);
   const [comments, setComments] = useState<PostCommentRecord[]>([]);
@@ -816,13 +812,7 @@ export default function PostDetailScreen() {
             Android (plain View on iOS). The pill renders after/outside it. */}
         <GlassBackdrop style={styles.flex}>
           {/* Header */}
-          <View
-            style={[styles.header, { borderBottomColor: colors.border }]}
-            onLayout={(e) => {
-              const h = e.nativeEvent.layout.height;
-              setHeaderHeight((prev) => (prev === h ? prev : h));
-            }}
-          >
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Pressable onPress={goBack} style={styles.backButton}>
               <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
             </Pressable>
@@ -864,11 +854,6 @@ export default function PostDetailScreen() {
             }
           />
           <CommentScrim visible={commentFocused} />
-          <ScreenShimmer shimmer={entryShimmer} topInset={headerHeight}>
-            <FeedPostSkeleton />
-            <CommentSkeleton />
-            <CommentSkeleton />
-          </ScreenShimmer>
         </GlassBackdrop>
 
         {/* Floating comment bar — overlaps the list bottom so comments

@@ -8,6 +8,8 @@ import GlassSurface from '@/components/GlassSurface';
 import { fontFamily } from '@/constants/theme';
 import GlassTabBar from '@/components/navigation/GlassTabBar';
 import { useNavBarStyle } from '@/lib/nav-bar-style';
+import { usePathname } from 'expo-router';
+import { goToTab, tabSwitchAction } from '@/lib/navigation/goToTab';
 
 // Import SVG icons
 import HomeStroke from '../assets/icons/bottom-nav/home.svg';
@@ -26,7 +28,11 @@ const ICON_SIZE = 24;
 
 type Props = {
   activeTab: TabKey;
-  onTabPress: (tab: TabKey) => void;
+  /**
+   * Re-tap of the tab whose section is already on screen. Switching sections is handled here via
+   * goToTab() so the stack never grows (hosts must not navigate themselves).
+   */
+  onTabPress?: (tab: TabKey) => void;
   /** Skip the solid fill — for hosts that paint their own (glass) surface. */
   transparent?: boolean;
   /**
@@ -52,12 +58,17 @@ export default function BottomNavigation({ activeTab, onTabPress, transparent = 
   const activeColor = colors.textPrimary;
   const inactiveColor = colors.textPrimary;
 
+  const pathname = usePathname();
   const handlePress = (key: TabKey) => {
     Haptics.selectionAsync().catch(() => {});
     if (key === 'explore' && exploreDotVisible) {
       dismissExploreDot();
     }
-    onTabPress(key);
+    if (tabSwitchAction(key, pathname) === 'none') {
+      onTabPress?.(key);
+      return;
+    }
+    goToTab(key, pathname);
   };
 
   if (navStyle === 'glass') {

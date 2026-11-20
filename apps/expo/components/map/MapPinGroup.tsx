@@ -18,6 +18,8 @@ import type { PinGroup } from '@/lib/map/clusters';
 type Props = {
   group: PinGroup;
   onPress: (group: PinGroup) => void;
+  /** A photo finished loading — the map annotation re-rasterizes the view. */
+  onImageLoad?: () => void;
 };
 
 const FRONT = 44;
@@ -37,10 +39,12 @@ function Tile({
   member,
   size,
   style,
+  onLoad,
 }: {
   member: MapFeatureProperties;
   size: number;
   style?: object;
+  onLoad?: () => void;
 }) {
   const { colors, isDark } = useTheme();
   const frame = isDark ? '#2d2e31' : '#ffffff';
@@ -59,7 +63,9 @@ function Tile({
           contentFit="cover"
           cachePolicy="memory-disk"
           recyclingKey={member.fid}
-          transition={120}
+          // No fade: the view is rasterized into the map; a mid-fade snapshot would stick.
+          transition={0}
+          onLoad={onLoad}
         />
       ) : (
         <Text style={[styles.emoji, { fontSize: size * 0.48 }]}>{member.emoji}</Text>
@@ -68,7 +74,7 @@ function Tile({
   );
 }
 
-function MapPinGroup({ group, onPress }: Props) {
+function MapPinGroup({ group, onPress, onImageLoad }: Props) {
   const { colors, isDark } = useTheme();
   const [front, second, third] = stackMembers(group.members);
   const more = group.members.length - 1;
@@ -83,9 +89,9 @@ function MapPinGroup({ group, onPress }: Props) {
       accessibilityLabel={`${front.title} und ${more} weitere`}
     >
       <View style={styles.stack}>
-        {third ? <Tile member={third} size={BACK} style={styles.backRight} /> : null}
-        {second ? <Tile member={second} size={BACK} style={styles.backLeft} /> : null}
-        <Tile member={front} size={FRONT} style={styles.front} />
+        {third ? <Tile member={third} size={BACK} style={styles.backRight} onLoad={onImageLoad} /> : null}
+        {second ? <Tile member={second} size={BACK} style={styles.backLeft} onLoad={onImageLoad} /> : null}
+        <Tile member={front} size={FRONT} style={styles.front} onLoad={onImageLoad} />
       </View>
       <Text
         numberOfLines={2}

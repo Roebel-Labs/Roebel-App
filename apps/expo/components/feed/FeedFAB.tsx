@@ -3,7 +3,6 @@ import { Pressable, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   Easing,
   interpolate,
@@ -12,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { GlassFill, glassChrome } from '@/components/GlassIconButton';
 
 import PencilIcon from '@/assets/icons/pencil.svg';
 
@@ -31,6 +31,7 @@ type Props = {
 
 export default function FeedFAB({ onPress, visibilityScale, label, accessibilityLabel }: Props) {
   const { colors } = useTheme();
+  const { rim } = glassChrome(true, true);
   const insets = useSafeAreaInsets();
   const scale = useSharedValue(1);
   const expanded = useSharedValue(label ? 1 : 0);
@@ -57,10 +58,10 @@ export default function FeedFAB({ onPress, visibilityScale, label, accessibility
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
+    scale.value = withTiming(0.92, { duration: 90, easing: Easing.out(Easing.quad) });
   };
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    scale.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
   };
 
   return (
@@ -74,7 +75,9 @@ export default function FeedFAB({ onPress, visibilityScale, label, accessibility
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? 'Neuen Beitrag erstellen'}
       >
-        <Animated.View style={[styles.fab, { backgroundColor: colors.primary }, pillStyle]}>
+        <Animated.View style={[styles.fab, { borderColor: rim }, pillStyle]}>
+          {/* Glass over the brand color: same rim + sheen as the glass buttons. */}
+          <GlassFill dark tint={colors.primary} />
           <PencilIcon width={24} height={24} color={colors.onPrimary} />
           {label ? (
             <Animated.Text numberOfLines={1} style={[styles.label, { color: colors.onPrimary }, labelStyle]}>
@@ -110,6 +113,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     overflow: 'hidden',
+    borderWidth: 1,
     paddingHorizontal: 16,
   },
   label: {

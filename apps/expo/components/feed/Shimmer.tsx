@@ -1,100 +1,58 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions, type ViewStyle, type StyleProp } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-  type SharedValue,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 
-const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
-
-const SWEEP_DURATION_MS = 1100;
-const SWEEP_WIDTH = 96;
-
-// One shared 0→1 loop per <ShimmerGroup> so every block on a skeleton
-// screen sweeps in phase (staggered sweeps read as flicker, not loading).
-const ShimmerContext = createContext<SharedValue<number> | null>(null);
-
-export function ShimmerGroup({ children }: { children: React.ReactNode }) {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withRepeat(
-      withTiming(1, { duration: SWEEP_DURATION_MS, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      false,
-    );
-    return () => cancelAnimation(progress);
-  }, [progress]);
-
-  return <ShimmerContext.Provider value={progress}>{children}</ShimmerContext.Provider>;
-}
-
-type BlockProps = {
-  style?: StyleProp<ViewStyle>;
-};
+/** One full breath (dim → bright → dim), ms. */
+const BREATH_MS = 1600;
+/** Lowest opacity of the breath. Subtle on purpose: the page "develops", it does not blink. */
+const DIM = 0.45;
 
 /**
- * A skeleton block with a light band sweeping across it. Drop-in
- * replacement for the previous static `backgroundColor: colors.skeleton`
- * views. Must render inside a <ShimmerGroup>.
+ * Skeleton container: the whole group breathes as ONE native-driven opacity
+ * loop. A single animated node per skeleton (instead of a sweeping gradient
+ * per block, each measuring itself) keeps the JS thread free during
+ * navigation and reads calmer. Static when reduce motion is on.
  */
-export function ShimmerBlock({ style }: BlockProps) {
-  const { colors, isDark } = useTheme();
-  const progress = useContext(ShimmerContext);
-  const { width: screenWidth } = useWindowDimensions();
-  const [blockWidth, setBlockWidth] = useState(0);
+export function ShimmerGroup({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
 
-  // Sweep across the full screen width so blocks at different x positions
-  // still appear lit by one band moving over the whole card.
-  const sweepStyle = useAnimatedStyle(() => {
-    if (!progress) return { opacity: 0 };
-    const travel = screenWidth + SWEEP_WIDTH * 2;
-    return {
-      opacity: 1,
-      transform: [{ translateX: -SWEEP_WIDTH + progress.value * travel }],
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => alive && setReduceMotion(on))
+      .catch(() => {});
+    return () => {
+      alive = false;
     };
-  });
+  }, []);
 
-  const highlight = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.55)';
+  useEffect(() => {
+    if (reduceMotion) {
+      opacity.setValue(1);
+      return;
+    }
+    const half = BREATH_MS / 2;
+    const ease = Easing.inOut(Easing.sin);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: DIM, duration: half, easing: ease, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: half, easing: ease, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, opacity]);
 
-  return (
-    <View
-      style={[styles.block, { backgroundColor: colors.skeleton }, style]}
-      onLayout={(e) => {
-        const w = e.nativeEvent.layout.width;
-        setBlockWidth((prev) => (prev === w ? prev : w));
-      }}
-    >
-      {blockWidth > 0 && (
-        <AnimatedGradient
-          pointerEvents="none"
-          colors={['transparent', highlight, 'transparent']}
-          start={{ x: 0, y: 0.4 }}
-          end={{ x: 1, y: 0.6 }}
-          style={[styles.sweep, sweepStyle]}
-        />
-      )}
-    </View>
-  );
+  return <Animated.View style={[style, { opacity }]}>{children}</Animated.View>;
+}
+
+/** A skeleton block. Animated by its surrounding <ShimmerGroup>. */
+export function ShimmerBlock({ style }: { style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return <View style={[styles.block, { backgroundColor: colors.skeleton }, style]} />;
 }
 
 const styles = StyleSheet.create({
-  block: {
-    overflow: 'hidden',
-  },
-  sweep: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: SWEEP_WIDTH,
-  },
+  block: { borderRadius: 8 },
 });

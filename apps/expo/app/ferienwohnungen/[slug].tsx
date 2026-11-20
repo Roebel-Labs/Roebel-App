@@ -24,6 +24,7 @@ import EmbeddedMap from '@/components/map/EmbeddedMap';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
+import GlassIconButton from '@/components/GlassIconButton';
 import {
   fetchVacationRental,
   formatEuro,
@@ -82,14 +83,9 @@ function VacationRentalScreenInner() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.roundBtn, styles.notFoundBack, { backgroundColor: colors.surfaceSecondary }]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
+        <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück" style={styles.notFoundBack}>
           <ArrowLeftIcon size={22} color={colors.textPrimary} />
-        </Pressable>
+        </GlassIconButton>
         <MeckyNotFound title="Ferienwohnung nicht gefunden" />
       </SafeAreaView>
     );
@@ -334,22 +330,12 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
         </View>
       </ScrollView>
       <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.roundBtn, { backgroundColor: 'rgba(255,255,255,0.94)', borderColor: 'rgba(0,0,0,0.08)' }]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
-          <ArrowLeftIcon size={22} color="#000" />
-        </Pressable>
-        <Pressable
-          onPress={share}
-          style={[styles.roundBtn, { backgroundColor: 'rgba(255,255,255,0.94)', borderColor: 'rgba(0,0,0,0.08)' }]}
-          accessibilityRole="button"
-          accessibilityLabel="Teilen"
-        >
-          <ShareIcon size={20} color="#000" />
-        </Pressable>
+        <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
+          <ArrowLeftIcon size={22} color={colors.textPrimary} />
+        </GlassIconButton>
+        <GlassIconButton onPress={share} accessibilityLabel="Teilen">
+          <ShareIcon size={20} color={colors.textPrimary} />
+        </GlassIconButton>
       </View>
 
       {rental.badge ? (
@@ -397,15 +383,6 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  roundBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
   },
   counter: {
     position: 'absolute',

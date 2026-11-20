@@ -26,6 +26,7 @@ import {
 } from '@/components/Icons';
 import BadgeCheckIcon from '@/assets/icons/badge-check.svg';
 import { VERIFIED_GOLD } from '@/components/profile/IdentityRow';
+import GlassIconButton from '@/components/GlassIconButton';
 
 export const HERO_HEIGHT = 300;
 /** How far the info sheet slides up over the photo (flat sheet: none). */
@@ -82,7 +83,7 @@ function OrgProfileHero({
   onToggleLike,
   extraActions = [],
 }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
@@ -95,7 +96,6 @@ function OrgProfileHero({
   const hasRating = !!ratingSummary && ratingSummary.rating_count > 0;
   const ratingText = ratingSummary ? formatRating(ratingSummary.avg_stars) : '';
   const ratingCount = ratingSummary?.rating_count ?? 0;
-  const buttonBg = isDark ? colors.background : 'rgba(255,255,255,0.94)';
   const closedColor = colors.warning;
 
   return (
@@ -123,51 +123,25 @@ function OrgProfileHero({
         ) : null}
 
         <View style={[styles.actionsRow, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <Pressable
-            onPress={onBack}
-            style={[styles.roundButton, { backgroundColor: buttonBg }]}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
+          <GlassIconButton onPress={onBack} accessibilityLabel="Zurück">
             <ArrowLeftIcon size={22} color={colors.textPrimary} />
-          </Pressable>
+          </GlassIconButton>
           <View style={styles.actionsRight}>
             {extraActions.map((a) => (
-              <Pressable
-                key={a.key}
-                onPress={a.onPress}
-                style={[styles.roundButton, { backgroundColor: buttonBg }]}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={a.accessibilityLabel}
-              >
+              <GlassIconButton key={a.key} onPress={a.onPress} accessibilityLabel={a.accessibilityLabel}>
                 {a.icon}
-              </Pressable>
+              </GlassIconButton>
             ))}
-            <Pressable
-              onPress={onShare}
-              style={[styles.roundButton, { backgroundColor: buttonBg }]}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Teilen"
-            >
+            <GlassIconButton onPress={onShare} accessibilityLabel="Teilen">
               <ShareIcon size={22} color={colors.textPrimary} />
-            </Pressable>
-            <Pressable
-              onPress={onToggleLike}
-              style={[styles.roundButton, { backgroundColor: buttonBg }]}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={liked ? 'Gefällt mir entfernen' : 'Gefällt mir'}
-              accessibilityState={{ selected: liked }}
-            >
+            </GlassIconButton>
+            <GlassIconButton onPress={onToggleLike} accessibilityLabel={liked ? 'Gefällt mir entfernen' : 'Gefällt mir'}>
               {liked ? (
                 <HeartFilledIcon size={22} color="#E53935" />
               ) : (
                 <HeartIcon size={22} color={colors.textPrimary} />
               )}
-            </Pressable>
+            </GlassIconButton>
           </View>
         </View>
 
@@ -284,13 +258,6 @@ const styles = StyleSheet.create({
   actionsRight: {
     flexDirection: 'row',
     gap: 10,
-  },
-  roundButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   counter: {
     position: 'absolute',

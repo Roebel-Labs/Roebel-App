@@ -68,6 +68,8 @@ const MUENZEN_INTRO_KEY = '@rewards/muenzen_intro_seen';
 export default function RewardsIndexScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  // Dark mode: the action cards sit a step lighter than the black page (Max 2026-11-20).
+  const cardFill = isDark ? colors.surfaceSecondary : colors.card;
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
   const { celebrate } = useRewardCelebration();
@@ -594,7 +596,7 @@ export default function RewardsIndexScreen() {
             onPress={() => router.push('/rewards/invite' as any)}
             style={({ pressed }) => [
               styles.inviteCard,
-              { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+              { backgroundColor: cardFill, opacity: pressed ? 0.9 : 1 },
               softShadow(2, isDark),
             ]}
             accessibilityRole="button"
@@ -620,7 +622,7 @@ export default function RewardsIndexScreen() {
               onPress={() => router.push('/treasury' as any)}
               style={({ pressed }) => [
                 styles.squareCard,
-                { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+                { backgroundColor: cardFill, opacity: pressed ? 0.9 : 1 },
                 softShadow(2, isDark),
               ]}
               accessibilityRole="button"
@@ -641,7 +643,7 @@ export default function RewardsIndexScreen() {
               onPress={() => router.push('/rewards/schatzkammer' as any)}
               style={({ pressed }) => [
                 styles.squareCard,
-                { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+                { backgroundColor: cardFill, opacity: pressed ? 0.9 : 1 },
                 softShadow(2, isDark),
               ]}
               accessibilityRole="button"

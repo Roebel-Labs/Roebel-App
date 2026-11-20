@@ -18,6 +18,7 @@ import { useUser } from '@/context/UserContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRelations } from '@/context/RelationsContext';
 import FollowButton from '@/components/follow/FollowButton';
+import GlassIconButton from '@/components/GlassIconButton';
 import { FollowCounts } from '@/components/follow/FollowersDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
@@ -26,8 +27,6 @@ import ProfileTabs from '@/components/profile/ProfileTabs';
 import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import RatingModal from '@/components/RatingModal';
@@ -121,9 +120,6 @@ function formatEventDate(date: string | null | undefined, time: string | null): 
 }
 
 
-/** Status-bar gap + the hero's round back/share buttons — kept clear of the entry skeleton. */
-const ACCOUNT_CHROME_HEIGHT = 8 + 44 + 8;
-
 export default function PublicAccountScreen() {
   return (
     <InlineErrorBoundary label="account-screen">
@@ -141,7 +137,6 @@ function PublicAccountScreenInner() {
   const { user } = useUser();
   const { isFollowing, isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
-  const entryShimmer = useEntryShimmer();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
@@ -532,10 +527,6 @@ function PublicAccountScreenInner() {
           onOpenMap={hasValidCoords ? openMap : undefined}
           onEditHours={() => goToOwnerScreen('/org/opening-hours')}
         />
-        {/* Entry skeleton below the hero's back/share row (it stays live). */}
-        <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + ACCOUNT_CHROME_HEIGHT} alignToScreenTop>
-          <AccountPageSkeleton onBack={goBack} />
-        </ScreenShimmer>
         <RatingModal
           visible={ratingModalOpen}
           accountId={account.id}
@@ -1097,10 +1088,6 @@ function PublicAccountScreenInner() {
         )}
       </ScrollView>
 
-      {/* Entry skeleton below the hero's back/share row (it stays live). */}
-      <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + ACCOUNT_CHROME_HEIGHT} alignToScreenTop>
-        <AccountPageSkeleton onBack={goBack} />
-      </ScreenShimmer>
 
       {/* Sticky category bar — rendered OUTSIDE the ScrollView as an
           absolute overlay so its taps aren't fought over by the parent
@@ -1169,15 +1156,9 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
         {/* Photo — same height as OrgProfileHero */}
         <View style={{ height: HERO_HEIGHT }}>
           <ShimmerSkeleton width={'100%' as any} height={HERO_HEIGHT} borderRadius={0} />
-          <Pressable
-            onPress={onBack}
-            style={[styles.backPill, { top: insets.top + 8, backgroundColor: colors.background }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
+          <GlassIconButton onPress={onBack} accessibilityLabel="Zurück" style={[styles.backPill, { top: insets.top + 8 }]}>
+            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+          </GlassIconButton>
         </View>
 
         {/* Info sheet — logo, name, category, meta line, location row */}
@@ -1295,16 +1276,6 @@ const styles = StyleSheet.create({
   backPill: {
     position: 'absolute',
     left: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
   identityBlock: {

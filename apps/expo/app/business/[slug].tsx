@@ -22,6 +22,7 @@ import { isRestaurantOpen } from '@/lib/utils';
 import { fetchBusinessBySlug } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import MeckyNotFound from '@/components/MeckyNotFound';
+import GlassIconButton from '@/components/GlassIconButton';
 import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
@@ -202,15 +203,9 @@ export default function BusinessDetailScreen() {
         {/* ── Cover banner with back chevron + optional edit pill ── */}
         <View style={styles.bannerWrap}>
           <ProfileCoverBanner assetUrl={business.cover_image_url} />
-          <Pressable
-            onPress={goBack}
-            style={[styles.backPill, { backgroundColor: colors.background }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
+          <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" style={styles.backPill}>
+            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+          </GlassIconButton>
           {isOwner && (
             <Pressable
               onPress={() => router.push(`/business/edit/${business.slug}` as any)}
@@ -451,11 +446,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   editPill: {
     position: 'absolute',

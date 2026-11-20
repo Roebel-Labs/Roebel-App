@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Pressable, Text, StyleSheet, View, Animated as RNAnimated } from 'react-native';
+import React from 'react';
+import { Pressable, Text, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import ReanimatedAnimated, {
   useAnimatedStyle,
@@ -11,9 +11,8 @@ import ReanimatedAnimated, {
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
+import { GlassFill, glassChrome } from '@/components/GlassIconButton';
 import { LocationIcon } from '@/components/Icons';
-import { softShadow } from '@/lib/shadow';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 
 type Props = {
@@ -41,8 +40,10 @@ export default function MapFAB({
   bottomOffset = 0,
 }: Props) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const scaleAnim = useRef(new RNAnimated.Value(1)).current;
+  const { colors, isDark, variant } = useTheme();
+  const { rim, shadow } = glassChrome(isDark);
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   // Fallback for callers that don't drive show/hide — created unconditionally
   // to satisfy the rules of hooks, only actually used when `visible` is omitted.
   const alwaysVisible = useSharedValue(true);
@@ -67,44 +68,38 @@ export default function MapFAB({
     pointerEvents: visibleShared.value ? 'auto' : 'none',
   }));
 
+  // One ease-out each way — no spring overshoot.
   const handlePressIn = () => {
-    RNAnimated.spring(scaleAnim, {
-      toValue: 0.95,
-      useNativeDriver: true,
-    }).start();
+    scale.set(withTiming(0.95, { duration: 90, easing: Easing.out(Easing.quad) }));
   };
-
   const handlePressOut = () => {
-    RNAnimated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    scale.set(withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) }));
   };
 
   return (
     <ReanimatedAnimated.View
       style={[styles.container, bottomOffset ? { bottom: BOTTOM_NAV_HEIGHT + 40 + bottomOffset } : null, animatedStyle]}
     >
-      <RNAnimated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <ReanimatedAnimated.View style={scaleStyle}>
         <Pressable
           onPress={() => router.push(href as any)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          style={[styles.pill, softShadow(2, isDark)]}
+          style={[styles.pill, { boxShadow: shadow } as ViewStyle]}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
         >
           {/* Frosted pill: the outer pressable carries the shadow, the inner
               view clips the glass — same material as the map's controls. */}
-          <View style={[styles.clip, { borderColor: glassEdgeColor(isDark) }]}>
-            <GlassSurface />
+          <View style={[styles.clip, { borderColor: rim }]}>
+            <GlassFill dark={isDark} black={variant === 'dark'} />
             <View style={styles.content}>
               {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
               <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
             </View>
           </View>
         </Pressable>
-      </RNAnimated.View>
+      </ReanimatedAnimated.View>
     </ReanimatedAnimated.View>
   );
 }

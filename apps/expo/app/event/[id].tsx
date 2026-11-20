@@ -24,8 +24,6 @@ import type { Account, EventRecord, EventDateRecord, OrgSubType } from '@/lib/ty
 import { currency, formatDate, formatTime, formatLocationFull, getNextUpcomingDate } from '@/lib/utils';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { EventDetailSkeleton } from '@/components/SkeletonLoader';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
 import EventLocationMap from '@/components/EventLocationMap';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -44,6 +42,7 @@ import InterestSocialRow from '@/components/InterestSocialRow';
 import HorizontalEventCard from '@/components/HorizontalEventCard';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
 import AmbientBackdrop from '@/components/AmbientBackdrop';
+import GlassIconButton from '@/components/GlassIconButton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
@@ -97,16 +96,12 @@ const OrganizerPhoneButton: React.FC<{ phone: string; color: string }> = ({ phon
   </Pressable>
 );
 
-/** Status-bar gap + top bar (back / share) of the hero — kept clear of the entry skeleton. */
-const EVENT_CHROME_HEIGHT = 6 + 44 + 4;
-
 export default function EventDetails() {
   const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const entryShimmer = useEntryShimmer();
   const liveSlug = useLiveShowForEvent(typeof id === 'string' ? id : null);
   const liveShow = useEventLiveShow(typeof id === 'string' ? id : null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -387,24 +382,12 @@ export default function EventDetails() {
 
         <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
           <View style={styles.topBar}>
-            <Pressable
-              onPress={goBack}
-              hitSlop={8}
-              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Zurück"
-            >
-              <ArrowLeftIcon size={26} color={chromeColor} strokeWidth={1.8} />
-            </Pressable>
-            <Pressable
-              onPress={handleShare}
-              hitSlop={8}
-              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Veranstaltung teilen"
-            >
-              <ShareIcon size={24} color={chromeColor} />
-            </Pressable>
+            <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" tone={hasAmbient ? 'dark' : 'auto'}>
+              <ArrowLeftIcon size={22} color={chromeColor} strokeWidth={2} />
+            </GlassIconButton>
+            <GlassIconButton onPress={handleShare} accessibilityLabel="Veranstaltung teilen" tone={hasAmbient ? 'dark' : 'auto'}>
+              <ShareIcon size={20} color={chromeColor} />
+            </GlassIconButton>
           </View>
 
           {liveSlug ? (
@@ -729,11 +712,6 @@ export default function EventDetails() {
         <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
       </ScrollView>
 
-      {/* Entry skeleton: below the top bar (back/share stay live), under the
-          sticky footer. Aligned to the screen so the flyer bone matches. */}
-      <ScreenShimmer shimmer={entryShimmer} topInset={insets.top + EVENT_CHROME_HEIGHT} alignToScreenTop>
-        <EventDetailSkeleton />
-      </ScreenShimmer>
 
       {/* Sticky footer: the primary action floats over the scrolling content. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">

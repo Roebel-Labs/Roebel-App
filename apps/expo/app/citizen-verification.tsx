@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { ArrowLeftIcon } from '@/components/Icons';
+import GlassIconButton from '@/components/GlassIconButton';
 import { useTheme } from '@/context/ThemeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useIsCitizen } from '@/hooks/useIsCitizen';
@@ -89,15 +90,9 @@ export default function CredentialExplainerScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.surface }]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-          hitSlop={12}
-        >
-          <ArrowLeftIcon size={20} color={colors.textPrimary} />
-        </Pressable>
+        <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
+          <ArrowLeftIcon size={22} color={colors.textPrimary} />
+        </GlassIconButton>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -158,7 +153,6 @@ export default function CredentialExplainerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 16, paddingVertical: 12 },
-  backButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   content: { paddingTop: 8, paddingBottom: 48 },
   body: { paddingHorizontal: 16, paddingTop: 20, gap: 16 },
   title: { fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Bold' },

@@ -4,6 +4,7 @@ import {
   glassBarFootprint,
   glassHighlightX,
   glassPillBottomGap,
+  glassPillInnerWidth,
   glassTabWidth,
 } from '../glass-tab-geometry';
 
@@ -33,8 +34,11 @@ describe('glass tab geometry', () => {
   });
 
   it('keeps a minimum gap under the pill without a home indicator', () => {
-    expect(glassPillBottomGap(0)).toBe(10);
-    expect(glassPillBottomGap(34)).toBe(22);
+    expect(glassPillBottomGap(0)).toBe(12);
+  });
+
+  it('sits fully above the safe area', () => {
+    for (const inset of [16, 24, 34, 48]) expect(glassPillBottomGap(inset)).toBeGreaterThan(inset);
   });
 
   it('never takes more room than the standard bar (hosts keep their padding)', () => {
@@ -43,7 +47,12 @@ describe('glass tab geometry', () => {
     }
   });
 
+  it('derives the inner width from the window', () => {
+    expect(glassPillInnerWidth(412)).toBe(412 - 40 - 2);
+    expect(glassPillInnerWidth(10)).toBe(0);
+  });
+
   it('highlight fits inside the pill', () => {
-    expect(GLASS_HIGHLIGHT_HEIGHT).toBe(56);
+    expect(GLASS_HIGHLIGHT_HEIGHT).toBe(50);
   });
 });

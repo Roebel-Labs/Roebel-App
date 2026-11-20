@@ -269,16 +269,12 @@ export default function MapboxMapView({
           />
         </Mapbox.ShapeSource>
 
+        {/* Groups are drawn INTO the map (PointAnnotation rasterizes the
+            view), so they move in the same frame as the pins while panning.
+            MarkerView floated native views that the SDK repositions after
+            each camera frame — on Android they trailed the map. */}
         {groups.map((group) => (
-          <Mapbox.MarkerView
-            key={group.key}
-            coordinate={group.coordinate}
-            // The front tile's centre sits on the anchor member's position.
-            anchor={{ x: 0.5, y: 0.28 }}
-            allowOverlap
-          >
-            <MapPinGroup group={group} onPress={handleGroupPress} />
-          </Mapbox.MarkerView>
+          <PinGroupAnnotation key={group.key} group={group} onPress={handleGroupPress} isDark={isDark} />
         ))}
 
         {/* Live vehicles — simulated bus / ferry positions */}
@@ -338,4 +334,52 @@ export default function MapboxMapView({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+});
+
+/** One photo-stack group as a map annotation; re-rasterized when its photos load or the theme flips. */
+const PinGroupAnnotation = React.memo(function PinGroupAnnotation({
+  group,
+  onPress,
+  isDark,
+}: {
+  group: PinGroup;
+  onPress: (group: PinGroup) => void;
+  isDark: boolean;
+}) {
+  const ref = useRef<any>(null);
+  // Bumped after every tap: a selected annotation does not report a second
+  // tap, so it is re-created deselected.
+  const [generation, setGeneration] = useState(0);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    // Coalesce the up-to-three photo loads into one re-raster.
+    refreshTimer.current = setTimeout(() => ref.current?.refresh?.(), 30);
+  }, []);
+  React.useEffect(() => {
+    refresh();
+  }, [isDark, refresh]);
+  React.useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+
+  return (
+    <Mapbox.PointAnnotation
+      ref={ref}
+      key={`${group.key}:${generation}`}
+      id={`group-${group.key}-${generation}`}
+      coordinate={group.coordinate}
+      // The front tile's centre sits on the anchor member's position.
+      anchor={{ x: 0.5, y: 0.28 }}
+      onSelected={() => {
+        onPress(group);
+        setGeneration((g) => g + 1);
+      }}
+    >
+      <MapPinGroup group={group} onPress={onPress} onImageLoad={refresh} />
+    </Mapbox.PointAnnotation>
+  );
 });

@@ -9,8 +9,8 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
+  Easing,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
@@ -42,6 +42,8 @@ const HEIGHT = 44;
 const RADIUS = HEIGHT / 2;
 const BORDER = 1.5;
 const PRESS_DEPTH = 3;
+/** Release: one ease-out, no spring overshoot. */
+const RELEASE = { duration: 160, easing: Easing.out(Easing.cubic) } as const;
 const SWAP_AT_MS = 300;
 const DONE_AT_MS = 900;
 
@@ -102,9 +104,15 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [pressed]);
 
+  // Release is deferred one tick: onPress fires right after onPressOut, and a
+  // claim keeps the button sunk until it settles. Releasing first and sinking
+  // again in onPress read as a double bounce (Max 2026-11-20).
+  const holdRef = useRef(false);
   const handlePressOut = useCallback(() => {
     if (pending) return; // stays sunk while the claim is pending
-    pressed.set(withSpring(0, { damping: 14, stiffness: 260 }));
+    setTimeout(() => {
+      if (!holdRef.current) pressed.set(withTiming(0, RELEASE));
+    }, 0);
   }, [pending, pressed]);
 
   const playClaimed = useCallback(() => {
@@ -134,13 +142,15 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
       return;
     }
     setPending(true);
+    holdRef.current = true;
     pressed.set(withTiming(1, { duration: 90 }));
     result
       .catch(() => false)
       .then((ok) => {
         if (!mounted.current) return;
+        holdRef.current = false;
         setPending(false);
-        pressed.set(withSpring(0, { damping: 14, stiffness: 260 }));
+        pressed.set(withTiming(0, RELEASE));
         if (ok) playClaimed();
       });
   }, [claiming, onClaim, onOpen, pending, playClaimed, pressed, visual]);

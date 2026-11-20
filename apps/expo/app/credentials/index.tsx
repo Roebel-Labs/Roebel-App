@@ -12,9 +12,6 @@ import { CredentialScreenFrame, CredentialStatus, formatValidity } from '@/compo
 import { useCredentialsGate } from '@/lib/credreg/gate';
 import { useHeld, type HeldCredential } from '@/lib/credreg/held';
 import type { InvitationView } from '@/lib/credreg/types';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { CardListEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 
 const KIND_LABEL: Record<string, string> = { role: 'Amt', membership: 'Mitgliedschaft', badge: 'Abzeichen' };
 
@@ -97,7 +94,6 @@ function CredentialsList() {
 export default function CredentialsScreen() {
   const account = useActiveAccount();
   const gate = useCredentialsGate();
-  const entryShimmer = useEntryShimmer();
   return (
     <CredentialScreenFrame title="Deine Ausweise">
       <View style={styles.body}>
@@ -110,9 +106,6 @@ export default function CredentialsScreen() {
       ) : (
         <CredentialsList />
       )}
-      <ScreenShimmer shimmer={entryShimmer}>
-        <CardListEntrySkeleton withHeader={false} />
-      </ScreenShimmer>
       </View>
     </CredentialScreenFrame>
   );

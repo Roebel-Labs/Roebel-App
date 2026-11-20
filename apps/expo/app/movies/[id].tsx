@@ -22,6 +22,7 @@ import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useGoBack } from '@/hooks/useGoBack';
 import MovieCard from '@/components/MovieCard';
+import GlassIconButton from '@/components/GlassIconButton';
 import AmbientBackdrop from '@/components/AmbientBackdrop';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { MovieDetailSkeleton } from '@/components/SkeletonLoader';
@@ -197,16 +198,9 @@ export default function MovieDetailScreen() {
 
         <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
           <View style={styles.topBar}>
-            <Pressable
-              onPress={goBack}
-              hitSlop={8}
-              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Zurück"
-            >
-              <ArrowLeftIcon size={26} color={chromeColor} strokeWidth={1.8} />
-            </Pressable>
-            <View style={styles.chromeBtn} />
+            <GlassIconButton onPress={goBack} accessibilityLabel="Zurück" tone={hasAmbient ? 'dark' : 'auto'}>
+              <ArrowLeftIcon size={22} color={chromeColor} strokeWidth={2} />
+            </GlassIconButton>
           </View>
 
           <View style={[styles.posterWrap, { width: posterWidth, height: posterHeight }]}>

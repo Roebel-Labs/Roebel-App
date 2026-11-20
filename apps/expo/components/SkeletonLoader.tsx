@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions, Animated, Easing, AccessibilityInfo } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { ShimmerGroup } from '@/components/feed/Shimmer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
@@ -31,49 +31,12 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 4, style 
   );
 }
 
-/**
- * Skeleton block with a light band sweeping across it. Uses the core Animated
- * API on the native driver (no reanimated worklets) and stays static when the
- * user has "reduce motion" enabled.
- */
-export function ShimmerSkeleton({ width = '100%', height = 20, borderRadius = 4, style }: SkeletonProps) {
-  const { colors, isDark } = useTheme();
-  const [blockWidth, setBlockWidth] = React.useState(0);
-  const [reduceMotion, setReduceMotion] = React.useState(false);
-  const progress = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
-  }, []);
-
-  React.useEffect(() => {
-    if (!blockWidth || reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.timing(progress, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [blockWidth, reduceMotion, progress]);
-
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-blockWidth, blockWidth] });
-  const highlight = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.55)';
-
+/** Skeleton block that breathes on its own (one native-driven opacity loop). */
+export function ShimmerSkeleton(props: SkeletonProps) {
   return (
-    <View
-      onLayout={(e) => setBlockWidth(e.nativeEvent.layout.width)}
-      style={[{ width, height, borderRadius, backgroundColor: colors.skeleton, overflow: 'hidden' }, style]}
-    >
-      {blockWidth > 0 && !reduceMotion ? (
-        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}>
-          <LinearGradient
-            colors={['transparent', highlight, 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      ) : null}
-    </View>
+    <ShimmerGroup>
+      <Skeleton {...props} />
+    </ShimmerGroup>
   );
 }
 
@@ -124,6 +87,34 @@ export function HeroCardSkeleton() {
   );
 }
 
+/** One hero card in HeroEventCard's own anatomy: poster, title, subline, divider, location + button. */
+function HeroCardBones({ width, height }: { width: number; height: number }) {
+  const { colors, isDark } = useTheme();
+  return (
+    <View
+      style={[
+        styles.heroCardBones,
+        { width, height, borderColor: isDark ? colors.border : colors.borderSecondary, backgroundColor: colors.background },
+      ]}
+    >
+      <View style={[styles.heroCardImage, { backgroundColor: colors.skeleton }]} />
+      <View style={styles.heroCardContent}>
+        <Skeleton width="82%" height={26} borderRadius={6} />
+        <Skeleton width="55%" height={26} borderRadius={6} style={{ marginTop: 8 }} />
+        <Skeleton width="40%" height={14} borderRadius={4} style={{ marginTop: 12 }} />
+        <View style={[styles.heroCardDivider, { backgroundColor: colors.borderSecondary }]} />
+        <View style={styles.heroCardBottom}>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Skeleton width="70%" height={12} borderRadius={4} />
+            <Skeleton width="45%" height={12} borderRadius={4} />
+          </View>
+          <Skeleton width={104} height={48} borderRadius={12} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /**
  * Placeholder for HeroCarousel: the centered card plus the two teased
  * neighbours, in the carousel's own geometry so the swap is shift-free.
@@ -131,22 +122,17 @@ export function HeroCardSkeleton() {
 export function HeroCarouselSkeleton() {
   const { width } = useWindowDimensions();
   const { cardWidth } = heroCarouselLayout(width);
+  const { colors } = useTheme();
   return (
-    <View style={styles.heroCarouselSkeleton}>
-      <Skeleton
-        width={HERO_CAROUSEL_PEEK}
-        height={HERO_CAROUSEL_CARD_HEIGHT * 0.92}
-        borderRadius={24}
-        style={styles.heroCarouselPeek}
+    <ShimmerGroup style={styles.heroCarouselSkeleton}>
+      <View
+        style={[styles.heroCarouselPeek, styles.heroPeekCard, { width: HERO_CAROUSEL_PEEK, height: HERO_CAROUSEL_CARD_HEIGHT * 0.92, backgroundColor: colors.skeleton }]}
       />
-      <Skeleton width={cardWidth} height={HERO_CAROUSEL_CARD_HEIGHT} borderRadius={24} />
-      <Skeleton
-        width={HERO_CAROUSEL_PEEK}
-        height={HERO_CAROUSEL_CARD_HEIGHT * 0.92}
-        borderRadius={24}
-        style={styles.heroCarouselPeek}
+      <HeroCardBones width={cardWidth} height={HERO_CAROUSEL_CARD_HEIGHT} />
+      <View
+        style={[styles.heroCarouselPeek, styles.heroPeekCard, { width: HERO_CAROUSEL_PEEK, height: HERO_CAROUSEL_CARD_HEIGHT * 0.92, backgroundColor: colors.skeleton }]}
       />
-    </View>
+    </ShimmerGroup>
   );
 }
 
@@ -464,6 +450,12 @@ export function MovieDetailSkeleton() {
 }
 
 const styles = StyleSheet.create({
+  heroCardBones: { borderRadius: 24, borderWidth: 1, padding: 8, overflow: 'hidden' },
+  heroCardImage: { flex: 1, width: '100%', borderRadius: 18 },
+  heroCardContent: { paddingHorizontal: 16, paddingVertical: 24 },
+  heroCardDivider: { height: 1, width: '100%', marginTop: 16, marginBottom: 16 },
+  heroCardBottom: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroPeekCard: { borderRadius: 24 },
   skeleton: {
     opacity: 0.7,
   },

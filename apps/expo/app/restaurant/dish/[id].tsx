@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { ArrowLeftIcon } from '@/components/Icons';
+import GlassIconButton from '@/components/GlassIconButton';
 import MenuImage from '@/components/MenuImage';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import DishComments from '@/components/DishComments';
@@ -52,14 +53,9 @@ function SpecialMenuDishScreenInner() {
 
   const backButton = (
     <View style={styles.floatingBack}>
-      <Pressable
-        onPress={() => router.back()}
-        style={[styles.backBtn, { backgroundColor: colors.background }]}
-        accessibilityRole="button"
-        accessibilityLabel="Zurück"
-      >
-        <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-      </Pressable>
+      <GlassIconButton onPress={() => router.back()} accessibilityLabel="Zurück">
+        <ArrowLeftIcon size={22} color={colors.textPrimary} />
+      </GlassIconButton>
     </View>
   );
 
@@ -176,7 +172,6 @@ const styles = StyleSheet.create({
   hero: { width: '100%', height: '100%' },
   heroFallback: { width: 140, height: 140 },
   floatingBack: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   headBlock: { paddingHorizontal: 16, paddingTop: 24 },
   day: { fontSize: 14, fontFamily: 'MonaSans-Medium' },
   title: { fontSize: 26, fontFamily: 'MonaSansSemiCondensed-Bold', marginTop: 6 },

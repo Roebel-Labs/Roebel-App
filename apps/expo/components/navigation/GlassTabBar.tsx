@@ -17,13 +17,13 @@
  * on mount — the slide reads as one bar across the instant screen cuts.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useIsFocused } from 'expo-router';
@@ -34,6 +34,7 @@ import { LiquidGlassView, useLiquidGlass } from '@/lib/liquidGlass';
 import {
   GLASS_HIGHLIGHT_HEIGHT,
   GLASS_PILL_BORDER,
+  glassPillInnerWidth,
   GLASS_PILL_HEIGHT,
   GLASS_PILL_INSET,
   GLASS_PILL_SIDE_MARGIN,
@@ -60,7 +61,8 @@ type Props<K extends string> = {
 };
 
 const ICON_SIZE = 24;
-const SPRING = { damping: 20, stiffness: 240, mass: 0.9 } as const;
+/** Highlight slide: short and decisive so it lands with the color change, no spring overshoot. */
+const SLIDE = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
 
 // Last highlighted tab across all bar instances (one per pseudo-tab screen).
 let lastHighlightIndex: number | null = null;
@@ -71,17 +73,25 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
   const reduceMotion = useReducedMotion();
   const liquid = useLiquidGlass();
 
-  // Immediate feedback on press; the host's activeKey wins again whenever it
-  // changes (screen focus, host state).
+  // Immediate feedback on press. Cleared only when this bar's screen GAINS
+  // focus again (or the host's activeKey changes) — never on blur: resetting
+  // on blur flipped the still-visible outgoing bar back to the old tab for a
+  // frame before the next screen appeared (the "color jumps back" flicker).
   const [pressedKey, setPressedKey] = useState<K | null>(null);
   // expo-router's own hook — the @react-navigation/native one crashes under
   // expo-router 56 (memory: reference_expo_router_use_is_focused).
   const focused = useIsFocused();
-  useEffect(() => setPressedKey(null), [activeKey, focused]);
+  useEffect(() => {
+    if (focused) setPressedKey(null);
+  }, [activeKey, focused]);
   const shownKey = pressedKey ?? activeKey;
   const activeIndex = Math.max(0, tabs.findIndex((t) => t.key === shownKey));
 
-  const [pillWidth, setPillWidth] = useState(0);
+  // Known up front from the window, so the highlight is in place on the very
+  // first frame of a freshly mounted bar (waiting for onLayout left one frame
+  // without it on every tab switch).
+  const { width: windowWidth } = useWindowDimensions();
+  const pillWidth = glassPillInnerWidth(windowWidth);
   const tabWidth = glassTabWidth(pillWidth, tabs.length);
   const x = useSharedValue(0);
   const placed = useSharedValue(0);
@@ -95,7 +105,7 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
       x.value = glassHighlightX(pillWidth, tabs.length, from);
       placed.value = 1;
     }
-    x.value = reduceMotion ? withTiming(target, { duration: 0 }) : withSpring(target, SPRING);
+    x.value = reduceMotion ? target : withTiming(target, SLIDE);
     lastHighlightIndex = activeIndex;
   }, [pillWidth, activeIndex, tabs.length, reduceMotion, x, placed]);
 
@@ -131,7 +141,9 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
       isDark
         ? {
             active: '#FFFFFF',
-            inactive: 'rgba(235,235,245,0.6)',
+            // Opaque: a translucent tint double-paints where icon strokes
+            // overlap (lighter joints) and reads as "disabled".
+            inactive: '#9C9CA3',
             highlight: 'rgba(255,255,255,0.16)',
             rim: 'rgba(255,255,255,0.14)',
             liquidTint: variant === 'dark' ? 'rgba(20,20,22,0.55)' : 'rgba(40,41,44,0.5)',
@@ -150,11 +162,6 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
     [isDark, variant],
   );
 
-  const onPillLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width - GLASS_PILL_BORDER * 2;
-    setPillWidth((prev) => (prev === w ? prev : w));
-  };
-
   const handlePress = (key: K) => {
     if (key !== shownKey) setPressedKey(key);
     onTabPress(key);
@@ -170,7 +177,7 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
       pointerEvents={keyboardUp ? 'none' : 'box-none'}
     >
       <View style={[styles.shadowBox, { boxShadow: palette.shadow } as object]}>
-        <View style={[styles.pill, { borderColor: palette.rim }]} onLayout={onPillLayout}>
+        <View style={[styles.pill, { borderColor: palette.rim }]}>
           {liquid && LiquidGlassView ? (
             <LiquidGlassView
               pointerEvents="none"
@@ -268,15 +275,15 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   iconBox: {
-    width: 28,
-    height: 26,
+    width: 26,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 16,
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 14,
   },
   dot: {
     position: 'absolute',

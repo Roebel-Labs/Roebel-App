@@ -57,9 +57,8 @@ import { useAudioPlayerControls } from '@/context/AudioPlayerContext';
 import { fetchAudioShows } from '@/lib/audio-content';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { ExploreEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
+import { ShimmerGroup } from '@/components/feed/Shimmer';
+import { useNavHideStyle } from '@/hooks/useScrollChrome';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
@@ -146,7 +145,7 @@ async function fetchExploreRestaurants() {
 // mirroring the horizontal-rail layout every explore section uses.
 function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | number }) {
   return (
-    <View style={styles.skeletonSection}>
+    <ShimmerGroup style={styles.skeletonSection}>
       <Skeleton width={titleWidth} height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
       <View style={styles.skeletonRow}>
         {[16, 12].map((marginLeft) => (
@@ -161,7 +160,7 @@ function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | num
           </View>
         ))}
       </View>
-    </View>
+    </ShimmerGroup>
   );
 }
 
@@ -170,7 +169,6 @@ export default function ExploreScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const entryShimmer = useEntryShimmer();
   // Controls context only changes on track switches, never per playback tick.
   const { track: audioTrack } = useAudioPlayerControls();
 
@@ -182,6 +180,7 @@ export default function ExploreScreen() {
   // shared value — this only tracks scroll position + the visible/hidden bit.
   const lastScrollY = useSharedValue(0);
   const fabVisible = useSharedValue(true);
+  const navHideStyle = useNavHideStyle(fabVisible);
   // When the user taps a result/tile inside the search modal we close the modal
   // and navigate, but flag it to reopen once Explore regains focus — so pressing
   // back from the subpage returns to the search page, not the bare feed.
@@ -295,7 +294,9 @@ export default function ExploreScreen() {
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
-      if (currentY > lastScrollY.value + 10) {
+      if (currentY <= 0) {
+        fabVisible.value = true;
+      } else if (currentY > lastScrollY.value + 10) {
         fabVisible.value = false;
       } else if (currentY < lastScrollY.value - 10) {
         fabVisible.value = true;
@@ -492,9 +493,6 @@ export default function ExploreScreen() {
         {/* Clearance for the now-overlaying glass BottomNavigation (+ mini player) */}
         <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 + (audioTrack ? 68 : 0) }} />
       </Animated.ScrollView>
-      <ScreenShimmer shimmer={entryShimmer}>
-        <ExploreEntrySkeleton />
-      </ScreenShimmer>
       </GlassBackdrop>
 
       {/* Search Modal */}
@@ -513,10 +511,10 @@ export default function ExploreScreen() {
       {/* Now-playing bar, floating just above the glass nav */}
       <MiniPlayer style={[styles.miniPlayer, { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 8 }]} />
 
-      {/* Bottom Navigation — frosted glass overlaying the scroll content */}
-      <View style={styles.navOverlay}>
+      {/* Bottom Navigation — slides away with the Karte pill on scroll-down, like Austausch */}
+      <Animated.View style={[styles.navOverlay, navHideStyle]}>
         <BottomNavigation activeTab="explore" onTabPress={handleTabPress} glass />
-    </View>
+      </Animated.View>
       </GlassProvider>
     </SafeAreaView>
   );

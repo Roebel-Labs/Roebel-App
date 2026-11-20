@@ -21,7 +21,11 @@ type Props = {
  */
 export default function MenuImage({ uri, thumbUri, size = 'thumb', borderRadius = 0, style }: Props) {
   const [loaded, setLoaded] = useState(false);
-  const source = size === 'thumb' ? thumbUri || uri : uri || thumbUri;
+  // A thumbnail that fails (missing file — 2026-11-20 all 299 thumbs were
+  // dangling links) falls back to the full photo instead of staying empty.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const thumb = thumbFailed ? null : thumbUri;
+  const source = size === 'thumb' ? thumb || uri : uri || thumb;
   if (!source) return null;
 
   return (
@@ -31,13 +35,16 @@ export default function MenuImage({ uri, thumbUri, size = 'thumb', borderRadius 
       ) : null}
       <Image
         source={{ uri: source }}
-        placeholder={size === 'full' && thumbUri && thumbUri !== source ? { uri: thumbUri } : undefined}
+        placeholder={size === 'full' && thumb && thumb !== source ? { uri: thumb } : undefined}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={source}
         transition={180}
         onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (source === thumbUri && uri && uri !== thumbUri) setThumbFailed(true);
+        }}
         accessibilityIgnoresInvertColors
       />
     </View>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -51,9 +51,24 @@ import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { ProfileEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated from 'react-native-reanimated';
+import GlassIconButton from '@/components/GlassIconButton';
+import { useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
+
+/** How far the header's fade reaches below the bar itself. */
+const HEADER_FADE = 28;
+
+/** `#RRGGBB` (or rgb/rgba) → same color at `alpha`; the gradient fades in one hue, never via black. */
+function withAlpha(color: string, alpha: number): string {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+  }
+  const rgb = /^rgba?\(([^,]+),([^,]+),([^,)]+)/.exec(color.replace(/\s/g, ''));
+  return rgb ? `rgba(${rgb[1]},${rgb[2]},${rgb[3]},${alpha})` : 'transparent';
+}
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -69,12 +84,17 @@ export default function ProfileScreen() {
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const entryShimmer = useEntryShimmer();
 
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
   const [showAccountSheet, setShowAccountSheet] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(56);
+  const chrome = useScrollChrome();
+  const navHideStyle = useNavHideStyle(chrome.visible);
+  // The nav clearance lives INSIDE the sheet, so the sheet's own color runs to
+  // the very bottom (padding on the scroll content showed a backdrop strip).
+  const sheetBottomPad = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
   const [storyCollections, setStoryCollections] = useState<StoryCollection[]>([]);
 
   const isConnected = !!account;
@@ -248,23 +268,18 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.backdrop }]} edges={['top', 'left', 'right']}>
       <GlassProvider>
-        <ProfileHeader
-          title={isConnected ? profileHeaderTitle(activeAccount) : 'Profil'}
-          switcherVisible={isConnected && ownedAccounts.length > 1}
-          recentOtherAccounts={recentOtherAccounts}
-          personalAvatarUrl={personalAvatarUrl}
-          onSwitch={() => setShowAccountSheet(true)}
-        />
-
         <GlassBackdrop style={styles.content}>
-          <ScrollView
+          <Animated.ScrollView
             style={styles.content}
-            contentContainerStyle={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 16 }}
+            onScroll={chrome.onScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ paddingTop: headerHeight }}
+            scrollIndicatorInsets={{ top: headerHeight }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
             {!isConnected ? (
-              <ProfileSheet flat>
+              <ProfileSheet flat style={{ paddingBottom: sheetBottomPad }}>
                 <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
                   <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Noch keinen Account</Text>
                   <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Sie sind noch nicht angemeldet.</Text>
@@ -281,7 +296,7 @@ export default function ProfileScreen() {
                 <ProfileMenu variant="guest" />
               </ProfileSheet>
             ) : isOrg ? (
-              <ProfileSheet flat>
+              <ProfileSheet flat style={{ paddingBottom: sheetBottomPad }}>
                 <OrgIdentityRow
                   name={activeAccount?.name || 'Organisation'}
                   avatarUrl={activeAccount?.avatar_url || activeAccount?.cover_url || null}
@@ -332,7 +347,7 @@ export default function ProfileScreen() {
                   </Pressable>
                 )}
                 <CredentialCardStack cards={creds.profile.cards} onPress={openCard} holder={holder} animateFront={!shownCard} />
-                <ProfileSheet>
+                <ProfileSheet style={{ paddingBottom: sheetBottomPad }}>
                   <IdentityRow
                     name={displayName}
                     avatarUrl={personalAvatarUrl}
@@ -371,28 +386,52 @@ export default function ProfileScreen() {
                 </ProfileSheet>
               </>
             )}
-          </ScrollView>
-          {isConnected && (
-            <ScreenShimmer shimmer={entryShimmer} backgroundColor={colors.backdrop}>
-              <ProfileEntrySkeleton />
-            </ScreenShimmer>
-          )}
+          </Animated.ScrollView>
         </GlassBackdrop>
 
+        {/* Floating title bar: content scrolls under it and fades out through
+            a gradient (opaque at the top → 0 % at its bottom edge) instead of
+            being cut by a hard bar. */}
+        <View
+          pointerEvents="box-none"
+          style={styles.headerOverlay}
+          onLayout={(e) => {
+            const h = Math.round(e.nativeEvent.layout.height);
+            setHeaderHeight((prev) => (prev === h ? prev : h));
+          }}
+        >
+          <LinearGradient
+            pointerEvents="none"
+            colors={[colors.backdrop, colors.backdrop, withAlpha(colors.backdrop, 0)]}
+            locations={[0, 0.55, 1]}
+            style={[StyleSheet.absoluteFill, { bottom: -HEADER_FADE }]}
+          />
+          <ProfileHeader
+            title={isConnected ? profileHeaderTitle(activeAccount) : 'Profil'}
+            switcherVisible={isConnected && ownedAccounts.length > 1}
+            recentOtherAccounts={recentOtherAccounts}
+            personalAvatarUrl={personalAvatarUrl}
+            onSwitch={() => setShowAccountSheet(true)}
+          />
+        </View>
+
         {hasAnyNFT && (
-          <Pressable
-            onPress={() => router.push('/verification/scan' as any)}
-            style={[styles.qrFab, { backgroundColor: colors.primary }]}
-            accessibilityRole="button"
-            accessibilityLabel="QR-Code scannen"
-          >
-            <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
-          </Pressable>
+          <Animated.View style={[styles.qrFab, navHideStyle]}>
+            <GlassIconButton
+              size={56}
+              tint={colors.primary}
+              onPress={() => router.push('/verification/scan' as any)}
+              accessibilityLabel="QR-Code scannen"
+            >
+              <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
+            </GlassIconButton>
+          </Animated.View>
         )}
 
-        <View style={styles.navOverlay}>
+        {/* Slides away on scroll-down, like Austausch. */}
+        <Animated.View style={[styles.navOverlay, navHideStyle]}>
           <BottomNavigation activeTab="profile" onTabPress={handleTabPress} glass />
-        </View>
+        </Animated.View>
 
         {/* Closes itself once the login lands (no effect needed). */}
         <LoginDrawer visible={showLoginDrawer && !isConnected} onClose={() => setShowLoginDrawer(false)} />
@@ -450,6 +489,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1 },
   navOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5 },
   bannerWrap: { marginTop: 16 },
   emptyState: {
     borderWidth: 1,
@@ -467,15 +507,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: BOTTOM_NAV_HEIGHT + 40,
     right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 10,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
-      android: { elevation: 6 },
-    }),
   },
 });

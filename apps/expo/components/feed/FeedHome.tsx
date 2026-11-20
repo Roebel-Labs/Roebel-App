@@ -34,9 +34,6 @@ import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { useNavBarStyle } from '@/lib/nav-bar-style';
-import ScreenShimmer from '@/components/shimmer/ScreenShimmer';
-import { FeedEntrySkeleton } from '@/components/shimmer/ScreenSkeletons';
-import { useEntryShimmer } from '@/hooks/useEntryShimmer';
 import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
@@ -244,7 +241,6 @@ export default function FeedHome() {
   const chromeHidden = useSharedValue(0);
   // Glass pill draws its own glass; the full-width surface is the standard bar's.
   const navBarStyle = useNavBarStyle();
-  const entryShimmer = useEntryShimmer();
   const navHideDistance = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
   const bottomNavAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -688,10 +684,6 @@ export default function FeedHome() {
       </HorizontalRailLockProvider>
       </GlassBackdrop>
 
-      {/* Entry skeleton on every focus — below the floating header and nav. */}
-      <ScreenShimmer shimmer={entryShimmer} topInset={headerHeight}>
-        <FeedEntrySkeleton />
-      </ScreenShimmer>
 
       {appHeader}
 

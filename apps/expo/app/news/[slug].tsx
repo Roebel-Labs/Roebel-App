@@ -25,6 +25,7 @@ import ArticleListenRow from '@/components/news/ArticleListenRow';
 import { fontFamily } from '@/constants/theme';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { NewsDetailSkeleton } from '@/components/SkeletonLoader';
+import GlassIconButton from '@/components/GlassIconButton';
 import NewsCard from '@/components/NewsCard';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -277,19 +278,18 @@ export default function NewsDetailScreen() {
       </ScrollView>
 
       {/* Floating back chevron over the hero */}
-      <Pressable
+      <GlassIconButton
         onPress={goBack}
-        hitSlop={12}
-        accessibilityRole="button"
         accessibilityLabel="Zurück"
+        tone={article.cover_image_url ? 'dark' : 'auto'}
         style={[styles.floatingBack, { top: insets.top + 8 }]}
       >
         <Ionicons
           name="chevron-back"
-          size={30}
+          size={24}
           color={article.cover_image_url ? '#FFFFFF' : colors.textPrimary}
         />
-      </Pressable>
+      </GlassIconButton>
 
       {/* Image Zoom Modal */}
       {article.cover_image_url && (
@@ -362,10 +362,6 @@ const styles = StyleSheet.create({
   floatingBack: {
     position: 'absolute',
     left: 12,
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   contentContainer: {
     paddingHorizontal: 20,
