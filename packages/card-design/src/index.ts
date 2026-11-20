@@ -3,3 +3,8 @@ export * from './validate';
 export * from './hash';
 export * from './fields';
 export * from './edit';
+export * from './fonts';
+export * from './draw/api';
+export * from './draw/presets';
+export * from './draw/shine';
+export * from './draw/draw';
