@@ -15,6 +15,9 @@ chooses them in the Röbel app under profile settings.
 - The user picks and orders the apps in a new settings screen; every widget on the
   phone shows that one list.
 - Tapping an icon opens that mini app in Röbel (`roebel://mini-app/<slug>`).
+- A red dot (top-right of the icon, no count) when the mini app has unread notifications,
+  in the widget and on the mini-app icons inside the app.
+- Opening from the widget keeps the user signed in to the mini app with their Röbel account.
 
 ## Non-goals
 
@@ -55,6 +58,8 @@ chooses them in the Röbel app under profile settings.
 - Customization lives inside the Röbel app, not the phone's widget editor.
 - The option sits in the profile settings (`app/settings.tsx`).
 - Tech: approach 1.
+- Unread red dot on widget icons and in-app mini-app icons (2026-11-20).
+- Widget-opened mini apps must keep the Röbel-account sign-in (2026-11-20).
 
 ## Design
 
@@ -87,8 +92,22 @@ icons as local file URIs / data URIs. `requestWidgetUpdate()` after sync. Sizes:
 **Look** — Röbel brand: title "Röbel Mini Apps", rounded icon tiles on a light / dark
 background (follows system), app name under each icon (1 line, truncated). No shadows.
 
-**Taps** — deep link `roebel://mini-app/<slug>`; the existing mini-app route handles
-locked / audience-restricted apps.
+**Taps** — deep link `roebel://mini-app/<slug>?open=1`: launches the MiniAppHost directly
+(no store preview page); the existing route still handles locked / audience-restricted
+apps. Cold start from the widget: the route must wait until the thirdweb wallet has
+auto-reconnected (`useActiveWalletConnectionStatus` ≠ connecting, account present or
+definitively absent) before mounting the host, so identity grant + user token resolve
+for the right account — otherwise the app would load as logged out.
+
+**Unread dot** — source: `notifications` rows with `type='mini_app'`, `is_read=false`,
+`recipient_wallet` = user, grouped by `metadata->>slug` (one query, no schema change).
+`syncWidget()` adds `unread: boolean` per app to the payload. Cleared by marking that
+app's `mini_app` notifications read when the host opens it. Refresh points: app
+foreground/background, mini-app host open/close, push received while the app runs; on
+Android additionally from a background notification task. iOS with the app fully
+closed: dot appears on next app open (accepted — the push itself is the real-time
+signal; no background-wake pushes). Same dot on mini-app icons inside the app
+(store/list + Erkunden), from the same query. Logged-out: no dots.
 
 ## Left to the builder
 
@@ -97,6 +116,8 @@ locked / audience-restricted apps.
   when an icon fails to download).
 - Reorder UI mechanics (drag vs. up/down buttons).
 - Widget preview/description strings in German (gallery text).
+- Dot size/position per tile size; whether the in-app query reuses the existing
+  notifications realtime subscription.
 
 ## Release notes
 
