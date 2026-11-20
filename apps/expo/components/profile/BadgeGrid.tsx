@@ -23,6 +23,15 @@ type Props = {
   parentInset?: number;
 };
 
+/**
+ * The own profile shows its stamp section only once the person has collected a stamp: a badge in
+ * the register, or one scanned offline that is still waiting to be sent (queued). Badges the
+ * organiser has not awarded yet (pending) alone do not open it.
+ */
+export function hasCollectedStamp(badges: readonly unknown[], queued: readonly unknown[] = []): boolean {
+  return badges.length > 0 || queued.length > 0;
+}
+
 const COLUMNS = 3;
 const GAP = 12;
 
