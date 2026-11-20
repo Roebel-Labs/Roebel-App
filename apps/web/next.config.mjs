@@ -58,7 +58,9 @@ const nextConfig = {
   // runtime (render.ts resolves them from process.cwd()), which the tracer cannot see.
   outputFileTracingIncludes: {
     "/api/credentials/designs": [
-      "./node_modules/canvaskit-wasm/bin/canvaskit.wasm",
+      // The real file, not apps/web/node_modules/canvaskit-wasm: that is a pnpm symlink, and a
+      // traced symlinked directory makes Vercel reject the function package.
+      "../../node_modules/.pnpm/canvaskit-wasm@*/node_modules/canvaskit-wasm/bin/canvaskit.wasm",
       "../../packages/card-design/fonts/*.ttf",
       "../../packages/card-design/assets/builtin/*.png",
     ],
