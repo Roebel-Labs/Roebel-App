@@ -24,7 +24,7 @@ export type Tilt = { x: number; y: number };
 /** Radians of tilt that count as "full" (-1..1). */
 const FULL_TILT = 0.5;
 /** Exponential smoothing per sample (60 Hz): higher follows faster. */
-export const TILT_SMOOTHING = 0.18;
+export const TILT_SMOOTHING = 0.14;
 
 const clamp1 = (v: number) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
 
@@ -45,8 +45,8 @@ export function phaseForTilt(t: Tilt): number {
   return Math.max(0, Math.min(1, REST_PHASE + t.x * 0.3 + t.y * 0.2));
 }
 
-/** Tilt steps that are redrawn (1/40 of full tilt): finer changes are not visible in the sheen. */
-export const TILT_STEP = 0.025;
+/** Tilt steps that are redrawn (1/100 of full tilt): fine enough that the light glides, not steps. */
+export const TILT_STEP = 0.01;
 
 export function quantiseTilt(t: Tilt, step = TILT_STEP): Tilt {
   return { x: Math.round(t.x / step) * step, y: Math.round(t.y / step) * step };
