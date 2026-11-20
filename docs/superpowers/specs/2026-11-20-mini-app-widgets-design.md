@@ -66,7 +66,7 @@ chooses them in the Röbel app under profile settings.
 **Settings screen** `app/settings/widget.tsx`, row "Widget" in the
 `ERSCHEINUNGSBILD` section of `app/settings.tsx`. Lists live mini apps (from
 `fetchLiveMiniApps`, installed ones first) with a toggle each, drag/arrow reorder for
-selected ones, max 8. Short hint how to add the widget to the home screen (per platform).
+selected ones, max 15 (the 16th slot is the store tile). Short hint how to add the widget to the home screen (per platform).
 
 **Shared selection** `lib/widget-sync.ts` — single source of truth, persisted locally
 (AsyncStorage key `widget.miniapps.v1`, list of slugs). `syncWidget()` resolves slugs →
@@ -75,22 +75,28 @@ platform, and asks the OS to reload widgets. Called on save in the settings scre
 app foreground (keeps names/icons fresh, drops apps that went offline).
 
 **Default** when the user has never chosen: the installed mini apps
-(`lib/miniapp-installs.ts`), up to 8; if none, featured live apps. Empty state in the
+(`lib/miniapp-installs.ts`), up to 15; if none, featured live apps. Empty state in the
 widget: "Mini Apps auswählen" → opens `roebel://settings/widget`.
 
 **iOS** — `apple-targets` widget target `targets/widget/` (SwiftUI, WidgetKit), App Group
 `group.com.maxbrych.roebelonchain.widgets` on both app and extension. Payload JSON in the
-App Group `UserDefaults` via `ExtensionStorage`; icons as PNG files in the App Group
-container (`Paths.appleSharedContainers` from expo-file-system). Reload via
-`ExtensionStorage.reloadWidget()`. Sizes: small = first app, medium = 4, large = 8.
+App Group `UserDefaults` via `ExtensionStorage`; icons as base64 PNG (≈96 px, resized with
+expo-image-manipulator) inside the same JSON — one code path for both platforms; builder's
+call over files in the App Group container. Reload via
+`ExtensionStorage.reloadWidget()`. Sizes: small = 2×2 (3 apps + Alle, one tap target → opens the Mini-Apps store), medium = 4×2 (7 + Alle), large = 4×4 (15 + Alle).
 
 **Android** — `react-native-android-widget` config plugin + widget task handler
 registered in `index.js`. Widget rendered in JSX from the same payload (AsyncStorage);
-icons as local file URIs / data URIs. `requestWidgetUpdate()` after sync. Sizes: 1×1 → 1,
-4×1/4×2 → 4, 4×3+ → 8.
+icons as `data:image/png;base64` URIs (same payload as iOS). `requestWidgetUpdate()` after sync. Columns/rows derived from widget size: 2×2 up to 4×4
+(max 15 apps + Alle); every tile has its own tap target.
 
-**Look** — Röbel brand: title "Röbel Mini Apps", rounded icon tiles on a light / dark
-background (follows system), app name under each icon (1 line, truncated). No shadows.
+**Look** — same as the Mini-Apps section on Erkunden (`MiniAppGridTile` / `AppIcon`):
+rounded-square icon (corner radius 24 % of the size, `primaryColor` behind it, first letter
+when no icon), app name centered underneath in one line, 4-column grid. White / `#18191B`
+background following system light/dark, no title bar, no shadows (decided by Max
+2026-11-20: "like the explore section, icon + title below, 4×4 grid"). The last tile in
+every size is "Alle" with the store icon (`assets/illustration/mini-app-store.png`) and
+opens the Mini-App store (`roebel://mini-apps`) — as on Erkunden (Max, 2026-11-20).
 
 **Taps** — deep link `roebel://mini-app/<slug>?open=1`: launches the MiniAppHost directly
 (no store preview page); the existing route still handles locked / audience-restricted
@@ -104,7 +110,9 @@ for the right account — otherwise the app would load as logged out.
 `syncWidget()` adds `unread: boolean` per app to the payload. Cleared by marking that
 app's `mini_app` notifications read when the host opens it. Refresh points: app
 foreground/background, mini-app host open/close, push received while the app runs; on
-Android additionally from a background notification task. iOS with the app fully
+Android additionally every 30 min while the app is closed (widget `updatePeriodMillis`;
+the headless widget task re-runs the unread query for the stored wallet — builder's call,
+since mini-app pushes carry a notification payload, which never wakes JS when the app is killed). iOS with the app fully
 closed: dot appears on next app open (accepted — the push itself is the real-time
 signal; no background-wake pushes). Same dot on mini-app icons inside the app
 (store/list + Erkunden), from the same query. Logged-out: no dots.
