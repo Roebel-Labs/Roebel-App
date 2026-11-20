@@ -15,6 +15,8 @@ import { metadataFor } from "../src/lib/credentials/metadata";
 import { InMemoryDesignStore } from "../src/lib/credentials/designs/store";
 import { getDraft, saveDraft, type DraftWithDesign } from "../src/lib/credentials/designs/drafts";
 import { promoteDesignVersion, publishDraft, sendTest, type PublishDeps } from "../src/lib/credentials/designs/publish";
+import { promoteDesignVersionBySha } from "../src/lib/credentials/designs/lifecycle";
+import { designMetadataJson, designUrl } from "../src/lib/credentials/designs/public";
 
 const REGISTRY = "0x00000000000000000000000000000000000000c1" as Address;
 const VEREIN = "6f1c2a7e-0d3b-4c55-9a1e-2b3c4d5e6f70";
@@ -306,4 +308,103 @@ test("a plain config edit of a designed type keeps the live design URL on chain"
   const step = (await w.credStore.getAction(r.actionId!))!.steps[0];
   assert.ok(step.fn === "updateType" && step.config.metadataURI.endsWith(`/api/credentials/designs/${first.sha}`));
   assert.equal(step.fn === "updateType" && step.config.supplyCap, 50);
+});
+
+// ── review fixes (2026-11-20) ────────────────────────────────────────────────
+
+test("a prepare that throws leaves no pending version behind; the next publish works", async () => {
+  const w = world();
+  const draft = await newDraft(w.d);
+  const reader = w.register.reader as unknown as Record<string, unknown>;
+  const original = reader.isOrgRegistered;
+  reader.isOrgRegistered = async () => {
+    throw new Error("rpc down");
+  };
+  await assert.rejects(() => publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  assert.deepEqual((await w.store.versionsOf(draft.id)).map((v) => v.status), ["abandoned"]);
+  reader.isOrgRegistered = original;
+  const r = must(await publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  assert.equal((await w.store.getVersion(r.sha))!.status, "pending");
+});
+
+test("a pending version without an action is given up after five minutes", async () => {
+  const w = world();
+  const draft = await newDraft(w.d);
+  await w.store.insertVersion({
+    sha: "e".repeat(64),
+    draftId: draft.id,
+    typeId: null,
+    version: 1,
+    design: DESIGN,
+    meta: { name: "x", description: "", kind: "membership", organisation: "Heimatverein", aiGenerated: false },
+    previewPath: "p",
+    actionId: null,
+    status: "pending",
+    createdBy: OWNER,
+    createdAt: new Date(T0).toISOString(),
+  });
+  let cur = must(await getDraft(w.d, caller(OWNER, "design_draft_get"), { draftId: draft.id }));
+  assert.equal(cur.pendingVersion, 1);
+  w.advance(6 * 60_000);
+  cur = must(await getDraft(w.d, caller(OWNER, "design_draft_get"), { draftId: draft.id }));
+  assert.equal(cur.pendingVersion, null);
+  assert.equal((await w.store.getVersion("e".repeat(64)))!.status, "abandoned");
+});
+
+test("the chain is the truth: an older URL configured later makes that version live again", async () => {
+  const w = world();
+  const draft = await newDraft(w.d);
+  const first = must(await publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  await confirm(w, first.actionId);
+  const cur = must(await getDraft(w.d, caller(OWNER, "design_draft_get"), { draftId: draft.id }));
+  must(await saveDraft(w.d, caller(OWNER, "design_draft_save"), { accountId: VEREIN, draftId: draft.id, baseRevision: cur.revision, name: "Neu", kind: "membership", design: DESIGN }));
+  const second = must(await publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  await confirm(w, second.actionId);
+  assert.equal((await w.store.getVersion(second.sha))!.status, "live");
+  // A config edit prepared while v1 was live is confirmed afterwards and writes v1's URL back.
+  const log: RegisterLog = {
+    eventName: "TypeConfigured",
+    args: { typeId: cur.typeId, config: { metadataURI: designUrl(first.sha), defaultValidity: 0n, claimStart: 0n, claimEnd: 0n, supplyCap: 0, publicClaim: true } },
+    blockNumber: 300n,
+    logIndex: 0,
+  };
+  await applyRegisterLogs(w.syncDeps, [log]);
+  assert.equal((await w.store.getVersion(first.sha))!.status, "live");
+  assert.equal((await w.store.getVersion(second.sha))!.status, "superseded");
+});
+
+test("another org's type cannot adopt a version that has no type yet", async () => {
+  const w = world();
+  const draft = await newDraft(w.d);
+  const first = must(await publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  await confirm(w, first.actionId);
+  const own = (await w.credStore.getType(must(await getDraft(w.d, caller(OWNER, "design_draft_get"), { draftId: draft.id })).typeId as Hex))!;
+  const foreignTypeId = `0x${"bb".repeat(32)}` as Hex;
+  await w.credStore.upsertType({ ...own, typeId: foreignTypeId, accountId: "7a1c2a7e-0d3b-4c55-9a1e-2b3c4d5e6f71" });
+  const orphan = "f".repeat(64);
+  await w.store.insertVersion({
+    sha: orphan,
+    draftId: draft.id,
+    typeId: null,
+    version: 9,
+    design: DESIGN,
+    meta: { name: "x", description: "", kind: "membership", organisation: "Heimatverein", aiGenerated: false },
+    previewPath: "p",
+    actionId: null,
+    status: "abandoned",
+    createdBy: OWNER,
+    createdAt: new Date(T0).toISOString(),
+  });
+  await promoteDesignVersionBySha(w.store, w.credStore, orphan, foreignTypeId);
+  assert.equal((await w.store.getVersion(orphan))!.status, "abandoned");
+});
+
+test("public metadata never carries a field's sample text", async () => {
+  const w = world();
+  const draft = await newDraft(w.d);
+  const r = must(await publishDraft(w.d, caller(OWNER), { draftId: draft.id }));
+  const json = designMetadataJson((await w.store.getVersion(r.sha))!);
+  const fields = json.properties.design.layers.filter((l) => l.type === "field");
+  assert.ok(fields.length > 0);
+  for (const f of fields) assert.equal((f as { sampleText: string }).sampleText, "");
 });
