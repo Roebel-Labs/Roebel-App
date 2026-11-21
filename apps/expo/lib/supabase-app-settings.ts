@@ -198,3 +198,16 @@ export async function fetchTreasuryHistoryBalancingTx(): Promise<string | null> 
     return null;
   }
 }
+
+/**
+ * Kill switch for passkey device sessions (Münzen abholen ohne Fingerabdruck). Fails CLOSED: only
+ * an explicit 'true' enables it; a missing key, 'false' or any error means OFF, and the app claims
+ * with the passkey as before (revoking stays possible regardless). The migration seeds 'true'.
+ */
+export async function fetchPasskeySessionKeysEnabled(): Promise<boolean> {
+  try {
+    return (await fetchAppSetting('passkey_session_keys_enabled')) === 'true';
+  } catch {
+    return false;
+  }
+}

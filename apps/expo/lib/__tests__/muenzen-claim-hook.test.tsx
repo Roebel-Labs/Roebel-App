@@ -84,6 +84,20 @@ describe('useDailyMint', () => {
     expect(h.current().state).toBe('idle');
   });
 
+  it('passkey session: the profile pill never accepts the offer (claimNow without allowGrant) and accepts a partial claim', async () => {
+    mockTaler.passkeyClaim = true;
+    mockTaler.claimNow.mockImplementationOnce(async () => ({ received: 2, claimedAt: Date.now(), streak: 1, partial: true }) as any);
+    const h = await renderMint();
+    let ok: boolean | Promise<boolean> = false;
+    await act(async () => {
+      ok = await h.current().claim();
+    });
+    expect(ok).toBe(true);
+    expect(mockTaler.claimNow).toHaveBeenCalledTimes(1);
+    expect(mockTaler.claimNow.mock.calls[0]).toEqual([]);
+    expect(h.current().cooldownEnd).not.toBeNull();
+  });
+
   it('thirdweb session: unchanged — the claim goes to the settlement queue', async () => {
     mockTaler.passkeyClaim = false;
     const h = await renderMint();

@@ -4,11 +4,15 @@
  * — the exact shape apps/web's everyday allowlist accepts (everyday-policy.test.ts).
  */
 jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: jest.fn(), isSupported: () => true } }));
+jest.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY' }));
+jest.mock('@/lib/storage/secureStorage', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), deleteItemAsync: jest.fn() }));
 
 import { decodeFunctionData, getAddress, type Address, type Hex } from 'viem';
 import {
   buildMuenzenClaimTxs,
   claimMuenzenAsOneBatch,
+  claimMuenzenRouted,
+  claimMuenzenWithDeviceSession,
   claimsAsOneBatch,
   CLAIM_NOTHING_MESSAGE,
   groupMintAmount,
@@ -21,6 +25,19 @@ import { predictSafeAddress } from '../passkey/safe-address';
 import type { PasskeySession } from '../passkey/session';
 import type { PasskeyUserOpArgs } from '../passkey/userop';
 import sv from '../passkey/__tests__/passkey-safe-vector.json';
+import kv from '../passkey/__tests__/session-keys-vector.json';
+import { grantDeviceSession, type GrantDeps } from '../passkey/session-keys/grant';
+import { DeviceSessionRejectedError, isDeviceSessionRejection } from '../passkey/session-keys/session-op';
+import {
+  DEVICE_SESSION_STORE_KEY,
+  activateDeviceSession,
+  deleteDeviceSession,
+  loadDeviceSession,
+  savePendingDeviceSession,
+  type DeviceKeyStore,
+} from '../passkey/session-keys/device-key';
+import { SESSION_DAYS, permissionIdsOf } from '../passkey/session-keys/builders';
+import type { UserOpDeps } from '../passkey/userop';
 
 const HUB = getAddress('0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8');
 const GROUP = getAddress('0xAc2CeCdBead594F97358a0d3132454f24F3E470c');
@@ -193,5 +210,223 @@ describe('claimMuenzenAsOneBatch', () => {
     (r.isGroupMember as jest.Mock).mockRejectedValueOnce(new Error('rpc down'));
     await expect(claimMuenzenAsOneBatch(account, r, { hub: HUB, group: GROUP })).rejects.toThrow('rpc down');
     expect(d.sendUserOp).not.toHaveBeenCalled();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Device session claim (Münzen ohne Fingerabdruck)
+// ---------------------------------------------------------------------------
+
+describe('claimMuenzenWithDeviceSession', () => {
+  it('one session op per tx, in order: personalMint, then groupMint(group, [self], [amount])', async () => {
+    const send = jest.fn(async () => `0x${'cc'.repeat(32)}` as Hex);
+    const res = await claimMuenzenWithDeviceSession({ address: LEGACY }, reads(), { hub: HUB, group: GROUP }, send);
+    expect(res).toEqual({ mintedRaw: 3n * ONE, partial: false });
+    expect(send.mock.calls.map((c) => (c as unknown as [string])[0])).toEqual(['personalMint', 'groupMint']);
+    const g = decodeFunctionData({ abi: hubAbi, data: (send.mock.calls[1] as unknown as [string, Hex])[1] });
+    expect(g.functionName).toBe('groupMint');
+    expect(g.args).toEqual([GROUP, [LEGACY], [5n * ONE - (5n * ONE * 10n) / 10_000n], '0x']);
+  });
+
+  it('groupMint failure after personalMint returns a partial result', async () => {
+    const err = new DeviceSessionRejectedError('expired between the two ops');
+    const send = jest.fn(async (kind: string) => {
+      if (kind === 'groupMint') throw err;
+      return `0x${'cc'.repeat(32)}` as Hex;
+    });
+    const res = await claimMuenzenWithDeviceSession({ address: LEGACY }, reads(), { hub: HUB, group: GROUP }, send);
+    expect(res).toEqual({ mintedRaw: 3n * ONE, partial: true, error: err });
+  });
+
+  it('a failure of the first op propagates (nothing landed)', async () => {
+    const send = jest.fn(async () => {
+      throw new Error('boom');
+    });
+    await expect(claimMuenzenWithDeviceSession({ address: LEGACY }, reads(), { hub: HUB, group: GROUP }, send)).rejects.toThrow('boom');
+  });
+
+  it('nothing to claim: German message, no op', async () => {
+    const send = jest.fn();
+    await expect(
+      claimMuenzenWithDeviceSession({ address: LEGACY }, reads({ personalBalance: 0n, mintable: 0n }), { hub: HUB, group: GROUP }, send),
+    ).rejects.toThrow(CLAIM_NOTHING_MESSAGE);
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('claimMuenzenRouted', () => {
+  const KSAFE = getAddress(kv.inputs.safe);
+  const KPK = kv.inputs.sessionPrivateKey as Hex;
+  const KSIGNER = getAddress(kv.inputs.signer);
+  const KUNTIL = Number(kv.inputs.validUntil);
+  const KPIDS = permissionIdsOf({ legacy: LEGACY, signer: KSIGNER, validUntil: KUNTIL });
+  const kSession: PasskeySession = {
+    credentialId: 'cred',
+    x,
+    y,
+    safe: KSAFE,
+    identity: LEGACY,
+    ownerType: 'sharedSigner',
+    owner: SAFE_WEBAUTHN_SHARED_SIGNER,
+  };
+
+  function world(o: { pids?: 'mine' | 'none'; sessionSend?: (kind: string) => Promise<Hex> } = {}) {
+    const data = new Map<string, string>();
+    const store: DeviceKeyStore = {
+      getItemAsync: async (k) => data.get(k) ?? null,
+      setItemAsync: async (k, v) => {
+        data.set(k, v);
+      },
+      deleteItemAsync: async (k) => {
+        data.delete(k);
+      },
+    };
+    let onChain: Hex[] = o.pids === 'mine' ? [KPIDS.personalMint, KPIDS.groupMint] : [];
+    // the passkey: every prompt is counted
+    const sign = jest.fn(async () => ({}) as any);
+    const grantDeps: GrantDeps = {
+      store,
+      nowSec: () => KUNTIL - SESSION_DAYS * 86_400,
+      userOp: { sign } as UserOpDeps,
+      readLayout: async () => '4337',
+      readModules: async () => kv.inputs.modulesBefore.map((m) => getAddress(m)),
+      readPermissionIds: async () => onChain,
+      readSmartSessionInstalled: async () => false,
+      newKey: () => ({ privateKey: KPK, signer: KSIGNER }),
+      sendPasskeyOp: jest.fn(async (args: PasskeyUserOpArgs, d: UserOpDeps) => {
+        await d.sign!(args.credentialId, '0x00');
+        onChain = [KPIDS.personalMint, KPIDS.groupMint];
+        return { userOpHash: '0x01' as Hex, txHash: '0x02' as Hex };
+      }),
+    };
+    const sessionSend = jest.fn(o.sessionSend ?? (async () => `0x${'cc'.repeat(32)}` as Hex));
+    const passkeyClaim = jest.fn(async () => {
+      await sign('cred', '0x00');
+      return { mintedRaw: 3n * ONE };
+    });
+    const deps = (path: 'session' | 'renew-then-session' | 'offer' | 'passkey', allowGrant = false) => ({
+      path,
+      allowGrant,
+      account: { address: LEGACY },
+      reads: reads(),
+      addrs: { hub: HUB, group: GROUP },
+      grant: async () => {
+        await grantDeviceSession(kSession, grantDeps);
+      },
+      loadSession: () => loadDeviceSession(store, KSAFE, async () => onChain),
+      sendSessionCall: (_s: unknown, kind: 'personalMint' | 'groupMint') => sessionSend(kind),
+      isRejection: isDeviceSessionRejection,
+      dropSession: () => deleteDeviceSession(store, KSAFE),
+      passkeyClaim,
+    });
+    const seedActive = async () => {
+      await savePendingDeviceSession(store, { v: 1, safe: KSAFE, legacy: LEGACY, signer: KSIGNER, validUntil: KUNTIL, permissionIds: KPIDS }, KPK);
+      await activateDeviceSession(store, KSAFE);
+    };
+    return { data, sign, sessionSend, passkeyClaim, deps, seedActive, grantDeps };
+  }
+
+  it('session: claims with session ops, no passkey prompt', async () => {
+    const w = world({ pids: 'mine' });
+    await w.seedActive();
+    const res = await claimMuenzenRouted(w.deps('session'));
+    expect(res).toEqual({ mintedRaw: 3n * ONE, partial: false, via: 'session' });
+    expect(w.sessionSend).toHaveBeenCalledTimes(2);
+    expect(w.sign).not.toHaveBeenCalled();
+  });
+
+  it('offer accepted = exactly one passkey prompt for grant + claim', async () => {
+    const w = world();
+    const res = await claimMuenzenRouted(w.deps('offer', true));
+    expect(w.sign).toHaveBeenCalledTimes(1);
+    expect(w.grantDeps.sendPasskeyOp).toHaveBeenCalledTimes(1);
+    expect(w.passkeyClaim).not.toHaveBeenCalled();
+    expect(w.sessionSend).toHaveBeenCalledTimes(2);
+    expect(res.via).toBe('session');
+    expect(JSON.parse(w.data.get(DEVICE_SESSION_STORE_KEY(KSAFE))!).status).toBe('active');
+  });
+
+  it('offer without allowGrant ("Nicht jetzt" / profile pill) = today\'s passkey claim', async () => {
+    const w = world();
+    const res = await claimMuenzenRouted(w.deps('offer'));
+    expect(res.via).toBe('passkey');
+    expect(w.sign).toHaveBeenCalledTimes(1);
+    expect(w.grantDeps.sendPasskeyOp).not.toHaveBeenCalled();
+  });
+
+  it('renew-then-session: one prompt (renew), then session ops', async () => {
+    const w = world({ pids: 'mine' });
+    await w.seedActive();
+    const res = await claimMuenzenRouted(w.deps('renew-then-session'));
+    expect(w.sign).toHaveBeenCalledTimes(1);
+    expect(w.grantDeps.sendPasskeyOp).toHaveBeenCalledTimes(1);
+    expect(res.via).toBe('session');
+  });
+
+  it('kill switch off → passkey claim even with an active record', async () => {
+    const w = world({ pids: 'mine' });
+    await w.seedActive();
+    const res = await claimMuenzenRouted(w.deps('passkey', true));
+    expect(res.via).toBe('passkey');
+    expect(w.sessionSend).not.toHaveBeenCalled();
+    expect(w.sign).toHaveBeenCalledTimes(1);
+  });
+
+  it('stale permission falls back to passkey and clears the record', async () => {
+    const w = world({
+      pids: 'mine',
+      sessionSend: async () => {
+        throw new DeviceSessionRejectedError('device session rejected: InvalidPermissionId');
+      },
+    });
+    await w.seedActive();
+    const res = await claimMuenzenRouted(w.deps('session'));
+    expect(res.via).toBe('passkey');
+    expect(w.sessionSend).toHaveBeenCalledTimes(1); // never retried
+    expect(w.passkeyClaim).toHaveBeenCalledTimes(1);
+    expect(w.sign).toHaveBeenCalledTimes(1);
+    expect(w.data.size).toBe(0);
+  });
+
+  it('a sponsor 403 on the first op counts as a rejection too', async () => {
+    const w = world({
+      pids: 'mine',
+      sessionSend: async () => {
+        throw Object.assign(new Error('HTTP 403: device sessions are switched off'), { status: 403 });
+      },
+    });
+    await w.seedActive();
+    expect((await claimMuenzenRouted(w.deps('session'))).via).toBe('passkey');
+    expect(w.data.size).toBe(0);
+  });
+
+  it('a rejection after personalMint landed: partial, record dropped, no passkey prompt', async () => {
+    const w = world({
+      pids: 'mine',
+      sessionSend: async (kind) => {
+        if (kind === 'groupMint') throw new DeviceSessionRejectedError('device session expired');
+        return `0x${'cc'.repeat(32)}` as Hex;
+      },
+    });
+    await w.seedActive();
+    const res = await claimMuenzenRouted(w.deps('session'));
+    expect(res).toEqual({ mintedRaw: 3n * ONE, partial: true, via: 'session' });
+    expect(w.passkeyClaim).not.toHaveBeenCalled();
+    expect(w.sign).not.toHaveBeenCalled();
+    expect(w.data.size).toBe(0);
+  });
+
+  it('a network error (not a rejection) propagates and keeps the record', async () => {
+    const w = world({
+      pids: 'mine',
+      sessionSend: async () => {
+        throw new Error('timed out waiting for the userOp receipt');
+      },
+    });
+    await w.seedActive();
+    await expect(claimMuenzenRouted(w.deps('session'))).rejects.toThrow('timed out');
+    expect(w.passkeyClaim).not.toHaveBeenCalled();
+    expect(w.data.size).toBe(2);
   });
 });

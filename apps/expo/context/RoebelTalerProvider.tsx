@@ -11,8 +11,21 @@ import {
   prepareContributeToRoebelTaler, prepareSendRoebelTaler, isGroupMember,
 } from '@/lib/roebel-taler';
 import { circlesHubAddress, roebeltalerGroupAddress } from '@/constants/gnosis';
-import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount } from '@/lib/muenzen-claim';
+import {
+  claimMuenzenAsOneBatch, claimMuenzenRouted, claimsAsOneBatch, wholeMuenzen, type BatchAccount,
+} from '@/lib/muenzen-claim';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import type { PasskeySession } from '@/lib/passkey/session';
+import {
+  chooseClaimPath, isDeviceSessionEligible, DEVICE_SESSION_DECLINED_KEY, DEVICE_SESSION_DECLINE_SEC,
+  type ClaimPath,
+} from '@/lib/passkey/session-keys/claim-route';
+import { grantDeviceSession, readDeviceSessionState, readOnChainPermissionIds } from '@/lib/passkey/session-keys/grant';
+import { defaultDeviceKeyStore, deleteDeviceSession, loadDeviceSession } from '@/lib/passkey/session-keys/device-key';
+import { isDeviceSessionRejection, sendDeviceSessionCall } from '@/lib/passkey/session-keys/session-op';
+import { fetchPasskeySessionKeysEnabled } from '@/lib/supabase-app-settings';
 import { recordMuenzenClaim } from '@/lib/muenzen-daily-mint';
 import { convertibleRaw, findMyInvitation, getInviteReserveRaw } from '@/lib/muenzen-invite';
 
@@ -42,7 +55,32 @@ export interface SettlementJob {
   attempts?: number;
 }
 
-export type ClaimNowResult = { received: number; claimedAt: number; streak: number };
+/**
+ * `partial`: a device-session claim minted the personal Münzen but the conversion (groupMint)
+ * did not land; the next claim converts the rest.
+ */
+export type ClaimNowResult = { received: number; claimedAt: number; streak: number; partial?: boolean };
+
+/** The claim path for the current passkey session (kill switch, eligibility, device state, "Nicht jetzt"). */
+async function routeFor(account: unknown): Promise<{ path: ClaimPath; session: PasskeySession | null }> {
+  const session = passkeySessionOf<PasskeySession>(account);
+  if (!session || !isDeviceSessionEligible(session, Platform.OS)) return { path: 'passkey', session };
+  const enabled = await fetchPasskeySessionKeysEnabled().catch(() => false);
+  if (!enabled) return { path: 'passkey', session };
+  const [state, declinedRaw] = await Promise.all([
+    readDeviceSessionState(session).catch(() => null),
+    AsyncStorage.getItem(DEVICE_SESSION_DECLINED_KEY).catch(() => null),
+  ]);
+  const declined = declinedRaw ? Number(declinedRaw) : NaN;
+  const path = chooseClaimPath({
+    enabled,
+    eligible: true,
+    state,
+    nowSec: Math.floor(Date.now() / 1000),
+    declinedUntilSec: Number.isFinite(declined) ? declined : null,
+  });
+  return { path, session };
+}
 
 interface RoebelTalerContextValue {
   talerBalance: number;
@@ -71,7 +109,15 @@ interface RoebelTalerContextValue {
    * the whole Münzen landed, the claim time and the new streak. Throws on cancel/failure
    * (nothing persisted, never retried).
    */
-  claimNow: () => Promise<ClaimNowResult>;
+  claimNow: (opts?: { allowGrant?: boolean }) => Promise<ClaimNowResult>;
+  /**
+   * Passkey session only: which way the next claim goes ('offer' = show the first-claim offer
+   * sheet, then `claimNow({ allowGrant: true })` or `declineDeviceSession()` + `claimNow()`).
+   * 'passkey' for thirdweb, web, words, Safe identities, or with the kill switch off.
+   */
+  deviceSessionClaimPath: () => Promise<ClaimPath>;
+  /** "Nicht jetzt": no offer for 7 days on this device. */
+  declineDeviceSession: () => Promise<void>;
   onboard: () => Promise<void>;
   /** Resolves with the transaction hash (used by in-chat payment receipts). */
   send: (to: string, amount: bigint) => Promise<string>;
@@ -175,21 +221,51 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     }
   }, [gnosisAccount]);
 
-  // Passkey session: one tap → one batch → one fingerprint, awaited in the foreground.
-  const claimNow = useCallback(async (): Promise<ClaimNowResult> => {
+  // Passkey session: one tap → at most one fingerprint, awaited in the foreground. With a device
+  // session (Münzen ohne Fingerabdruck) the claim runs as session ops without any prompt.
+  const claimNow = useCallback(async (opts?: { allowGrant?: boolean }): Promise<ClaimNowResult> => {
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
     if (!claimsAsOneBatch(gnosisAccount)) throw new Error('claimNow is for passkey sessions only');
     setMinting(true);
     try {
-      const { mintedRaw } = await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
+      const { path, session } = await routeFor(gnosisAccount);
+      const store = defaultDeviceKeyStore;
+      const passkeyClaim = () => claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
+      const { mintedRaw, partial } = !session || path === 'passkey'
+        ? { ...(await passkeyClaim()), partial: false }
+        : await claimMuenzenRouted({
+          path,
+          allowGrant: opts?.allowGrant === true,
+          account: gnosisAccount,
+          reads: CLAIM_READS,
+          addrs: CLAIM_ADDRS,
+          grant: async () => { await grantDeviceSession(session); },
+          loadSession: () => loadDeviceSession(store, session.safe, () => readOnChainPermissionIds(session.safe)),
+          sendSessionCall: async (s, kind, innerHubData) => (await sendDeviceSessionCall({
+            record: s.record, privateKey: s.privateKey, proof: { x: session.x, y: session.y }, kind, innerHubData,
+          })).txHash,
+          isRejection: isDeviceSessionRejection,
+          dropSession: () => deleteDeviceSession(store, session.safe),
+          passkeyClaim,
+        });
       const claimedAt = Date.now();
       const streak = await recordMuenzenClaim(AsyncStorage, gnosisAccount.address, claimedAt);
       await reconcile().catch(() => {});
-      return { received: wholeMuenzen(mintedRaw), claimedAt, streak };
+      return { received: wholeMuenzen(mintedRaw), claimedAt, streak, ...(partial ? { partial: true } : {}) };
     } finally {
       setMinting(false);
     }
   }, [gnosisAccount, reconcile]);
+
+  const deviceSessionClaimPath = useCallback(async (): Promise<ClaimPath> => {
+    if (!gnosisAccount || !claimsAsOneBatch(gnosisAccount)) return 'passkey';
+    return (await routeFor(gnosisAccount).catch(() => ({ path: 'passkey' as const }))).path;
+  }, [gnosisAccount]);
+
+  const declineDeviceSession = useCallback(async () => {
+    const until = Math.floor(Date.now() / 1000) + DEVICE_SESSION_DECLINE_SEC;
+    await AsyncStorage.setItem(DEVICE_SESSION_DECLINED_KEY, String(until));
+  }, []);
 
   const onboard = useCallback(async () => {
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
@@ -282,13 +358,15 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     dailyMint,
     passkeyClaim,
     claimNow,
+    deviceSessionClaimPath,
+    declineDeviceSession,
     onboard,
     send,
     refresh,
     enqueueSettlement,
     account: gnosisAccount,
   }), [optimisticRaw, groupRaw, mintableRaw, personalRaw, onboarded, loading, ready, minting, onboarding,
-       sending, dailyMint, passkeyClaim, claimNow, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
+       sending, dailyMint, passkeyClaim, claimNow, deviceSessionClaimPath, declineDeviceSession, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
 
   return <RoebelTalerContext.Provider value={value}>{children}</RoebelTalerContext.Provider>;
 }

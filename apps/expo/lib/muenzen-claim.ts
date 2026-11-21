@@ -136,3 +136,102 @@ export async function claimMuenzenAsOneBatch(
   const { transactionHash } = await account.sendBatchTransaction(txs);
   return { transactionHash, mintedRaw: mintable };
 }
+
+const PERSONAL_MINT_DATA = encodeFunctionData({ abi: hubAbi, functionName: 'personalMint' });
+
+/** A partial device-session claim: personalMint landed, a later groupMint did not. */
+export type DeviceSessionClaimResult = { mintedRaw: bigint; partial: boolean; error?: unknown };
+
+/**
+ * The device-session claim (no fingerprint): the same transactions as `buildMuenzenClaimTxs`,
+ * one session op per transaction, in order (personalMint, then groupMint). `send(kind, data)`
+ * sends one session op with the Hub calldata and resolves with its tx hash.
+ *
+ * An error on the FIRST op propagates (nothing landed; the caller may fall back to the passkey).
+ * An error after personalMint landed returns `partial: true` with the error: the personal Münzen
+ * are there, the next claim converts the rest.
+ */
+export async function claimMuenzenWithDeviceSession(
+  account: Pick<BatchAccount, 'address'>,
+  reads: ClaimReads,
+  addrs: { hub: Address; group: Address },
+  send: (kind: 'personalMint' | 'groupMint', data: Hex) => Promise<Hex>,
+): Promise<DeviceSessionClaimResult> {
+  const self = account.address as Address;
+  const [member, personalBalance, mintable, reserve] = await Promise.all([
+    reads.isGroupMember(self),
+    reads.personalBalance(self),
+    reads.mintable(self),
+    reads.inviteReserve ? reads.inviteReserve(self) : Promise.resolve(0n),
+  ]);
+  const txs = buildMuenzenClaimTxs({ ...addrs, self, member, personalBalance, mintable, reserve });
+  if (txs.length === 0) throw new Error(CLAIM_NOTHING_MESSAGE);
+  let mintedRaw = 0n;
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
+    const kind = tx.data.toLowerCase() === PERSONAL_MINT_DATA.toLowerCase() ? 'personalMint' : 'groupMint';
+    try {
+      await send(kind, tx.data);
+    } catch (error) {
+      if (i === 0) throw error;
+      return { mintedRaw, partial: true, error };
+    }
+    if (kind === 'personalMint') mintedRaw = mintable;
+  }
+  return { mintedRaw, partial: false };
+}
+
+/** Claim route (see lib/passkey/session-keys/claim-route.ts). */
+export type RoutedClaimPath = 'session' | 'renew-then-session' | 'offer' | 'passkey';
+
+export type RoutedClaimDeps<S> = {
+  path: RoutedClaimPath;
+  /** The user accepted the offer sheet ("Erlauben"). */
+  allowGrant: boolean;
+  account: Pick<BatchAccount, 'address'>;
+  reads: ClaimReads;
+  addrs: { hub: Address; group: Address };
+  /** grantDeviceSession (ONE passkey prompt). */
+  grant: () => Promise<void>;
+  /** This device's active session (record + key), or null. */
+  loadSession: () => Promise<S | null>;
+  /** One device-session op (no prompt); resolves with the tx hash. */
+  sendSessionCall: (s: S, kind: 'personalMint' | 'groupMint', data: Hex) => Promise<Hex>;
+  /** isDeviceSessionRejection. */
+  isRejection: (e: unknown) => boolean;
+  /** Deletes this device's record + key. */
+  dropSession: () => Promise<void>;
+  /** Today's one-batch passkey claim (ONE prompt). */
+  passkeyClaim: () => Promise<{ mintedRaw: bigint }>;
+};
+
+export type RoutedClaimResult = { mintedRaw: bigint; partial: boolean; via: 'session' | 'passkey' };
+
+/**
+ * The passkey claim, routed through the device session when there is one:
+ *   'session'                     → session ops (no prompt)
+ *   'renew-then-session'          → renew (one prompt; the user opted in before), then session ops
+ *   'offer' + allowGrant          → grant (one prompt), then session ops
+ *   'offer' without it, 'passkey' → today's one-batch passkey claim (one prompt)
+ * A rejected session (other device replaced it, expired, sponsor refusal) drops the local record
+ * and runs the passkey claim ONCE; it never retries the session. A rejection after personalMint
+ * landed drops the record and returns the partial result (no second prompt).
+ */
+export async function claimMuenzenRouted<S>(d: RoutedClaimDeps<S>): Promise<RoutedClaimResult> {
+  const viaPasskey = async (): Promise<RoutedClaimResult> => ({ ...(await d.passkeyClaim()), partial: false, via: 'passkey' });
+  const wantsSession = d.path === 'session' || d.path === 'renew-then-session' || (d.path === 'offer' && d.allowGrant);
+  if (!wantsSession) return viaPasskey();
+  if (d.path !== 'session') await d.grant();
+  const s = await d.loadSession();
+  if (!s) return viaPasskey();
+  let result: DeviceSessionClaimResult;
+  try {
+    result = await claimMuenzenWithDeviceSession(d.account, d.reads, d.addrs, (kind, data) => d.sendSessionCall(s, kind, data));
+  } catch (e) {
+    if (!d.isRejection(e)) throw e;
+    await d.dropSession().catch(() => {});
+    return viaPasskey();
+  }
+  if (result.partial && d.isRejection(result.error)) await d.dropSession().catch(() => {});
+  return { mintedRaw: result.mintedRaw, partial: result.partial, via: 'session' };
+}
