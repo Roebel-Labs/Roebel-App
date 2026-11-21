@@ -161,3 +161,15 @@ audit covered, with the audit's fixes in it?
 but the deployed OwnableValidator (core-modules `f86f209` with checknsignatures `ecbadc3`) includes unaudited
 changes to signature verification made after Ackee's last review (`4531b2e`), so this module needs an explicit
 exception or re-review before the flag goes on.
+
+## Decision (Max, 2026-11-21)
+
+**OwnableValidator accepted as a documented exception.** Rationale: the post-audit changes
+(4531b2e..f86f209 and checknsignatures fce5568..ecbadc3) only have a known bug for smart-contract
+owners; Röbel device sessions use exactly one EOA owner, threshold 1, a 65-byte ECDSA signature
+over the raw userOpHash (fork-tested in SessionKeys.t.sol). Blast radius is bounded by the
+session scope (mint-only: personalMint + Röbel groupMint into the owner's own account), the
+30-day expiry, revocation with one passkey op, the device-signature sponsor gate and the kill
+switch. Revisit when Rhinestone redeploys a fixed, audited validator (core-modules PR #32) —
+that changes the validator address and therefore the permission IDs (small builder update).
+An optional paid review of the two diffs stays open.

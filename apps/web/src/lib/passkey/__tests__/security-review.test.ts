@@ -78,9 +78,9 @@ test("FINDING H-1: the kill switch row passkey_session_keys_enabled is not writa
   // So anyone with the public anon key can INSERT/UPDATE passkey_session_keys_enabled = 'true'
   // (today the row does not exist: an INSERT turns the feature on in production) or flip it to
   // 'false' (every device's 403 then drops its local session in muenzen-claim.ts).
-  // The flag migration must exclude the key from those policies (like newsletter_auto_enroll).
+  // Fixed 2026-11-21 by 20261121_lock_passkey_session_keys_flag.sql (applied to production).
   const sql = readFileSync(
-    join(__dirname, "../../../../../../supabase/migrations/20261121_passkey_session_keys_flag.sql"),
+    join(__dirname, "../../../../../../supabase/migrations/20261121_lock_passkey_session_keys_flag.sql"),
     "utf8",
   );
   const hardened = /policy[\s\S]*app_settings[\s\S]*passkey_session_keys_enabled/i.test(
