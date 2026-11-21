@@ -1,17 +1,19 @@
 // Entwicklermodus: "Sprachassistent testen" — Sprachgespräch mit Mecky über LiveKit (Voice Agent).
 // The token comes from POST /api/live/act { action: 'voice_token' }, authorised with the live session
 // of the test show (`testlauf`), so no new signed scope is needed. LiveKit itself is loaded lazily.
+// Look = chat kit (components/chat): chat tokens, SettingsHeader, Mecky figure, black pill CTA.
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveAccount } from 'thirdweb/react';
 import { useMicrophonePermissions } from 'expo-camera';
-import { useTheme } from '@/context/ThemeContext';
-import { fontFamily } from '@/constants/theme';
+import { useKeepAwake } from 'expo-keep-awake';
+import { SettingsHeader } from '@/components/chat/SettingsHeader';
+import { BlackPillButton } from '@/components/chat/BlackPillButton';
+import { chatFont, chatSize, chatType, useChatTokens } from '@/components/chat/tokens';
+import { VoiceFigure, VoiceStatusChip } from '@/components/voice/VoiceFigure';
 import { hasLiveKitNative } from '@/lib/live-guest-support';
 import { fetchShow, liveActAs, liveErrorText } from '@/lib/live';
-import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import type { VoiceAgentStageProps } from '@/components/voice/VoiceAgentStage';
 
 const TEST_SHOW_SLUG = 'testlauf';
@@ -31,15 +33,25 @@ function loadStage(): React.ComponentType<VoiceAgentStageProps> | null {
 
 type Conn = { url: string; token: string };
 
+function KeepAwake() {
+  useKeepAwake('roebel-voice-agent');
+  return null;
+}
+
 export default function DevVoiceScreen() {
-  const router = useRouter();
-  const { colors } = useTheme();
+  const t = useChatTokens();
+  const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const account = useActiveAccount();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
   const [conn, setConn] = useState<Conn | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supported] = useState(() => hasLiveKitNative());
+
+  // Big figure while idle, smaller once the transcript needs the room.
+  const idleFigure = Math.round(Math.min(380, winH * 0.42));
+  const activeFigure = Math.round(Math.min(260, winH * 0.3));
 
   const start = useCallback(async () => {
     if (!account || busy) return;
@@ -54,7 +66,10 @@ export default function DevVoiceScreen() {
       const r = await liveActAs<{ livekit_url: string; token: string }>(
         account, shown.show.id, { action: 'voice_token' },
       );
-      if (!r.ok) { setError(r.code === 'VOICE_UNAVAILABLE' || r.code === 'RATE_LIMITED' ? r.message : liveErrorText(r.code, r.message)); return; }
+      if (!r.ok) {
+        setError(r.code === 'VOICE_UNAVAILABLE' || r.code === 'RATE_LIMITED' ? r.message : liveErrorText(r.code, r.message));
+        return;
+      }
       setConn({ url: r.data.livekit_url, token: r.data.token });
     } finally {
       setBusy(false);
@@ -62,67 +77,71 @@ export default function DevVoiceScreen() {
   }, [account, busy, micPerm, requestMicPerm]);
 
   const Stage = conn ? loadStage() : null;
+  const blocked = !supported || !account;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Zurück">
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Sprachassistent</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={[styles.container, { backgroundColor: t.background }]}>
+      <SettingsHeader title="Mit Mecky sprechen" />
 
       {conn && Stage ? (
-        <Stage
-          url={conn.url}
-          token={conn.token}
-          onEnd={() => setConn(null)}
-          onError={(m) => { setConn(null); setError(m); }}
-        />
+        <>
+          <KeepAwake />
+          <Stage
+            url={conn.url}
+            token={conn.token}
+            figureHeight={activeFigure}
+            bottomInset={insets.bottom}
+            onEnd={() => setConn(null)}
+            onError={(m) => { setConn(null); setError(m); }}
+          />
+        </>
       ) : (
-        <View style={styles.content}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Sprich mit Mecky</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>
-            Ein Testgespräch per Sprache. Mecky hört zu, antwortet laut und schreibt mit.
-            Das Gespräch dauert höchstens 10 Minuten.
-          </Text>
-          {!supported && (
-            <Text style={[styles.body, { color: colors.error }]}>
-              Diese App-Version kann noch keine Sprachgespräche. Bitte aktualisiere die App im Store.
+        <View style={styles.flex}>
+          <View style={styles.figure}>
+            <VoiceFigure state="idle" height={idleFigure} />
+          </View>
+          <View style={styles.copy}>
+            <Text style={[styles.title, { color: t.textPrimary }]}>Sprich einfach los</Text>
+            <Text style={[chatType.secondary, styles.center, { color: t.textSecondary }]}>
+              Mecky hört zu, antwortet laut und schreibt mit. Ein Gespräch dauert höchstens 10 Minuten.
             </Text>
-          )}
-          {!account && (
-            <Text style={[styles.body, { color: colors.textSecondary }]}>Bitte melde dich zuerst an.</Text>
-          )}
-          {error && <Text style={[styles.body, { color: colors.error }]}>{error}</Text>}
-          <Pressable
-            onPress={start}
-            disabled={!supported || !account || busy}
-            style={[styles.cta, { backgroundColor: colors.primary, opacity: !supported || !account ? 0.4 : 1 }]}
-          >
-            {busy
-              ? <ActivityIndicator color="#ffffff" />
-              : <Text style={styles.ctaText}>Gespräch starten</Text>}
-          </Pressable>
+            {!supported && (
+              <Text style={[chatType.caption, styles.center, { color: t.recordingRed }]}>
+                Diese App-Version kann noch keine Sprachgespräche. Bitte aktualisiere die App im Store.
+              </Text>
+            )}
+            {supported && !account && (
+              <Text style={[chatType.caption, styles.center, { color: t.textSecondary }]}>
+                Bitte melde dich zuerst an.
+              </Text>
+            )}
+            {error && (
+              <Text style={[chatType.caption, styles.center, { color: t.recordingRed }]}>{error}</Text>
+            )}
+          </View>
+          <View style={styles.flex} />
+          <View style={[styles.cta, { paddingBottom: insets.bottom + 12 }]}>
+            {error ? <View style={styles.chipGap} /> : <VoiceStatusChip state="idle" />}
+            <BlackPillButton
+              label="Gespräch starten"
+              onPress={start}
+              loading={busy}
+              variant={blocked ? 'disabled' : 'primary'}
+            />
+          </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontFamily: fontFamily.heading, fontSize: 17 },
-  headerSpacer: { width: 40 },
-  content: { flex: 1, padding: 24, gap: 14, justifyContent: 'center' },
-  title: { fontFamily: fontFamily.heading, fontSize: 24 },
-  body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 22 },
-  cta: { marginTop: 12, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  ctaText: { fontFamily: fontFamily.semiBold, fontSize: 16, color: '#ffffff' },
+  flex: { flex: 1 },
+  figure: { paddingHorizontal: chatSize.screenPadH, paddingTop: 8 },
+  copy: { paddingHorizontal: 28, paddingTop: 22, gap: 8, alignItems: 'center' },
+  title: { fontFamily: chatFont.semiBold, fontSize: 26, letterSpacing: -0.4, textAlign: 'center' },
+  center: { textAlign: 'center' },
+  cta: { paddingHorizontal: chatSize.screenPadH, gap: 14 },
+  chipGap: { height: 0 },
 });
