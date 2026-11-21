@@ -9,6 +9,7 @@ import type { LanguageModel } from "ai";
 import type { ModelRoute } from "./types";
 import { tokenCostMicros } from "../ai-usage/pricing";
 import { getProviderKey } from "./provider-keys";
+import { SAIA_MODELS, saiaChatModel, saiaEnabled, withSaiaFallback } from "../ai/saia";
 
 export const MODEL_ROUTES: Record<ModelRoute, { anthropic: string }> = {
   "bot-fast": { anthropic: "claude-haiku-4-5-20251001" },
@@ -28,7 +29,8 @@ export function normalizeRoute(route: unknown): ModelRoute {
 
 export interface ResolvedModel {
   route: ModelRoute;
-  provider: "anthropic" | "gateway";
+  /** 'saia' = GWDG first with Anthropic fallback (see lib/ai/saia.ts). */
+  provider: "anthropic" | "gateway" | "saia";
   modelId: string;
   model: LanguageModel;
   /** 'own_key' = the user's own Anthropic key pays; cost 0 for the platform, no quota. */
@@ -53,6 +55,11 @@ export function resolveModel(routeInput: unknown, env: NodeJS.ProcessEnv = proce
     return { route, provider: "gateway", modelId: route, model: gatewayProvider.chatModel(route), billedTo: "platform" };
   }
   const modelId = MODEL_ROUTES[route].anthropic;
+  if (saiaEnabled(route, env)) {
+    // GWDG SAIA first (open-weight, Göttingen), Anthropic when SAIA fails or stalls.
+    const model = withSaiaFallback(saiaChatModel(route, env), anthropic(modelId));
+    return { route, provider: "saia", modelId: SAIA_MODELS[route], model, billedTo: "platform" };
+  }
   return { route, provider: "anthropic", modelId, model: anthropic(modelId), billedTo: "platform" };
 }
 

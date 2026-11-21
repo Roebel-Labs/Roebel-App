@@ -16,7 +16,7 @@ export const ROEBEL_TENANT: TenantConfig = {
     "Zuständige Stellen: Stadt Röbel/Müritz, Amt Röbel-Müritz und der Landkreis Mecklenburgische Seenplatte.",
     "Die Röbel-App ist eine offene Bürger-App (Open Source) für Röbel: Veranstaltungen, Neuigkeiten, Vereine, Gastronomie, Marktplatz, Vorschläge und Abstimmungen.",
     "Mecky ist das Maskottchen und der KI-Assistent der Röbel-App.",
-    "„Röbel Münzen“ sind die lokale Gemeinschaftswährung der App (auf Circles); nenn sie immer „Röbel Münzen“, nie mit Kürzel.",
+    "„Röbel Münzen“ sind Röbels Dankeschön fürs Dabeisein und Mitmachen (ein Belohnungssystem auf Circles); nenn sie immer „Röbel Münzen“, nie mit Kürzel und nie „Währung“ oder „Geld“.",
     "Verifizierte Bürgerinnen und Bürger werden von anderen Röbelern bestätigt und können über Vorschläge abstimmen; Abstimmungen sind geheim.",
     "Abstimmungen in der App sind ein Bürgervotum der Bürgerschaft, keine rechtsverbindlichen Beschlüsse der Stadt.",
     "Die Gemeinschaftskasse ist der gemeinsame Topf der Röbeler Gemeinschaft; ihre Zahlen sind in der App öffentlich einsehbar.",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { STT_MODEL } from "@/lib/chat/models";
+import { saiaEnabled, saiaTranscribe, markSaiaDown } from "@/lib/ai/saia";
 import { recordTranscriptionUsage, type TranscriptionUsage } from "@/lib/ai-usage/record";
 import { badRequest, handleError, jsonError, requireWallet, unauthorized } from "../_lib/http";
 
@@ -12,7 +13,8 @@ const MAX_BYTES = 25 * 1024 * 1024;
 export async function POST(request: Request) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
-  if (!process.env.OPENAI_API_KEY) return jsonError(503, "stt_unavailable", "Spracherkennung ist gerade nicht verfügbar.");
+  const useSaia = saiaEnabled("stt");
+  if (!process.env.OPENAI_API_KEY && !useSaia) return jsonError(503, "stt_unavailable", "Spracherkennung ist gerade nicht verfügbar.");
   let form: FormData;
   try {
     form = await request.formData();
@@ -28,10 +30,21 @@ export async function POST(request: Request) {
     // re-labels the bytes ("audio.mp4") and OpenAI rejects iOS/Android AAC
     // recordings with `unsupported_format`.
     const name = audioFileName(audio);
+    const bytes = await audio.arrayBuffer();
+    if (useSaia) {
+      // Whisper large-v3 at the GWDG (Göttingen); OpenAI only when SAIA fails.
+      try {
+        const text = await saiaTranscribe(new File([bytes], name, { type: audioMimeType(name) }));
+        return NextResponse.json({ text });
+      } catch (err) {
+        markSaiaDown(err);
+        if (!process.env.OPENAI_API_KEY) throw err;
+      }
+    }
     const upstream = new FormData();
     upstream.append("model", STT_MODEL);
     upstream.append("language", "de");
-    upstream.append("file", new File([await audio.arrayBuffer()], name, { type: audioMimeType(name) }));
+    upstream.append("file", new File([bytes], name, { type: audioMimeType(name) }));
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
