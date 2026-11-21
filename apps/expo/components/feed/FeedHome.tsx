@@ -618,7 +618,7 @@ export default function FeedHome() {
       {/* GlassBackdrop is the surface Android's frosted chrome samples
           from (BlurTargetView) — the glass bars below must stay OUTSIDE
           it and render after it. Plain passthrough View on iOS. */}
-      <GlassBackdrop style={styles.pager}>
+      <GlassBackdrop style={[styles.pager, { backgroundColor: colors.background }]}>
       <HorizontalRailLockProvider setRailActive={setRailActive}>
       <Pager
         ref={pagerRef}

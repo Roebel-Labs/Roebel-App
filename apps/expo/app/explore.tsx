@@ -411,7 +411,7 @@ export default function ExploreScreen() {
       <GlassProvider>
       {/* GlassBackdrop: the surface the frosted bottom nav samples on
           Android. Passthrough View on web; the nav overlay stays OUTSIDE. */}
-      <GlassBackdrop style={styles.glassBody}>
+      <GlassBackdrop style={[styles.glassBody, { backgroundColor: colors.background }]}>
       <Animated.ScrollView
         // flex:1 is load-bearing on web: react-native-web sizes an unstyled
         // ScrollView to its content, so `overflow-y: auto` never has anything

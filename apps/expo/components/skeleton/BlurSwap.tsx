@@ -25,10 +25,13 @@ export default function BlurSwap({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { colors } = useTheme();
   return (
     <GlassProvider>
       <View style={style}>
-        <GlassBackdrop>{children}</GlassBackdrop>
+        {/* Opaque page colour: the blur samples only this view, and transparent pixels came out
+            inverted (dark blur in light mode, light in dark — Max 2026-11-21). */}
+        <GlassBackdrop style={{ backgroundColor: colors.background }}>{children}</GlassBackdrop>
         <BlurPulse swapKey={swapKey} />
       </View>
     </GlassProvider>
