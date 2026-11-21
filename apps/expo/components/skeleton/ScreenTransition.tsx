@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
@@ -42,9 +43,16 @@ type Props = {
    * again, Airbnb-style — raised BEFORE the screen is revealed (goToTab signals first).
    */
   tab?: MainTab;
+  /**
+   * The screen root is a SafeAreaView with the top edge: absolute overlays ignore its padding,
+   * so the status-bar inset is added here (else the skeleton sits higher than the real UI).
+   */
+  safeAreaTop?: boolean;
 };
 
-export default function ScreenTransition({ skeleton, ready, topInset = 0, backgroundColor, tab }: Props) {
+export default function ScreenTransition({ skeleton, ready, topInset = 0, backgroundColor, tab, safeAreaTop = false }: Props) {
+  const insets = useSafeAreaInsets();
+  const overlayTop = topInset + (safeAreaTop ? insets.top : 0);
   const { colors, isDark } = useTheme();
   const target = useGlassTarget();
 
@@ -145,7 +153,7 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
       {entryShown ? (
         <Animated.View
           pointerEvents={ready ? 'none' : 'auto'}
-          style={[StyleSheet.absoluteFill, styles.entry, { top: topInset, backgroundColor: backgroundColor ?? colors.background }, entryStyle]}
+          style={[StyleSheet.absoluteFill, styles.entry, { top: overlayTop, backgroundColor: backgroundColor ?? colors.background }, entryStyle]}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >

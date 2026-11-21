@@ -123,7 +123,8 @@ export function Bone({ width, height, radius = 8, style, children }: BoneProps) 
 const styles = StyleSheet.create({
   bone: { overflow: 'hidden' },
   band: { position: 'absolute', left: 0, right: 0, top: 0, height: BAND },
-  ghostText: { color: 'transparent' },
+  // opacity, not color: 'transparent' (Android still painted the text black — Max 2026-11-21).
+  ghostText: { opacity: 0 },
 });
 
 /**
