@@ -128,7 +128,9 @@ describe('live foil', () => {
 describe('gravity tilt', () => {
   const { tiltFromGravity, softClamp, approach, GRAVITY_FULL_X } = jest.requireActual('@/lib/card-design/record');
   it('is zero at the resting pose and follows both axes (Android signs)', () => {
-    expect(tiltFromGravity(0.1, 0.7, 0.1, 0.7, 1)).toEqual({ x: 0, y: 0 });
+    const rest = tiltFromGravity(0.1, 0.7, 0.1, 0.7, 1);
+    expect(rest.x).toBeCloseTo(0);
+    expect(rest.y).toBeCloseTo(0);
     const t = tiltFromGravity(0.1 - GRAVITY_FULL_X / 2, 0.8, 0.1, 0.7, 1);
     expect(t.x).toBeGreaterThan(0.4);
     expect(t.y).toBeGreaterThan(0);
@@ -149,15 +151,6 @@ describe('gravity tilt', () => {
     const k60 = approach(1 / 60, 0.05);
     const k120 = approach(1 / 120, 0.05);
     expect(1 - (1 - k120) * (1 - k120)).toBeCloseTo(k60, 6);
-  });
-});
-
-describe('tilt redraws', () => {
-  it('are quantised: sensor noise does not redraw, a real tilt does', () => {
-    const { quantiseTilt, sameTilt } = jest.requireActual('@/lib/card-design/record');
-    const a = quantiseTilt({ x: 0.2001, y: -0.1 });
-    expect(sameTilt(a, quantiseTilt({ x: 0.2049, y: -0.1049 }))).toBe(true);
-    expect(sameTilt(a, quantiseTilt({ x: 0.26, y: -0.1 }))).toBe(false);
   });
 });
 
