@@ -62,7 +62,9 @@ type Props = {
  * ends and the only JS work per swipe is the pagination dot flip.
  */
 export default function HeroCarousel({ events, showPagination = false, containerStyle }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, variant } = useTheme();
+  // Dim: solid cards in the page colour and no ambient wash (Max 2026-11-21).
+  const isDim = variant === 'dim';
   const ambientMax = isDark ? HERO_AMBIENT_MAX_OPACITY_DARK : HERO_AMBIENT_MAX_OPACITY;
   const { width: screenWidth } = useWindowDimensions();
   const layout = useMemo(() => heroCarouselLayout(screenWidth), [screenWidth]);
@@ -135,31 +137,33 @@ export default function HeroCarousel({ events, showPagination = false, container
   return (
     <View style={[styles.container, containerStyle]}>
       {/* Ambient backdrop: one blurred layer per slot, crossfading with the swipe. */}
-      <View style={styles.ambient} pointerEvents="none">
-        {Array.from({ length: slots }, (_, slot) => {
-          const event = events[slot % count];
-          if (!event.image_url) return null;
-          return (
-            <HeroAmbientLayer
-              key={`ambient-${event.id}-${slot}`}
-              slot={slot}
-              slots={slots}
-              interval={interval}
-              offset={offset}
-              maxOpacity={ambientMax}
-              uri={transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ?? event.image_url}
-            />
-          );
-        })}
-        <LinearGradient
-          colors={[colors.background, `${colors.background}00`]}
-          style={[styles.ambientEdge, { top: 0 }]}
-        />
-        <LinearGradient
-          colors={[`${colors.background}00`, colors.background]}
-          style={[styles.ambientEdge, { bottom: 0 }]}
-        />
-      </View>
+      {!isDim && (
+        <View style={styles.ambient} pointerEvents="none">
+          {Array.from({ length: slots }, (_, slot) => {
+            const event = events[slot % count];
+            if (!event.image_url) return null;
+            return (
+              <HeroAmbientLayer
+                key={`ambient-${event.id}-${slot}`}
+                slot={slot}
+                slots={slots}
+                interval={interval}
+                offset={offset}
+                maxOpacity={ambientMax}
+                uri={transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ?? event.image_url}
+              />
+            );
+          })}
+          <LinearGradient
+            colors={[colors.background, `${colors.background}00`]}
+            style={[styles.ambientEdge, { top: 0 }]}
+          />
+          <LinearGradient
+            colors={[`${colors.background}00`, colors.background]}
+            style={[styles.ambientEdge, { bottom: 0 }]}
+          />
+        </View>
+      )}
 
       <GestureDetector gesture={pan}>
         <Animated.View style={styles.stage}>
@@ -223,7 +227,7 @@ const HeroCarouselSlot = memo(function HeroCarouselSlot({
   offset,
   onPress,
 }: SlotProps) {
-  const { isDark } = useTheme();
+  const { isDark, variant } = useTheme();
 
   const animatedStyle = useAnimatedStyle(() => {
     const loopLength = slots * interval;
@@ -253,7 +257,7 @@ const HeroCarouselSlot = memo(function HeroCarouselSlot({
     >
       <HeroEventCard
         event={event}
-        glass
+        glass={variant !== 'dim'}
         onPress={handlePress}
         imagePriority="high"
         style={{ width: cardWidth, height: HERO_CAROUSEL_CARD_HEIGHT }}

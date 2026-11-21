@@ -223,7 +223,8 @@ export default function ListingDetailScreen() {
     );
   }
 
-  const images = listing.media_urls || [];
+  const images = (listing.media_urls || []).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+  const gridTileSize = Math.floor((windowWidth - SIDE * 2 - 8) / 2);
   const isService = listing.listing_type === 'service';
   const categoryDef =
     [...PRODUCT_CATEGORIES, ...SERVICE_CATEGORIES].find((c) => c.key === listing.category) || null;
@@ -530,13 +531,13 @@ export default function ListingDetailScreen() {
           ) : null}
         </View>
 
-        {/* ── Portfolio ── */}
-        {images.length > 1 ? (
+        {/* ── Portfolio: services only ("Einblicke"); product photos live in the hero ── */}
+        {isService && images.length > 1 ? (
           <>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                {isService ? 'Einblicke' : 'Fotos'}
+                Einblicke
               </Text>
               <View style={styles.grid}>
                 {images.slice(0, 6).map((uri, index) => (
@@ -545,7 +546,8 @@ export default function ListingDetailScreen() {
                     onPress={() => openGallery(index)}
                     style={({ pressed }) => [
                       styles.gridTile,
-                      { width: (windowWidth - SIDE * 2 - 8) / 2, backgroundColor: colors.cardPlaceholder },
+                      // Explicit height: aspectRatio alone collapsed to 0 with only absolute children.
+                      { width: gridTileSize, height: gridTileSize, backgroundColor: colors.cardPlaceholder },
                       pressed && styles.pressed,
                     ]}
                     accessibilityRole="imagebutton"
@@ -772,7 +774,7 @@ const styles = StyleSheet.create({
 
   // Portfolio grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  gridTile: { aspectRatio: 1, borderRadius: 16, overflow: 'hidden' },
+  gridTile: { borderRadius: 16, overflow: 'hidden' },
   gridMore: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.45)',
