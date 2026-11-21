@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mecky voice agent (LiveKit Agents) for the R\u00f6bel app \u2013 dev test 'Sprachassistent testen'",
+  "description": "Mecky voice agent (LiveKit Agents) for the Röbel app – dev test 'Sprachassistent testen'",
   "scripts": {
     "dev": "tsx --env-file=.env.local agent.ts dev",
     "start": "tsx agent.ts start"
@@ -11,6 +11,7 @@
   "dependencies": {
     "@livekit/agents": "1.9.5",
     "@livekit/noise-cancellation-node": "0.3.1",
+    "@livekit/rtc-node": "1.2.3",
     "tsx": "4.23.15"
   },
   "devDependencies": {
