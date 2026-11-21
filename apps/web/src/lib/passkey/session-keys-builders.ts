@@ -441,3 +441,35 @@ export function encodeSessionSignature(pid: Hex, ecdsa65: Hex): Hex {
   if ((ecdsa65.length - 2) / 2 !== 65) throw new Error("session ECDSA signature must be 65 bytes");
   return concatHex([numberToHex(MODE_USE, { size: 1 }), pid, ecdsa65]);
 }
+
+// ---------------------------------------------------------------------------
+// Device authorization of a session-op sponsor request (security review M-1)
+// ---------------------------------------------------------------------------
+
+/** Domain tag of the device-session sponsor authorization (v1). */
+export const DEVICE_AUTH_TAG: Hex = keccak256(stringToHex("roebel/passkey-sponsor/device-session-op/v1"));
+/** A device authorization is valid for at most this long (seconds after the server's now). */
+export const DEVICE_AUTH_MAX_TTL_SEC = 300;
+
+/**
+ * What the device session key signs (EIP-191 personal message over these 32 raw bytes, i.e.
+ * `signMessage({ message: { raw } })`) before the app asks the sponsor for a session-op voucher:
+ *
+ *   keccak256(abi.encode(bytes32 DEVICE_AUTH_TAG, uint256 chainId, bytes32 stableFieldsHash, uint256 expiresAt))
+ *
+ * stableFieldsHash = NetizenVerifyingPaymaster.hashStableFields(op) (voucher.ts `hashStableFields`):
+ * sender, nonce, initCode, callData, accountGasLimits, preVerificationGas, gasFees and both
+ * paymaster gas limits, i.e. every field the voucher covers. The EIP-191 prefix keeps this
+ * signature structurally apart from the raw userOpHash signatures the same key makes for SmartSession.
+ * Mirrored byte for byte by apps/expo/lib/passkey/session-keys/builders.ts.
+ */
+export function deviceSessionAuthHash(p: { chainId: number; stableFieldsHash: Hex; expiresAt: number }): Hex {
+  return keccak256(
+    encodeAbiParameters(parseAbiParameters("bytes32, uint256, bytes32, uint256"), [
+      DEVICE_AUTH_TAG,
+      BigInt(p.chainId),
+      p.stableFieldsHash,
+      BigInt(p.expiresAt),
+    ]),
+  );
+}

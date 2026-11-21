@@ -34,15 +34,34 @@
  *    op.callData is BYTE-EQUAL to sessionClaimCallData(legacy, personalMint()) or to
  *    sessionClaimCallData(legacy, groupMint(Röbel group, [legacy], [amount], 0x)) with the amount
  *    read from the op (> 0) and the whole op compared with the canonical re-encoding.
- *    callGasLimit <= 500k; budget key = legacy plus the group `session:<sender>` (per-session
- *    daily cap PASSKEY_SPONSOR_SESSION_DAILY_WEI, applied by the handler).
+ *    Session gas caps (SESSION_CAPS: fork-measured ~232k / ~234k total handleOps gas per op, caps
+ *    with margin). The request MUST carry `deviceAuth`: the device session key's EIP-191 signature
+ *    over deviceSessionAuthHash(100, hashStableFields(op), expiresAt), now < expiresAt <= now + 300 s;
+ *    the recovered signer's permission id for the op's kind (personalMint / groupMint) must be one
+ *    of SmartSession.getPermissionIDs(sender) ON CHAIN (permissionId = keccak256(OwnableValidator,
+ *    abi.encode(1, [signer]), salt), so an enabled pid binds exactly that signer). Without it: denied
+ *    before any reservation (security review M-1).
+ *    Budget key `session:<sender>` with its own per-key cap PASSKEY_SPONSOR_SESSION_DAILY_WEI (the
+ *    handler applies it) and a settle-able reservation per (sender, nonce) that is settled to the
+ *    EntryPoint's actualGasCost after landing (sponsor-settle.ts; security review M-2). Session ops
+ *    never touch the legacy's everyday budget, so hourly claims cannot starve votes or sends.
  *
  * Kill switch: ctx.sessionKeysEnabled must be exactly `true` for upgrade / grant / session;
  * unset, false or a failed read deny them ("device sessions are switched off") before any chain
  * read. Structural checks (shape, bounds, gas) never touch the chain; chain read failures throw
  * ChainReadError (the caller fails closed).
  */
-import { decodeFunctionData, encodeFunctionData, isAddress, isAddressEqual, parseAbi, size, zeroAddress, type Hex } from "viem";
+import {
+  decodeFunctionData,
+  encodeFunctionData,
+  isAddress,
+  isAddressEqual,
+  parseAbi,
+  recoverMessageAddress,
+  size,
+  zeroAddress,
+  type Hex,
+} from "viem";
 import {
   CAPS,
   checkDeployedPasskeySafe,
@@ -58,11 +77,14 @@ import {
   type SafeLayout,
   type SponsorContext,
   type SponsorUserOp,
+  toPackedUserOperation,
 } from "./sponsor-policy";
+import { hashStableFields } from "./voucher";
 import { decodeSafe7579Execute, nonceKeyOf } from "./safe7579";
 import { PASSKEY_SAFE } from "./safe-address";
 import {
   CIRCLES_HUB,
+  DEVICE_AUTH_MAX_TTL_SEC,
   DEVICE_SESSION_MAX_SEC,
   MULTI_SEND_CALL_ONLY,
   SESSION_NONCE_KEY,
@@ -72,25 +94,43 @@ import {
   groupMintData,
   legacyAccountAbi,
   migrationCallData,
+  permissionIdsOf,
   personalMintData,
   prev4337AfterEnable,
   sessionClaimCallData,
   smartSessionAbi,
+  deviceSessionAuthHash,
+  type MintSessionKind,
 } from "./session-keys-builders";
 
-/** Gas caps of the device-session modes (the rest of every op stays under CAPS). */
+/**
+ * Gas caps of the device-session modes (grant / upgrade: the rest of the op stays under CAPS).
+ * Session (mint) ops get their own tight table: the fork measured ~232k (personalMint) and ~234k
+ * (groupMint) total handleOps gas, so the sum of the caps (300k + 500k + 100k + 200k + 60k =
+ * 1.16M gas, x 2 gwei = 0.00232 xDAI max prefund) leaves ~5x margin for bundler padding while a
+ * single voucher can never reserve more than 0.00232 xDAI.
+ */
 export const SESSION_CAPS = {
   grantCallGasLimit: 3_000_000n,
   grantVerificationGasLimit: 600_000n,
   grantMaxFeePerGas: 2_000_000_000n,
-  sessionCallGasLimit: 500_000n,
+  sessionCallGasLimit: 300_000n,
+  sessionVerificationGasLimit: 500_000n,
+  sessionPreVerificationGas: 100_000n,
+  sessionMaxFeePerGas: 2_000_000_000n,
+  sessionPaymasterVerificationGasLimit: 200_000n,
+  sessionPaymasterPostOpGasLimit: 60_000n,
 } as const;
 
-/** 0.005 xDAI per device session (group `session:<sender>`) per UTC day; env PASSKEY_SPONSOR_SESSION_DAILY_WEI. */
-export const DEFAULT_SESSION_DAILY_WEI = 5n * 10n ** 15n;
+/**
+ * 0.05 xDAI per device session (budget key `session:<sender>`) per UTC day; env
+ * PASSKEY_SPONSOR_SESSION_DAILY_WEI. Fits 24 hourly claims (48 ops) settled to their actual cost
+ * (48 x ~320k gas x 2 gwei = 0.0307 xDAI) plus ~8 open max-prefund reservations (8 x 0.00232).
+ */
+export const DEFAULT_SESSION_DAILY_WEI = 5n * 10n ** 16n;
 
-/** Budget group of one Safe's device-session ops. */
-export const sessionGroupKey = (sender: Hex) => `session:${sender.toLowerCase()}`;
+/** Budget key of one Safe's device-session ops (own per-key cap, never the legacy's budget). */
+export const sessionGroupKey = (sender: Hex) => `session:${sender.toLowerCase() as Hex}` as const;
 
 const SAFE_MODULES_SENTINEL: Hex = "0x0000000000000000000000000000000000000001";
 
@@ -121,7 +161,14 @@ const grantCaps = (): GasCaps => ({
   verificationGasLimit: SESSION_CAPS.grantVerificationGasLimit,
   maxFeePerGas: SESSION_CAPS.grantMaxFeePerGas,
 });
-const sessionOpCaps = (): GasCaps => ({ ...CAPS, callGasLimit: SESSION_CAPS.sessionCallGasLimit });
+const sessionOpCaps = (): GasCaps => ({
+  callGasLimit: SESSION_CAPS.sessionCallGasLimit,
+  verificationGasLimit: SESSION_CAPS.sessionVerificationGasLimit,
+  preVerificationGas: SESSION_CAPS.sessionPreVerificationGas,
+  maxFeePerGas: SESSION_CAPS.sessionMaxFeePerGas,
+  paymasterVerificationGasLimit: SESSION_CAPS.sessionPaymasterVerificationGasLimit,
+  paymasterPostOpGasLimit: SESSION_CAPS.sessionPaymasterPostOpGasLimit,
+});
 
 /**
  * Targets of the op's calls, whichever layout (best effort, structural): Safe7579.execute
@@ -270,7 +317,7 @@ async function evaluateRevoke(op: SponsorUserOp, ctx: SponsorContext, key: { x: 
 }
 
 /** The claim inside a session op: personalMint, or groupMint into the Röbel group with [legacy] collateral. */
-function expectedSessionCallData(callData: Hex, legacy: Hex): Hex | null {
+function expectedSessionCallData(callData: Hex, legacy: Hex): { expected: Hex; kind: MintSessionKind } | null {
   const exec = decodeSafe7579Execute(callData);
   if (!exec || exec.batch || exec.executions.length !== 1) return null;
   const [e] = exec.executions;
@@ -281,10 +328,33 @@ function expectedSessionCallData(callData: Hex, legacy: Hex): Hex | null {
   if (!isAddressEqual(target, CIRCLES_HUB) || value !== 0n || size(inner) < 4) return null;
   const hub = tryOr(() => decodeFunctionData({ abi: circlesHubMintAbi, data: inner }));
   if (!hub) return null;
-  if (hub.functionName === "personalMint") return tryOr(() => sessionClaimCallData(legacy, personalMintData()));
+  if (hub.functionName === "personalMint") {
+    const expected = tryOr(() => sessionClaimCallData(legacy, personalMintData()));
+    return expected ? { expected, kind: "personalMint" } : null;
+  }
   const [, , amounts] = hub.args;
   if (amounts.length !== 1 || amounts[0] <= 0n) return null;
-  return tryOr(() => sessionClaimCallData(legacy, groupMintData(legacy, amounts[0])));
+  const expected = tryOr(() => sessionClaimCallData(legacy, groupMintData(legacy, amounts[0])));
+  return expected ? { expected, kind: "groupMint" } : null;
+}
+
+/**
+ * The device key that authorized this sponsor request (M-1): recovered from the EIP-191 signature
+ * over deviceSessionAuthHash. Pure crypto, no chain read; the on-chain binding is checked by the caller.
+ */
+async function recoverDeviceAuthSigner(op: SponsorUserOp, ctx: SponsorContext): Promise<Fail | { ok: true; signer: Hex }> {
+  const auth = ctx.deviceAuth;
+  if (!auth) return deny("a session op needs deviceAuth (the device session key's signature)");
+  if (!Number.isSafeInteger(auth.expiresAt) || auth.expiresAt <= ctx.nowSeconds) return deny("deviceAuth has expired");
+  if (auth.expiresAt > ctx.nowSeconds + DEVICE_AUTH_MAX_TTL_SEC) return deny("deviceAuth.expiresAt is too far in the future");
+  const hash = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: hashStableFields(toPackedUserOperation(op)), expiresAt: auth.expiresAt });
+  let signer: Hex;
+  try {
+    signer = await recoverMessageAddress({ message: { raw: hash }, signature: auth.signature });
+  } catch {
+    return deny("deviceAuth signature is invalid");
+  }
+  return { ok: true, signer };
 }
 
 /** session: a device-key op (SmartSession nonce key) that mints for the sender's own legacy. */
@@ -293,16 +363,24 @@ async function evaluateSessionOp(op: SponsorUserOp, ctx: SponsorContext, key: { 
   if (ctx.deviceSession) return deny("a session op does not name deviceSession");
   const gas = checkGas(op, sessionOpCaps());
   if (!gas.ok) return gas;
-  const expected = expectedSessionCallData(op.callData, legacy);
-  if (!expected || !sameBytes(op.callData, expected)) {
+  const claim = expectedSessionCallData(op.callData, legacy);
+  if (!claim || !sameBytes(op.callData, claim.expected)) {
     return deny("a session op may only be personalMint or the Röbel groupMint for the request's legacy, one call, canonical");
   }
+  const device = await recoverDeviceAuthSigner(op, ctx);
+  if (!device.ok) return device;
 
   const id = await checkIdentity(op, ctx, key, legacy, "7579", chain);
   if (!id.ok) return id;
   const installed = await read(() => chain.isSmartSessionInstalled(op.sender));
   if (installed !== true) return deny("SmartSession is not installed on the sender");
-  return { ok: true, mode: "session", budgetKey: legacy };
+  // The signer is bound on chain: the pid commits to OwnableValidator config [signer] + the kind's salt.
+  const pid = permissionIdsOf({ legacy, signer: device.signer, validUntil: 0 })[claim.kind];
+  const enabled = await read(() => chain.getPermissionIDs(op.sender));
+  if (!enabled.some((p) => sameBytes(p, pid))) {
+    return deny("deviceAuth signer holds no enabled session of this kind on the sender");
+  }
+  return { ok: true, mode: "session", budgetKey: sessionGroupKey(op.sender) };
 }
 
 /**
@@ -321,7 +399,11 @@ export async function evaluateSessionKeyModes(
   if (!claim && nonceKey === 0n && shape) {
     claim = shape.targets.some((t) => isAddressEqual(t, op.sender) || isAddressEqual(t, SMART_SESSIONS));
   }
-  if (!claim) return null;
+  if (!claim) {
+    // deviceAuth only ever authorizes a session op.
+    return ctx.deviceAuth ? deny("deviceAuth is only for session ops (SmartSession nonce key)") : null;
+  }
+  if (ctx.deviceAuth && !sessionKey) return deny("deviceAuth is only for session ops (SmartSession nonce key)");
   if (!sessionKey && nonceKey !== 0n) return deny("nonce key not allowed (only key 0 or the SmartSession key)");
 
   // ---- structural, zero chain reads ----

@@ -13,6 +13,10 @@
  *             miniApp?,   // a mini app's uuid: sponsor mode "miniapp" (only its declared calls), charged
  *                         // to the mini-app gas budget (miniapp-gas-budget.ts), never the everyday budget
  *             deviceSession?, // { signer, validUntil }: session-upgrade / session-grant (session-key-policy.ts)
+ *             deviceAuth?,    // { expiresAt, signature }: REQUIRED for a session op (SmartSession nonce key):
+ *                             // the device key's EIP-191 signature over deviceSessionAuthHash
+ *                             // (session-keys-builders.ts); missing / invalid / not bound on chain = 403,
+ *                             // nothing reserved (security review M-1)
  *             userOp: { sender, nonce, factory?, factoryData?, callData,
  *               callGasLimit, verificationGasLimit, preVerificationGas,
  *               maxFeePerGas, maxPriorityFeePerGas,
@@ -48,9 +52,12 @@
  *                              global cap - 1 wei
  *   MINIAPP_GAS_PER_PERSON_DAILY_WEI optional; per person per UTC day across all mini apps, default 0.003 xDAI
  *   MINIAPP_GAS_GLOBAL_DAILY_WEI     optional; all mini apps together per UTC day, default 0.05 xDAI
- *   PASSKEY_SPONSOR_SESSION_DAILY_WEI optional; device-session (mint) ops per Safe per UTC day (group
- *                              `session:<sender>`), default 0.005 xDAI. Grants / upgrades are charged to
- *                              `grant:<legacy>` (per-key cap), session-revoke to the legacy.
+ *   PASSKEY_SPONSOR_SESSION_DAILY_WEI optional; device-session (mint) ops per Safe per UTC day (budget
+ *                              key `session:<sender>`, its own per-key cap), default 0.05 xDAI. Each session
+ *                              op reserves its max prefund as reservation `<sender>:<nonce>`, settled to the
+ *                              actual gas by POST /api/passkey/sponsor/settle or the lazy sweep
+ *                              (sponsor-settle.ts). Grants / upgrades are charged to `grant:<legacy>`
+ *                              (per-key cap), session-revoke to the legacy.
  *
  * Kill switch: deps.sessionKeysEnabled (app_settings.passkey_session_keys_enabled, session-keys-flag.ts).
  * Missing dep, false or a rejected read = OFF (session-upgrade / -grant / session denied; revoke still ok).
@@ -78,7 +85,9 @@ import {
   type ReserveLimits,
   type SponsorBudget,
 } from "./sponsor-budget";
-import { issueSponsorship, requiredPrefund } from "./voucher";
+import { VOUCHER_TTL_SECONDS, issueSponsorship, requiredPrefund } from "./voucher";
+import { reservationIdOf } from "./sponsor-budget";
+import { sweepExpiredReservations, type UserOpEventReader } from "./sponsor-settle";
 import { DEFAULT_SESSION_DAILY_WEI, sessionGroupKey } from "./session-key-policy";
 import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
 import type { GasVerdict, MiniAppGasBudget } from "./miniapp-gas-budget";
@@ -168,6 +177,8 @@ export async function handleSponsorRequest(
     miniApps?: MiniAppSponsorDeps;
     /** Kill switch for device sessions; absent or rejecting = OFF (fail closed). */
     sessionKeysEnabled?: () => Promise<boolean>;
+    /** EntryPoint event reader for the lazy sweep of a session sender's expired reservations (optional). */
+    events?: UserOpEventReader;
   },
 ) {
   if (process.env.PASSKEY_SPONSOR_ENABLED !== "1") return disabled();
@@ -186,7 +197,8 @@ export async function handleSponsorRequest(
   } catch {
     return badRequest();
   }
-  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, miniApp: miniAppId, deviceSession } = parsed;
+  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, miniApp: miniAppId, deviceSession, deviceAuth } = parsed;
+  const nowSeconds = Math.floor(Date.now() / 1000);
   if (parsed.chainId !== CHAIN_ID) return notSponsorable("chainId must be 100");
 
   // Mode "miniapp": the request names a mini app; only its reviewed declaration counts.
@@ -227,10 +239,11 @@ export async function handleSponsorRequest(
         legacy,
         recoveryLegacy,
         pollId,
-        nowSeconds: Math.floor(Date.now() / 1000),
+        nowSeconds,
         v3: v3ConfigFromEnv(),
         ...(miniApp ? { miniApp } : {}),
         ...(deviceSession ? { deviceSession } : {}),
+        ...(deviceAuth ? { deviceAuth } : {}),
         sessionKeysEnabled,
       },
       deps.chain,
@@ -240,12 +253,17 @@ export async function handleSponsorRequest(
     if (miniApp && verdict.mode !== "miniapp") return notSponsorable("mini-app request outside miniapp mode");
     budgetKey = verdict.budgetKey;
     mode = verdict.mode;
-    // Device-session mint ops: the legacy's budget AND the per-Safe session group cap.
+    // Device-session mint ops: the Safe's own `session:<sender>` key and cap (never the legacy's
+    // everyday budget), as a reservation per (sender, nonce) that is settled to the actual gas.
     if (verdict.mode === "session") {
+      if (budgetKey !== sessionGroupKey(op.sender)) return notSponsorable("session op budget key mismatch");
       limits = {
-        group: {
-          key: sessionGroupKey(op.sender),
-          dailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_SESSION_DAILY_WEI, DEFAULT_SESSION_DAILY_WEI),
+        keyCapWei: weiFromEnv(process.env.PASSKEY_SPONSOR_SESSION_DAILY_WEI, DEFAULT_SESSION_DAILY_WEI),
+        reservation: {
+          id: reservationIdOf(op.sender, op.nonce),
+          sender: op.sender,
+          nonce: op.nonce,
+          expiresAt: nowSeconds + VOUCHER_TTL_SECONDS,
         },
       };
     }
@@ -276,6 +294,10 @@ export async function handleSponsorRequest(
       return NextResponse.json({ error: "chain_unavailable" }, { status: 503 });
     }
   } else {
+    // Give the Safe back what its expired, never-landed session vouchers still hold (bounded, never throws).
+    if (mode === "session" && deps.events) {
+      await sweepExpiredReservations(deps.budget, deps.events, config.paymaster, { nowSeconds, budgetKey: budgetKey.toLowerCase(), limit: 3 });
+    }
     try {
       const reserved = await deps.budget.reserve(budgetKey.toLowerCase(), requiredPrefund(packed), limits);
       if (!reserved) return NextResponse.json({ error: "budget_exhausted" }, { status: 429 });
@@ -290,6 +312,7 @@ export async function handleSponsorRequest(
       op: packed,
       privateKey: config.key,
       ctx: { chainId: CHAIN_ID, paymaster: config.paymaster },
+      nowSeconds,
     });
     return NextResponse.json({
       paymasterAndData,

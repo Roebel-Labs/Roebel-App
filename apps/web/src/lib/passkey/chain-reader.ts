@@ -4,6 +4,7 @@ import {
   createPublicClient,
   http,
   parseAbi,
+  parseAbiItem,
   type Hex,
 } from "viem";
 import { gnosis } from "viem/chains";
@@ -11,6 +12,7 @@ import { PASSKEY_SAFE } from "./safe-address";
 import { ADDRESSES, type ChainReader, type SignerPermissionRequest } from "./sponsor-policy";
 import { EVERYDAY_CONTRACTS } from "./everyday-allowlist";
 import { MODULE_TYPE_VALIDATOR, SMART_SESSIONS } from "./session-keys-builders";
+import { ENTRY_POINT_V07, type UserOpEvent, type UserOpEventReader } from "./sponsor-settle";
 
 const DEFAULT_GNOSIS_RPC = "https://gnosis-rpc.publicnode.com";
 const RPC_TIMEOUT_MS = 8_000;
@@ -146,6 +148,60 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
         if (isRevert(err)) return null; // e.g. ECDSA.recover on a malformed signature
         throw err;
       }
+    },
+  };
+}
+
+const userOperationEvent = parseAbiItem(
+  "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)",
+);
+/** Gnosis: 5 s blocks. */
+const BLOCK_SECONDS = 5;
+/** getLogs window per request (topic-filtered, so small results); newest window first. */
+const LOG_CHUNK_BLOCKS = 5_000n;
+/** Never look back further than ~28 h (budgets are per UTC day). */
+const MAX_LOOKBACK_BLOCKS = 20_000n;
+
+/** EntryPoint v0.7 UserOperationEvent reader for the settle path (sponsor-settle.ts). Errors propagate. */
+export function createGnosisUserOpEventReader(rpcUrl = process.env.GNOSIS_RPC_URL || DEFAULT_GNOSIS_RPC): UserOpEventReader {
+  const client = createPublicClient({
+    chain: gnosis,
+    transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS, retryCount: 1 }),
+  });
+  return {
+    async userOperationEvents({ paymaster, userOpHash, sender, sinceSeconds }) {
+      if (!userOpHash && !sender) throw new Error("filter by userOpHash or sender");
+      const latest = await client.getBlockNumber();
+      let span = BigInt(Math.ceil(Math.max(0, sinceSeconds) / BLOCK_SECONDS)) + 60n;
+      if (span > MAX_LOOKBACK_BLOCKS) span = MAX_LOOKBACK_BLOCKS;
+      const floor = latest > span ? latest - span : 0n;
+      const out: UserOpEvent[] = [];
+      for (let to = latest; to >= floor; ) {
+        const from = to - floor + 1n > LOG_CHUNK_BLOCKS ? to - LOG_CHUNK_BLOCKS + 1n : floor;
+        const logs = await client.getLogs({
+          address: ENTRY_POINT_V07,
+          event: userOperationEvent,
+          args: { paymaster, ...(userOpHash ? { userOpHash } : {}), ...(sender ? { sender } : {}) },
+          fromBlock: from,
+          toBlock: to,
+        });
+        for (const l of logs) {
+          const a = l.args;
+          if (!a.userOpHash || !a.sender || !a.paymaster || a.nonce === undefined || a.actualGasCost === undefined) continue;
+          out.push({
+            userOpHash: a.userOpHash,
+            sender: a.sender,
+            paymaster: a.paymaster,
+            nonce: a.nonce,
+            success: a.success === true,
+            actualGasCost: a.actualGasCost,
+          });
+        }
+        if (userOpHash && out.length > 0) break; // a hash is unique
+        if (from === 0n || from <= floor) break;
+        to = from - 1n;
+      }
+      return out;
     },
   };
 }

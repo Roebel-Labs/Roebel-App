@@ -47,11 +47,19 @@ import {
   safe7579Abi,
   sessionClaimCallData,
 } from "../session-keys-builders";
-import { SESSION_CAPS, evaluateSessionKeyModes } from "../session-key-policy";
+import { SESSION_CAPS, evaluateSessionKeyModes, sessionGroupKey } from "../session-key-policy";
+import { privateKeyToAccount } from "viem/accounts";
+import { DEVICE_AUTH_MAX_TTL_SEC, deviceSessionAuthHash } from "../session-keys-builders";
+import { toPackedUserOperation } from "../sponsor-policy";
+import { hashStableFields } from "../voucher";
 import { EOA, KEY, LEGACY, OTHER_LEGACY, SAFE, brokenChain, fakeChain, migrateTo7579, type FakeWorld } from "./fake-chain";
 import { NOW, op as baseOp, outer } from "./policy-helpers";
 
-const SIGNER = "0x8888888888888888888888888888888888888888" as Hex;
+// Device session key (test-only, public): its address is the session signer bound on chain.
+const DEVICE_PK = "0x0000000000000000000000000000000000000000000000000000000005e5510e" as Hex;
+const DEVICE = privateKeyToAccount(DEVICE_PK);
+const SIGNER = DEVICE.address as Hex;
+const STRANGER = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 const OTHER_GROUP = "0x9999999999999999999999999999999999999999" as Hex;
 const VALID_UNTIL = NOW + 30 * 86_400;
 const DS = { signer: SIGNER, validUntil: VALID_UNTIL };
@@ -98,6 +106,12 @@ const legacyAbi = parseAbi([
 ]);
 const viaLegacy = (inner: Hex, legacy: Hex = LEGACY) =>
   encode7579Execute([{ to: legacy, data: encodeFunctionData({ abi: legacyAbi, functionName: "execute", args: [CIRCLES_HUB, 0n, inner] }) }]);
+
+/** ctx + the device key's deviceAuth over this exact op (security review M-1). */
+async function authed(o: SponsorUserOp, ctx: SponsorContext = ON, signer = DEVICE, expiresAt = NOW + 120): Promise<SponsorContext> {
+  const hash = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: hashStableFields(toPackedUserOperation(o)), expiresAt });
+  return { ...ctx, deviceAuth: { expiresAt, signature: await signer.signMessage({ message: { raw: hash } }) } };
+}
 
 async function passes(o: SponsorUserOp, ctx: SponsorContext, chain = migrated()): Promise<PolicyResult & { ok: true }> {
   const r = await evaluateSponsorPolicy(o, ctx, chain);
@@ -339,18 +353,97 @@ test("revoke needs the sender bound to the legacy", async () => {
 // =====================================================================
 
 test("session personalMint", async () => {
-  const r = await passes(sessionOp(PERSONAL), ON);
+  const o = sessionOp(PERSONAL);
+  const r = await passes(o, await authed(o));
   assert.equal(r.mode, "session");
-  assert.equal(r.budgetKey, LEGACY);
+  assert.equal(r.budgetKey, sessionGroupKey(SAFE));
   // any sequence number on the session key
-  await passes(sessionOp(PERSONAL, { nonce: SESSION_NONCE + 41n }), ON);
+  const o41 = sessionOp(PERSONAL, { nonce: SESSION_NONCE + 41n });
+  await passes(o41, await authed(o41));
 });
 
 test("session groupMint into the Röbel group with [legacy] collateral", async () => {
-  const r = await passes(sessionOp(GROUP), ON);
+  const r = await passes(sessionOp(GROUP), await authed(sessionOp(GROUP)));
   assert.equal(r.mode, "session");
-  await passes(sessionOp(sessionClaimCallData(LEGACY, groupMintData(LEGACY, 1n))), ON);
+  const one = sessionOp(sessionClaimCallData(LEGACY, groupMintData(LEGACY, 1n)));
+  await passes(one, await authed(one));
 });
+
+// ---- device authorization (security review M-1) ----
+
+test("M-1: a session op without deviceAuth is denied before any chain read", async () => {
+  const chain = migrated();
+  await denied(sessionOp(PERSONAL), ON, chain, /needs deviceAuth/);
+  assert.equal(chain.reads.length, 0);
+});
+
+test("M-1: deviceAuth by a key that is not a session signer of the sender is denied", async () => {
+  const o = sessionOp(PERSONAL);
+  await denied(o, await authed(o, ON, STRANGER), migrated(), /no enabled session/);
+});
+
+test("M-1: deviceAuth over a different op (any signed field changed) is denied", async () => {
+  const o = sessionOp(PERSONAL);
+  const ctx = await authed(o);
+  for (const over of [
+    { nonce: SESSION_NONCE + 1n },
+    { callGasLimit: 299_999n },
+    { verificationGasLimit: 499_999n },
+    { preVerificationGas: 60_001n },
+    { maxFeePerGas: 1_999_999_999n },
+    { maxPriorityFeePerGas: 999_999_999n },
+    { paymasterVerificationGasLimit: 150_001n },
+    { paymasterPostOpGasLimit: 50_001n },
+  ] as Partial<SponsorUserOp>[]) {
+    // recovers to some other address, which holds no permission id
+    await denied({ ...o, ...over }, ctx, migrated(), /no enabled session|signature is invalid/);
+  }
+  await denied(sessionOp(GROUP), ctx, migrated(), /no enabled session|signature is invalid/);
+});
+
+test("M-1: the device key's personalMint authorization needs ITS personalMint pid on chain (kind-bound)", async () => {
+  const o = sessionOp(PERSONAL);
+  await denied(o, await authed(o), migrated((w) => w.permissionIds.set(SAFE.toLowerCase(), [PIDS.groupMint])), /no enabled session/);
+  const g = sessionOp(GROUP);
+  await denied(g, await authed(g), migrated((w) => w.permissionIds.set(SAFE.toLowerCase(), [PIDS.personalMint])), /no enabled session/);
+  // revoked sessions (other device granted): denied
+  await denied(o, await authed(o), migrated((w) => w.permissionIds.set(SAFE.toLowerCase(), [])), /no enabled session/);
+});
+
+test("M-1: deviceAuth expiry window: expired, now, and beyond now + 300 s are denied; the edges pass", async () => {
+  const o = sessionOp(PERSONAL);
+  await denied(o, await authed(o, ON, DEVICE, NOW - 1), migrated(), /expired/);
+  await denied(o, await authed(o, ON, DEVICE, NOW), migrated(), /expired/);
+  await denied(o, await authed(o, ON, DEVICE, NOW + DEVICE_AUTH_MAX_TTL_SEC + 1), migrated(), /too far/);
+  await passes(o, await authed(o, ON, DEVICE, NOW + 1));
+  await passes(o, await authed(o, ON, DEVICE, NOW + DEVICE_AUTH_MAX_TTL_SEC));
+});
+
+test("M-1: a malformed deviceAuth signature is denied; a raw (non EIP-191) signature over the hash is denied", async () => {
+  const o = sessionOp(PERSONAL);
+  const bad = { ...ON, deviceAuth: { expiresAt: NOW + 60, signature: `0x${"00".repeat(65)}` as Hex } };
+  await denied(o, bad, migrated(), /signature is invalid|no enabled session/);
+  const hash = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: hashStableFields(toPackedUserOperation(o)), expiresAt: NOW + 60 });
+  const raw = await DEVICE.sign({ hash });
+  await denied(o, { ...ON, deviceAuth: { expiresAt: NOW + 60, signature: raw } }, migrated(), /no enabled session|signature is invalid/);
+});
+
+test("M-1: deviceAuth on anything but a session op is denied", async () => {
+  const o = sessionOp(PERSONAL);
+  const ctx = await authed(o);
+  await denied(op(PERSONAL), ctx, migrated(), /only for session ops/);
+  await denied(op(revokeCallData([PIDS.personalMint])), ctx, migrated(), /only for session ops/);
+  await denied(op(grantCallData({ safe: SAFE, ...PARAMS, replace: true }), GRANT_GAS), { ...ctx, deviceSession: DS }, migrated(), /only for session ops/);
+});
+
+test("deviceAuth vector (pinned by the Expo copy too)", async () => {
+  const h = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: `0x${"ab".repeat(32)}`, expiresAt: 1_800_000_000 });
+  assert.equal(h, DEVICE_AUTH_VECTOR_HASH);
+  assert.equal(await DEVICE.signMessage({ message: { raw: h } }), DEVICE_AUTH_VECTOR_SIG);
+});
+
+const DEVICE_AUTH_VECTOR_HASH = "0xf43220bd5a4a4cd5f718233bb5802df9dce1ff2df01c7c87725ed53acfe2f827";
+const DEVICE_AUTH_VECTOR_SIG = "0x7e7c4962d5c26152fa50a58d2b4c2f86b1129eed53b898b30f23aac65e358702544d3704ef3cfd36ed26531bd1d939360713cbf7fa21bbb49d83b000aba08da11c";
 
 test("session op calling safeTransferFrom", async () => {
   const t = encodeFunctionData({ abi: hub, functionName: "safeTransferFrom", args: [LEGACY, EOA, 1n, 1n, "0x"] });
@@ -432,7 +525,8 @@ test("session op for another legacy", async () => {
   // callData for LEGACY, request names OTHER_LEGACY
   await denied(sessionOp(PERSONAL), { ...ON, legacy: OTHER_LEGACY }, migrated(), /Röbel groupMint/);
   // callData and request for OTHER_LEGACY, which the Safe does not administer
-  await denied(sessionOp(sessionClaimCallData(OTHER_LEGACY, personalMintData())), { ...ON, legacy: OTHER_LEGACY }, migrated(), /not an admin/);
+  const other = sessionOp(sessionClaimCallData(OTHER_LEGACY, personalMintData()));
+  await denied(other, await authed(other, { ...ON, legacy: OTHER_LEGACY }), migrated(), /not an admin/);
   // groupMint for LEGACY with OTHER_LEGACY collateral
   await denied(sessionOp(sessionClaimCallData(LEGACY, groupMintData(OTHER_LEGACY, 5n))), ON, migrated(), /Röbel groupMint/);
   // no legacy named
@@ -440,17 +534,33 @@ test("session op for another legacy", async () => {
 });
 
 test("session op on a Safe without SmartSession", async () => {
-  await denied(sessionOp(PERSONAL), ON, migrated((w) => w.smartSession.delete(SAFE.toLowerCase())), /SmartSession is not installed/);
+  const o = sessionOp(PERSONAL);
+  await denied(o, await authed(o), migrated((w) => w.smartSession.delete(SAFE.toLowerCase())), /SmartSession is not installed/);
 });
 
 test("session op on a 4337 Safe (not migrated)", async () => {
-  await denied(sessionOp(PERSONAL), ON, fakeChain(), /layout/);
+  const o = sessionOp(PERSONAL);
+  await denied(o, await authed(o), fakeChain(), /layout/);
 });
 
-test("session op callGasLimit 500_001", async () => {
-  await denied(sessionOp(PERSONAL, { callGasLimit: 500_001n }), ON, migrated(), /callGasLimit over cap/);
-  await passes(sessionOp(PERSONAL, { callGasLimit: 500_000n }), ON);
-  await denied(sessionOp(PERSONAL, { maxFeePerGas: 3_000_000_001n }), ON, migrated(), /maxFeePerGas over cap/);
+test("session op gas caps (M-2): each field at its cap passes, one above is denied", async () => {
+  const caps: [keyof SponsorUserOp, bigint][] = [
+    ["callGasLimit", SESSION_CAPS.sessionCallGasLimit],
+    ["verificationGasLimit", SESSION_CAPS.sessionVerificationGasLimit],
+    ["preVerificationGas", SESSION_CAPS.sessionPreVerificationGas],
+    ["maxFeePerGas", SESSION_CAPS.sessionMaxFeePerGas],
+    ["paymasterVerificationGasLimit", SESSION_CAPS.sessionPaymasterVerificationGasLimit],
+    ["paymasterPostOpGasLimit", SESSION_CAPS.sessionPaymasterPostOpGasLimit],
+  ];
+  for (const [field, cap] of caps) {
+    const at = sessionOp(PERSONAL, { [field]: cap });
+    await passes(at, await authed(at));
+    const over = sessionOp(PERSONAL, { [field]: cap + 1n });
+    await denied(over, await authed(over), migrated(), new RegExp(`${field} over cap`));
+  }
+  assert.equal(SESSION_CAPS.sessionCallGasLimit, 300_000n);
+  assert.equal(SESSION_CAPS.sessionVerificationGasLimit, 500_000n);
+  assert.equal(SESSION_CAPS.sessionMaxFeePerGas, 2_000_000_000n);
 });
 
 test("session op with deviceSession, a factory, an ECDSA proof or a mini app", async () => {
@@ -461,7 +571,8 @@ test("session op with deviceSession, a factory, an ECDSA proof or a mini app", a
 });
 
 test("session op chain failure throws ChainReadError (caller fails closed)", async () => {
-  await assert.rejects(evaluateSponsorPolicy(sessionOp(PERSONAL), ON, brokenChain()), ChainReadError);
+  const o = sessionOp(PERSONAL);
+  await assert.rejects(evaluateSponsorPolicy(o, await authed(o), brokenChain()), ChainReadError);
 });
 
 // =====================================================================

@@ -320,6 +320,13 @@ export interface SponsorContext {
   /** session-upgrade / session-grant: the device key and expiry the op's sessions must carry. */
   deviceSession?: { signer: Hex; validUntil: number };
   /**
+   * Session ops (SmartSession nonce key): the device session key's EIP-191 signature over
+   * deviceSessionAuthHash(chainId 100, hashStableFields(op), expiresAt) (session-keys-builders.ts).
+   * Required for a session op; the signer it recovers to must own an enabled permission id of the
+   * sender for the op's mint kind (read on chain). Security review M-1.
+   */
+  deviceAuth?: { expiresAt: number; signature: Hex };
+  /**
    * Kill switch app_settings.passkey_session_keys_enabled. Anything but `true` (unset, false, a
    * failed read) = OFF: session-upgrade, session-grant and session ops are denied. Fails closed.
    */
@@ -340,6 +347,8 @@ export type SponsorMode =
 
 /** Budget key of a device-session grant / upgrade: `grant:<legacy>` (lowercased), apart from the legacy's daily budget. */
 export type GrantBudgetKey = `grant:${Hex}`;
+/** Budget key of one Safe's device-session (mint) ops; its own per-key cap (session-key-policy.ts). */
+export type SessionBudgetKey = `session:${Hex}`;
 
 /** Detach (mode E) needs this many guardians AND this threshold on the sender Safe. */
 export const DETACH_MIN_GUARDIANS = 2n;
@@ -348,7 +357,7 @@ export type PolicyResult =
   | {
       ok: true;
       mode: SponsorMode;
-      budgetKey: Hex | GrantBudgetKey;
+      budgetKey: Hex | GrantBudgetKey | SessionBudgetKey;
       /** everyday mode only; "onboarding" = only guest-allowed calls */
       tier?: EverydayTier;
       /** Set whenever the budget identity is a non-citizen passkey Safe (a guest): guest budget applies. */
@@ -1550,6 +1559,7 @@ export function parseSponsorRequest(input: unknown): {
   pollId?: bigint;
   miniApp?: string;
   deviceSession?: { signer: Hex; validUntil: number };
+  deviceAuth?: { expiresAt: number; signature: Hex };
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
@@ -1568,7 +1578,23 @@ export function parseSponsorRequest(input: unknown): {
     pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),
     ...(present("miniApp") ? { miniApp: miniAppId(o.miniApp) } : {}),
     ...(present("deviceSession") ? { deviceSession: deviceSessionField(o.deviceSession) } : {}),
+    ...(present("deviceAuth") ? { deviceAuth: deviceAuthField(o.deviceAuth) } : {}),
   };
+}
+
+/** `deviceAuth: { expiresAt: unix seconds (safe integer), signature: 65 bytes 0x hex }`; bounds + recovery are the policy's job. */
+function deviceAuthField(v: unknown): { expiresAt: number; signature: Hex } {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("deviceAuth must be an object");
+  const o = v as Record<string, unknown>;
+  const expiresAt = o.expiresAt;
+  if (typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
+    throw new Error("deviceAuth.expiresAt must be a positive integer (unix seconds)");
+  }
+  const signature = o.signature;
+  if (typeof signature !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(signature)) {
+    throw new Error("deviceAuth.signature must be 65 bytes of 0x hex");
+  }
+  return { expiresAt, signature: signature as Hex };
 }
 
 /** `deviceSession: { signer: address, validUntil: unix seconds (safe integer) }`; the bounds are the policy's job. */

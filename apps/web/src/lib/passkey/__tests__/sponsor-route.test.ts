@@ -16,6 +16,8 @@ import {
   sessionClaimCallData,
 } from "../session-keys-builders";
 import { DEFAULT_SESSION_DAILY_WEI } from "../session-key-policy";
+import { DEVICE_SIGNER, deviceAuthFor } from "./device-auth";
+import { InMemorySponsorBudget } from "../sponsor-budget";
 import { sessionKeysFlag, type AppSettingsReader } from "../session-keys-flag";
 import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
 import {
@@ -747,7 +749,7 @@ test("a throwing mini-app gas store fails closed with 503", async () => {
 
 // ---- device sessions (Task 9): budgets, kill switch, mode in the response ----
 
-const DS_SIGNER = "0x8888888888888888888888888888888888888888" as Hex;
+const DS_SIGNER = DEVICE_SIGNER;
 const dsNow = () => Math.floor(Date.now() / 1000);
 const sessionChain = (dsUntil: number) =>
   fakeChain((w) => {
@@ -760,15 +762,55 @@ const sessionUserOp = () =>
   userOp(sessionClaimCallData(LEGACY, personalMintData()), { nonce: numberToHex(SESSION_NONCE_KEY << 64n) });
 const flagOn = async () => true;
 
-test("session op reserves against the session:<sender> group", async () => {
+const authedBody = async (uo = sessionUserOp(), o: Parameters<typeof deviceAuthFor>[1] = {}) =>
+  body(uo, { deviceAuth: await deviceAuthFor(uo, o) });
+
+test("session op reserves under session:<sender> with its own cap and a (sender, nonce) reservation", async () => {
   enable();
   const recording = new RecordingBudget();
-  const res = await handleSponsorRequest(req(body(sessionUserOp())), { chain: sessionChain(dsNow() + 86_400), budget: recording, sessionKeysEnabled: flagOn });
+  const res = await handleSponsorRequest(req(await authedBody()), { chain: sessionChain(dsNow() + 86_400), budget: recording, sessionKeysEnabled: flagOn });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
-  assert.equal((await res.json()).mode, "session");
-  assert.equal(recording.calls[0].key, LEGACY.toLowerCase());
-  assert.equal(recording.limits[0]?.group?.key, `session:${SAFE.toLowerCase()}`);
-  assert.equal(recording.limits[0]?.group?.dailyWei, DEFAULT_SESSION_DAILY_WEI);
+  const json = await res.json();
+  assert.equal(json.mode, "session");
+  assert.equal(recording.calls[0].key, `session:${SAFE.toLowerCase()}`, "never the legacy's everyday budget");
+  assert.equal(recording.limits[0]?.keyCapWei, DEFAULT_SESSION_DAILY_WEI);
+  assert.equal(recording.limits[0]?.group, undefined);
+  const r = recording.limits[0]?.reservation;
+  assert.equal(r?.id, `${SAFE.toLowerCase()}:0x${(SESSION_NONCE_KEY << 64n).toString(16)}`);
+  assert.equal(r?.expiresAt, json.validUntil, "the reservation expires with the voucher");
+});
+
+test("M-1 route: no / foreign / stale deviceAuth = 403 and nothing reserved", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  const deps = { chain: sessionChain(dsNow() + 86_400), budget: recording, sessionKeysEnabled: flagOn };
+  const stranger = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as Hex;
+  for (const b of [
+    body(sessionUserOp()),
+    await authedBody(sessionUserOp(), { pk: stranger }),
+    await authedBody(sessionUserOp(), { expiresAt: dsNow() - 1 }),
+    await authedBody(sessionUserOp(), { expiresAt: dsNow() + 3600 }),
+    // signed for another op (nonce + 1)
+    body(sessionUserOp(), { deviceAuth: await deviceAuthFor(userOp(sessionClaimCallData(LEGACY, personalMintData()), { nonce: numberToHex((SESSION_NONCE_KEY << 64n) + 1n) })) }),
+  ]) {
+    const res = await handleSponsorRequest(req(b), deps);
+    assert.equal(res.status, 403, JSON.stringify(await res.clone().json()));
+  }
+  assert.equal(recording.calls.length, 0, "nothing reserved");
+  const bad = await handleSponsorRequest(req(body(sessionUserOp(), { deviceAuth: { expiresAt: dsNow() + 60, signature: "0x12" } })), deps);
+  assert.equal(bad.status, 400);
+});
+
+test("M-2 route: a repeated request for the same (sender, nonce) does not reserve twice", async () => {
+  enable();
+  const mem = new InMemorySponsorBudget();
+  const deps = { chain: sessionChain(dsNow() + 86_400), budget: mem, sessionKeysEnabled: flagOn };
+  for (let i = 0; i < 30; i++) {
+    const res = await handleSponsorRequest(req(await authedBody()), deps);
+    assert.equal(res.status, 200, `request ${i}`);
+  }
+  const open = await mem.expiredReservations({ beforeSeconds: dsNow() + 10_000, limit: 50 });
+  assert.equal(open.length, 1);
 });
 
 test("grant reserves under grant:<legacy>, not the legacy key; upgrade answers mode session-upgrade", async () => {

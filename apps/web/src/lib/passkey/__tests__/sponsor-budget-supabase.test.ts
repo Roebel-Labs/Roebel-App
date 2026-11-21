@@ -11,8 +11,13 @@ import {
   DEFAULT_PER_KEY_DAILY_WEI,
   InMemorySponsorBudget,
   GUEST_GROUP_KEY,
+  SPONSOR_EXPIRED_RPC,
+  SPONSOR_RELEASE_RPC,
   SPONSOR_RESERVE_RPC,
+  SPONSOR_RESERVE_V3_RPC,
+  SPONSOR_SETTLE_RPC,
   SupabaseSponsorBudget,
+  reservationIdOf,
   budgetFromEnv,
 } from "../sponsor-budget";
 
@@ -171,4 +176,83 @@ test("guest-cap migration: additive v2 reserve, 'guests' allowed as a key, servi
   assert.match(GUEST_SQL, /for update/);
   // The earlier migration is left as it is (not applied yet, never edited).
   assert.doesNotMatch(GUEST_SQL, /create table/);
+});
+
+// ---- settle-able reservations (security review M-2; migration 20261121b_passkey_sponsor_settle.sql) ----
+
+const SESS = "session:0x00000000000000000000000000000000000000aa";
+const SENDER = "0x00000000000000000000000000000000000000AA" as const;
+
+test("a reservation goes to passkey_sponsor_reserve_v3 with id, sender, decimal nonce and expiry", async () => {
+  const { calls, client } = fakeRpc({ data: true });
+  const b = new SupabaseSponsorBudget(client, { perKeyDailyWei: 10n, globalDailyWei: 1000n });
+  const nonce = (1n << 200n) + 5n;
+  assert.equal(
+    await b.reserve(SESS, 60n, { keyCapWei: 500n, reservation: { id: reservationIdOf(SENDER, nonce), sender: SENDER, nonce, expiresAt: 1_800_000_000 } }),
+    true,
+  );
+  assert.equal(calls[0].fn, SPONSOR_RESERVE_V3_RPC);
+  assert.equal(SPONSOR_RESERVE_V3_RPC, "passkey_sponsor_reserve_v3");
+  assert.deepEqual(calls[0].args, {
+    p_budget_key: SESS,
+    p_cost_wei: "60",
+    p_key_cap_wei: "500",
+    p_global_cap_wei: "1000",
+    p_group_key: null,
+    p_group_cap_wei: null,
+    p_reservation_id: `${SENDER.toLowerCase()}:0x${nonce.toString(16)}`,
+    p_sender: SENDER.toLowerCase(),
+    p_nonce: nonce.toString(),
+    p_expires_at: "2027-01-15T08:00:00.000Z",
+  });
+});
+
+test("keyCapWei outside session:<address> is refused without a round trip", async () => {
+  const { calls, client } = fakeRpc({ data: true });
+  const b = new SupabaseSponsorBudget(client);
+  assert.equal(await b.reserve("0x00000000000000000000000000000000000000aa", 1n, { keyCapWei: 10n ** 18n }), false);
+  assert.equal(calls.length, 0);
+});
+
+test("settle / release / expired call their RPCs; anything unexpected = unknown / false / skipped", async () => {
+  const s = fakeRpc({ data: "settled" });
+  assert.equal(await new SupabaseSponsorBudget(s.client).settle("id", 42n), "settled");
+  assert.deepEqual(s.calls[0], { fn: SPONSOR_SETTLE_RPC, args: { p_reservation_id: "id", p_actual_wei: "42" } });
+  assert.equal(await new SupabaseSponsorBudget(fakeRpc({ data: "weird" }).client).settle("id", 1n), "unknown");
+  assert.equal(await new SupabaseSponsorBudget(fakeRpc({ data: null }).client).settle("id", -1n), "unknown");
+
+  const r = fakeRpc({ data: true });
+  assert.equal(await new SupabaseSponsorBudget(r.client).release("id"), true);
+  assert.equal(r.calls[0].fn, SPONSOR_RELEASE_RPC);
+  assert.equal(await new SupabaseSponsorBudget(fakeRpc({ data: "true" }).client).release("id"), false);
+
+  const e = fakeRpc({
+    data: [
+      { reservation_id: "a", sender: "0x00000000000000000000000000000000000000aa", nonce: "77", created_at: 5 },
+      { reservation_id: "b", sender: "nope", nonce: "1", created_at: 5 },
+      { reservation_id: "c", sender: "0x00000000000000000000000000000000000000aa", nonce: "-1", created_at: 5 },
+    ],
+  });
+  const rows = await new SupabaseSponsorBudget(e.client).expiredReservations({ beforeSeconds: 0, budgetKey: SESS, limit: 3 });
+  assert.equal(e.calls[0].fn, SPONSOR_EXPIRED_RPC);
+  assert.deepEqual(e.calls[0].args, { p_before: "1970-01-01T00:00:00.000Z", p_budget_key: SESS, p_limit: 3 });
+  assert.deepEqual(rows, [{ id: "a", sender: "0x00000000000000000000000000000000000000aa", nonce: 77n, createdAt: 5 }]);
+  await assert.rejects(new SupabaseSponsorBudget(fakeRpc({ error: { code: "x" } }).client).settle("id", 1n));
+});
+
+const SETTLE_SQL = readFileSync(
+  join(process.cwd(), "../../supabase/migrations/20261121b_passkey_sponsor_settle.sql"),
+  "utf8",
+).toLowerCase();
+
+test("settle migration: RLS on, table + every function revoked from anon/authenticated, service role only", () => {
+  assert.match(SETTLE_SQL, /alter table public\.passkey_sponsor_reservations enable row level security/);
+  assert.match(SETTLE_SQL, /revoke all on table public\.passkey_sponsor_reservations from public, anon, authenticated/);
+  assert.doesNotMatch(SETTLE_SQL, /create policy/);
+  for (const fn of ["reserve_v3", "adjust_v1", "lock_reservation_v1", "settle_v1", "release_v1", "expired_v1"]) {
+    assert.match(SETTLE_SQL, new RegExp(`revoke all on function public\\.passkey_sponsor_${fn}\\([^)]*\\)\\s+from public, anon, authenticated`), fn);
+    assert.match(SETTLE_SQL, new RegExp(`grant execute on function public\\.passkey_sponsor_${fn}\\([^)]*\\)\\s+to service_role`), fn);
+  }
+  assert.equal((SETTLE_SQL.match(/^security definer$/gm) ?? []).length, 6);
+  assert.equal((SETTLE_SQL.match(/^set search_path = ''$/gm) ?? []).length, 6);
 });

@@ -1,6 +1,5 @@
 import { createGnosisChainReader } from "@/lib/passkey/chain-reader";
-import { budgetFromEnv, type SponsorBudget } from "@/lib/passkey/sponsor-budget";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { makeAdminClient, sponsorBudget, userOpEvents } from "@/lib/passkey/sponsor-runtime";
 import type { ChainReader } from "@/lib/passkey/sponsor-policy";
 import { handleSponsorRequest, type MiniAppSponsorDeps } from "@/lib/passkey/sponsor-handler";
 import { miniAppGasBudgetFromEnv } from "@/lib/passkey/miniapp-gas-budget";
@@ -32,7 +31,7 @@ import { sessionKeysFlag, type AppSettingsReader } from "@/lib/passkey/session-k
  *   PASSKEY_PAYMASTER_ADDRESS=0x…    (required; the dedicated preview paymaster)
  *   PASSKEY_SPONSOR_DAILY_WEI        (optional; per identity per UTC day, default 0.01 xDAI;
  *                                     identity = legacy account, citizen Safe, or the wallet being recovered)
- *   PASSKEY_SPONSOR_GLOBAL_DAILY_WEI (optional; all accounts per UTC day, default 0.05 xDAI)
+ *   PASSKEY_SPONSOR_GLOBAL_DAILY_WEI (optional; all accounts per UTC day, default 0.25 xDAI)
  *   PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI (optional; per guest (non-citizen) Safe, default 0.002 xDAI;
  *                                     too low for a guest's first op: set ~0.006 xDAI before opening sign-up)
  *   PASSKEY_SPONSOR_GUEST_GLOBAL_DAILY_WEI (optional; all guest Safes together per UTC day, default 0.02 xDAI;
@@ -44,7 +43,9 @@ import { sessionKeysFlag, type AppSettingsReader } from "@/lib/passkey/session-k
  *   MINIAPP_GAS_PER_PERSON_DAILY_WEI (optional; mini-app ops, per person per UTC day, default 0.003 xDAI)
  *   MINIAPP_GAS_GLOBAL_DAILY_WEI     (optional; all mini-app ops per UTC day, default 0.05 xDAI)
  *
- *   PASSKEY_SPONSOR_SESSION_DAILY_WEI (optional; device-session mint ops per Safe per UTC day, default 0.005 xDAI)
+ *   PASSKEY_SPONSOR_SESSION_DAILY_WEI (optional; device-session mint ops per Safe per UTC day, default 0.05 xDAI;
+ *                                     reserved at max prefund, settled to actual gas via /api/passkey/sponsor/settle
+ *                                     + lazy sweep; Supabase store needs 20261121b_passkey_sponsor_settle.sql)
  *
  * DEVICE SESSIONS (session-key-policy.ts): kill switch app_settings.passkey_session_keys_enabled,
  * read with the service-role client and cached 30 s. FAILS CLOSED: a missing row, any value but
@@ -60,18 +61,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 let chain: ChainReader | null = null;
-let budget: SponsorBudget | null = null;
 let miniApps: MiniAppSponsorDeps | null = null;
 let sessionKeysEnabled: (() => Promise<boolean>) | null = null;
 /** Granted budgets seen by `rules`, for the in-memory store (the Supabase store reads the row itself). */
 const appBudgets = new Map<string, bigint>();
 
-const makeAdminClient = () =>
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : null;
-
 export async function POST(request: Request) {
   chain ??= createGnosisChainReader();
-  budget ??= budgetFromEnv(process.env, undefined, makeAdminClient);
   miniApps ??= {
     rules: async (id) => {
       // Loaded lazily: the mini-app data layer is server-only and only needed for mini-app requests.
@@ -88,5 +84,5 @@ export async function POST(request: Request) {
     // Cast: checking SupabaseClient against the narrow reader interface trips TS2589 (too deep).
     sessionKeysEnabled = admin ? sessionKeysFlag(admin as unknown as AppSettingsReader) : async () => false;
   }
-  return handleSponsorRequest(request, { chain, budget, miniApps, sessionKeysEnabled });
+  return handleSponsorRequest(request, { chain, budget: sponsorBudget(), miniApps, sessionKeysEnabled, events: userOpEvents() });
 }
