@@ -84,7 +84,7 @@ describe('useDailyMint', () => {
     expect(h.current().state).toBe('idle');
   });
 
-  it('passkey session: the profile pill never accepts the offer (claimNow without allowGrant) and accepts a partial claim', async () => {
+  it('passkey session: without the offer path the pill claims without allowGrant and accepts a partial claim', async () => {
     mockTaler.passkeyClaim = true;
     mockTaler.claimNow.mockImplementationOnce(async () => ({ received: 2, claimedAt: Date.now(), streak: 1, partial: true }) as any);
     const h = await renderMint();
@@ -96,6 +96,33 @@ describe('useDailyMint', () => {
     expect(mockTaler.claimNow).toHaveBeenCalledTimes(1);
     expect(mockTaler.claimNow.mock.calls[0]).toEqual([]);
     expect(h.current().cooldownEnd).not.toBeNull();
+  });
+
+  it('passkey session, path "offer": the pill stays pending on the sheet; swiping it away claims nothing', async () => {
+    mockTaler.passkeyClaim = true;
+    (mockTaler as any).deviceSessionClaimPath = jest.fn(async () => 'offer');
+    (mockTaler as any).declineDeviceSession = jest.fn(async () => undefined);
+    try {
+      const h = await renderMint();
+      let pending!: boolean | Promise<boolean>;
+      await act(async () => {
+        pending = h.current().claim();
+      });
+      expect(h.current().offerSheet.visible).toBe(true);
+      expect(mockTaler.claimNow).not.toHaveBeenCalled();
+      let ok: boolean | null = null;
+      await act(async () => {
+        h.current().offerSheet.onClose();
+        ok = await pending;
+      });
+      expect(ok).toBe(false);
+      expect(mockTaler.claimNow).not.toHaveBeenCalled();
+      expect(h.current().offerSheet.visible).toBe(false);
+      expect(h.current().cooldownEnd).toBeNull();
+    } finally {
+      delete (mockTaler as any).deviceSessionClaimPath;
+      delete (mockTaler as any).declineDeviceSession;
+    }
   });
 
   it('thirdweb session: unchanged — the claim goes to the settlement queue', async () => {

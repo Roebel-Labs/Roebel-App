@@ -21,6 +21,7 @@ import { isRecoverySurfaceAllowed } from '@/lib/passkey/existing-account';
 import { isWordsOwner, type PasskeySession } from '@/lib/passkey/session';
 import { ensureSovereignRecord } from '@/lib/passkey/sovereign-record';
 import EmailRow from '@/components/passkey/EmailRow';
+import DeviceSessionSection from '@/components/passkey/DeviceSessionSection';
 import GuardiansSection from '@/components/passkey/GuardiansSection';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
@@ -123,6 +124,8 @@ export default function SovereignAccountSettings({ initialRecord }: { initialRec
       </Card>
 
       <EmailRow />
+
+      <DeviceSessionSection session={passkeySessionOf<PasskeySession>(account)} />
 
       <Text style={[passkeyStyles.sectionHeading, { color: colors.textSecondary }]}>SCHLÜSSEL & NACHRICHTEN</Text>
       <KeysAndMessagesSection words={wordsSession} />

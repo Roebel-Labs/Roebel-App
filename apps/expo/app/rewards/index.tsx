@@ -37,6 +37,9 @@ import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
 import MuenzenIntroSheet from '@/components/rewards/MuenzenIntroSheet';
 import NotInvitedSheet from '@/components/rewards/NotInvitedSheet';
+import DeviceSessionOfferSheet from '@/components/rewards/DeviceSessionOfferSheet';
+import { useDeviceSessionOffer } from '@/hooks/useDeviceSessionOffer';
+import { PARTIAL_CLAIM_NOTICE } from '@/lib/passkey/session-keys/ui-state';
 import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
@@ -103,10 +106,12 @@ export default function RewardsIndexScreen() {
     onboarding: talerOnboarding,
     dailyMint,
     passkeyClaim,
-    claimNow,
     onboard,
     account: talerAccount,
   } = useRoebelTaler();
+  // Passkey claim with the first-claim "Münzen abholen ohne Fingerabdruck?" offer (device session).
+  const offer = useDeviceSessionOffer();
+  const claimWithOffer = offer.claim;
   // Passkey session: success line "+X Röbel Münzen" shown in the button's place after a claim.
   const [passkeyClaimed, setPasskeyClaimed] = useState<number | null>(null);
   useEffect(() => {
@@ -226,7 +231,9 @@ export default function RewardsIndexScreen() {
     setPasskeyClaimed(null);
     try {
       // Same claim function as the profile pill; it persists cooldown + streak itself.
-      const { received, claimedAt, streak } = await claimNow();
+      const result = await claimWithOffer();
+      if (!result) return; // offer sheet swiped away: no claim
+      const { received, claimedAt, streak } = result;
       setLastClaim(claimedAt);
       setNowTs(claimedAt);
       setRtStreak(streak);
@@ -234,10 +241,12 @@ export default function RewardsIndexScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
+      if (result.partial) Alert.alert('Münzen abholen', PARTIAL_CLAIM_NOTICE);
     } catch (e: any) {
+      if (e?.name === 'PasskeyCancelledError') return;
       Alert.alert('Münzen abholen', e?.message ?? 'Das hat nicht geklappt. Bitte versuche es erneut.');
     }
-  }, [claimNow, talerAccount]);
+  }, [claimWithOffer, talerAccount]);
 
   const onDailyMint = useCallback(() => {
     if (!talerAccount) {
@@ -801,6 +810,8 @@ export default function RewardsIndexScreen() {
         onClose={dismissIntro}
         onLearnMore={onIntroLearnMore}
       />
+
+      <DeviceSessionOfferSheet {...offer.sheet} />
 
       <NotInvitedSheet
         visible={showNotInvited}

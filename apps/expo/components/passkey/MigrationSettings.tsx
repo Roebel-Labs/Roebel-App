@@ -10,6 +10,9 @@ import { useMaci } from '@/context/MaciContext';
 import { fontFamily } from '@/constants/theme';
 import MigrationSteps, { stepStates } from '@/components/passkey/MigrationSteps';
 import EmailRow from '@/components/passkey/EmailRow';
+import DeviceSessionSection from '@/components/passkey/DeviceSessionSection';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import type { PasskeySession } from '@/lib/passkey/session';
 import PasskeySessionSwitch from '@/components/passkey/PasskeySessionSwitch';
 import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
@@ -178,6 +181,9 @@ export default function MigrationSettings({ initialRecord, canStart, canDetach }
       {connected && record ? <RecoveryWordsEntry safe={record.safe} /> : null}
 
       {connected && <EmailRow />}
+
+      {/* Self-hides unless this is an eligible passkey session (legacy identity) + flag on. */}
+      <DeviceSessionSection session={passkeySessionOf<PasskeySession>(account)} />
 
       {connected && (
         <>

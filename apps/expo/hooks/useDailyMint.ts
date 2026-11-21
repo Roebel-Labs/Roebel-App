@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { useDeviceSessionOffer } from '@/hooks/useDeviceSessionOffer';
+import { PARTIAL_CLAIM_NOTICE } from '@/lib/passkey/session-keys/ui-state';
 import {
   MIN_MINTABLE,
   MINT_COOLDOWN_MS,
@@ -32,10 +34,15 @@ const isPasskeyCancel = (e: unknown): boolean =>
  * Münzen page uses. It returns a promise the button awaits (pending while the passkey prompt is
  * open): true once landed (cooldown + streak persisted), false on cancel/failure (back to
  * claimable, nothing written, no retry).
+ *
+ * First device-session claim ('offer'): the promise stays pending while the offer sheet is open
+ * (render DeviceSessionOfferSheet with `offerSheet`); swiping it away resolves false (no claim).
  */
 export function useDailyMint(opts: { isCitizen: boolean }) {
-  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account, passkeyClaim, claimNow } =
+  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account, passkeyClaim } =
     useRoebelTaler();
+  const offer = useDeviceSessionOffer();
+  const claimWithOffer = offer.claim;
   const address = account?.address ?? null;
 
   // Last claim per wallet, loaded from the same key the Münzen page writes.
@@ -90,10 +97,13 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
     if (!address || !claimable) return false;
     if (passkeyClaim) {
       // Foreground, one batch, one fingerprint. Nothing optimistic: the cooldown moves only on success.
-      return claimNow().then(
-        ({ claimedAt }) => {
+      return claimWithOffer().then(
+        (result) => {
+          if (!result) return false; // offer sheet swiped away: no claim
+          const { claimedAt } = result;
           setClaimState({ address, lastClaim: claimedAt });
           setNow(claimedAt);
+          if (result.partial) Alert.alert('Münzen abholen', PARTIAL_CLAIM_NOTICE);
           return true;
         },
         (e: unknown) => {
@@ -137,7 +147,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
       },
     });
     return true;
-  }, [address, amount, claimable, claimNow, dailyMint, enqueueSettlement, lastClaim, passkeyClaim]);
+  }, [address, amount, claimable, claimWithOffer, dailyMint, enqueueSettlement, lastClaim, passkeyClaim]);
 
-  return { state, amount, claim, cooldownEnd, passkey: passkeyClaim };
+  return { state, amount, claim, cooldownEnd, passkey: passkeyClaim, offerSheet: offer.sheet };
 }

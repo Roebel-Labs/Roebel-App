@@ -6,6 +6,7 @@ import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { useIsCitizen } from '@/hooks/useIsCitizen';
 import { useDailyMint } from '@/hooks/useDailyMint';
+import DeviceSessionOfferSheet from '@/components/rewards/DeviceSessionOfferSheet';
 import { useOrgMemberPreview } from '@/hooks/useOrgMemberPreview';
 import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
@@ -477,6 +478,7 @@ export default function ProfileScreen() {
             holder={holder}
           />
         )}
+        <DeviceSessionOfferSheet {...mint.offerSheet} />
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />
         <AccountSwitchSheet
           visible={showAccountSheet}
