@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import MenuImage, { prefetchMenuImages } from '@/components/MenuImage';
 import { placeCardStyles } from '@/components/GastroCard';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 import { RAIL_LIST_PROPS } from '@/components/railListProps';
 import { formatMenuPrice, hasMenuPrice } from '@/lib/utils';
 import { transformedImageUrl } from '@/lib/image-url';
@@ -91,9 +92,9 @@ export default function FeedSpecialMenuSection({ menus, gutter = 24, containerSt
               />
             )}
             {dayLabel ? (
-              <View style={placeCardStyles.pill}>
-                <Text style={placeCardStyles.pillText}>{dayLabel}</Text>
-              </View>
+              <GlassTag style={placeCardStyles.pill}>
+                <GlassTagText>{dayLabel}</GlassTagText>
+              </GlassTag>
             ) : null}
           </View>
           <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>

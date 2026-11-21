@@ -7,12 +7,15 @@ import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { placeCardStyles } from '@/components/GastroCard';
 import { RAIL_LIST_PROPS } from '@/components/railListProps';
-import { ArrowRight02Icon } from '@/components/Icons';
+import { ArrowRight02Icon, HeartFilledIcon } from '@/components/Icons';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 import {
   VACATION_RENTALS_QUERY_KEY,
   fetchVacationRentals,
   formatEuro,
   guestsLabel,
+  GUEST_FAVORITE_LABEL,
+  GUEST_FAVORITE_RED,
   type VacationRental,
 } from '@/lib/vacation-rentals';
 
@@ -39,9 +42,10 @@ function RentalCard({ rental }: { rental: VacationRental }) {
           />
         ) : null}
         {rental.badge ? (
-          <View style={placeCardStyles.pill}>
-            <Text style={placeCardStyles.pillText}>{rental.badge}</Text>
-          </View>
+          <GlassTag style={placeCardStyles.pill}>
+            <HeartFilledIcon size={13} color={GUEST_FAVORITE_RED} />
+            <GlassTagText>{GUEST_FAVORITE_LABEL}</GlassTagText>
+          </GlassTag>
         ) : null}
       </View>
       <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>

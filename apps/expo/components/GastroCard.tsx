@@ -7,6 +7,7 @@ import { StarIcon } from '@/components/Icons';
 import { describeOpenState, formatAddress, formatRating } from '@/lib/org-profile';
 import type { AccountRatingSummary, RestaurantRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
+import GlassTag, { GlassTagDot, GlassTagText } from '@/components/GlassTag';
 
 export const PLACE_CARD_WIDTH = 280;
 export const PLACE_COVER_HEIGHT = 186;
@@ -77,12 +78,10 @@ function GastroCard({ restaurant, ratingSummary }: Props) {
         ) : null}
 
         {openState ? (
-          <View style={styles.pill}>
-            <View
-              style={[styles.pillDot, { backgroundColor: openState.isOpen ? '#16a34a' : '#9ca3af' }]}
-            />
-            <Text style={styles.pillText}>{openState.label}</Text>
-          </View>
+          <GlassTag style={styles.pill}>
+            <GlassTagDot color={openState.isOpen ? '#16a34a' : '#9ca3af'} />
+            <GlassTagText>{openState.label}</GlassTagText>
+          </GlassTag>
         ) : null}
       </View>
 
@@ -130,27 +129,11 @@ export const placeCardStyles = StyleSheet.create({
     height: LOGO_SIZE,
     borderRadius: LOGO_SIZE / 2,
   },
+  /** Placement of the GlassTag on the cover. */
   pill: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-  },
-  pillDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  pillText: {
-    fontSize: 14,
-    fontFamily: 'MonaSans-SemiBold',
-    color: '#000000',
+    top: 10,
+    left: 10,
   },
   titleRow: {
     flexDirection: 'row',

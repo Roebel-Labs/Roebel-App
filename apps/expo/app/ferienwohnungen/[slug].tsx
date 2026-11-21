@@ -18,7 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
+import { ArrowLeftIcon, HeartFilledIcon, ShareIcon } from '@/components/Icons';
+import PhotoTourModal from '@/components/detail/PhotoTourModal';
 import EmbeddedMap from '@/components/map/EmbeddedMap';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
@@ -29,6 +30,8 @@ import {
   fetchVacationRental,
   formatEuro,
   rentalFactsLine,
+  GUEST_FAVORITE_LABEL,
+  GUEST_FAVORITE_RED,
   type VacationRental,
 } from '@/lib/vacation-rentals';
 
@@ -102,6 +105,7 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
   const { colors } = useTheme();
   const [photoIndex, setPhotoIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const galleryHeight = Math.round(width * 0.9);
 
   const onGalleryScroll = useCallback(
@@ -144,14 +148,19 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
             initialNumToRender={2}
             windowSize={3}
             renderItem={({ item, index }) => (
-              <Image
-                source={{ uri: item }}
-                style={{ width, height: galleryHeight }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={index === 0 ? 0 : 150}
-                accessibilityLabel={`${rental.title}, Foto ${index + 1}`}
-              />
+              <Pressable
+                onPress={() => setTourOpen(true)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`${rental.title}, Foto ${index + 1} – alle Fotos ansehen`}
+              >
+                <Image
+                  source={{ uri: item }}
+                  style={{ width, height: galleryHeight }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={index === 0 ? 0 : 150}
+                />
+              </Pressable>
             )}
           />
         )}
@@ -347,11 +356,19 @@ function RentalDetail({ rental }: { rental: VacationRental }) {
         </View>
       </CollapsingHeroScreen>
 
+      <PhotoTourModal
+        visible={tourOpen}
+        images={rental.images}
+        title="Fototour"
+        onShare={share}
+        onClose={() => setTourOpen(false)}
+      />
+
       {rental.badge ? (
         <View style={[styles.badgeStrip, { backgroundColor: colors.surfaceSecondary }]}>
-          <Ionicons name="diamond-outline" size={16} color={colors.textPrimary} />
+          <HeartFilledIcon size={16} color={GUEST_FAVORITE_RED} />
           <Text style={[styles.badgeText, { color: colors.textPrimary }]}>
-            {rental.badge}! Diese Unterkunft ist normalerweise ausgebucht.
+            {GUEST_FAVORITE_LABEL}! Diese Unterkunft ist normalerweise ausgebucht.
           </Text>
         </View>
       ) : null}

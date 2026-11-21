@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { MovieRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { transformedImageUrl } from '@/lib/image-url';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 
 type Props = {
   movie: MovieRecord;
@@ -44,9 +45,9 @@ function MovieCard({ movie, compact = false }: Props) {
 
         {/* FSK Badge */}
         {movie.fsk && (
-          <View style={styles.fskBadge}>
-            <Text style={styles.fskText}>{movie.fsk}</Text>
-          </View>
+          <GlassTag style={styles.fskBadge}>
+            <GlassTagText>{movie.fsk}</GlassTagText>
+          </GlassTag>
         )}
       </View>
 
@@ -122,15 +123,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  fskText: {
-    color: '#ffffff', // Intentionally white on dark overlay badge
-    fontSize: 11,
-    fontFamily: 'MonaSans-Medium',
   },
   contentContainer: {
     paddingVertical: 12,

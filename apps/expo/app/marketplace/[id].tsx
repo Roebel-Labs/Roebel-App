@@ -45,6 +45,7 @@ import GlassIconButton from '@/components/GlassIconButton';
 import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
 import DetailBodySkeleton from '@/components/detail/DetailBodySkeleton';
 import ImageGalleryModal from '@/components/detail/ImageGalleryModal';
+import { ListingReviewsSection, WriteReviewSheet } from '@/components/marketplace/ListingReviews';
 import { fontFamily } from '@/constants/theme';
 import ListingCategoryIcon from '@/components/ListingCategoryIcon';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from '@/constants/listing-categories';
@@ -95,6 +96,7 @@ export default function ListingDetailScreen() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     if (listing) trackListingOpen(listing);
@@ -309,6 +311,15 @@ export default function ListingDetailScreen() {
       ? { key: 'condition', icon: <SparklesIcon size={24} color={colors.textPrimary} />, title: 'Qualität', subtitle: conditionLabel }
       : null,
     { key: 'price', icon: <Ionicons name="pricetag-outline" size={22} color={colors.textPrimary} />, title: 'Preis', subtitle: `${priceBase} · ${priceSub}` },
+    !isOwn
+      ? {
+          key: 'review',
+          icon: <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.textPrimary} />,
+          title: 'Bewertung schreiben',
+          subtitle: 'Teile deinen Eindruck mit der Nachbarschaft',
+          onPress: () => setReviewOpen(true),
+        }
+      : null,
     {
       key: 'share',
       icon: <ShareIcon size={22} color={colors.textPrimary} />,
@@ -553,6 +564,15 @@ export default function ListingDetailScreen() {
           </>
         ) : null}
 
+        {/* ── Bewertungen (only once someone has written one) ── */}
+        <ListingReviewsSection
+          listingId={listing.id}
+          side={SIDE}
+          canWrite={!isOwn}
+          onWrite={() => setReviewOpen(true)}
+          before={<View style={[styles.divider, { backgroundColor: colors.border }]} />}
+        />
+
         {/* ── Gut zu wissen ── */}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
         <View style={styles.section}>
@@ -614,8 +634,10 @@ export default function ListingDetailScreen() {
         visible={galleryOpen}
         images={images}
         initialIndex={galleryIndex}
+        title={isService ? 'Einblicke' : 'Fotos'}
         onClose={() => setGalleryOpen(false)}
       />
+      <WriteReviewSheet visible={reviewOpen} listingId={listing.id} onClose={() => setReviewOpen(false)} />
     </>
   );
 }

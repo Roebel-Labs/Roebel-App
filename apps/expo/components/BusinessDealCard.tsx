@@ -7,6 +7,7 @@ import { DEAL_TYPE_LABELS } from '@/lib/map/constants';
 import type { BusinessDealWithBusiness } from '@/lib/types';
 import StarIcon from '@/assets/icons/star.svg';
 import { transformedImageUrl } from '@/lib/image-url';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 
 type Props = {
   deal: BusinessDealWithBusiness;
@@ -47,9 +48,9 @@ function BusinessDealCard({ deal, compact = true, style }: Props) {
             </View>
           )}
           {deal.deal_value && (
-            <View style={styles.priceTag}>
-              <Text style={styles.priceTagText}>{deal.deal_value}</Text>
-            </View>
+            <GlassTag style={styles.priceTag}>
+              <GlassTagText>{deal.deal_value}</GlassTagText>
+            </GlassTag>
           )}
         </View>
         <View style={styles.contentCompact}>
@@ -89,9 +90,9 @@ function BusinessDealCard({ deal, compact = true, style }: Props) {
           </View>
         )}
         {deal.deal_value && (
-          <View style={styles.dealBadge}>
-            <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
-          </View>
+          <GlassTag style={styles.dealBadge}>
+            <GlassTagText>{deal.deal_value}</GlassTagText>
+          </GlassTag>
         )}
         {deal.is_boosted && (
           <View style={[styles.boostedBadge, { backgroundColor: '#FFA500' }]}>
@@ -170,20 +171,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 10,
     right: 10,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  dealBadgeText: {
-    color: '#000000',
-    fontSize: 13,
-    fontFamily: 'MonaSans-SemiBold',
   },
   boostedBadge: {
     position: 'absolute',
@@ -197,17 +184,8 @@ const styles = StyleSheet.create({
   },
   priceTag: {
     position: 'absolute',
-    backgroundColor: '#FFFFFF',
     top: 8,
     right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  priceTagText: {
-    color: '#000000',
-    fontSize: 12,
-    fontFamily: 'MonaSans-SemiBold',
   },
   contentCompact: {
     paddingTop: 10,

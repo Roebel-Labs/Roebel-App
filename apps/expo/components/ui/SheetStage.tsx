@@ -2,7 +2,7 @@
  * SheetStage — iOS page-sheet depth effect for the whole app.
  *
  * While a bottom sheet is open, the screen behind it shrinks (~0.92), gets
- * rounded top corners, moves down a little and dims; the area around it is
+ * increasingly rounded corners, moves down a little and dims; the area around it is
  * black. Everything is interpolated from ONE progress value (0 = no sheet,
  * 1 = sheet fully open) that the sheets write on the UI thread — including
  * while the user drags a sheet down, so the background grows back with the
@@ -54,7 +54,13 @@ import { useTheme } from "@/context/ThemeContext";
 /** Max sheets that can push the stage back at once (more = ignored, no crash). */
 const SLOT_COUNT = 6;
 const STAGE_SCALE = 0.92;
-const STAGE_RADIUS = 14;
+/**
+ * Corner radius at full depth. The radius grows FASTER than the scale
+ * (ease-in, p^1.6): barely rounded at the start of the drag, device-like
+ * rounded corners once the page sits fully back.
+ */
+const STAGE_RADIUS = 38;
+const STAGE_RADIUS_CURVE = 1.6;
 const STAGE_SHIFT_Y = 10;
 
 /** Shared open/close curve for sheets and the stage (no overshoot). */
@@ -165,18 +171,19 @@ export function SheetStageView({
     if (reducedMotion)
       return {
         transform: [{ translateY: 0 }, { scale: 1 }],
-        borderTopLeftRadius: 0,
-        borderTopRightRadius: 0,
+        borderRadius: 0,
       };
     const p = progress.get();
-    const radius = p * STAGE_RADIUS;
+    // Uniform radius on purpose (bottom corners sit under the sheet anyway):
+    // Android clips a uniform radius with a hardware outline, while per-corner
+    // radii fall back to a path clip of the whole app page on every frame.
+    const radius = p <= 0 ? 0 : STAGE_RADIUS * Math.pow(p, STAGE_RADIUS_CURVE);
     return {
       transform: [
         { translateY: p * STAGE_SHIFT_Y },
         { scale: 1 - p * (1 - STAGE_SCALE) },
       ],
-      borderTopLeftRadius: radius,
-      borderTopRightRadius: radius,
+      borderRadius: radius,
     };
   });
 

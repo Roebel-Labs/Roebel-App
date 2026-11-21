@@ -6,13 +6,16 @@ import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { ArrowLeftIcon } from '@/components/Icons';
+import { ArrowLeftIcon, HeartFilledIcon } from '@/components/Icons';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 import { ShimmerSkeleton } from '@/components/SkeletonLoader';
 import {
   VACATION_RENTALS_QUERY_KEY,
   fetchVacationRentals,
   formatEuro,
   rentalFactsLine,
+  GUEST_FAVORITE_LABEL,
+  GUEST_FAVORITE_RED,
   type VacationRental,
 } from '@/lib/vacation-rentals';
 
@@ -46,9 +49,10 @@ export default function VacationRentalsScreen() {
             />
           ) : null}
           {item.badge ? (
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>{item.badge}</Text>
-            </View>
+            <GlassTag style={styles.pill}>
+              <HeartFilledIcon size={13} color={GUEST_FAVORITE_RED} />
+              <GlassTagText>{GUEST_FAVORITE_LABEL}</GlassTagText>
+            </GlassTag>
           ) : null}
         </View>
         <View style={styles.titleRow}>
@@ -114,17 +118,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 },
   card: { marginBottom: 28 },
   cover: { width: '100%', aspectRatio: 4 / 3, borderRadius: 16, overflow: 'hidden' },
-  pill: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.94)',
-  },
-  pillText: { fontSize: 14, fontFamily: fontFamily.semiBold, color: '#000' },
+  pill: { position: 'absolute', top: 12, left: 12 },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginTop: 12 },
   title: { fontSize: 18, fontFamily: fontFamily.semiBold, flexShrink: 1 },
   price: { fontSize: 16, fontFamily: fontFamily.semiBold },

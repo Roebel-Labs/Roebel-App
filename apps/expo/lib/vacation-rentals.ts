@@ -55,6 +55,13 @@ export interface VacationRental {
 // FK pinned: accounts is referenced once, but keep it explicit like restaurants.
 const COLUMNS = '*, host:accounts!vacation_rentals_account_id_fkey(id, name, avatar_url)';
 
+/**
+ * A rental flagged with any `badge` in the DB is shown as "Gäste-Favorit"
+ * with a red filled heart (Airbnb-style), whatever the stored badge text.
+ */
+export const GUEST_FAVORITE_LABEL = 'Gäste-Favorit';
+export const GUEST_FAVORITE_RED = '#E31C5F';
+
 export const VACATION_RENTALS_QUERY_KEY = ['explore', 'vacation-rentals'] as const;
 
 function normalize(row: any): VacationRental {

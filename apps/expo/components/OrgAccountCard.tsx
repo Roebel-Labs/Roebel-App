@@ -10,6 +10,7 @@ import { placeCardStyles as styles } from '@/components/GastroCard';
 import { formatAddress, formatRating } from '@/lib/org-profile';
 import type { AccountRatingSummary, OrgAccountCardRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
+import GlassTag, { GlassTagText } from '@/components/GlassTag';
 
 const STAR_GOLD = '#FFB400';
 
@@ -69,10 +70,10 @@ function OrgAccountCard({ account, upCount, ratingSummary }: Props) {
         )}
 
         {account.is_verified ? (
-          <View style={styles.pill}>
-            <BadgeCheckIcon width={18} height={18} color={VERIFIED_GOLD} />
-            <Text style={styles.pillText}>Verifiziert</Text>
-          </View>
+          <GlassTag style={styles.pill}>
+            <BadgeCheckIcon width={14} height={14} color={VERIFIED_GOLD} />
+            <GlassTagText>Verifiziert</GlassTagText>
+          </GlassTag>
         ) : null}
       </View>
 
