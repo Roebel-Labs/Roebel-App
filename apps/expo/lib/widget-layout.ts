@@ -24,11 +24,13 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  */
 export type EventsLayoutKind = 'row' | 'compact' | 'list' | 'hero';
 
-export const EVENTS_PADDING = 14;
-export const EVENTS_HEADER_H = 22;
-export const EVENTS_HEADER_GAP = 8;
-export const EVENT_ROW_H = 44;
-export const EVENT_ROW_GAP = 8;
+export const EVENTS_PADDING = 16;
+export const EVENTS_HEADER_H = 28;
+export const EVENTS_HEADER_GAP = 12;
+/** Row = the 52 dp date tile; the gap below belongs to the row's tap area. */
+export const EVENT_ROW_H = 52;
+export const EVENT_ROW_GAP = 12;
+export const EVENT_DATE_TILE = 52;
 
 export function eventsLayoutKind(width: number, height: number): EventsLayoutKind {
   if (height < 100) return 'row';
@@ -91,7 +93,7 @@ export type MiniAppsGrid = {
   /** Names under the icons (off when only one short row fits, e.g. 4×1). */
   labels: boolean;
   labelSize: number;
-  /** Apps shown; the store tile ("Mini-Apps entdecken") always follows as the last item. */
+  /** Apps shown; the store tile ("Alle") always follows as the last item. */
   apps: number;
   /** apps + 1 store tile. */
   items: number;
@@ -134,9 +136,48 @@ export function miniAppsGrid(appCount: number, width: number, height: number): M
   };
 }
 
-/** Store tile label: the long one only when it is alone or its tile is wide. */
-export function storeTileLabel(apps: number, tileW: number): string {
-  return apps === 0 || tileW >= 120 ? 'Mini-Apps entdecken' : 'Entdecken';
+/** Store tile label: always the short "Alle" (opens the mini-app store). */
+export function storeTileLabel(_apps: number, _tileW: number): string {
+  return 'Alle';
+}
+
+// ── Images ────────────────────────────────────────────────────────────────
+
+export type CoverBox = { width: number; height: number; offsetX: number; offsetY: number };
+
+/**
+ * Size + offset of an image of `aspect` (w/h) that covers a `width × height` box
+ * (centre crop). The Android widget library always scales a bitmap to exactly the
+ * size it is given, so the widgets draw it this large inside a clipping container
+ * instead of letting it stretch.
+ */
+export function coverBox(aspect: number, width: number, height: number): CoverBox {
+  if (!(aspect > 0) || width <= 0 || height <= 0) return { width, height, offsetX: 0, offsetY: 0 };
+  if (aspect > width / height) {
+    const w = Math.round(height * aspect);
+    return { width: w, height, offsetX: -Math.round((w - width) / 2), offsetY: 0 };
+  }
+  const h = Math.round(width / aspect);
+  return { width, height: h, offsetX: 0, offsetY: -Math.round((h - height) / 2) };
+}
+
+/** Same, but the whole image fits inside (letterbox); offsets are ≥ 0. */
+export function containBox(aspect: number, width: number, height: number): CoverBox {
+  if (!(aspect > 0) || width <= 0 || height <= 0) return { width, height, offsetX: 0, offsetY: 0 };
+  if (aspect > width / height) {
+    const h = Math.round(width / aspect);
+    return { width, height: h, offsetX: 0, offsetY: Math.round((height - h) / 2) };
+  }
+  const w = Math.round(height * aspect);
+  return { width: w, height, offsetX: Math.round((width - w) / 2), offsetY: 0 };
+}
+
+/**
+ * A flyer (portrait, usually A4) shown whole over its own blurred copy instead of
+ * being cropped: whenever the image is clearly narrower than the box.
+ */
+export function showsAsFlyer(aspect: number | null | undefined, width: number, height: number): boolean {
+  return !!aspect && aspect > 0 && height > 0 && aspect < (width / height) * 0.8;
 }
 
 // ── Mittagstisch ──────────────────────────────────────────────────────────

@@ -99,34 +99,68 @@ struct EventsProvider: TimelineProvider {
 
 // MARK: - Pieces
 
-private let rowHeight: CGFloat = 44
-private let rowGap: CGFloat = 8
-private let headerHeight: CGFloat = 22
-private let headerGap: CGFloat = 8
+private let rowHeight: CGFloat = 52
+private let rowGap: CGFloat = 12
+private let headerHeight: CGFloat = 28
+private let headerGap: CGFloat = 12
+/// Longest side the hero / 2×2 photo is decoded at (sharp on 3× screens).
+private let heroMaxSide: CGFloat = 900
 
-/// Light grey bordered square: "MO" small caps over the big day.
+/// Calendar tile: bordered rounded square, weekday on a grey band at the top ("MI"),
+/// the day big below ("14"). `solid` = white tile on top of a photo (hero card).
 struct DateTileView: View {
   let event: WidgetEvent
-  var size: CGFloat = 40
-  /// White tile on top of a photo (hero card).
+  var size: CGFloat = 52
   var solid = false
 
   var body: some View {
-    VStack(spacing: -1) {
+    let radius = size * 0.22
+    let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+    VStack(spacing: 0) {
       Text(event.weekday.uppercased())
-        .font(.system(size: size * 0.22, weight: .medium))
+        .font(.system(size: size * 0.21, weight: .medium))
         .foregroundColor(solid ? Color(white: 0.22) : Color("widgetSub"))
+        .frame(maxWidth: .infinity)
+        .frame(height: size * 0.36)
+        .background(solid ? Color(white: 0.95) : Color("widgetBand"))
       Text(event.day)
-        .font(.system(size: size * 0.42, weight: .semibold))
+        .font(.system(size: size * 0.4, weight: .semibold))
         .foregroundColor(solid ? .black : Color("widgetText"))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(width: size, height: size)
     .background(solid ? Color.white : Color("$widgetBackground"))
-    .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-        .stroke(Color("widgetBorder"), lineWidth: solid ? 0 : 1)
-    )
+    .clipShape(shape)
+    .overlay(shape.stroke(solid ? Color.white : Color("widgetBorder"), lineWidth: 1))
+  }
+}
+
+/// The event photo filling its frame without stretching: a flyer (clearly narrower than
+/// the frame, usually A4) is shown whole over a blurred copy of itself, as in the app;
+/// anything else is centre-cropped.
+struct EventPhotoView: View {
+  let image: UIImage
+
+  var body: some View {
+    GeometryReader { geo in
+      let aspect = image.size.height > 0 ? image.size.width / image.size.height : 1
+      let boxAspect = geo.size.height > 0 ? geo.size.width / geo.size.height : 1
+      if aspect < boxAspect * 0.8 {
+        ZStack {
+          Image(uiImage: image).resizable().scaledToFill()
+            .frame(width: geo.size.width, height: geo.size.height)
+            .blur(radius: 18)
+            .clipped()
+          Color.black.opacity(0.22)
+          Image(uiImage: image).resizable().scaledToFit()
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+      } else {
+        Image(uiImage: image).resizable().scaledToFill()
+          .frame(width: geo.size.width, height: geo.size.height)
+          .clipped()
+      }
+    }
   }
 }
 
@@ -134,16 +168,16 @@ struct EventRowView: View {
   let event: WidgetEvent
 
   var body: some View {
-    HStack(spacing: 10) {
-      DateTileView(event: event)
-      VStack(alignment: .leading, spacing: 1) {
+    HStack(spacing: 14) {
+      DateTileView(event: event, size: rowHeight)
+      VStack(alignment: .leading, spacing: 3) {
         Text(event.title)
-          .font(.system(size: 14, weight: .medium))
+          .font(.system(size: 16, weight: .medium))
           .foregroundColor(Color("widgetText"))
           .lineLimit(1)
         if !event.metaLine.isEmpty {
           Text(event.metaLine)
-            .font(.system(size: 11.5))
+            .font(.system(size: 13))
             .foregroundColor(Color("widgetSub"))
             .lineLimit(1)
         }
@@ -165,22 +199,20 @@ struct EventHeroView: View {
   var body: some View {
     GeometryReader { geo in
       ZStack(alignment: .bottomLeading) {
-        if let img = widgetImage(event.image) {
-          Image(uiImage: img).resizable().scaledToFill()
-            .frame(width: geo.size.width, height: geo.size.height)
-            .clipped()
+        if let img = widgetImage(event.image, maxSide: heroMaxSide) {
+          EventPhotoView(image: img)
         } else {
           Color("$accent")
         }
         LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
           Text(event.title)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: 18, weight: .semibold))
             .foregroundColor(.white)
             .lineLimit(2)
           if !meta.isEmpty {
             Text(meta)
-              .font(.system(size: 11.5))
+              .font(.system(size: 13))
               .foregroundColor(.white.opacity(0.88))
               .lineLimit(1)
           }
@@ -189,7 +221,7 @@ struct EventHeroView: View {
       }
       .frame(width: geo.size.width, height: geo.size.height)
       .overlay(alignment: .topTrailing) {
-        DateTileView(event: event, size: 38, solid: true).padding(10)
+        DateTileView(event: event, size: 46, solid: true).padding(10)
       }
       .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -226,10 +258,10 @@ struct EventsWidgetView: View {
     VStack(alignment: .leading, spacing: 0) {
       ZStack {
         Color("widgetTileFallback")
-        if let img = widgetImage(event.image) {
-          Image(uiImage: img).resizable().scaledToFill()
+        if let img = widgetImage(event.image, maxSide: heroMaxSide) {
+          EventPhotoView(image: img)
         } else {
-          DateTileView(event: event, size: 48)
+          DateTileView(event: event, size: 52)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -254,11 +286,11 @@ struct EventsWidgetView: View {
     Link(destination: eventsURL) {
       HStack {
         Text("Events in \(entry.place)")
-          .font(.system(size: 14, weight: .medium))
+          .font(.system(size: 18, weight: .medium))
           .foregroundColor(Color("widgetText"))
           .lineLimit(1)
         Spacer(minLength: 4)
-        AppBadge()
+        AppBadge(size: 26)
       }
       .frame(height: headerHeight)
     }

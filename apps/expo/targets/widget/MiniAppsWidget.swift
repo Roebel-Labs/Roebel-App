@@ -3,7 +3,7 @@
 // Reads the payload the app writes into the shared App Group (key "widget.payload.v1",
 // see apps/expo/lib/widget-payload.ts for the shape) and draws the same tiles as the
 // Mini-Apps section on Erkunden: rounded icon, name below. The recently opened apps
-// come first, the store tile ("Mini-Apps entdecken") is always last. Grid and icon size
+// come first, the store tile ("Alle") is always last. Grid and icon size
 // follow miniAppsGrid in apps/expo/lib/widget-layout.ts: few items grow to fill the
 // widget, many shrink into a grid. The timeline never refreshes itself — the app reloads
 // it after every sync (ExtensionStorage.reloadWidget).
@@ -95,7 +95,7 @@ struct AppIconView: View {
     ZStack(alignment: .topTrailing) {
       ZStack {
         Color(hex: app.color) ?? Color("widgetTileFallback")
-        if let img = widgetImage(app.icon, maxSide: 192) {
+        if let img = widgetImage(app.icon, maxSide: 256) {
           Image(uiImage: img).resizable().scaledToFill()
         } else {
           Text(String(app.name.prefix(1)).uppercased())
@@ -236,7 +236,7 @@ struct MiniAppsWidgetView: View {
         Link(destination: URL(string: app.url) ?? storeURL) { AppTile(app: app, size: grid.icon, label: label) }
       }
     case .store:
-      let text = grid.apps == 0 || colWidth >= 120 ? "Mini-Apps entdecken" : "Entdecken"
+      let text = "Alle"
       if family == .systemSmall {
         StoreTile(size: grid.icon, label: label, text: text)
       } else {

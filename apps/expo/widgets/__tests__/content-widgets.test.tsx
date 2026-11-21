@@ -114,6 +114,26 @@ describe('Events widget', () => {
     expect(json(list.children[1])).toContain('roebel://event/b');
   });
 
+  it('photos never stretch: drawn at cover size inside a clipping box', () => {
+    const photo: EventsPayload = { ...events, events: [{ ...ev('a'), image: 'SU1H', imageAspect: 2 }, ev('b')] };
+    const imgs = find(tree(photo, 320, 340), 'ImageWidget').filter((n: any) => String(n.props.image.uri).includes('SU1H'));
+    expect(imgs).toHaveLength(1);
+    const { imageWidth, imageHeight } = imgs[0].props;
+    expect(imageWidth / imageHeight).toBeCloseTo(2, 1);
+  });
+
+  it('a portrait flyer is shown whole over its blurred copy', () => {
+    const flyer: EventsPayload = {
+      ...events,
+      events: [{ ...ev('a'), image: 'FLYER', imageAspect: 0.707, imageBlur: 'TINY' }, ev('b')],
+    };
+    const t = tree(flyer, 320, 340);
+    const imgs = find(t, 'ImageWidget');
+    const front = imgs.find((n: any) => String(n.props.image.uri).includes('FLYER'));
+    expect(front.props.imageWidth / front.props.imageHeight).toBeCloseTo(0.707, 1);
+    expect(imgs.some((n: any) => String(n.props.image.uri).includes('TINY'))).toBe(true);
+  });
+
   it('a payload of an older app (no month, no place, no image) still renders', () => {
     const old = { v: 1, updatedAt: 0, events: [{ id: 'a', title: 'Alt', weekday: 'Sa', day: '21', time: null, location: 'X', url: 'roebel://event/a' }] } as EventsPayload;
     expect(json(tree(old, 320, 70))).toContain('Sa. 21.');

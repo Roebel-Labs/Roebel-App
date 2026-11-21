@@ -24,6 +24,9 @@ import {
   type WidgetLunchDish,
 } from '@/lib/widget-content';
 import {
+  containBox,
+  coverBox,
+  EVENT_DATE_TILE,
   EVENT_ROW_GAP,
   EVENT_ROW_H,
   EVENTS_HEADER_GAP,
@@ -34,6 +37,7 @@ import {
   eventsHeroHeight,
   eventsLayoutKind,
   lunchLayout,
+  showsAsFlyer,
 } from '@/lib/widget-layout';
 
 export const LUNCH_WIDGET_NAME = 'Mittagstisch';
@@ -52,12 +56,14 @@ type Palette = {
   border: Hex;
   red: Hex;
   accent: Hex;
+  /** Round ‹ › buttons of the Mittagstisch pager. */
+  button: Hex;
 };
 
 /** App tokens (constants/theme.ts): background, textPrimary/Secondary, border, error. */
 const PALETTE: { light: Palette; dark: Palette } = {
-  light: { bg: '#FFFFFF', text: '#000000', sub: '#6B7280', tile: '#F2F3F5', border: '#E5E7EB', red: '#DC2626', accent: '#00498B' },
-  dark: { bg: '#18191B', text: '#E8EAED', sub: '#9AA0A6', tile: '#2A2C2F', border: '#3C4043', red: '#F87171', accent: '#8AB4F8' },
+  light: { bg: '#FFFFFF', text: '#000000', sub: '#6B7280', tile: '#F2F3F5', border: '#E5E7EB', red: '#DC2626', accent: '#00498B', button: '#EEEFF1' },
+  dark: { bg: '#18191B', text: '#E8EAED', sub: '#9AA0A6', tile: '#2A2C2F', border: '#3C4043', red: '#F87171', accent: '#8AB4F8', button: '#2F3236' },
 };
 
 /** Mona Sans is embedded by expo-font (android assets/fonts), so the widget can use it. */
@@ -122,30 +128,99 @@ function AppBadge({ size = 18 }: { size?: number }) {
 
 const jpeg = (b64: string) => `data:image/jpeg;base64,${b64}` as const;
 
+/**
+ * A photo filling `width × height` without stretching. The library scales every bitmap
+ * to exactly imageWidth × imageHeight (its resizeMode does nothing), so the image is
+ * drawn at its cover size inside a clipping box and centred with negative margins.
+ * Without a known aspect (payload of an older app) it falls back to the plain image.
+ */
+function CoverPhoto({ b64, aspect, width, height, radius = 0 }: { b64: string; aspect?: number; width: number; height: number; radius?: number }) {
+  if (!aspect) {
+    return <ImageWidget image={jpeg(b64)} imageWidth={width} imageHeight={height} radius={radius} />;
+  }
+  const box = coverBox(aspect, width, height);
+  return (
+    <FlexWidget
+      style={{ width, height, flexDirection: 'row', overflow: 'hidden', ...(radius ? { borderRadius: radius } : {}) }}
+    >
+      <ImageWidget
+        image={jpeg(b64)}
+        imageWidth={box.width}
+        imageHeight={box.height}
+        style={{ width: box.width, height: box.height, marginLeft: box.offsetX, marginTop: box.offsetY }}
+      />
+    </FlexWidget>
+  );
+}
+
+/**
+ * The event photo for a `width × height` card: a flyer (portrait) is shown whole,
+ * centred over a blurred, darkened copy of itself (as in the app); anything else fills
+ * the card (centre crop). The parent clips the corners.
+ */
+function EventPhoto({ event, width, height }: { event: WidgetEvent & { image: string }; width: number; height: number }) {
+  if (!showsAsFlyer(event.imageAspect, width, height)) {
+    return <CoverPhoto b64={event.image} aspect={event.imageAspect} width={width} height={height} />;
+  }
+  const fit = containBox(event.imageAspect!, width, height);
+  return (
+    <OverlapWidget style={{ width, height }}>
+      {event.imageBlur ? (
+        <CoverPhoto b64={event.imageBlur} aspect={event.imageAspect} width={width} height={height} />
+      ) : (
+        <FlexWidget style={{ width, height, backgroundColor: '#1F2937' }} />
+      )}
+      <FlexWidget style={{ width, height, backgroundColor: '#00000038' }} />
+      <FlexWidget style={{ width, height, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+        <ImageWidget
+          image={jpeg(event.image)}
+          imageWidth={fit.width}
+          imageHeight={fit.height}
+          style={{ width: fit.width, height: fit.height }}
+        />
+      </FlexWidget>
+    </OverlapWidget>
+  );
+}
+
 // ── Mittagstisch ──────────────────────────────────────────────────────────
 
 const LUNCH_PADDING = 12;
-const LUNCH_HEADER_H = 28;
+const LUNCH_HEADER_H = 32;
+/** Round ‹ › button diameter, counter width, and the whole pager. */
+const PAGER_BTN = 30;
+const PAGER_COUNTER = 34;
+const PAGER_W = PAGER_BTN * 2 + PAGER_COUNTER + 6;
 
 const chevron = (dir: 'left' | 'right', color: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="${
     dir === 'left' ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'
   }" fill="none" stroke="${color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
-/** ‹ 1/3 › — chevrons in the text color (black / white), counter centred between them. */
+/**
+ * ‹ 1/3 › — chevrons in the text color (black / white) on round light / dark grey
+ * buttons, counter centred between them.
+ */
 function Pager({ idx, count, pal }: { idx: number; count: number; pal: Palette }) {
   const arrow = (dir: 'left' | 'right', action: string) => (
     <FlexWidget
       clickAction={action}
-      style={{ width: 28, height: LUNCH_HEADER_H, justifyContent: 'center', alignItems: 'center' }}
+      style={{
+        width: PAGER_BTN,
+        height: PAGER_BTN,
+        borderRadius: PAGER_BTN / 2,
+        backgroundColor: pal.button,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
     >
-      <SvgWidget svg={chevron(dir, pal === PALETTE.dark ? '#FFFFFF' : '#000000')} style={{ width: 16, height: 16 }} />
+      <SvgWidget svg={chevron(dir, pal === PALETTE.dark ? '#FFFFFF' : '#000000')} style={{ width: 15, height: 15 }} />
     </FlexWidget>
   );
   return (
-    <FlexWidget style={{ flexDirection: 'row', height: LUNCH_HEADER_H, alignItems: 'center' }}>
+    <FlexWidget style={{ flexDirection: 'row', width: PAGER_W, height: LUNCH_HEADER_H, alignItems: 'center', justifyContent: 'flex-end' }}>
       {arrow('left', LUNCH_PREV)}
-      <FlexWidget style={{ height: LUNCH_HEADER_H, justifyContent: 'center', alignItems: 'center' }}>
+      <FlexWidget style={{ width: PAGER_COUNTER, height: LUNCH_HEADER_H, justifyContent: 'center', alignItems: 'center' }}>
         <TextWidget
           text={`${idx + 1}/${count}`}
           style={{ fontSize: 11, color: pal.sub, fontFamily: FONT.medium, fontWeight: '500' }}
@@ -158,7 +233,7 @@ function Pager({ idx, count, pal }: { idx: number; count: number; pal: Palette }
 
 function DishPhoto({ dish, width, height, radius, pal }: { dish: WidgetLunchDish; width: number; height: number; radius: number; pal: Palette }) {
   return dish.image ? (
-    <ImageWidget image={jpeg(dish.image)} imageWidth={width} imageHeight={height} radius={radius} resizeMode="cover" />
+    <CoverPhoto b64={dish.image} aspect={dish.imageAspect} width={width} height={height} radius={radius} />
   ) : (
     <FlexWidget style={{ width, height, borderRadius: radius, backgroundColor: pal.tile }} />
   );
@@ -198,17 +273,17 @@ function DishTile({ dish, width, height, pal }: { dish: WidgetLunchDish; width: 
 function LunchHeader({ name, idx, count, width, pal }: { name: string; idx: number; count: number; width: number; pal: Palette }) {
   const multi = count > 1;
   return (
-    <FlexWidget style={{ flexDirection: 'row', width: 'match_parent', height: LUNCH_HEADER_H, alignItems: 'center', marginBottom: 6 }}>
+    <FlexWidget style={{ flexDirection: 'row', width: 'match_parent', height: LUNCH_HEADER_H, alignItems: 'center', marginBottom: 8 }}>
       <FlexWidget
         clickAction="OPEN_URI"
         clickActionData={{ uri: WIDGET_LUNCH_URL }}
-        style={{ width: multi ? width - 84 : width, height: LUNCH_HEADER_H, justifyContent: 'center' }}
+        style={{ width: multi ? width - PAGER_W : width, height: LUNCH_HEADER_H, justifyContent: 'center' }}
       >
         <TextWidget
           text={name}
           maxLines={1}
           truncate="END"
-          style={{ fontSize: 14, color: pal.text, fontFamily: FONT.semi, fontWeight: '600' }}
+          style={{ fontSize: 17, color: pal.text, fontFamily: FONT.semi, fontWeight: '600' }}
         />
       </FlexWidget>
       {multi ? <Pager idx={idx} count={count} pal={pal} /> : null}
@@ -241,7 +316,7 @@ export function LunchWidget({
 
   if (layout.kind === 'row') {
     const dish = r.dishes[0];
-    const textW = innerW - 52 - (count > 1 ? 84 : 0);
+    const textW = innerW - 52 - (count > 1 ? PAGER_W : 0);
     const meta = [r.name, dish?.price].filter(Boolean).join(' · ');
     return (
       <Card pal={pal} padding={LUNCH_PADDING}>
@@ -249,7 +324,7 @@ export function LunchWidget({
           <FlexWidget
             clickAction="OPEN_URI"
             clickActionData={{ uri: dish?.url ?? WIDGET_LUNCH_URL }}
-            style={{ flexDirection: 'row', alignItems: 'center', width: innerW - (count > 1 ? 84 : 0) }}
+            style={{ flexDirection: 'row', alignItems: 'center', width: innerW - (count > 1 ? PAGER_W : 0) }}
           >
             {dish ? <DishPhoto dish={dish} width={44} height={44} radius={10} pal={pal} /> : null}
             <FlexWidget style={{ flexDirection: 'column', marginLeft: 8, width: textW }}>
@@ -273,7 +348,7 @@ export function LunchWidget({
     );
   }
 
-  const bodyH = height - LUNCH_PADDING * 2 - LUNCH_HEADER_H - 6;
+  const bodyH = height - LUNCH_PADDING * 2 - LUNCH_HEADER_H - 8;
   const tileW = Math.floor(innerW / layout.cols);
   const tileH = Math.floor(bodyH / layout.rows);
   const shown = r.dishes.slice(0, layout.cols * layout.rows);
@@ -305,41 +380,59 @@ export function renderLunch(payload: LunchPayload | null, page: number, width: n
 
 // ── Events ────────────────────────────────────────────────────────────────
 
-/** Light grey bordered square: "MO" small caps over the big day. */
+/**
+ * Calendar tile: bordered rounded square, the weekday on a grey band at the top
+ * ("MI"), the day big below ("14"). `solid` = white tile on top of a photo.
+ */
 function DateTile({ event, size, pal, solid }: { event: WidgetEvent; size: number; pal: Palette; solid?: boolean }) {
+  const radius = Math.round(size * 0.22);
+  const inner = size - 2; // inside the 1 dp border
+  const band = Math.round(size * 0.36);
   return (
     <FlexWidget
       style={{
         width: size,
         height: size,
-        borderRadius: Math.round(size * 0.24),
-        borderWidth: solid ? 0 : 1,
-        borderColor: pal.border,
+        borderRadius: radius,
+        borderWidth: 1,
+        borderColor: solid ? '#FFFFFF' : pal.border,
         backgroundColor: solid ? '#FFFFFF' : pal.bg,
-        justifyContent: 'center',
-        alignItems: 'center',
         flexDirection: 'column',
       }}
     >
-      <TextWidget
-        text={event.weekday.toUpperCase()}
+      <FlexWidget
         style={{
-          fontSize: Math.round(size * 0.22),
-          color: solid ? '#374151' : pal.sub,
-          fontFamily: FONT.medium,
-          fontWeight: '500',
-          letterSpacing: 0.04,
+          width: inner,
+          height: band,
+          backgroundColor: solid ? '#F2F3F5' : pal.tile,
+          borderTopLeftRadius: radius - 1,
+          borderTopRightRadius: radius - 1,
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
-      />
-      <TextWidget
-        text={event.day}
-        style={{
-          fontSize: Math.round(size * 0.42),
-          color: solid ? '#000000' : pal.text,
-          fontFamily: FONT.semi,
-          fontWeight: '600',
-        }}
-      />
+      >
+        <TextWidget
+          text={event.weekday.toUpperCase()}
+          style={{
+            fontSize: Math.round(size * 0.21),
+            color: solid ? '#374151' : pal.sub,
+            fontFamily: FONT.medium,
+            fontWeight: '500',
+            letterSpacing: 0.04,
+          }}
+        />
+      </FlexWidget>
+      <FlexWidget style={{ width: inner, height: inner - band, justifyContent: 'center', alignItems: 'center' }}>
+        <TextWidget
+          text={event.day}
+          style={{
+            fontSize: Math.round(size * 0.4),
+            color: solid ? '#000000' : pal.text,
+            fontFamily: FONT.semi,
+            fontWeight: '600',
+          }}
+        />
+      </FlexWidget>
     </FlexWidget>
   );
 }
@@ -355,10 +448,10 @@ function EventsHeader({ place, width, pal }: { place: string; width: number; pal
         text={`Events in ${place}`}
         maxLines={1}
         truncate="END"
-        style={{ fontSize: 14, color: pal.text, fontFamily: FONT.medium, fontWeight: '500', width: width - 24 }}
+        style={{ fontSize: 18, color: pal.text, fontFamily: FONT.medium, fontWeight: '500', width: width - 32 }}
       />
-      <FlexWidget style={{ width: 24, alignItems: 'flex-end' }}>
-        <AppBadge />
+      <FlexWidget style={{ width: 32, alignItems: 'flex-end' }}>
+        <AppBadge size={26} />
       </FlexWidget>
     </FlexWidget>
   );
@@ -366,7 +459,7 @@ function EventsHeader({ place, width, pal }: { place: string; width: number; pal
 
 /** List item: date tile + title + "19:00 · Venue"; the gap below is part of the item. */
 function EventRow({ event, width, pal }: { event: WidgetEvent; width: number; pal: Palette }) {
-  const textW = width - 50;
+  const textW = width - EVENT_DATE_TILE - 14;
   const meta = eventMetaLine(event);
   return (
     <FlexWidget
@@ -375,20 +468,20 @@ function EventRow({ event, width, pal }: { event: WidgetEvent; width: number; pa
       style={{ width: 'match_parent', height: EVENT_ROW_H + EVENT_ROW_GAP, paddingBottom: EVENT_ROW_GAP }}
     >
       <FlexWidget style={{ flexDirection: 'row', width: 'match_parent', height: EVENT_ROW_H, alignItems: 'center' }}>
-        <DateTile event={event} size={40} pal={pal} />
-        <FlexWidget style={{ flexDirection: 'column', marginLeft: 10, width: textW }}>
+        <DateTile event={event} size={EVENT_DATE_TILE} pal={pal} />
+        <FlexWidget style={{ flexDirection: 'column', marginLeft: 14, width: textW }}>
           <TextWidget
             text={event.title}
             maxLines={1}
             truncate="END"
-            style={{ fontSize: 14, color: pal.text, fontFamily: FONT.medium, fontWeight: '500', width: textW }}
+            style={{ fontSize: 16, color: pal.text, fontFamily: FONT.medium, fontWeight: '500', width: textW }}
           />
           {meta ? (
             <TextWidget
               text={meta}
               maxLines={1}
               truncate="END"
-              style={{ fontSize: 11.5, color: pal.sub, fontFamily: FONT.regular, width: textW, marginTop: 1 }}
+              style={{ fontSize: 13, color: pal.sub, fontFamily: FONT.regular, width: textW, marginTop: 3 }}
             />
           ) : null}
         </FlexWidget>
@@ -406,17 +499,12 @@ function HeroCard({ event, width, height }: { event: WidgetEvent; width: number;
       clickActionData={{ uri: event.url }}
       style={{ width: 'match_parent', height: height + EVENT_ROW_GAP + 2, paddingBottom: EVENT_ROW_GAP + 2 }}
     >
-      <OverlapWidget style={{ width, height, borderRadius: 16 }}>
-        {event.image ? (
-          <ImageWidget image={jpeg(event.image)} imageWidth={width} imageHeight={height} radius={16} resizeMode="cover" />
-        ) : (
-          <FlexWidget style={{ width, height, borderRadius: 16, backgroundColor: '#00498B' }} />
-        )}
+      <OverlapWidget style={{ width, height, borderRadius: 16, overflow: 'hidden', backgroundColor: '#00498B' }}>
+        {event.image ? <EventPhoto event={{ ...event, image: event.image }} width={width} height={height} /> : null}
         <FlexWidget
           style={{
             width,
             height,
-            borderRadius: 16,
             backgroundGradient: { from: '#00000000', to: '#000000C0', orientation: 'TOP_BOTTOM' },
             flexDirection: 'column',
             justifyContent: 'flex-end',
@@ -427,19 +515,19 @@ function HeroCard({ event, width, height }: { event: WidgetEvent; width: number;
             text={event.title}
             maxLines={2}
             truncate="END"
-            style={{ fontSize: 16, color: '#FFFFFF', fontFamily: FONT.semi, fontWeight: '600', width: width - 28 }}
+            style={{ fontSize: 18, color: '#FFFFFF', fontFamily: FONT.semi, fontWeight: '600', width: width - 28 }}
           />
           {meta ? (
             <TextWidget
               text={meta}
               maxLines={1}
               truncate="END"
-              style={{ fontSize: 11.5, color: '#E5E7EB', fontFamily: FONT.regular, width: width - 28, marginTop: 2 }}
+              style={{ fontSize: 13, color: '#E5E7EB', fontFamily: FONT.regular, width: width - 28, marginTop: 3 }}
             />
           ) : null}
         </FlexWidget>
         <FlexWidget style={{ width, flexDirection: 'row', justifyContent: 'flex-end', padding: 10 }}>
-          <DateTile event={event} size={38} pal={PALETTE.light} solid />
+          <DateTile event={event} size={46} pal={PALETTE.light} solid />
         </FlexWidget>
       </OverlapWidget>
     </FlexWidget>
@@ -506,9 +594,9 @@ export function EventsWidget({
     const photoH = Math.max(48, height - pad * 2 - 56);
     return (
       <Card pal={pal} uri={first.url} padding={pad}>
-        <OverlapWidget style={{ width: innerW, height: photoH, borderRadius: 14 }}>
+        <OverlapWidget style={{ width: innerW, height: photoH, borderRadius: 14, overflow: 'hidden' }}>
           {first.image ? (
-            <ImageWidget image={jpeg(first.image)} imageWidth={innerW} imageHeight={photoH} radius={14} resizeMode="cover" />
+            <EventPhoto event={{ ...first, image: first.image }} width={innerW} height={photoH} />
           ) : (
             <FlexWidget
               style={{ width: innerW, height: photoH, borderRadius: 14, backgroundColor: pal.tile, justifyContent: 'center', alignItems: 'center' }}

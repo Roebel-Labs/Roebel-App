@@ -27,7 +27,8 @@ export { useMiniAppUnread } from './miniapp-unread';
 export const SELECTION_KEY = 'widget.miniapps.v1';
 export const PAYLOAD_KEY = 'widget.payload.v1';
 export const WALLET_KEY = 'widget.wallet.v1';
-const ICON_SIZE = 96;
+/** Icon edge in px: the largest widget icon is 84 dp ≈ 250 px on a 3× screen. */
+const ICON_SIZE = 256;
 
 /** null = the user never chose (widget shows the recently opened apps). */
 export async function getWidgetSelection(): Promise<string[] | null> {
@@ -109,7 +110,10 @@ export async function markMiniAppNotificationsRead(wallet: string, slug: string)
 
 const iconCache = new Map<string, string | null>();
 
-/** Downloads + shrinks an icon to a 96 px PNG (base64). null on any failure → letter tile. */
+/**
+ * Downloads an icon, centre-crops it square (never squashed) and shrinks it to a
+ * ICON_SIZE PNG (base64). null on any failure → letter tile.
+ */
 async function loadIcon(url: string | null): Promise<string | null> {
   if (!url) return null;
   if (iconCache.has(url)) return iconCache.get(url) ?? null;
@@ -118,9 +122,19 @@ async function loadIcon(url: string | null): Promise<string | null> {
     const dir = new Directory(Paths.cache, 'widget-icons');
     if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
     const file = await File.downloadFileAsync(url, dir, { idempotent: true });
-    const ref = await ImageManipulator.manipulate(file.uri)
-      .resize({ width: ICON_SIZE, height: ICON_SIZE })
-      .renderAsync();
+    const src = await ImageManipulator.manipulate(file.uri).renderAsync();
+    const side = Math.min(src.width, src.height);
+    const ctx = ImageManipulator.manipulate(src);
+    if (src.width !== src.height) {
+      ctx.crop({
+        originX: Math.floor((src.width - side) / 2),
+        originY: Math.floor((src.height - side) / 2),
+        width: side,
+        height: side,
+      });
+    }
+    if (side > ICON_SIZE) ctx.resize({ width: ICON_SIZE, height: ICON_SIZE });
+    const ref = await ctx.renderAsync();
     const saved = await ref.saveAsync({ format: SaveFormat.PNG, base64: true });
     result = saved.base64 ?? null;
     try {

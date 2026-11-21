@@ -22,6 +22,10 @@ module.exports = (config) => ({
     widgetRed: { light: '#DC2626', dark: '#F87171' },
     // Mittagstisch ‹ › arrows: black in light, white in dark mode.
     widgetArrow: { light: '#000000', dark: '#FFFFFF' },
+    // Round background behind the ‹ › arrows.
+    widgetButton: { light: '#EEEFF1', dark: '#2F3236' },
+    // Weekday band at the top of the events date tile.
+    widgetBand: { light: '#F2F3F5', dark: '#2A2C2F' },
   },
   images: {
     storeIcon: '../../assets/illustration/mini-app-store.png',

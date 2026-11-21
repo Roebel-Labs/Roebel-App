@@ -71,6 +71,8 @@ export type WidgetLunchDish = {
   day: string;
   /** Base64 JPEG without the data: prefix; null → plain tile. */
   image: string | null;
+  /** width / height of `image`, so the widgets can crop instead of stretching. */
+  imageAspect?: number;
   url: string;
 };
 export type WidgetLunchRestaurant = { name: string; dishes: WidgetLunchDish[] };
@@ -85,6 +87,7 @@ export function buildLunchPayload(
   images: Record<string, string | null>,
   today: string,
   now: number,
+  aspects: Record<string, number> = {},
 ): LunchPayload {
   return {
     v: 1,
@@ -97,6 +100,7 @@ export function buildLunchPayload(
         price: hasMenuPrice(item.price) ? formatMenuPrice(item.price) : null,
         day: day ? dishDayLabel(day, today) : '',
         image: images[item.id] ?? null,
+        ...(images[item.id] && aspects[item.id] ? { imageAspect: aspects[item.id] } : {}),
         url: dishDeepLink(item.id),
       })),
     })),
@@ -129,6 +133,10 @@ export type WidgetEvent = {
   location: string;
   /** Base64 JPEG without the data: prefix — only the first event (2×2 photo, hero card). */
   image?: string | null;
+  /** width / height of `image` (flyers are portrait → blurred sides, photos → cropped). */
+  imageAspect?: number;
+  /** Tiny (~24 px) copy of `image`; Android scales it up as the blurred backdrop. */
+  imageBlur?: string;
   url: string;
 };
 /** `place` is optional for the same reason as WidgetEvent.month (default: WIDGET_PLACE). */
@@ -142,7 +150,12 @@ export function eventDeepLink(id: string): string {
  * `events` = upcoming events in Röbel, already in order. `heroImage` (base64) belongs
  * to the first event that is not cancelled.
  */
-export function buildEventsPayload(events: EventRecord[], now: number, heroImage: string | null = null): EventsPayload {
+export function buildEventsPayload(
+  events: EventRecord[],
+  now: number,
+  heroImage: string | null = null,
+  heroMeta: { aspect?: number; blur?: string | null } = {},
+): EventsPayload {
   return {
     v: 1,
     updatedAt: now,
@@ -161,6 +174,8 @@ export function buildEventsPayload(events: EventRecord[], now: number, heroImage
           time: e.time ? e.time.slice(0, 5) : null,
           location: shortVenue(e.location),
           ...(i === 0 ? { image: heroImage } : {}),
+          ...(i === 0 && heroImage && heroMeta.aspect ? { imageAspect: heroMeta.aspect } : {}),
+          ...(i === 0 && heroImage && heroMeta.blur ? { imageBlur: heroMeta.blur } : {}),
           url: eventDeepLink(e.id),
         };
       }),

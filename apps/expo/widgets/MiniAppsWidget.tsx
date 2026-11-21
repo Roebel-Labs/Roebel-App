@@ -3,7 +3,7 @@
  *
  * Same look as the Mini-Apps section on Erkunden and the iOS widget: rounded icon
  * (24 % radius, primary color behind it, first letter without icon), name below.
- * The recently opened apps come first; the store tile ("Mini-Apps entdecken") is always
+ * The recently opened apps come first; the store tile ("Alle") is always
  * the last item. Grid and icon size come from miniAppsGrid (lib/widget-layout.ts):
  * few items grow to fill the widget, many shrink into a grid.
  */

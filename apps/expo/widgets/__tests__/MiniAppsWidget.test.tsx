@@ -76,9 +76,9 @@ it('an app with unread notifications gets the red dot', () => {
   expect(dots(payload(3))).toBe(0);
 });
 
-it('no apps opened yet: the store tile alone, "Mini-Apps entdecken"', () => {
+it('no apps opened yet: the store tile alone, "Alle"', () => {
   const nodes = expand(<MiniAppsWidget payload={null} width={320} height={170} dark />);
-  expect(nodes.some((n: any) => n.props?.text === 'Mini-Apps entdecken')).toBe(true);
+  expect(nodes.some((n: any) => n.props?.text === 'Alle')).toBe(true);
   expect(clickUris(<MiniAppsWidget payload={null} width={320} height={170} dark />)).toEqual(['roebel://mini-apps']);
 });
 

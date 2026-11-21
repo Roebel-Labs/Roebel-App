@@ -9,6 +9,9 @@ import {
   rowsThatFit,
   shortVenue,
   storeTileLabel,
+  coverBox,
+  containBox,
+  showsAsFlyer,
 } from '../widget-layout';
 
 // Typical Android launcher sizes in dp (Pixel, 5-column grid ≈ 4-column on most phones).
@@ -34,6 +37,22 @@ describe('rowsThatFit', () => {
   });
 });
 
+describe('image boxes (no stretching)', () => {
+  it('cover: a wide photo in a square box keeps its aspect and is centred', () => {
+    expect(coverBox(2, 100, 100)).toEqual({ width: 200, height: 100, offsetX: -50, offsetY: 0 });
+    expect(coverBox(0.5, 100, 100)).toEqual({ width: 100, height: 200, offsetX: 0, offsetY: -50 });
+    expect(coverBox(0, 100, 50)).toEqual({ width: 100, height: 50, offsetX: 0, offsetY: 0 });
+  });
+  it('contain: an A4 flyer fits the height, centred horizontally', () => {
+    expect(containBox(0.707, 300, 160)).toEqual({ width: 113, height: 160, offsetX: 94, offsetY: 0 });
+  });
+  it('portrait flyers get the blurred backdrop, photos fill the card', () => {
+    expect(showsAsFlyer(0.707, 300, 160)).toBe(true);
+    expect(showsAsFlyer(1.6, 300, 160)).toBe(false);
+    expect(showsAsFlyer(undefined, 300, 160)).toBe(false);
+  });
+});
+
 describe('events layout', () => {
   it('picks the layout per size', () => {
     expect(eventsLayoutKind(...SIZES.row)).toBe('row');
@@ -47,12 +66,15 @@ describe('events layout', () => {
   it('visible rows without scrolling never include a half row', () => {
     expect(eventsRowsVisible(...SIZES.row)).toBe(1);
     expect(eventsRowsVisible(...SIZES.small)).toBe(0);
-    expect(eventsRowsVisible(...SIZES.wide)).toBe(2);
+    // Roomy 52 dp rows: the rest of the list scrolls on Android.
+    expect(eventsRowsVisible(...SIZES.wide)).toBe(1);
+    expect(eventsRowsVisible(320, 200)).toBe(2);
     expect(eventsRowsVisible(...SIZES.large3)).toBe(1);
-    expect(eventsRowsVisible(...SIZES.large)).toBe(2);
+    expect(eventsRowsVisible(...SIZES.large)).toBe(1);
+    expect(eventsRowsVisible(320, 420)).toBe(2);
     // iOS large (≈ 338 × 354 pt) and iPad extra large
-    expect(eventsRowsVisible(338, 354)).toBe(2);
-    expect(eventsRowsVisible(715, 354)).toBe(2);
+    expect(eventsRowsVisible(338, 354)).toBe(1);
+    expect(eventsRowsVisible(715, 354)).toBe(1);
   });
 
   it('hero height follows the width within bounds', () => {
@@ -129,9 +151,9 @@ describe('mini apps grid (apps + the store tile)', () => {
   });
 
   it('store tile label', () => {
-    expect(storeTileLabel(0, 60)).toBe('Mini-Apps entdecken');
-    expect(storeTileLabel(3, 70)).toBe('Entdecken');
-    expect(storeTileLabel(1, 148)).toBe('Mini-Apps entdecken');
+    expect(storeTileLabel(0, 60)).toBe('Alle');
+    expect(storeTileLabel(3, 70)).toBe('Alle');
+    expect(storeTileLabel(1, 148)).toBe('Alle');
   });
 });
 

@@ -123,7 +123,7 @@ struct DishTileView: View {
       GeometryReader { geo in
         ZStack {
           Color("widgetTileFallback")
-          if let img = widgetImage(dish.image) {
+          if let img = widgetImage(dish.image, maxSide: 560) {
             Image(uiImage: img).resizable().scaledToFill()
           }
         }
@@ -181,36 +181,40 @@ struct LunchWidgetView: View {
     HStack(alignment: .center, spacing: 4) {
       Link(destination: lunchURL) {
         Text(name)
-          .font(.system(size: 14, weight: .semibold))
+          .font(.system(size: 17, weight: .semibold))
           .foregroundColor(Color("widgetText"))
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       if count > 1 { pager(idx: idx, count: count) }
     }
-    .frame(height: 24)
+    .frame(height: 30)
   }
 
-  /// ‹ 1/3 › — chevrons black (light) / white (dark), the counter centred between them.
+  /// ‹ 1/3 › — chevrons black (light) / white (dark) on round light / dark grey
+  /// buttons, the counter centred between them.
   private func pager(idx: Int, count: Int) -> some View {
-    HStack(alignment: .center, spacing: 2) {
+    HStack(alignment: .center, spacing: 4) {
       Button(intent: LunchStepIntent(step: -1)) {
         Image(systemName: "chevron.left")
-          .font(.system(size: 13, weight: .bold))
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
+          .font(.system(size: 12, weight: .bold))
+          .frame(width: 30, height: 30)
+          .background(Circle().fill(Color("widgetButton")))
+          .contentShape(Circle())
       }
       .buttonStyle(.plain)
       .foregroundColor(Color("widgetArrow"))
       Text("\(idx + 1)/\(count)")
         .font(.system(size: 11, weight: .medium))
         .foregroundColor(Color("widgetSub"))
-        .frame(height: 24)
+        .frame(minWidth: 26)
+        .frame(height: 30)
       Button(intent: LunchStepIntent(step: 1)) {
         Image(systemName: "chevron.right")
-          .font(.system(size: 13, weight: .bold))
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
+          .font(.system(size: 12, weight: .bold))
+          .frame(width: 30, height: 30)
+          .background(Circle().fill(Color("widgetButton")))
+          .contentShape(Circle())
       }
       .buttonStyle(.plain)
       .foregroundColor(Color("widgetArrow"))
