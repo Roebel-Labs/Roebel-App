@@ -1,12 +1,14 @@
 // Mecky voice agent for the Röbel app (LiveKit Agents, Node).
 // Dispatched by name: the app's token (POST /api/live/act { action: 'voice_token' }) carries
 // roomConfig.agents = [{ agentName: LIVEKIT_VOICE_AGENT_NAME }] → must equal AGENT_NAME below.
-import { Agent, AgentSession, AgentSessionEventTypes, ServerOptions, cli, defineAgent, inference, llm } from '@livekit/agents';
-import { RoomEvent, TrackKind, VideoStream, type RemoteTrack, type VideoFrame } from '@livekit/rtc-node';
+import { Agent, AgentSession, ServerOptions, cli, defineAgent, inference, llm } from '@livekit/agents';
+import { RoomEvent, TrackKind, VideoBufferType, VideoStream, type RemoteTrack, type VideoFrame } from '@livekit/rtc-node';
+import sharp from 'sharp';
 import { BackgroundVoiceCancellation } from '@livekit/noise-cancellation-node';
 import { fileURLToPath } from 'node:url';
 
-const AGENT_NAME = 'mecky-voice';
+// MECKY_AGENT_NAME only for local end-to-end tests, so a dev worker never takes production calls.
+const AGENT_NAME = process.env.MECKY_AGENT_NAME ?? 'mecky-voice';
 
 const INSTRUCTIONS = `Du bist Mecky, der freundliche Assistent der Röbel-App für Röbel/Müritz.
 Du sprichst mit Bürgerinnen und Bürgern per Sprache. Antworte immer auf Deutsch (außer jemand spricht
@@ -17,15 +19,15 @@ Du bist eine KI – sag das, wenn jemand fragt.
 Für Fragen zu Röbel (Veranstaltungen, Mittagstisch, Vereine, Müllabfuhr, Nachrichten, Angebote, Vorschläge)
 nutze zuerst das Röbel-Wissen unten und sonst deine Werkzeuge. Sag kurz "Moment, ich schau nach", bevor du
 ein Werkzeug benutzt. Lies keine Links oder IDs vor.
-Wenn die Person ihre Kamera eingeschaltet hat, bekommst du beim Sprechen ein aktuelles Bild ("Kamerabild").
-Beziehe dich darauf, wenn es zur Frage passt (z. B. "Was ist das?", "Kannst du das lesen?"). Beschreibe
-Menschen nicht nach Aussehen und erkenne niemanden. Ohne Bild sag ehrlich, dass du gerade nichts siehst.`;
+Die Person kann ihre Handykamera einschalten. Wenn sie etwas zeigt oder fragt, was zu sehen ist ("Was ist das?",
+"Kannst du das lesen?", "Was steht hier?"), sag kurz "Moment, ich schau hin" und nutze das Werkzeug kamera_ansehen
+mit ihrer Frage. Gib die Antwort des Werkzeugs in deinen Worten wieder. Beschreibe Menschen nicht nach Aussehen
+und erkenne niemanden. Ist die Kamera aus, bitte die Person, sie unten mit dem Kamera-Knopf einzuschalten.`;
 
-// ---- camera: latest frame of the user's camera, handed to the model when the user starts speaking ----
-// LiveKit Agents (Node) does not stream video into realtime models, so we add one still image per turn.
-const CAMERA_ITEM_PREFIX = 'camera_frame_';
-const CAMERA_MAX_EDGE = 768; // px, long edge sent to the model
-const CAMERA_MIN_GAP_MS = 1_500;
+// ---- camera: the worker keeps the latest frame of the user's camera; the tool kamera_ansehen sends it to
+// the web app's vision endpoint. The realtime model behind LiveKit Inference rejects image input
+// ("image input is not supported on realtime sessions", e2e test 2026-11-21), so vision runs as a tool.
+const CAMERA_MAX_EDGE = 1024; // px, long edge sent to the vision model
 
 class CameraFeed {
   latest: VideoFrame | null = null;
@@ -35,10 +37,12 @@ class CameraFeed {
     this.detach();
     const stream = new VideoStream(track);
     this.stream = stream;
+    console.log('[mecky-voice] camera track attached');
     void (async () => {
       try {
         for await (const ev of stream) {
           if (this.stream !== stream) break;
+          if (!this.latest) console.log(`[mecky-voice] first camera frame ${ev.frame.width}x${ev.frame.height}`);
           this.latest = ev.frame;
         }
       } catch {
@@ -55,21 +59,49 @@ class CameraFeed {
   }
 }
 
-function inferenceSize(frame: VideoFrame): { inferenceWidth: number; inferenceHeight: number } {
-  const scale = Math.min(1, CAMERA_MAX_EDGE / Math.max(frame.width, frame.height));
-  return { inferenceWidth: Math.round(frame.width * scale), inferenceHeight: Math.round(frame.height * scale) };
+async function frameToJpegDataUrl(frame: VideoFrame): Promise<string> {
+  const rgba = frame.convert(VideoBufferType.RGBA);
+  const scale = Math.min(1, CAMERA_MAX_EDGE / Math.max(rgba.width, rgba.height));
+  const jpeg = await sharp(Buffer.from(rgba.data.buffer, rgba.data.byteOffset, rgba.data.byteLength), {
+    raw: { width: rgba.width, height: rgba.height, channels: 4 },
+  })
+    .resize(Math.round(rgba.width * scale), Math.round(rgba.height * scale))
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
 }
 
-/** Replaces the previous camera image in the conversation with the current one (only one image in context). */
-async function pushCameraFrame(agent: Agent, frame: VideoFrame) {
-  const chatCtx = agent.chatCtx.copy();
-  chatCtx.items = chatCtx.items.filter((item) => !item.id.startsWith(CAMERA_ITEM_PREFIX));
-  chatCtx.addMessage({
-    role: 'user',
-    id: `${CAMERA_ITEM_PREFIX}${Date.now()}`,
-    content: ['Kamerabild (aktuell):', llm.createImageContent({ image: frame, inferenceDetail: 'low', ...inferenceSize(frame) })],
+function cameraTool(camera: CameraFeed) {
+  return llm.tool({
+    description:
+      'Schaut durch die Handykamera der Person und beantwortet eine Frage zum aktuellen Bild (Text lesen, Gegenstände, Schilder, Speisekarten, Plakate).',
+    parameters: {
+      type: 'object',
+      properties: { frage: { type: 'string', description: 'Was die Person über das Bild wissen will' } },
+      required: ['frage'],
+    },
+    execute: async (args: { frage?: string }) => {
+      const frame = camera.latest;
+      if (!frame) return { fehler: 'Die Kamera ist aus. Bitte die Person, unten den Kamera-Knopf zu drücken.' };
+      if (!VOICE_AGENT_SECRET) return { fehler: 'Sehen ist gerade nicht eingerichtet.' };
+      try {
+        const image = await frameToJpegDataUrl(frame);
+        const res = await fetch(`${ROEBEL_API_URL}/api/voice/vision`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${VOICE_AGENT_SECRET}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image, question: args.frage ?? '' }),
+          signal: AbortSignal.timeout(25_000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { description?: string };
+        console.log('[mecky-voice] vision answered');
+        return { bild: data.description ?? 'Nichts erkannt.' };
+      } catch (err) {
+        console.error('[mecky-voice] vision failed', err);
+        return { fehler: 'Ich konnte das Bild gerade nicht auswerten.' };
+      }
+    },
   });
-  await agent.updateChatCtx(chatCtx);
 }
 
 // Röbel knowledge from the web app (apps/web/src/app/api/voice/tools/route.ts): same read tools as the chat suite.
@@ -129,9 +161,9 @@ export default defineAgent({
       llm: new inference.RealtimeModel({ model: 'openai/gpt-realtime-2.1', voice: 'marin' }),
     });
 
-    const agent = new Agent({ instructions, tools: knowledge.tools });
-
     const camera = new CameraFeed();
+    const agent = new Agent({ instructions, tools: { ...knowledge.tools, kamera_ansehen: cameraTool(camera) } });
+
     ctx.room
       .on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === TrackKind.KIND_VIDEO) camera.attach(track);
@@ -145,14 +177,6 @@ export default defineAgent({
         if (pub.kind === TrackKind.KIND_VIDEO && pub.track) camera.attach(pub.track as RemoteTrack);
       }
     }
-
-    let lastPush = 0;
-    session.on(AgentSessionEventTypes.UserStateChanged, (ev) => {
-      if (ev.newState !== 'speaking' || !camera.latest) return;
-      if (Date.now() - lastPush < CAMERA_MIN_GAP_MS) return;
-      lastPush = Date.now();
-      pushCameraFrame(agent, camera.latest).catch((err) => console.error('[mecky-voice] camera frame failed', err));
-    });
 
     await session.start({
       room: ctx.room,
