@@ -27,6 +27,7 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import {
@@ -210,9 +211,14 @@ export default function MiniAppDetailScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  const [app, setApp] = useState<MiniApp | null>(null);
+  const queryClient = useQueryClient();
+  // The live list (same key as MiniAppsEntry / the store, persisted) usually already holds this
+  // app: render it at once and refresh from the network behind it instead of a blank spinner.
+  const cachedApp = (): MiniApp | null =>
+    queryClient.getQueryData<MiniApp[]>(['explore', 'mini-apps'])?.find((a) => a.slug === slug) ?? null;
+  const [app, setApp] = useState<MiniApp | null>(cachedApp);
   const [stats, setStats] = useState<MiniAppStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedApp() === null);
   const [hostVisible, setHostVisible] = useState(false);
   const { held, ready } = useMatchCredentials();
   const decision = app ? openDecision(app, held, ready) : 'wait';
@@ -222,13 +228,23 @@ export default function MiniAppDetailScreen() {
   useEffect(() => {
     if (!slug) return;
     let cancelled = false;
+    const seeded = cachedApp();
+    if (seeded) {
+      setApp(seeded);
+      // Stats need only the id: fetch them alongside the fresh row, not after it.
+      void fetchMiniAppStats(seeded.id).then((s) => {
+        if (!cancelled) setStats(s);
+      });
+    }
     (async () => {
-      setLoading(true);
+      if (!seeded) setLoading(true);
       const data = await fetchMiniAppBySlug(slug);
       if (cancelled) return;
-      setApp(data);
+      // null (offline, or delisted since the list was cached) keeps the cached entry; a suspended
+      // app is still refused by its own origin (410).
+      if (data || !seeded) setApp(data);
       setLoading(false);
-      if (data) {
+      if (data && !seeded) {
         const s = await fetchMiniAppStats(data.id);
         if (!cancelled) setStats(s);
       }
@@ -236,6 +252,7 @@ export default function MiniAppDetailScreen() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cache read once per slug
   }, [slug]);
 
   const open = useCallback(() => {

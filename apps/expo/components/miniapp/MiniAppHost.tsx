@@ -152,6 +152,12 @@ const NO_CREDENTIALS: Credential[] = [];
 const NO_ITEMS: ConsentItem[] = [];
 /** Failsafe: reveal the WebView if the app never calls actions.ready(). */
 const READY_TIMEOUT_MS = 10_000;
+/**
+ * Once the page has loaded, wait at most this long for actions.ready() before revealing it.
+ * Apps that never call ready (13 % of opens hit the 10 s failsafe) no longer stare at a splash
+ * over an already painted page.
+ */
+const READY_AFTER_LOAD_MS = 2_000;
 
 /**
  * Host chrome is always dark (independent of the app theme), so the mini app
@@ -213,6 +219,14 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const appOpenFiredRef = useRef(false);
 
   const [splashVisible, setSplashVisible] = useState(true);
+  // Time-to-ready telemetry: when this open started, and whether its reveal was already tracked.
+  const openedAtRef = useRef(Date.now());
+  const revealTrackedRef = useRef(false);
+  const afterLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAfterLoadTimer = useCallback(() => {
+    if (afterLoadTimerRef.current) clearTimeout(afterLoadTimerRef.current);
+    afterLoadTimerRef.current = null;
+  }, []);
   // Bumped on every open: keys the WebView so each open mounts a FRESH page
   // (fresh hello/ready handshake). Without this, iOS keeps the Modal's
   // children mounted after the first open+close (Modal.isRendered only clears
@@ -398,6 +412,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       appOpenFiredRef.current = false;
       notifCheckedRef.current = false;
       handlesBackRef.current = false;
+      openedAtRef.current = Date.now();
+      revealTrackedRef.current = false;
+      clearAfterLoadTimer();
       setNotifVisible(false);
       setSplashVisible(true);
       setLoadError(null);
@@ -409,11 +426,15 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       if (hasOpenedRef.current) setOpenCount((c) => c + 1);
       hasOpenedRef.current = true;
     } else {
+      clearAfterLoadTimer();
       // Pre-arm the splash so the first frame of the next open never flashes
       // the previous page before the reset effect runs.
       setSplashVisible(true);
     }
-  }, [visible]);
+  }, [visible, clearAfterLoadTimer]);
+
+  // Unmount: no reveal timer outlives the host.
+  useEffect(() => clearAfterLoadTimer, [clearAfterLoadTimer]);
 
   // Splash failsafe: if `ready` never arrives (app-side error, dropped
   // message), reveal the page instead of spinning forever. Tracked so broken
@@ -1013,6 +1034,11 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       hello: () => ({ ok: true, host: 'roebel' }),
       ready: (opts) => {
         handlesBackRef.current = opts?.handlesBack === true;
+        clearAfterLoadTimer();
+        if (!revealTrackedRef.current) {
+          revealTrackedRef.current = true;
+          track('ready', { ms: Date.now() - openedAtRef.current });
+        }
         setSplashVisible(false);
       },
       close: () => onClose(),
@@ -1145,7 +1171,21 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
 
       track: ({ event, props }) => track(event, props),
     };
-  }, [app, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken, isV2, gate, applyIdentityState]);
+  }, [app, walletLc, onClose, buildContext, account, walletRequest, track, getUserToken, isV2, gate, applyIdentityState, clearAfterLoadTimer]);
+
+  // The page finished loading (success only; failures go through handleLoadError): give the app a
+  // short window to call ready, then reveal it anyway.
+  const handleLoad = useCallback(() => {
+    clearAfterLoadTimer();
+    afterLoadTimerRef.current = setTimeout(() => {
+      afterLoadTimerRef.current = null;
+      setSplashVisible(false);
+      if (!revealTrackedRef.current) {
+        revealTrackedRef.current = true;
+        track('ready_after_load', { ms: Date.now() - openedAtRef.current });
+      }
+    }, READY_AFTER_LOAD_MS);
+  }, [clearAfterLoadTimer, track]);
 
   // --- construct/refresh the bridge ----------------------------------------
   useEffect(() => {
@@ -1286,6 +1326,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             // top-frame message with this open's nonce.
             injectedJavaScriptBeforeContentLoaded={bridgeGuardJs}
             onError={handleLoadError}
+            onLoad={handleLoad}
             originWhitelist={['*']}
             javaScriptEnabled
             domStorageEnabled

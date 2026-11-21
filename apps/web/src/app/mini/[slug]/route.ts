@@ -17,6 +17,10 @@ import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { hasSupabase } from "@/lib/record";
 
 export const runtime = "nodejs";
+// Run next to the database (Supabase is AWS eu-central-1 / Frankfurt). The
+// project default (iad1) made each cold load two sequential transatlantic
+// queries: 0.7–1.9 s to first byte before the WebView could paint anything.
+export const preferredRegion = "fra1";
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
@@ -92,8 +96,11 @@ export async function GET(
     status: 200,
     headers: {
       "content-type": "text/html; charset=utf-8",
-      // Short shared cache so review-state flips (kill-switch) take effect quickly.
-      "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+      // Fresh for 2 min, then served stale while the CDN refetches in the
+      // background: almost every open is a cache hit (~0.15 s instead of a
+      // cold function run). A kill-switch flip or a new version still lands
+      // within ~2 min plus one request, since revalidation picks it up.
+      "cache-control": "public, max-age=0, s-maxage=120, stale-while-revalidate=86400",
       "x-robots-tag": "noindex",
       // CRITICAL: the app is untrusted model/developer HTML. On its own
       // subdomain (<slug>.roebel.site) the dedicated origin IS the isolation —
