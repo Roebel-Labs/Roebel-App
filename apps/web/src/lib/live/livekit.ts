@@ -20,7 +20,11 @@ export function guestRoomName(showId: string, requestId: string): string {
 
 export async function livekitToken(
   cfg: LivekitConfig,
-  opts: { identity: string; name: string; room: string; canPublish: boolean; ttlSeconds?: number },
+  opts: {
+    identity: string; name: string; room: string; canPublish: boolean; ttlSeconds?: number;
+    /** Dispatch this LiveKit Agents worker into the room when the participant joins (room created on join). */
+    agentName?: string;
+  },
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
@@ -29,6 +33,8 @@ export async function livekitToken(
       room: opts.room, roomJoin: true,
       canPublish: opts.canPublish, canSubscribe: true, canPublishData: true,
     },
+    // Same JSON shape livekit-server-sdk writes for AccessToken.roomConfig (RoomConfiguration.toJson()).
+    ...(opts.agentName ? { roomConfig: { agents: [{ agentName: opts.agentName }] } } : {}),
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuer(cfg.apiKey)
@@ -37,4 +43,9 @@ export async function livekitToken(
     .setExpirationTime(now + (opts.ttlSeconds ?? 2 * 60 * 60))
     .setJti(`${opts.identity}-${now}`)
     .sign(new TextEncoder().encode(cfg.apiSecret));
+}
+
+/** Name of the voice agent worker (LiveKit Cloud). Unset = the voice test is switched off. */
+export function voiceAgentName(): string | null {
+  return process.env.LIVEKIT_VOICE_AGENT_NAME?.trim() || null;
 }

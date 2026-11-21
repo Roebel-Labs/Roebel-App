@@ -5,7 +5,8 @@ import { verifyLiveToken } from "@/lib/live/token";
 import { viewerProfile, UUID_RE, CHAT_MAX } from "@/lib/live/server";
 import { sharedLimiters } from "@/lib/rate-limit/server";
 import { MINUTE_MS, takeAll } from "@/lib/rate-limit";
-import { livekitConfig, livekitToken } from "@/lib/live/livekit";
+import { livekitConfig, livekitToken, voiceAgentName } from "@/lib/live/livekit";
+import { randomUUID } from "node:crypto";
 import { advance } from "@/lib/live/stage";
 import { insertChat } from "@/lib/live/chat";
 import { normaliseChat, spamCheck, isDuplicate, SPAM_MESSAGES } from "@/lib/live/spam";
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
 const chatLimiters = sharedLimiters([{ name: "live-chat-wallet", limit: 20, windowMs: MINUTE_MS }]);
 const burstLimiters = sharedLimiters([{ name: "live-chat-burst", limit: 4, windowMs: 10_000 }]);
 const strikeLimiters = sharedLimiters([{ name: "live-chat-strikes", limit: 4, windowMs: 10 * MINUTE_MS }]);
+// Voice agent minutes cost money (LiveKit Inference): a few test conversations per wallet and hour.
+const voiceLimiters = sharedLimiters([{ name: "live-voice-wallet", limit: 6, windowMs: 60 * MINUTE_MS }]);
 
 // POST with `Authorization: Live <token>` (from POST /api/live live_session):
 //   chat     { show_id, body }          → { message }
@@ -26,6 +29,7 @@ const strikeLimiters = sharedLimiters([{ name: "live-chat-strikes", limit: 4, wi
 //   test_support  { show_id, amount_cents, body? } → { message }   (test shows only, no money)
 //   test_next     { show_id }           → { current }            (test shows only)
 //   report        { show_id, message_id, reason } → { reported } (3 reporters hide the message)
+//   voice_token   {}                  → { livekit_url, token, room } (dev test: talk to the voice agent)
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization") ?? "";
   const session = verifyLiveToken(auth.startsWith("Live ") ? auth.slice(5).trim() : null);
@@ -47,6 +51,21 @@ export async function POST(request: NextRequest) {
     const { error } = await admin.from("live_reminders").upsert({ item_id: itemId, wallet }, { onConflict: "item_id,wallet", ignoreDuplicates: true });
     if (error) return jsonFail(500, "DB_ERROR", error.message);
     return jsonOk({ on: true });
+  }
+
+  if (action === "voice_token") {
+    const cfg = livekitConfig();
+    const agentName = voiceAgentName();
+    if (!cfg || !agentName) return jsonFail(503, "VOICE_UNAVAILABLE", "Der Sprachassistent ist noch nicht eingerichtet.");
+    if (!(await takeAll(voiceLimiters, wallet.toLowerCase()))) return jsonFail(429, "RATE_LIMITED", "Zu viele Gespräche – bitte versuche es später noch einmal.");
+    const profile = await viewerProfile(admin, wallet);
+    // A fresh room per conversation; the token dispatches the agent when the room is created.
+    const room = `voice-${randomUUID()}`;
+    const token = await livekitToken(cfg, {
+      identity: `user-${wallet.toLowerCase()}`, name: profile.display_name || "Gast", room,
+      canPublish: true, ttlSeconds: 10 * 60, agentName,
+    });
+    return jsonOk({ livekit_url: cfg.url, token, room });
   }
 
   const showId = String(b.show_id ?? "");

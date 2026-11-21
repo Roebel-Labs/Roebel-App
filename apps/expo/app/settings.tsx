@@ -454,6 +454,22 @@ export default function SettingsScreen() {
             </Pressable>
           )}
           {isDeveloperMode && (
+            <Pressable
+              style={[styles.themeOptionRow, { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }]}
+              onPress={() => router.push('/settings/dev-voice' as any)}
+            >
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Sprachassistent testen
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Mit Mecky sprechen statt tippen – Testversion.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          )}
+          {isDeveloperMode && (
             <Pressable style={styles.themeOptionRow} onPress={() => router.push('/live/testlauf' as any)}>
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>

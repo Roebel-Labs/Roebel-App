@@ -337,7 +337,8 @@ export type LiveActBody =
   | { action: 'guest_cancel'; show_id: string; request_id: string }
   | { action: 'test_support'; show_id: string; amount_cents: number; body?: string }
   | { action: 'test_next'; show_id: string }
-  | { action: 'report'; show_id: string; message_id: string; reason: ReportReason };
+  | { action: 'report'; show_id: string; message_id: string; reason: ReportReason }
+  | { action: 'voice_token' };
 
 export function liveAct<T>(token: string, body: LiveActBody, timeoutMs?: number): Promise<ApiResult<T>> {
   return requestJson<T>('/api/live/act', { method: 'POST', body, headers: { Authorization: `Live ${token}` } }, timeoutMs);
