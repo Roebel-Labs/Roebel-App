@@ -127,8 +127,9 @@ export default function EditorCanvas({ design, selected, width, values, dispatch
         onTouchEnd={() => onTouching?.(false)}
         onTouchCancel={() => onTouching?.(false)}
       >
-        {/* Live hologram while designing; flat card so the layer handles stay under the finger. */}
-        <DesignedCard design={design} width={width} mode="preview" values={values} animate="tilt" lean={false} />
+        {/* Live hologram while designing. The card leans with the phone only while no layer is
+            selected — with a selection it stays flat so the handles stay under the finger. */}
+        <DesignedCard design={design} width={width} mode="preview" values={values} animate="tilt" lean={!layer} />
         {layer ? <Handles layer={layer} scale={k} dispatch={dispatch} /> : null}
       </View>
     </GestureDetector>

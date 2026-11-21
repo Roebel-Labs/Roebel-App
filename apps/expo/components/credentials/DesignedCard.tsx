@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'rea
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
 import { Canvas, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { DeviceMotion } from 'expo-sensors';
 import { CARD_RADIUS, designSize, drawHeight, type CardDesign, type FieldValues, type RenderMode } from '@roebel/card-design';
 import { useTheme } from '@/context/ThemeContext';
@@ -28,10 +28,16 @@ type Props = {
   fallback?: ReactNode;
 };
 
-/** How far the card leans against the phone's tilt, degrees at full tilt. */
-const LEAN_DEG = 5;
-/** Long enough to glide between sensor frames (60 Hz) instead of stepping. */
-const LEAN_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) } as const;
+/** How far the card leans against the phone's tilt, degrees at full tilt (Apple TV-style ±7°). */
+const LEAN_DEG = 7;
+/**
+ * The lean follows the phone on a spring, re-targeted every sensor frame: it keeps its velocity
+ * between frames, so the card glides and settles with a hint of weight instead of easing in steps
+ * (a fresh timing curve per 60 Hz sample restarted from zero speed each time).
+ */
+const LEAN_SPRING = { damping: 18, stiffness: 170, mass: 0.7 } as const;
+/** The card lifts a touch towards the viewer while it is tilted. */
+const LIFT = 0.012;
 
 /** Sensor interval (ms): 60 Hz. */
 const MOTION_INTERVAL = 16;
@@ -94,13 +100,17 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
   // The card itself leans a few degrees against the phone's tilt (plain numbers on the UI thread).
   const leanX = useSharedValue(0);
   const leanY = useSharedValue(0);
-  const leanStyle = useAnimatedStyle(() => ({
-    transform: [
-      { perspective: 900 },
-      { rotateY: `${-leanX.value * LEAN_DEG}deg` },
-      { rotateX: `${leanY.value * LEAN_DEG}deg` },
-    ],
-  }));
+  const leanStyle = useAnimatedStyle(() => {
+    const amount = Math.min(1, Math.hypot(leanX.value, leanY.value));
+    return {
+      transform: [
+        { perspective: 900 },
+        { rotateY: `${-leanX.value * LEAN_DEG}deg` },
+        { rotateX: `${leanY.value * LEAN_DEG}deg` },
+        { scale: 1 + amount * LIFT },
+      ],
+    };
+  });
 
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -115,8 +125,8 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
     const flush = () => {
       frame = null;
       if (!alive) return;
-      leanX.value = withTiming(tilt.x, LEAN_TIMING);
-      leanY.value = withTiming(tilt.y, LEAN_TIMING);
+      leanX.value = withSpring(tilt.x, LEAN_SPRING);
+      leanY.value = withSpring(tilt.y, LEAN_SPRING);
       const d = drawRef.current;
       // Quantised: sensor noise while the phone is held still no longer redraws every frame.
       const q = quantiseTilt(tilt);
@@ -139,8 +149,8 @@ export default function DesignedCard({ design, width, mode, values, animate = 's
       if (frame !== null) cancelAnimationFrame(frame);
       // Back to the resting picture and a flat card when the card stops following the phone.
       setTiltPicture(null);
-      leanX.value = withTiming(0, LEAN_TIMING);
-      leanY.value = withTiming(0, LEAN_TIMING);
+      leanX.value = withSpring(0, LEAN_SPRING);
+      leanY.value = withSpring(0, LEAN_SPRING);
     };
   }, [tilting, leanX, leanY]);
 

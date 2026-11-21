@@ -297,12 +297,9 @@ function ThemedLayout() {
           <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
           <TransitionStack.Screen name="games/speedrun" options={noTransition()} />
           <TransitionStack.Screen name="games/fortune-cards" options={noTransition()} />
-          {/* Pseudo-tab routes reachable from components/BottomNavigation.tsx — no tab
-              navigator exists, so these switches must stay instant cuts instead of
-              sliding sideways like a real push. */}
-          <TransitionStack.Screen name="index" options={noTransition()} />
-          <TransitionStack.Screen name="explore" options={noTransition()} />
-          <TransitionStack.Screen name="profile" options={noTransition()} />
+          {/* The three main sections (Austausch, Erkunden, Profil) live in one kept-alive tab
+              group, app/(tabs)/_layout.tsx; switches between them never touch this stack. */}
+          <TransitionStack.Screen name="(tabs)" options={noTransition()} />
           <TransitionStack.Screen name="events" options={noTransition()} />
           <TransitionStack.Screen name="calendar" options={noTransition()} />
           <TransitionStack.Screen name="governance" options={noTransition()} />

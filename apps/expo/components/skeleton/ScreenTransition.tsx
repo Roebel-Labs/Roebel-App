@@ -3,6 +3,9 @@
  *
  *  - ENTRY (first mount of the screen): the screen's matched skeleton covers
  *    the content until its data is ready, at least ENTRY_MIN_MS, then fades.
+ *  - TAB SWITCH (bottom nav): nothing — the sections are kept mounted
+ *    (app/(tabs)/_layout.tsx), so the page is simply there (Max 2026-11-21:
+ *    the old skeleton beat on every switch read as slow loading).
  *  - RETURN (the screen gains focus again, e.g. back from a detail page): no
  *    skeleton — the cached page is shown blurred and sharpens in one motion.
  *
@@ -38,10 +41,7 @@ type Props = {
   topInset?: number;
   /** Overlay fill behind the skeleton; defaults to the theme background. */
   backgroundColor?: string;
-  /**
-   * The main section this screen is. A tab switch to it (bottom nav) shows the skeleton beat
-   * again, Airbnb-style — raised BEFORE the screen is revealed (goToTab signals first).
-   */
+  /** The main section this screen is: a tab switch to it (bottom nav) skips the return blur. */
   tab?: MainTab;
   /**
    * The screen root is a SafeAreaView with the top edge: absolute overlays ignore its padding,
@@ -72,18 +72,14 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
   }, [ready, entryShown, entryOpacity]);
   const entryStyle = useAnimatedStyle(() => ({ opacity: entryOpacity.value }));
 
-  // ---- Tab arrival (bottom nav switch to this section) ----
+  // ---- Tab arrival (bottom nav switch to this section): shown as is, no beat ----
   const arrivedByTab = useRef(false);
   useEffect(() => {
     if (!tab) return undefined;
     return onTabArrival((target) => {
-      if (target !== tab) return;
-      arrivedByTab.current = true;
-      mountedAt.current = Date.now();
-      entryOpacity.value = 1;
-      setEntryShown(true);
+      if (target === tab) arrivedByTab.current = true;
     });
-  }, [tab, entryOpacity]);
+  }, [tab]);
 
   // ---- Return blur (every focus after the first) ----
   const firstFocus = useRef(true);
@@ -101,9 +97,10 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
     useCallback(() => {
       if (firstFocus.current) {
         firstFocus.current = false;
+        arrivedByTab.current = false;
         return undefined;
       }
-      // A tab switch shows the skeleton beat instead of the return blur.
+      // A tab switch reveals the kept-alive page as it is.
       if (arrivedByTab.current) {
         arrivedByTab.current = false;
         return undefined;
@@ -153,6 +150,10 @@ export default function ScreenTransition({ skeleton, ready, topInset = 0, backgr
       {entryShown ? (
         <Animated.View
           pointerEvents={ready ? 'none' : 'auto'}
+          // Fade the skeleton as ONE layer. Without this Android applies the opacity to every
+          // child separately, so mid-fade the skeleton sheet turned see-through and the card bones
+          // behind it showed over it (Profil, Max 2026-11-21).
+          needsOffscreenAlphaCompositing
           style={[StyleSheet.absoluteFill, styles.entry, { top: overlayTop, backgroundColor: backgroundColor ?? colors.background }, entryStyle]}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"

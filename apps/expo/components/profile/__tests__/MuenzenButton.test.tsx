@@ -1,5 +1,5 @@
 /**
- * The profile's Münzen pill, wired exactly like app/profile.tsx (useDailyMint → MuenzenButton).
+ * The profile's Münzen pill, wired exactly like app/(tabs)/profile.tsx (useDailyMint → MuenzenButton).
  *
  * Passkey session: the pill looks like before (gold "+N Münzen", cooldown clock) and a tap claims
  * right there in the foreground through the provider's one-batch `claimNow` (one fingerprint),
@@ -83,7 +83,7 @@ import MuenzenButton from '../MuenzenButton';
 
 const onOpen = jest.fn();
 
-// Mirrors app/profile.tsx's muenzenSlot.
+// Mirrors app/(tabs)/profile.tsx's muenzenSlot.
 function ProfileSlot() {
   const mint = useDailyMint({ isCitizen: true });
   if (mint.state === 'hidden') return null;

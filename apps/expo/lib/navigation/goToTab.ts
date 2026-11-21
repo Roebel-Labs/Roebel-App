@@ -1,16 +1,13 @@
 /**
  * Switch between the three main sections (Austausch, Erkunden, Profil).
  *
- * There is no tab navigator — the sections are routes on the root stack.
- * Pushing a section on every tap grew the stack without bound (Austausch →
- * Erkunden → Profil → Erkunden … all mounted, all re-rendering), and
- * `replace('/')` rebuilt the heavy feed each time. The rules here keep the
- * stack at "Austausch + at most one other section (+ whatever was open)":
+ * The sections live in one kept-alive tab group (app/(tabs)/_layout.tsx), so a switch never
+ * re-creates a screen:
  *
- *   - Austausch is the root and stays mounted: going home pops back to it.
- *   - From Austausch, Erkunden/Profil are pushed on top.
- *   - Elsewhere, a section already in the stack is popped back to; if it is
- *     not there, it replaces the current screen.
+ *   - From one section to another: a plain tab switch (`navigate`) — the target is already
+ *     mounted (or mounts once) and is simply revealed.
+ *   - From anywhere else (a detail page with its own bottom bar): pop back to the tab group and
+ *     select the section there (`dismissTo`), so the stack never grows.
  */
 import { router } from 'expo-router';
 
@@ -22,21 +19,20 @@ const TAB_PATH: Record<MainTab, '/' | '/explore' | '/profile'> = {
   profile: '/profile',
 };
 
+const SECTION_PATHS = new Set<string>(Object.values(TAB_PATH));
+
 /** Pure: which router call a tab switch needs, given the current pathname. */
-export function tabSwitchAction(tab: MainTab, pathname: string): 'none' | 'push' | 'dismissTo' {
-  const target = TAB_PATH[tab];
-  if (pathname === target) return 'none';
-  if (tab === 'home') return 'dismissTo';
-  return pathname === '/' ? 'push' : 'dismissTo';
+export function tabSwitchAction(tab: MainTab, pathname: string): 'none' | 'switch' | 'dismissTo' {
+  if (pathname === TAB_PATH[tab]) return 'none';
+  return SECTION_PATHS.has(pathname) ? 'switch' : 'dismissTo';
 }
 
 type ArrivalListener = (tab: MainTab) => void;
 const arrivalListeners = new Set<ArrivalListener>();
 
 /**
- * Screens listen for "a tab switch is about to land on me" so they can raise
- * their skeleton BEFORE they become visible (ScreenTransition). A section that
- * stays mounted (Austausch) would otherwise show stale content first.
+ * Screens listen for "a tab switch is about to land on me" (ScreenTransition): a section revealed
+ * by the bottom nav shows instantly, without the blur → sharp beat a return from a detail page gets.
  */
 export function onTabArrival(listener: ArrivalListener): () => void {
   arrivalListeners.add(listener);
@@ -49,10 +45,7 @@ export function goToTab(tab: MainTab, pathname: string): void {
   const action = tabSwitchAction(tab, pathname);
   if (action === 'none') return;
   arrivalListeners.forEach((l) => l(tab));
-  // One frame for the target's skeleton to render before it is revealed.
-  requestAnimationFrame(() => {
-    if (action === 'push') router.push(TAB_PATH[tab]);
-    // Pops to the section when it is in the stack, else replaces the current screen.
-    else router.dismissTo(TAB_PATH[tab]);
-  });
+  if (action === 'switch') router.navigate(TAB_PATH[tab]);
+  // Pops to the tab group when it is in the stack (and selects the section), else replaces.
+  else router.dismissTo(TAB_PATH[tab]);
 }
