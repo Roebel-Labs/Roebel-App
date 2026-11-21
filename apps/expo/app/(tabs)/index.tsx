@@ -14,7 +14,7 @@ import SearchModal from '@/components/SearchModal';
 import CalendarModal from '@/components/CalendarModal';
 import BottomNavigation from '@/components/BottomNavigation';
 import { Skeleton, EventCardSkeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useIsFocused } from 'expo-router';
 import { isEventThisWeek, isEventTodayOrFuture, isEventInRoebel } from '@/lib/utils';
 import HomeCategoryChips from '@/components/HomeCategoryChips';
 import NearbyEventsSection from '@/components/NearbyEventsSection';
@@ -70,9 +70,16 @@ export default function HomeScreen() {
   }
   const isColdStartLandingOnRoot = decision.current;
 
+  // Austausch is a kept-alive tab (app/(tabs)): this instance lives on after the cold-start
+  // redirect. Render the redirect ONCE, then the feed — otherwise every later tap on Austausch
+  // re-mounted <Redirect> and bounced straight back to Erkunden (Pixel 2026-11-21).
+  const [redirecting, setRedirecting] = useState(isColdStartLandingOnRoot);
   useEffect(() => {
-    if (isColdStartLandingOnRoot) hasRedirectedFromRoot = true;
+    if (!isColdStartLandingOnRoot) return;
+    hasRedirectedFromRoot = true;
+    setRedirecting(false);
   }, [isColdStartLandingOnRoot]);
+  const focused = useIsFocused();
 
   // Feed is the home screen for ALL modes (spec section 2)
   // Content adapts per mode via the feed algorithm
@@ -95,7 +102,9 @@ export default function HomeScreen() {
   useEffect(() => {
     // This render redirects away instead of showing the feed — nothing to
     // schedule (this instance unmounts as soon as the redirect takes hold).
-    if (isColdStartLandingOnRoot) return;
+    if (redirecting) return;
+    // Only while Austausch is on screen (the kept-alive tab must not prompt over Erkunden).
+    if (!focused) return;
     // Wait until permission + consent state are known, and never fight the
     // full-screen consent modal or the re-consent sheet for attention.
     if (promptedThisSession.current) return;
@@ -120,14 +129,14 @@ export default function HomeScreen() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isColdStartLandingOnRoot, notificationsLoading, consentReady, needsConsent, needsReconsent, pushActive]);
+  }, [redirecting, focused, notificationsLoading, consentReady, needsConsent, needsReconsent, pushActive]);
 
   const handleNotificationDismiss = async () => {
     setShowNotificationSheet(false);
     await Promise.all([clearNotificationPromptPending(), markNotificationPromptDismissed()]);
   };
 
-  if (isColdStartLandingOnRoot) {
+  if (redirecting) {
     return <Redirect href="/explore" />;
   }
 
