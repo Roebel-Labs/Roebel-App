@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ChainReader } from "@/lib/passkey/sponsor-policy";
 import { handleSponsorRequest, type MiniAppSponsorDeps } from "@/lib/passkey/sponsor-handler";
 import { miniAppGasBudgetFromEnv } from "@/lib/passkey/miniapp-gas-budget";
+import { sessionKeysFlag, type AppSettingsReader } from "@/lib/passkey/session-keys-flag";
 
 /**
  * PREVIEW-ONLY sponsor for passkey Safe userOps (EntryPoint v0.7). Returns a
@@ -43,6 +44,13 @@ import { miniAppGasBudgetFromEnv } from "@/lib/passkey/miniapp-gas-budget";
  *   MINIAPP_GAS_PER_PERSON_DAILY_WEI (optional; mini-app ops, per person per UTC day, default 0.003 xDAI)
  *   MINIAPP_GAS_GLOBAL_DAILY_WEI     (optional; all mini-app ops per UTC day, default 0.05 xDAI)
  *
+ *   PASSKEY_SPONSOR_SESSION_DAILY_WEI (optional; device-session mint ops per Safe per UTC day, default 0.005 xDAI)
+ *
+ * DEVICE SESSIONS (session-key-policy.ts): kill switch app_settings.passkey_session_keys_enabled,
+ * read with the service-role client and cached 30 s. FAILS CLOSED: a missing row, any value but
+ * 'true', a read error or missing Supabase env = OFF (session-upgrade / session-grant / session
+ * denied; session-revoke stays sponsored). Row: migration 20261121_passkey_session_keys_flag.sql.
+ *
  * MINI APPS: a body with `miniApp` (uuid) is sponsored only for that app's declared calls
  * (live, manifest version 2, contracts reviewed) and charged to the mini-app gas budget
  * (migration 20261117mb_mini_app_contracts_gas.sql; with the in-memory store the granted
@@ -54,6 +62,7 @@ export const dynamic = "force-dynamic";
 let chain: ChainReader | null = null;
 let budget: SponsorBudget | null = null;
 let miniApps: MiniAppSponsorDeps | null = null;
+let sessionKeysEnabled: (() => Promise<boolean>) | null = null;
 /** Granted budgets seen by `rules`, for the in-memory store (the Supabase store reads the row itself). */
 const appBudgets = new Map<string, bigint>();
 
@@ -74,5 +83,10 @@ export async function POST(request: Request) {
     },
     budget: miniAppGasBudgetFromEnv(process.env, makeAdminClient, (id) => appBudgets.get(id) ?? 0n),
   };
-  return handleSponsorRequest(request, { chain, budget, miniApps });
+  if (!sessionKeysEnabled) {
+    const admin = makeAdminClient();
+    // Cast: checking SupabaseClient against the narrow reader interface trips TS2589 (too deep).
+    sessionKeysEnabled = admin ? sessionKeysFlag(admin as unknown as AppSettingsReader) : async () => false;
+  }
+  return handleSponsorRequest(request, { chain, budget, miniApps, sessionKeysEnabled });
 }

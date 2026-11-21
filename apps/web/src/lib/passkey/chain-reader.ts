@@ -10,6 +10,7 @@ import { gnosis } from "viem/chains";
 import { PASSKEY_SAFE } from "./safe-address";
 import { ADDRESSES, type ChainReader, type SignerPermissionRequest } from "./sponsor-policy";
 import { EVERYDAY_CONTRACTS } from "./everyday-allowlist";
+import { MODULE_TYPE_VALIDATOR, SMART_SESSIONS } from "./session-keys-builders";
 
 const DEFAULT_GNOSIS_RPC = "https://gnosis-rpc.publicnode.com";
 const RPC_TIMEOUT_MS = 8_000;
@@ -32,6 +33,10 @@ const sharedSignerAbi = parseAbi([
 ]);
 const signerFactoryAbi = parseAbi([
   "function getSigner(uint256 x, uint256 y, uint176 verifiers) view returns (address signer)",
+]);
+const smartSessionReadAbi = parseAbi(["function getPermissionIDs(address account) view returns (bytes32[])"]);
+const safe7579ReadAbi = parseAbi([
+  "function isModuleInstalled(uint256 moduleTypeId, address module, bytes additionalContext) view returns (bool)",
 ]);
 const citizenNftAbi = parseAbi(["function hasCitizenNFT(address account) view returns (bool)"]);
 const maciAbi = parseAbi(["function polls(uint256 pollId) view returns (address)"]);
@@ -109,6 +114,16 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
       }),
     maciPoll: (pollId) =>
       client.readContract({ address: EVERYDAY_CONTRACTS.maci, abi: maciAbi, functionName: "polls", args: [pollId] }),
+    getPermissionIDs: (safe) =>
+      client.readContract({ address: SMART_SESSIONS, abi: smartSessionReadAbi, functionName: "getPermissionIDs", args: [safe] }),
+    // Answered by the Safe's fallback handler (Safe7579); only called for a Safe already proven to be in the 7579 layout.
+    isSmartSessionInstalled: (safe) =>
+      client.readContract({
+        address: safe,
+        abi: safe7579ReadAbi,
+        functionName: "isModuleInstalled",
+        args: [MODULE_TYPE_VALIDATOR, SMART_SESSIONS, "0x"],
+      }),
     async getRecoveryRequest(wallet) {
       const r = await client.readContract({
         address: ADDRESSES.socialRecoveryModule,

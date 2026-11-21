@@ -12,13 +12,15 @@
  *             pollId?,    // everyday votes: MACI poll id (0x hex); MACI.polls(pollId) must be the vote target
  *             miniApp?,   // a mini app's uuid: sponsor mode "miniapp" (only its declared calls), charged
  *                         // to the mini-app gas budget (miniapp-gas-budget.ts), never the everyday budget
+ *             deviceSession?, // { signer, validUntil }: session-upgrade / session-grant (session-key-policy.ts)
  *             userOp: { sender, nonce, factory?, factoryData?, callData,
  *               callGasLimit, verificationGasLimit, preVerificationGas,
  *               maxFeePerGas, maxPriorityFeePerGas,
  *               paymasterVerificationGasLimit, paymasterPostOpGasLimit } }
  *           (numerics as 0x hex)
  * Response: 200 { paymasterAndData, paymasterVerificationGasLimit,
- *           paymasterPostOpGasLimit, validUntil }
+ *           paymasterPostOpGasLimit, validUntil, mode }
+ *           (mode = the sponsor mode; 'session-upgrade' tells the app to drop its cached Safe layout)
  *           | 400 { error: 'bad_request' }
  *           | 403 { error: 'not_sponsorable', reason }
  *           | 403 { error: 'not_sponsorable', reason: 'mini app has no approved contracts' }
@@ -46,6 +48,12 @@
  *                              global cap - 1 wei
  *   MINIAPP_GAS_PER_PERSON_DAILY_WEI optional; per person per UTC day across all mini apps, default 0.003 xDAI
  *   MINIAPP_GAS_GLOBAL_DAILY_WEI     optional; all mini apps together per UTC day, default 0.05 xDAI
+ *   PASSKEY_SPONSOR_SESSION_DAILY_WEI optional; device-session (mint) ops per Safe per UTC day (group
+ *                              `session:<sender>`), default 0.005 xDAI. Grants / upgrades are charged to
+ *                              `grant:<legacy>` (per-key cap), session-revoke to the legacy.
+ *
+ * Kill switch: deps.sessionKeysEnabled (app_settings.passkey_session_keys_enabled, session-keys-flag.ts).
+ * Missing dep, false or a rejected read = OFF (session-upgrade / -grant / session denied; revoke still ok).
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -71,6 +79,7 @@ import {
   type SponsorBudget,
 } from "./sponsor-budget";
 import { issueSponsorship, requiredPrefund } from "./voucher";
+import { DEFAULT_SESSION_DAILY_WEI, sessionGroupKey } from "./session-key-policy";
 import type { CallRule } from "@netizen-labs/miniapp-sdk/host";
 import type { GasVerdict, MiniAppGasBudget } from "./miniapp-gas-budget";
 
@@ -153,7 +162,13 @@ export function guestGroupCap(env: Record<string, string | undefined> = process.
 
 export async function handleSponsorRequest(
   request: Request,
-  deps: { chain: ChainReader; budget: SponsorBudget; miniApps?: MiniAppSponsorDeps },
+  deps: {
+    chain: ChainReader;
+    budget: SponsorBudget;
+    miniApps?: MiniAppSponsorDeps;
+    /** Kill switch for device sessions; absent or rejecting = OFF (fail closed). */
+    sessionKeysEnabled?: () => Promise<boolean>;
+  },
 ) {
   if (process.env.PASSKEY_SPONSOR_ENABLED !== "1") return disabled();
   const config = readConfig();
@@ -171,7 +186,7 @@ export async function handleSponsorRequest(
   } catch {
     return badRequest();
   }
-  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, miniApp: miniAppId } = parsed;
+  const { userOp: op, x, y, ecdsaOwner, legacy, recoveryLegacy, pollId, miniApp: miniAppId, deviceSession } = parsed;
   if (parsed.chainId !== CHAIN_ID) return notSponsorable("chainId must be 100");
 
   // Mode "miniapp": the request names a mini app; only its reviewed declaration counts.
@@ -188,7 +203,19 @@ export async function handleSponsorRequest(
     miniApp = { id: miniAppId, rules };
   }
 
-  let budgetKey: Hex;
+  // Fail closed: only an explicit true from the flag reader opens the minting session modes.
+  let sessionKeysEnabled = false;
+  if (deps.sessionKeysEnabled) {
+    try {
+      sessionKeysEnabled = (await deps.sessionKeysEnabled()) === true;
+    } catch (err) {
+      console.error("[passkey-sponsor] session-keys flag read failed:", errName(err));
+      sessionKeysEnabled = false;
+    }
+  }
+
+  let budgetKey: string;
+  let mode: string;
   let limits: ReserveLimits | undefined;
   try {
     const verdict = await evaluateSponsorPolicy(
@@ -203,6 +230,8 @@ export async function handleSponsorRequest(
         nowSeconds: Math.floor(Date.now() / 1000),
         v3: v3ConfigFromEnv(),
         ...(miniApp ? { miniApp } : {}),
+        ...(deviceSession ? { deviceSession } : {}),
+        sessionKeysEnabled,
       },
       deps.chain,
     );
@@ -210,6 +239,16 @@ export async function handleSponsorRequest(
     // A passing mini-app request is always mode "miniapp" (the policy decides by the request alone).
     if (miniApp && verdict.mode !== "miniapp") return notSponsorable("mini-app request outside miniapp mode");
     budgetKey = verdict.budgetKey;
+    mode = verdict.mode;
+    // Device-session mint ops: the legacy's budget AND the per-Safe session group cap.
+    if (verdict.mode === "session") {
+      limits = {
+        group: {
+          key: sessionGroupKey(op.sender),
+          dailyWei: weiFromEnv(process.env.PASSKEY_SPONSOR_SESSION_DAILY_WEI, DEFAULT_SESSION_DAILY_WEI),
+        },
+      };
+    }
     // Every guest result (everyday onboarding, guardian management, recovery of a guest Safe -
     // the latter keyed to the SUBMITTING Safe, see sponsor-policy mode C) gets the onboarding
     // per-account cap AND counts against the one shared guest total.
@@ -257,6 +296,7 @@ export async function handleSponsorRequest(
       paymasterVerificationGasLimit: numberToHex(op.paymasterVerificationGasLimit),
       paymasterPostOpGasLimit: numberToHex(op.paymasterPostOpGasLimit),
       validUntil,
+      mode,
     });
   } catch (err) {
     console.error("[passkey-sponsor] signing failed:", errName(err));

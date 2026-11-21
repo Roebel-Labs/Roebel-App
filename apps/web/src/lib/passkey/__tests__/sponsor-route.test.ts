@@ -4,7 +4,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { encodeFunctionData, parseAbi, recoverTypedDataAddress, type Hex } from "viem";
+import { encodeFunctionData, numberToHex, parseAbi, recoverTypedDataAddress, type Hex } from "viem";
+import {
+  SAFE7579,
+  SESSION_NONCE_KEY,
+  grantCallData,
+  migrationCallData,
+  permissionIdsOf,
+  personalMintData,
+  revokeCallData,
+  sessionClaimCallData,
+} from "../session-keys-builders";
+import { DEFAULT_SESSION_DAILY_WEI } from "../session-key-policy";
+import { sessionKeysFlag, type AppSettingsReader } from "../session-keys-flag";
 import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
 import {
   ADDRESSES,
@@ -44,6 +56,7 @@ import {
   fakeChain,
   makeEcdsaSafe,
   makePasskeySafe,
+  migrateTo7579,
   signerKey,
 } from "./fake-chain";
 
@@ -730,4 +743,133 @@ test("a throwing mini-app gas store fails closed with 503", async () => {
     handleSponsorRequest(req(miniBody()), { chain, budget: new RecordingBudget(), miniApps: miniDeps(broken) }),
   );
   assert.equal(result.status, 503);
+});
+
+// ---- device sessions (Task 9): budgets, kill switch, mode in the response ----
+
+const DS_SIGNER = "0x8888888888888888888888888888888888888888" as Hex;
+const dsNow = () => Math.floor(Date.now() / 1000);
+const sessionChain = (dsUntil: number) =>
+  fakeChain((w) => {
+    migrateTo7579(w, SAFE);
+    w.smartSession.add(SAFE.toLowerCase());
+    const pids = permissionIdsOf({ legacy: LEGACY, signer: DS_SIGNER, validUntil: dsUntil });
+    w.permissionIds.set(SAFE.toLowerCase(), [pids.personalMint, pids.groupMint]);
+  });
+const sessionUserOp = () =>
+  userOp(sessionClaimCallData(LEGACY, personalMintData()), { nonce: numberToHex(SESSION_NONCE_KEY << 64n) });
+const flagOn = async () => true;
+
+test("session op reserves against the session:<sender> group", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  const res = await handleSponsorRequest(req(body(sessionUserOp())), { chain: sessionChain(dsNow() + 86_400), budget: recording, sessionKeysEnabled: flagOn });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal((await res.json()).mode, "session");
+  assert.equal(recording.calls[0].key, LEGACY.toLowerCase());
+  assert.equal(recording.limits[0]?.group?.key, `session:${SAFE.toLowerCase()}`);
+  assert.equal(recording.limits[0]?.group?.dailyWei, DEFAULT_SESSION_DAILY_WEI);
+});
+
+test("grant reserves under grant:<legacy>, not the legacy key; upgrade answers mode session-upgrade", async () => {
+  enable();
+  const validUntil = dsNow() + 30 * 86_400;
+  const params = { legacy: LEGACY, signer: DS_SIGNER, validUntil };
+  const grantGas = { callGasLimit: numberToHex(3_000_000n), verificationGasLimit: numberToHex(600_000n), maxFeePerGas: numberToHex(2_000_000_000n) };
+  const recording = new RecordingBudget();
+  const res = await handleSponsorRequest(
+    req(body(userOp(grantCallData({ safe: SAFE, ...params, replace: true }), grantGas), { deviceSession: { signer: DS_SIGNER, validUntil } })),
+    { chain: sessionChain(validUntil), budget: recording, sessionKeysEnabled: flagOn },
+  );
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal((await res.json()).mode, "session-grant");
+  assert.equal(recording.calls[0].key, `grant:${LEGACY.toLowerCase()}`);
+  assert.equal(recording.limits[0], undefined);
+
+  const up = new RecordingBudget();
+  const upRes = await handleSponsorRequest(
+    req(body(userOp(migrationCallData({ safe: SAFE, ...params, prev4337: SAFE7579 }), grantGas), { deviceSession: { signer: DS_SIGNER, validUntil } })),
+    { chain: fakeChain(), budget: up, sessionKeysEnabled: flagOn },
+  );
+  assert.equal(upRes.status, 200, JSON.stringify(await upRes.clone().json()));
+  assert.equal((await upRes.json()).mode, "session-upgrade");
+  assert.equal(up.calls[0].key, `grant:${LEGACY.toLowerCase()}`);
+});
+
+test("flag read error = switched off (and a missing flag dep = off)", async () => {
+  enable();
+  const recording = new RecordingBudget();
+  const { result } = await captureErrors(() =>
+    handleSponsorRequest(req(body(sessionUserOp())), {
+      chain: sessionChain(dsNow() + 86_400),
+      budget: recording,
+      sessionKeysEnabled: async () => {
+        throw new Error("db down");
+      },
+    }),
+  );
+  assert.equal(result.status, 403);
+  assert.match((await result.json()).reason, /switched off/);
+  const noDep = await handleSponsorRequest(req(body(sessionUserOp())), { chain: sessionChain(dsNow() + 86_400), budget: recording });
+  assert.equal(noDep.status, 403);
+  const off = await handleSponsorRequest(req(body(sessionUserOp())), { chain: sessionChain(dsNow() + 86_400), budget: recording, sessionKeysEnabled: async () => false });
+  assert.equal(off.status, 403);
+  assert.equal(recording.calls.length, 0, "nothing reserved");
+});
+
+test("kill switch off: session-revoke is still sponsored", async () => {
+  enable();
+  const until = dsNow() + 86_400;
+  const pids = permissionIdsOf({ legacy: LEGACY, signer: DS_SIGNER, validUntil: until });
+  const res = await handleSponsorRequest(req(body(userOp(revokeCallData([pids.personalMint, pids.groupMint])))), {
+    chain: sessionChain(until),
+    budget: new RecordingBudget(),
+    sessionKeysEnabled: async () => false,
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).mode, "session-revoke");
+});
+
+test("a malformed deviceSession is a 400", async () => {
+  enable();
+  const res = await POST(req(body(userOp(), { deviceSession: { signer: DS_SIGNER, validUntil: "soon" } })));
+  assert.equal(res.status, 400);
+});
+
+test("sessionKeysFlag: only 'true' is on; missing row, other values, errors are off; cached", async () => {
+  const stub = (rows: Record<string, string>, opts: { error?: boolean; throws?: boolean; reads?: { n: number } } = {}): AppSettingsReader => ({
+    from: (table: string) => {
+      assert.equal(table, "app_settings");
+      return {
+        select: () => ({
+          eq: (_c: string, key: string) => ({
+            maybeSingle: async () => {
+              if (opts.reads) opts.reads.n += 1;
+              if (opts.throws) throw new Error("boom");
+              if (opts.error) return { data: null, error: { message: "x" } };
+              return { data: key in rows ? { value: rows[key] } : null, error: null };
+            },
+          }),
+        }),
+      };
+    },
+  });
+  const K = "passkey_session_keys_enabled";
+  assert.equal(await sessionKeysFlag(stub({}))(), false, "missing row = off");
+  assert.equal(await sessionKeysFlag(stub({ [K]: "true" }))(), true);
+  assert.equal(await sessionKeysFlag(stub({ [K]: " true " }))(), true);
+  for (const v of ["false", "TRUE", "1", "yes", ""]) assert.equal(await sessionKeysFlag(stub({ [K]: v }))(), false, v);
+  await captureErrors(async () => {
+    assert.equal(await sessionKeysFlag(stub({ [K]: "true" }, { error: true }))(), false);
+    assert.equal(await sessionKeysFlag(stub({ [K]: "true" }, { throws: true }))(), false);
+  });
+  let t = 0;
+  const reads = { n: 0 };
+  const flag = sessionKeysFlag(stub({ [K]: "true" }, { reads }), 30_000, () => t);
+  await flag();
+  await flag();
+  assert.equal(reads.n, 1, "cached within the ttl");
+  t = 30_001;
+  await flag();
+  assert.equal(reads.n, 2);
 });

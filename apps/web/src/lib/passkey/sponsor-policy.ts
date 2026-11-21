@@ -112,7 +112,14 @@
  *     Safe (handler + module Safe4337Module) or a "7579" Safe (handler +
  *     module Safe7579, Safe4337Module NOT enabled, modules exactly {Safe7579,
  *     SRM}). Deploy ops and expert-path (ECDSA) Safes are 4337 only.
- *  4. Nonce key (nonce >> 64) == 0: root ops only (the passkey / Safe owner).
+ *  4. Nonce key (nonce >> 64) == 0: root ops (the passkey / Safe owner), or
+ *     SESSION_NONCE_KEY (SmartSession): ONLY the device-session claim shape.
+ *
+ * Device sessions (session-key-policy.ts, evaluated BEFORE the modes above): an op
+ * with the SmartSession nonce key, a root op that names `deviceSession`, or a root op
+ * with a call to the sender Safe itself or to SmartSession is evaluated ONLY as one of
+ * "session-upgrade" | "session-grant" | "session-revoke" | "session" (every byte
+ * rebuilt by the server and compared), never by the modes above.
  *
  * Allowed calls per mode:
  *  A: legacy.setPermissionsForSigner (add the SENDER as admin, in its validity
@@ -185,6 +192,7 @@ import {
 } from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
 import { SAFE7579, decodeSafe7579Execute, nonceKeyOf } from "./safe7579";
+import { evaluateSessionKeyModes } from "./session-key-policy";
 import {
   MULTI_SEND_CALL_ONLY,
   OWNABLE_VALIDATOR,
@@ -309,9 +317,29 @@ export interface SponsorContext {
   pollId?: bigint;
   /** Mode F: the mini app the request names and its declared call rules (live, version 2). */
   miniApp?: { id: string; rules: CallRule[] };
+  /** session-upgrade / session-grant: the device key and expiry the op's sessions must carry. */
+  deviceSession?: { signer: Hex; validUntil: number };
+  /**
+   * Kill switch app_settings.passkey_session_keys_enabled. Anything but `true` (unset, false, a
+   * failed read) = OFF: session-upgrade, session-grant and session ops are denied. Fails closed.
+   */
+  sessionKeysEnabled?: boolean;
 }
 
-export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach" | "miniapp";
+export type SponsorMode =
+  | "legacy"
+  | "safe"
+  | "recovery"
+  | "everyday"
+  | "detach"
+  | "miniapp"
+  | "session-upgrade"
+  | "session-grant"
+  | "session-revoke"
+  | "session";
+
+/** Budget key of a device-session grant / upgrade: `grant:<legacy>` (lowercased), apart from the legacy's daily budget. */
+export type GrantBudgetKey = `grant:${Hex}`;
 
 /** Detach (mode E) needs this many guardians AND this threshold on the sender Safe. */
 export const DETACH_MIN_GUARDIANS = 2n;
@@ -320,7 +348,7 @@ export type PolicyResult =
   | {
       ok: true;
       mode: SponsorMode;
-      budgetKey: Hex;
+      budgetKey: Hex | GrantBudgetKey;
       /** everyday mode only; "onboarding" = only guest-allowed calls */
       tier?: EverydayTier;
       /** Set whenever the budget identity is a non-citizen passkey Safe (a guest): guest budget applies. */
@@ -368,6 +396,10 @@ export interface ChainReader {
   maciPoll(pollId: bigint): Promise<Hex>;
   /** Safe.getModulesPaginated(SENTINEL, 10): the first page of enabled Safe modules and the next cursor. */
   getModulesPaginated(safe: Hex): Promise<{ modules: readonly Hex[]; next: Hex }>;
+  /** SmartSession.getPermissionIDs(safe): the permission ids currently enabled for the Safe. */
+  getPermissionIDs(safe: Hex): Promise<readonly Hex[]>;
+  /** Safe7579.isModuleInstalled(1, SmartSession, "") called on the (migrated) Safe. */
+  isSmartSessionInstalled(safe: Hex): Promise<boolean>;
   /** SocialRecoveryModule.getRecoveryRequest(wallet). */
   getRecoveryRequest(wallet: Hex): Promise<{ executeAfter: bigint; newThreshold: bigint; newOwners: readonly Hex[] }>;
   /** legacy.verifySignerPermissionRequest(req, sig); null when the CALL REVERTS (e.g. a malformed
@@ -835,14 +867,14 @@ function checkCallData(callData: Hex, st: ScanState): Check {
 }
 
 /** The sender proof the request names: the passkey key or the expert path's ECDSA owner. */
-type SenderProof = { kind: "passkey"; x: Hex; y: Hex } | { kind: "ecdsa"; owner: Hex };
+export type SenderProof = { kind: "passkey"; x: Hex; y: Hex } | { kind: "ecdsa"; owner: Hex };
 
 const PROOF_QUANTITY = /^0x[0-9a-fA-F]{1,64}$/;
 /** Safe's owner-list sentinel; never a real owner. */
 const SAFE_SENTINEL_OWNER: Hex = "0x0000000000000000000000000000000000000001";
 
 /** Exactly one of (x and y) or `ecdsaOwner`; null for both, neither, half a key or a malformed value. */
-function senderProof(ctx: SponsorContext): SenderProof | null {
+export function senderProof(ctx: SponsorContext): SenderProof | null {
   const hasKey = ctx.x !== undefined || ctx.y !== undefined;
   if (ctx.ecdsaOwner !== undefined) {
     if (hasKey) return null;
@@ -886,15 +918,20 @@ function checkFactory(op: SponsorUserOp, proof: SenderProof): Check {
   return PASS;
 }
 
-function checkGas(op: SponsorUserOp): Check {
+export type GasCaps = { readonly [K in keyof typeof CAPS]: bigint };
+
+/** Gas / fee caps; `caps` defaults to CAPS (device-session modes pass their own). */
+export function checkGas(op: SponsorUserOp, caps: GasCaps = CAPS): Check {
   for (const key of Object.keys(CAPS) as Array<keyof typeof CAPS>) {
-    if (op[key] > CAPS[key]) return deny(`${key} over cap`);
+    const cap = caps[key];
+    if (typeof cap !== "bigint") return deny(`${key} has no cap`); // fail closed on a malformed caps table
+    if (op[key] > cap) return deny(`${key} over cap`);
   }
   if (op.maxPriorityFeePerGas > op.maxFeePerGas) return deny("maxPriorityFeePerGas exceeds maxFeePerGas");
   return PASS;
 }
 
-async function read<T>(fn: () => Promise<T>): Promise<T> {
+export async function read<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
@@ -910,12 +947,12 @@ function wordIsAddress(word: Hex | undefined, addr: Hex): boolean {
   return BigInt(word) === BigInt(addr);
 }
 
-const isLegacyProxyCode = (code: Hex | undefined) =>
+export const isLegacyProxyCode = (code: Hex | undefined) =>
   (code ?? "0x").toLowerCase() === LEGACY_ACCOUNT_PROXY_CODE.toLowerCase();
 const hasNoCode = (code: Hex | undefined) => !code || code === "0x";
 
 /** citizen(a) := CitizenNFTv2.hasCitizenNFT(a) OR (v3 configured AND v3.hasCitizenNFT(a)). */
-async function isCitizen(account: Hex, v3: V3Config, chain: ChainReader): Promise<boolean> {
+export async function isCitizen(account: Hex, v3: V3Config, chain: ChainReader): Promise<boolean> {
   if (await read(() => chain.hasCitizenNFT(CITIZEN_NFT, account))) return true;
   const citizenV3 = v3.citizenNft;
   if (!citizenV3) return false;
@@ -1006,7 +1043,7 @@ async function checkDeployedEcdsaSafe(sender: Hex, owner: Hex, layout: SafeLayou
 }
 
 /** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y), in the callData's layout. */
-async function checkDeployedPasskeySafe(
+export async function checkDeployedPasskeySafe(
   sender: Hex,
   key: { x: Hex; y: Hex },
   layout: SafeLayout,
@@ -1355,14 +1392,19 @@ export async function evaluateSponsorPolicy(
   chain: ChainReader,
 ): Promise<PolicyResult> {
   // ---- structural: zero chain reads ----
-  const gas = checkGas(op);
-  if (!gas.ok) return gas;
   const proof = senderProof(ctx);
   if (!proof) return deny("the request must name exactly one sender proof: (x, y) or ecdsaOwner");
   if (proof.kind === "ecdsa" && ctx.legacy) return deny("an expert-path Safe cannot drive a legacy account");
   const factory = checkFactory(op, proof);
   if (!factory.ok) return factory;
-  // Root ops only (nonce key 0 = the Safe owner). Device-session keys are not sponsored here.
+  // Device sessions: the SmartSession nonce key, a `deviceSession` request, or a root op touching
+  // the Safe itself / SmartSession is decided there and ONLY there (its own gas caps, structural
+  // checks before any chain read). null = not a device-session shape.
+  const session = await evaluateSessionKeyModes(op, ctx, chain);
+  if (session) return session;
+  const gas = checkGas(op);
+  if (!gas.ok) return gas;
+  // Root ops only (nonce key 0 = the Safe owner); the session key was handled above.
   if (nonceKeyOf(op.nonce) !== 0n) return deny("nonce key not allowed (only key 0, the root / passkey path)");
   const st: ScanState = {
     sender: op.sender,
@@ -1507,6 +1549,7 @@ export function parseSponsorRequest(input: unknown): {
   recoveryLegacy?: Hex;
   pollId?: bigint;
   miniApp?: string;
+  deviceSession?: { signer: Hex; validUntil: number };
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
@@ -1524,7 +1567,19 @@ export function parseSponsorRequest(input: unknown): {
     recoveryLegacy: optionalAddress(o, "recoveryLegacy"),
     pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),
     ...(present("miniApp") ? { miniApp: miniAppId(o.miniApp) } : {}),
+    ...(present("deviceSession") ? { deviceSession: deviceSessionField(o.deviceSession) } : {}),
   };
+}
+
+/** `deviceSession: { signer: address, validUntil: unix seconds (safe integer) }`; the bounds are the policy's job. */
+function deviceSessionField(v: unknown): { signer: Hex; validUntil: number } {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("deviceSession must be an object");
+  const o = v as Record<string, unknown>;
+  const validUntil = o.validUntil;
+  if (typeof validUntil !== "number" || !Number.isSafeInteger(validUntil) || validUntil <= 0) {
+    throw new Error("deviceSession.validUntil must be a positive integer (unix seconds)");
+  }
+  return { signer: address(o, "signer"), validUntil };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -64,6 +64,10 @@ export interface FakeWorld {
   polls: Map<string, Hex>;
   /** getModulesPaginated `next` cursor per lowercased Safe (default SENTINEL = the page is complete). */
   modulesNext: Map<string, Hex>;
+  /** SmartSession.getPermissionIDs per lowercased Safe. */
+  permissionIds: Map<string, Hex[]>;
+  /** Lowercased Safes with SmartSession installed as a 7579 validator. */
+  smartSession: Set<string>;
 }
 
 export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
@@ -118,6 +122,8 @@ export function defaultWorld(): FakeWorld {
     recoveryRequests: new Map(),
     polls: new Map(),
     modulesNext: new Map(),
+    permissionIds: new Map(),
+    smartSession: new Set(),
   };
   makePasskeySafe(w, SAFE);
   return w;
@@ -190,6 +196,14 @@ export function fakeChain(mutate?: (w: FakeWorld) => void): FakeChain {
       const modules = [...w.modules].filter((m) => m.startsWith(prefix)).map((m) => getAddress(m.slice(prefix.length)) as Hex);
       return { modules, next: w.modulesNext.get(safe.toLowerCase()) ?? ("0x0000000000000000000000000000000000000001" as Hex) };
     },
+    async getPermissionIDs(safe) {
+      reads.push("getPermissionIDs");
+      return w.permissionIds.get(safe.toLowerCase()) ?? [];
+    },
+    async isSmartSessionInstalled(safe) {
+      reads.push("isSmartSessionInstalled");
+      return w.smartSession.has(safe.toLowerCase());
+    },
     async getRecoveryRequest(wallet) {
       reads.push("getRecoveryRequest");
       return w.recoveryRequests.get(wallet.toLowerCase()) ?? { executeAfter: 0n, newThreshold: 0n, newOwners: [] };
@@ -217,6 +231,8 @@ export function brokenChain(): ChainReader {
     isModuleEnabled: fail,
     getOwners: fail,
     getModulesPaginated: fail,
+    getPermissionIDs: fail,
+    isSmartSessionInstalled: fail,
     getSharedSignerConfiguration: fail,
     getWebAuthnSigner: fail,
     hasCitizenNFT: fail,

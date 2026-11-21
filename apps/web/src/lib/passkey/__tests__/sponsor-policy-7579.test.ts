@@ -351,16 +351,19 @@ test("execution with value 1 is denied", async () => {
 
 test("execution targeting the Safe itself (installModule) is denied", async () => {
   const install = encodeFunctionData({ abi: safe7579Abi, functionName: "installModule", args: [1n, SMART_SESSIONS, "0x"] });
-  await denied(op(as7579([{ to: SAFE, data: install }])), migrated(), LEGACY_CTX, /sender Safe itself/);
-  await denied(op(as7579([MINT_CALL, { to: SAFE, data: install }])), migrated(), LEGACY_CTX, /sender Safe itself/);
+  // Since Task 9 a root op touching the Safe itself is routed to the device-session modes (and denied there).
+  await denied(op(as7579([{ to: SAFE, data: install }])), migrated(), LEGACY_CTX, /Safe itself or SmartSession/);
+  await denied(op(as7579([MINT_CALL, { to: SAFE, data: install }])), migrated(), LEGACY_CTX, /Safe itself or SmartSession/);
   // a Safe self-call such as enableModule / addOwner, in a mini-app op as well
   const enable = encodeFunctionData({ abi: [{ type: "function", name: "enableModule", inputs: [{ type: "address" }], outputs: [], stateMutability: "nonpayable" }], functionName: "enableModule", args: [EOA] });
-  await denied(op(as7579([{ to: SAFE, data: enable }])), migrated(), MINI, /sender Safe itself/);
+  await denied(op(as7579([{ to: SAFE, data: enable }])), migrated(), MINI, /mini-app request|sender Safe itself/);
 });
 
 test("executions to the device-session stack, MultiSendCallOnly or unknown targets are denied", async () => {
   const remove = encodeFunctionData({ abi: smartSessionAbi, functionName: "removeSession", args: [`0x${"01".repeat(32)}`] });
-  await denied(op(as7579([{ to: SMART_SESSIONS, data: remove }])), migrated(), SAFE_CTX, /not allowlisted/);
+  // SmartSession calls are device-session shapes (session-revoke needs a legacy and an on-chain pid).
+  await denied(op(as7579([{ to: SMART_SESSIONS, data: remove }])), migrated(), SAFE_CTX, /legacy account/);
+  await denied(op(as7579([{ to: SMART_SESSIONS, data: remove }])), migrated(), LEGACY_CTX, /permission id/);
   const install = encodeFunctionData({ abi: safe7579Abi, functionName: "installModule", args: [1n, SMART_SESSIONS, "0x"] });
   await denied(op(as7579([{ to: SAFE7579, data: install }])), migrated(), SAFE_CTX, /not allowlisted/);
   await denied(op(as7579([{ to: ADDRESSES.multiSendCallOnly, data: "0x8d80ff0a" }])), migrated(), SAFE_CTX, /not allowlisted/);
@@ -402,12 +405,12 @@ test("nonce key 1 is denied", async () => {
   await denied(op(as4337([MINT_CALL]), { nonce: 1n << 64n }), fakeChain(), LEGACY_CTX, /nonce key/);
 });
 
-test("nonce key = SmartSession is denied (no session modes yet)", async () => {
+test("nonce key = SmartSession is denied with the kill switch off, before any chain read", async () => {
   const sessionNonce = SESSION_NONCE_KEY << 64n;
   assert.equal(nonceKeyOf(sessionNonce), SESSION_NONCE_KEY);
   const chain = migrated();
-  await denied(op(as7579([MINT_CALL]), { nonce: sessionNonce }), chain, LEGACY_CTX, /nonce key/);
-  await denied(op(as7579([MINT_CALL]), { nonce: sessionNonce + 7n }), chain, LEGACY_CTX, /nonce key/);
+  await denied(op(as7579([MINT_CALL]), { nonce: sessionNonce }), chain, LEGACY_CTX, /switched off/);
+  await denied(op(as7579([MINT_CALL]), { nonce: sessionNonce + 7n }), chain, LEGACY_CTX, /switched off/);
   assert.equal(chain.reads.length, 0, "the nonce key is refused before any chain read");
 });
 
