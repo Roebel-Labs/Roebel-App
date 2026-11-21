@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { revalidatePath } from "next/cache"
 import { isAuthenticated } from "@/lib/auth/session"
 import { clampSpeed, DEFAULT_SPEED } from "@/lib/event-radio/tts"
@@ -26,12 +27,15 @@ async function getAppSetting(key: string): Promise<string | null> {
 }
 
 /**
- * Upsert a single global setting value. Auth is enforced by the
- * route-protected admin dashboard (same MVP model as manage-events).
+ * Upsert a single global setting value. app_settings is locked to service-role writes
+ * (security review 2026-11-21: public RLS writes let anyone flip feature flags and kill
+ * switches), so this writes with the admin client — and therefore checks the admin
+ * session itself instead of relying on every caller to do it.
  */
 async function setAppSetting(key: string, value: string | null) {
+  if (!(await isAuthenticated())) return { success: false as const, error: "Nicht autorisiert" }
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from("app_settings")
       .upsert(
