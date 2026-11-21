@@ -1,21 +1,30 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, type ReactNode } from 'react';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useIsFocused } from 'expo-router';
-import { Canvas, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
-import { DeviceMotion } from 'expo-sensors';
-import { CARD_RADIUS, designSize, drawHeight, type CardDesign, type FieldValues, type RenderMode } from '@roebel/card-design';
+import { Canvas, Group, Picture, Rect, Shader, Skia, type SkPicture, type SkRuntimeEffect } from '@shopify/react-native-skia';
+import Animated, {
+  SensorType,
+  useAnimatedSensor,
+  useAnimatedStyle,
+  useDerivedValue,
+  useFrameCallback,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { CARD_RADIUS, SHINE_SKSL, designSize, drawHeight, type CardDesign, type FieldValues, type RenderMode } from '@roebel/card-design';
 import { useTheme } from '@/context/ThemeContext';
 import { useCardSkiaState } from '@/lib/card-design/skia';
 import { useDesignImages } from '@/lib/card-design/assets';
-import { REST_PHASE, nextTilt, phaseForTilt, quantiseTilt, recordDesign, sameTilt, type Tilt } from '@/lib/card-design/record';
+import { BASELINE_TAU, REST_PHASE, TILT_TAU, approach, recordDesign, tiltFromGravity } from '@/lib/card-design/record';
 
 type Props = {
   design: CardDesign;
   width: number;
   mode: RenderMode;
   values?: FieldValues;
-  /** 'tilt': the sheen follows the phone (only while the screen is focused); 'static': drawn once. */
+  /** 'tilt': the foil and the card follow the phone (only while the screen is focused); 'static': drawn once. */
   animate?: 'tilt' | 'static';
   /**
    * With 'tilt': the card also leans a few degrees against the phone (default). Off where touch
@@ -28,143 +37,150 @@ type Props = {
   fallback?: ReactNode;
 };
 
-/** How far the card leans against the phone's tilt, degrees at full tilt (Apple TV-style ±7°). */
+/** How far the card leans against the phone's tilt, degrees at full tilt (Apple TV-style). */
 const LEAN_DEG = 7;
-/**
- * The lean follows the phone on a spring, re-targeted every sensor frame: it keeps its velocity
- * between frames, so the card glides and settles with a hint of weight instead of easing in steps
- * (a fresh timing curve per 60 Hz sample restarted from zero speed each time).
- */
-const LEAN_SPRING = { damping: 18, stiffness: 170, mass: 0.7 } as const;
 /** The card lifts a touch towards the viewer while it is tilted. */
 const LIFT = 0.012;
+/** Back to rest when the card stops following the phone. */
+const REST_SPRING = { damping: 18, stiffness: 170, mass: 0.7 } as const;
+/** CoreMotion's gravity points the other way round than Android's TYPE_GRAVITY. */
+const GRAVITY_SIGN = Platform.OS === 'ios' ? -1 : 1;
 
-/** Sensor interval (ms): 60 Hz. */
-const MOTION_INTERVAL = 16;
-
-type Disposable = { dispose?: () => void };
-/** Frees a picture two frames later: the UI thread may still be drawing it right now. */
-function disposeLater(p: unknown) {
-  const d = p as Disposable | null;
-  if (!d || typeof d.dispose !== 'function') return;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+/** One compiled foil effect for every card (a Skia host object: only ever passed as a plain prop). */
+let shineEffect: SkRuntimeEffect | null | undefined;
+function getShineEffect(): SkRuntimeEffect | null {
+  if (shineEffect === undefined) {
     try {
-      d.dispose!();
+      shineEffect = Skia.RuntimeEffect.Make(SHINE_SKSL);
     } catch {
-      // Already gone.
+      shineEffect = null;
     }
-  }));
+  }
+  return shineEffect;
+}
+
+/**
+ * Reads the fused gravity sensor on the UI thread and writes a smoothed tilt into `x`/`y` every
+ * frame. Mounted only while the card follows the phone, so the sensor runs only then.
+ */
+function TiltDriver({ x, y }: { x: SharedValue<number>; y: SharedValue<number> }) {
+  const gravity = useAnimatedSensor(SensorType.GRAVITY, { interval: 'auto' });
+  // Resting pose (unit gravity x/y); NaN until the first sample.
+  const baseX = useSharedValue(NaN);
+  const baseY = useSharedValue(NaN);
+
+  useFrameCallback((frame) => {
+    'worklet';
+    const dt = Math.min(0.05, (frame.timeSincePreviousFrame ?? 16) / 1000);
+    const g = gravity.sensor.value;
+    const len = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
+    if (!(len > 1)) return; // no sample yet
+    const nx = g.x / len;
+    const ny = g.y / len;
+    if (Number.isNaN(baseX.value)) {
+      baseX.value = nx;
+      baseY.value = ny;
+    }
+    // The resting pose follows a new way of holding the phone slowly; the tilt itself is fast.
+    const kb = approach(dt, BASELINE_TAU);
+    baseX.value += (nx - baseX.value) * kb;
+    baseY.value += (ny - baseY.value) * kb;
+    const t = tiltFromGravity(nx, ny, baseX.value, baseY.value, GRAVITY_SIGN);
+    const k = approach(dt, TILT_TAU);
+    x.value += (t.x - x.value) * k;
+    y.value += (t.y - y.value) * k;
+  });
+
+  useEffect(
+    () => () => {
+      x.value = withSpring(0, REST_SPRING);
+      y.value = withSpring(0, REST_SPRING);
+    },
+    [x, y],
+  );
+  return null;
 }
 
 /**
  * A card drawn from its design with Skia. Missing images are left out and fetched again on the
  * next focus; while the fonts load, a quiet placeholder of the card's shape is shown.
+ *
+ * Tilting cards: the design is recorded ONCE without its card-wide foil; the foil is the same
+ * SHINE_SKSL drawn live on top, its uniforms fed from the gravity sensor on the UI thread. So the
+ * light follows the hand at the display's frame rate with no JS work per frame (before: a picture
+ * re-recorded on the JS thread per tilt step).
  */
 export default function DesignedCard({ design, width, mode, values, animate = 'static', lean = true, style, accessibilityLabel, fallback }: Props) {
   const { colors } = useTheme();
   const focused = useIsFocused();
   const reduced = useReducedMotion();
-  const { skia, failed } = useCardSkiaState();
+  const { skia } = useCardSkiaState();
   const images = useDesignImages(design, focused);
   const height = drawHeight(design, width);
   const radius = design.format === 'stamp' ? width / 2 : (CARD_RADIUS * width) / designSize(design.format).w;
-  const tilting = animate === 'tilt' && focused && !reduced;
+  const tiltCard = animate === 'tilt';
+  const effect = tiltCard && design.shine.enabled && design.shine.intensity > 0 ? getShineEffect() : null;
+  // Live foil only when the shader compiled; otherwise the foil stays in the recorded picture.
+  const liveFoil = !!effect;
+  const tilting = tiltCard && focused && !reduced;
 
-  const draw = useMemo(() => {
+  // Skia host objects reach Skia only as plain React props (never via shared values or worklet
+  // closures: a JS-created SkPicture arrives EMPTY on the UI thread → "Invalid prop value for
+  // SkTextBlob" outside every error boundary, Pixel 2026-11-20).
+  const still = useMemo<SkPicture | null>(() => {
     if (!skia) return null;
-    return (tilt: Tilt | undefined, phase: number) =>
-      recordDesign<SkPicture>(Skia, skia.api, design, {
-        width, mode, values, images, fonts: skia.fonts, shinePhase: phase, tilt, reducedMotion: !!reduced,
-      });
-  }, [skia, design, width, mode, values, images, reduced]);
+    return recordDesign<SkPicture>(Skia, skia.api, design, {
+      width, mode, values, images, fonts: skia.fonts, shinePhase: REST_PHASE, reducedMotion: !!reduced, cardShine: !liveFoil,
+    });
+  }, [skia, design, width, mode, values, images, reduced, liveFoil]);
+  const clip = useMemo(() => Skia.RRectXY(Skia.XYWHRect(0, 0, width, height), radius, radius), [width, height, radius]);
 
-  // The resting picture: what static cards show, and where a tilting card starts and returns to.
-  const still = useMemo(() => (draw ? draw(undefined, REST_PHASE) : null), [draw]);
-  // The tilting picture lives in React STATE and reaches Skia as a plain prop. Never through a
-  // Reanimated shared value: Skia replays drawings on the UI thread, and an SkPicture created on
-  // the JS thread arrives there EMPTY → drawPicture throws "Invalid prop value for SkTextBlob"
-  // (Skia's message for a non-object picture) outside every error boundary — the app died on
-  // every credential sheet / quick navigation (Pixel 2026-11-20). Also never capture a Skia
-  // object in a worklet closure, and never free a picture in an effect CLEANUP (a screen hidden
-  // by a tab switch runs cleanups but keeps state, then draws the freed picture on return).
-  const [tiltPicture, setTiltPicture] = useState<SkPicture | null>(null);
-  // Free a replaced tilt picture only AFTER the commit that stopped drawing it (Skia redraws in
-  // the commit itself, so by this effect the new picture is on screen).
-  const shownTiltRef = useRef<SkPicture | null>(null);
-  useEffect(() => {
-    const old = shownTiltRef.current;
-    shownTiltRef.current = tiltPicture;
-    if (old && old !== tiltPicture) disposeLater(old);
-  }, [tiltPicture]);
+  const tiltX = useSharedValue(0);
+  const tiltY = useSharedValue(0);
+  const intensity = reduced ? 0 : design.shine.intensity;
+  const uniforms = useDerivedValue(() => {
+    const x = tiltX.value;
+    const y = tiltY.value;
+    return {
+      phase: Math.max(0, Math.min(1, REST_PHASE + x * 0.3 + y * 0.2)),
+      tilt: [x, y],
+      intensity,
+      size: [width, height],
+    };
+  });
 
-  // The card itself leans a few degrees against the phone's tilt (plain numbers on the UI thread).
-  const leanX = useSharedValue(0);
-  const leanY = useSharedValue(0);
   const leanStyle = useAnimatedStyle(() => {
-    const amount = Math.min(1, Math.hypot(leanX.value, leanY.value));
+    const x = tiltX.value;
+    const y = tiltY.value;
+    const amount = Math.min(1, Math.sqrt(x * x + y * y));
     return {
       transform: [
         { perspective: 900 },
-        { rotateY: `${-leanX.value * LEAN_DEG}deg` },
-        { rotateX: `${leanY.value * LEAN_DEG}deg` },
+        { rotateY: `${-x * LEAN_DEG}deg` },
+        { rotateX: `${y * LEAN_DEG}deg` },
         { scale: 1 + amount * LIFT },
       ],
     };
   });
 
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
-
-  useEffect(() => {
-    if (!tilting) return;
-    let tilt: Tilt = { x: 0, y: 0 };
-    let drawn: Tilt = tilt;
-    let baseline: number | null = null;
-    let frame: number | null = null;
-    let alive = true;
-    const flush = () => {
-      frame = null;
-      if (!alive) return;
-      leanX.value = withSpring(tilt.x, LEAN_SPRING);
-      leanY.value = withSpring(tilt.y, LEAN_SPRING);
-      const d = drawRef.current;
-      // Quantised: sensor noise while the phone is held still no longer redraws every frame.
-      const q = quantiseTilt(tilt);
-      if (!d || sameTilt(q, drawn)) return;
-      drawn = q;
-      const pic = d(q, phaseForTilt(q));
-      if (pic) setTiltPicture(pic);
-    };
-    DeviceMotion.setUpdateInterval(MOTION_INTERVAL);
-    const sub = DeviceMotion.addListener((m) => {
-      const r = m.rotation;
-      if (!r) return;
-      if (baseline === null) baseline = r.beta;
-      tilt = nextTilt(tilt, r, baseline);
-      if (frame === null) frame = requestAnimationFrame(flush);
-    });
-    return () => {
-      alive = false;
-      sub.remove();
-      if (frame !== null) cancelAnimationFrame(frame);
-      // Back to the resting picture and a flat card when the card stops following the phone.
-      setTiltPicture(null);
-      leanX.value = withSpring(0, LEAN_SPRING);
-      leanY.value = withSpring(0, LEAN_SPRING);
-    };
-  }, [tilting, leanX, leanY]);
-
   return (
     <Animated.View
-      style={[{ width, height, borderRadius: radius }, style, animate === 'tilt' && lean ? leanStyle : null]}
+      style={[{ width, height, borderRadius: radius }, style, tiltCard && lean ? leanStyle : null]}
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}
       testID="designed-card"
     >
+      {tilting ? <TiltDriver x={tiltX} y={tiltY} /> : null}
       {still ? (
         <Canvas style={{ width, height }}>
-          {/* A plain SkPicture prop only: the tilt frame while tilting, else the resting one. */}
-          <Picture picture={(animate === 'tilt' && tiltPicture) || still} />
+          <Picture picture={still} />
+          {effect ? (
+            <Group clip={clip}>
+              <Rect x={0} y={0} width={width} height={height}>
+                <Shader source={effect} uniforms={uniforms} />
+              </Rect>
+            </Group>
+          ) : null}
         </Canvas>
       ) : fallback ? (
         fallback

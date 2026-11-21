@@ -18,6 +18,11 @@ export interface DrawOptions {
   /** Device tilt, each axis -1..1. */
   tilt?: { x: number; y: number };
   reducedMotion?: boolean;
+  /**
+   * Draw the card-wide foil (default true). False when the caller draws it live on top instead
+   * (the app animates SHINE_SKSL on the UI thread with the tilt as uniforms).
+   */
+  cardShine?: boolean;
 }
 
 /** Output height in pixels for a design drawn at `width`. */
@@ -50,7 +55,7 @@ export function drawDesign(api: SkiaApi, canvas: CanvasLike, design: CardDesign,
       }
     }
 
-    if (design.shine.enabled && design.shine.intensity > 0) {
+    if (opts.cardShine !== false && design.shine.enabled && design.shine.intensity > 0) {
       const s = shine();
       if (s) canvas.drawRect([0, 0, W, H], track(api.makePaint({ shader: s })));
     }

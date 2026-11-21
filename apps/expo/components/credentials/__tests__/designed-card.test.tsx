@@ -22,6 +22,9 @@ jest.mock('@shopify/react-native-skia', () => {
       mockPictures.push(p);
       return null;
     },
+    Group: ({ children }: { children: React.ReactNode }) => R.createElement(View, { testID: 'skia-group' }, children),
+    Rect: ({ children }: { children: React.ReactNode }) => R.createElement(View, { testID: 'skia-rect' }, children),
+    Shader: (props: { source: unknown; uniforms: unknown }) => R.createElement(View, { testID: 'skia-shader', ...props }),
   };
 });
 jest.mock('@/lib/card-design/skia', () => ({
@@ -41,6 +44,11 @@ jest.mock('react-native-reanimated', () => {
     useReducedMotion: () => false,
     useSharedValue: (v: unknown) => ({ value: v }),
     useAnimatedStyle: () => ({}),
+    useDerivedValue: (fn: () => unknown) => ({ value: fn() }),
+    useAnimatedSensor: () => ({ sensor: { value: { x: 0, y: 0, z: 0 } }, unregister: jest.fn() }),
+    useFrameCallback: jest.fn(),
+    SensorType: { GRAVITY: 3 },
+    withSpring: (v: unknown) => v,
     withTiming: (v: unknown) => v,
   };
 });
@@ -92,6 +100,55 @@ describe('DesignedCard', () => {
     const without = await renderRgba(design, opts);
     const withName = await renderRgba(design, { ...opts, values: { holderName: 'Erika Mustermann' } });
     expect(diffRatio(without.data, withName.data)).toBeGreaterThan(0.002);
+  });
+});
+
+describe('live foil', () => {
+  it('a tilting card draws its foil as a live shader over a picture without the baked foil', () => {
+    let t!: renderer.ReactTestRenderer;
+    act(() => {
+      t = renderer.create(<DesignedCard design={memberCard()} width={300} mode="holder" animate="tilt" />);
+    });
+    const shaders = t.root.findAllByProps({ testID: 'skia-shader' });
+    expect(shaders.length).toBeGreaterThan(0);
+    const u = shaders[0].props.uniforms.value;
+    expect(u.tilt).toEqual([0, 0]);
+    expect(u.size[0]).toBe(300);
+  });
+
+  it('a static card keeps the foil inside its picture (no shader)', () => {
+    let t!: renderer.ReactTestRenderer;
+    act(() => {
+      t = renderer.create(<DesignedCard design={memberCard()} width={300} mode="holder" animate="static" />);
+    });
+    expect(t.root.findAllByProps({ testID: 'skia-shader' })).toHaveLength(0);
+  });
+});
+
+describe('gravity tilt', () => {
+  const { tiltFromGravity, softClamp, approach, GRAVITY_FULL_X } = jest.requireActual('@/lib/card-design/record');
+  it('is zero at the resting pose and follows both axes (Android signs)', () => {
+    expect(tiltFromGravity(0.1, 0.7, 0.1, 0.7, 1)).toEqual({ x: 0, y: 0 });
+    const t = tiltFromGravity(0.1 - GRAVITY_FULL_X / 2, 0.8, 0.1, 0.7, 1);
+    expect(t.x).toBeGreaterThan(0.4);
+    expect(t.y).toBeGreaterThan(0);
+  });
+  it('flips with the iOS gravity sign', () => {
+    const a = tiltFromGravity(0.0, 0.8, 0.1, 0.7, 1);
+    const b = tiltFromGravity(0.0, 0.8, 0.1, 0.7, -1);
+    expect(b.x).toBeCloseTo(-a.x);
+    expect(b.y).toBeCloseTo(-a.y);
+  });
+  it('limits softly: linear near the centre, never past ±1', () => {
+    expect(softClamp(0.1)).toBeCloseTo(0.1, 2);
+    expect(softClamp(5)).toBeLessThanOrEqual(1);
+    expect(softClamp(-5)).toBeGreaterThanOrEqual(-1);
+    expect(softClamp(NaN)).toBe(0);
+  });
+  it('smooths independently of the frame rate', () => {
+    const k60 = approach(1 / 60, 0.05);
+    const k120 = approach(1 / 120, 0.05);
+    expect(1 - (1 - k120) * (1 - k120)).toBeCloseTo(k60, 6);
   });
 });
 

@@ -61,3 +61,44 @@ export function sameTilt(a: Tilt, b: Tilt): boolean {
 export function tiltMoved(a: Tilt, b: Tilt, eps = 0.004): boolean {
   return Math.abs(a.x - b.x) > eps || Math.abs(a.y - b.y) > eps;
 }
+
+// ---- Gravity tilt (UI thread) ----------------------------------------------------------------
+// The live tilt reads the fused GRAVITY sensor on the UI thread (Reanimated useAnimatedSensor), not
+// DeviceMotion Euler angles on the JS thread: Euler gamma gets unstable when the phone is held
+// near upright, and the JS round trip + per-step picture re-recording made the light lag and step
+// (Max 2026-11-21: "not as accurate as I tilt, should be smoother").
+
+/** Gravity-vector change (unit length) that counts as full tilt: ≈ 22° sideways, 20° forward. */
+export const GRAVITY_FULL_X = 0.38;
+export const GRAVITY_FULL_Y = 0.34;
+/** Seconds for the resting pose to follow a new way of holding the phone (recentres slowly). */
+export const BASELINE_TAU = 5;
+/** Seconds of smoothing on the tilt itself: removes sensor jitter, still follows the hand closely. */
+export const TILT_TAU = 0.05;
+
+/** Soft limit: linear near the centre, eases into ±1 instead of hitting a wall. */
+export function softClamp(v: number): number {
+  'worklet';
+  if (!Number.isFinite(v)) return 0;
+  const c = Math.max(-3, Math.min(3, v));
+  return (c * (27 + c * c)) / (27 + 9 * c * c);
+}
+
+/**
+ * Tilt (-1..1 per axis) from a unit gravity vector relative to the resting one. Axes match the
+ * shader and the lean: x > 0 = right edge down, y > 0 = top edge raised. `sign` is +1 on Android
+ * (TYPE_GRAVITY points up out of the screen when flat) and -1 on iOS (CoreMotion points down).
+ */
+export function tiltFromGravity(nx: number, ny: number, bx: number, by: number, sign: number): Tilt {
+  'worklet';
+  return {
+    x: softClamp((-sign * (nx - bx)) / GRAVITY_FULL_X),
+    y: softClamp((sign * (ny - by)) / GRAVITY_FULL_Y),
+  };
+}
+
+/** Frame-rate independent exponential approach factor for a time constant `tau` (seconds). */
+export function approach(dt: number, tau: number): number {
+  'worklet';
+  return 1 - Math.exp(-Math.max(0, dt) / tau);
+}
