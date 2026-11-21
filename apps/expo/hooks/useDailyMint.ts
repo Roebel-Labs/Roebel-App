@@ -96,23 +96,32 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
   const claim = useCallback<DailyMintClaim>(() => {
     if (!address || !claimable) return false;
     if (passkeyClaim) {
-      // Foreground, one batch, one fingerprint. Nothing optimistic: the cooldown moves only on success.
-      return claimWithOffer().then(
+      // Optimistic like the thirdweb path (Max 2026-11-21: "optimistic instant UI", no spinner):
+      // the claim counts at once and the button plays its animation; the device-session ops (no
+      // prompt) — or the offer sheet / one fingerprint when needed — run in the background. Only a
+      // real failure, a cancelled prompt or a swiped-away sheet rolls the cooldown back.
+      const ts = Date.now();
+      const prevLastClaim = lastClaim;
+      setClaimState({ address, lastClaim: ts });
+      setNow(ts);
+      const rollBack = () => setClaimState({ address, lastClaim: prevLastClaim });
+      claimWithOffer().then(
         (result) => {
-          if (!result) return false; // offer sheet swiped away: no claim
-          const { claimedAt } = result;
-          setClaimState({ address, lastClaim: claimedAt });
-          setNow(claimedAt);
+          if (!result) {
+            rollBack(); // offer sheet swiped away: no claim
+            return;
+          }
+          setClaimState({ address, lastClaim: result.claimedAt });
           if (result.partial) Alert.alert('Münzen abholen', PARTIAL_CLAIM_NOTICE);
-          return true;
         },
         (e: unknown) => {
+          rollBack();
           if (!isPasskeyCancel(e)) {
             Alert.alert('Münzen abholen', (e as Error | null)?.message || 'Das hat nicht geklappt. Bitte versuche es erneut.');
           }
-          return false;
         },
       );
+      return true;
     }
     const ts = Date.now();
     const prevLastClaim = lastClaim;

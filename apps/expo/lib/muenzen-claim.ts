@@ -197,8 +197,10 @@ export type RoutedClaimDeps<S> = {
   loadSession: () => Promise<S | null>;
   /** One device-session op (no prompt); resolves with the tx hash. */
   sendSessionCall: (s: S, kind: 'personalMint' | 'groupMint', data: Hex) => Promise<Hex>;
-  /** isDeviceSessionRejection. */
+  /** isDeviceSessionRejection: fall back to the passkey claim once. */
   isRejection: (e: unknown) => boolean;
+  /** isFatalDeviceSessionRejection: the chain says the session is dead → drop the local record. */
+  isFatalRejection?: (e: unknown) => boolean;
   /** Deletes this device's record + key. */
   dropSession: () => Promise<void>;
   /** Today's one-batch passkey claim (ONE prompt). */
@@ -229,9 +231,11 @@ export async function claimMuenzenRouted<S>(d: RoutedClaimDeps<S>): Promise<Rout
     result = await claimMuenzenWithDeviceSession(d.account, d.reads, d.addrs, (kind, data) => d.sendSessionCall(s, kind, data));
   } catch (e) {
     if (!d.isRejection(e)) throw e;
-    await d.dropSession().catch(() => {});
+    if (d.isFatalRejection?.(e) ?? true) await d.dropSession().catch(() => {});
     return viaPasskey();
   }
-  if (result.partial && d.isRejection(result.error)) await d.dropSession().catch(() => {});
+  if (result.partial && d.isRejection(result.error) && (d.isFatalRejection?.(result.error) ?? true)) {
+    await d.dropSession().catch(() => {});
+  }
   return { mintedRaw: result.mintedRaw, partial: result.partial, via: 'session' };
 }

@@ -224,9 +224,18 @@ function hasBothPids(rec: DeviceSessionRecord, onChainPids: readonly Hex[]): boo
 export async function readDeviceSessionState(session: PasskeySession, deps: GrantDeps = {}): Promise<DeviceSessionState> {
   const d = resolved(deps);
   const safe = session.safe;
+  // ALWAYS a fresh layout: a memoised '4337' from before a migration made the pids look absent and
+  // deleted this device's (pending) record although its session was live on chain — the grant was
+  // re-offered and the key lost (Pixel 2026-11-21).
+  invalidateSafeLayout(safe);
   const layout = await d.readLayout(safe);
   const onChainPids = layout === '7579' ? await d.readPermissionIds(safe) : [];
-  let loaded = await loadDeviceSession(d.store, safe, async () => onChainPids);
+  // Not migrated (yet): an upgrade may still be landing — never judge a pending record against a
+  // 4337 Safe (loadDeviceSession keeps it when the pid read fails).
+  let loaded = await loadDeviceSession(d.store, safe, async () => {
+    if (layout !== '7579') throw new Error('Safe not migrated yet');
+    return onChainPids;
+  });
   // loadDeviceSession only re-checks pending records: an active record whose pids left the chain
   // (another device granted, or a revoke elsewhere) can never sign again.
   if (loaded && loaded.record.status === 'active' && !hasBothPids(loaded.record, onChainPids)) {
@@ -290,6 +299,7 @@ export async function grantDeviceSession(session: PasskeySession, deps: GrantDep
   };
   await savePendingDeviceSession(d.store, record, privateKey);
 
+  try {
   await d.sendPasskeyOp(
     {
       credentialId: session.credentialId,
@@ -307,8 +317,12 @@ export async function grantDeviceSession(session: PasskeySession, deps: GrantDep
     },
     d.userOp,
   );
-  // The migration moved the Safe to Safe7579 (ERC-1271 prefix + root ops depend on the layout).
-  if (layout === '4337') invalidateSafeLayout(safe);
+  } finally {
+    // The migration moved the Safe to Safe7579 (ERC-1271 prefix + root ops depend on the layout).
+    // Also when the send threw: the op may have landed anyway (receipt timeout) — a stale '4337'
+    // memo must never outlive it.
+    invalidateSafeLayout(safe);
+  }
   await activateDeviceSession(d.store, safe);
   return { ...record, status: 'active' };
 }

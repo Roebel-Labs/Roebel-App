@@ -24,7 +24,7 @@ import {
 } from '@/lib/passkey/session-keys/claim-route';
 import { grantDeviceSession, readDeviceSessionState, readOnChainPermissionIds } from '@/lib/passkey/session-keys/grant';
 import { defaultDeviceKeyStore, deleteDeviceSession, loadDeviceSession } from '@/lib/passkey/session-keys/device-key';
-import { isDeviceSessionRejection, sendDeviceSessionCall } from '@/lib/passkey/session-keys/session-op';
+import { isDeviceSessionRejection, isFatalDeviceSessionRejection, sendDeviceSessionCall } from '@/lib/passkey/session-keys/session-op';
 import { fetchPasskeySessionKeysEnabled } from '@/lib/supabase-app-settings';
 import { recordMuenzenClaim } from '@/lib/muenzen-daily-mint';
 import { convertibleRaw, findMyInvitation, getInviteReserveRaw } from '@/lib/muenzen-invite';
@@ -245,6 +245,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
             record: s.record, privateKey: s.privateKey, proof: { x: session.x, y: session.y }, kind, innerHubData,
           })).txHash,
           isRejection: isDeviceSessionRejection,
+          isFatalRejection: isFatalDeviceSessionRejection,
           dropSession: () => deleteDeviceSession(store, session.safe),
           passkeyClaim,
         });

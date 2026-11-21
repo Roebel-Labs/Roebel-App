@@ -102,6 +102,32 @@ export function isDeviceSessionRejection(e: unknown): boolean {
   );
 }
 
+/**
+ * The CHAIN says this device's session can never sign again (expired, wrong key, permission no
+ * longer installed) — only then is the local record dropped. A sponsor 403 / budget limit / network
+ * error falls back to the passkey claim ONCE but keeps the key (dropping it on a transient refusal
+ * stranded a working on-chain session and re-offered the grant — Pixel 2026-11-21).
+ */
+export function isFatalDeviceSessionRejection(e: unknown): boolean {
+  const seen = new Set<unknown>();
+  let cur: unknown = e;
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const err = cur as { message?: string; body?: unknown; cause?: unknown };
+    const text = `${err?.message ?? ''} ${err?.body ? JSON.stringify(err.body) : ''}`.toLowerCase();
+    if (
+      text.includes('aa22') ||
+      text.includes('aa24') ||
+      text.includes('invalidpermissionid') ||
+      text.includes(INVALID_PERMISSION_ID_SELECTOR.toLowerCase())
+    ) {
+      return true;
+    }
+    cur = err?.cause;
+  }
+  return false;
+}
+
 function assertInnerMatchesKind(kind: MintSessionKind, innerHubData: Hex): void {
   if (!isHex(innerHubData)) throw new Error('innerHubData must be hex');
   const ok =
