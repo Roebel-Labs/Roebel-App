@@ -2,9 +2,25 @@ jest.mock('react-native-passkey', () => ({ Passkey: { create: jest.fn(), get: je
 jest.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY' }));
 jest.mock('@/lib/storage/secureStorage', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), deleteItemAsync: jest.fn() }));
 
-import { getAddress, numberToHex, sliceHex, type Hex } from 'viem';
-import { DeviceSessionRejectedError, deviceSessionOpSigner, sendDeviceSessionCall } from '../session-keys/session-op';
-import { SESSION_NONCE_KEY, groupMintData, permissionIdsOf, personalMintData } from '../session-keys/builders';
+import { getAddress, numberToHex, recoverMessageAddress, sliceHex, type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { sponsorRequestBody } from '../userop';
+import {
+  DeviceSessionRejectedError,
+  SESSION_MAX_FEE_PER_GAS,
+  deviceSessionOpSigner,
+  sendDeviceSessionCall,
+  settleSponsorship,
+} from '../session-keys/session-op';
+import {
+  DEVICE_AUTH_MAX_TTL_SEC,
+  SESSION_NONCE_KEY,
+  deviceSessionAuthHash,
+  groupMintData,
+  permissionIdsOf,
+  personalMintData,
+  stableFieldsHash,
+} from '../session-keys/builders';
 import type { DeviceSessionRecord } from '../session-keys/device-key';
 import vector from './session-keys-vector.json';
 
@@ -29,10 +45,17 @@ const record: DeviceSessionRecord = {
 };
 
 /** Fake network answering with the vector session op's nonce, gas, fees and voucher. */
-function network(o: { sponsor?: { status: number; body: unknown }; estimateError?: string } = {}) {
+function network(
+  o: { sponsor?: { status: number; body: unknown }; estimateError?: string; settle?: 'ok' | 'fail' | 'throw'; fee?: bigint } = {},
+) {
   const calls: { url: string; method: string; body: any }[] = [];
   const fetchMock = jest.fn(async (url: string, init: any) => {
     const body = JSON.parse(init.body);
+    if (url.endsWith('/api/passkey/sponsor/settle')) {
+      calls.push({ url, method: 'settle', body });
+      if (o.settle === 'throw') throw new Error('offline');
+      return { ok: o.settle !== 'fail', status: o.settle === 'fail' ? 503 : 200, json: async () => ({ status: 'settled' }) };
+    }
     calls.push({ url, method: body.method ?? 'sponsor', body });
     const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
     if (url.endsWith('/api/passkey/sponsor')) {
@@ -55,7 +78,12 @@ function network(o: { sponsor?: { status: number; body: unknown }; estimateError
       case 'eth_call':
         return ok(numberToHex(BigInt(op.nonce), { size: 32 }));
       case 'pimlico_getUserOperationGasPrice':
-        return ok({ fast: { maxFeePerGas: numberToHex(BigInt(op.maxFeePerGas)), maxPriorityFeePerGas: numberToHex(BigInt(op.maxPriorityFeePerGas)) } });
+        return ok({
+          fast: {
+            maxFeePerGas: numberToHex(o.fee ?? BigInt(op.maxFeePerGas)),
+            maxPriorityFeePerGas: numberToHex(BigInt(op.maxPriorityFeePerGas)),
+          },
+        });
       case 'eth_estimateUserOperationGas':
         if (o.estimateError) return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, error: { message: o.estimateError } }) };
         return ok({
@@ -174,6 +202,91 @@ describe('device session op', () => {
     const p = sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW);
     await expect(p).rejects.toThrow('HTTP 500');
     await expect(p).rejects.not.toBeInstanceOf(DeviceSessionRejectedError);
+  });
+
+  // ---- security review M-1: deviceAuth ----
+
+  test('M-1: the sponsor body carries deviceAuth signed by the device key over the exact op sent', async () => {
+    const net = network();
+    await sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW);
+    const sponsor = net.body('sponsor');
+    const auth = sponsor.deviceAuth as { expiresAt: number; signature: Hex };
+    expect(Object.keys(auth).sort()).toEqual(['expiresAt', 'signature']);
+    const now = Math.max(NOW, Math.floor(Date.now() / 1000));
+    expect(auth.expiresAt).toBeGreaterThan(now);
+    expect(auth.expiresAt).toBeLessThanOrEqual(now + DEVICE_AUTH_MAX_TTL_SEC);
+    const u = sponsor.userOp;
+    const stable = stableFieldsHash({
+      sender: u.sender,
+      nonce: BigInt(u.nonce),
+      callData: u.callData,
+      callGasLimit: BigInt(u.callGasLimit),
+      verificationGasLimit: BigInt(u.verificationGasLimit),
+      preVerificationGas: BigInt(u.preVerificationGas),
+      maxFeePerGas: BigInt(u.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(u.maxPriorityFeePerGas),
+      paymasterVerificationGasLimit: BigInt(u.paymasterVerificationGasLimit),
+      paymasterPostOpGasLimit: BigInt(u.paymasterPostOpGasLimit),
+    });
+    const hash = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: stable, expiresAt: auth.expiresAt });
+    expect(getAddress(await recoverMessageAddress({ message: { raw: hash }, signature: auth.signature }))).toBe(SIGNER);
+    // a different op (deny side): the same signature recovers to someone else
+    const other = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: stableFieldsHash({ ...{
+      sender: u.sender, nonce: BigInt(u.nonce) + 1n, callData: u.callData, callGasLimit: BigInt(u.callGasLimit),
+      verificationGasLimit: BigInt(u.verificationGasLimit), preVerificationGas: BigInt(u.preVerificationGas),
+      maxFeePerGas: BigInt(u.maxFeePerGas), maxPriorityFeePerGas: BigInt(u.maxPriorityFeePerGas),
+      paymasterVerificationGasLimit: BigInt(u.paymasterVerificationGasLimit), paymasterPostOpGasLimit: BigInt(u.paymasterPostOpGasLimit),
+    } }), expiresAt: auth.expiresAt });
+    expect(getAddress(await recoverMessageAddress({ message: { raw: other }, signature: auth.signature }))).not.toBe(SIGNER);
+  });
+
+  test('M-1: the deviceAuth hash + signature match the web vector byte for byte', async () => {
+    const h = deviceSessionAuthHash({ chainId: 100, stableFieldsHash: `0x${'ab'.repeat(32)}`, expiresAt: 1_800_000_000 });
+    expect(h).toBe('0xf43220bd5a4a4cd5f718233bb5802df9dce1ff2df01c7c87725ed53acfe2f827');
+    expect(await privateKeyToAccount(PK).signMessage({ message: { raw: h } })).toBe(
+      '0x7e7c4962d5c26152fa50a58d2b4c2f86b1129eed53b898b30f23aac65e358702544d3704ef3cfd36ed26531bd1d939360713cbf7fa21bbb49d83b000aba08da11c',
+    );
+  });
+
+  test('M-1: a passkey (root) op never carries deviceAuth', async () => {
+    const u = { sender: SAFE, nonce: 0n, callData: '0x' as Hex, callGasLimit: 1n, verificationGasLimit: 1n, preVerificationGas: 1n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, signature: '0x' as Hex };
+    expect('deviceAuth' in sponsorRequestBody(u, { proof: PROOF, legacy: LEGACY })).toBe(false);
+    const withAuth = sponsorRequestBody(u, { proof: PROOF, legacy: LEGACY, deviceAuth: { expiresAt: 5, signature: '0x01' } });
+    expect(withAuth.deviceAuth).toEqual({ expiresAt: 5, signature: '0x01' });
+  });
+
+  // ---- security review M-2: fee cap + settle ----
+
+  test('M-2: fees are capped at the 2 gwei session cap', async () => {
+    const net = network({ fee: 2_900_000_000n });
+    await sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW);
+    expect(BigInt(net.body('sponsor').userOp.maxFeePerGas)).toBe(SESSION_MAX_FEE_PER_GAS);
+    expect(BigInt(net.sent().maxFeePerGas)).toBe(SESSION_MAX_FEE_PER_GAS);
+  });
+
+  test('M-2: after the receipt the app asks the server to settle with ONLY the userOpHash', async () => {
+    const net = network();
+    const res = await sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW);
+    expect(res.userOpHash).toBe(`0x${'ee'.repeat(32)}`);
+    const settle = net.calls.filter((c) => c.method === 'settle');
+    expect(settle).toHaveLength(1);
+    expect(settle[0].url).toBe('https://preview.example/api/passkey/sponsor/settle');
+    expect(settle[0].body).toEqual({ chainId: 100, userOpHash: `0x${'ee'.repeat(32)}` });
+  });
+
+  test.each(['fail', 'throw'] as const)('M-2: a settle that does %s never fails the claim', async (mode) => {
+    const net = network({ settle: mode });
+    const res = await sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW);
+    expect(res.txHash).toBe(`0x${'dd'.repeat(32)}`);
+    expect(await settleSponsorship(`0x${'ee'.repeat(32)}`, net.deps)).toBe(false);
+  });
+
+  test('M-2: no settle call when the sponsor refused (nothing was reserved)', async () => {
+    const net = network({ sponsor: { status: 403, body: { error: 'not_sponsorable' } } });
+    await expect(
+      sendDeviceSessionCall({ record, privateKey: PK, proof: PROOF, kind: 'personalMint', innerHubData: personalMintData() }, net.deps, NOW),
+    ).rejects.toBeInstanceOf(DeviceSessionRejectedError);
+    expect(net.calls.some((c) => c.method === 'settle')).toBe(false);
   });
 
   test('an expired or pending record is rejected before any network call', async () => {

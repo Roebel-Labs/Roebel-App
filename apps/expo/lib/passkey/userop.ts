@@ -447,14 +447,21 @@ export function entryPointUserOpHash(op: UnpackedUserOp): Hex {
   });
 }
 
+/** A device session key's authorization of one session-op sponsor request (security review M-1). */
+export type DeviceAuth = { expiresAt: number; signature: Hex };
+
 /**
  * POST /api/passkey/sponsor body: { chainId, userOp, (x, y) | ecdsaOwner, legacy?, recoveryLegacy?,
- * pollId?, miniApp?, deviceSession? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
+ * pollId?, miniApp?, deviceSession?, deviceAuth? }. The proof names the Safe's owner: the passkey key (x, y) or the expert path's ECDSA
  * owner, never both. Optional identity hints are omitted (not null) when unset.
  */
 export function sponsorRequestBody(
   op: UnpackedUserOp,
-  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId' | 'miniApp' | 'deviceSession'> & { proof: SafeOpProof },
+  args: Pick<SafeUserOpArgs, 'legacy' | 'recoveryLegacy' | 'pollId' | 'miniApp' | 'deviceSession'> & {
+    proof: SafeOpProof;
+    /** Session ops: the device key's signature over the op (required by the sponsor). */
+    deviceAuth?: DeviceAuth;
+  },
 ): Record<string, unknown> {
   return {
     chainId: PASSKEY_CHAIN_ID,
@@ -470,6 +477,8 @@ export function sponsorRequestBody(
     ...(args.deviceSession
       ? { deviceSession: { signer: getAddress(args.deviceSession.signer), validUntil: args.deviceSession.validUntil } }
       : {}),
+    // Device-session ops (sponsor mode session): { expiresAt, signature }.
+    ...(args.deviceAuth ? { deviceAuth: { expiresAt: args.deviceAuth.expiresAt, signature: args.deviceAuth.signature } } : {}),
   };
 }
 
@@ -617,6 +626,11 @@ export type SafeOpSigner = {
    * 'userOpHash' = the raw EntryPoint v0.7 userOpHash (device session ops via SmartSession).
    */
   hashKind?: 'safeOp' | 'userOpHash';
+  /**
+   * Device session ops: signs the sponsor authorization for the final unsigned op (all gas fields
+   * and the paymaster gas limits set), sent as `deviceAuth` in the sponsor body.
+   */
+  sponsorAuth?: (op: UnpackedUserOp) => Promise<DeviceAuth>;
 };
 
 /**
@@ -802,7 +816,11 @@ export async function sendSafeUserOp(
   const reply = (await postJson(
     fetchImpl,
     `${apiUrl}/api/passkey/sponsor`,
-    sponsorRequestBody(op, { ...args, proof: signer.proof }),
+    sponsorRequestBody(op, {
+      ...args,
+      proof: signer.proof,
+      ...(signer.sponsorAuth ? { deviceAuth: await signer.sponsorAuth(op) } : {}),
+    }),
     timeout,
   )) as SponsorResponse;
   op = applySponsorship(op, reply);

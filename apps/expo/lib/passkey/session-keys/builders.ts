@@ -560,3 +560,77 @@ export function encodeSessionSignature(pid: Hex, ecdsa65: Hex): Hex {
 export function withValidatorPrefix(safeSignature: Hex): Hex {
   return concatHex([`0x${'00'.repeat(20)}`, safeSignature]).toLowerCase() as Hex;
 }
+
+// ---------------------------------------------------------------------------
+// Device authorization of a session-op sponsor request (security review M-1)
+// ---------------------------------------------------------------------------
+
+/** Domain tag of the device-session sponsor authorization (v1). Mirrors the web copy. */
+export const DEVICE_AUTH_TAG: Hex = keccak256(stringToHex('roebel/passkey-sponsor/device-session-op/v1'));
+/** The sponsor accepts expiresAt <= its now + 300 s; the app asks for 120 s. */
+export const DEVICE_AUTH_MAX_TTL_SEC = 300;
+export const DEVICE_AUTH_TTL_SEC = 120;
+
+/** The op fields the sponsor's voucher covers (paymaster gas limits included). */
+export type StableUserOpFields = {
+  sender: Address;
+  nonce: bigint;
+  factory?: Address;
+  factoryData?: Hex;
+  callData: Hex;
+  callGasLimit: bigint;
+  verificationGasLimit: bigint;
+  preVerificationGas: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+  paymasterVerificationGasLimit?: bigint;
+  paymasterPostOpGasLimit?: bigint;
+};
+
+const u128 = (v: bigint): Hex => numberToHex(v, { size: 16 });
+
+/** Byte-identical to NetizenVerifyingPaymaster.hashStableFields (apps/web voucher.ts). */
+export function stableFieldsHash(op: StableUserOpFields): Hex {
+  const initCode = op.factory ? concatHex([op.factory, op.factoryData ?? '0x']) : '0x';
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: 'address' },
+        { type: 'uint256' },
+        { type: 'bytes32' },
+        { type: 'bytes32' },
+        { type: 'bytes32' },
+        { type: 'uint256' },
+        { type: 'bytes32' },
+        { type: 'uint256' },
+        { type: 'uint256' },
+      ],
+      [
+        op.sender,
+        op.nonce,
+        keccak256(initCode),
+        keccak256(op.callData),
+        concatHex([u128(op.verificationGasLimit), u128(op.callGasLimit)]),
+        op.preVerificationGas,
+        concatHex([u128(op.maxPriorityFeePerGas), u128(op.maxFeePerGas)]),
+        op.paymasterVerificationGasLimit ?? 0n,
+        op.paymasterPostOpGasLimit ?? 0n,
+      ],
+    ),
+  );
+}
+
+/**
+ * What the device session key signs (EIP-191 personal message over these 32 raw bytes) so the
+ * sponsor issues a session-op voucher:
+ *   keccak256(abi.encode(bytes32 DEVICE_AUTH_TAG, uint256 chainId, bytes32 stableFieldsHash, uint256 expiresAt))
+ * Mirrors apps/web/src/lib/passkey/session-keys-builders.ts `deviceSessionAuthHash`.
+ */
+export function deviceSessionAuthHash(p: { chainId: number; stableFieldsHash: Hex; expiresAt: number }): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'uint256' }],
+      [DEVICE_AUTH_TAG, BigInt(p.chainId), p.stableFieldsHash, BigInt(p.expiresAt)],
+    ),
+  );
+}
