@@ -10,6 +10,28 @@ import type { RegisterCard } from '@/lib/credreg/model';
 import type { HeldCredential } from '@/lib/credreg/held';
 
 // ThemeContext imports AsyncStorage, which has no native module under jest.
+// Reanimated without its native part: reduced motion on, so the wallet reveal shows cards at once.
+jest.mock('react-native-reanimated', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: { View, createAnimatedComponent: (c: unknown) => c },
+    Easing: { out: () => () => 0, in: () => () => 0, cubic: () => 0, quad: () => 0 },
+    Extrapolation: { CLAMP: 'clamp' },
+    interpolate: () => 1,
+    cancelAnimation: () => {},
+    useAnimatedStyle: () => ({}),
+    useReducedMotion: () => true,
+    useSharedValue: (v: unknown) => ({ value: v }),
+    withDelay: (_d: number, v: unknown) => v,
+    withTiming: (v: unknown) => v,
+  };
+});
+// The wallet reveal runs on focus: in tests, focus = mount.
+jest.mock('expo-router', () => {
+  const R = jest.requireActual('react');
+  return { useFocusEffect: (cb: () => void | (() => void)) => R.useEffect(cb, [cb]) };
+});
 jest.mock('@/context/ThemeContext', () => {
   const { colors } = require('@/constants/theme');
   return { useTheme: () => ({ colors: colors.light, isDark: false }) };
