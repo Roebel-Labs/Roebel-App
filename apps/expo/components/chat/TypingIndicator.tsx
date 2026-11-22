@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { BotAvatarSpec } from '@/lib/chat/types';
+import { botAnimationUrl } from '@/lib/chat/avatar-picture';
 import { BotAvatar } from './BotAvatar';
 
 export type TypingIndicatorProps = {
@@ -21,11 +22,16 @@ export type TypingIndicatorProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Bot is thinking: its picture gently breathes (scale + a little bounce). */
+/**
+ * Bot is thinking: characters and Mecky play their writing loop; other pictures gently breathe
+ * (scale + a little bounce).
+ */
 export function TypingIndicator({ spec, name, size = 29, style }: TypingIndicatorProps) {
   const pulse = useSharedValue(0);
+  const animated = !!botAnimationUrl(spec, name, 'writing');
 
   useEffect(() => {
+    if (animated) return;
     pulse.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) }),
@@ -37,7 +43,7 @@ export function TypingIndicator({ spec, name, size = 29, style }: TypingIndicato
     return () => {
       cancelAnimation(pulse);
     };
-  }, [pulse]);
+  }, [pulse, animated]);
 
   const anim = useAnimatedStyle(() => ({
     transform: [{ translateY: -pulse.value * size * 0.06 }, { scale: 1 + pulse.value * 0.06 }],
@@ -50,7 +56,7 @@ export function TypingIndicator({ spec, name, size = 29, style }: TypingIndicato
       accessibilityRole="progressbar"
       accessibilityLabel="Schreibt …"
     >
-      <BotAvatar spec={spec} name={name} size={size} />
+      <BotAvatar spec={spec} name={name} size={size} animate="writing" />
     </Animated.View>
   );
 }

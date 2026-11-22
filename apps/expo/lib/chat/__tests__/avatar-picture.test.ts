@@ -1,6 +1,7 @@
 import {
   MECKY_AVATAR_SPEC,
   MECKY_TILE_URL,
+  botAnimationUrl,
   botInitial,
   botPictureUrl,
   botTileColor,
@@ -79,5 +80,22 @@ describe('centerSquareCrop', () => {
   it('crops the centre square of landscape and portrait images', () => {
     expect(centerSquareCrop(1600, 1200)).toEqual({ originX: 200, originY: 0, width: 1200, height: 1200 });
     expect(centerSquareCrop(1000, 1601)).toEqual({ originX: 0, originY: 300, width: 1000, height: 1000 });
+  });
+});
+
+describe('botAnimationUrl', () => {
+  const base = 'https://www.roebel.app/agents';
+
+  it('animates characters, Mecky by name and house artwork', () => {
+    expect(botAnimationUrl({ character: 'otto' }, 'Otto', 'idle')).toBe(`${base}/otto/idle.webp`);
+    expect(botAnimationUrl(null, 'Mecky', 'writing')).toBe(`${base}/mecky/writing.webp`);
+    expect(botAnimationUrl({ imageUrl: `${base}/lumi/tile.webp` }, 'Recherche', 'idle')).toBe(`${base}/lumi/idle.webp`);
+    expect(botAnimationUrl({ imageUrl: MECKY_TILE_URL }, 'Assistent', 'writing')).toBe(`${base}/mecky/writing.webp`);
+  });
+
+  it('keeps own uploads, unknown art and plain bots still', () => {
+    expect(botAnimationUrl({ imageUrl: 'https://x.supabase.co/a.jpg', character: 'otto' }, 'Otto', 'idle')).toBeNull();
+    expect(botAnimationUrl({ imageUrl: `${base}/berta/tile.webp` }, 'Berta', 'idle')).toBeNull();
+    expect(botAnimationUrl({ character: null }, 'Recherche', 'idle')).toBeNull();
   });
 });

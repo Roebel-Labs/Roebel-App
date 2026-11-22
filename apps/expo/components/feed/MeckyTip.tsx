@@ -1,11 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { AnimatedMascot } from '@/components/chat/AnimatedMascot';
+import { meckyAnimationUrl } from '@/lib/chat/avatar-picture';
+
 const MECKY_AVATAR = require('@/assets/illustration/mecky/welcome.png');
+const MECKY_IDLE = meckyAnimationUrl('idle');
 
 interface MeckyTipProps {
   text: string;
@@ -22,11 +24,12 @@ export default function MeckyTip({ text, actionLabel, actionRoute }: MeckyTipPro
       onPress={actionRoute ? () => router.push(actionRoute as any) : undefined}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <Image
-        source={MECKY_AVATAR}
+      <AnimatedMascot
+        uri={MECKY_IDLE}
+        size={40}
+        mode="idle"
+        placeholder={MECKY_AVATAR}
         style={[styles.avatar, { backgroundColor: colors.primaryLight }]}
-        contentFit="cover"
-        accessibilityIgnoresInvertColors
       />
       <View style={styles.content}>
         <Text style={[styles.label, { color: colors.primary }]}>MECKY TIPP</Text>

@@ -9,6 +9,7 @@ import PostVideoPlayer from './PostVideoPlayer';
 import PostLinkPreview from './PostLinkPreview';
 import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import { meckyAnimationUrl } from '@/lib/chat/avatar-picture';
 
 const MECKY_AVATAR = require('@/assets/images/icon.png');
 
@@ -65,6 +66,7 @@ export default function FeedMeckyCard({
         createdAt={post.created_at}
         nameOverride="Mecky Bot"
         avatarOverride={MECKY_AVATAR}
+        avatarAnimationUri={meckyAnimationUrl('idle')}
         badge="Bot"
         onMore={onMore}
       />

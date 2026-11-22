@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
+import { AnimatedMascot } from '@/components/chat/AnimatedMascot';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
@@ -20,6 +21,8 @@ type Props = {
   nameOverride?: string;
   /** Override avatar — URI string or local require() source */
   avatarOverride?: string | ImageSource;
+  /** Animated picture (Mecky): rests, plays when the row scrolls into view and now and then. */
+  avatarAnimationUri?: string;
   /** Extra label shown after the author name (e.g., "Gesponsert") */
   badge?: string;
   /** Optional more (dots) button rendered at the right end of the row. */
@@ -37,6 +40,7 @@ export default function PostAuthorRow({
   createdAt,
   nameOverride,
   avatarOverride,
+  avatarAnimationUri,
   badge,
   onMore,
   hideAvatar = false,
@@ -59,7 +63,9 @@ export default function PostAuthorRow({
     ? () => openAuthorProfile(router, { author, account: author?.account })
     : undefined;
 
-  const avatarNode = avatarSource ? (
+  const avatarNode = avatarAnimationUri ? (
+    <AnimatedMascot uri={avatarAnimationUri} size={36} mode="idle" placeholder={avatarSource ?? avatarUri ?? null} />
+  ) : avatarSource ? (
     <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
   ) : (
     <UserAvatarWithFrame

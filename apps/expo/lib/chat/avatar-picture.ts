@@ -38,6 +38,37 @@ export function botPictureUrl(
   return null;
 }
 
+/** The two animated loops each house character (and Mecky) has on the website. */
+export type MascotAnimation = 'idle' | 'writing';
+
+const HOUSE_ART = /^https:\/\/(?:www\.)?roebel\.app\/agents\/([a-z0-9-]+)\/tile\.webp$/i;
+
+/**
+ * Animated loop for a bot, or null when it has none (own uploads and initial tiles stay still). House artwork
+ * carried by preset bots counts as its character; Mecky by name.
+ */
+export function botAnimationUrl(
+  spec: Pick<BotAvatarSpec, 'imageUrl' | 'character'> | null | undefined,
+  name: string | null | undefined,
+  kind: MascotAnimation,
+): string | null {
+  let id: string | null = null;
+  if (spec && isHttpsUrl(spec.imageUrl)) {
+    const m = HOUSE_ART.exec(spec.imageUrl);
+    const house = m?.[1].toLowerCase();
+    if (house && (house === 'mecky' || characterById(house))) id = house;
+    else return null;
+  } else {
+    id = characterById(spec?.character)?.id ?? (isMeckyName(name) ? 'mecky' : null);
+  }
+  return id ? `${AGENT_SITE_ORIGIN}/agents/${id}/${kind}.webp` : null;
+}
+
+/** Mecky's animated loops, for screens that show Mecky without a bot spec (comments, tips, posts). */
+export function meckyAnimationUrl(kind: MascotAnimation): string {
+  return `${AGENT_SITE_ORIGIN}/agents/mecky/${kind}.webp`;
+}
+
 /** First letter of the name, upper-cased ("" when there is none). Skips leading symbols and spaces. */
 export function botInitial(name: string | null | undefined): string {
   if (typeof name !== 'string') return '';

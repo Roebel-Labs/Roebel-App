@@ -1,6 +1,7 @@
+import { AnimatedMascot } from '@/components/chat/AnimatedMascot';
+import { meckyAnimationUrl } from '@/lib/chat/avatar-picture';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
-import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import CommentItem from '@/components/feed/CommentItem';
 import { useRelations } from '@/context/RelationsContext';
@@ -24,6 +25,7 @@ type Props = {
 };
 
 const MECKY_AVATAR = require('@/assets/illustration/mecky/welcome.png');
+const MECKY_WRITING = meckyAnimationUrl('writing');
 
 export default function CommentThread({
   comment,
@@ -96,7 +98,7 @@ export default function CommentThread({
 
       {meckyThinking && (
         <View style={styles.thinking} accessibilityLiveRegion="polite">
-          <Image source={MECKY_AVATAR} style={styles.thinkingAvatar} contentFit="cover" />
+          <AnimatedMascot uri={MECKY_WRITING} size={28} mode="loop" placeholder={MECKY_AVATAR} />
           <Text style={[styles.thinkingText, { color: colors.textSecondary }]}>
             Mecky denkt nach…
           </Text>

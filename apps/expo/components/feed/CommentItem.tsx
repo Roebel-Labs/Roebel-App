@@ -8,6 +8,8 @@ import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import { AnimatedMascot } from '@/components/chat/AnimatedMascot';
+import { meckyAnimationUrl } from '@/lib/chat/avatar-picture';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import LinkifiedText from '@/components/feed/LinkifiedText';
 import { MECKY_WALLET } from '@/lib/mentions';
@@ -15,6 +17,9 @@ import type { PostCommentRecord } from '@/lib/types/feed';
 
 import HeartIcon from '@/assets/icons/heart-02.svg';
 import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
+
+/** Mecky's still picture while the animated one loads. */
+const MECKY_STILL = require('@/assets/illustration/mecky/welcome.png');
 
 // Standard Röbel Münzen coin (same asset as the chat + Belohnungen screens).
 const COIN = require('@/assets/illustration/gamification/single.png');
@@ -83,6 +88,14 @@ export default function CommentItem({
         accessibilityRole={isInteractive ? 'button' : undefined}
         accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
       >
+        {isMecky ? (
+          <AnimatedMascot
+            uri={meckyAnimationUrl('idle')}
+            size={avatarSize}
+            mode="idle"
+            placeholder={avatarUri ?? MECKY_STILL}
+          />
+        ) : (
         <UserAvatarWithFrame
           size={avatarSize}
           uri={avatarUri ?? null}
@@ -90,6 +103,7 @@ export default function CommentItem({
           frameAssetUrl={isOrgComment ? null : comment.author?.equipped_frame_asset_url ?? null}
           disabled={isOrgComment}
         />
+        )}
       </Pressable>
 
       {/* Content */}

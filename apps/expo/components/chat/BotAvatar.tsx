@@ -2,7 +2,15 @@ import React, { memo, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import type { BotAvatarSpec, BotEyes, BotShape } from '@/lib/chat/types';
-import { botInitial, botPictureUrl, botTileColor, initialTextColor } from '@/lib/chat/avatar-picture';
+import {
+  botAnimationUrl,
+  botInitial,
+  botPictureUrl,
+  botTileColor,
+  initialTextColor,
+  type MascotAnimation,
+} from '@/lib/chat/avatar-picture';
+import { AnimatedMascot } from './AnimatedMascot';
 import { chatFont, useChatTokens } from './tokens';
 
 /** Palette sampled from the reference mascots (still used as tile colours of older bots). */
@@ -39,6 +47,11 @@ export type BotAvatarProps = {
   online?: boolean;
   /** Legacy (the drawn eyes are gone); ignored. */
   hideEyes?: boolean;
+  /**
+   * Animated characters and Mecky: 'idle' (default) plays a short loop when the avatar comes into view and now
+   * and then; 'writing' loops while the agent answers; false keeps the picture still. Below 24 px it stays still.
+   */
+  animate?: MascotAnimation | false;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -60,7 +73,7 @@ function InitialTile({ spec, size, name }: { spec: BotAvatarSpec; size: number; 
   );
 }
 
-function BotAvatarImpl({ spec, size, name, online, style }: BotAvatarProps) {
+function BotAvatarImpl({ spec, size, name, online, animate = 'idle', style }: BotAvatarProps) {
   const t = useChatTokens();
   const dot = Math.max(8, Math.round(size * 0.26));
   const ring = size >= 36 ? 2.5 : 2;
@@ -68,10 +81,21 @@ function BotAvatarImpl({ spec, size, name, online, style }: BotAvatarProps) {
   // A failed download shows the initial tile; a new url gets a fresh try.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const picture = url && failedUrl !== url ? url : null;
+  const animUrl = animate && size >= 24 ? botAnimationUrl(spec, name, animate) : null;
+  const animation = animUrl && failedUrl !== animUrl ? animUrl : null;
   return (
     <View style={[{ width: size, height: size }, style]}>
       <InitialTile spec={spec} size={size} name={name} />
-      {picture ? (
+      {animation ? (
+        <AnimatedMascot
+          uri={animation}
+          size={size}
+          mode={animate === 'writing' ? 'loop' : 'idle'}
+          placeholder={picture}
+          onError={() => setFailedUrl(animation)}
+          style={styles.picture}
+        />
+      ) : picture ? (
         <View style={[styles.picture, { width: size, height: size, borderRadius: size / 2 }]}>
           <Image
             source={{ uri: picture }}
