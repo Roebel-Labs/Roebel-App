@@ -143,7 +143,7 @@ export const placeCardStyles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 15,
     fontFamily: 'MonaSans-SemiBold',
   },
   rating: {
@@ -152,11 +152,11 @@ export const placeCardStyles = StyleSheet.create({
     gap: 4,
   },
   ratingValue: {
-    fontSize: 15,
+    fontSize: 13,
     fontFamily: 'MonaSans-SemiBold',
   },
   line: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'MonaSans-Regular',
     marginTop: 3,
   },

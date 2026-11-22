@@ -135,17 +135,17 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   name: {
-    fontSize: 17,
+    fontSize: 15,
     fontFamily: fontFamily.semiBold,
     marginTop: 10,
   },
   meta: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fontFamily.regular,
     marginTop: 2,
   },
   price: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fontFamily.semiBold,
     marginTop: 4,
   },

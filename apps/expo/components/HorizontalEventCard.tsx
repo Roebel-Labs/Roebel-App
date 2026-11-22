@@ -125,13 +125,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: fontFamily.medium,
   },
   meta: {
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: fontFamily.regular,
   },
   peek: {
