@@ -15,7 +15,7 @@ const ILLUSTRATION = require('@/assets/illustration/weather/donations_hero.png')
 const ILLU_ASPECT = 1488 / 818;
 const CARD_HEIGHT = 172;
 /** How far the plants run below the card edge (the card clips them). */
-const ILLU_SINK = 48;
+const ILLU_SINK = 34;
 
 /**
  * Pinned at the top of the Umfragen tab: the Gemeinschaftskasse total on the
