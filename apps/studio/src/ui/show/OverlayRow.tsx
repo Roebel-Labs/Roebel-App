@@ -6,6 +6,7 @@ import { useShow } from '../../state/store';
 import type { OverlayInstance, RenderContext, ShowState, Template } from '../../state/types';
 import { useStudio } from '../studio';
 import { useTileDrag } from './tile-drag';
+import { useFloating } from '../floating';
 
 const PREVIEW_W = 160;
 const PREVIEW_H = 90;
@@ -89,6 +90,7 @@ function hotkeyFor(state: ShowState, overlayId: string): string | null {
 function AddOverlayMenu({ onClose }: { onClose: () => void }) {
   const { state, dispatch } = useShow();
   const ref = useRef<HTMLDivElement>(null);
+  useFloating(ref);
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.parentElement?.contains(e.target as Node)) onClose();

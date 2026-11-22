@@ -16,6 +16,7 @@ import { useTileDrag } from './tile-drag';
 import { ScreenPicker } from './ScreenPicker';
 import { arrange } from './arrange';
 import { defaultFrame } from '../../render/layout';
+import { useFloating } from '../floating';
 
 const THUMB_W = 192;
 const THUMB_H = 108;
@@ -96,6 +97,7 @@ function AddSourceMenu({ onClose, onPickScreen }: { onClose: () => void; onPickS
   const [bg, setBg] = useState('');
   const [extra, setExtra] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  useFloating(ref);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -409,6 +411,7 @@ function ComboOptions(p: { layout: Scene['layout']; fill: boolean; onFill: (v: b
 function ComboEdit({ scene, onClose }: { scene: Scene; onClose: () => void }) {
   const { dispatch } = useShow();
   const ref = useRef<HTMLDivElement>(null);
+  useFloating(ref);
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.parentElement?.contains(e.target as Node)) onClose();
