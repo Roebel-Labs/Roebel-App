@@ -181,6 +181,25 @@
   line-height: 1;
 }
 
+.ws-avatar {
+  position: relative;
+}
+
+/* Animated loop over the still tile (mascot-animation.ts); fades in so the switch is soft. */
+.ws-avatar .ws-avatar-anim {
+  position: absolute;
+  inset: 0;
+  transform: none;
+  object-position: 50% 50%;
+  animation: ws-avatar-anim-in 160ms ease-out;
+}
+
+@keyframes ws-avatar-anim-in {
+  from {
+    opacity: 0;
+  }
+}
+
 .ws-avatar img {
   display: block;
   width: 100%;

@@ -13,7 +13,7 @@ export function ActivityBar({ bot, label }: { bot?: Pick<ChatBot, 'id' | 'name'>
   return (
     <div className="ws-activity" role="status" aria-live="polite">
       <span className="ws-activity-avatar">
-        <BotAvatar bot={bot} size={36} radius={8} />
+        <BotAvatar bot={bot} size={36} radius={8} animate="writing" />
       </span>
       <span className="ws-activity-label" key={label}>
         {label}
