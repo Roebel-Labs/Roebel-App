@@ -29,6 +29,7 @@ import {
   type LngLat,
 } from '@/lib/elli/routeMath';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { co2SavedGrams, formatCo2 } from '@/lib/elli/co2';
 
 const MODEL_URL = 'https://www.roebel.app/models/elli.glb?v=2';
 const ELLI_YELLOW = '#FFB703';
@@ -38,6 +39,10 @@ const ROUTE = buildPolyline(DEMO_ROUTE);
 const SPEED_MPS = ROUTE.length / DEMO_ROUTE_DURATION_S;
 const PICKUP: LngLat = DEMO_ROUTE[DEMO_ROUTE.length - 1];
 const ARRIVED_HOLD_S = 8;
+// Test ride after pickup: 8 km to the shops; the drive to the pickup is the
+// empty leg. Shows what the CO₂ line will say on a real ride.
+const DEMO_RIDE_KM = 8;
+const DEMO_CO2 = formatCo2(co2SavedGrams({ rideKm: DEMO_RIDE_KM, emptyKm: ROUTE.length / 1000, passengers: 1 }));
 const NEXT_LEG_MIN = 11;
 
 // Model is the real e-NV200 size in metres (4.56 m). From zoom 17 in it is
@@ -439,6 +444,13 @@ export default function DevElliMapScreen() {
             <Text style={[styles.status, { color: colors.success }]}>
               {arrived ? 'Steig in Ruhe ein – Elli wartet auf dich.' : `Pünktlich · an ${hhmm(pickupAt)}`}
             </Text>
+            {arrived ? (
+              <Pressable onPress={() => router.push('/elli/co2' as any)} hitSlop={8}>
+                <Text style={[styles.co2Line, { color: colors.textPrimary }]}>
+                  🍃 Statt Diesel-Auto: ca. {DEMO_CO2} CO₂ gespart auf {DEMO_RIDE_KM} km →
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           <View style={[styles.testTag, { borderColor: hairline }]}>
             <Text style={[styles.testTagText, { color: colors.textSecondary }]}>Testfahrt</Text>
@@ -547,6 +559,7 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
+  co2Line: { fontFamily: fontFamily.semiBold, fontSize: 14, marginTop: 8 },
   container: { flex: 1 },
   fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 

@@ -178,6 +178,11 @@ export default function TransitScreen() {
                   </Pressable>
                 ) : null}
               </View>
+              <Pressable onPress={() => router.push('/elli/co2' as any)} style={styles.elliCo2Link} hitSlop={8}>
+                <Text style={[styles.elliCo2LinkText, { color: colors.textPrimary }]}>
+                  🍃 Deine CO₂-Bilanz mit Elli ansehen →
+                </Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -327,6 +332,8 @@ const styles = StyleSheet.create({
   elliEmoji: { fontSize: 30 },
   elliTitle: { fontSize: 16, fontFamily: 'MonaSans-SemiBold', marginBottom: 6 },
   elliSub: { fontSize: 13, fontFamily: 'MonaSans-Regular', lineHeight: 18, marginBottom: 12 },
+  elliCo2Link: { marginTop: 12, paddingVertical: 4 },
+  elliCo2LinkText: { fontSize: 14, fontFamily: 'MonaSans-SemiBold' },
   elliButtonRow: { flexDirection: 'row', gap: 8 },
   elliButton: {
     paddingHorizontal: 14,
