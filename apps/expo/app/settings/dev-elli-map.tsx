@@ -30,7 +30,7 @@ import {
 } from '@/lib/elli/routeMath';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
-const MODEL_URL = 'https://www.roebel.app/models/elli.glb';
+const MODEL_URL = 'https://www.roebel.app/models/elli.glb?v=2';
 const ELLI_YELLOW = '#FFB703';
 const NAVY = '#00498B';
 
@@ -40,17 +40,20 @@ const PICKUP: LngLat = DEMO_ROUTE[DEMO_ROUTE.length - 1];
 const ARRIVED_HOLD_S = 8;
 const NEXT_LEG_MIN = 11;
 
-// Model is built ~4.6 m long. Scale it so it keeps roughly the same size on
-// screen at every zoom (×2 per zoom step down), like a marker.
-const MODEL_PX_SCALE = 3;
+// Model is the real e-NV200 size in metres (4.56 m). From zoom 17 in it is
+// true scale, so it grows with the map like a real car; further out it grows
+// ×2 per zoom step so it keeps its zoom-17 on-screen size instead of vanishing.
+const MODEL_TRUE_SCALE_ZOOM = 17;
 const MODEL_SCALE = [
   'interpolate',
   ['exponential', 2],
   ['zoom'],
   10,
-  [MODEL_PX_SCALE * 64, MODEL_PX_SCALE * 64, MODEL_PX_SCALE * 64],
-  20,
-  [MODEL_PX_SCALE / 16, MODEL_PX_SCALE / 16, MODEL_PX_SCALE / 16],
+  Array(3).fill(2 ** (MODEL_TRUE_SCALE_ZOOM - 10)),
+  MODEL_TRUE_SCALE_ZOOM,
+  [1, 1, 1],
+  22,
+  [1, 1, 1],
 ];
 
 const THEMES = ['faded', 'monochrome', 'default'] as const;
