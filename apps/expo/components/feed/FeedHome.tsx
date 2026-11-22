@@ -54,6 +54,7 @@ import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
 import ForumCategoryChips from '../forum/ForumCategoryChips';
 import BuergerratTrackerCard from '../forum/BuergerratTrackerCard';
+import GemeinschaftskasseCard from '../forum/GemeinschaftskasseCard';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
@@ -657,6 +658,7 @@ export default function FeedHome() {
             onMore={handleMore}
             listHeader={
               <View>
+                <GemeinschaftskasseCard />
                 <ForumCategoryChips activeSlug="alle" showNewCta={false} />
                 <BuergerratTrackerCard />
               </View>
