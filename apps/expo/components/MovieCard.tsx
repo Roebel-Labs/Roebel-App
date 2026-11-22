@@ -129,15 +129,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: 'MonaSans-Medium',
     marginBottom: 4,
     lineHeight: 22,
   },
   description: {
-    fontSize: 13,
-    fontFamily: 'Inter',
-    lineHeight: 18,
+    fontSize: 14,
+    fontFamily: 'MonaSans-Regular',
+    lineHeight: 19,
   },
 });
 

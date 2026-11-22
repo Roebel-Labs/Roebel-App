@@ -172,12 +172,12 @@ const styles = StyleSheet.create({
   },
   title: {
     marginTop: 10,
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: fontFamily.semiBold,
   },
   subtitle: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: fontFamily.regular,
   },
 });

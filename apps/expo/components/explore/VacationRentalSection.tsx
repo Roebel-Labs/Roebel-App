@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   name: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: fontFamily.semiBold,
     marginTop: 10,
   },
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   price: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: fontFamily.semiBold,
     marginTop: 4,
   },

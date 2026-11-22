@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     height: 96,
   },
   name: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: 'MonaSans-SemiBold',
     marginTop: 10,
   },

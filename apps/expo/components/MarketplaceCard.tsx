@@ -157,9 +157,9 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   titleCompact: {
-    fontSize: 14,
+    fontSize: 17,
     fontFamily: 'MonaSans-SemiBold',
-    lineHeight: 19,
+    lineHeight: 22,
     marginBottom: 4,
   },
   title: {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   priceCompact: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'MonaSans-Regular',
     marginBottom: 6,
   },
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   neighborhood: {
-    fontSize: 13,
+    fontSize: 14,
     marginBottom: 6,
   },
   conditionBadge: {

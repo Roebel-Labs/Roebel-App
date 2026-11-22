@@ -195,9 +195,9 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   titleCompact: {
-    fontSize: 14,
+    fontSize: 17,
     fontFamily: 'MonaSans-SemiBold',
-    lineHeight: 19,
+    lineHeight: 22,
     marginBottom: 4,
   },
   title: {
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   businessNameCompact: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'MonaSans-Regular',
     marginBottom: 6,
   },

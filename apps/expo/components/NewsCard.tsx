@@ -133,16 +133,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
     marginBottom: 8,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   titleCompact: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: 'MonaSans-Medium',
     marginBottom: 8,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   excerpt: {
     fontSize: 14,
@@ -155,10 +155,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 14,
   },
   metaDot: {
-    fontSize: 13,
+    fontSize: 14,
     marginHorizontal: 6,
   },
 });
