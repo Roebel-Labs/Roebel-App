@@ -47,7 +47,7 @@ const ILLU_ASPECT = 1488 / 818;
 /** The illustration is drawn a little wider than the screen so the edge figures crop like the design. */
 const ILLU_OVERSCAN = 1.08;
 /** Hero text block below the header bar: label + number + pill. */
-const HERO_TEXT_BLOCK = 196;
+const HERO_TEXT_BLOCK = 200;
 /** Free illustration band under the pill (plants + feet). */
 const HERO_GARDEN_BAND = 150;
 const SHEET_OVERLAP = 24;
@@ -446,9 +446,9 @@ function makeStyles(colors: any, isDark: boolean) {
 		heroBg: { backgroundColor: colors.primaryLight },
 		illustration: { position: "absolute" },
 		heroTitleBar: { height: DETAIL_HEADER_BAR, alignItems: "center", justifyContent: "center", paddingHorizontal: 80 },
-		heroTitle: { fontFamily: fontFamily.semiBold, fontSize: 19, color: colors.textPrimary },
+		heroTitle: { fontFamily: fontFamily.semiBold, fontSize: 17, color: colors.textPrimary },
 		heroText: { alignItems: "center", paddingHorizontal: 24, paddingTop: 14 },
-		heroLabel: { fontFamily: fontFamily.medium, fontSize: 18, color: colors.textSecondary },
+		heroLabel: { fontFamily: fontFamily.medium, fontSize: 15, color: colors.textSecondary },
 		heroValue: {
 			fontFamily: fontFamily.bold,
 			fontSize: 66,
@@ -457,17 +457,17 @@ function makeStyles(colors: any, isDark: boolean) {
 			color: colors.textPrimary,
 			marginTop: 2,
 		},
-		heroNote: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+		heroNote: { fontFamily: fontFamily.regular, fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 		supportBtn: {
-			marginTop: 14,
+			marginTop: 24,
 			backgroundColor: colors.textPrimary,
 			borderRadius: 999,
-			paddingHorizontal: 34,
-			height: 52,
+			paddingHorizontal: 30,
+			height: 46,
 			alignItems: "center",
 			justifyContent: "center",
 		},
-		supportBtnText: { fontFamily: fontFamily.semiBold, fontSize: 17, color: isDark ? "#000000" : "#FFFFFF" },
+		supportBtnText: { fontFamily: fontFamily.semiBold, fontSize: 15, color: isDark ? "#000000" : "#FFFFFF" },
 		sheet: { paddingHorizontal: 20, paddingTop: 26, paddingBottom: 48 },
 		section: { marginBottom: 30 },
 		sectionHeader: {
@@ -477,8 +477,8 @@ function makeStyles(colors: any, isDark: boolean) {
 			marginBottom: 12,
 			minHeight: 36,
 		},
-		sectionTitle: { fontFamily: fontFamily.heading, fontSize: 26, letterSpacing: -0.4, color: colors.textPrimary },
-		empty: { fontFamily: fontFamily.regular, fontSize: 14, color: colors.textSecondary, paddingVertical: 8 },
+		sectionTitle: { fontFamily: fontFamily.heading, fontSize: 21, letterSpacing: -0.2, color: colors.textPrimary },
+		empty: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.textSecondary, paddingVertical: 8 },
 		row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8 },
 		badgeWrap: { width: 56, height: 56 },
 		eurBadge: {
@@ -489,7 +489,7 @@ function makeStyles(colors: any, isDark: boolean) {
 			alignItems: "center",
 			justifyContent: "center",
 		},
-		eurBadgeText: { fontFamily: fontFamily.bold, fontSize: 24, color: colors.primary },
+		eurBadgeText: { fontFamily: fontFamily.bold, fontSize: 20, color: colors.primary },
 		dirDot: {
 			position: "absolute",
 			right: -3,
@@ -502,14 +502,14 @@ function makeStyles(colors: any, isDark: boolean) {
 			alignItems: "center",
 			justifyContent: "center",
 		},
-		rowTitle: { fontFamily: fontFamily.semiBold, fontSize: 18, color: colors.textPrimary },
+		rowTitle: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
 		rowLinks: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 3 },
-		rowLink: { fontFamily: fontFamily.medium, fontSize: 14, color: colors.primary },
-		rowProof: { fontFamily: fontFamily.regular, fontSize: 14, color: colors.textSecondary },
-		rowAmount: { fontFamily: fontFamily.semiBold, fontSize: 18, color: colors.textPrimary },
+		rowLink: { fontFamily: fontFamily.medium, fontSize: 12, color: colors.primary },
+		rowProof: { fontFamily: fontFamily.regular, fontSize: 12, color: colors.textSecondary },
+		rowAmount: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
 		proof: { marginTop: 4, alignItems: "center", gap: 2 },
 		proofLabel: { fontFamily: fontFamily.medium, fontSize: 12, color: colors.textTertiary, letterSpacing: 0.3 },
 		proofLink: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.textSecondary, textDecorationLine: "underline" },
-		drawerTitle: { fontFamily: fontFamily.heading, fontSize: 22, color: colors.textPrimary, marginBottom: 12 },
+		drawerTitle: { fontFamily: fontFamily.heading, fontSize: 19, color: colors.textPrimary, marginBottom: 12 },
 	});
 }
