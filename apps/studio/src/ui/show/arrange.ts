@@ -5,9 +5,10 @@
 import { useSyncExternalStore } from 'react';
 import type { Scene } from '../../state/types';
 
-type ArrangeState = { on: boolean; selected: string | null };
+/** crop = the box handles cut the picture instead of scaling it. */
+type ArrangeState = { on: boolean; selected: string | null; crop: boolean };
 
-let state: ArrangeState = { on: false, selected: null };
+let state: ArrangeState = { on: false, selected: null, crop: false };
 let draft: Scene | null = null;
 const listeners = new Set<() => void>();
 
@@ -25,10 +26,11 @@ export const arrange = {
   open: (selected: string | null = null) => set({ on: true, selected }),
   close: () => {
     draft = null;
-    set({ on: false, selected: null });
+    set({ on: false, selected: null, crop: false });
   },
+  setCrop: (crop: boolean) => set({ crop }),
   toggle: () => (state.on ? arrange.close() : arrange.open()),
-  select: (selected: string | null) => set({ selected }),
+  select: (selected: string | null) => set(selected ? { selected } : { selected, crop: false }),
   /** The scene as it looks mid-drag (null = draw the show state). */
   draft: () => draft,
   setDraft: (scene: Scene | null) => {

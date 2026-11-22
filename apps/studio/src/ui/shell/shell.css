@@ -93,14 +93,9 @@
   --w-accent-tile: color-mix(in srgb, var(--w-accent) 46%, #161713);
 }
 
-/* Workspace typography: Mona Sans at normal width for headings too; the livestream keeps the
-   semi-condensed display face of its control-room theme. */
+/* Workspace typography: Mona Sans at normal width for headings too (the livestream included). */
 .app.shell {
   --font-head: 'Mona Sans', 'Inter', system-ui, sans-serif;
-}
-
-.shell-card.live-mode {
-  --font-head: 'Mona Sans SemiCondensed', 'Mona Sans', 'Inter', system-ui, sans-serif;
 }
 
 body {
@@ -300,12 +295,196 @@ html.mac-inset .toolbar {
   color-scheme: dark;
 }
 
-/* The livestream keeps its dark control-room theme inside the card. */
+/* ---------------------------------------------------------------- livestream in the Ortis design
+   The control room (ui/theme.css) is written against its own tokens. Inside the card they point at the
+   workspace tokens, so the livestream follows light/dark, the stone neutrals and the user's accent colour
+   like every other section. What stays: green = preview, red = live, amber = attention, black monitors. */
+
 .shell-card.live-mode {
-  border-color: var(--line);
-  background: var(--bg);
-  color: var(--text);
-  color-scheme: dark;
+  --bg: var(--w-card);
+  --panel: var(--w-side);
+  --raised: var(--w-control);
+  --raised-hover: color-mix(in srgb, var(--w-text) 7%, var(--w-control));
+  --line: var(--w-line-strong);
+  --line-strong: color-mix(in srgb, var(--w-text) 18%, var(--w-card));
+  --border-brand: var(--w-accent);
+  --text: var(--w-text);
+  --text-2: var(--w-text-2);
+  --text-3: var(--w-muted);
+  --navy: var(--w-accent);
+  --navy-hover: var(--w-accent-hover);
+  --navy-press: color-mix(in srgb, var(--w-accent) 80%, black);
+  --pgm-text: var(--w-danger);
+  --r: var(--w-r);
+  background: var(--w-card);
+  color: var(--w-text);
+}
+
+.live-mode .topbar {
+  height: 52px;
+  gap: 20px;
+  border-bottom-color: var(--w-line);
+  background: var(--w-card);
+}
+
+.live-mode .wordmark {
+  font: 600 15px/1 var(--font-head);
+  letter-spacing: 0;
+}
+
+/* Tabs as the segmented control of Einstellungen → Darstellung. */
+.live-mode .tabs {
+  align-self: center;
+  height: auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  background: var(--w-raised);
+}
+
+.live-mode .tab {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  color: var(--w-muted);
+  font: 600 13px/1 var(--font-body);
+}
+
+.live-mode .tab:hover {
+  color: var(--w-text);
+}
+
+.live-mode .tab[aria-selected='true'] {
+  background: var(--w-card);
+  color: var(--w-text);
+  outline: 1px solid var(--w-line-strong);
+}
+
+.live-mode .tab[aria-selected='true']::after {
+  display: none;
+}
+
+/* Buttons and pills: round, quiet outline; the accent fill is kept for the one primary action. */
+.live-mode .btn {
+  border-color: var(--w-line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--w-text);
+}
+
+.live-mode .btn:hover:not(:disabled) {
+  background: var(--w-hover);
+}
+
+.live-mode .btn.ghost {
+  border-color: transparent;
+  color: var(--w-muted);
+}
+
+.live-mode .btn.ghost:hover:not(:disabled) {
+  color: var(--w-text);
+}
+
+.live-mode .btn.primary {
+  border-color: var(--w-accent);
+  background: var(--w-accent);
+  color: #fff;
+}
+
+.live-mode .btn.primary:hover:not(:disabled) {
+  background: var(--w-accent-hover);
+}
+
+.live-mode .btn.solid-danger {
+  background: var(--pgm);
+  color: #fff;
+}
+
+.live-mode .pill,
+.live-mode .monitor-action,
+.live-mode .arrange-chip {
+  border-radius: 999px;
+}
+
+.live-mode .pill {
+  font: 600 13px/1 var(--font-body);
+  letter-spacing: 0.02em;
+}
+
+.live-mode .monitor-title,
+.live-mode .row-title {
+  font: 600 14px/1 var(--font-head);
+}
+
+.live-mode .monitor-action {
+  height: 24px;
+  border-color: var(--w-line-strong);
+  background: transparent;
+  color: var(--w-text-2);
+}
+
+.live-mode .monitor-action:hover:not(:disabled) {
+  background: var(--w-hover);
+}
+
+/* Monitors: a thin signal ring instead of a heavy frame. */
+.live-mode .monitor-frame {
+  border-width: 2px;
+}
+
+.live-mode .chip {
+  border-color: var(--w-line-strong);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.live-mode .chip[aria-pressed='true'] {
+  border-color: var(--w-accent);
+  background: var(--w-accent-soft);
+  color: var(--w-accent-text);
+}
+
+.live-mode .duration input[type='range'],
+.live-mode .settings input[type='range'] {
+  accent-color: var(--w-accent);
+}
+
+.live-mode .take {
+  font: 700 24px/1 var(--font-head);
+  letter-spacing: 0.04em;
+}
+
+.live-mode .tile,
+.live-mode .ovl {
+  background: var(--w-card);
+}
+
+.live-mode .add-tile {
+  border-radius: var(--w-r);
+}
+
+.live-mode .seg,
+.live-mode .arrange-seg {
+  border-radius: 8px;
+}
+
+.live-mode .menu,
+.live-mode .dialog {
+  border-color: var(--w-line-strong);
+  background: var(--w-card);
+}
+
+.live-mode .backdrop {
+  background: color-mix(in srgb, var(--w-ink) 35%, transparent);
+}
+
+.live-mode .input,
+.live-mode .au-field input,
+.live-mode .au-field select {
+  border-color: var(--w-line-strong);
+  border-radius: 8px;
+  background: var(--w-card);
 }
 
 .section {

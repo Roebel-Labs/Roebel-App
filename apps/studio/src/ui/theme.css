@@ -43,6 +43,7 @@
   --pvw: #2fa866;
   --pgm: #e5484d;
   --amber: #e8a33d;
+  --pgm-text: #ff8a8d;
   --r: 4px;
   /* Interface fonts. The on-air graphics (canvas) keep Inter / Plus Jakarta Sans in render/fonts.ts. */
   --font-body: 'Mona Sans', 'Inter', system-ui, sans-serif;
@@ -253,7 +254,7 @@ button {
 .btn.danger {
   border-color: var(--pgm);
   background: transparent;
-  color: #ff8a8d;
+  color: var(--pgm-text);
 }
 
 .btn.danger:hover:not(:disabled) {
@@ -546,7 +547,7 @@ button {
   padding: 6px 10px;
   border-radius: var(--r);
   background: rgba(229, 72, 77, 0.14);
-  color: #ff8a8d;
+  color: var(--pgm-text);
   font-size: 12px;
 }
 
@@ -622,10 +623,126 @@ button {
   box-shadow: inset 0 -2px 0 var(--pvw);
 }
 
-.arrange-tools .btn.small {
+.arrange-tools .btn.small,
+.arrange-layer-actions .btn.small {
   height: 26px;
   padding: 0 8px;
   font-size: 12px;
+}
+
+/* Crop mode: the selected box gets bar handles on its edges (they cut, they do not scale). */
+.arrange-box.cropping {
+  border-style: dashed;
+  border-color: var(--amber);
+}
+
+.arrange-box.cropping .arrange-handle {
+  border-color: var(--amber);
+  border-radius: 1px;
+}
+
+.arrange-box.cropping .arrange-handle.h-n,
+.arrange-box.cropping .arrange-handle.h-s {
+  width: 28px;
+  height: 6px;
+  margin: -3px 0 0 -14px;
+}
+
+.arrange-box.cropping .arrange-handle.h-e,
+.arrange-box.cropping .arrange-handle.h-w {
+  width: 6px;
+  height: 28px;
+  margin: -14px 0 0 -3px;
+}
+
+.arrange-layer-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.arrange-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+
+.arrange-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arrange-group h4 {
+  margin: 0;
+  color: var(--text-2);
+  font: 600 12px/1.2 var(--font-body);
+}
+
+.arrange-group h4 .check {
+  font: inherit;
+}
+
+.arrange-group .arrange-seg {
+  align-self: flex-start;
+}
+
+.arrange-slider {
+  display: grid;
+  grid-template-columns: 48px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.arrange-slider input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--navy);
+}
+
+.arrange-slider-value {
+  color: var(--text-2);
+  text-align: right;
+}
+
+.arrange-crop {
+  display: grid;
+  gap: 4px;
+}
+
+.arrange-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.arrange-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.arrange-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.arrange-color {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: none;
 }
 
 /* screen picker */
@@ -1115,7 +1232,7 @@ button {
 }
 
 .ovl.on .ovl-state {
-  color: #ff9a9d;
+  color: var(--pgm-text);
 }
 
 .ovl .add-tile,
@@ -1246,7 +1363,7 @@ input[type='color'].input {
 
 .health-item.bad,
 .health-item.bad > span:first-child {
-  color: #ff8a8d;
+  color: var(--pgm-text);
   font-weight: 600;
 }
 
@@ -1309,7 +1426,7 @@ input[type='color'].input {
   padding: 10px 12px;
   border-radius: var(--r);
   background: rgba(229, 72, 77, 0.14);
-  color: #ffb1b3;
+  color: var(--pgm-text);
 }
 
 .dialog-warn {

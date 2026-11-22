@@ -1,4 +1,4 @@
-import type { Frame, Scene } from '../state/types';
+import type { Crop, Frame, Scene } from '../state/types';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -51,7 +51,36 @@ export function fitRect(srcW: number, srcH: number, box: Rect, fit: 'contain' | 
 // Free layout: every layer has its own box (move, resize, snap in the preview).
 
 /** `free`: a layer of a free scene (transparent around a contained picture instead of black bars). */
-export type Layer = { sourceId: string; rect: Rect; fit: 'cover' | 'contain' | 'auto'; radius: number; border: boolean; free: boolean };
+export type Layer = {
+  sourceId: string;
+  rect: Rect;
+  fit: 'cover' | 'contain' | 'auto';
+  radius: number;
+  border: boolean;
+  free: boolean;
+  /** Free layers only: frame line style and the part of the source that is cut away. */
+  borderWidth?: number;
+  borderColor?: string;
+  crop?: Crop;
+};
+
+/** Largest share of the picture one edge may cut away (two opposite edges together keep ≥ 10 %). */
+export const MAX_CROP = 0.45;
+
+/** A crop with every edge clamped to 0…MAX_CROP; undefined when nothing is cut. */
+export function cleanCrop(c: Crop | undefined): Crop | undefined {
+  if (!c) return undefined;
+  const k = (v: number) => (Number.isFinite(v) ? Math.min(MAX_CROP, Math.max(0, v)) : 0);
+  const out = { l: k(c.l), t: k(c.t), r: k(c.r), b: k(c.b) };
+  return out.l || out.t || out.r || out.b ? out : undefined;
+}
+
+/** The part of a srcW×srcH picture that remains after `crop` (source pixels). */
+export function cropRect(srcW: number, srcH: number, crop: Crop | undefined): Rect {
+  const c = cleanCrop(crop);
+  if (!c) return { x: 0, y: 0, w: srcW, h: srcH };
+  return { x: srcW * c.l, y: srcH * c.t, w: srcW * (1 - c.l - c.r), h: srcH * (1 - c.t - c.b) };
+}
 
 /**
  * The layers a scene draws, bottom first. `auto` fit = the source kind decides (images and screens contain,
@@ -62,7 +91,17 @@ export function sceneLayers(scene: Scene, W: number, H: number): Layer[] {
     return scene.sourceIds.map((id) => {
       const f = scene.frames?.[id];
       const rect = f ? { x: f.x, y: f.y, w: f.w, h: f.h } : { x: 0, y: 0, w: W, h: H };
-      return { sourceId: id, rect, fit: f?.fit ?? 'auto', radius: Math.max(0, f?.radius ?? 0), border: !!f?.border, free: true };
+      return {
+        sourceId: id,
+        rect,
+        fit: f?.fit ?? 'auto',
+        radius: Math.max(0, f?.radius ?? 0),
+        border: !!f?.border,
+        free: true,
+        borderWidth: f?.borderWidth,
+        borderColor: f?.borderColor,
+        crop: cleanCrop(f?.crop),
+      };
     });
   }
   const rects = sceneRects(scene.layout, W, H, { fill: scene.fill });

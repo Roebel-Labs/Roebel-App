@@ -82,7 +82,14 @@ export type Frame = {
   radius?: number;
   /** Thin white frame around the layer. */
   border?: boolean;
+  /** Frame line width in program px (default 3) and colour (default white). */
+  borderWidth?: number;
+  borderColor?: string;
+  /** Cut away from the source picture before it is placed: fractions of its width / height per edge. */
+  crop?: Crop;
 };
+
+export type Crop = { l: number; t: number; r: number; b: number };
 
 export type Scene = {
   id: string;

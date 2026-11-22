@@ -27,7 +27,7 @@ function sceneLabel(state: ShowState, id: string | null): string {
 }
 
 function PreviewMonitor() {
-  const { state } = useShow();
+  const { state, dispatch } = useShow();
   const { engine } = useStudio();
   const ref = useRef<HTMLCanvasElement>(null);
   const latest = useRef(state);
@@ -65,8 +65,12 @@ function PreviewMonitor() {
         <button
           className={`monitor-action${arranging ? ' on' : ''}`}
           aria-pressed={arranging}
-          disabled={!scene && !arranging}
-          onClick={() => arrange.toggle()}
+          disabled={!scene && !arranging && !state.programSceneId}
+          onClick={() => {
+            // Nothing prepared: arrange what is live (screen + camera are usually set up while on air).
+            if (!scene && !arranging && state.programSceneId) dispatch({ type: 'setPreview', sceneId: state.programSceneId });
+            arrange.toggle();
+          }}
           title={t('Bilder in dieser Ansicht verschieben und in der Größe ändern')}
         >
           {arranging ? t('Fertig') : t('Anordnen')}

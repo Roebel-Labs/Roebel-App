@@ -23,7 +23,7 @@
 .tbl-grid .hd button { border: 0; background: transparent; color: var(--text-3); padding: 4px 6px; }
 .tbl-grid input.cell { width: 100%; min-width: 110px; background: transparent; border: 0; border-radius: 0; color: var(--text); font: inherit; padding: 7px 8px; outline: none; }
 .tbl-grid input.cell:focus { background: var(--bg); box-shadow: inset 0 0 0 2px var(--navy); }
-.tbl-grid tr.current td { background: rgba(0, 73, 139, 0.18); }
+.tbl-grid tr.current td { background: color-mix(in srgb, var(--navy) 18%, transparent); }
 .tbl-grid tr.current td:first-child { box-shadow: inset 4px 0 0 var(--navy); }
 .tbl-grid td.act { white-space: nowrap; padding: 3px 6px; border-right: 0; }
 .tbl-grid td.act button + button { margin-left: 4px; }

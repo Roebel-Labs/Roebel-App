@@ -1,4 +1,5 @@
 import { overlayProgress } from '../render/anim';
+import { cleanCrop } from '../render/layout';
 import { renameInTemplates } from './columns';
 import { OVERLAY_PORT } from '../overlay/constants';
 import { nextSpot } from '../sponsors/rotation';
@@ -682,6 +683,13 @@ function restoreSceneFrames(sc: Scene): Scene {
     if (f.fit === 'contain' || f.fit === 'cover') frame.fit = f.fit;
     if (typeof f.radius === 'number' && Number.isFinite(f.radius) && f.radius > 0) frame.radius = f.radius;
     if (f.border === true) frame.border = true;
+    if (typeof f.borderWidth === 'number' && Number.isFinite(f.borderWidth) && f.borderWidth > 0) frame.borderWidth = Math.min(40, f.borderWidth);
+    if (typeof f.borderColor === 'string' && /^#[0-9a-f]{6}$/i.test(f.borderColor)) frame.borderColor = f.borderColor;
+    if (isObj(f.crop)) {
+      const c = f.crop as Record<string, unknown>;
+      const crop = cleanCrop({ l: Number(c.l), t: Number(c.t), r: Number(c.r), b: Number(c.b) });
+      if (crop) frame.crop = crop;
+    }
     frames[id] = frame;
   }
   return { ...sc, frames };

@@ -5,6 +5,7 @@ import type {
   RenderContext,
   Scene,
   ShowState,
+  Crop,
   Source,
   Template,
   TemplateNode,
@@ -12,7 +13,7 @@ import type {
 } from '../state/types';
 import { ease, overlayProgress, transitionProgress } from './anim';
 import { resolveBindings } from './bindings';
-import { fitRect, sceneLayers, type Layer, type Rect } from './layout';
+import { cropRect, fitRect, sceneLayers, type Layer, type Rect } from './layout';
 
 // Canvas renderer shared by the preview monitor, the 1920×1080 program canvas and the OBS overlay page.
 // Everything is drawn in 1920×1080 space; `opts.scale` maps that onto smaller canvases.
@@ -201,20 +202,20 @@ function drawLayer(ctx: CanvasRenderingContext2D, source: Source | undefined, la
       ctx.beginPath();
       ctx.roundRect(r.x, r.y, r.w, r.h, radius);
       ctx.clip();
-      drawSource(ctx, source, r, media, layer.fit, layer.free);
+      drawSource(ctx, source, r, media, layer.fit, layer.free, layer.crop);
     } finally {
       ctx.restore();
     }
   } else {
-    drawSource(ctx, source, r, media, layer.fit, layer.free);
+    drawSource(ctx, source, r, media, layer.fit, layer.free, layer.crop);
   }
-  if (layer.border) drawInsetFrame(ctx, r, radius);
+  if (layer.border) drawInsetFrame(ctx, r, radius, layer.borderWidth, layer.borderColor);
 }
 
-function drawInsetFrame(ctx: CanvasRenderingContext2D, r: Rect, radius = 0) {
-  const b = 3;
+function drawInsetFrame(ctx: CanvasRenderingContext2D, r: Rect, radius = 0, width?: number, color?: string) {
+  const b = Math.max(1, Math.min(40, width ?? 3));
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeStyle = color || 'rgba(255,255,255,0.9)';
   ctx.lineWidth = b;
   ctx.beginPath();
   // The line sits just outside the picture, like the old picture-in-picture frame.
@@ -236,7 +237,7 @@ function sizeOf(el: CanvasImageSource): { w: number; h: number } {
   return { w: n(w), h: n(h) };
 }
 
-function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r: Rect, media: MediaLookup, fitMode: Layer['fit'] = 'auto', free = false) {
+function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r: Rect, media: MediaLookup, fitMode: Layer['fit'] = 'auto', free = false, crop?: Crop) {
   if (!source) {
     drawSlate(ctx, r, 'Signal verloren', '');
     return;
@@ -258,7 +259,9 @@ function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r
   if (!(w > 0) || !(h > 0)) return drawSlate(ctx, r, 'Lädt…', source.label);
   // Images and screens are never cropped by the fixed layouts (a slide's edge matters); cameras and videos fill.
   const fit = fitMode !== 'auto' ? fitMode : source.kind === 'image' || source.kind === 'screen' ? 'contain' : 'cover';
-  const dst = fitRect(w, h, r, fit);
+  // A crop cuts the source first; the remaining part is then fitted into the box like a whole picture.
+  const src = cropRect(w, h, crop);
+  const dst = fitRect(src.w, src.h, r, fit);
   // Fixed layouts letterbox on black; a free layer stays transparent around its picture (a logo over the screen).
   if (!free) {
     ctx.fillStyle = '#000000';
@@ -269,7 +272,8 @@ function drawSource(ctx: CanvasRenderingContext2D, source: Source | undefined, r
     ctx.beginPath();
     ctx.rect(r.x, r.y, r.w, r.h);
     ctx.clip();
-    ctx.drawImage(m.el, dst.x, dst.y, dst.w, dst.h);
+    if (src.x === 0 && src.y === 0 && src.w === w && src.h === h) ctx.drawImage(m.el, dst.x, dst.y, dst.w, dst.h);
+    else ctx.drawImage(m.el, src.x, src.y, src.w, src.h, dst.x, dst.y, dst.w, dst.h);
   } finally {
     ctx.restore();
   }

@@ -109,7 +109,7 @@
   padding: 8px 10px;
   border-radius: var(--r);
   background: rgba(229, 72, 77, 0.14);
-  color: #ffb1b3;
+  color: var(--pgm-text);
   user-select: text;
 }
 
@@ -162,7 +162,7 @@
 }
 
 .lr-badge.bad {
-  color: #ff8a8d;
+  color: var(--pgm-text);
 }
 
 .lr-badge.live {
