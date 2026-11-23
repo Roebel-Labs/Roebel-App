@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { consumeSSE } from './sse';
 import { apiBase } from './session';
 import type { ChatBootstrap, ChatMessage, ChatStreamEvent, ChatThread } from './types';
+import { CLIENT_PART_TYPES } from './types';
 
 export class ChatApiError extends Error {
   constructor(
@@ -86,7 +87,7 @@ async function stream(path: string, token: string, json: unknown, onEvent: (e: C
 }
 
 export const sendMessage = (token: string, threadId: string, body: { text: string; imageUrls?: string[]; optionAnswer?: { messageId: string; key: string } }, onEvent: (e: ChatStreamEvent) => void) =>
-  stream(`/api/chat/threads/${encodeURIComponent(threadId)}/messages`, token, body, onEvent);
+  stream(`/api/chat/threads/${encodeURIComponent(threadId)}/messages`, token, { ...body, partTypes: CLIENT_PART_TYPES }, onEvent);
 
 export const approveAction = (token: string, actionId: string, onEvent: (e: ChatStreamEvent) => void) =>
   stream(`/api/chat/actions/${encodeURIComponent(actionId)}/approve`, token, {}, onEvent);

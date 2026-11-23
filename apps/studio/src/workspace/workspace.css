@@ -2197,3 +2197,101 @@ html.mac-inset .rail {
   transform: none;
   object-position: 50% 50%;
 }
+
+/* Schedule card (agent-built day-by-day plan) */
+.ws-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 600px;
+  margin: 10px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.ws-sched-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ws-sched-head strong {
+  font-size: 16px;
+}
+
+.ws-sched-day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-sched-label {
+  color: var(--w-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ws-sched-list {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  background: var(--w-raised);
+}
+
+.ws-sched-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.ws-sched-row + .ws-sched-row {
+  border-top: 1px solid var(--w-line);
+}
+
+.ws-sched-row.link {
+  cursor: pointer;
+}
+
+.ws-sched-row.link:hover .ws-sched-title {
+  text-decoration: underline;
+}
+
+.ws-sched-time {
+  flex: 0 0 58px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.ws-sched-time.none {
+  color: var(--w-faint);
+  font-weight: 400;
+}
+
+.ws-sched-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ws-sched-title {
+  font-weight: 500;
+}
+
+.ws-sched-meta {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

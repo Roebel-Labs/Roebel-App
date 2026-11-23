@@ -22,7 +22,20 @@ export type ChatPart =
   | { type: 'task'; taskId: string; title: string; status: string; steps: { label: string; status: string }[] }
   | { type: 'generated_image'; imageId: string; status: 'generating' | 'done' | 'failed'; prompt: string; url?: string; error?: string }
   | { type: 'calendar_event'; title: string; start: string; end: string; location?: string; status: string }
+  | { type: 'schedule'; title: string; subtitle?: string; days: { date: string; items: ScheduleItem[] }[]; empty?: string }
   | { type: string; [k: string]: unknown };
+
+/** One entry of a schedule part (agent-built day-by-day plan). */
+export interface ScheduleItem {
+  title: string;
+  time?: string | null;
+  location?: string | null;
+  url?: string | null;
+  tag?: string | null;
+}
+
+/** Optional part types this client renders; sent with every message (send body partTypes). */
+export const CLIENT_PART_TYPES = ['schedule'];
 
 export interface BotAvatarSpec {
   shape: string;

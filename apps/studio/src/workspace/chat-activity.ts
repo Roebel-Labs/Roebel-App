@@ -39,6 +39,7 @@ function fallbackPreview(parts: ChatPart[]): string {
   if (parts.some((p) => p.type === 'image' || p.type === 'generated_image')) return t('Bild');
   if (parts.some((p) => p.type === 'file')) return t('Datei');
   if (parts.some((p) => p.type === 'task')) return t('Aufgabe');
+  if (parts.some((p) => p.type === 'schedule')) return t('Plan');
   return t('Nachricht');
 }
 

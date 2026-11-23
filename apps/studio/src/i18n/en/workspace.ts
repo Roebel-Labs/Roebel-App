@@ -108,6 +108,10 @@ export default {
   Freigeben: 'Approve',
   Ablehnen: 'Decline',
   'Dieser Inhalt wird in der Röbel App angezeigt.': 'This content is shown in the Röbel app.',
+  Morgen: 'Tomorrow',
+  ganztags: 'all day',
+  'Nichts geplant.': 'Nothing planned.',
+  Plan: 'Plan',
 
   // Errors
   'Fehler {status}': 'Error {status}',

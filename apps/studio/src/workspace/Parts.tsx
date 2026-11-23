@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { renderBlocks, type Ctx } from '../help/HelpTab';
 import { locale, t } from '../i18n';
 import { parseMarkdown, safeHref } from '../help/markdown';
-import type { ChatPart } from './types';
+import type { ChatPart, ScheduleItem } from './types';
 
 export interface PartHandlers {
   onOption(key: string, label: string): void;
@@ -46,6 +46,41 @@ const APPROVAL_STATUS: Record<string, string> = {
   failed: 'Fehlgeschlagen',
   expired: 'Abgelaufen',
 };
+
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "Heute", "Morgen" or the localized weekday + date for a YYYY-MM-DD day. */
+function scheduleDay(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const now = new Date();
+  if (iso === isoDay(now)) return t('Heute');
+  if (iso === isoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))) return t('Morgen');
+  return d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'numeric' });
+}
+
+function ScheduleRow({ item }: { item: ScheduleItem }) {
+  const meta = [item.location, item.tag].filter(Boolean).join(' · ');
+  const body = (
+    <>
+      <span className={`ws-sched-time${item.time ? '' : ' none'}`}>{item.time ?? t('ganztags')}</span>
+      <span className="ws-sched-body">
+        <span className="ws-sched-title">{item.title}</span>
+        {meta && <span className="w-muted ws-sched-meta">{meta}</span>}
+      </span>
+    </>
+  );
+  return item.url ? (
+    <button type="button" className="ws-sched-row link" onClick={() => open(item.url!)} title={item.url}>
+      {body}
+    </button>
+  ) : (
+    <div className="ws-sched-row">{body}</div>
+  );
+}
 
 export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
   switch (part.type) {
@@ -173,6 +208,31 @@ export function Part({ part, h }: { part: ChatPart; h: PartHandlers }) {
             {d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             {p.location ? ` · ${p.location}` : ''}
           </span>
+        </div>
+      );
+    }
+    case 'schedule': {
+      const p = part as Extract<ChatPart, { type: 'schedule' }>;
+      return (
+        <div className="ws-schedule">
+          <div className="ws-sched-head">
+            <strong>{p.title}</strong>
+            {p.subtitle && <span className="w-muted">{p.subtitle}</span>}
+          </div>
+          {p.days.length === 0 ? (
+            <div className="w-muted">{p.empty ?? t('Nichts geplant.')}</div>
+          ) : (
+            p.days.map((d) => (
+              <section key={d.date} className="ws-sched-day">
+                <div className="ws-sched-label">{scheduleDay(d.date)}</div>
+                <div className="ws-sched-list">
+                  {d.items.map((it, i) => (
+                    <ScheduleRow key={i} item={it} />
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
         </div>
       );
     }
