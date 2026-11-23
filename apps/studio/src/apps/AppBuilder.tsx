@@ -59,7 +59,6 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
   const [streaming, setStreaming] = useState(false);
   const [stage, setStage] = useState<Stage>('plan');
   const [liveHtml, setLiveHtml] = useState('');
-  const [hard, setHard] = useState(true); // "Gründlich" on by default (Max 2026-11-23)
   const [cmsSeed, setCmsSeed] = useState<CmsSeed[]>([]);
   const [preset, setPreset] = useState<ManifestDraft | null>(null);
   const [published, setPublished] = useState<PublishResult | null>(null);
@@ -129,7 +128,7 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
     try {
       const { raw, finish } = await generateApp(
         token,
-        { messages: toTurns(convo), html: html ?? undefined, complexity: hard ? 'hard' : 'default' },
+        { messages: toTurns(convo), html: html ?? undefined, complexity: 'hard' },
         {
           onPhase: () => setStage('plan'),
           onThink: () => setStage('plan'),
@@ -247,9 +246,6 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
               }}
             />
             <div className="builder-composer-row">
-              <label className="builder-toggle" title={t('Gründlicher, dauert länger')}>
-                <input type="checkbox" checked={hard} disabled={streaming} onChange={(e) => setHard(e.target.checked)} /> {t('Gründlich')}
-              </label>
               <span className="ws-tools-spacer" />
               {streaming ? (
                 <button type="button" className="w-round" aria-label={t('Stopp')} onClick={() => abortRef.current?.abort()}>
