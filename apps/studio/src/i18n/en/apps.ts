@@ -1,0 +1,52 @@
+// English for the mini-app builder and the template gallery (src/apps/*, Mini-Apps tabs).
+export default {
+  'Die Vorlage „{title}“ ist geladen. Beschreibe, was du anpassen möchtest: Texte, Inhalte, Farben oder neue Funktionen.':
+    'The template “{title}” is loaded. Describe what you want to change: texts, content, colours or new features.',
+  'Für diese App ist kein Quelltext gespeichert. Extern gehostete Apps können hier nicht bearbeitet werden.':
+    'No source is stored for this app. Externally hosted apps cannot be edited here.',
+  '„{name}“ ist geladen. Beschreibe, was du ändern möchtest. Veröffentlichen reicht eine neue Version ein.':
+    '“{name}” is loaded. Describe what you want to change. Publishing submits a new version.',
+  'Die App wurde zu lang und ist mitten im Schreiben abgebrochen. Versuche es mit einer kleineren Änderung.':
+    'The app got too long and stopped mid-way. Try a smaller change.',
+  'Die KI hat keine vollständige App geliefert. Bitte formuliere die Anfrage noch einmal.':
+    'The AI did not return a complete app. Please rephrase your request.',
+  'Fertig. Die neue Version ist in der Vorschau.': 'Done. The new version is in the preview.',
+  'Abgebrochen.': 'Cancelled.',
+  Version: 'Version',
+  'Version {n} von {total}': 'Version {n} of {total}',
+  'Neue Version veröffentlichen': 'Publish new version',
+  'Was soll deine App können?': 'What should your app do?',
+  'Beschreibe sie in ein paar Sätzen, zum Beispiel: Eine App für unseren Sportverein mit Trainingszeiten und Zusagen.':
+    'Describe it in a few sentences, for example: an app for our sports club with training times and sign-ups.',
+  'Version {n} ansehen': 'View version {n}',
+  'Plane die App …': 'Planning the app …',
+  'Baue die App …': 'Building the app …',
+  'Was soll sich ändern?': 'What should change?',
+  'Beschreibe deine App …': 'Describe your app …',
+  'Gründlicher, dauert länger': 'More thorough, takes longer',
+  Gründlich: 'Thorough',
+  Stopp: 'Stop',
+  Planen: 'Plan',
+  Bauen: 'Build',
+  Abschluss: 'Finish',
+  'Die Screens und Daten der App werden festgelegt.': 'The app’s screens and data are being defined.',
+  'Die App wird geschrieben: {chars} Zeichen': 'Writing the app: {chars} characters',
+  'Wird geladen …': 'Loading …',
+  'Hier erscheint die Vorschau deiner App.': 'Your app’s preview appears here.',
+  'Die neue Version ist eingereicht und erscheint nach der Prüfung.': 'The new version is submitted and goes live after review.',
+  'Deine App ist eingereicht. Nach der Prüfung erscheint sie in der Röbel App.': 'Your app is submitted. After review it appears in the Röbel App.',
+  'App öffnen': 'Open app',
+  'Name und Beschreibung werden vorgeschlagen …': 'Suggesting a name and description …',
+  'Kurzname (Adresse)': 'Short name (address)',
+  'Wird veröffentlicht …': 'Publishing …',
+  'Neue Version einreichen': 'Submit new version',
+  'Zur Prüfung einreichen': 'Submit for review',
+  'Vorlagen suchen': 'Search templates',
+  'Keine Vorlage passt zu deiner Suche.': 'No template matches your search.',
+  Empfohlen: 'Recommended',
+  'Dieser Kurzname ist schon vergeben. Wähle einen anderen.': 'This short name is taken. Choose another one.',
+  'Zu viele Anfragen. Bitte später noch einmal versuchen.': 'Too many requests. Please try again later.',
+  'Meine Apps': 'My apps',
+  'Inhalte, Bilder und Einstellungen im Web-Dashboard': 'Content, images and settings in the web dashboard',
+  Dashboard: 'Dashboard',
+};

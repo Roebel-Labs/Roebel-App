@@ -5,6 +5,9 @@ import { apiBase, loadSession } from '../../workspace/session';
 import { IconPlus } from './line-icons';
 import { AppAnalytics } from './AppAnalytics';
 import { SkCards } from '../Skeleton';
+import { AppBuilder, type BuilderStart } from '../../apps/AppBuilder';
+import { TemplateGallery } from '../../apps/TemplateGallery';
+import '../../apps/apps.css';
 
 const STATUS: Record<MyMiniApp['status'], string> = {
   draft: 'Entwurf',
@@ -19,13 +22,16 @@ const open = (url: string) => {
   if (/^https:\/\//.test(url)) void window.studio.shell.openExternal(url);
 };
 
-/** Mini-Apps: the signed-in user's own apps (same list as the web dashboard), with open/edit/new. */
+/** Mini-Apps: the user's own apps (same list as the web dashboard), templates and the in-Studio builder. */
 export function AppsSection() {
   const [apps, setApps] = useState<MyMiniApp[] | null>(null);
   const [state, setState] = useState<'loading' | 'signed-out' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [selected, setSelected] = useState<MyMiniApp | null>(null);
+  const [tab, setTab] = useState<'mine' | 'templates'>('mine');
+  const [builder, setBuilder] = useState<BuilderStart | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -47,9 +53,27 @@ export function AppsSection() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reload]);
 
   const dashboard = `${apiBase()}/dashboard/mini-apps`;
+
+  if (builder && token) {
+    return (
+      <div className="section apps">
+        <AppBuilder
+          token={token}
+          start={builder}
+          onClose={(changed) => {
+            setBuilder(null);
+            if (changed) {
+              setTab('mine');
+              setReload((n) => n + 1);
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   if (selected && token) {
     return (
@@ -63,12 +87,23 @@ export function AppsSection() {
     <div className="section apps">
       <header className="section-head">
         <h1>{t('Mini-Apps')}</h1>
+        <div className="apps-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'on' : ''} onClick={() => setTab('mine')}>
+            {t('Meine Apps')}
+          </button>
+          <button role="tab" aria-selected={tab === 'templates'} className={tab === 'templates' ? 'on' : ''} onClick={() => setTab('templates')}>
+            {t('Vorlagen')}
+          </button>
+        </div>
         <span className="ws-tools-spacer" />
-        <button className="w-btn green" onClick={() => open(`${dashboard}/new`)}>
+        <button className="w-btn green" disabled={!token} onClick={() => setBuilder({ kind: 'blank' })}>
           <IconPlus size={16} /> {t('Neue Mini-App')}
         </button>
       </header>
       <div className="apps-body">
+        {tab === 'templates' && token && <TemplateGallery onPick={(id) => setBuilder({ kind: 'template', id })} />}
+        {tab === 'templates' && !token && state !== 'loading' && <div className="w-muted">{t('Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Mini-Apps.')}</div>}
+        {tab === 'mine' && (<>
         {state === 'loading' && <SkCards cards={3} height={168} className="apps-grid" />}
         {state === 'signed-out' && <div className="w-muted">{t('Melde dich unter Start mit deinem Konto an, dann erscheinen hier deine Mini-Apps.')}</div>}
         {state === 'error' && <div className="ws-error">{error}</div>}
@@ -76,9 +111,14 @@ export function AppsSection() {
           <div className="apps-empty">
             <strong>{t('Noch keine Mini-App')}</strong>
             <span className="w-muted">{t('Bau deine erste Mini-App für Verein oder Betrieb. Sie erscheint nach der Prüfung in der Röbel App.')}</span>
-            <button className="w-btn green" onClick={() => open(`${dashboard}/new`)}>
-              {t('Mini-App erstellen')}
-            </button>
+            <div className="app-actions">
+              <button className="w-btn green" onClick={() => setBuilder({ kind: 'blank' })}>
+                {t('Mini-App erstellen')}
+              </button>
+              <button className="w-btn" onClick={() => setTab('templates')}>
+                {t('Vorlage wählen')}
+              </button>
+            </div>
           </div>
         )}
         {state === 'ready' && apps && apps.length > 0 && (
@@ -109,14 +149,18 @@ export function AppsSection() {
                   <button className="w-btn" onClick={() => open(a.homeUrl)}>
                     {t('Öffnen')}
                   </button>
-                  <button className="w-btn" onClick={() => open(`${dashboard}/${encodeURIComponent(a.id)}`)}>
+                  <button className="w-btn" onClick={() => setBuilder({ kind: 'app', id: a.id, name: a.name })}>
                     {t('Bearbeiten')}
+                  </button>
+                  <button className="w-btn" title={t('Inhalte, Bilder und Einstellungen im Web-Dashboard')} onClick={() => open(`${dashboard}/${encodeURIComponent(a.id)}`)}>
+                    {t('Dashboard')}
                   </button>
                 </div>
               </article>
             ))}
           </div>
         )}
+        </>)}
       </div>
     </div>
   );
