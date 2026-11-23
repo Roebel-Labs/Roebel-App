@@ -35,6 +35,7 @@ import { CmsSetupCard } from "./components/CmsSetupCard";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
+import { TemplateGallery } from "./components/TemplateGallery";
 import { fetchChat, schedulePush, trimForServer } from "./lib/chatSync";
 import { uploadContentImage } from "./lib/cmsData";
 import {
@@ -186,6 +187,61 @@ export default function NewMiniAppBuilderPage() {
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     if (search.get("chat")) return; // server-chat restore effect handles this
+
+    // Start from a template (?template=<id>): version 1 = the template, its Inhalte become the
+    // CMS plan (seeded on the first publish). The manifest is drafted at publish time as usual.
+    const templateId = search.get("template");
+    if (templateId) {
+      let cancelled = false;
+      (async () => {
+        setLoadingApp(true);
+        try {
+          const res = await fetch(`/api/mini-apps/templates/${encodeURIComponent(templateId)}`);
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json.error ?? `Fehler ${res.status}`);
+          const t = json.template as {
+            title: string;
+            html: string;
+            suggestions: string[];
+            cms: CmsKeyPlan[];
+          };
+          if (cancelled) return;
+          window.history.replaceState(null, "", "/editor");
+          setVersions([{ html: t.html, notes: "" }]);
+          setActiveIdx(0);
+          setPreset(null);
+          setPublished(null);
+          setCmsKeys(t.cms.length > 0 ? t.cms : null);
+          setMessages([
+            {
+              id: uid(),
+              role: "assistant",
+              content:
+                `Die Vorlage „${t.title}“ ist geladen. Beschreibe, was du anpassen möchtest — Texte, Inhalte, Farben oder neue Funktionen.` +
+                (t.suggestions.length > 0 ? `\n\nIdeen:\n${t.suggestions.map((s) => `• ${s}`).join("\n")}` : ""),
+              versionIndex: 0,
+            },
+          ]);
+        } catch (e) {
+          if (!cancelled) {
+            setMessages([
+              {
+                id: uid(),
+                role: "assistant",
+                content: e instanceof Error ? e.message : "Die Vorlage konnte nicht geladen werden.",
+                error: true,
+              },
+            ]);
+          }
+        } finally {
+          if (!cancelled) setLoadingApp(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const param = search.get("app");
     if (!param) {
       const draft = loadSession(DRAFT_KEY);
@@ -1813,6 +1869,8 @@ function EmptyState({
               </button>
             ))}
           </div>
+
+          <TemplateGallery />
         </div>
       </main>
     </div>
