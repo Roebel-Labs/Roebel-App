@@ -59,7 +59,7 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
   const [streaming, setStreaming] = useState(false);
   const [stage, setStage] = useState<Stage>('plan');
   const [liveHtml, setLiveHtml] = useState('');
-  const [hard, setHard] = useState(false);
+  const [hard, setHard] = useState(true); // "Gründlich" on by default (Max 2026-11-23)
   const [cmsSeed, setCmsSeed] = useState<CmsSeed[]>([]);
   const [preset, setPreset] = useState<ManifestDraft | null>(null);
   const [published, setPublished] = useState<PublishResult | null>(null);
