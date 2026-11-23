@@ -16,6 +16,7 @@ import { identityForHtml } from "./credentialUse";
 import { missingNewColumns, validateAudience, validateOrg, withoutColumns } from "../manifest";
 import type { MiniAppAudience } from "../types";
 import { bindingPatch } from "../orgBinding";
+import { managesOrg } from "../myOrgs";
 
 /**
  * Slugs that must never be claimed (existing apps, template, route namespaces —
@@ -105,6 +106,9 @@ export async function publishHtmlMiniApp(input: {
   manifest: unknown;
   developerId: string | null;
   origin: string;
+  /** Verified wallet of the publisher (chat session); when it manages the named org, the
+   * binding is confirmed right away instead of waiting for the org to confirm. */
+  publisherWallet?: string | null;
 }): Promise<PublishHtmlResult> {
   // 1. Validate the manifest (model + user edited — untrusted).
   const parsedManifest = manifestDraftSchema.safeParse(input.manifest);
@@ -201,8 +205,14 @@ export async function publishHtmlMiniApp(input: {
     status: "pending" as const,
     ...v2Fields,
   };
-  // Naming an org asks that org to confirm (same rule as registered apps).
-  Object.assign(appFields, bindingPatch(existing ?? null, appFields));
+  // Naming an org asks that org to confirm (same rule as registered apps) — unless the
+  // publisher is the org's owner or admin, who would only confirm their own request.
+  const binding = bindingPatch(existing ?? null, appFields);
+  if (org && binding.org_binding === "requested" && input.publisherWallet) {
+    const role = await managesOrg(input.publisherWallet, org).catch(() => null);
+    if (role) Object.assign(binding, { org_binding: "confirmed", org_binding_decided_at: new Date().toISOString(), org_binding_decided_by: role });
+  }
+  Object.assign(appFields, binding);
 
   let miniAppId: string;
   let republished = false;

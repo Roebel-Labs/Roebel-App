@@ -11,7 +11,7 @@
  * 409 → slug taken/reserved · 400 → invalid html/manifest · 401 → no wallet
  */
 import { publishHtmlMiniApp } from "@/lib/miniapp/ai/publishHtml";
-import { jsonError, resolveDeveloper } from "@/lib/miniapp/http";
+import { jsonError, resolveDeveloper, sessionWallet } from "@/lib/miniapp/http";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       manifest: body.manifest,
       developerId,
       origin,
+      publisherWallet: await sessionWallet(request),
     });
 
     if (!result.ok) {
