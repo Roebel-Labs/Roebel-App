@@ -15,9 +15,10 @@ import type {
   NetizenSDK,
   PayParams,
   WalletAccount,
+  Row,
 } from './types';
 
-const SDK_VERSION = '0.4.0';
+const SDK_VERSION = '0.5.0';
 
 export function createClient(): NetizenSDK {
   const bridge = new ClientBridge();
@@ -79,6 +80,16 @@ export function createClient(): NetizenSDK {
       list: (prefix) => bridge.request('data.list', prefix ? { prefix } : {}),
       getUser: (key) => bridge.request('data.userGet', { key }),
       setUser: (key, value) => bridge.request('data.userSet', { key, value }),
+      collection: (name, opts) => {
+        const scope = opts?.scope ?? 'shared';
+        const call = (p: Record<string, unknown>) => bridge.request('data.rows', { collection: name, scope, ...p });
+        return {
+          list: (query) => call({ op: 'list', query }) as Promise<{ rows: Row[]; total: number }>,
+          add: (row) => call({ op: 'add', ...row }) as Promise<Row>,
+          update: (id, patch) => call({ op: 'update', id, ...patch }) as Promise<Row>,
+          remove: (id) => call({ op: 'remove', id }) as Promise<{ ok: boolean }>,
+        };
+      },
     },
 
     credentials: {

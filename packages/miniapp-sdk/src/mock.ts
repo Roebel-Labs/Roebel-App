@@ -17,6 +17,7 @@
  *     token: 'eyJ…', // auth.getToken resolves { token }
  *   }
  */
+import { mockRows } from './rows-mock';
 import { credentialMatches } from './credential-ref';
 import type {
   BridgeError,
@@ -27,6 +28,7 @@ import type {
   MuenzenBalance,
   NetizenMockConfig,
   WalletAccount,
+  RowsCall,
 } from './types';
 
 declare global {
@@ -198,6 +200,8 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
       if (p.key) mockUserData.set(p.key, p.value ?? null);
       return Promise.resolve({ ok: true });
     }
+    case 'data.rows':
+      return mockRows(params as RowsCall);
     case 'credentials.list':
       return Promise.resolve(mockCredentials());
     case 'credentials.has': {

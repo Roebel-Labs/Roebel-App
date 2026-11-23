@@ -81,7 +81,7 @@ async function post<T>(path: string, body: unknown, user: MiniAppApiIdentity): P
   if (!res.ok) {
     throw {
       code: (json.code as string) || 'internal',
-      message: (json.message as string) || `HTTP ${res.status}`,
+      message: (json.message as string) || (typeof json.error === 'string' ? json.error : '') || `HTTP ${res.status}`,
     };
   }
   return json as T;
@@ -99,7 +99,7 @@ async function get<T>(path: string, query: Record<string, string>, user?: MiniAp
   if (!res.ok) {
     throw {
       code: (json.code as string) || 'internal',
-      message: (json.message as string) || `HTTP ${res.status}`,
+      message: (json.message as string) || (typeof json.error === 'string' ? json.error : '') || `HTTP ${res.status}`,
     };
   }
   return json as T;
@@ -197,6 +197,15 @@ export async function apiDataUserGet(
     scope: 'user',
     wallet: id.wallet,
     key,
+  }, id);
+}
+
+/** v0.5 shared collections (`data.rows`): one endpoint, the server enforces scope and authorship. */
+export async function apiDataRows(id: MiniAppApiIdentity, call: Record<string, unknown>): Promise<unknown> {
+  return post<unknown>('/api/mini-apps/rows', {
+    app: id.miniAppId,
+    ...call,
+    ...(id.wallet ? { wallet: id.wallet } : {}),
   }, id);
 }
 

@@ -22,6 +22,7 @@ import {
   type NetizenEvent,
   type PayParams,
   type ReadyOptions,
+  type RowsCall,
   type WalletAccount,
 } from '../types';
 
@@ -70,6 +71,8 @@ export interface HostHandlers {
   dataList?(p: { prefix?: string }): Promise<{ items: { key: string; value: unknown }[] }>;
   dataUserGet?(p: { key: string }): Promise<{ value: unknown; exists: boolean }>;
   dataUserSet?(p: { key: string; value: unknown }): Promise<{ ok: boolean }>;
+  /** v0.5 — shared collections; one handler for list/add/update/remove (see RowsCall). */
+  dataRows?(p: RowsCall): Promise<unknown>;
 
   // v0.4 — identity and credentials (manifest version "2"). No permission
   // needed; the host answers only what the person agreed to share.
@@ -103,6 +106,7 @@ const METHOD_HANDLER: Record<BridgeMethod, keyof HostHandlers | null> = {
   'data.list': 'dataList',
   'data.userGet': 'dataUserGet',
   'data.userSet': 'dataUserSet',
+  'data.rows': 'dataRows',
   'credentials.list': 'credentialsList',
   'credentials.has': 'credentialsHas',
   'credentials.request': 'credentialsRequest',
@@ -209,6 +213,8 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
         return requireHandler(handlers.dataUserGet)(params as { key: string });
       case 'data.userSet':
         return requireHandler(handlers.dataUserSet)(params as { key: string; value: unknown });
+      case 'data.rows':
+        return requireHandler(handlers.dataRows)(params as RowsCall);
       case 'credentials.list':
         return requireHandler(handlers.credentialsList)();
       case 'credentials.has':
@@ -309,3 +315,6 @@ export {
   type WalletMethodClass,
 } from './wallet-methods';
 export { callRules, findDeclaredCall, type CallRule, type DeclaredCallMatch } from './declared-calls';
+
+/** In-memory `data.rows` for previews (editor, builders): same rules as the server. */
+export { mockRows as previewRows, resetMockRows as resetPreviewRows } from '../rows-mock';

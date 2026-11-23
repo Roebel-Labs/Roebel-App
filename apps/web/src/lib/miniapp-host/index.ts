@@ -19,6 +19,7 @@ import {
   type MiniAppContext,
 } from "@netizen-labs/miniapp-sdk/host";
 import type {
+  BridgeErrorCode,
   BridgeMessage,
   BridgeMethod,
   Eip1193Provider,
@@ -26,6 +27,7 @@ import type {
   GrantRewardParams,
   MiniAppPermission,
   NetizenEvent,
+  RowsCall,
   WalletAccount,
 } from "@netizen-labs/miniapp-sdk";
 import { gateWalletRequest } from "./walletGate";
@@ -312,6 +314,19 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
         throw { code: "internal", message: j.error ?? "Speichern fehlgeschlagen." };
       }
       return { ok: true };
+    },
+    // v0.5 shared collections: one endpoint, the server enforces scope and authorship.
+    dataRows: async (p: RowsCall) => {
+      const res = await userFetch("/api/mini-apps/rows", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ app: app.id, ...p, ...(account?.address ? { wallet: account.address } : {}) }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (!res.ok) {
+        throw { code: (j.code ?? "internal") as BridgeErrorCode, message: j.error ?? "Die Sammlung ist gerade nicht erreichbar." };
+      }
+      return j;
     },
   };
 

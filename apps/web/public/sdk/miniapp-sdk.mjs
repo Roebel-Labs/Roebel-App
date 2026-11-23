@@ -1,3 +1,63 @@
+// src/rows-mock.ts
+var store = /* @__PURE__ */ new Map();
+var seq = 0;
+var err = (code, message) => ({ code, message });
+var bucket = (c) => `${c.scope}:${c.collection}`;
+function mockRows(call) {
+  if (!call || typeof call.collection !== "string" || !/^[a-z0-9][a-z0-9_-]{0,39}$/.test(call.collection)) {
+    return Promise.reject(err("invalid_params", "Ung\xFCltiger Sammlungsname (a-z, 0-9, - und _, bis 40 Zeichen)."));
+  }
+  const rows = store.get(bucket(call)) ?? [];
+  store.set(bucket(call), rows);
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  switch (call.op) {
+    case "list":
+      return Promise.resolve(listRows(rows, call.query));
+    case "add": {
+      if (call.key != null && rows.some((r) => r.key === call.key)) {
+        return Promise.reject(err("conflict", "Schon vergeben."));
+      }
+      seq += 1;
+      const row = {
+        id: `mock-${seq}`,
+        key: call.key ?? null,
+        data: call.data ?? {},
+        privateData: call.privateData ?? null,
+        mine: true,
+        createdAt: now,
+        updatedAt: now
+      };
+      rows.push(row);
+      return Promise.resolve(row);
+    }
+    case "update": {
+      const row = rows.find((r) => r.id === call.id);
+      if (!row) return Promise.reject(err("invalid_params", "Eintrag nicht gefunden."));
+      if (call.data) row.data = call.data;
+      if (call.privateData) row.privateData = call.privateData;
+      row.updatedAt = now;
+      return Promise.resolve(row);
+    }
+    case "remove": {
+      const i = rows.findIndex((r) => r.id === call.id);
+      if (i >= 0) rows.splice(i, 1);
+      return Promise.resolve({ ok: i >= 0 });
+    }
+    default:
+      return Promise.reject(err("invalid_params", "Unbekannte Operation."));
+  }
+}
+function listRows(rows, q = {}) {
+  let out = rows.filter((r) => q.keyPrefix ? (r.key ?? "").startsWith(q.keyPrefix) : true);
+  const total = out.length;
+  const order = q.order ?? "newest";
+  out = [...out].sort(
+    (a, b) => order === "key" ? (a.key ?? "").localeCompare(b.key ?? "") : order === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)
+  );
+  const limit = Math.min(Math.max(q.limit ?? 100, 1), 200);
+  return { rows: out.slice(0, limit), total };
+}
+
 // src/credential-ref.ts
 var BUILTIN_CREDENTIALS = ["citizen", "attester", "guest"];
 var TYPE_RE = /^type:(0x[0-9a-fA-F]{64})$/;
@@ -66,7 +126,7 @@ function mockCredentials() {
 function mockHolds(pattern) {
   return mockCredentials().some((held) => credentialMatches(pattern, held));
 }
-function err(code, message, rpcCode) {
+function err2(code, message, rpcCode) {
   return rpcCode === void 0 ? { code, message } : { code, message, rpcCode };
 }
 var mockUserData = /* @__PURE__ */ new Map();
@@ -123,11 +183,11 @@ function mockDispatch(method, params) {
           const first = Array.isArray(args.params) ? args.params[0] : void 0;
           const chainId = typeof first?.chainId === "string" ? first.chainId.toLowerCase() : "";
           if (chainId === "0x64") return Promise.resolve(null);
-          return Promise.reject(err("unsupported", "Nur Gnosis (Chain 100) wird unterst\xFCtzt", 4902));
+          return Promise.reject(err2("unsupported", "Nur Gnosis (Chain 100) wird unterst\xFCtzt", 4902));
         }
         default:
           return Promise.reject(
-            err("unsupported", `Mock-Modus: "${args.method ?? "unknown"}" braucht den R\xF6bel-Host`)
+            err2("unsupported", `Mock-Modus: "${args.method ?? "unknown"}" braucht den R\xF6bel-Host`)
           );
       }
     }
@@ -136,7 +196,7 @@ function mockDispatch(method, params) {
       return Promise.resolve(token ? { token } : null);
     }
     case "auth.signIn":
-      return Promise.reject(err("unsupported", "Mock-Modus: Anmeldung braucht den R\xF6bel-Host"));
+      return Promise.reject(err2("unsupported", "Mock-Modus: Anmeldung braucht den R\xF6bel-Host"));
     case "roebel.getMuenzenBalance":
       return Promise.resolve(mockBalance());
     case "roebel.grantReward": {
@@ -147,19 +207,19 @@ function mockDispatch(method, params) {
       return Promise.resolve({ granted: false, amount: 0 });
     }
     case "roebel.pay":
-      return Promise.reject(err("unsupported", "Mock-Modus: Zahlungen brauchen den R\xF6bel-Host"));
+      return Promise.reject(err2("unsupported", "Mock-Modus: Zahlungen brauchen den R\xF6bel-Host"));
     case "notifications.send":
       return Promise.resolve({ sent: false });
     case "data.get": {
       const key = params?.key ?? "";
-      const store = getMockConfig().data ?? {};
-      const exists = Object.prototype.hasOwnProperty.call(store, key);
-      return Promise.resolve({ value: exists ? store[key] : null, exists });
+      const store2 = getMockConfig().data ?? {};
+      const exists = Object.prototype.hasOwnProperty.call(store2, key);
+      return Promise.resolve({ value: exists ? store2[key] : null, exists });
     }
     case "data.list": {
       const prefix = params?.prefix ?? "";
-      const store = getMockConfig().data ?? {};
-      const items = Object.keys(store).filter((k) => k.startsWith(prefix)).sort().map((k) => ({ key: k, value: store[k] }));
+      const store2 = getMockConfig().data ?? {};
+      const items = Object.keys(store2).filter((k) => k.startsWith(prefix)).sort().map((k) => ({ key: k, value: store2[k] }));
       return Promise.resolve({ items });
     }
     case "data.userGet": {
@@ -172,6 +232,8 @@ function mockDispatch(method, params) {
       if (p.key) mockUserData.set(p.key, p.value ?? null);
       return Promise.resolve({ ok: true });
     }
+    case "data.rows":
+      return mockRows(params);
     case "credentials.list":
       return Promise.resolve(mockCredentials());
     case "credentials.has": {
@@ -186,7 +248,7 @@ function mockDispatch(method, params) {
     case "analytics.track":
       return Promise.resolve(void 0);
     default:
-      return Promise.reject(err("unsupported", `Mock-Modus: Methode "${method}" nicht verf\xFCgbar`));
+      return Promise.reject(err2("unsupported", `Mock-Modus: Methode "${method}" nicht verf\xFCgbar`));
   }
 }
 
@@ -425,10 +487,10 @@ function toProviderError(e) {
   let code;
   if (bridgeCode === "unsupported") code = typeof e.rpcCode === "number" ? e.rpcCode : 4200;
   else code = PROVIDER_CODES[bridgeCode] ?? -32603;
-  const err2 = new Error(e?.message ?? String(bridgeCode));
-  err2.code = code;
-  err2.data = { bridgeCode };
-  return err2;
+  const err3 = new Error(e?.message ?? String(bridgeCode));
+  err3.code = code;
+  err3.data = { bridgeCode };
+  return err3;
 }
 function createEip1193Provider(bridge) {
   const emitters = /* @__PURE__ */ new Map();
@@ -474,7 +536,7 @@ function safe(fn, args) {
 }
 
 // src/client.ts
-var SDK_VERSION = "0.4.0";
+var SDK_VERSION = "0.5.0";
 function createClient() {
   const bridge = new ClientBridge();
   let provider;
@@ -519,7 +581,17 @@ function createClient() {
       get: (key) => bridge.request("data.get", { key }),
       list: (prefix) => bridge.request("data.list", prefix ? { prefix } : {}),
       getUser: (key) => bridge.request("data.userGet", { key }),
-      setUser: (key, value) => bridge.request("data.userSet", { key, value })
+      setUser: (key, value) => bridge.request("data.userSet", { key, value }),
+      collection: (name, opts) => {
+        const scope = opts?.scope ?? "shared";
+        const call = (p) => bridge.request("data.rows", { collection: name, scope, ...p });
+        return {
+          list: (query) => call({ op: "list", query }),
+          add: (row) => call({ op: "add", ...row }),
+          update: (id, patch) => call({ op: "update", id, ...patch }),
+          remove: (id) => call({ op: "remove", id })
+        };
+      }
     },
     credentials: {
       list: () => bridge.request("credentials.list"),

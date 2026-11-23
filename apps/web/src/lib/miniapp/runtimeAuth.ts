@@ -19,7 +19,7 @@ import {
   type VerifyTokenResult,
 } from "./userToken";
 
-export type RuntimeRoute = "rewards" | "data" | "notifications" | "muenzen-balance";
+export type RuntimeRoute = "rewards" | "data" | "notifications" | "muenzen-balance" | "rows";
 
 /**
  * `pseudonymous`: the token carried no address grant (a version-2 app knows the person only by

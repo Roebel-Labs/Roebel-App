@@ -12,7 +12,7 @@
  * FS at runtime, which breaks on Vercel lambdas. Keep in sync on contract bumps.
  */
 
-export const SDK_VERSION = "0.4.0";
+export const SDK_VERSION = "0.5.0";
 // Self-hosted build of @netizen-labs/miniapp-sdk (synced from packages/miniapp-sdk
 // via `pnpm sync-web`, served with ACAO:*). Absolute URL so the document also works
 // when saved/hosted outside roebel.app. v0.2 adds mock mode: outside the Röbel
@@ -192,6 +192,15 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
   try { const r = await sdk.data.get("lektionen"); if (r.exists && Array.isArray(r.value)) lektionen = r.value; } catch {}
   \`\`\`
   Nutzer-Fortschritt beim Start laden (getUser) und bei Änderungen speichern (setUser) — jede Methode kann rejecten (älterer Host → "unsupported"): immer try/catch.
+- sdk.data.collection(name, { scope? }) — SAMMLUNGEN (v0.5): Einträge, die VIELE Menschen schreiben (Buchungen, Anmeldungen, Zusagen, Check-ins, Wunschlisten). name: a-z, 0-9, - und _ (max. 40).
+  · scope "shared" (Standard): alle Nutzer:innen der App sehen data jedes Eintrags; privateData sehen NUR die Person, die ihn angelegt hat, und die Betreiber:in der App. scope "private": nur die eigene Person sieht ihre Einträge.
+  · const c = sdk.data.collection("buchungen");
+    await c.list({ keyPrefix?, mine?, limit?, order?: "newest"|"oldest"|"key" }) → { rows: [{ id, key, data, privateData?, mine, createdAt }], total }
+    await c.add({ data, privateData?, key? }) → row. key ist in der Sammlung EINDEUTIG: ein zweites add mit gleichem key rejected mit code "conflict" → freundlich "Schon vergeben" zeigen und die Liste neu laden.
+    await c.update(id, { data?, privateData? }) (nur eigene Einträge) · await c.remove(id) (eigene; die Betreiber:in darf geteilte löschen)
+  · BUCHUNGS-MUSTER (Räume, Termine, Geräte): key = "<ressource>|<JJJJ-MM-TT>|<HH:MM>" — damit verhindert der Server Doppelbuchungen. Belegte Slots per list({ keyPrefix: ressource + "|" + datum }) laden. In data nur, was alle sehen dürfen (Raum, Zeit, ggf. "belegt"); Name, Telefon, Zweck gehören in privateData.
+  · Ressourcen (Räume, Öffnungszeiten, Regeln) sind INHALTE (sdk.data.get) mit eingebautem Fallback, keine Sammlung.
+  · Sammlungen brauchen eine angemeldete Person zum Schreiben; ohne Host (Vorschau) laufen sie im Speicher. Vorher sdk.supports("data.rows") prüfen; wenn false: erklären, dass Buchen in der aktuellen Röbel App kommt, und die Belegung nur lesen bzw. ausblenden.
 
 Fehler der Bridge haben { code, message } mit code ∈ user_rejected | unauthorized | unsupported | invalid_params | rate_limited | budget_exceeded | timeout | internal.
 JEDER sdk-Aufruf kann rejecten (z. B. fehlende Berechtigung → "unsupported"). Immer try/catch und eine freundliche deutsche Meldung zeigen — die App darf nie an einem Bridge-Fehler sterben.`;

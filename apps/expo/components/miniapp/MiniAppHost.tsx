@@ -126,6 +126,7 @@ import {
   apiDataList,
   apiDataUserGet,
   apiDataUserSet,
+  apiDataRows,
   apiGetMuenzenBalance,
   apiGrantReward,
   apiSendNotification,
@@ -1150,6 +1151,13 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       dataUserSet: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
         return apiDataUserSet(await userApiId(), p.key, p.value);
+      },
+      // v0.5 shared collections (bookings, sign-ups, check-ins). Shared lists can be read
+      // without a person; writes and private collections need one.
+      dataRows: async (p) => {
+        if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
+        const needsPerson = p.op !== 'list' || p.scope === 'private';
+        return apiDataRows(await userApiId(needsPerson ? undefined : { silent: true }), p);
       },
 
       authGetToken: isV2

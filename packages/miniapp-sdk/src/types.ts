@@ -54,7 +54,9 @@ export type BridgeErrorCode =
   | 'rate_limited'
   | 'budget_exceeded'
   | 'timeout'
-  | 'internal';
+  | 'internal'
+  // v0.5 — a row with the same key already exists (data.rows add)
+  | 'conflict';
 
 /** Every callable bridge method. Host routers switch on these. */
 export type BridgeMethod =
@@ -83,6 +85,8 @@ export type BridgeMethod =
   | 'data.list'
   | 'data.userGet'
   | 'data.userSet'
+  // v0.5 — shared collections (rows)
+  | 'data.rows'
   // v0.4 — identity and credentials (manifest version "2"). Older hosts answer
   // `unsupported`; check `sdk.supports(method)` first.
   | 'credentials.list'
@@ -254,6 +258,47 @@ export interface MiniAppIdentityRequest {
   credentials: CredentialRequest[];
 }
 
+// --- v0.5 shared collections -------------------------------------------------
+
+export type RowScope = 'shared' | 'private';
+
+/** One row as the app sees it. The author's wallet is never exposed. */
+export interface Row {
+  id: string;
+  key: string | null;
+  data: Record<string, unknown>;
+  /** Present only for the row's author and the app's owner. */
+  privateData?: Record<string, unknown> | null;
+  /** true when the current person wrote this row. */
+  mine: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RowListQuery {
+  /** Only rows whose key starts with this (e.g. "room1|2026-12-01"). */
+  keyPrefix?: string;
+  /** Only the current person's rows. */
+  mine?: boolean;
+  /** 1–200, default 100. Newest first unless `order: 'key'`. */
+  limit?: number;
+  order?: 'newest' | 'oldest' | 'key';
+}
+
+export interface RowCollection {
+  list(query?: RowListQuery): Promise<{ rows: Row[]; total: number }>;
+  add(row: { data: Record<string, unknown>; privateData?: Record<string, unknown>; key?: string }): Promise<Row>;
+  update(id: string, patch: { data?: Record<string, unknown>; privateData?: Record<string, unknown> }): Promise<Row>;
+  remove(id: string): Promise<{ ok: boolean }>;
+}
+
+/** Params of the single `data.rows` bridge call. */
+export type RowsCall =
+  | { op: 'list'; collection: string; scope: RowScope; query?: RowListQuery }
+  | { op: 'add'; collection: string; scope: RowScope; data: Record<string, unknown>; privateData?: Record<string, unknown>; key?: string }
+  | { op: 'update'; collection: string; scope: RowScope; id: string; data?: Record<string, unknown>; privateData?: Record<string, unknown> }
+  | { op: 'remove'; collection: string; scope: RowScope; id: string };
+
 /** A credential the person holds and agreed to share with this app. */
 export interface Credential {
   /** A built-in (`citizen`, `attester`, `guest`) or a `type:0x…` reference. */
@@ -371,6 +416,14 @@ export interface NetizenSDK {
     list(prefix?: string): Promise<{ items: { key: string; value: unknown }[] }>;
     getUser(key: string): Promise<{ value: unknown | null; exists: boolean }>;
     setUser(key: string, value: unknown): Promise<{ ok: boolean }>;
+    /**
+     * v0.5 — a collection of rows that many people write to (bookings, sign-ups, check-ins).
+     * `shared`: every user of the app sees every row's `data`; `privateData` only the row's
+     * author and the app's owner. `private`: only the author sees their rows.
+     * A `key` is unique within the collection: a second `add` with the same key rejects with
+     * code `conflict` (e.g. "room1|2026-12-01|14:00" can only be booked once).
+     */
+    collection(name: string, opts?: { scope?: RowScope }): RowCollection;
   };
 
   // --- v0.4 additive: identity and credentials (manifest version "2") ------

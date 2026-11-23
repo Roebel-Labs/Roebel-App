@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { createWebMiniAppHost } from "@/lib/miniapp-host";
+import { previewRows } from "@netizen-labs/miniapp-sdk/host";
+import type { RowsCall } from "@netizen-labs/miniapp-sdk";
 import type { MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
 
 const GNOSIS_CHAIN_ID = 100;
@@ -125,6 +127,8 @@ export function useMiniAppHost(
           previewDataRef.current.set(p.key, p.value);
           return { ok: true };
         },
+        // Shared collections in the preview: in memory, same rules as the server.
+        dataRows: (p: RowsCall) => previewRows(p),
         getMuenzenBalance: async () => {
           if (!account?.address) return { balance: "48", decimals: 18, symbol: "RÖ" as const };
           const res = await fetch(
