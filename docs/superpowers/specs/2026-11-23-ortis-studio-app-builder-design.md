@@ -75,6 +75,40 @@ the Röbel App host, the web host and `<slug>.roebel.site`.
 
 Rough total: 5–7 focused weeks for A0–A5. A0+A1 alone already gives "build an app inside Studio".
 
+### 3.5 Credentials and attendance badges in apps (A6, added 2026-11-23)
+
+Max asked to think about credential use and attendance badges. What exists: the credential register
+(`CredentialRegistry` on Gnosis, roles / memberships / badges per org, spec 2026-11-17), Studio "Ausweise"
+(types, people, batches, event badges), and SDK v0.4 `sdk.credentials.list / has / request / onChange` plus
+v2 manifests with `identity.credentials` (what the app may ask for) and `audience` (whom it is for). Production
+status: register switched off (`credentials_enabled` false, no registry env on Vercel).
+
+**Gap:** AI-built apps cannot use any of it. The builder prompt (`htmlPrompt.ts`) does not document
+`sdk.credentials`, and `manifestDraftSchema` / `publishHtml.ts` only write v1 fields, so the host refuses
+every `credentials.request` from an HTML app (types must be in the reviewed manifest).
+
+| Slice | What | Est. |
+|---|---|---|
+| A6.1 Builder knows credentials | `SDK_REFERENCE` gets `sdk.credentials.*` with the patterns below; `manifestDraftSchema` gets optional `identity.credentials` (≤8, with reason) and `audience`; `publishHtml` writes `manifest_version '2'`, `identity`, `audience` (same missing-column fallback as `data.ts`); identity goes through the existing identity review | 3–4 d |
+| A6.2 Org binding in the builder | Publishing from Studio for an org (the user's orgs from `/api/credentials/org`): sets `org`, offers the org's credential types as "Nur für Mitglieder" (`audience.required`) or "Empfohlen für Mitglieder" | 2–3 d |
+| A6.3 Attendance in apps | Template "Anwesenheit" (training / course / Ehrenamt): trainer opens a session, members check in (tap, or QR shown by the trainer), list per session — needs A2 shared collections. "Abzeichen vergeben" hands the checked-in people to the org's event-badge flow (Studio Ausweise → one batch, phone confirms) | 1 wk after A2 |
+| A6.4 Apps as badge issuers | Count-based badges ("10 Trainings") issued without the organiser's phone: the org appoints the node's badge key as delegate for that one type (register spec 5.5); the app's check-ins trigger small batches. Needs the register live + the node key decision | later |
+
+Patterns the builder should produce (all degrade when `supports('credentials.list')` is false or the
+register is off):
+
+- **Mitgliederbereich:** a screen shown only when `sdk.credentials.has('org:<id>')`; otherwise an explanation
+  and "Mitgliedschaft teilen" (`request`). Never security — data that must stay private needs A2 rules on the
+  server (shared collections readable only by holders of a credential).
+- **Rollen-Werkzeuge:** trainer / Vorstand screens behind a `role` credential (e.g. open a check-in session,
+  edit the weekly plan), the server checks the same credential.
+- **Abzeichen zeigen:** an app lists the person's badges of its org (kind `badge`) as a small collection or
+  "Dabei gewesen" on past events (Festprogramm, Vereinstermine).
+- **Belohnung mit Nachweis:** Quiz or Stempelkarte pays its Röbel-Münze only to `citizen`.
+
+**Decision for Max:** order A2 → A6.1 → A6.3 (attendance needs shared data), or A6.1 first so apps can at
+least gate screens once the register is switched on in production.
+
 ### 3.4 Non-goals (for now)
 
 Multi-file apps with their own server code (Langdock's `actors.ts`). Single-file + SDK services keeps
