@@ -19,6 +19,7 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { takeBuilderBudget } from "@/lib/miniapp/ai/limits";
 import { tracked } from "@/lib/ai-usage/tracked";
 
 export const maxDuration = 30;
@@ -99,6 +100,9 @@ export async function POST(request: Request) {
   if (!hasCodegenKey()) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
+
+  const budget = await takeBuilderBudget(request, "assist");
+  if (budget.refused) return budget.refused;
 
   try {
     for (let attempt = 0; attempt < 2; attempt++) {

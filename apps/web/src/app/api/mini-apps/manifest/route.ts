@@ -17,6 +17,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { manifestDraftSchema, type ManifestDraft } from "@/lib/miniapp/ai/manifest";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { takeBuilderBudget } from "@/lib/miniapp/ai/limits";
 import { tracked } from "@/lib/ai-usage/tracked";
 
 export const maxDuration = 60;
@@ -73,6 +74,9 @@ export async function POST(request: Request) {
   if (!hasCodegenKey()) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
+
+  const budget = await takeBuilderBudget(request, "assist");
+  if (budget.refused) return budget.refused;
 
   const { html, idea } = parsed.data;
   const prompt = `${idea ? `Idee / Verlauf:\n${idea}\n\n` : ""}HTML der App:\n${html.slice(0, 60_000)}`;

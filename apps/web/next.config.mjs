@@ -185,6 +185,18 @@ const nextConfig = {
         ],
       },
       {
+        // Mini-app builder API: Ortis Studio builds and publishes apps with its pairing session
+        // (Bearer). Auth is headers only (Bearer / x-wallet-address); with `*` browsers never
+        // send cookies, so cookie-authenticated admin calls stay same-origin.
+        source: '/api/mini-apps/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PATCH, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'authorization, content-type, x-wallet-address' },
+          { key: 'Access-Control-Max-Age', value: '600' },
+        ],
+      },
+      {
         // Mini apps served from /mini/[slug] run with an opaque origin (CSP
         // sandbox) — @font-face fetches are CORS-gated there, so the shared
         // fonts must be readable cross-origin.

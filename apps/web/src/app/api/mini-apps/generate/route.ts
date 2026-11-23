@@ -23,6 +23,7 @@ import { z } from "zod";
 import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/htmlPrompt";
 import { writeJobState, type GenerationJobState } from "@/lib/miniapp/ai/jobs";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
+import { takeBuilderBudget } from "@/lib/miniapp/ai/limits";
 import { tracked } from "@/lib/ai-usage/tracked";
 import { analyzeImagesForBrief } from "@/lib/miniapp/ai/vision";
 
@@ -81,6 +82,9 @@ export async function POST(request: Request) {
   if (!hasCodegenKey()) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
+
+  const budget = await takeBuilderBudget(request, "generate");
+  if (budget.refused) return budget.refused;
 
   // The response must start streaming IMMEDIATELY: vision analysis (≤75s) and
   // GLM's thinking phase (minutes on "Stark") both run before the first model

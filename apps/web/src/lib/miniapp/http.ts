@@ -3,6 +3,7 @@
 // builder-auth resolver.
 import "server-only";
 import { NextResponse } from "next/server";
+import { bearerToken, verifySessionToken } from "@/lib/chat/session";
 import { requireAdmin } from "@/lib/muenzen/api";
 import { getDeveloperByWallet, getOrCreateDeveloper } from "./data";
 import { MiniAppError, type DeveloperRow } from "./types";
@@ -44,6 +45,7 @@ export async function resolveDeveloper(
   body?: { wallet?: string } | null,
 ): Promise<DeveloperRow> {
   const wallet =
+    (await sessionWallet(req)) ||
     req.headers.get("x-wallet-address") ||
     body?.wallet ||
     getParam(req, "wallet") ||
@@ -54,13 +56,23 @@ export async function resolveDeveloper(
   return getOrCreateDeveloper(wallet);
 }
 
+// Both resolvers prefer a verified chat session (`Authorization: Bearer <chat session token>`,
+// sent by Ortis Studio after device pairing) over the claimed wallet. An invalid or foreign
+// bearer (e.g. a mini-app user token) is ignored and the wallet path applies as before.
+
 /** Read-only variant: returns null instead of creating a row. */
 export async function resolveDeveloperReadonly(
   req: Request,
   body?: { wallet?: string } | null,
 ): Promise<DeveloperRow | null> {
   const wallet =
+    (await sessionWallet(req)) ||
     req.headers.get("x-wallet-address") || body?.wallet || getParam(req, "wallet") || "";
   if (!wallet) return null;
   return getDeveloperByWallet(wallet);
+}
+
+/** Wallet of a verified chat session bearer, or null. */
+export async function sessionWallet(req: Request): Promise<string | null> {
+  return verifySessionToken(bearerToken(req.headers.get("authorization")));
 }
