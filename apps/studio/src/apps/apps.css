@@ -504,3 +504,41 @@
 .data-table tr:last-child td {
   border-bottom: 0;
 }
+
+.builder-form select {
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--w-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.builder-radio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.builder-radio label {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+  color: var(--w-text);
+}
+
+.builder-radio label > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.builder-radio label.off {
+  opacity: 0.6;
+}

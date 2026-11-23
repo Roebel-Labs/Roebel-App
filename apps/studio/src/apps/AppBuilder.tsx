@@ -17,6 +17,10 @@ import {
   seedContent,
   type BuildTurn,
   type CmsSeed,
+  audienceFor,
+  credentialsLive,
+  fetchMyOrgs,
+  type ManagedOrg,
   type ManifestDraft,
   type PublishResult,
 } from './builder-api';
@@ -331,6 +335,19 @@ function PublishPanel({
   const [busy, setBusy] = useState(!preset);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<PublishResult | null>(null);
+  const [orgs, setOrgs] = useState<ManagedOrg[]>([]);
+  const [membersLive, setMembersLive] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchMyOrgs(token)
+      .then((o) => alive && setOrgs(o))
+      .catch(() => {});
+    credentialsLive().then((v) => alive && setMembersLive(v));
+    return () => {
+      alive = false;
+    };
+  }, [token]);
 
   useEffect(() => {
     if (preset) return;
@@ -398,6 +415,54 @@ function PublishPanel({
               {t('Beschreibung')}
               <textarea rows={3} value={draft.description} maxLength={280} onChange={(e) => set('description', e.target.value)} />
             </label>
+            {(orgs.length > 0 || draft.org) && (
+              <label>
+                {t('Für wen ist die App?')}
+                <select
+                  value={draft.org ?? ''}
+                  onChange={(e) => setDraft((d) => (d ? { ...d, ...audienceFor(e.target.value || null, 'recommended') } : d))}
+                >
+                  <option value="">{t('Für alle in der Röbel App')}</option>
+                  {orgs.map((o) => (
+                    <option key={o.accountId} value={o.accountId}>
+                      {o.name}
+                    </option>
+                  ))}
+                  {draft.org && !orgs.some((o) => o.accountId === draft.org) && <option value={draft.org}>{t('Bisherige Organisation')}</option>}
+                </select>
+              </label>
+            )}
+            {draft.org && (
+              <div className="builder-radio">
+                <label>
+                  <input
+                    type="radio"
+                    checked={draft.audience?.mode !== 'required'}
+                    onChange={() => setDraft((d) => (d ? { ...d, ...audienceFor(d.org ?? null, 'recommended') } : d))}
+                  />
+                  <span>
+                    <strong>{t('Empfohlen für Mitglieder')}</strong>
+                    <span className="w-muted">{t('Alle können die App öffnen. Sie erscheint als App eurer Organisation.')}</span>
+                  </span>
+                </label>
+                <label className={membersLive ? '' : 'off'}>
+                  <input
+                    type="radio"
+                    disabled={!membersLive && draft.audience?.mode !== 'required'}
+                    checked={draft.audience?.mode === 'required'}
+                    onChange={() => setDraft((d) => (d ? { ...d, ...audienceFor(d.org ?? null, 'required') } : d))}
+                  />
+                  <span>
+                    <strong>{t('Nur für Mitglieder')}</strong>
+                    <span className="w-muted">
+                      {membersLive
+                        ? t('Nur wer einen Mitgliedsausweis eurer Organisation hat, kann sie öffnen.')
+                        : t('Geht, sobald Mitgliedsausweise freigeschaltet sind.')}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
             {error && <p className="ws-error">{error}</p>}
             <button className="w-btn green" disabled={busy || !draft.name.trim() || !draft.slug} onClick={() => void publish()}>
               {busy ? t('Wird veröffentlicht …') : preset ? t('Neue Version einreichen') : t('Zur Prüfung einreichen')}

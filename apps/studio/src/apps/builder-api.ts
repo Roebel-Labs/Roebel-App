@@ -48,6 +48,35 @@ export interface ManifestDraft {
   tags: string[];
   permissions: string[];
   primaryColor: string;
+  /** Version 2: the org the app belongs to, and whom it is for. */
+  org?: string;
+  audience?: { mode: 'required' | 'recommended'; anyOf: string[] };
+}
+
+export interface ManagedOrg {
+  accountId: string;
+  name: string;
+  avatarUrl: string | null;
+  role: 'owner' | 'admin';
+}
+
+/** Organisations the signed-in account owns or administers. */
+export const fetchMyOrgs = (token: string) => request<{ orgs: ManagedOrg[] }>('/api/chat/my-orgs', { token }).then((r) => r.orgs);
+
+/** Whether membership credentials are switched on (needed for "Nur für Mitglieder"). */
+export async function credentialsLive(): Promise<boolean> {
+  try {
+    const r = await request<{ enabled?: boolean; configured?: boolean }>('/api/credentials/status');
+    return r.enabled === true && r.configured === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The manifest's org/audience fields for a choice in the publish sheet. */
+export function audienceFor(org: string | null, mode: 'recommended' | 'required'): Pick<ManifestDraft, 'org' | 'audience'> {
+  if (!org) return { org: undefined, audience: undefined };
+  return { org, audience: { mode, anyOf: [`org:${org}`] } };
 }
 
 export interface PublishResult {
@@ -118,7 +147,17 @@ export async function seedContent(token: string, slug: string, seeds: CmsSeed[])
 /** Latest stored HTML of one of the user's own AI-built apps (to keep editing it). */
 export async function fetchAppSource(id: string): Promise<{ html: string; manifest: ManifestDraft } | null> {
   const r = await request<{
-    app: { name: string; slug: string; description: string | null; category: string; tags: string[] | null; permissions: string[] | null; primary_color: string | null };
+    app: {
+      name: string;
+      slug: string;
+      description: string | null;
+      category: string;
+      tags: string[] | null;
+      permissions: string[] | null;
+      primary_color: string | null;
+      org_account_id?: string | null;
+      audience?: { mode: 'required' | 'recommended'; anyOf: string[] } | null;
+    };
     versions?: { html?: string | null }[];
   }>(`/api/mini-apps/${encodeURIComponent(id)}`);
   const html = r.versions?.find((v) => typeof v.html === 'string' && v.html.length > 0)?.html;
@@ -134,6 +173,8 @@ export async function fetchAppSource(id: string): Promise<{ html: string; manife
       tags: (a.tags ?? []).slice(0, 5),
       permissions: a.permissions ?? [],
       primaryColor: a.primary_color ?? '#00498B',
+      ...(a.org_account_id ? { org: a.org_account_id } : {}),
+      ...(a.audience ? { audience: a.audience } : {}),
     },
   };
 }

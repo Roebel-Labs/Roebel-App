@@ -57,3 +57,12 @@ describe('owner data table', () => {
     expect(csv).toContain('"Lea; ""L"""');
   });
 });
+
+import { audienceFor } from '../builder-api';
+
+describe('audience choice', () => {
+  it('maps the publish-sheet choice to manifest org/audience', () => {
+    expect(audienceFor(null, 'required')).toEqual({ org: undefined, audience: undefined });
+    expect(audienceFor('abc', 'recommended')).toEqual({ org: 'abc', audience: { mode: 'recommended', anyOf: ['org:abc'] } });
+  });
+});

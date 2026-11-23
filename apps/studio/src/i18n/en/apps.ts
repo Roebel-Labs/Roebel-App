@@ -57,4 +57,12 @@ export default {
   'Spalten mit „(privat)“ sehen nur die Person selbst und du.': 'Columns marked “(privat)” are visible only to the person and to you.',
   Aktionen: 'Actions',
   'Die neuesten {n} von {total} Einträgen.': 'The newest {n} of {total} entries.',
+  'Für wen ist die App?': 'Who is the app for?',
+  'Für alle in der Röbel App': 'Everyone in the Röbel App',
+  'Bisherige Organisation': 'Current organisation',
+  'Empfohlen für Mitglieder': 'Recommended for members',
+  'Alle können die App öffnen. Sie erscheint als App eurer Organisation.': 'Everyone can open the app. It shows as your organisation’s app.',
+  'Nur für Mitglieder': 'Members only',
+  'Nur wer einen Mitgliedsausweis eurer Organisation hat, kann sie öffnen.': 'Only people with a membership card of your organisation can open it.',
+  'Geht, sobald Mitgliedsausweise freigeschaltet sind.': 'Available once membership cards are switched on.',
 };
