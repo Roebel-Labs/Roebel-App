@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { t } from '../../i18n';
-import { addMcpConnector, deleteConnector, googleStart, listConnectors, type Connector } from '../../workspace/api';
+import { addMcpConnector, deleteConnector, googleStart, listConnectors, microsoftAdminConsentLink, microsoftStart, type Connector } from '../../workspace/api';
 import { onDesktopCommand } from '../../workspace/desktop';
 import { Busy, Skeleton } from '../Skeleton';
 
-/** Connectors list (Google, MCP servers). Shown in Einstellungen › Verbindungen and Funktionen › Integrationen. */
+type Provider = 'google' | 'microsoft';
+const LABEL: Record<Provider, string> = { google: 'Google', microsoft: 'Microsoft' };
+
+/** Connectors list (Google, Microsoft 365, MCP servers). Shown in Einstellungen › Verbindungen and Funktionen › Integrationen. */
 export function Connections({ token, title = 'Verbindungen' }: { token: string; title?: string }) {
   const [rows, setRows] = useState<Connector[] | null>(null);
   const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [microsoftAvailable, setMicrosoftAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -18,6 +22,7 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
       const r = await listConnectors(token);
       setRows(r.connectors);
       setGoogleAvailable(r.googleAvailable);
+      setMicrosoftAvailable(Boolean(r.microsoftAvailable));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -27,15 +32,16 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
 
   // After "Verbinden" Google runs in the browser. Refresh when Studio regains focus, when the browser hands
   // back via ortis-studio://connected, and every 3 s while waiting (max 5 min).
-  const [waiting, setWaiting] = useState(false);
+  const [waiting, setWaiting] = useState<Provider | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     const onFocus = () => void load();
     window.addEventListener('focus', onFocus);
     const off = onDesktopCommand((c) => {
       if (c.kind !== 'connected') return;
-      setWaiting(false);
-      setNotice(c.result === 'ok' ? t('Google ist verbunden.') : c.result === 'cancelled' ? t('Google-Anmeldung abgebrochen.') : t('Google-Verbindung fehlgeschlagen.'));
+      // The shell reports only ok/cancelled/error (key "google" for both providers); the list refresh tells which.
+      setWaiting(null);
+      setNotice(c.result === 'ok' ? t('Verbunden.') : c.result === 'cancelled' ? t('Anmeldung abgebrochen.') : t('Verbindung fehlgeschlagen.'));
       void load();
     });
     return () => {
@@ -44,36 +50,95 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
     };
   }, [load]);
   const google = rows?.find((r) => r.kind === 'google');
+  const microsoft = rows?.find((r) => r.kind === 'microsoft');
+  const waitingDone = waiting === 'google' ? google?.status === 'active' : waiting === 'microsoft' ? microsoft?.status === 'active' : false;
   useEffect(() => {
     if (!waiting) return;
-    if (google) {
-      setWaiting(false);
-      setNotice(t('Google ist verbunden.'));
+    if (waitingDone) {
+      setNotice(t('{provider} ist verbunden.', { provider: LABEL[waiting] }));
+      setWaiting(null);
       return;
     }
     const started = Date.now();
     const timer = setInterval(() => {
-      if (Date.now() - started > 5 * 60_000) setWaiting(false);
+      if (Date.now() - started > 5 * 60_000) setWaiting(null);
       else void load();
     }, 3000);
     return () => clearInterval(timer);
-  }, [waiting, google, load]);
+  }, [waiting, waitingDone, load]);
 
-  const connectGoogle = async () => {
+  const openExternal = (url: string) => {
+    // Guarded: the browser build and older shells open the page in a new tab.
+    if (window.studio?.shell?.openExternal) void window.studio.shell.openExternal(url);
+    else window.open(url, '_blank', 'noopener');
+  };
+
+  const connect = async (provider: Provider) => {
     setBusy(true);
     setNotice(null);
     try {
-      const { url } = await googleStart(token);
-      // Guarded: the browser build and older shells open the consent page in a new tab.
-      if (window.studio?.shell?.openExternal) void window.studio.shell.openExternal(url);
-      else window.open(url, '_blank', 'noopener');
-      setWaiting(true);
+      const { url } = provider === 'google' ? await googleStart(token) : await microsoftStart(token);
+      openExternal(url);
+      setWaiting(provider);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+
+  const copyAdminLink = async () => {
+    try {
+      await navigator.clipboard.writeText(microsoftAdminConsentLink());
+      setNotice(t('Freigabe-Link kopiert. Schick ihn der Person, die euer Microsoft 365 verwaltet.'));
+    } catch {
+      setNotice(microsoftAdminConsentLink());
+    }
+  };
+
+  const providerRow = (provider: Provider, row: Connector | undefined, available: boolean, subtitle: string) => (
+    <div className="conn-row">
+      <div>
+        <strong>{provider === 'google' ? 'Google' : 'Microsoft 365'}</strong>
+        <span className="w-muted">
+          {row ? row.name.replace(/^(Google|Microsoft) \((.*)\)$/, '$2') : subtitle}
+          {row && row.status === 'error' ? ` · ${row.lastError ?? t('Verbindung gestört')}` : ''}
+        </span>
+      </div>
+      {rows === null && !error ? (
+        <Busy as="span">
+          <Skeleton h={32} w={104} style={{ borderRadius: 16 }} />
+        </Busy>
+      ) : row && row.status === 'active' ? (
+        <div className="conn-actions">
+          <span className="w-tag ok">{t('Verbunden')}</span>
+          <button className="w-btn" disabled={busy} onClick={() => void remove(row.id)}>
+            {t('Trennen')}
+          </button>
+        </div>
+      ) : waiting === provider ? (
+        <div className="conn-actions">
+          <span className="w-muted">{t('Warte auf {provider} im Browser …', { provider: LABEL[provider] })}</span>
+          <button className="w-btn" onClick={() => setWaiting(null)}>
+            {t('Abbrechen')}
+          </button>
+        </div>
+      ) : available ? (
+        <div className="conn-actions">
+          {provider === 'microsoft' && (
+            <button className="w-btn" onClick={() => void copyAdminLink()} title={t('Für Arbeitskonten, bei denen die IT Apps freigeben muss')}>
+              {t('Freigabe-Link')}
+            </button>
+          )}
+          <button className="w-btn green" disabled={busy} onClick={() => void connect(provider)}>
+            {row ? t('Neu verbinden') : t('Verbinden')}
+          </button>
+        </div>
+      ) : (
+        <span className="w-tag">{t('Noch nicht eingerichtet')}</span>
+      )}
+    </div>
+  );
   const add = async () => {
     setBusy(true);
     try {
@@ -106,46 +171,8 @@ export function Connections({ token, title = 'Verbindungen' }: { token: string; 
       {error && <div className="ws-error">{error}</div>}
       {notice && <div className="conn-notice">{notice}</div>}
       <div className="conn-list">
-        <div className="conn-row">
-          <div>
-            <strong>Google</strong>
-            <span className="w-muted">{google ? google.name.replace(/^Google \((.*)\)$/, '$1') : t('Kalender, Gmail, Drive')}</span>
-          </div>
-          {rows === null && !error ? (
-            <Busy as="span">
-              <Skeleton h={32} w={104} style={{ borderRadius: 16 }} />
-            </Busy>
-          ) : google ? (
-            <div className="conn-actions">
-              <span className="w-tag ok">{t('Verbunden')}</span>
-              <button className="w-btn" disabled={busy} onClick={() => void remove(google.id)}>
-                {t('Trennen')}
-              </button>
-            </div>
-          ) : googleAvailable ? (
-            waiting ? (
-              <div className="conn-actions">
-                <span className="w-muted">{t('Warte auf Google im Browser …')}</span>
-                <button className="w-btn" onClick={() => setWaiting(false)}>
-                  {t('Abbrechen')}
-                </button>
-              </div>
-            ) : (
-              <button className="w-btn green" disabled={busy} onClick={() => void connectGoogle()}>
-                {t('Verbinden')}
-              </button>
-            )
-          ) : (
-            <span className="w-tag">{t('Noch nicht eingerichtet')}</span>
-          )}
-        </div>
-        <div className="conn-row">
-          <div>
-            <strong>Microsoft 365</strong>
-            <span className="w-muted">{t('Outlook, Kalender, OneDrive')}</span>
-          </div>
-          <span className="w-tag">{t('Geplant')}</span>
-        </div>
+        {providerRow('google', google, googleAvailable, t('Kalender, Gmail, Drive'))}
+        {providerRow('microsoft', microsoft, microsoftAvailable, t('Outlook-Mail und -Kalender'))}
         <div className="conn-row">
           <div>
             <strong>Röbel App</strong>

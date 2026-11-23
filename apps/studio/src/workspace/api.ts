@@ -163,7 +163,7 @@ export const deleteProviderKey = (token: string, provider: KeyProvider) =>
 
 export interface Connector {
   id: string;
-  kind: 'mcp' | 'google';
+  kind: 'mcp' | 'google' | 'microsoft';
   name: string;
   url: string | null;
   status: 'active' | 'error' | 'disabled';
@@ -171,7 +171,8 @@ export interface Connector {
   lastError: string | null;
 }
 
-export const listConnectors = (token: string) => call<{ connectors: Connector[]; googleAvailable: boolean }>('/api/chat/connectors', { token });
+export const listConnectors = (token: string) =>
+  call<{ connectors: Connector[]; googleAvailable: boolean; microsoftAvailable?: boolean }>('/api/chat/connectors', { token });
 export const addMcpConnector = (token: string, name: string, url: string) =>
   call<{ connector: Connector }>('/api/chat/connectors', { token, json: { kind: 'mcp', name, url } });
 export const deleteConnector = (token: string, id: string) =>
@@ -179,6 +180,10 @@ export const deleteConnector = (token: string, id: string) =>
 /** Google consent URL; the browser lands on /studio/verbunden afterwards. */
 export const googleStart = (token: string) =>
   call<{ url: string }>(`/api/chat/connectors/google/start?return=${encodeURIComponent(`${apiBase()}/studio/verbunden`)}`, { token });
+export const microsoftStart = (token: string) =>
+  call<{ url: string }>(`/api/chat/connectors/microsoft/start?return=${encodeURIComponent(`${apiBase()}/studio/verbunden`)}`, { token });
+/** Link an organisation's Microsoft 365 admin opens once to approve Ortis for everyone. */
+export const microsoftAdminConsentLink = () => `${apiBase()}/api/chat/connectors/microsoft/admin-consent?go=1`;
 
 export type AnalyticsRange = '24h' | '7d' | '30d' | '90d' | 'all';
 export interface AnalyticsSummary {
