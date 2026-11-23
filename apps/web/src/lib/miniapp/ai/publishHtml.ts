@@ -15,6 +15,7 @@ import { manifestDraftSchema, safeIconDataUri, type ManifestDraft } from "./mani
 import { identityForHtml } from "./credentialUse";
 import { missingNewColumns, validateAudience, validateOrg, withoutColumns } from "../manifest";
 import type { MiniAppAudience } from "../types";
+import { bindingPatch } from "../orgBinding";
 
 /**
  * Slugs that must never be claimed (existing apps, template, route namespaces —
@@ -171,11 +172,19 @@ export async function publishHtmlMiniApp(input: {
   const supabase = createAdminClient();
 
   // 3. Existing slug → same developer may re-publish; anyone else conflicts.
-  const { data: existing, error: lookupErr } = await supabase
+  type ExistingRow = { id: string; developer_id: string | null; source: string; org_account_id?: string | null; org_binding?: string | null };
+  let { data: existing, error: lookupErr } = await supabase
     .from("mini_apps")
-    .select("id, developer_id, source")
+    .select("id, developer_id, source, org_account_id, org_binding")
     .eq("slug", slug)
-    .maybeSingle();
+    .maybeSingle<ExistingRow>();
+  if (lookupErr && missingNewColumns(lookupErr).length > 0) {
+    ({ data: existing, error: lookupErr } = await supabase
+      .from("mini_apps")
+      .select("id, developer_id, source")
+      .eq("slug", slug)
+      .maybeSingle<ExistingRow>());
+  }
   if (lookupErr) {
     return fail(slug, "db_error", `registry_lookup_failed: ${lookupErr.message}`);
   }
@@ -192,6 +201,8 @@ export async function publishHtmlMiniApp(input: {
     status: "pending" as const,
     ...v2Fields,
   };
+  // Naming an org asks that org to confirm (same rule as registered apps).
+  Object.assign(appFields, bindingPatch(existing ?? null, appFields));
 
   let miniAppId: string;
   let republished = false;
