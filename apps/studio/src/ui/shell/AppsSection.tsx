@@ -23,8 +23,12 @@ const open = (url: string) => {
   if (/^https:\/\//.test(url)) void window.studio.shell.openExternal(url);
 };
 
-/** Mini-Apps: the user's own apps (same list as the web dashboard), templates and the in-Studio builder. */
-export function AppsSection() {
+/**
+ * Mini-Apps: the user's own apps (same list as the web dashboard), templates and the in-Studio builder.
+ * App.tsx keeps this mounted after the first visit and only hides it, so a running build and the
+ * builder chat survive a trip to another section.
+ */
+export function AppsSection({ hidden = false }: { hidden?: boolean }) {
   const [apps, setApps] = useState<MyMiniApp[] | null>(null);
   const [state, setState] = useState<'loading' | 'signed-out' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +65,7 @@ export function AppsSection() {
 
   if (builder && token) {
     return (
-      <div className="section apps">
+      <div className="section apps" style={hidden ? { display: 'none' } : undefined}>
         <AppBuilder
           token={token}
           start={builder}
@@ -79,7 +83,7 @@ export function AppsSection() {
 
   if (dataOf && token) {
     return (
-      <div className="section apps">
+      <div className="section apps" style={hidden ? { display: 'none' } : undefined}>
         <AppData token={token} app={dataOf} onBack={() => setDataOf(null)} />
       </div>
     );
@@ -87,14 +91,14 @@ export function AppsSection() {
 
   if (selected && token) {
     return (
-      <div className="section apps">
+      <div className="section apps" style={hidden ? { display: 'none' } : undefined}>
         <AppAnalytics token={token} app={selected} onBack={() => setSelected(null)} />
       </div>
     );
   }
 
   return (
-    <div className="section apps">
+    <div className="section apps" style={hidden ? { display: 'none' } : undefined}>
       <header className="section-head">
         <h1>{t('Mini-Apps')}</h1>
         <div className="apps-tabs" role="tablist">

@@ -374,6 +374,11 @@ function QuitConfirm() {
 function Shell() {
   const [section, setSectionState] = useState<AppSection>(() => loadSection());
   const [tab, setTab] = useState<Tab>('show');
+  // Mini-Apps stays mounted after its first visit (see AppsSection).
+  const [appsOpened, setAppsOpened] = useState(section === 'apps');
+  useEffect(() => {
+    if (section === 'apps') setAppsOpened(true);
+  }, [section]);
   // Visited sections for Zurück / Vor (⌘[ / ⌘⇧]).
   const [history, setHistory] = useState<NavHistory<AppSection>>(() => ({ items: [section], at: 0 }));
   const show = (next: AppSection) => {
@@ -502,7 +507,8 @@ function Shell() {
           {section === 'skills' && <SkillsSection />}
           {section === 'wiki' && <WikiSection />}
           {section === 'library' && <LibrarySection />}
-          {section === 'apps' && <AppsSection />}
+          {/* Stays mounted once opened (hidden elsewhere) so the mini-app builder keeps its chat and build. */}
+          {appsOpened && <AppsSection hidden={section !== 'apps'} />}
           {section === 'credentials' && <CredentialsSection />}
           {section === 'agent' && <AgentSection onNavigate={setSection} />}
           {/* Livestream health: always in the livestream, elsewhere only while on air (silent-audio alarm). */}
