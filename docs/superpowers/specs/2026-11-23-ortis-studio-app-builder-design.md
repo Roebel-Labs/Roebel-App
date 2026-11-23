@@ -1,6 +1,6 @@
 # Ortis Studio: App builder, meetings and the business case (vs. Langdock)
 
-**Status:** 2026-11-23 — A0, templates and A1 (builder in Studio) built, see `STATE_OF_ORTIS_STUDIO.md` §6b. Meetings dropped by Max ("not needed right now"); templates added instead. A2–A5 open.
+**Status:** 2026-11-23 — A0, templates and A1 (builder in Studio) built, see `STATE_OF_ORTIS_STUDIO.md` §6b. Meetings dropped by Max ("not needed right now"); templates added instead. A2 (shared collections, Raumbuchung, Anwesenheit, Studio „Daten“) and A6.1 built 2026-11-23; A3–A5, A6.2, A6.3 badge issuance, A6.4 open.
 **Context:** Max compared Ortis Studio with Langdock (screenshots of the desktop app, Apps and Meetings)
 and asked: how far are we, what can SAIA carry, which external model, and how does it become revenue.
 Read with [`STATE_OF_ORTIS_STUDIO.md`](../../STATE_OF_ORTIS_STUDIO.md),
