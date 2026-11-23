@@ -64,3 +64,21 @@ export const BUILDER_LIMIT_MESSAGE: Record<BuilderCaller["kind"], string> = {
   session: "Du hast gerade sehr viele Apps gebaut. Bitte versuche es später noch einmal.",
   anon: "Zu viele Anfragen von deinem Anschluss. Melde dich an oder versuche es später noch einmal.",
 };
+
+/**
+ * A short German explanation for a failed model call, sent to the builder as an `error` frame
+ * instead of the generic "no complete app" (2026-11-23: z.ai answered 429 "Insufficient balance").
+ */
+export function providerErrorMessage(e: unknown): string {
+  const text = e instanceof Error ? `${e.message} ${String((e as { lastError?: unknown }).lastError ?? "")}` : String(e);
+  if (/balance|recharge|quota|resource package|billing|credit/i.test(text)) {
+    return "Der KI-Dienst des Baukastens hat gerade kein Guthaben. Bitte versuche es später noch einmal oder sag der Betreiber:in Bescheid.";
+  }
+  if (/429|rate.?limit|too many|overloaded|529/i.test(text)) {
+    return "Der KI-Dienst ist gerade ausgelastet. Bitte in ein paar Minuten noch einmal versuchen.";
+  }
+  if (/timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed/i.test(text)) {
+    return "Der KI-Dienst hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen.";
+  }
+  return "Beim Bauen ist ein Fehler im KI-Dienst aufgetreten. Bitte noch einmal versuchen.";
+}

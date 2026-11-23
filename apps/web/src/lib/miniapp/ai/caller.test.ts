@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUILDER_LIMITS, clientIp, limitKey, resolveBuilderCaller } from "./caller";
+import { BUILDER_LIMITS, clientIp, limitKey, providerErrorMessage, resolveBuilderCaller } from "./caller";
 
 const W = "0x" + "a".repeat(40);
 
@@ -28,4 +28,10 @@ test("anonymous callers get a smaller budget than sessions", () => {
   assert.ok(sum("anon") < sum("session"));
   const names = Object.values(BUILDER_LIMITS).flatMap((r) => [...r.generate, ...r.assist].map((x) => x.name));
   assert.equal(new Set(names).size, names.length, "limiter names must be unique");
+});
+
+test("provider errors become specific German messages", () => {
+  assert.match(providerErrorMessage(new Error("Failed after 3 attempts. Last error: Insufficient balance or no resource package. Please recharge.")), /Guthaben/);
+  assert.match(providerErrorMessage(new Error("429 Too Many Requests")), /ausgelastet/);
+  assert.match(providerErrorMessage("boom"), /Fehler/);
 });

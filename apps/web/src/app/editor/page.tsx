@@ -655,6 +655,7 @@ export default function NewMiniAppBuilderPage() {
         let thinkAcc = "";
         let briefAcc = "";
         let finishReason = "";
+        let serverError = "";
         const feed = makeFrameParser((f) => {
           if (f.t === "html" && f.v) {
             htmlAcc += f.v;
@@ -666,6 +667,8 @@ export default function NewMiniAppBuilderPage() {
             briefAcc = f.v;
           } else if (f.t === "status" && (f.v === "vision" || f.v === "code")) {
             setPhase(f.v);
+          } else if (f.t === "error" && f.v) {
+            serverError = f.v;
           } else if (f.t === "done" && f.v) {
             finishReason = f.v;
           } else if (f.t === "job" && f.v) {
@@ -681,6 +684,12 @@ export default function NewMiniAppBuilderPage() {
         }
         feed(decoder.decode());
 
+        // The model call failed server-side (no balance, overloaded, …): show why, don't resume.
+        if (serverError && !htmlAcc.trim()) {
+          jobIdRef.current = null;
+          setPendingJob(null);
+          throw new Error(serverError);
+        }
         applyResult(htmlAcc, thinkAcc, briefAcc, finishReason);
         jobIdRef.current = null;
         setPendingJob(null);

@@ -24,6 +24,7 @@ import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/ht
 import { writeJobState, type GenerationJobState } from "@/lib/miniapp/ai/jobs";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
 import { takeBuilderBudget } from "@/lib/miniapp/ai/limits";
+import { providerErrorMessage } from "@/lib/miniapp/ai/caller";
 import { tracked } from "@/lib/ai-usage/tracked";
 import { analyzeImagesForBrief } from "@/lib/miniapp/ai/vision";
 
@@ -226,6 +227,13 @@ export async function POST(request: Request) {
               }
             } else if (p.type === "error") {
               console.error("[mini-apps/generate] stream part error", p.error);
+              const msg = providerErrorMessage(p.error);
+              frame("error", msg);
+              if (job) {
+                job.status = "error";
+                job.error = msg;
+                await mirror(true);
+              }
             }
           }
           // Why the stream ended — 'length' = output budget hit (doc truncated);
@@ -252,6 +260,7 @@ export async function POST(request: Request) {
         }
       } catch (e) {
         console.error("[mini-apps/generate] generation failed", e);
+        if (ndjson) frame("error", providerErrorMessage(e));
         if (job) {
           job.status = "error";
           job.error = e instanceof Error ? e.message : String(e);
