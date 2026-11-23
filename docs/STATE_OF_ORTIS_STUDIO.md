@@ -217,6 +217,12 @@ Spec: `docs/superpowers/specs/2026-11-23-ortis-studio-app-builder-design.md` (sl
 - **A6.2 (main `373c2606`, `c6a4a5d4`; Studio branch `54e12470`, not OTA'd):** `GET /api/chat/my-orgs` (orgs the account owns/administers, no register needed); the Studio publish sheet sets `org` + `audience` („Empfohlen für Mitglieder“ / „Nur für Mitglieder“ — the latter disabled until `/api/credentials/status` is enabled+configured); AI-app publishes apply the org binding, and the org's own owner/admin confirms it on the spot. Studio OTA **0.3.21** (Daten view) published 2026-11-23.
 - **Not done / not verified:** no live build or publish from Studio yet (needs the OTA and a signed-in session); preview has no host bridge (wallet/rewards inactive in preview); A2 shared collections, A3 connectors, A4 AI/schedules, A5 code/versions tabs.
 
+## 6c. Agent Mittagstisch + schedule card (2026-11-23)
+
+- **Backend (main `19923202`):** `set_mittagstisch` (actions pack, approval card): an org owner/admin enters a week's lunch menu by chat, same rows as the dashboard (one `special_menus` row per week, day categories "Dienstag, 24.11."); `get_menu` also returns the Mittagstisch. `show_schedule` (user pack) builds a `schedule` ChatPart from marked events + own org events.
+- **Opt-in part types:** clients list the optional parts they render in the send body (`partTypes: ['schedule']`); without it the tool returns data and the agent answers in text. Expo sends it from the next EAS update; Studio since **interface OTA 0.3.24** (branch `c9eb581d`/`1315763a`, release `ortis-studio-ota-v0.3.24`).
+- Not tested live yet.
+
 ## 7. Release and deploy runbook
 
 - Installers: `cd apps/studio && env -u ELECTRON_RUN_AS_NODE pnpm dist:mac && … pnpm dist:win`
