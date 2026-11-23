@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { IconCheck, IconClose, IconRefresh, IconSend, IconStop } from '../ui/shell/line-icons';
+import { BuildWireframe } from './BuildWireframe';
 import {
   BuilderApiError,
   draftManifest,
@@ -148,6 +149,7 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
         );
       }
       setStage('finish');
+      await new Promise((r) => setTimeout(r, 900)); // let the "Abschluss" wireframe show
       const index = versions.length;
       setVersions((v) => [...v, result.html!]);
       setActive(index);
@@ -273,14 +275,14 @@ export function AppBuilder({ token, start, onClose }: { token: string; start: Bu
                   </div>
                 ))}
               </div>
-              <p className="w-muted">{stage === 'plan' ? t('Die Screens und Daten der App werden festgelegt.') : t('Die App wird geschrieben: {chars} Zeichen', { chars: liveHtml.length.toLocaleString() })}</p>
-              {liveScreens.length > 0 && (
-                <ul className="builder-screens">
-                  {liveScreens.map((s) => (
-                    <li key={s.slug}>{s.title}</li>
-                  ))}
-                </ul>
-              )}
+              <BuildWireframe stage={stage} screens={liveScreens} chars={liveHtml.length} />
+              <p className="w-muted">
+                {stage === 'plan'
+                  ? t('Die Screens und Daten der App werden festgelegt.')
+                  : stage === 'build'
+                    ? t('Die App wird geschrieben: {chars} Zeichen', { chars: liveHtml.length.toLocaleString() })
+                    : t('Fertig. Die Vorschau wird geladen …')}
+              </p>
             </div>
           ) : html ? (
             <div className="builder-phone-wrap">

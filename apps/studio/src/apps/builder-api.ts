@@ -258,6 +258,7 @@ export async function generateApp(
   let raw = '';
   let think = '';
   let finish = '';
+  let serverError = '';
   const feed = makeFrameParser((f) => {
     if (f.t === 'html' && f.v) {
       raw += f.v;
@@ -269,6 +270,8 @@ export async function generateApp(
       cb.onPhase(f.v);
     } else if (f.t === 'done') {
       finish = f.v ?? '';
+    } else if (f.t === 'error' && f.v) {
+      serverError = f.v;
     }
   });
   const reader = res.body.getReader();
@@ -279,6 +282,8 @@ export async function generateApp(
     feed(decoder.decode(value, { stream: true }));
   }
   feed('\n');
+  // The model call failed on the server (no balance, overloaded, …): say why.
+  if (serverError && !raw.trim()) throw new BuilderApiError(503, 'provider', serverError);
   return { raw, finish };
 }
 

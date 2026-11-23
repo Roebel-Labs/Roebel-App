@@ -58,6 +58,7 @@ export default {
   Aktionen: 'Actions',
   'Die neuesten {n} von {total} Einträgen.': 'The newest {n} of {total} entries.',
   'Für wen ist die App?': 'Who is the app for?',
+  'Fertig. Die Vorschau wird geladen …': 'Done. Loading the preview …',
   'Für alle in der Röbel App': 'Everyone in the Röbel App',
   'Bisherige Organisation': 'Current organisation',
   'Empfohlen für Mitglieder': 'Recommended for members',

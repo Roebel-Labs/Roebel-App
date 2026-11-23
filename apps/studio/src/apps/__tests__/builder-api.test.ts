@@ -66,3 +66,15 @@ describe('audience choice', () => {
     expect(audienceFor('abc', 'recommended')).toEqual({ org: 'abc', audience: { mode: 'recommended', anyOf: ['org:abc'] } });
   });
 });
+
+import { filledBlocks } from '../BuildWireframe';
+
+describe('build wireframe', () => {
+  it('fills blocks by stage and progress', () => {
+    expect(filledBlocks('plan', 99999, 8)).toBe(0);
+    expect(filledBlocks('build', 0, 8)).toBe(1);
+    expect(filledBlocks('build', 11000, 8)).toBe(4);
+    expect(filledBlocks('build', 999999, 8)).toBe(7);
+    expect(filledBlocks('finish', 0, 8)).toBe(8);
+  });
+});

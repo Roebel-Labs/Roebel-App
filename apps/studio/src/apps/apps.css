@@ -542,3 +542,156 @@
 .builder-radio label.off {
   opacity: 0.6;
 }
+
+/* build wireframes (BuildWireframe.tsx) */
+
+.wf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.wf-phone {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-phone.large svg {
+  width: 190px;
+  height: auto;
+}
+
+.wf-phone.small svg {
+  width: 54px;
+  height: auto;
+}
+
+.wf-phone figcaption {
+  max-width: 72px;
+  color: var(--w-text-2);
+  font-size: 11px;
+}
+
+.wf-screens {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.wf-screens .wf-phone {
+  animation: wf-pop 0.35s ease-out both;
+}
+
+.wf-frame {
+  fill: var(--w-card);
+  stroke: var(--w-line-strong);
+  stroke-width: 2;
+}
+
+.wf-plan .wf-frame {
+  stroke: var(--w-accent);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: wf-draw 1.6s ease-in-out forwards;
+}
+
+.wf-block {
+  fill: var(--w-raised);
+  stroke: var(--w-line);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  transition: fill 0.5s ease, stroke 0.5s ease;
+}
+
+.wf-plan .wf-block {
+  opacity: 0;
+  animation: wf-appear 0.5s ease-out forwards, wf-breathe 2.4s ease-in-out 1.2s infinite;
+}
+
+.wf-block.on {
+  fill: var(--w-accent-soft);
+  stroke: var(--w-accent);
+  stroke-dasharray: none;
+}
+
+.wf-finish .wf-block {
+  fill: var(--w-accent-soft);
+  stroke: var(--w-accent-line, var(--w-accent));
+  stroke-dasharray: none;
+}
+
+.wf-scan {
+  fill: var(--w-accent);
+  opacity: 0.55;
+  animation: wf-scan 1.8s linear infinite;
+}
+
+.wf-check circle {
+  fill: var(--w-accent);
+  animation: wf-pop 0.35s ease-out both;
+}
+
+.wf-check path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes wf-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes wf-appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wf-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes wf-scan {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(250px);
+  }
+}
+
+@keyframes wf-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf *,
+  .wf-phone {
+    animation: none !important;
+    opacity: 1 !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
