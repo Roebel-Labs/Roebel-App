@@ -257,3 +257,58 @@ export function screensOf(html: string): { slug: string; title: string }[] {
     title: /data-title="([^"]*)"/.exec(m[0])?.[1] ?? m[1],
   }));
 }
+
+// ---- owner view of an app's collections (bookings, check-ins, sign-ups) ----------------
+
+export interface OwnerRow {
+  id: string;
+  key: string | null;
+  data: Record<string, unknown>;
+  privateData?: Record<string, unknown> | null;
+  mine: boolean;
+  createdAt: string;
+}
+
+export interface CollectionInfo {
+  collection: string;
+  scope: 'shared' | 'private';
+  rows: number;
+}
+
+export const fetchCollections = (token: string, appId: string) =>
+  request<{ collections: CollectionInfo[] }>(`/api/mini-apps/rows?app=${encodeURIComponent(appId)}&collections=1`, { token }).then((r) => r.collections);
+
+export const fetchOwnerRows = (token: string, appId: string, collection: string) =>
+  request<{ rows: OwnerRow[]; total: number }>('/api/mini-apps/rows', {
+    token,
+    json: { app: appId, op: 'list', collection, scope: 'shared', query: { order: 'newest', limit: 200 } },
+  });
+
+export const removeOwnerRow = (token: string, appId: string, collection: string, id: string) =>
+  request<{ ok: boolean }>('/api/mini-apps/rows', { token, json: { app: appId, op: 'remove', collection, scope: 'shared', id } });
+
+/** Flattens rows into columns for the table and CSV: key, every data field, every private field. */
+export function rowTable(rows: OwnerRow[]): { columns: string[]; cells: string[][] } {
+  const dataCols: string[] = [];
+  const privCols: string[] = [];
+  for (const r of rows) {
+    for (const k of Object.keys(r.data ?? {})) if (!dataCols.includes(k)) dataCols.push(k);
+    for (const k of Object.keys(r.privateData ?? {})) if (!privCols.includes(k)) privCols.push(k);
+  }
+  const show = (v: unknown) => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+  return {
+    columns: ['Schlüssel', ...dataCols, ...privCols.map((c) => `${c} (privat)`), 'Erstellt'],
+    cells: rows.map((r) => [
+      r.key ?? '',
+      ...dataCols.map((c) => show(r.data?.[c])),
+      ...privCols.map((c) => show(r.privateData?.[c])),
+      new Date(r.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }),
+    ]),
+  };
+}
+
+/** RFC 4180 CSV (semicolon for German Excel), BOM so umlauts open correctly. */
+export function toCsv(columns: string[], cells: string[][]): string {
+  const q = (s: string) => (/[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  return '﻿' + [columns.map(q), ...cells.map((r) => r.map(q))].map((r) => r.join(';')).join('\r\n');
+}

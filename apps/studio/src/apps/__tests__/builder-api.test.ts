@@ -41,3 +41,19 @@ describe('builder stream helpers', () => {
     expect(errorText({ error: 'invalid_body' }, 400)).toMatch(/400/);
   });
 });
+
+import { rowTable, toCsv } from '../builder-api';
+
+describe('owner data table', () => {
+  it('flattens data and private fields into columns and writes Excel-friendly CSV', () => {
+    const { columns, cells } = rowTable([
+      { id: '1', key: 'raum1|2026-12-01|14:00', data: { raum: 'raum1' }, privateData: { name: 'Lea; "L"' }, mine: false, createdAt: '2026-11-23T10:00:00Z' },
+      { id: '2', key: null, data: { raum: 'kueche', extra: { a: 1 } }, mine: false, createdAt: '2026-11-23T11:00:00Z' },
+    ]);
+    expect(columns).toEqual(['Schlüssel', 'raum', 'extra', 'name (privat)', 'Erstellt']);
+    expect(cells[1].slice(0, 4)).toEqual(['', 'kueche', '{"a":1}', '']);
+    const csv = toCsv(columns, cells);
+    expect(csv.startsWith('﻿Schlüssel;raum')).toBe(true);
+    expect(csv).toContain('"Lea; ""L"""');
+  });
+});

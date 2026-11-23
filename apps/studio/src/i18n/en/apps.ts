@@ -49,4 +49,12 @@ export default {
   'Meine Apps': 'My apps',
   'Inhalte, Bilder und Einstellungen im Web-Dashboard': 'Content, images and settings in the web dashboard',
   Dashboard: 'Dashboard',
+  Daten: 'Data',
+  'Diesen Eintrag löschen? Bei einer Buchung wird der Termin wieder frei.': 'Delete this entry? For a booking, the slot becomes free again.',
+  'Als CSV exportieren': 'Export as CSV',
+  'Noch keine Daten': 'No data yet',
+  'Sobald jemand in der App bucht, sich anmeldet oder eincheckt, erscheint es hier.': 'As soon as someone books, signs up or checks in through the app, it appears here.',
+  'Spalten mit „(privat)“ sehen nur die Person selbst und du.': 'Columns marked “(privat)” are visible only to the person and to you.',
+  Aktionen: 'Actions',
+  'Die neuesten {n} von {total} Einträgen.': 'The newest {n} of {total} entries.',
 };

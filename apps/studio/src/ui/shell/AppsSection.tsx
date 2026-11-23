@@ -7,6 +7,7 @@ import { AppAnalytics } from './AppAnalytics';
 import { SkCards } from '../Skeleton';
 import { AppBuilder, type BuilderStart } from '../../apps/AppBuilder';
 import { TemplateGallery } from '../../apps/TemplateGallery';
+import { AppData } from '../../apps/AppData';
 import '../../apps/apps.css';
 
 const STATUS: Record<MyMiniApp['status'], string> = {
@@ -31,6 +32,7 @@ export function AppsSection() {
   const [selected, setSelected] = useState<MyMiniApp | null>(null);
   const [tab, setTab] = useState<'mine' | 'templates'>('mine');
   const [builder, setBuilder] = useState<BuilderStart | null>(null);
+  const [dataOf, setDataOf] = useState<MyMiniApp | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -71,6 +73,14 @@ export function AppsSection() {
             }
           }}
         />
+      </div>
+    );
+  }
+
+  if (dataOf && token) {
+    return (
+      <div className="section apps">
+        <AppData token={token} app={dataOf} onBack={() => setDataOf(null)} />
       </div>
     );
   }
@@ -145,6 +155,9 @@ export function AppsSection() {
                 <div className="app-actions">
                   <button className="w-btn green" onClick={() => setSelected(a)}>
                     {t('Nutzung')}
+                  </button>
+                  <button className="w-btn" onClick={() => setDataOf(a)}>
+                    {t('Daten')}
                   </button>
                   <button className="w-btn" onClick={() => open(a.homeUrl)}>
                     {t('Öffnen')}
