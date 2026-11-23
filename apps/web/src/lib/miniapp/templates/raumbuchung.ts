@@ -207,6 +207,10 @@ async function init() {
   }
   render();
   sdk.actions.ready().catch(() => {});
+  try {
+    const ctx = await sdk.getContext();
+    if (ctx.user && ctx.user.displayName && !$("f-name").value) $("f-name").value = ctx.user.displayName;
+  } catch {}
   const [r, z, h] = await Promise.all([content("raeume", DEFAULT_RAEUME), content("zeiten", DEFAULT_ZEITEN), content("haus", DEFAULT_HAUS)]);
   raeume = Array.isArray(r) && r.length ? r : DEFAULT_RAEUME;
   zeiten = z && typeof z === "object" ? Object.assign({}, DEFAULT_ZEITEN, z) : DEFAULT_ZEITEN;

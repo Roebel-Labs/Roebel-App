@@ -12,6 +12,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { siteDomainActiveForPublish, siteOriginForSlug } from "../siteDomain";
 import { manifestDraftSchema, safeIconDataUri, type ManifestDraft } from "./manifest";
+import { identityForHtml } from "./credentialUse";
+import { missingNewColumns, validateAudience, validateOrg, withoutColumns } from "../manifest";
+import type { MiniAppAudience } from "../types";
 
 /**
  * Slugs that must never be claimed (existing apps, template, route namespaces —
@@ -144,6 +147,25 @@ export async function publishHtmlMiniApp(input: {
     );
   }
 
+  // Version 2 when the code uses credentials (identity derived from the code, not the model)
+  // or the publisher set an audience / org. Identity requests go through the reviewer check.
+  const identity = identityForHtml(html);
+  let audience: MiniAppAudience | null = null;
+  let org: string | null = null;
+  try {
+    if (manifest.audience !== undefined && manifest.audience !== null) audience = validateAudience(manifest.audience);
+    if (manifest.org) org = validateOrg(manifest.org);
+  } catch (e) {
+    return fail(slug, "invalid_manifest", `invalid_manifest: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const v2 = Boolean(identity || audience || org);
+  const v2Fields = {
+    manifest_version: v2 ? "2" : "1",
+    identity: v2 ? (identity ?? { profile: false, address: false, credentials: [] }) : null,
+    audience,
+    org_account_id: org,
+  };
+
   const homeUrl = homeUrlForSlug(slug, input.origin);
   const iconUrl = safeIconDataUri(manifest.iconSvg);
   const supabase = createAdminClient();
@@ -168,6 +190,7 @@ export async function publishHtmlMiniApp(input: {
     permissions: manifest.permissions ?? [],
     primary_color: manifest.primaryColor ?? "#00498B",
     status: "pending" as const,
+    ...v2Fields,
   };
 
   let miniAppId: string;
@@ -181,28 +204,36 @@ export async function publishHtmlMiniApp(input: {
     }
     // Re-publish without a fresh icon keeps the existing one instead of nulling it.
     const { icon_url: newIcon, ...withoutIcon } = appFields;
-    const { error: updateErr } = await supabase
-      .from("mini_apps")
-      .update(newIcon ? appFields : withoutIcon)
-      .eq("id", existing.id);
+    const patch: Record<string, unknown> = newIcon ? appFields : withoutIcon;
+    let { error: updateErr } = await supabase.from("mini_apps").update(patch).eq("id", existing.id);
+    // Older schema without the version-2 columns: store the version-1 part.
+    const missing = missingNewColumns(updateErr);
+    if (missing.length > 0) {
+      ({ error: updateErr } = await supabase.from("mini_apps").update(withoutColumns(patch, missing)).eq("id", existing.id));
+    }
     if (updateErr) {
       return fail(slug, "db_error", `registry_update_failed: ${updateErr.message}`);
     }
     miniAppId = existing.id;
     republished = true;
   } else {
-    const { data: row, error: insertErr } = await supabase
-      .from("mini_apps")
-      .insert({
-        developer_id: input.developerId,
-        slug,
-        ...appFields,
-        screenshots: [],
-        source: "ai_builder",
-        reward_budget: 0,
-      })
-      .select("id")
-      .single();
+    const insertRow: Record<string, unknown> = {
+      developer_id: input.developerId,
+      slug,
+      ...appFields,
+      screenshots: [],
+      source: "ai_builder",
+      reward_budget: 0,
+    };
+    let { data: row, error: insertErr } = await supabase.from("mini_apps").insert(insertRow).select("id").single();
+    const missing = missingNewColumns(insertErr);
+    if (missing.length > 0) {
+      ({ data: row, error: insertErr } = await supabase
+        .from("mini_apps")
+        .insert(withoutColumns(insertRow, missing))
+        .select("id")
+        .single());
+    }
     if (insertErr || !row) {
       return fail(slug, "db_error", `registry_insert_failed: ${insertErr?.message ?? "no row"}`);
     }
@@ -220,7 +251,13 @@ export async function publishHtmlMiniApp(input: {
     mini_app_id: miniAppId,
     version,
     home_url: homeUrl,
-    manifest: { ...manifest, iconSvg: undefined, iconUrl, homeUrl },
+    manifest: {
+      ...manifest,
+      iconSvg: undefined,
+      iconUrl,
+      homeUrl,
+      ...(v2 ? { version: "2", identity: v2Fields.identity, audience: audience ?? undefined, org: org ?? undefined } : {}),
+    },
     status: "pending",
     html,
   });

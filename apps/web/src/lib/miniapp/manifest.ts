@@ -66,7 +66,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-function validateIdentity(input: unknown): MiniAppIdentityRequest {
+export function validateIdentity(input: unknown): MiniAppIdentityRequest {
   if (!isPlainObject(input)) fail("identity muss ein Objekt sein.");
   for (const key of Object.keys(input)) {
     if (!IDENTITY_KEYS.includes(key)) {
@@ -131,7 +131,7 @@ function canonicalRef(s: unknown): string | null {
   return `org:${p.org}`;
 }
 
-function validateAudience(input: unknown): MiniAppAudience {
+export function validateAudience(input: unknown): MiniAppAudience {
   if (!isPlainObject(input)) fail("audience muss ein Objekt mit mode und anyOf sein.");
   for (const key of Object.keys(input)) {
     if (!(AUDIENCE_KEYS as readonly string[]).includes(key)) {
@@ -161,7 +161,7 @@ function validateAudience(input: unknown): MiniAppAudience {
   return { mode: mode as MiniAppAudience["mode"], anyOf };
 }
 
-function validateOrg(input: unknown): string {
+export function validateOrg(input: unknown): string {
   if (typeof input !== "string" || !UUID_RE.test(input.trim())) {
     fail("org muss die Konto-ID des Vereins sein (eine UUID, wie in /account/<id>).");
   }

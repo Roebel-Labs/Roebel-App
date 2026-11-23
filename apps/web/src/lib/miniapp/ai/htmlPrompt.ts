@@ -201,6 +201,12 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
   · BUCHUNGS-MUSTER (Räume, Termine, Geräte): key = "<ressource>|<JJJJ-MM-TT>|<HH:MM>" — damit verhindert der Server Doppelbuchungen. Belegte Slots per list({ keyPrefix: ressource + "|" + datum }) laden. In data nur, was alle sehen dürfen (Raum, Zeit, ggf. "belegt"); Name, Telefon, Zweck gehören in privateData.
   · Ressourcen (Räume, Öffnungszeiten, Regeln) sind INHALTE (sdk.data.get) mit eingebautem Fallback, keine Sammlung.
   · Sammlungen brauchen eine angemeldete Person zum Schreiben; ohne Host (Vorschau) laufen sie im Speicher. Vorher sdk.supports("data.rows") prüfen; wenn false: erklären, dass Buchen in der aktuellen Röbel App kommt, und die Belegung nur lesen bzw. ausblenden.
+- sdk.credentials — NACHWEISE der Person (Mitgliedschaft, Rolle, Abzeichen, „citizen“ = in Röbel verifiziert). Die Person entscheidet, was sie teilt.
+  · await sdk.credentials.has("citizen") → boolean · await sdk.credentials.request(["org:<Konto-ID>"]) → { granted } (zeigt das Freigabe-Sheet) · await sdk.credentials.list() → [{ type, kind: "builtin"|"role"|"membership"|"badge", org?, name?, image? }] · sdk.credentials.onChange(cb)
+  · Nachweis-Referenzen IMMER als String-Literal direkt im Aufruf schreiben (z. B. has("citizen")), nie aus Variablen zusammensetzen: die Plattform liest daraus, um welche Nachweise die App bitten darf. "org:<Konto-ID>" nur verwenden, wenn die Nutzer:in die Konto-ID ihres Vereins genannt hat; sonst "citizen".
+  · Muster: Mitgliederbereich (Screen nur bei has(...), sonst Erklärung + Button „Mitgliedschaft teilen“ → request), Rollen-Werkzeuge (z. B. Trainer:in öffnet eine Anwesenheitsliste), Abzeichen anzeigen (list() mit kind "badge"), Belohnung nur für "citizen".
+  · Das ist Komfort, keine Sicherheit: echte Geheimnisse gehören nicht in die App. Vorher sdk.supports("credentials.list") prüfen; wenn false oder bei Fehlern freundlich erklären, dass das mit der aktuellen Röbel App kommt.
+  · Namen vorausfüllen: (await sdk.getContext()).user?.displayName — nur zur Anzeige/als Vorschlag, die Person kann ihn ändern.
 
 Fehler der Bridge haben { code, message } mit code ∈ user_rejected | unauthorized | unsupported | invalid_params | rate_limited | budget_exceeded | timeout | internal.
 JEDER sdk-Aufruf kann rejecten (z. B. fehlende Berechtigung → "unsupported"). Immer try/catch und eine freundliche deutsche Meldung zeigen — die App darf nie an einem Bridge-Fehler sterben.`;

@@ -54,6 +54,9 @@ export const manifestDraftSchema = z.object({
    * data URI at publish time. Optional — the store falls back to a letter tile.
    */
   iconSvg: z.string().max(4000).optional(),
+  /** Version 2 (optional): whom the app is for, and the org it belongs to. Validated on publish. */
+  audience: z.unknown().optional(),
+  org: z.string().max(64).optional(),
 });
 
 export type ManifestDraft = z.infer<typeof manifestDraftSchema>;
