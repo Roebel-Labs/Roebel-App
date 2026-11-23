@@ -20,10 +20,18 @@ export function googleResultFromUrl(url: string | null | undefined): 'ok' | 'err
   return m ? (m[1] as 'ok' | 'error' | 'cancelled') : null;
 }
 
+/** Result of the Microsoft OAuth redirect (…?microsoft=ok|error|cancelled|admin). */
+export function microsoftResultFromUrl(url: string | null | undefined): 'ok' | 'error' | 'cancelled' | 'admin' | null {
+  if (!url) return null;
+  const m = url.match(/[?&]microsoft=(ok|error|cancelled|admin)\b/);
+  return m ? (m[1] as 'ok' | 'error' | 'cancelled' | 'admin') : null;
+}
+
 export function connectorSubtitle(c: ChatConnector): string {
   if (c.status === 'error') return c.lastError || 'Verbindung gestört';
   if (c.status === 'disabled') return 'Deaktiviert';
   if (c.kind === 'google') return 'Gmail, Kalender und Drive';
+  if (c.kind === 'microsoft') return 'Outlook-Mail und -Kalender';
   const tools = c.toolCount === 1 ? '1 Werkzeug' : `${c.toolCount} Werkzeuge`;
   let host = '';
   try {

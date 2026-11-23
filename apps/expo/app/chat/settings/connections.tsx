@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
+  KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions } from '@/context/ChatContext';
 import { ChatApiError, type ChatConnector } from '@/lib/chat/api';
-import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl } from '@/lib/chat/connections';
+import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl, microsoftResultFromUrl } from '@/lib/chat/connections';
 import { BlackPillButton, SettingsListSkeleton, ShimmerLine, chatFont, chatSize, useChatSheets, useChatTokens, type ChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
@@ -21,6 +21,16 @@ const GOOGLE_MESSAGES = {
   error: 'Google konnte nicht verbunden werden.',
   cancelled: 'Google-Verbindung abgebrochen.',
 } as const;
+
+const MICROSOFT_MESSAGES = {
+  ok: 'Microsoft ist verbunden.',
+  error: 'Microsoft konnte nicht verbunden werden.',
+  cancelled: 'Microsoft-Verbindung abgebrochen.',
+  admin: 'Eure IT muss Ortis einmal freigeben. Teile ihr den Freigabe-Link unten.',
+} as const;
+
+/** Link an organisation's Microsoft 365 admin opens once to approve Ortis for everyone. */
+const ADMIN_CONSENT_LINK = 'https://www.roebel.app/api/chat/connectors/microsoft/admin-consent?go=1';
 
 function statusDot(c: ChatConnector, t: ChatTokens): string {
   if (c.status === 'active') return t.online;
@@ -36,8 +46,8 @@ export default function ChatConnectionsScreen() {
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
   const { confirm } = useChatSheets();
-  const { fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect } = useChatActions();
-  const params = useLocalSearchParams<{ google?: string }>();
+  const { fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect, startMicrosoftConnect } = useChatActions();
+  const params = useLocalSearchParams<{ google?: string; microsoft?: string }>();
 
   const [items, setItems] = useState<ChatConnector[] | null>(null);
   const [googleAvailable, setGoogleAvailable] = useState(false);
@@ -45,6 +55,9 @@ export default function ChatConnectionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [microsoftAvailable, setMicrosoftAvailable] = useState(false);
+  const [microsoftBusy, setMicrosoftBusy] = useState(false);
+  const [needsAdmin, setNeedsAdmin] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -57,6 +70,7 @@ export default function ChatConnectionsScreen() {
       const res = await fetchConnectors();
       setItems(res.connectors);
       setGoogleAvailable(res.googleAvailable);
+      setMicrosoftAvailable(res.microsoftAvailable);
       setError(null);
     } catch (err) {
       setError(errorText(err, 'Verbindungen konnten nicht geladen werden.'));
@@ -75,6 +89,14 @@ export default function ChatConnectionsScreen() {
     if (r === 'ok' || r === 'error' || r === 'cancelled') showSnackbar({ message: GOOGLE_MESSAGES[r] });
   }, [params.google, showSnackbar]);
 
+  useEffect(() => {
+    const r = params.microsoft;
+    if (r === 'ok' || r === 'error' || r === 'cancelled' || r === 'admin') {
+      showSnackbar({ message: MICROSOFT_MESSAGES[r] });
+      if (r === 'admin') setNeedsAdmin(true);
+    }
+  }, [params.microsoft, showSnackbar]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -82,6 +104,7 @@ export default function ChatConnectionsScreen() {
   };
 
   const google = items?.find((c) => c.kind === 'google') ?? null;
+  const microsoft = items?.find((c) => c.kind === 'microsoft') ?? null;
   const mcp = items?.filter((c) => c.kind === 'mcp') ?? [];
 
   const connectGoogle = async () => {
@@ -107,6 +130,38 @@ export default function ChatConnectionsScreen() {
     } finally {
       setGoogleBusy(false);
     }
+  };
+
+  const connectMicrosoft = async () => {
+    if (!microsoftAvailable) {
+      showSnackbar({ message: 'Microsoft-Verbindung ist bald verfügbar.' });
+      return;
+    }
+    setMicrosoftBusy(true);
+    try {
+      const returnUrl = Linking.createURL('chat/settings/connections');
+      const authUrl = await startMicrosoftConnect(returnUrl);
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, returnUrl, { showInRecents: true });
+      const outcome = result.type === 'success' ? microsoftResultFromUrl(result.url) : null;
+      if (outcome) showSnackbar({ message: MICROSOFT_MESSAGES[outcome] });
+      if (outcome === 'admin') setNeedsAdmin(true);
+      await load();
+    } catch (err) {
+      if (err instanceof ChatApiError && err.status === 503) {
+        setMicrosoftAvailable(false);
+        showSnackbar({ message: 'Microsoft-Verbindung ist bald verfügbar.' });
+      } else {
+        showSnackbar({ message: errorText(err, 'Microsoft konnte nicht verbunden werden.') });
+      }
+    } finally {
+      setMicrosoftBusy(false);
+    }
+  };
+
+  const shareAdminLink = () => {
+    Share.share({
+      message: `Bitte gib die App „Ortis“ einmal für unser Microsoft 365 frei (Outlook-Mail und -Kalender für unseren Assistenten): ${ADMIN_CONSENT_LINK}`,
+    }).catch(() => {});
   };
 
   const remove = async (c: ChatConnector) => {
@@ -251,6 +306,43 @@ export default function ChatConnectionsScreen() {
             )}
           </Pressable>
         )}
+
+        <Text style={[styles.section, { color: t.textSecondary }]}>Microsoft 365</Text>
+        {microsoft ? (
+          renderRow(microsoft)
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Microsoft verbinden"
+            disabled={microsoftBusy}
+            onPress={connectMicrosoft}
+            style={({ pressed }) => [styles.row, { backgroundColor: t.bubbleBot, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="calendar" size={18} color={t.icon} style={styles.leadIcon} />
+            <View style={styles.rowText}>
+              <Text style={[styles.rowTitle, { color: t.textPrimary }]}>Microsoft verbinden</Text>
+              <Text style={[styles.meta, { color: t.textSecondary }]}>Outlook-Mail und -Kalender</Text>
+            </View>
+            {microsoftBusy ? (
+              <ShimmerLine width={44} height={10} accessibilityLabel="Microsoft wird verbunden" />
+            ) : microsoftAvailable ? (
+              <Feather name="chevron-right" size={20} color={t.textSecondary} />
+            ) : (
+              <View style={[styles.chip, { backgroundColor: t.chipBackground }]}>
+                <Text style={[styles.chipText, { color: t.chipText }]}>Bald verfügbar</Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+        {microsoftAvailable && !microsoft ? (
+          <Pressable accessibilityRole="button" onPress={shareAdminLink} style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
+            <Text style={[styles.hint, { color: needsAdmin ? t.textPrimary : t.textSecondary }]}>
+              {needsAdmin
+                ? 'Eure Organisation verlangt eine Freigabe durch die IT. Tippe hier, um ihr den Freigabe-Link zu schicken.'
+                : 'Arbeitskonto? Falls eure IT Apps freigeben muss, tippe hier und schick ihr den Freigabe-Link.'}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <Text style={[styles.section, { color: t.textSecondary }]}>MCP-Server</Text>
         {mcp.length ? mcp.map(renderRow) : (

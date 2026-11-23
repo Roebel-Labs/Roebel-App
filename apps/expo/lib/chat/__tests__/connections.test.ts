@@ -1,4 +1,4 @@
-import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl } from '../connections';
+import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl, microsoftResultFromUrl } from '../connections';
 import type { ChatConnector } from '../api';
 
 const base: ChatConnector = {
@@ -33,5 +33,13 @@ describe('connections helpers', () => {
     expect(connectorSubtitle({ ...base, toolCount: 1 })).toBe('1 Werkzeug · mcp.notion.com');
     expect(connectorSubtitle({ ...base, status: 'error', lastError: 'Kaputt' })).toBe('Kaputt');
     expect(connectorSubtitle({ ...base, kind: 'google', url: null })).toBe('Gmail, Kalender und Drive');
+  });
+
+  it('reads the Microsoft OAuth result and labels Microsoft connections', () => {
+    expect(microsoftResultFromUrl('roebel://chat/settings/connections?microsoft=ok')).toBe('ok');
+    expect(microsoftResultFromUrl('roebel://x?microsoft=admin')).toBe('admin');
+    expect(microsoftResultFromUrl('roebel://x?google=ok')).toBeNull();
+    expect(microsoftResultFromUrl(null)).toBeNull();
+    expect(connectorSubtitle({ ...base, kind: 'microsoft', url: null })).toBe('Outlook-Mail und -Kalender');
   });
 });

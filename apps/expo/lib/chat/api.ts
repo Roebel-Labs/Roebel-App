@@ -458,7 +458,7 @@ export async function fetchAgentActions(account: SigningAccount, limit = 50): Pr
 
 export interface ChatConnector {
   id: string;
-  kind: 'mcp' | 'google';
+  kind: 'mcp' | 'google' | 'microsoft';
   name: string;
   url: string | null;
   status: 'active' | 'error' | 'disabled';
@@ -470,11 +470,17 @@ export interface ChatConnectorList {
   connectors: ChatConnector[];
   /** False until the server has Google OAuth credentials ("Bald verfügbar"). */
   googleAvailable: boolean;
+  /** False until the server has Microsoft OAuth credentials ("Bald verfügbar"). */
+  microsoftAvailable: boolean;
 }
 
 export async function fetchConnectors(account: SigningAccount): Promise<ChatConnectorList> {
   const res = await request<Partial<ChatConnectorList> | null>(account, 'GET', '/api/chat/connectors');
-  return { connectors: res?.connectors ?? [], googleAvailable: Boolean(res?.googleAvailable) };
+  return {
+    connectors: res?.connectors ?? [],
+    googleAvailable: Boolean(res?.googleAvailable),
+    microsoftAvailable: Boolean(res?.microsoftAvailable),
+  };
 }
 
 export interface AddMcpConnectorInput {
@@ -506,6 +512,12 @@ export async function refreshConnector(account: SigningAccount, id: string): Pro
 /** Google consent URL; throws ChatApiError status 503 while Google is not set up on the server. */
 export async function startGoogleConnect(account: SigningAccount, returnUrl: string): Promise<string> {
   const res = await request<{ url: string }>(account, 'GET', `/api/chat/connectors/google/start?return=${enc(returnUrl)}`);
+  return res.url;
+}
+
+/** Microsoft sign-in URL; throws ChatApiError status 503 while Microsoft is not set up on the server. */
+export async function startMicrosoftConnect(account: SigningAccount, returnUrl: string): Promise<string> {
+  const res = await request<{ url: string }>(account, 'GET', `/api/chat/connectors/microsoft/start?return=${enc(returnUrl)}`);
   return res.url;
 }
 

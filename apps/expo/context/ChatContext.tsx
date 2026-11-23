@@ -19,6 +19,7 @@ import {
   deleteConnector as apiDeleteConnector,
   refreshConnector as apiRefreshConnector,
   startGoogleConnect as apiStartGoogleConnect,
+  startMicrosoftConnect as apiStartMicrosoftConnect,
   type AddMcpConnectorInput,
   type ChatConnector,
   type ChatConnectorList,
@@ -900,11 +901,19 @@ export function useChatActions() {
     [account],
   );
 
+  const startMicrosoftConnect = useCallback(
+    async (returnUrl: string): Promise<string> => {
+      if (!account) throw notSignedIn();
+      return apiStartMicrosoftConnect(account, returnUrl);
+    },
+    [account],
+  );
+
   return {
     createBot, updateBot, createThread, uploadImage, transcribe, fetchFile,
     fetchRoutines, updateRoutine, deleteRoutine,
     fetchMemories, deleteMemory, fetchBotGrants, setBotGrants, fetchAgentActions,
-    fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect,
+    fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect, startMicrosoftConnect,
   };
 }
 
