@@ -151,6 +151,8 @@ interface BotTurnContext {
   extraUserText?: string;
   /** Device-calendar events sent by the app; null/undefined = no read access. */
   calendarContext?: CalendarContextEvent[] | null;
+  /** Optional part types the client renders (send body partTypes). */
+  partTypes?: string[] | null;
   /** Scheduled routine run (no routine tools, no human watching). */
   routineRun?: boolean;
   /** Parts attached to the last bubble in addition to what tools emit (approval continuation). */
@@ -226,6 +228,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     profile: ctx.profile,
     turn: {
       calendarContext: ctx.calendarContext ?? null,
+      partTypes: ctx.partTypes ?? null,
       routineRun: Boolean(ctx.routineRun),
       recentParts: rows.slice(-10).flatMap((r) => store.partsOf(r.parts)),
       emitted: extraParts,
@@ -447,6 +450,7 @@ export async function runUserTurn(opts: {
     const res = await runBotTurn({
       wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0,
       calendarContext: input.calendarContext ?? null,
+      partTypes: input.partTypes ?? null,
       channel: opts.channel ?? null,
     });
     spent += res.inputTokens + res.outputTokens;

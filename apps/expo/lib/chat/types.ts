@@ -60,9 +60,27 @@ export type ChatPart =
       width?: number;
       height?: number;
       error?: string; // German reason when failed
+    }
+  | {
+      // Day-by-day plan the agent shows (e.g. the week's marked events). Read-only card;
+      // only sent to clients that list 'schedule' in the send body's partTypes.
+      type: 'schedule';
+      title: string;
+      subtitle?: string;
+      days: { date: string; items: ScheduleItem[] }[]; // date = YYYY-MM-DD, sorted
+      empty?: string; // text when days is empty
     };
 
 export type GeneratedImageStatus = 'generating' | 'done' | 'failed';
+
+/** One entry of a schedule part. */
+export interface ScheduleItem {
+  title: string;
+  time?: string | null; // HH:mm
+  location?: string | null;
+  url?: string | null;
+  tag?: string | null; // short label, e.g. "Vorgemerkt" or the org name
+}
 
 export type CalendarEventStatus = 'proposed' | 'added' | 'dismissed';
 

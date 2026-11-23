@@ -635,8 +635,42 @@ export async function getMenu(db: Db, tenant: TenantRef, args: { restaurant: str
     beschreibung: r.description,
     adresse: r.address,
     kategorien: kategorien.filter((k) => k.gerichte.length > 0),
+    mittagstisch: await getMittagstisch(db, r.id),
     url: orgUrl ? `${orgUrl}` : null,
   };
+}
+
+const euro = (n: number | string | null) => (n != null ? `${Number(n).toFixed(2).replace(".", ",")} €` : null);
+
+/** Current and upcoming weekly specials (Mittagstisch) of a restaurant, by day. */
+export async function getMittagstisch(db: Db, restaurantId: string) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const { data: menus } = await db
+    .from("special_menus")
+    .select("id, name, price, start_date, end_date")
+    .eq("restaurant_id", restaurantId)
+    .eq("status", "published")
+    .or(`end_date.is.null,end_date.gte.${today}`)
+    .order("start_date", { ascending: true })
+    .limit(3);
+  if (!menus?.length) return [];
+  const ids = menus.map((m) => m.id);
+  const [{ data: cats }, { data: items }] = await Promise.all([
+    db.from("special_menu_categories").select("id, special_menu_id, name, sort_order").in("special_menu_id", ids).order("sort_order"),
+    db.from("special_menu_items").select("special_menu_id, category_id, name, description, price, is_vegetarian").in("special_menu_id", ids).order("sort_order"),
+  ]);
+  return menus.map((m) => {
+    const dish = (it: { name: string; description: string | null; price: number | null; is_vegetarian: boolean | null }) => ({
+      name: it.name, info: it.description, preis: euro(it.price), veg: it.is_vegetarian ? "vegetarisch" : null,
+    });
+    const own = (items ?? []).filter((it) => it.special_menu_id === m.id);
+    const tage = (cats ?? []).filter((c) => c.special_menu_id === m.id)
+      .map((c) => ({ tag: c.name, gerichte: own.filter((it) => it.category_id === c.id).map(dish) }))
+      .filter((t) => t.gerichte.length > 0);
+    const loose = own.filter((it) => !it.category_id).map(dish);
+    if (loose.length) tage.push({ tag: "Ohne Tag", gerichte: loose });
+    return { name: m.name, von: m.start_date, bis: m.end_date, preis: euro(m.price), tage };
+  });
 }
 
 // ---- Abfallkalender ----------------------------------------------------------------

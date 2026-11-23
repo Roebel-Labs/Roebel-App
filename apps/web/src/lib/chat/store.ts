@@ -151,6 +151,7 @@ export function previewOfParts(parts: ChatPart[], max = 120): string {
     if (p.type === "approval") return clip(`✋ ${p.summary}`, max);
     if (p.type === "task") return clip(`🗂️ ${p.title}`, max);
     if (p.type === "generated_image") return p.status === "failed" ? "🖼️ Bild fehlgeschlagen" : "🖼️ Bild";
+    if (p.type === "schedule") return clip(`🗓️ ${p.title}`, max);
   }
   return "";
 }

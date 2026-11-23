@@ -23,6 +23,7 @@ export const TOOL_DAILY_LIMITS: Record<string, number> = {
   create_feed_post: 3,
   submit_event: 3,
   create_org_event: 5,
+  set_mittagstisch: 10,
   create_listing: 5,
   send_email: 5,
 };
@@ -105,7 +106,7 @@ export const actionsDeps = {
   },
 };
 
-async function checkLimit(tool: string, ctx: HarnessContext): Promise<void> {
+export async function checkLimit(tool: string, ctx: HarnessContext): Promise<void> {
   const limit = TOOL_DAILY_LIMITS[tool];
   if (limit && (await actionsDeps.executedToday(ctx.wallet, tool)) >= limit) throw new ToolInputError(limitReached(tool));
 }
@@ -445,7 +446,7 @@ export const submitEvent: HarnessTool<EventInput> = {
 
 // ---- create_org_event ----------------------------------------------------------------
 
-function managedOrgs(ctx: HarnessContext) {
+export function managedOrgs(ctx: HarnessContext) {
   return (ctx.profile?.orgs ?? []).filter((o) => o.role === "owner" || o.role === "admin");
 }
 

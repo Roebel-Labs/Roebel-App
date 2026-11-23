@@ -6,10 +6,12 @@ import * as memory from "../memory";
 import * as actionsTest from "./actions-test";
 import * as roebelRead from "./roebel-read";
 import * as userPrivate from "./user-private";
+import * as schedule from "./schedule";
 import * as web from "./web";
 import * as connectors from "./connectors";
 import * as tasks from "./tasks";
 import * as actions from "./actions";
+import * as mittagstisch from "./mittagstisch";
 import * as money from "./money";
 import * as images from "./images";
 import * as media from "./media";
@@ -17,7 +19,7 @@ import * as eventRequests from "./event-requests";
 import * as persona from "../../persona/runtime";
 
 const PACKS: { register: (registry: ToolRegistry) => void }[] = [
-  chat, memory, roebelRead, userPrivate, web, actionsTest, tasks, connectors, actions, money, images, media, eventRequests, persona,
+  chat, memory, roebelRead, userPrivate, schedule, web, actionsTest, tasks, connectors, actions, mittagstisch, money, images, media, eventRequests, persona,
 ];
 
 export function registerAllPacks(registry: ToolRegistry): void {

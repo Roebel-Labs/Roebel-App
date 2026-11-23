@@ -160,6 +160,71 @@ export async function getMyEvents(db: Db, tenant: TenantRef, wallet: string) {
   return { vorgemerkt, von_meinen_organisationen: eigene };
 }
 
+export interface ScheduleEntry {
+  date: string; // YYYY-MM-DD
+  title: string;
+  time: string | null; // HH:mm
+  location: string | null;
+  url: string;
+  tag: string;
+}
+
+/**
+ * Entries for a personal schedule between from and to (inclusive): events the
+ * person marked (event_interests) plus, optionally, events of their own orgs.
+ * Cancelled and rejected events are left out; one entry per event.
+ */
+export async function getMySchedule(
+  db: Db,
+  tenant: TenantRef,
+  wallet: string,
+  args: { from: string; to: string; includeOrgEvents: boolean },
+): Promise<ScheduleEntry[]> {
+  const w = walletFilter(wallet);
+  const o = origin(tenant);
+  type Ev = { id: string; title: string; date: string; time: string | null; location: string | null; status: string; is_cancelled: boolean | null };
+  const inRange = (e: Ev) => e.date >= args.from && e.date <= args.to && !e.is_cancelled;
+  const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
+  const byId = new Map<string, ScheduleEntry>();
+
+  const { data: interests } = await db
+    .from("event_interests")
+    .select("events!inner(id, title, date, time, location, status, is_cancelled)")
+    .ilike("user_wallet", w)
+    .gte("events.date", args.from)
+    .lte("events.date", args.to)
+    .limit(200);
+  for (const r of interests ?? []) {
+    const e = one(r.events as unknown) as Ev | null;
+    if (!e || e.status !== "approved" || !inRange(e)) continue;
+    byId.set(e.id, { date: e.date, title: e.title, time: hhmm(e.time), location: e.location, url: `${o}/app/events/${e.id}`, tag: "Vorgemerkt" });
+  }
+
+  if (args.includeOrgEvents) {
+    const { data: owned } = await db.from("account_owners").select("account_id").ilike("wallet_address", w);
+    const accIds = (owned ?? []).map((r) => r.account_id);
+    if (accIds.length) {
+      const { data: evs } = await db
+        .from("events")
+        .select("id, title, date, time, location, status, is_cancelled, accounts:account_id(name)")
+        .in("account_id", accIds)
+        .gte("date", args.from)
+        .lte("date", args.to)
+        .in("status", ["approved", "pending"])
+        .limit(100);
+      for (const e of (evs ?? []) as (Ev & { accounts: { name: string } | { name: string }[] | null })[]) {
+        if (!inRange(e) || byId.has(e.id)) continue;
+        const org = one(e.accounts)?.name ?? "Deine Organisation";
+        byId.set(e.id, {
+          date: e.date, title: e.title, time: hhmm(e.time), location: e.location, url: `${o}/app/events/${e.id}`,
+          tag: e.status === "pending" ? `${org} · in Prüfung` : org,
+        });
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
 export async function getMyNotifications(db: Db, _tenant: TenantRef, wallet: string, args: { limit: number; unreadOnly?: boolean }) {
   const w = walletFilter(wallet);
   let q = db.from("notifications").select("type, title, body, is_read, created_at").ilike("recipient_wallet", w);

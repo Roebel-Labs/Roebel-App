@@ -142,6 +142,7 @@ export function messagePreview(message: ChatMessage, max = 80): string {
     else if (part.type === 'approval') text = part.title;
     else if (part.type === 'task') text = part.title;
     else if (part.type === 'generated_image') text = 'Bild';
+    else if (part.type === 'schedule') text = part.title;
     if (text.trim()) {
       const flat = text.replace(/\s+/g, ' ').trim();
       return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;

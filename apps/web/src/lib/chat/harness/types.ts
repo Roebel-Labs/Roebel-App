@@ -42,6 +42,8 @@ export interface HarnessContext {
 export interface HarnessTurn {
   /** Device-calendar events the app sent; null/undefined = no read access. */
   calendarContext?: CalendarContextEvent[] | null;
+  /** Optional part types the client renders (e.g. 'schedule'); null/undefined = base set only. */
+  partTypes?: string[] | null;
   /** Scheduled routine run (no human watching → no routine tools). */
   routineRun?: boolean;
   /** Parts of the last few stored messages (dedupe of cards). */

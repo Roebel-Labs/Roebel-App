@@ -380,13 +380,13 @@ export const getMenuTool: HarnessTool<z.infer<typeof menuInput>> = {
   name: "get_menu",
   pack: "roebel",
   risk: "read",
-  description: "Speisekarte eines Röbeler Gastro-Betriebs aus der App (Gerichte, Preise, vegetarisch/vegan).",
+  description: "Speisekarte eines Röbeler Gastro-Betriebs aus der App (Gerichte, Preise, vegetarisch/vegan) und sein aktueller Mittagstisch (Wochenkarte nach Tagen).",
   inputSchema: menuInput,
   summarize: ({ restaurant }) => `Speisekarte ansehen: ${restaurant}`,
   execute: async ({ restaurant }, ctx) => {
     const m = await getMenu(await db(), tenantOf(ctx), { restaurant });
     if (!m) return { error: `Keine Speisekarte für „${restaurant}“ gefunden. Tipp: list_orgs mit kind "restaurant".` };
-    return shapeOutput(m, { maxString: 300 });
+    return shapeOutput(m, { maxString: 300, maxChars: 6000 });
   },
 };
 

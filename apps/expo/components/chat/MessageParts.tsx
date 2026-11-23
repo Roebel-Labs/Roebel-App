@@ -13,6 +13,7 @@ import { splitSources } from '@/lib/chat/media-links';
 import { ApprovalCard, type ApprovalPart } from './ApprovalCard';
 import { TaskCard } from './TaskCard';
 import { GeneratedImageCard } from './GeneratedImageCard';
+import { ScheduleCard } from './ScheduleCard';
 import { ReplyQuote } from './ReplyQuote';
 import { chatFont, useChatTokens } from './tokens';
 
@@ -106,6 +107,7 @@ export function messagePreview(parts: ChatPart[]): string {
     if (p.type === 'approval') return p.title;
     if (p.type === 'task') return p.title;
     if (p.type === 'generated_image') return 'Bild';
+    if (p.type === 'schedule') return p.title;
   }
   return '';
 }
@@ -240,6 +242,8 @@ export function MessageParts({
                 onCancel={onTaskCancel ? async () => { await onTaskCancel(part.taskId); } : undefined}
               />
             );
+          case 'schedule':
+            return <ScheduleCard key={key} part={part} onItemPress={onLinkPress} onLongPress={lp} />;
           case 'generated_image':
             return <GeneratedImageCard key={`${message.id}-img-${part.imageId}`} part={part} onPress={onImagePress} />;
           case 'sources': {

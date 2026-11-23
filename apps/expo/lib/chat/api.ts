@@ -49,6 +49,8 @@ export interface SendMessageBody {
   optionAnswer?: { messageId: string; key: string };
   /** Upcoming device-calendar events for calendar bots; omitted without read access. */
   calendarContext?: CalendarContextEvent[];
+  /** Optional part types this build renders; the server falls back to text for the rest. */
+  partTypes?: string[];
 }
 
 export interface ChatFile {

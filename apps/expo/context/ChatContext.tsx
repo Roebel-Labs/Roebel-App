@@ -108,6 +108,9 @@ type StoreAction =
   | { type: 'upsert_bot'; bot: ChatBot }
   | { type: 'thread'; threadId: string; action: ThreadAction };
 
+/** Optional part types this build renders (send body partTypes). */
+const CLIENT_PART_TYPES = ['schedule'];
+
 const initialStore: StoreState = { status: 'idle', data: null, error: null, threads: {} };
 
 function storeReducer(state: StoreState, action: StoreAction): StoreState {
@@ -401,6 +404,7 @@ export function useThread(threadId: string) {
         return;
       }
       let body: SendMessageBody = imageUrls.length ? { ...draft, imageUrls } : draft;
+      body = { ...body, partTypes: CLIENT_PART_TYPES };
       // Calendar bots get the next 7 days of the device calendar when read access is granted.
       if (isCalendarThread(storeRef.current.data?.threads.find((t) => t.id === threadId))) {
         const calendarContext = await readCalendarContext();

@@ -52,6 +52,9 @@ function parseSendBody(body: Record<string, unknown>): SendMessageInput | string
   const calendar = sanitizeCalendarContext(body.calendarContext);
   if (calendar === "invalid") return "Ungültiger Kalender.";
   if (calendar) input.calendarContext = calendar;
+  if (Array.isArray(body.partTypes)) {
+    input.partTypes = body.partTypes.filter((t): t is string => typeof t === "string" && /^[a-z_]{1,40}$/.test(t)).slice(0, 20);
+  }
   return input;
 }
 

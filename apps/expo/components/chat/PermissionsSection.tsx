@@ -17,6 +17,7 @@ export const DEFAULT_GRANTABLE_TOOLS: GrantableTool[] = [
   { tool: 'create_listing', label: 'Anzeigen im Marktplatz erstellen', risk: 'public' },
   { tool: 'send_direct_message', label: 'Direktnachrichten senden', risk: 'public' },
   { tool: 'create_org_event', label: 'Veranstaltungen deiner Organisation anlegen', risk: 'public' },
+  { tool: 'set_mittagstisch', label: 'Mittagstisch deines Lokals eintragen', risk: 'public' },
   { tool: 'send_email', label: 'E-Mails senden', risk: 'external' },
 ];
 
