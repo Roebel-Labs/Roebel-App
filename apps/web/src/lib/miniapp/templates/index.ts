@@ -1,4 +1,5 @@
 // Template catalogue. Order = gallery order (recommended first).
+import { anwesenheit } from "./anwesenheit";
 import { buergerinfo } from "./buergerinfo";
 import { festprogramm } from "./festprogramm";
 import { quiz } from "./quiz";
@@ -10,7 +11,7 @@ import { TEMPLATE_GROUPS, type MiniAppTemplate } from "./types";
 export { TEMPLATE_GROUPS };
 export type { MiniAppTemplate, TemplateGroup, TemplateCmsKey } from "./types";
 
-export const MINI_APP_TEMPLATES: MiniAppTemplate[] = [vereinstermine, raumbuchung, wochenkarte, quiz, festprogramm, buergerinfo];
+export const MINI_APP_TEMPLATES: MiniAppTemplate[] = [vereinstermine, raumbuchung, wochenkarte, quiz, anwesenheit, festprogramm, buergerinfo];
 
 export function getTemplate(id: string): MiniAppTemplate | null {
   return MINI_APP_TEMPLATES.find((t) => t.id === id) ?? null;
