@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Pressable, FlatList, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -18,6 +18,8 @@ type Props = {
   /** Side gutter of title and first card: 24 in the feed, 16 on Erkunden. */
   gutter?: number;
   containerStyle?: StyleProp<ViewStyle>;
+  /** Headline override (Erkunden uses its own type scale). */
+  titleStyle?: StyleProp<TextStyle>;
 };
 
 type Dish = {
@@ -38,7 +40,7 @@ const dishKey = (dish: Dish) => dish.item.id;
  * serving day first. Dishes of past days are hidden; dishes without a day
  * go last. Tapping a dish opens its detail page (photo, day, comments).
  */
-export default function FeedSpecialMenuSection({ menus, gutter = 24, containerStyle }: Props) {
+export default function FeedSpecialMenuSection({ menus, gutter = 24, containerStyle, titleStyle }: Props) {
   // Locks the feed pager while a finger is on the rail (see HorizontalRailLock).
   const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
@@ -130,7 +132,7 @@ export default function FeedSpecialMenuSection({ menus, gutter = 24, containerSt
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }, containerStyle]}>
-      <Text style={[styles.title, { color: colors.textPrimary, paddingHorizontal: gutter }]}>Mittagstisch</Text>
+      <Text style={[styles.title, { color: colors.textPrimary, paddingHorizontal: gutter }, titleStyle]}>Mittagstisch</Text>
       <FlatList
         horizontal
         data={dishes}

@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, type StyleProp, type TextStyle } from 'react-native';
 import { NewsArticle } from '@/lib/types';
 import NewsCard from './NewsCard';
 import { useRouter } from 'expo-router';
@@ -10,12 +10,14 @@ import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   articles: NewsArticle[];
+  /** Headline override (Erkunden uses its own type scale). */
+  titleStyle?: StyleProp<TextStyle>;
 };
 
 const renderNewsCard = ({ item }: { item: NewsArticle }) => <NewsCard article={item} compact={true} />;
 const articleKey = (article: NewsArticle) => article.id;
 
-function NewsSection({ articles }: Props) {
+function NewsSection({ articles, titleStyle }: Props) {
   // In the Austausch feed: locks the tab pager while a finger is on this rail.
   const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
@@ -40,7 +42,7 @@ function NewsSection({ articles }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Neuigkeiten</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }, titleStyle]}>Neuigkeiten</Text>
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/news' as any)}

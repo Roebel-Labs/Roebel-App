@@ -23,6 +23,7 @@ import {
 import PinnedMiniAppBlock from '@/components/explore/PinnedMiniAppBlock';
 import MiniAppSuggestion from '@/components/explore/MiniAppSuggestion';
 import ExploreEditBoard from '@/components/explore/ExploreEditBoard';
+import { EXPLORE_SECTION_TITLE } from '@/components/explore/sectionTitleStyle';
 import type {
   EventRecord,
   NewsArticle,
@@ -358,13 +359,13 @@ export default function ExploreScreen() {
         return eventsQuery.isPending ? (
           <SectionRailSkeleton key={id} titleWidth="30%" />
         ) : (
-          <NearbyEventsSection key={id} events={eventBuckets.nearby} />
+          <NearbyEventsSection key={id} titleStyle={EXPLORE_SECTION_TITLE} events={eventBuckets.nearby} />
         );
       case 'movies':
         return moviesQuery.isPending ? (
           <SectionRailSkeleton key={id} titleWidth="25%" />
         ) : (
-          <MovieSection key={id} movies={movies} />
+          <MovieSection key={id} titleStyle={EXPLORE_SECTION_TITLE} movies={movies} />
         );
       case 'audio':
         // Hören: short stories, audiobooks, podcasts
@@ -382,7 +383,7 @@ export default function ExploreScreen() {
         return newsQuery.isPending ? (
           <SectionRailSkeleton key={id} titleWidth="40%" />
         ) : (
-          <NewsSection key={id} articles={newsArticles} />
+          <NewsSection key={id} titleStyle={EXPLORE_SECTION_TITLE} articles={newsArticles} />
         );
       case 'special_menu':
         // Mittagstisch dishes; hidden when no menu is active
@@ -393,7 +394,7 @@ export default function ExploreScreen() {
         return restaurantsQuery.isPending ? (
           <SectionRailSkeleton key={id} titleWidth="40%" />
         ) : (
-          <RestaurantSection key={id} restaurants={restaurants} />
+          <RestaurantSection key={id} titleStyle={EXPLORE_SECTION_TITLE} restaurants={restaurants} />
         );
       case 'businesses':
         // Nearby Org Accounts (Unternehmen)

@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList, type StyleProp, type TextStyle } from 'react-native';
 import { EventRecord } from '@/lib/types';
 import { isEventInRoebel, isEventTodayOrFuture } from '@/lib/utils';
 import HorizontalEventCard from './HorizontalEventCard';
@@ -9,12 +9,14 @@ import { useInterestPreviews } from '@/hooks/useInterestPreviews';
 
 type Props = {
   events: EventRecord[];
+  /** Headline override (Erkunden uses its own type scale). */
+  titleStyle?: StyleProp<TextStyle>;
 };
 
 const renderEventCard = ({ item }: { item: EventRecord }) => <HorizontalEventCard event={item} />;
 const eventKey = (event: EventRecord) => event.id;
 
-function NearbyEventsSection({ events }: Props) {
+function NearbyEventsSection({ events, titleStyle }: Props) {
   const { colors } = useTheme();
   // Filter events that are NOT in Röbel and are today or in the future
   const nearbyEvents = useMemo(() => {
@@ -34,7 +36,7 @@ function NearbyEventsSection({ events }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>In der Nähe</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }, titleStyle]}>In der Nähe</Text>
       </View>
       <FlatList
         horizontal

@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import FeedSpecialMenuSection from '@/components/feed/FeedSpecialMenuSection';
+import { EXPLORE_SECTION_TITLE } from './sectionTitleStyle';
 import { fetchActiveSpecialMenus } from '@/lib/supabase-restaurants';
 
 export const SPECIAL_MENUS_QUERY_KEY = ['explore', 'special-menus'] as const;
@@ -16,7 +17,7 @@ function SpecialMenuExploreSection() {
     meta: { persist: true },
   });
   if (!data || data.length === 0) return null;
-  return <FeedSpecialMenuSection menus={data} gutter={16} containerStyle={styles.container} />;
+  return <FeedSpecialMenuSection menus={data} gutter={16} containerStyle={styles.container} titleStyle={EXPLORE_SECTION_TITLE} />;
 }
 
 const styles = StyleSheet.create({

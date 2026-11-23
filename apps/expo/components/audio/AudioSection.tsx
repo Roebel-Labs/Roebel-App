@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 22,
-    fontFamily: 'MonaSansSemiCondensed-Medium',
+    fontSize: 24,
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   listContent: {
     paddingHorizontal: 16,

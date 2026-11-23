@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, type StyleProp, type TextStyle } from 'react-native';
 import { MovieRecord } from '@/lib/types';
 import MovieCard from './MovieCard';
 import { useRouter } from 'expo-router';
@@ -10,12 +10,14 @@ import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   movies: MovieRecord[];
+  /** Headline override (Erkunden uses its own type scale). */
+  titleStyle?: StyleProp<TextStyle>;
 };
 
 const renderMovieCard = ({ item }: { item: MovieRecord }) => <MovieCard movie={item} compact={true} />;
 const movieKey = (movie: MovieRecord) => movie.id;
 
-function MovieSection({ movies }: Props) {
+function MovieSection({ movies, titleStyle }: Props) {
   // In the Austausch feed: locks the tab pager while a finger is on this rail.
   const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
@@ -47,7 +49,7 @@ function MovieSection({ movies }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kinoprogramm</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }, titleStyle]}>Kinoprogramm</Text>
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/movies' as any)}

@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { RestaurantRecord } from '@/lib/types';
 import GastroCard from './GastroCard';
@@ -13,9 +13,11 @@ import { useRailLockTouchHandlers } from '@/components/feed/HorizontalRailLock';
 
 type Props = {
   restaurants: RestaurantRecord[];
+  /** Headline override (Erkunden uses its own type scale). */
+  titleStyle?: StyleProp<TextStyle>;
 };
 
-function RestaurantSection({ restaurants: fetched }: Props) {
+function RestaurantSection({ restaurants: fetched, titleStyle }: Props) {
   // In the Austausch feed: locks the tab pager while a finger is on this rail.
   const railLockHandlers = useRailLockTouchHandlers();
   const router = useRouter();
@@ -56,7 +58,7 @@ function RestaurantSection({ restaurants: fetched }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Gastronomie</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }, titleStyle]}>Gastronomie</Text>
 
         <Pressable
           style={[styles.showAllButton, { backgroundColor: colors.surfaceSecondary }]}
