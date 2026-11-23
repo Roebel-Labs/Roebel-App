@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const PROGRAMM = [
   { id: "p1", tag: "Samstag", beginn: "10:00", ende: "11:00", titel: "Eröffnung", ort: "Hauptbühne", beschreibung: "Begrüßung durch die Bürgermeisterin" },
@@ -130,7 +131,7 @@ export const festprogramm: MiniAppTemplate = {
     { key: "fest", beschreibung: "Name, Datum und Infos vor Ort", beispiel: FEST },
   ],
   suggestions: ["Füge einen Lageplan hinzu", "Schicke eine Erinnerung vor gemerkten Punkten", "Füge Sponsoren hinzu"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E5ECF3"/><path d="M80 150 160 40l80 110z" fill="#00498B"/><path d="M160 40v-16" stroke="#051433" stroke-width="3"/><path d="M160 24h18l-6 6 6 6h-18" fill="#FDC705"/><rect x="140" y="110" width="40" height="40" rx="6" fill="#E4F2FF"/><circle cx="92" cy="58" r="10" fill="#7ABBF2"/><circle cx="232" cy="52" r="8" fill="#FDC705"/><circle cx="246" cy="76" r="6" fill="#7ABBF2"/></svg>`,
+  thumbnailSvg: THUMBS.festprogramm,
   html: templateDocument({
     title: "Festprogramm",
     body,

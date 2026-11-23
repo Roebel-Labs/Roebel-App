@@ -1,4 +1,5 @@
 import { SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const FRAGEN = [
   { frage: "An welchem See liegt Röbel?", antworten: ["Plauer See", "Müritz", "Tollensesee", "Kölpinsee"], richtig: 1, erklaerung: "Röbel liegt am Südwestufer der Müritz, dem größten Binnensee Deutschlands." },
@@ -169,7 +170,7 @@ export const quiz: MiniAppTemplate = {
     { key: "quiz", beschreibung: "Titel und Einleitungstext", beispiel: QUIZ },
   ],
   suggestions: ["Mach daraus ein Vereinsquiz", "Füge zu jeder Frage ein Bild hinzu", "Zeige eine Bestenliste"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E4F2FF"/><rect x="92" y="30" width="136" height="120" rx="12" fill="#fff"/><rect x="108" y="46" width="80" height="10" rx="5" fill="#051433"/><rect x="108" y="68" width="104" height="16" rx="6" fill="#E5ECF3"/><rect x="108" y="90" width="104" height="16" rx="6" fill="#16A34A" opacity=".25"/><rect x="108" y="112" width="104" height="16" rx="6" fill="#E5ECF3"/><circle cx="228" cy="128" r="22" fill="#FDC705"/><circle cx="228" cy="128" r="15" fill="none" stroke="#051433" stroke-width="2.5"/><text x="228" y="133" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#051433">R</text></svg>`,
+  thumbnailSvg: THUMBS.quiz,
   html: templateDocument({
     title: "Röbel-Quiz",
     body,

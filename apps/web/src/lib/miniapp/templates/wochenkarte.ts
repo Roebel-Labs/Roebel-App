@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const GERICHTE = [
   { tag: "Montag", name: "Kartoffelsuppe mit Bockwurst", beschreibung: "Hausgemacht, mit frischem Brot", preis: "6,90", vegetarisch: false },
@@ -120,7 +121,7 @@ export const wochenkarte: MiniAppTemplate = {
     { key: "betrieb", beschreibung: "Name, Öffnungszeiten, Telefon, Adresse, Hinweis", beispiel: BETRIEB },
   ],
   suggestions: ["Füge Fotos zu den Gerichten hinzu", "Zeige Allergene an", "Füge eine Getränkekarte hinzu"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#FFF4CD"/><rect x="96" y="26" width="128" height="128" rx="12" fill="#fff"/><rect x="112" y="42" width="64" height="10" rx="5" fill="#051433"/><g fill="#E5ECF3"><rect x="112" y="66" width="96" height="18" rx="6"/><rect x="112" y="92" width="96" height="18" rx="6"/><rect x="112" y="118" width="96" height="18" rx="6"/></g><g fill="#00498B"><rect x="186" y="71" width="16" height="8" rx="4"/><rect x="186" y="97" width="16" height="8" rx="4"/><rect x="186" y="123" width="16" height="8" rx="4"/></g><circle cx="232" cy="46" r="18" fill="#FDC705"/><path d="M224 46h16M232 38v16" stroke="#051433" stroke-width="3" stroke-linecap="round"/></svg>`,
+  thumbnailSvg: THUMBS.wochenkarte,
   html: templateDocument({
     title: "Wochenkarte",
     body,

@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const THEMEN = [
   { kategorie: "Abfall", frage: "Wann wird der Sperrmüll abgeholt?", antwort: "Sperrmüll holt der Entsorger auf Anmeldung ab. Die Karte liegt dem Abfallkalender bei oder wird online bestellt." },
@@ -118,7 +119,7 @@ export const buergerinfo: MiniAppTemplate = {
     { key: "amt", beschreibung: "Name, Öffnungszeiten, Telefon, E-Mail, Adresse", beispiel: AMT },
   ],
   suggestions: ["Füge Formulare zum Herunterladen hinzu", "Zeige wichtige Termine wie die Müllabfuhr", "Mach daraus eine Elterninfo für die Kita"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E4F2FF"/><rect x="96" y="30" width="128" height="120" rx="12" fill="#fff"/><rect x="110" y="44" width="100" height="18" rx="9" fill="#E5ECF3"/><circle cx="122" cy="53" r="4" fill="none" stroke="#00498B" stroke-width="2"/><g fill="#E5ECF3"><rect x="110" y="72" width="100" height="16" rx="6"/><rect x="110" y="96" width="100" height="16" rx="6"/><rect x="110" y="120" width="100" height="16" rx="6"/></g><circle cx="230" cy="44" r="18" fill="#00498B"/><text x="230" y="51" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#fff">?</text></svg>`,
+  thumbnailSvg: THUMBS.buergerinfo,
   html: templateDocument({
     title: "Bürgerinfo",
     body,

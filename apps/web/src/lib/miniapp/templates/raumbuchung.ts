@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const RAEUME = [
   { id: "gruppenraum", name: "Gruppenraum", beschreibung: "Für Treffen, Workshops und Hausaufgabenhilfe", plaetze: 12 },
@@ -240,7 +241,7 @@ export const raumbuchung: MiniAppTemplate = {
     { key: "haus", beschreibung: "Name, Hausregeln, Kontakt", beispiel: HAUS },
   ],
   suggestions: ["Erlaube Buchungen nur für Mitglieder", "Zeige der Leitung eine Tagesübersicht", "Füge Geräte zum Ausleihen hinzu"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E5ECF3"/><rect x="92" y="28" width="136" height="124" rx="12" fill="#fff"/><rect x="108" y="44" width="72" height="10" rx="5" fill="#051433"/><g fill="#E5ECF3"><rect x="108" y="66" width="32" height="20" rx="6"/><rect x="144" y="66" width="32" height="20" rx="6"/><rect x="108" y="92" width="32" height="20" rx="6"/><rect x="180" y="92" width="32" height="20" rx="6"/><rect x="144" y="118" width="32" height="20" rx="6"/><rect x="180" y="118" width="32" height="20" rx="6"/></g><rect x="180" y="66" width="32" height="20" rx="6" fill="#00498B"/><rect x="144" y="92" width="32" height="20" rx="6" fill="#BCDDF9"/><rect x="108" y="118" width="32" height="20" rx="6" fill="#BCDDF9"/><circle cx="236" cy="40" r="16" fill="#FDC705"/><path d="M229 40l5 5 9-10" fill="none" stroke="#051433" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  thumbnailSvg: THUMBS.raumbuchung,
   html: templateDocument({
     title: "Raumbuchung",
     body,

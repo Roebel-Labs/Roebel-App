@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const EINHEITEN = [
   { id: "jugend-di", titel: "Training Jugend", wochentag: 2, von: "17:00", bis: "18:30", ort: "Sporthalle" },
@@ -175,7 +176,7 @@ export const anwesenheit: MiniAppTemplate = {
     { key: "regeln", beschreibung: "Name, optionaler Check-in-Code, Minuten vor Beginn, Erklärtext", beispiel: REGELN },
   ],
   suggestions: ["Zeige die Anwesenheit der ganzen Gruppe", "Nur Mitglieder dürfen sich anmelden", "Füge einen Code hinzu, den die Trainerin zeigt"],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E4F2FF"/><rect x="96" y="28" width="128" height="124" rx="12" fill="#fff"/><rect x="112" y="44" width="70" height="10" rx="5" fill="#051433"/><g fill="#E5ECF3"><rect x="112" y="68" width="96" height="16" rx="6"/><rect x="112" y="92" width="96" height="16" rx="6"/></g><rect x="112" y="118" width="96" height="20" rx="8" fill="#00498B"/><g fill="none" stroke="#16A34A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M117 76l4 4 7-8"/><path d="M117 100l4 4 7-8"/></g><circle cx="232" cy="128" r="18" fill="#FDC705"/><path d="M232 118l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="#051433"/></svg>`,
+  thumbnailSvg: THUMBS.anwesenheit,
   html: templateDocument({
     title: "Anwesenheit",
     body,

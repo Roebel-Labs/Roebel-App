@@ -1,4 +1,5 @@
 import { bottomNav, SCRIPT_HELPERS, templateDocument, type MiniAppTemplate } from "./types";
+import { THUMBS } from "./thumbs";
 
 const TERMINE = [
   { id: "t1", titel: "Training Jugend", datum: "2026-12-01", uhrzeit: "17:00", ort: "Sporthalle Röbel", gruppe: "Jugend", hinweis: "Hallenschuhe mitbringen" },
@@ -147,7 +148,7 @@ export const vereinstermine: MiniAppTemplate = {
     "Zeige die Termine als Monatskalender",
     "Ändere die Gruppen auf unsere Mannschaften",
   ],
-  thumbnailSvg: `<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="180" fill="#E5ECF3"/><rect x="100" y="34" width="120" height="116" rx="12" fill="#fff"/><rect x="100" y="34" width="120" height="28" rx="12" fill="#00498B"/><rect x="100" y="50" width="120" height="12" fill="#00498B"/><rect x="124" y="24" width="8" height="20" rx="4" fill="#051433"/><rect x="188" y="24" width="8" height="20" rx="4" fill="#051433"/><g fill="#BCDDF9"><rect x="114" y="76" width="18" height="16" rx="4"/><rect x="140" y="76" width="18" height="16" rx="4"/><rect x="166" y="76" width="18" height="16" rx="4"/><rect x="192" y="76" width="14" height="16" rx="4"/><rect x="114" y="100" width="18" height="16" rx="4"/><rect x="166" y="100" width="18" height="16" rx="4"/><rect x="192" y="100" width="14" height="16" rx="4"/><rect x="114" y="124" width="18" height="16" rx="4"/><rect x="140" y="124" width="18" height="16" rx="4"/></g><rect x="140" y="100" width="18" height="16" rx="4" fill="#FDC705"/></svg>`,
+  thumbnailSvg: THUMBS.vereinstermine,
   html: templateDocument({
     title: "Vereinstermine",
     body,
