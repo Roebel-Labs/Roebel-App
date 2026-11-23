@@ -102,6 +102,14 @@ Anthropic key, `chat_runs.billed_to = 'own_key'`, cost 0, and `checkQuota` never
   Search Console, demo video, then "Publish app" and submit for verification. Inbox reading
   (gmail.readonly) later needs the CASA Tier 2 assessment.
 
+## 6.1 Microsoft 365 connector (2026-11-23)
+
+- **Backend (main `fc969dd1`, `6b100280`):** `lib/chat/harness/connectors/microsoft.ts` — OAuth code flow + PKCE against the Microsoft identity platform (multi-tenant, tenant `common`), refresh token encrypted and **rotated on every refresh**; tools `microsoft_mail_search`, `_mail_read` (read), `_mail_draft`, `_mail_send` (approval), `microsoft_calendar_list` (read), `_calendar_create` (approval). Routes `/api/chat/connectors/microsoft/{start,callback,admin-consent}`; the callback maps AADSTS65001/90094 to `?microsoft=admin`; `admin-consent?go=1` redirects to Microsoft's admin approval page (shareable). `agent_connectors.kind` allows `microsoft` (migration `20261123b`, applied). `/studio/verbunden` speaks both providers.
+- **Clients:** Röbel App „Verbindungen“ row + share-the-approval-link hint (needs the next app update); Studio Einstellungen → Verbindungen row with Verbinden / Freigabe-Link (branch `c44e338f`, not OTA'd). Both rows now show broken links (status `error`) with „Neu verbinden“.
+- **Off until** `MICROSOFT_OAUTH_CLIENT_ID` / `MICROSOFT_OAUTH_CLIENT_SECRET` are set on Vercel (Entra app registration "Ortis", redirect `https://www.roebel.app/api/chat/connectors/microsoft/callback`, delegated Graph permissions offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite). Publisher verification (Partner Center + verified domain) is practically required for organisations.
+- **Not verified live** (no app registration yet). Persona/wiki building still reads Google only.
+- **Google in Testing mode:** refresh tokens expire after 7 days (Max's link broke 2026-11-19, 7 days after connecting). Fix = publish the OAuth app with `GOOGLE_OAUTH_SCOPE_PROFILE=verified` (§6 checklist).
+
 ## 6a. Personal context: Wiki, Für dich, Funktionen, Bibliothek (2026-11-12)
 
 Design and research: `docs/superpowers/specs/2026-11-12-ortis-personal-context-design.md`.
