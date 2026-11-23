@@ -6,9 +6,12 @@
 //    execute = connect (5 s) + callTool (30 s) + close, output ≤ 8k chars.
 //  - Google: the five google_* tools when GOOGLE_OAUTH_CLIENT_ID/SECRET are set
 //    and the wallet linked Google.
+//  - Microsoft: the six microsoft_* tools (Outlook mail + calendar) when
+//    MICROSOFT_OAUTH_CLIENT_ID/SECRET are set and the wallet linked Microsoft.
 // Rows are loaded by ctx.wallet, so a connector only ever runs for its owner.
 import type { HarnessContext, HarnessTool, ToolRegistry } from "../types";
 import { googleEnabled, googleTools } from "../connectors/google";
+import { microsoftEnabled, microsoftTools } from "../connectors/microsoft";
 import { callMcpTool, mcpInputSchema, mcpToolName, riskForMcpTool } from "../connectors/mcp";
 import type { CachedMcpTool } from "../connectors/mcp";
 import { listConnectors, secretOf } from "../connectors/store";
@@ -40,7 +43,7 @@ function mcpTool(row: ConnectorRow, cached: CachedMcpTool, name: string): Harnes
 }
 
 /** Pure: connector rows → harness tools (unique names). */
-export function toolsFromConnectors(rows: ConnectorRow[], opts: { google: boolean }): HarnessTool[] {
+export function toolsFromConnectors(rows: ConnectorRow[], opts: { google: boolean; microsoft?: boolean }): HarnessTool[] {
   const out: HarnessTool[] = [];
   const names = new Set<string>();
   for (const row of rows) {
@@ -48,6 +51,11 @@ export function toolsFromConnectors(rows: ConnectorRow[], opts: { google: boolea
     if (row.kind === "google") {
       if (!opts.google) continue;
       for (const t of googleTools(row)) if (!names.has(t.name)) { names.add(t.name); out.push(t); }
+      continue;
+    }
+    if (row.kind === "microsoft") {
+      if (!opts.microsoft) continue;
+      for (const t of microsoftTools(row)) if (!names.has(t.name)) { names.add(t.name); out.push(t); }
       continue;
     }
     if (!row.url) continue;
@@ -64,7 +72,7 @@ export function toolsFromConnectors(rows: ConnectorRow[], opts: { google: boolea
 
 async function loadFor(wallet: string): Promise<HarnessTool[]> {
   const rows = await listConnectors(wallet, { activeOnly: true });
-  return toolsFromConnectors(rows, { google: googleEnabled() });
+  return toolsFromConnectors(rows, { google: googleEnabled(), microsoft: microsoftEnabled() });
 }
 
 export function register(_registry: ToolRegistry): void {

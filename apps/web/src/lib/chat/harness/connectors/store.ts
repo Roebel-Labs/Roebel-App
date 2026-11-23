@@ -6,7 +6,7 @@ import { db } from "../../store";
 import { decryptSecret, encryptSecret } from "./crypto";
 import type { CachedMcpTool } from "./mcp";
 
-export type ConnectorKind = "mcp" | "google";
+export type ConnectorKind = "mcp" | "google" | "microsoft";
 export type ConnectorStatus = "active" | "error" | "disabled";
 
 export interface ConnectorRow {
@@ -50,7 +50,7 @@ export function toPublic(row: ConnectorRow): PublicConnector {
     name: row.name,
     url,
     status: row.status,
-    toolCount: row.kind === "google" ? 5 : Array.isArray(row.tools_cache) ? row.tools_cache.length : 0,
+    toolCount: row.kind === "google" ? 5 : row.kind === "microsoft" ? 6 : Array.isArray(row.tools_cache) ? row.tools_cache.length : 0,
     lastError: row.last_error,
   };
 }
@@ -105,6 +105,11 @@ export async function deleteConnector(wallet: string, id: string): Promise<boole
   const res = await db().from("agent_connectors").delete().eq("wallet", wallet).eq("id", id).select("id");
   if (res.error) throw new Error(`[connectors/store] delete: ${res.error.message}`);
   return Boolean(res.data?.length);
+}
+
+export async function deleteConnectorsOfKind(wallet: string, kind: "google" | "microsoft"): Promise<void> {
+  const res = await db().from("agent_connectors").delete().eq("wallet", wallet).eq("kind", kind);
+  if (res.error) throw new Error(`[connectors/store] delete ${kind}: ${res.error.message}`);
 }
 
 export async function deleteGoogleConnectors(wallet: string): Promise<void> {

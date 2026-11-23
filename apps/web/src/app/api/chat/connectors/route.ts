@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { googleEnabled, revokeToken } from "@/lib/chat/harness/connectors/google";
+import { microsoftEnabled } from "@/lib/chat/harness/connectors/microsoft";
 import type { GoogleSecret } from "@/lib/chat/harness/connectors/google";
 import { discoverMcpTools, sanitizeHeaders, serverSlug, validateMcpUrl } from "@/lib/chat/harness/connectors/mcp";
 import {
@@ -12,13 +13,13 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-/** GET /api/chat/connectors — { connectors, googleAvailable } (never secrets). */
+/** GET /api/chat/connectors — { connectors, googleAvailable, microsoftAvailable } (never secrets). */
 export async function GET(request: Request) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
   try {
     const rows = await listConnectors(wallet);
-    return NextResponse.json({ connectors: rows.map(toPublic), googleAvailable: googleEnabled() });
+    return NextResponse.json({ connectors: rows.map(toPublic), googleAvailable: googleEnabled(), microsoftAvailable: microsoftEnabled() });
   } catch (err) {
     return handleError(err, "connectors");
   }
