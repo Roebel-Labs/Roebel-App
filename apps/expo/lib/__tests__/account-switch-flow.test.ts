@@ -3,6 +3,7 @@ import {
   pillAvatarAccount,
   createSwitchRunner,
   MIN_VISIBLE_MS,
+  SWITCH_TIMEOUT_MS,
 } from '../account-switch-flow';
 import type { Account } from '../types';
 
@@ -74,6 +75,30 @@ describe('createSwitchRunner', () => {
     await Promise.all([first, second]);
     expect(deps.switchAccount).toHaveBeenCalledTimes(1);
     expect(deps.onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up on a switch that never settles and closes the overlay', async () => {
+    jest.useFakeTimers();
+    try {
+      const deps = {
+        switchAccount: jest.fn(() => new Promise<void>(() => {})),
+        now: () => 0,
+        sleep: jest.fn(async () => {}),
+        onStart: jest.fn(),
+        onDone: jest.fn(),
+        onError: jest.fn(),
+      };
+      const runner = createSwitchRunner(deps);
+      const p = runner.run('a');
+      jest.advanceTimersByTime(SWITCH_TIMEOUT_MS);
+      await p;
+      expect(SWITCH_TIMEOUT_MS).toBe(10_000);
+      expect(deps.onError).toHaveBeenCalledTimes(1);
+      expect(deps.onDone).not.toHaveBeenCalled();
+      expect(runner.isRunning()).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('reports a failed switch once and is ready again', async () => {

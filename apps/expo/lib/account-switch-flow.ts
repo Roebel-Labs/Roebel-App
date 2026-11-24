@@ -11,6 +11,8 @@ import type { Account } from './types';
 export const MIN_VISIBLE_MS = 900;
 export const OVERLAY_FADE_IN_MS = 150;
 export const OVERLAY_FADE_OUT_MS = 200;
+/** RN fetch has no timeout: a black-holed switch must not leave the full-screen overlay up forever. */
+export const SWITCH_TIMEOUT_MS = 10_000;
 
 export type SwitchStart = { kind: 'direct'; targetId: string } | { kind: 'sheet' } | { kind: 'none' };
 
@@ -48,7 +50,15 @@ export function createSwitchRunner(deps: RunnerDeps): { run(id: string): Promise
       const startedAt = deps.now();
       deps.onStart(id);
       try {
-        await deps.switchAccount(id);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Account switch timed out')), SWITCH_TIMEOUT_MS);
+        });
+        try {
+          await Promise.race([deps.switchAccount(id), timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
         const remaining = MIN_VISIBLE_MS - (deps.now() - startedAt);
         if (remaining > 0) await deps.sleep(remaining);
         running = false;

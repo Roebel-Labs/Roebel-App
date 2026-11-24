@@ -52,3 +52,16 @@ export async function saveCachedRole(
     // Non-fatal.
   }
 }
+
+/**
+ * Role to show while the role for `nextAccountId` loads: a role belongs to ONE account, so a switch
+ * must never carry the previous account's role over (it would show an owner's Dashboard to a
+ * member until the fetch lands). A re-check of the same account keeps the current role.
+ */
+export function roleAfterAccountChange(
+  prevAccountId: string | null,
+  nextAccountId: string,
+  prevRole: AccountRole | null
+): AccountRole | null {
+  return prevAccountId === nextAccountId ? prevRole : null;
+}

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
@@ -13,7 +14,7 @@ import {
 } from '@/lib/supabase-accounts';
 import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
 import { loadCachedAccounts, saveCachedAccounts, clearCachedAccounts } from '@/lib/account-cache';
-import { loadCachedRole, saveCachedRole } from '@/lib/role-cache';
+import { loadCachedRole, saveCachedRole, roleAfterAccountChange } from '@/lib/role-cache';
 import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
@@ -139,13 +140,27 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   // resolves. `resolved` ensures the cache can never clobber an
   // already-landed fetch result (including a legitimate null/"not a member"
   // answer); `cancelled` guards against the account switching mid-flight.
+  // Re-check the role when the app comes back (a downgrade or removal must reach the shell).
+  const [roleCheck, setRoleCheck] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') setRoleCheck((n) => n + 1);
+    });
+    return () => sub.remove();
+  }, []);
+  const roleAccountRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!activeAccount || !walletAddress) {
+      roleAccountRef.current = null;
       setRoleInActiveAccount(null);
       return;
     }
 
     const accountId = activeAccount.id;
+    const prevAccountId = roleAccountRef.current;
+    roleAccountRef.current = accountId;
+    setRoleInActiveAccount((prev) => roleAfterAccountChange(prevAccountId, accountId, prev));
     let cancelled = false;
     let resolved = false;
 
@@ -164,7 +179,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeAccount?.id, walletAddress]);
+  }, [activeAccount?.id, walletAddress, roleCheck]);
 
   // Reset on disconnect
   useEffect(() => {
