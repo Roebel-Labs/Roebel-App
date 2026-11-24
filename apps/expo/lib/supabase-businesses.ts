@@ -65,17 +65,28 @@ export async function fetchPrimaryBusinessForAccount(
   accountId: string | null | undefined,
   walletAddress: string | null | undefined
 ): Promise<BusinessRecord | null> {
+  // `true` once we know businesses.account_id exists (no 42703), so links can be written.
+  let linkColumn = false;
   if (accountId) {
     const { data, error } = await supabase
       .from('businesses')
       .select('*')
       .eq('account_id', accountId)
       .order('created_at', { ascending: false });
-    if (!error && data && data.length > 0) return data[0] as BusinessRecord;
+    if (!error) {
+      linkColumn = true;
+      if (data && data.length > 0) return data[0] as BusinessRecord;
+    }
   }
   if (!walletAddress) return null;
-  const owned = await fetchBusinessesByOwner(walletAddress);
-  return owned[0] ?? null;
+  // Only businesses not linked to some OTHER org: never show org B's Anzeigen inside org A.
+  const owned = (await fetchBusinessesByOwner(walletAddress)).filter((b: any) => !b.account_id);
+  const pick = owned.find((b) => b.status === 'approved') ?? owned[0] ?? null;
+  if (pick && accountId && linkColumn) {
+    // Opening the business while acting as this org claims it for the org (analytics need the link).
+    void Promise.resolve(supabase.from('businesses').update({ account_id: accountId } as any).eq('id', pick.id)).catch(() => {});
+  }
+  return pick;
 }
 
 /**
