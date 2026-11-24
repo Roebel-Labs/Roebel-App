@@ -57,6 +57,28 @@ export async function fetchBusinessesByOwner(walletAddress: string): Promise<Bus
 }
 
 /**
+ * The business behind the ACTIVE org account (businesses.account_id), falling back to the newest
+ * business of the owner wallet — until the account link exists (migration 20261124_org_analytics)
+ * or for businesses the backfill could not attribute.
+ */
+export async function fetchPrimaryBusinessForAccount(
+  accountId: string | null | undefined,
+  walletAddress: string | null | undefined
+): Promise<BusinessRecord | null> {
+  if (accountId) {
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false });
+    if (!error && data && data.length > 0) return data[0] as BusinessRecord;
+  }
+  if (!walletAddress) return null;
+  const owned = await fetchBusinessesByOwner(walletAddress);
+  return owned[0] ?? null;
+}
+
+/**
  * Create a new business profile (status = 'pending')
  */
 export async function createBusiness(input: CreateBusinessInput): Promise<BusinessRecord> {

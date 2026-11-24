@@ -69,6 +69,7 @@ import {
   type IdentityState,
 } from '@/lib/miniapp-identity';
 import { readV1Choice, saveV1Choice, v1ConnectItems, type V1Choice } from '@/lib/miniapp-connection';
+import { trackEvent } from '@/lib/analytics/track';
 
 /** Dark stage behind the sheet — same chrome as the MiniAppHost. */
 const CHROME_BG = '#0F1013';
@@ -90,6 +91,9 @@ function MiniAppV1AccessSection({ app, reloadKey }: { app: MiniApp; reloadKey: b
   const { isInstalled } = useInstalledMiniApps();
   const wallet = account?.address?.toLowerCase() ?? null;
   const opened = isInstalled(app.slug);
+  useEffect(() => {
+    trackEvent({ objectType: 'mini_app', objectId: String(app.id), metric: 'open', surface: 'mini_app' });
+  }, [app.id]);
   const [choice, setChoice] = useState<V1Choice | null>(null);
   useEffect(() => {
     if (!wallet || !opened || reloadKey) return;

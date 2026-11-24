@@ -75,6 +75,7 @@ import {
   type BusinessDealRecord,
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
+import { trackEvent } from '@/lib/analytics/track';
 
 /** Wallets left out of the public member list (they keep their role). */
 const HIDDEN_MEMBER_WALLETS = new Set(['0xc49de63ccfee46c6c5c3e393293f66779799fb28']);
@@ -136,7 +137,12 @@ function PublicAccountScreenInner() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
-  const { switchAccount } = useAccount();
+  const { switchAccount, activeAccount: viewerAccount } = useAccount();
+  useEffect(() => {
+    // Own active account doesn't count as a profile view.
+    if (id && id !== viewerAccount?.id) trackEvent({ objectType: 'profile', objectId: String(id), metric: 'view', surface: 'profile' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
   const { user } = useUser();
   const { isFollowing, isMuted, mute, unmute } = useRelations();
   const insets = useSafeAreaInsets();
@@ -441,6 +447,7 @@ function PublicAccountScreenInner() {
     void sheet.setSave(sheet.mySave ?? 'to_try');
   };
   const shareAccount = () => {
+    trackEvent({ objectType: 'profile', objectId: account.id, metric: 'share', surface: 'share_sheet' });
     Share.share({ message: `${account.name}\n${orgShareUrl(account)}` }).catch(() => undefined);
   };
   const closeRatingModal = () => {

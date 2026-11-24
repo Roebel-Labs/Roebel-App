@@ -58,6 +58,7 @@ import FeedProposalHeroCard from './FeedProposalHeroCard';
 import FeedBuergerratCard from './FeedBuergerratCard';
 import ForumThreadCard from '../forum/ForumThreadCard';
 import { useForumVotes } from '@/hooks/useForumVotes';
+import { trackEvent } from '@/lib/analytics/track';
 
 export type FeedListHandle = {
   refresh: () => void;
@@ -307,7 +308,10 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           if (target?.id) impressionIds.push(target.id);
         }
       });
-      if (impressionIds.length > 0) trackPostViews(impressionIds);
+      if (impressionIds.length > 0) {
+        trackPostViews(impressionIds);
+        impressionIds.forEach((id) => trackEvent({ objectType: 'post', objectId: id, metric: 'impression', surface: 'feed' }));
+      }
       setVisibleVideoIds((prev) => {
         if (prev.size === nextVideoIds.size) {
           let same = true;

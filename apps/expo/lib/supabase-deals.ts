@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { BusinessDealRecord, CreateDealInput, DealAnalytics } from './types';
+import { trackEvent } from './analytics/track';
 
 /**
  * Fetch all deals for a business
@@ -99,7 +100,8 @@ export async function deleteDeal(dealId: string): Promise<void> {
 /**
  * Increment deal views count
  */
-export async function incrementDealViews(dealId: string): Promise<void> {
+export async function incrementDealViews(dealId: string, surface = 'deal'): Promise<void> {
+  trackEvent({ objectType: 'deal', objectId: dealId, metric: 'view', surface });
   const { data } = await supabase
     .from('business_deals')
     .select('views_count')
@@ -117,7 +119,8 @@ export async function incrementDealViews(dealId: string): Promise<void> {
 /**
  * Increment deal clicks count
  */
-export async function incrementDealClicks(dealId: string): Promise<void> {
+export async function incrementDealClicks(dealId: string, surface = 'deal'): Promise<void> {
+  trackEvent({ objectType: 'deal', objectId: dealId, metric: 'click', surface });
   const { data } = await supabase
     .from('business_deals')
     .select('clicks_count')

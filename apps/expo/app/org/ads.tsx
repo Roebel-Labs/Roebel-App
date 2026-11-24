@@ -6,7 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import { getAccountRole, canEditListings, type AccountRole } from '@/lib/supabase-account-roles';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
+import { fetchPrimaryBusinessForAccount } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics, deleteDeal } from '@/lib/supabase-deals';
 import type { BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import AnalyticsCard from '@/components/AnalyticsCard';
@@ -35,8 +35,7 @@ export default function OrgAdsScreen() {
     if (!user?.wallet_address) return;
 
     try {
-      const businesses = await fetchBusinessesByOwner(user.wallet_address);
-      const primary = businesses.find(b => b.status === 'approved') || businesses[0];
+      const primary = await fetchPrimaryBusinessForAccount(activeAccount?.id, user.wallet_address);
       if (primary) {
         const [dealsData, analyticsData] = await Promise.all([
           fetchDealsByBusiness(primary.id),
@@ -48,7 +47,7 @@ export default function OrgAdsScreen() {
     } catch (error) {
       console.error('Error loading ads data:', error);
     }
-  }, [user?.wallet_address]);
+  }, [user?.wallet_address, activeAccount?.id]);
 
   useEffect(() => {
     loadData();

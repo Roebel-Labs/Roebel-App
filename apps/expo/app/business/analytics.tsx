@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
+import { useAccount } from '@/context/AccountContext';
+import { fetchPrimaryBusinessForAccount } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics, toggleDealBoost } from '@/lib/supabase-deals';
 import type { BusinessRecord, BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import AnalyticsCard from '@/components/AnalyticsCard';
@@ -14,6 +15,7 @@ export default function BusinessAnalyticsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
 
   const [userBusiness, setUserBusiness] = useState<BusinessRecord | null>(null);
   const [analytics, setAnalytics] = useState<DealAnalytics | null>(null);
@@ -23,8 +25,7 @@ export default function BusinessAnalyticsScreen() {
   const loadData = useCallback(async () => {
     if (!user?.wallet_address) return;
     try {
-      const businesses = await fetchBusinessesByOwner(user.wallet_address);
-      const primary = businesses.find(b => b.status === 'approved') || businesses[0] || null;
+      const primary = await fetchPrimaryBusinessForAccount(activeAccount?.id, user.wallet_address);
       setUserBusiness(primary);
       if (primary) {
         const [analyticsData, dealsData] = await Promise.all([
@@ -37,7 +38,7 @@ export default function BusinessAnalyticsScreen() {
     } catch (error) {
       console.error('Error loading analytics:', error);
     }
-  }, [user?.wallet_address]);
+  }, [user?.wallet_address, activeAccount?.id]);
 
   useEffect(() => {
     loadData();

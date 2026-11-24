@@ -144,7 +144,6 @@ declare
   e jsonb;
   v_type text; v_id text; v_metric text; v_surface text;
   v_hash text;
-  v_uuid uuid;
   v_n integer := 0;
 begin
   if not analytics_enabled() then return 0; end if;
@@ -163,14 +162,8 @@ begin
     if not analytics_record(v_type, v_id, v_metric, v_surface, v_hash) then continue; end if;
     v_n := v_n + 1;
 
-    -- Legacy counters, so existing screens show the same numbers.
-    v_uuid := analytics_try_uuid(v_id);
-    -- Post views keep their own counter (increment_post_views from lib/viewTracker), not bumped here.
-    if v_type = 'deal' and v_metric = 'view' then
-      update business_deals set views_count = coalesce(views_count, 0) + 1 where id = v_uuid;
-    elsif v_type = 'deal' and v_metric in ('click', 'link_tap') then
-      update business_deals set clicks_count = coalesce(clicks_count, 0) + 1 where id = v_uuid;
-    end if; -- listings keep increment_listing_views
+    -- Legacy counters (posts/listings/deals views_count, clicks_count) keep their existing writers;
+    -- track_events only feeds the analytics tables, so nothing is counted twice.
   end loop;
   return v_n;
 end $$;

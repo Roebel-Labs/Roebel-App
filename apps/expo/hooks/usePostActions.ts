@@ -9,6 +9,7 @@ import {
 } from '@/lib/supabase-posts';
 import type { PostRecord } from '@/lib/types/feed';
 import { useRequireAuth } from '@/context/AuthGateContext';
+import { trackEvent } from '@/lib/analytics/track';
 
 /**
  * MODULE-LEVEL interaction registry, shared by every usePostActions instance.
@@ -257,6 +258,7 @@ export function usePostActions(walletAddress: string | undefined) {
     // instead of the post. The link opens the post in the app (universal /
     // app links) or on roebel.app, whose og: tags preview the post.
     const url = `https://www.roebel.app/app/posts/${postId}`;
+    trackEvent({ objectType: 'post', objectId: postId, metric: 'share', surface: 'share_sheet' });
     try {
       await Share.share(Platform.OS === 'ios' ? { url } : { message: url });
     } catch (err) {

@@ -53,6 +53,7 @@ import MarketplaceCard from '@/components/MarketplaceCard';
 import type { MarketplaceListingRecord } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { trackEvent } from '@/lib/analytics/track';
 
 /** Hero takes ~45% of the screen. */
 const HERO_RATIO = 0.45;
@@ -145,6 +146,7 @@ export default function ListingDetailScreen() {
   const handleShare = async () => {
     if (!listing) return;
     try {
+      trackEvent({ objectType: 'listing', objectId: listing.id, metric: 'share', surface: 'share_sheet' });
       await Share.share({ message: `${listing.title} - ${formatPrice(listing.price, listing.price_type)}\nhttps://www.roebel.app/app/marktplatz/${listing.id}` });
     } catch {}
   };

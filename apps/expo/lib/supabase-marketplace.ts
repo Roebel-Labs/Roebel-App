@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { MarketplaceListingRecord } from './types';
+import { trackEvent } from './analytics/track';
 
 export type SellerProfile = {
   accountId: string;
@@ -314,6 +315,7 @@ export async function fetchListingById(id: string): Promise<MarketplaceListingRe
  * platforms. Errors are swallowed because view tracking must never block UI.
  */
 export async function trackListingView(listingId: string): Promise<void> {
+  trackEvent({ objectType: 'listing', objectId: listingId, metric: 'view', surface: 'listing' });
   try {
     await (supabase.rpc as any)('increment_listing_views', { listing_id: listingId });
   } catch {

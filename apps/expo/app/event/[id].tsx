@@ -57,6 +57,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useCredentialsGate } from '@/lib/credreg/gate';
 import EventBadgeOrganiser from '@/components/credentials/EventBadgeOrganiser';
 import EventBadgeAttendee from '@/components/credentials/EventBadgeAttendee';
+import { trackEvent } from '@/lib/analytics/track';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -148,6 +149,10 @@ export default function EventDetails() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (id) trackEvent({ objectType: 'event', objectId: String(id), metric: 'view', surface: 'event' });
+  }, [id]);
+
   const handleShare = async () => {
     if (!event) return;
 
@@ -157,6 +162,7 @@ export default function EventDetails() {
         title: event.title,
       });
       logEvent('share_event', { event_id: event.id, event_title: event.title });
+      trackEvent({ objectType: 'event', objectId: event.id, metric: 'share', surface: 'share_sheet' });
     } catch (error) {
       console.error('Error sharing event:', error);
     }

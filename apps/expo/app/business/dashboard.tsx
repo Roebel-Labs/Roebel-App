@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
+import { useAccount } from '@/context/AccountContext';
+import { fetchPrimaryBusinessForAccount } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
 import type { BusinessRecord, BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
@@ -16,6 +17,7 @@ export default function BusinessDashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
 
   const [userBusiness, setUserBusiness] = useState<BusinessRecord | null>(null);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
@@ -26,8 +28,7 @@ export default function BusinessDashboardScreen() {
   const loadData = useCallback(async () => {
     if (!user?.wallet_address) return;
     try {
-      const businesses = await fetchBusinessesByOwner(user.wallet_address);
-      const primary = businesses.find(b => b.status === 'approved') || businesses[0] || null;
+      const primary = await fetchPrimaryBusinessForAccount(activeAccount?.id, user.wallet_address);
       setUserBusiness(primary);
       if (primary) {
         const [dealsData, analyticsData] = await Promise.all([
@@ -42,7 +43,7 @@ export default function BusinessDashboardScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.wallet_address]);
+  }, [user?.wallet_address, activeAccount?.id]);
 
   useEffect(() => {
     loadData();

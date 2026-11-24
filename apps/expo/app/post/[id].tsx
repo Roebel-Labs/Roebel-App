@@ -79,6 +79,7 @@ import MuenzenSendSheet from '@/components/messages/MuenzenSendSheet';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import { trackEvent } from '@/lib/analytics/track';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -177,6 +178,7 @@ export default function PostDetailScreen() {
       // Opening the detail page counts as an impression too.
       setViewTrackerWallet(walletAddress);
       trackPostViews([postData.id]);
+      trackEvent({ objectType: 'post', objectId: postData.id, metric: 'view', surface: 'post' });
 
       // Init repost state (🔁 only shows on App-feed posts).
       if (walletAddress && postData.feed_type === 'app') {
