@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getContract } from "thirdweb";
-import { gnosis } from "@/lib/gnosis";
-import { base } from "thirdweb/chains";
+import { base, defineChain } from "thirdweb/chains";
 import { client } from "@/app/client";
 import { VERIFICATION_CONTRACTS } from "@/lib/verification-contracts";
 
@@ -49,6 +48,12 @@ const BASE_CITIZEN_NFT = "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
 const BASE_ATTESTER_NFT = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
 const BASE_FROM_BLOCK = 47000000n;
 
+// thirdweb's default Gnosis RPC caps eth_getLogs at 1000 blocks (-32005), but we scan
+// ~2M blocks since FROM_BLOCK. These public Gnosis RPCs serve the full range in one
+// call and allow browser CORS; the second is a fallback if the first errors.
+const GNOSIS_LOG_RPCS = ["https://rpc.gnosischain.com", "https://rpc.gnosis.gateway.fm"];
+const gnosisLogChains = GNOSIS_LOG_RPCS.map((rpc) => defineChain({ id: 100, rpc }));
+
 export function useSocialGraph(): SocialGraphData {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
@@ -65,17 +70,30 @@ export function useSocialGraph(): SocialGraphData {
 
       const { getContractEvents, prepareEvent } = await import("thirdweb");
 
-      const attesterContract = getContract({
-        client,
-        chain: gnosis,
-        address: VERIFICATION_CONTRACTS.attesterNFT,
-      });
+      const attesterContract = VERIFICATION_CONTRACTS.attesterNFT;
+      const citizenContract = VERIFICATION_CONTRACTS.citizenNFT;
 
-      const citizenContract = getContract({
-        client,
-        chain: gnosis,
-        address: VERIFICATION_CONTRACTS.citizenNFT,
-      });
+      // Full-range Gnosis log scan, trying each wide-range RPC in turn.
+      const scanGnosis = async (
+        address: string,
+        event: ReturnType<typeof prepareEvent>,
+      ): Promise<any[]> => {
+        let lastError: unknown;
+        for (const chain of gnosisLogChains) {
+          try {
+            const contract = getContract({ client, chain, address });
+            return await getContractEvents({
+              contract,
+              events: [event],
+              fromBlock: FROM_BLOCK,
+              useIndexer: false, // thirdweb Insight has no Gnosis support
+            });
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        throw lastError;
+      };
 
       const transferEvent = prepareEvent({
         signature:
@@ -146,16 +164,16 @@ export function useSocialGraph(): SocialGraphData {
         baseAttesterMintEvents,
         baseCitizenMintEvents,
       ] = await Promise.all([
-        getContractEvents({ contract: attesterContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: citizenContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: attesterContract, events: [attesterApprovedEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: citizenContract, events: [citizenApprovedEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: attesterContract, events: [attesterMintedEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: citizenContract, events: [citizenMintedEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: attesterContract, events: [attestationRequestEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: citizenContract, events: [attestationRequestEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: attesterContract, events: [attesterRevokedEvent], fromBlock: FROM_BLOCK }),
-        getContractEvents({ contract: citizenContract, events: [citizenRevokedEvent], fromBlock: FROM_BLOCK }),
+        scanGnosis(attesterContract, transferEvent),
+        scanGnosis(citizenContract, transferEvent),
+        scanGnosis(attesterContract, attesterApprovedEvent),
+        scanGnosis(citizenContract, citizenApprovedEvent),
+        scanGnosis(attesterContract, attesterMintedEvent),
+        scanGnosis(citizenContract, citizenMintedEvent),
+        scanGnosis(attesterContract, attestationRequestEvent),
+        scanGnosis(citizenContract, attestationRequestEvent),
+        scanGnosis(attesterContract, attesterRevokedEvent),
+        scanGnosis(citizenContract, citizenRevokedEvent),
         // Base (historical approval edges) — fail-soft so the graph still renders if Base RPC errors.
         getContractEvents({ contract: baseAttesterContract, events: [baseAttesterApprovedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
         getContractEvents({ contract: baseCitizenContract, events: [baseCitizenApprovedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
