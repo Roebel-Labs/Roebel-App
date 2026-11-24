@@ -46,8 +46,17 @@ export default function AgentHelperBanner({ inset = 16 }: { inset?: number }) {
               <Image
                 key={m.key}
                 source={m.src}
-                style={{ position: 'absolute', left: m.x, top: m.y, width: m.size, height: m.size }}
-                contentFit="contain"
+                // Fully round: every mascot is clipped to a circle (borderRadius = half the size).
+                style={{
+                  position: 'absolute',
+                  left: m.x,
+                  top: m.y,
+                  width: m.size,
+                  height: m.size,
+                  borderRadius: m.size / 2,
+                  overflow: 'hidden',
+                }}
+                contentFit="cover"
                 accessible={false}
               />
             ))}
