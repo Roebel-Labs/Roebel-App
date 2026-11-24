@@ -21,6 +21,7 @@ import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { AccountSwitchFlowProvider } from '@/context/AccountSwitchFlowContext';
+import AnalyticsTrackerSync from '@/components/AnalyticsTrackerSync';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { AudioPlayerProvider } from '@/context/AudioPlayerContext';
 import { LivePlayerProvider } from '@/components/live/player/LivePlayerProvider';
@@ -468,6 +469,7 @@ function Layout() {
                                 <AppUpdateGate />
                                 {/* Event QR scans queued offline are sent once the device is online again. */}
                                 <CollectQueueFlusher />
+                                <AnalyticsTrackerSync />
                                 <AccountSwitchFlowProvider>
                                   <ThemedLayout />
                                 </AccountSwitchFlowProvider>
