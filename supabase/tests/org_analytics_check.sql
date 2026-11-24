@@ -14,14 +14,14 @@ begin
   insert into account_owners(account_id, wallet_address, role) values (v_org, v_owner, 'owner'), (v_org, v_member, 'member');
   insert into posts(id, wallet_address, content, status, account_id) values (v_post, v_owner, 'test', 'published', v_org);
 
-  -- two impressions → daily count 2, legacy views +2
+  -- two impressions → daily count 2 (posts.views_count is owned by increment_post_views, untouched)
   perform track_events(jsonb_build_array(
     jsonb_build_object('object_type','post','object_id',v_post::text,'metric','impression','surface','feed'),
     jsonb_build_object('object_type','post','object_id',v_post::text,'metric','impression','surface','feed')), v_member);
   select count into v_n from analytics_daily where owner_account_id = v_org and object_id = v_post::text and metric = 'impression';
   if v_n is distinct from 2 then raise exception 'FAIL daily count %', v_n; end if;
   select views_count into v_views from posts where id = v_post;
-  if v_views is distinct from 2 then raise exception 'FAIL legacy views %', v_views; end if;
+  if v_views is distinct from 0 then raise exception 'FAIL post views double-counted %', v_views; end if;
 
   -- unknown object → nothing recorded
   select track_events(jsonb_build_array(jsonb_build_object('object_type','post','object_id',gen_random_uuid()::text,'metric','view')), null) into v_n;

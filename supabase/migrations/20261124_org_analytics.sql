@@ -165,15 +165,12 @@ begin
 
     -- Legacy counters, so existing screens show the same numbers.
     v_uuid := analytics_try_uuid(v_id);
-    if v_type = 'post' and v_metric in ('view', 'impression') then
-      update posts set views_count = views_count + 1 where id = v_uuid and status = 'published';
-    elsif v_type = 'deal' and v_metric = 'view' then
+    -- Post views keep their own counter (increment_post_views from lib/viewTracker), not bumped here.
+    if v_type = 'deal' and v_metric = 'view' then
       update business_deals set views_count = coalesce(views_count, 0) + 1 where id = v_uuid;
     elsif v_type = 'deal' and v_metric in ('click', 'link_tap') then
       update business_deals set clicks_count = coalesce(clicks_count, 0) + 1 where id = v_uuid;
-    elsif v_type = 'listing' and v_metric = 'view' then
-      update marketplace_listings set views_count = views_count + 1 where id = v_uuid;
-    end if;
+    end if; -- listings keep increment_listing_views
   end loop;
   return v_n;
 end $$;
