@@ -10,6 +10,7 @@ declare
   v_rows int;
   v_raised boolean;
 begin
+  insert into users(wallet_address, tier) values (v_owner, 'tourist'), (v_member, 'tourist'); -- account_owners FK
   insert into accounts(id, account_type, name) values (v_org, 'organisation', 'Analytics Testverein');
   insert into account_owners(account_id, wallet_address, role) values (v_org, v_owner, 'owner'), (v_org, v_member, 'member');
   insert into posts(id, wallet_address, content, status, account_id) values (v_post, v_owner, 'test', 'published', v_org);
