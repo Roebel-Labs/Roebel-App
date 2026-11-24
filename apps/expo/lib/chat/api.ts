@@ -108,11 +108,15 @@ function toApiError(err: unknown): ChatApiError {
 
 async function errorFromResponse(res: { status: number; json: () => Promise<unknown> }): Promise<ChatApiError> {
   const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-  return new ChatApiError(
-    body?.error?.code ?? `http_${res.status}`,
-    body?.error?.message ?? 'Es ist ein Fehler aufgetreten.',
-    res.status,
-  );
+  if (body?.error?.message) return new ChatApiError(body.error.code ?? `http_${res.status}`, body.error.message, res.status);
+  // Platform errors (Vercel 413 body limit, 502/504 timeouts) come as plain text, not our JSON shape.
+  const fallback =
+    res.status === 413
+      ? 'Die Datei ist zu groß zum Hochladen.'
+      : res.status === 504 || res.status === 502
+        ? 'Der Server hat zu lange gebraucht. Bitte versuche es erneut.'
+        : `Es ist ein Fehler aufgetreten (${res.status}).`;
+  return new ChatApiError(body?.error?.code ?? `http_${res.status}`, fallback, res.status);
 }
 
 /** Runs `attempt(token)`; on 401 drops the stored session, re-signs once and retries. */
