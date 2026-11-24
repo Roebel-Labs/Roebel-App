@@ -379,6 +379,9 @@ grant execute on function public.get_account_surfaces(uuid, text, date, date) to
 revoke execute on function public.analytics_record(text, text, text, text, text, timestamptz) from public, anon, authenticated;
 revoke execute on function public.analytics_bump(uuid, text, text, text, date, integer) from public, anon, authenticated;
 revoke execute on function public.analytics_viewer_hash(text) from public, anon, authenticated;
+revoke execute on function public.analytics_owner_of(text, text) from public, anon, authenticated;
+revoke execute on function public.analytics_personal_account(text) from public, anon, authenticated;
+revoke execute on function public.analytics_assert_access(uuid, text, date, date) from public, anon, authenticated;
 
 -- ── Retention ─────────────────────────────────────────────────────────────
 select cron.schedule('analytics-purge-raw', '20 3 * * *',
