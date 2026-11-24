@@ -11,15 +11,13 @@ import { useNavBarStyle } from '@/lib/nav-bar-style';
 import { usePathname } from 'expo-router';
 import { goToTab, tabSwitchAction } from '@/lib/navigation/goToTab';
 
-// Import SVG icons
-import HomeStroke from '../assets/icons/bottom-nav/home.svg';
-import HomeFilled from '../assets/icons/bottom-nav/home-filled.svg';
-import DiscoverStroke from '../assets/icons/bottom-nav/discover.svg';
-import DiscoverFilled from '../assets/icons/bottom-nav/discover_fill.svg';
-import UserStroke from '../assets/icons/bottom-nav/user-circle.svg';
-import UserFilled from '../assets/icons/bottom-nav/user-circle-filled.svg';
+import { bottomNavItems } from '@/components/navigation/tab-items';
+import { useShellTabs } from '@/lib/navigation/useShellTabs';
+import { useAccount } from '@/context/AccountContext';
+import { isOrgAccount } from '@/lib/types';
+import type { MainTab } from '@/lib/navigation/goToTab';
 
-export type TabKey = 'home' | 'explore' | 'profile';
+export type TabKey = MainTab;
 
 // Content height only — the rendered bar adds Math.max(insets.bottom, 8) bottom padding, so on home-indicator devices the total is taller.
 export const BOTTOM_NAV_HEIGHT = 78;
@@ -43,17 +41,14 @@ type Props = {
   glass?: boolean;
 };
 
-const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
-  { key: 'home', stroke: HomeStroke, filled: HomeFilled, label: 'Austausch' },
-  { key: 'explore', stroke: DiscoverStroke, filled: DiscoverFilled, label: 'Erkunden' },
-  { key: 'profile', stroke: UserStroke, filled: UserFilled, label: 'Profil' },
-];
-
 export default function BottomNavigation({ activeTab, onTabPress, transparent = false, glass = false }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
   const navStyle = useNavBarStyle();
+  const shellTabs = useShellTabs();
+  const { activeAccount } = useAccount();
+  const TABS = bottomNavItems(shellTabs, { org: isOrgAccount(activeAccount) });
 
   const activeColor = colors.textPrimary;
   const inactiveColor = colors.textPrimary;

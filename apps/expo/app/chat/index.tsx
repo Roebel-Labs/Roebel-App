@@ -19,6 +19,7 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import LoginDrawer from '@/components/LoginDrawer';
+import { useChatHomeChrome } from '@/components/chat/ChatHomeChrome';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
@@ -107,6 +108,7 @@ function WelcomeFrame({ children, footer }: { children?: React.ReactNode; footer
   const t = useChatTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const chrome = useChatHomeChrome();
   return (
     <View style={styles.flex}>
       <FloatingMascots />
@@ -122,7 +124,7 @@ function WelcomeFrame({ children, footer }: { children?: React.ReactNode; footer
         </Text>
         {children}
       </View>
-      <View style={[styles.welcomeFooter, { paddingBottom: insets.bottom + 16 }]}>{footer}</View>
+      <View style={[styles.welcomeFooter, { paddingBottom: insets.bottom + 16 + chrome.bottomExtra }]}>{footer}</View>
     </View>
   );
 }
@@ -166,6 +168,7 @@ function Onboarding({ presets, onSkip }: { presets: ChatBot[]; onSkip: () => voi
   const router = useRouter();
   const { openMenu: openSheetMenu } = useChatSheets();
   const insets = useSafeAreaInsets();
+  const chrome = useChatHomeChrome();
   const { showSnackbar } = useSnackbar();
   const { createThread } = useChatActions();
   const pagerRef = useRef<PagerView>(null);
@@ -258,7 +261,7 @@ function Onboarding({ presets, onSkip }: { presets: ChatBot[]; onSkip: () => voi
         </View>
       </PagerView>
 
-      <View style={[styles.onboardingFooter, { paddingBottom: onCreateSlide ? 16 : insets.bottom + 8 }]}>
+      <View style={[styles.onboardingFooter, { paddingBottom: (onCreateSlide ? 16 : insets.bottom + 8) + chrome.bottomExtra }]}>
         <PagerDots count={presets.length + 1} index={index} style={styles.dots} />
         {onCreateSlide ? (
           <BlackPillButton label="Agent erstellen" onPress={createOwn} />
@@ -290,6 +293,7 @@ function ChatList({
   const router = useRouter();
   const { openMenu: openSheetMenu } = useChatSheets();
   const insets = useSafeAreaInsets();
+  const chrome = useChatHomeChrome();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -315,12 +319,16 @@ function ChatList({
   return (
     <View style={styles.flex}>
       <View style={[styles.listHeader, { paddingTop: insets.top + 8 }]}>
-        <GlassCircleButton
-          accessibilityLabel="Zurück"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile' as Href))}
-        >
-          <Feather name="chevron-left" size={26} color={t.icon} />
-        </GlassCircleButton>
+        {chrome.showBack ? (
+          <GlassCircleButton
+            accessibilityLabel="Zurück"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile' as Href))}
+          >
+            <Feather name="chevron-left" size={26} color={t.icon} />
+          </GlassCircleButton>
+        ) : (
+          <Text style={[styles.tabTitle, { color: t.textPrimary }]}>Chat</Text>
+        )}
         <View style={styles.headerRight}>
           <GlassCircleButton accessibilityLabel={searchOpen ? 'Suche schließen' : 'Suchen'} onPress={toggleSearch}>
             <Feather name={searchOpen ? 'x' : 'search'} size={22} color={t.icon} />
@@ -378,7 +386,7 @@ function ChatList({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingTop: 8,
-          paddingBottom: insets.bottom + 24,
+          paddingBottom: insets.bottom + 24 + chrome.bottomExtra,
         }}
         ListHeaderComponent={
           query.trim() ? null : (
@@ -721,6 +729,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   headerRight: { flexDirection: 'row', gap: 10 },
+  tabTitle: { fontFamily: chatFont.bold, fontSize: 30 },
   searchWrap: { paddingHorizontal: 18, paddingTop: 8 },
   searchField: {
     flexDirection: 'row',

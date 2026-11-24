@@ -3,8 +3,9 @@ import { Tabs } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
 /**
- * The three main sections: Austausch (`/`), Erkunden (`/explore`), Profil (`/profile`). The group
- * name is invisible in URLs, so every link and deep link keeps working.
+ * The main sections: Austausch (`/`), Erkunden (`/explore`), Dashboard (`/dashboard`), Chat
+ * (`/chat-tab`), Profil (`/profile`). Which ones the bar shows depends on the active account
+ * (lib/navigation/shell-tabs.ts). The group name is invisible in URLs, so every link keeps working.
  *
  * A tab navigator keeps each section MOUNTED once it has been opened (Max 2026-11-21: switching
  * felt slow). Before, the sections were plain stack routes: every switch to Erkunden / Profil
@@ -34,6 +35,8 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="explore" />
+      <Tabs.Screen name="dashboard" />
+      <Tabs.Screen name="chat-tab" />
       <Tabs.Screen name="profile" />
     </Tabs>
   );
