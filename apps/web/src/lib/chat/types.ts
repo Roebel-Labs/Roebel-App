@@ -227,6 +227,8 @@ export interface SendMessageInput {
   calendarContext?: CalendarContextEvent[];
   /** Optional part types this client can render (e.g. 'schedule'); absent = only the base set. */
   partTypes?: string[];
+  /** Account the person is currently acting as in the app (personal or an org); absent = unknown. */
+  activeAccountId?: string;
 }
 
 /** SSE events of the send-message stream, in order (spec §3.5). */

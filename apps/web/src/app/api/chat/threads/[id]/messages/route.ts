@@ -52,6 +52,10 @@ function parseSendBody(body: Record<string, unknown>): SendMessageInput | string
   const calendar = sanitizeCalendarContext(body.calendarContext);
   if (calendar === "invalid") return "Ungültiger Kalender.";
   if (calendar) input.calendarContext = calendar;
+  if (body.activeAccountId !== undefined && body.activeAccountId !== null) {
+    if (!store.isUuid(body.activeAccountId)) return "Ungültiges Konto.";
+    input.activeAccountId = body.activeAccountId as string;
+  }
   if (Array.isArray(body.partTypes)) {
     input.partTypes = body.partTypes.filter((t): t is string => typeof t === "string" && /^[a-z_]{1,40}$/.test(t)).slice(0, 20);
   }

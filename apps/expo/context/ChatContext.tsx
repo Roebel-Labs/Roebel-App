@@ -53,6 +53,7 @@ import {
   type UploadedImage,
 } from '@/lib/chat/api';
 import { prepareChatImage } from '@/lib/chat/prepare-upload';
+import { useAccount } from '@/context/AccountContext';
 import { dismissInspiration, fetchInspiration } from '@/lib/chat/api';
 import { cancelTask as apiCancelTask, fetchTask as apiFetchTask } from '@/lib/chat/api';
 import { withoutTask, type InspirationFeed } from '@/lib/chat/inspiration';
@@ -329,6 +330,10 @@ export function useThread(threadId: string) {
   const { account, store, storeRef, dispatch, aborters, uploadCache, lastInputs } = useChatContext();
   const state = store.threads[threadId] ?? initialThreadState;
   const thread = store.data?.threads.find((t) => t.id === threadId) ?? null;
+  // Agents act in the name of whatever account the app is switched to (personal or org).
+  const { activeAccount } = useAccount();
+  const activeAccountIdRef = useRef<string | null>(activeAccount?.id ?? null);
+  activeAccountIdRef.current = activeAccount?.id ?? null;
 
   const local = useCallback(
     (action: ThreadAction) => dispatch({ type: 'thread', threadId, action }),
@@ -407,6 +412,7 @@ export function useThread(threadId: string) {
       }
       let body: SendMessageBody = imageUrls.length ? { ...draft, imageUrls } : draft;
       body = { ...body, partTypes: CLIENT_PART_TYPES };
+      if (activeAccountIdRef.current) body = { ...body, activeAccountId: activeAccountIdRef.current };
       // Calendar bots get the next 7 days of the device calendar when read access is granted.
       if (isCalendarThread(storeRef.current.data?.threads.find((t) => t.id === threadId))) {
         const calendarContext = await readCalendarContext();

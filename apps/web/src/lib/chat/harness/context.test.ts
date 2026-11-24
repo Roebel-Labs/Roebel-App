@@ -57,3 +57,20 @@ test("cleanFact: trims, collapses spaces, caps at 500", () => {
   assert.equal(cleanFact("   "), null);
   assert.equal(cleanFact("x".repeat(600))?.length, 500);
 });
+
+test("formatActiveAccountBlock: org mode, member, personal, unknown", async () => {
+  const { formatActiveAccountBlock } = await import("./context");
+  const profile = {
+    displayName: "Max", username: null, isCitizen: true,
+    orgs: [
+      { id: "11111111-1111-4111-8111-111111111111", name: "Café Hafen", role: "owner", kind: "business" },
+      { id: "22222222-2222-4222-8222-222222222222", name: "SV Röbel", role: "member", kind: "verein" },
+    ],
+  } as never;
+  const org = formatActiveAccountBlock(profile, "11111111-1111-4111-8111-111111111111")!;
+  assert.match(org, /als Organisation „Café Hafen“/);
+  assert.match(org, /org = "Café Hafen"/);
+  assert.match(formatActiveAccountBlock(profile, "22222222-2222-4222-8222-222222222222")!, /nur Mitglied/);
+  assert.match(formatActiveAccountBlock(profile, "33333333-3333-4333-8333-333333333333")!, /persönlichen Konto/);
+  assert.equal(formatActiveAccountBlock(profile, null), null);
+});

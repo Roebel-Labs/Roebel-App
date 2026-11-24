@@ -56,6 +56,27 @@ export function formatProfileBlock(profile: HarnessProfile | null): string {
   return lines.join("\n");
 }
 
+/**
+ * "Gerade unterwegs als": the account the person has switched to in the app. Only
+ * an org from their own profile counts (the id is client-sent, so it is matched,
+ * never trusted); the model then fills the tools' `org` field with that name.
+ */
+export function formatActiveAccountBlock(profile: HarnessProfile | null, activeAccountId: string | null | undefined): string | null {
+  if (!profile || !activeAccountId) return null;
+  const org = profile.orgs.find((o) => o.id === activeAccountId);
+  if (!org) {
+    return "Der Mensch ist in der App gerade mit seinem persönlichen Konto unterwegs. Beiträge, Anzeigen und Berichte sind persönlich, außer er nennt eine Organisation.";
+  }
+  const manages = org.role === "owner" || org.role === "admin";
+  return [
+    `Der Mensch ist in der App gerade als Organisation „${org.name}“ unterwegs (Rolle: ${ROLE_LABELS[org.role] ?? org.role}).`,
+    manages
+      ? `Beiträge, Veranstaltungen, Anzeigen und Datenberichte sind standardmäßig für „${org.name}“: setze dafür immer org = "${org.name}" ` +
+        "(create_feed_post, create_listing, create_org_event, account_report). Nur wenn er ausdrücklich „persönlich“ oder „privat“ sagt, ohne org."
+      : `Er ist dort nur Mitglied und kann nicht im Namen von „${org.name}“ veröffentlichen; schlag das ggf. der Verwaltung vor.`,
+  ].join("\n");
+}
+
 export function formatTenantBlock(tenant: TenantConfig): string {
   return [`Über ${tenant.name} (${tenant.region}):`, ...tenant.facts.map((f) => `- ${f}`), `- Links in die App beginnen mit ${tenant.appOrigin}.`].join("\n");
 }

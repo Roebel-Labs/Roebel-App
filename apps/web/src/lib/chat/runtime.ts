@@ -15,7 +15,7 @@ import { sendChatPush } from "./push";
 import { SplitStreamer, splitBubbles } from "./split";
 import { attachMessage } from "./harness/audit";
 import { describeApproval } from "./harness/approvals";
-import { buildHarnessContext, harnessSystemBlock } from "./harness/context";
+import { buildHarnessContext, formatActiveAccountBlock, harnessSystemBlock } from "./harness/context";
 import { isAwaitingApproval, toolsFor } from "./harness/registry";
 import { livePartKey, upsertLivePart } from "./harness/parts";
 import type { HarnessProfile } from "./harness/types";
@@ -153,6 +153,8 @@ interface BotTurnContext {
   calendarContext?: CalendarContextEvent[] | null;
   /** Optional part types the client renders (send body partTypes). */
   partTypes?: string[] | null;
+  /** Account the person is acting as in the app (send body activeAccountId). */
+  activeAccountId?: string | null;
   /** Scheduled routine run (no routine tools, no human watching). */
   routineRun?: boolean;
   /** Parts attached to the last bubble in addition to what tools emit (approval continuation). */
@@ -229,6 +231,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     turn: {
       calendarContext: ctx.calendarContext ?? null,
       partTypes: ctx.partTypes ?? null,
+      activeAccountId: ctx.activeAccountId ?? null,
       routineRun: Boolean(ctx.routineRun),
       recentParts: rows.slice(-10).flatMap((r) => store.partsOf(r.parts)),
       emitted: extraParts,
@@ -236,7 +239,8 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     },
   });
   const harnessBlock = await harnessSystemBlock(harness, { withMemory: enabled.has("memory") });
-  const system = [baseSystem, hasCalendar ? calendarPromptBlock(ctx.calendarContext) : null, harnessBlock]
+  const activeBlock = formatActiveAccountBlock(harness.profile, ctx.activeAccountId);
+  const system = [baseSystem, hasCalendar ? calendarPromptBlock(ctx.calendarContext) : null, harnessBlock, activeBlock]
     .filter(Boolean).join("\n\n");
 
   const tools: ToolSet = await toolsFor({ bot, ctx: harness });
@@ -451,6 +455,7 @@ export async function runUserTurn(opts: {
       wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0,
       calendarContext: input.calendarContext ?? null,
       partTypes: input.partTypes ?? null,
+      activeAccountId: input.activeAccountId ?? null,
       channel: opts.channel ?? null,
     });
     spent += res.inputTokens + res.outputTokens;

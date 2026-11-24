@@ -51,6 +51,8 @@ export interface SendMessageBody {
   calendarContext?: CalendarContextEvent[];
   /** Optional part types this build renders; the server falls back to text for the rest. */
   partTypes?: string[];
+  /** Account the app is switched to (personal or org) — agents publish in its name. */
+  activeAccountId?: string;
 }
 
 export interface ChatFile {

@@ -62,6 +62,9 @@ type ReportInput = z.infer<typeof reportInput>;
 const reportSchema = reportInput as unknown as z.ZodType<ReportInput>;
 
 async function resolveAccount(input: ReportInput, ctx: HarnessContext): Promise<{ id: string; name: string }> {
+  // No org named but the app is switched to a managed org → that org's numbers.
+  const active = managedOrgs(ctx).find((o) => o.id === ctx.turn?.activeAccountId);
+  if (!input.org?.trim() && active && input.account !== "persoenlich") return active;
   if (input.account === "persoenlich" || (!input.org && managedOrgs(ctx).length === 0)) {
     const id = await actionsDeps.personalAccountId(ctx.wallet);
     if (!id) throw new ToolInputError("Dafür braucht der Mensch ein Profil in der Röbel-App.");

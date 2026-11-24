@@ -44,6 +44,8 @@ export interface HarnessTurn {
   calendarContext?: CalendarContextEvent[] | null;
   /** Optional part types the client renders (e.g. 'schedule'); null/undefined = base set only. */
   partTypes?: string[] | null;
+  /** Account the person is acting as in the app (client-sent; match against profile.orgs). */
+  activeAccountId?: string | null;
   /** Scheduled routine run (no human watching → no routine tools). */
   routineRun?: boolean;
   /** Parts of the last few stored messages (dedupe of cards). */
