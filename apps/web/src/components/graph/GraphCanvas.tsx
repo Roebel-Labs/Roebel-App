@@ -29,43 +29,61 @@ const STATUS_ORDER: Record<NodeStatus, number> = {
   revoked: 2,
 };
 
+// Deterministic PRNG seeded from a string, so each member keeps the same
+// spot across refreshes while the overall layout looks organic.
+function seededRandom(seed: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), h | 1);
+    h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
+    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Node footprint incl. breathing room (nodes are ~170x80px).
+const NODE_W = 230;
+const NODE_H = 130;
+
 function calculateLayout(
   nodes: Array<{ id: string; type: string; isFounder: boolean; status: NodeStatus }>,
 ): Array<{ id: string; x: number; y: number }> {
-  const positions = new Map<string, { x: number; y: number }>();
+  const placed: Array<{ id: string; x: number; y: number }> = [];
 
-  const founders = nodes.filter((n) => n.isFounder && n.status === "active");
-  const founderRadius = 150;
-  founders.forEach((node, index) => {
-    const angle = (index / Math.max(founders.length, 1)) * 2 * Math.PI;
-    positions.set(node.id, {
-      x: Math.cos(angle) * founderRadius,
-      y: Math.sin(angle) * founderRadius,
-    });
+  const overlaps = (x: number, y: number) =>
+    placed.some((p) => Math.abs(p.x - x) < NODE_W && Math.abs(p.y - y) < NODE_H);
+
+  // Attesters first (near the middle), then active, pending, revoked.
+  const ordered = nodes.slice().sort((a, b) => {
+    const rank = (n: (typeof nodes)[number]) =>
+      n.type === "attester" || n.isFounder ? -1 : STATUS_ORDER[n.status];
+    return rank(a) - rank(b) || a.id.localeCompare(b.id);
   });
 
-  const nonFounders = nodes
-    .filter((n) => !(n.isFounder && n.status === "active"))
-    .slice()
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+  // Scatter area grows with the member count so density stays similar.
+  const baseRadius = Math.sqrt(nodes.length) * 120 + 150;
 
-  const radius = 300;
-  nonFounders.forEach((node, index) => {
-    const ring = Math.floor(index / 8) + 1;
-    const posInRing = index % 8;
-    const angle = (posInRing / 8) * 2 * Math.PI;
-    const currentRadius = radius + ring * 150;
-    positions.set(node.id, {
-      x: Math.cos(angle) * currentRadius,
-      y: Math.sin(angle) * currentRadius,
-    });
+  ordered.forEach((node) => {
+    const rand = seededRandom(node.id);
+    const isCore = node.type === "attester" || node.isFounder;
+    // Core members live in the inner part, everyone else across the whole disc.
+    let radius = isCore ? baseRadius * 0.35 : baseRadius;
+    let pos = { x: 0, y: 0 };
+    for (let attempt = 0; ; attempt++) {
+      const angle = rand() * 2 * Math.PI;
+      // sqrt() spreads points evenly over the disc area instead of clumping at the center.
+      const r = Math.sqrt(rand()) * radius;
+      pos = { x: Math.cos(angle) * r * 1.4, y: Math.sin(angle) * r };
+      if (!overlaps(pos.x, pos.y) || attempt > 400) break;
+      if (attempt % 40 === 39) radius *= 1.1;
+    }
+    placed.push({ id: node.id, ...pos });
   });
 
-  return Array.from(positions.entries()).map(([id, pos]) => ({
-    id,
-    x: pos.x,
-    y: pos.y,
-  }));
+  return placed;
 }
 
 function formatAgo(date: Date | null, now: number): string {
@@ -140,7 +158,7 @@ export default function GraphCanvas() {
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        type: "smoothstep",
+        type: "default",
         animated: !touchesRevoked,
         markerEnd: {
           type: MarkerType.ArrowClosed,
@@ -260,7 +278,7 @@ export default function GraphCanvas() {
           </p>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-gradient-to-br from-yellow-500 via-teal-500 to-blue-600"></div>
+              <div className="w-4 h-4 rounded bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 border border-amber-300"></div>
               <span className="text-xs">Bescheiniger</span>
             </div>
             <div className="flex items-center gap-2">
