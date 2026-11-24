@@ -102,7 +102,8 @@ export function rowsToModelMessages(
       return;
     }
     const content: Exclude<UserContent, string> = [];
-    // Bots with the images pack may edit the human's photos: they need the URL (sourceImageUrl).
+    // Bots with the images pack edit photos (sourceImageUrl); bots with actions attach them to
+    // events/posts/listings (imageUrl, e.g. a sent-in flyer as the event picture): both need the URL.
     if (opts.imageUrls && images.length) {
       content.push({ type: "text", text: images.map((img) => `(Bild-URL: ${img.url})`).join("\n") });
     }
@@ -192,7 +193,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     store.listThreadFiles(threadId),
   ]);
   const botNames = new Map(ctx.threadBots.map((b) => [b.id, b.name]));
-  const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText, { imageUrls: enabled.has("images") });
+  const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText, { imageUrls: enabled.has("images") || enabled.has("actions") });
   const overlay = await agentOverlay(wallet, bot, ctx.channel);
   const baseSystem = buildSystemPrompt({
     botName: overlay.name,

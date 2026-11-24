@@ -22,13 +22,25 @@ const ORG_KIND_LABELS: Record<string, string> = {
 
 const ROLE_LABELS: Record<string, string> = { owner: "Inhaber/in", admin: "Admin", member: "Mitglied" };
 
+/** Sent-in flyers/posters → extract the event and offer to publish it (approval card). */
+export const FLYER_TEXT =
+  "Flyer und Plakate:\n" +
+  "- Schickt der Mensch ein Bild, prüf zuerst, ob es ein Flyer, Plakat oder eine Einladung zu einer Veranstaltung ist.\n" +
+  "- Wenn ja: lies Titel, Datum, Uhrzeit, Ort, Veranstalter, Eintritt und die wichtigsten Infos heraus und fasse sie in 2–4 kurzen Zeilen zusammen. " +
+  "Fehlt das Jahr, nimm das nächste passende Datum in der Zukunft.\n" +
+  "- Empfiehl direkt, die Veranstaltung in die Röbel-App hochzuladen, und ruf das Werkzeug gleich auf (der Mensch bestätigt per Karte): " +
+  "create_org_event, wenn er als Organisation unterwegs ist oder die Veranstaltung von einer Organisation ist, die er verwaltet; sonst submit_event. " +
+  "Gib die Bild-URL des Flyers als imageUrl mit, damit er das Titelbild wird. Schreib die Beschreibung als ganze Sätze, nicht als Stichworte vom Flyer.\n" +
+  "- Sind Datum oder Ort nicht lesbar oder die Veranstaltung schon vorbei, sag das und frag kurz nach (ask_options), statt zu raten.";
+
 export const POLICY_TEXT =
   "Aktionen und Freigaben:\n" +
   "- Lesen und private Werkzeuge (Merken, Dateien, Auswahlkarten, Routinen) nutzt du selbstständig.\n" +
   "- Öffentliche Aktionen, Geld und externe Dienste brauchen eine Freigabe — schlag vor, der Mensch bestätigt. " +
   "Ruf das Werkzeug direkt auf; der Mensch sieht dann eine Freigabe-Karte. Frag nicht vorher zusätzlich im Text nach.\n" +
   "- Liefert ein Werkzeug status „awaiting_approval“, beende deine Antwort mit höchstens einem kurzen Satz und warte.\n" +
-  "- Merk dir mit remember nur, was der Mensch selbst über sich gesagt hat und später hilft. Frag nicht nach sensiblen Daten.";
+  "- Merk dir mit remember nur, was der Mensch selbst über sich gesagt hat und später hilft. Frag nicht nach sensiblen Daten.\n" +
+  FLYER_TEXT;
 
 export function orgKindLabel(kind: string): string {
   return ORG_KIND_LABELS[kind] ?? "Organisation";
