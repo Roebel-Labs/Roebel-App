@@ -4,27 +4,15 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { encodeFunctionData, parseAbi, type Address } from 'viem';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useGnosisWallet } from '@/context/GnosisWalletContext';
 import { useVerificationContext } from '@/context/VerificationContext';
-import { orgRegistryGnosisAddress } from '@/constants/gnosis';
 import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
 import { readOpenOrgRequests } from '@/lib/org-safe/chain';
 import { fetchOrgRefs } from '@/lib/org-safe/members';
 import { orgDirectory, type OrgRequestItem } from '@/lib/org-safe/requests';
-import { sendOrgCalls } from '@/lib/org-safe/send';
-
-const voteAbi = parseAbi(['function approveRequest(uint256 requestId)', 'function rejectRequest(uint256 requestId)']);
-
-function friendlyError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e);
-  if (msg.includes('SelfVote')) return 'Du bist Inhaber dieser Organisation und kannst sie nicht selbst bestätigen.';
-  if (msg.includes('AlreadyVoted')) return 'Du hast hier bereits abgestimmt.';
-  if (msg.includes('Expired') || msg.includes('NotPending')) return 'Die Anfrage ist nicht mehr offen.';
-  return 'Transaktion fehlgeschlagen. Bitte versuche es erneut.';
-}
+import { voteOnOrgRequest, orgVoteErrorText } from '@/lib/org-safe/vote';
 
 export default function OrgRequestsScreen() {
   const router = useRouter();
@@ -65,16 +53,11 @@ export default function OrgRequestsScreen() {
     setBusy(key);
     setError(null);
     try {
-      const data = encodeFunctionData({
-        abi: voteAbi,
-        functionName: approve ? 'approveRequest' : 'rejectRequest',
-        args: [BigInt(item.requestId)],
-      });
-      await sendOrgCalls(gnosisAccount, [{ to: orgRegistryGnosisAddress as Address, data }]);
+      await voteOnOrgRequest(gnosisAccount, item.requestId, approve);
       await load();
     } catch (e) {
       console.error('org request vote failed', e);
-      setError(friendlyError(e));
+      setError(orgVoteErrorText(e));
     } finally {
       setBusy(null);
     }

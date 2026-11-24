@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { routeForNotification } from '@/lib/navigation/notificationRoute';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import InviteNotificationCard from '@/components/InviteNotificationCard';
+import AttesterTaskNotificationCard from '@/components/AttesterTaskNotificationCard';
 import ActivityRow from '@/components/ActivityRow';
 import { NotificationCardSkeleton } from '@/components/SkeletonLoader';
 import { BookIcon, CalendarIcon } from '@/components/Icons';
@@ -182,6 +183,7 @@ export default function NotificationsInboxScreen() {
       case 'credential_action':
       case 'credential_letters':
       case 'credential_visibility':
+      case 'attester_task':
       case 'design_test': {
         // Same mapping as a push tap (ids validated there).
         const route = routeForNotification(data);
@@ -201,6 +203,11 @@ export default function NotificationsInboxScreen() {
       const w = (notification.metadata as { follower_wallet?: string } | undefined)?.follower_wallet;
       const profile = w ? actorProfiles.get(w.toLowerCase()) : undefined;
       if (profile?.username) router.push(`/user/${profile.username}` as any);
+      return;
+    }
+    if (notification.type === 'attester_task') {
+      // An org registration (later: other tasks) waiting for this attester's vote.
+      router.push('/verification/orgs' as any);
       return;
     }
     if (notification.type === 'event_request') {
@@ -243,6 +250,17 @@ export default function NotificationsInboxScreen() {
           preview={notificationPreview(item.data.notification_type, item.data.body)}
           unread={!pushInbox.readIds.has(item.data.id)}
           onPress={() => handlePushPress(item.data)}
+        />
+      );
+    }
+
+    if (item.data.type === 'attester_task') {
+      return (
+        <AttesterTaskNotificationCard
+          notification={item.data}
+          onRead={(n) => {
+            if (!n.is_read) userNotifs.markAsRead(n.id);
+          }}
         />
       );
     }

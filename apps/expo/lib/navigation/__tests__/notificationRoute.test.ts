@@ -1,6 +1,10 @@
 import { routeForNotification } from '../notificationRoute';
 
 describe('routeForNotification', () => {
+  it('opens the attester inbox for an attester task', () => {
+    expect(routeForNotification({ type: 'attester_task', kind: 'org_request', requestId: '2' })).toBe('/verification/orgs');
+  });
+
   it('maps a new-post push to the post screen', () => {
     expect(routeForNotification({ type: 'post', postId: 'dc9b89f8' })).toBe('/post/dc9b89f8');
   });

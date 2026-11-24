@@ -267,3 +267,28 @@ export async function readOpenOrgRequests(attester: string, orgs: Map<string, Or
     selfOwned: owned[i].status === 'success' && owned[i].result === true,
   }));
 }
+
+export type OrgRequestState = {
+  /** 0 pending, 1 approved, 2 rejected, 3+ expired/cancelled (OrgRegistry.sol). */
+  status: number;
+  approvals: number;
+  required: number;
+  expiresAt: number;
+  voted: boolean;
+};
+
+/** One registration request as this attester sees it (notification card). */
+export async function readOrgRequestState(requestId: number, attester: string): Promise<OrgRequestState> {
+  const registry = orgRegistryGnosisAddress as Address;
+  const [r, voted] = await Promise.all([
+    client.readContract({ address: registry, abi: registryAbi, functionName: 'getRequest', args: [BigInt(requestId)] }),
+    client.readContract({ address: registry, abi: registryAbi, functionName: 'hasVoted', args: [BigInt(requestId), attester as Address] }),
+  ]);
+  return {
+    status: Number(r.status),
+    approvals: Number(r.approvals),
+    required: Number(r.requiredApprovals),
+    expiresAt: Number(r.expiresAt),
+    voted,
+  };
+}

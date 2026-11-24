@@ -79,6 +79,10 @@
     {
       "path": "/api/cron/credentials-badges",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/attester-tasks",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

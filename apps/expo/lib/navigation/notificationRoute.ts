@@ -71,6 +71,9 @@ export function routeForNotification(data: NotificationData): string | null {
       const draftId = str(data.draftId);
       return draftId && UUID.test(draftId) ? `/org/credentials/design-test?draft=${draftId}` : null;
     }
+    case 'attester_task':
+      // An org registration request waiting for this attester's vote (the inbox lists them all).
+      return '/verification/orgs';
     case 'org':
       // Weekly follower digest for org owners/admins.
       return str(data.accountId) && `/account/${data.accountId}`;
