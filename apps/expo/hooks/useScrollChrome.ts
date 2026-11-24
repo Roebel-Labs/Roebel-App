@@ -62,3 +62,15 @@ export function useNavCompanionStyle(visible: SharedValue<boolean>) {
     transform: [{ translateY: withTiming(visible.value ? 0 : BOTTOM_NAV_HEIGHT, SLIDE) }],
   }));
 }
+
+/**
+ * Fade + drop for pills floating above the nav ("Account wechseln", Erkunden's Karte pill):
+ * scrolling down fades them out, scrolling up brings them back. Same timing as MapFAB.
+ */
+export function usePillFadeStyle(visible: SharedValue<boolean>) {
+  return useAnimatedStyle(() => ({
+    opacity: withTiming(visible.value ? 1 : 0, { duration: 350, easing: visible.value ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic) }),
+    transform: [{ translateY: withTiming(visible.value ? 0 : 80, { duration: 400, easing: visible.value ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic) }) }],
+    pointerEvents: visible.value ? 'auto' : 'none',
+  }));
+}

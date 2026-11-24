@@ -78,7 +78,7 @@ export function AccountSwitchFlowProvider({ children }: { children: React.ReactN
 }
 
 function SwitchOverlay({ name }: { name: string | null }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   return (
     <Animated.View
       entering={FadeIn.duration(OVERLAY_FADE_IN_MS)}
@@ -88,8 +88,8 @@ function SwitchOverlay({ name }: { name: string | null }) {
       accessibilityLiveRegion="polite"
     >
       <View style={styles.center}>
-        <RoebelLogo size={88} />
-        <Text style={[styles.text, { color: colors.textPrimary }]} numberOfLines={2}>
+        <RoebelLogo size={72} color={isDark ? '#FFFFFF' : '#000000'} animated />
+        <Text style={[styles.text, { color: colors.textSecondary }]} numberOfLines={2}>
           {name ? `Wechsle zu ${name}` : 'Account wird gewechselt'}
         </Text>
       </View>
@@ -99,6 +99,6 @@ function SwitchOverlay({ name }: { name: string | null }) {
 
 const styles = StyleSheet.create({
   overlay: { zIndex: 1000, elevation: 1000, alignItems: 'center', justifyContent: 'center' },
-  center: { alignItems: 'center', paddingHorizontal: 32, marginTop: 120 },
-  text: { marginTop: 24, fontFamily: fontFamily.semiBold, fontSize: 22, textAlign: 'center' },
+  center: { alignItems: 'center', paddingHorizontal: 32 },
+  text: { marginTop: 20, fontFamily: fontFamily.medium, fontSize: 15, textAlign: 'center' },
 });

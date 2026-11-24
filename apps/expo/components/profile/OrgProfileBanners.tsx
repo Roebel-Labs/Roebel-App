@@ -29,7 +29,6 @@ export default function OrgProfileBanners() {
         <BadgesBanner
           eyebrow="Für eure Organisation"
           title="Abzeichen erstellen"
-          chip="Bald verfügbar"
           onPress={() => router.push('/badges/create' as any)}
         />
       ),

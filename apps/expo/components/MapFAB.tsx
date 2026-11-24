@@ -71,7 +71,7 @@ export default function MapFAB({
       <ContrastPill
         label={label}
         onPress={() => router.push(href as any)}
-        leading={icon ?? <LocationIcon size={18} color="#FFFFFF" />}
+        leading={icon ?? ((p) => <LocationIcon size={17} color={p.active} />)}
         accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
       />
     </ReanimatedAnimated.View>

@@ -28,14 +28,8 @@ describe('PERSONAL_PROFILE_ACTIONS', () => {
 });
 
 describe('ORG_PROFILE_ACTIONS', () => {
-  it('has five actions and keeps the auth gate on the create actions', () => {
-    expect(ORG_PROFILE_ACTIONS.map((a) => a.key)).toEqual([
-      'create-product',
-      'create-service',
-      'submit-event',
-      'org-ads',
-      'org-dashboard',
-    ]);
+  it('has three create actions (Anzeigen + Dashboard live in the Dashboard tab) and keeps the auth gate', () => {
+    expect(ORG_PROFILE_ACTIONS.map((a) => a.key)).toEqual(['create-product', 'create-service', 'submit-event']);
     expect(ORG_PROFILE_ACTIONS.filter((a) => a.auth).map((a) => a.key)).toEqual([
       'create-product',
       'create-service',

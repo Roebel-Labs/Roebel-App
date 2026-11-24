@@ -107,9 +107,20 @@ export const chatDarkTokens: ChatTokens = {
   haloStrong: '0px 10px 36px rgba(0,0,0,0.6)',
 };
 
+/** Pure-black variant for the "Dark" theme (OLED): page #000, cards and sheets one step up. */
+export const chatBlackTokens: ChatTokens = {
+  ...chatDarkTokens,
+  background: '#000000',
+  surface: '#141416',
+  groupedBackground: '#141416',
+  sheetBackground: '#0E0E10',
+  bubbleBot: '#18181B',
+  optionBox: '#0E0E10',
+};
+
 export function useChatTokens(): ChatTokens {
-  const { isDark } = useTheme();
-  return isDark ? chatDarkTokens : chatLightTokens;
+  const { variant } = useTheme();
+  return variant === 'dark' ? chatBlackTokens : variant === 'dim' ? chatDarkTokens : chatLightTokens;
 }
 
 export function haloShadow(t: ChatTokens, strong = false): ViewStyle {

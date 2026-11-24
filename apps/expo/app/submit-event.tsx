@@ -32,6 +32,7 @@ import { geocodeLocation } from '@/lib/utils/geocoding';
 import { logEventSubmission } from '@/lib/firebase';
 import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
+import { useChatTokens } from '@/components/chat/tokens';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveAccount } from 'thirdweb/react';
 import EventBadgeSetupSection from '@/components/credentials/EventBadgeSetupSection';
@@ -125,6 +126,7 @@ export default function SubmitEventScreen() {
   const thirdwebAccount = useActiveAccount();
   const router = useRouter();
   const { colors } = useTheme();
+  const chatT = useChatTokens();
   const insets = useSafeAreaInsets();
   const { activeAccount, roleInActiveAccount } = useAccount();
   const { user } = useUser();
@@ -750,9 +752,9 @@ export default function SubmitEventScreen() {
   // AI mode - early return
   if (mode === 'ai') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: chatT.background }]}>
+        <View style={[styles.header, { borderBottomColor: chatT.separator }]}>
+          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: chatT.chipBackground }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Event einreichen</Text>

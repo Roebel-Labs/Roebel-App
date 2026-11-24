@@ -8,6 +8,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import RangePills from '@/components/charts/RangePills';
 import DateRangeSheet from '@/components/charts/DateRangeSheet';
 import OverviewSection from '@/components/dashboard/analytics/OverviewSection';
@@ -51,7 +52,9 @@ export default function DashboardTab() {
   };
 
   return (
-    <View style={[styles.flex, { backgroundColor: colors.backdrop }]}>
+    <GlassProvider>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+      <GlassBackdrop style={styles.flex}>
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: glassBarFootprint(insets.bottom) + 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -66,7 +69,7 @@ export default function DashboardTab() {
           ) : null}
         </View>
 
-        <View style={{ backgroundColor: colors.backdrop }}>
+        <View style={{ backgroundColor: colors.background }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
             {SECTIONS.map((s) => {
               const on = s === section;
@@ -103,6 +106,7 @@ export default function DashboardTab() {
           </View>
         ) : null}
       </ScrollView>
+      </GlassBackdrop>
 
       <DateRangeSheet
         visible={sheetOpen}
@@ -119,6 +123,7 @@ export default function DashboardTab() {
         <BottomNavigation activeTab="dashboard" glass />
       </View>
     </View>
+    </GlassProvider>
   );
 }
 

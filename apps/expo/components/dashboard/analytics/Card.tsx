@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 
-/** Flat card (no shadow), title + optional subtitle; loading / error states built in. */
+/** Dashboard section: title + optional subtitle, loading / error states built in. No border (tiles inside have one). */
 export default function Card({
   title,
   subtitle,
@@ -19,7 +19,7 @@ export default function Card({
 }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={styles.card}>
       {title ? <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text> : null}
       {subtitle ? <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
       {error ? (
@@ -36,7 +36,8 @@ export default function Card({
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12, marginHorizontal: 16 },
+  // No frame of its own: sections sit on the page, only the tiles inside carry a border.
+  card: { paddingVertical: 8, gap: 12, marginHorizontal: 16 },
   title: { fontFamily: fontFamily.heading, fontSize: 20 },
   subtitle: { fontFamily: fontFamily.regular, fontSize: 13, marginTop: -8 },
   error: { fontFamily: fontFamily.regular, fontSize: 14, paddingVertical: 24, textAlign: 'center' },

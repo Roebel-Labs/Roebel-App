@@ -44,6 +44,4 @@ export const ORG_PROFILE_ACTIONS: ProfileAction[] = [
   { key: 'create-product', label: 'Anzeige\nerstellen', href: '/create-listing', params: { listingType: 'product' }, auth: true },
   { key: 'create-service', label: 'Dienstleistung\nanbieten', href: '/create-listing', params: { listingType: 'service' }, auth: true },
   { key: 'submit-event', label: 'Veranstaltung\nerstellen', href: '/submit-event', auth: true },
-  { key: 'org-ads', label: 'Anzeigen', href: '/org/ads' },
-  { key: 'org-dashboard', label: 'Dashboard', href: '/org/dashboard' },
 ];

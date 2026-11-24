@@ -1,26 +1,30 @@
 /**
- * The dark, fully rounded "contrast pill" that floats above the glass bottom bar
- * ("Account wechseln", Erkunden's Karte/Liste switch). Figma node 3137:2815.
+ * The pill that floats above the glass bottom bar ("Account wechseln", Erkunden's Karte switch).
+ * Same material as the bottom-nav pill (Liquid Glass on iOS 26+, frosted GlassSurface elsewhere),
+ * same rim and shadow, ink from the nav palette. Press: spring to 0.97 + haptic.
  *
- * Near-black vertical gradient, a hairline light rim so it separates from dark content, and a
- * soft wide shadow (the one sanctioned shadow in the Ortis UI). Press: spring to 0.97 + haptic.
+ * Must render inside the screen's <GlassProvider> (like the bottom bar) so Android frosts too.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import GlassSurface from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { CONTRAST_PILL_GRADIENT, CONTRAST_PILL_HEIGHT } from '@/lib/contrast-pill';
+import { LiquidGlassView, useLiquidGlass } from '@/lib/liquidGlass';
+import { glassPillPalette, type GlassPillPalette } from '@/lib/glass-pill-palette';
+import { CONTRAST_PILL_HEIGHT } from '@/lib/contrast-pill';
+
+type Slot = React.ReactNode | ((palette: GlassPillPalette) => React.ReactNode);
 
 type Props = {
   label: string;
   onPress: () => void;
-  /** Left slot, e.g. a 28 pt avatar or a 24 pt icon. */
-  leading?: React.ReactNode;
+  /** Left slot, e.g. a 26 pt avatar or an icon; a function receives the palette (ink colors). */
+  leading?: Slot;
   /** Right slot, e.g. the ⇆ icon. */
-  trailing?: React.ReactNode;
+  trailing?: Slot;
   disabled?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -28,14 +32,21 @@ type Props = {
 
 const SPRING = { damping: 18, stiffness: 320, mass: 0.6 };
 
+export function useGlassPillPalette(): GlassPillPalette {
+  const { isDark, variant } = useTheme();
+  return glassPillPalette(isDark, variant);
+}
+
 export default function ContrastPill({ label, onPress, leading, trailing, disabled, accessibilityLabel, style }: Props) {
   const { isDark } = useTheme();
+  const palette = useGlassPillPalette();
+  const liquid = useLiquidGlass();
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const colors = isDark ? CONTRAST_PILL_GRADIENT.dark : CONTRAST_PILL_GRADIENT.light;
+  const render = (slot: Slot) => (typeof slot === 'function' ? slot(palette) : slot);
 
   return (
-    <Animated.View style={[styles.shadow, pressStyle, style]}>
+    <Animated.View style={[styles.shadow, { boxShadow: palette.shadow } as object, pressStyle, style]}>
       <Pressable
         onPress={() => {
           Haptics.selectionAsync().catch(() => {});
@@ -46,49 +57,42 @@ export default function ContrastPill({ label, onPress, leading, trailing, disabl
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? label}
-        style={[styles.pill, disabled && styles.disabled]}
+        style={[styles.pill, { borderColor: palette.rim }, disabled && styles.disabled]}
       >
-        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-        {/* Top sheen: a faint highlight on the upper half gives the pill its slight curvature. */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 0.6 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        {leading ? <View style={styles.leading}>{leading}</View> : null}
-        <Text style={styles.label} numberOfLines={1}>
+        {liquid && LiquidGlassView ? (
+          <LiquidGlassView
+            pointerEvents="none"
+            glassEffectStyle="regular"
+            colorScheme={isDark ? 'dark' : 'light'}
+            tintColor={palette.liquidTint}
+            style={[StyleSheet.absoluteFill, { borderRadius: CONTRAST_PILL_HEIGHT / 2 }]}
+          />
+        ) : (
+          <GlassSurface androidExperimentalBlur />
+        )}
+        {leading ? <View style={styles.leading}>{render(leading)}</View> : null}
+        <Text style={[styles.label, { color: palette.active }]} numberOfLines={1}>
           {label}
         </Text>
-        {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+        {trailing ? <View style={styles.trailing}>{render(trailing)}</View> : null}
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  shadow: {
-    alignSelf: 'center',
-    borderRadius: 999,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
+  shadow: { alignSelf: 'center', borderRadius: 999 },
   pill: {
     height: CONTRAST_PILL_HEIGHT,
     borderRadius: 999,
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 14,
+    borderWidth: 1,
   },
   disabled: { opacity: 0.6 },
-  leading: { marginRight: 10 },
-  trailing: { marginLeft: 8 },
-  label: { color: '#FFFFFF', fontFamily: fontFamily.semiBold, fontSize: 17, letterSpacing: -0.2 },
+  leading: { marginRight: 8 },
+  trailing: { marginLeft: 6 },
+  label: { fontFamily: fontFamily.semiBold, fontSize: 15, letterSpacing: -0.1 },
 });

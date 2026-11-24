@@ -30,6 +30,7 @@ import { formatDate } from '@/lib/utils';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
+import { useChatTokens, chatSize, chatType } from '@/components/chat/tokens';
 import type { ColorTokens } from '@/constants/theme';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveAccount } from 'thirdweb/react';
@@ -283,6 +284,35 @@ function createMarkdownStyles(colors: ColorTokens) {
   });
 }
 
+/**
+ * The agent chat's look for the event submission chat: theme tokens remapped onto the chat palette
+ * (components/chat/tokens) — page, bubbles, chips and the primary (send) button follow the agent chat
+ * in light, dim and dark.
+ */
+function useChatColors(): ColorTokens {
+  const { colors: theme } = useTheme();
+  const t = useChatTokens();
+  return useMemo(
+    () => ({
+      ...theme,
+      background: t.background,
+      feedBackground: t.background,
+      card: t.surface,
+      surface: t.bubbleBot,
+      surfaceSecondary: t.chipBackground,
+      primary: t.primaryButton,
+      onPrimary: t.primaryButtonText,
+      textPrimary: t.textPrimary,
+      textSecondary: t.textSecondary,
+      textTertiary: t.textTertiary,
+      textInverted: t.primaryButtonText,
+      border: t.separator,
+      input: t.chipBackground,
+    }),
+    [theme, t]
+  );
+}
+
 // Message bubble component with image and markdown support
 function MessageBubbleInner({
   role,
@@ -297,7 +327,7 @@ function MessageBubbleInner({
   imageStage?: ImageStage;
   autoCaption?: boolean;
 }) {
-  const { colors } = useTheme();
+  const colors = useChatColors();
   const isUser = role === 'user';
 
   const markdownStyles = useMemo(() => createMarkdownStyles(colors), [colors]);
@@ -338,7 +368,7 @@ function MessageBubbleInner({
 // Structured, highlighted recap of the collected event data, shown before
 // the user confirms and the swipe-to-submit control appears.
 function EventRecapCard({ data }: { data: EventRecapData }) {
-  const { colors } = useTheme();
+  const colors = useChatColors();
 
   const stripSeconds = (t?: string) => (t ? t.slice(0, 5) : '');
 
@@ -423,7 +453,7 @@ const recapStyles = StyleSheet.create({
 
 // Typing indicator component with animated dots
 function TypingIndicator() {
-  const { colors } = useTheme();
+  const colors = useChatColors();
   const dot1Opacity = useRef(new Animated.Value(0.4)).current;
   const dot2Opacity = useRef(new Animated.Value(0.4)).current;
   const dot3Opacity = useRef(new Animated.Value(0.4)).current;
@@ -471,7 +501,7 @@ function FullScreenImagePreviewInner({
   onSend: (message: string) => void;
   isSending?: boolean;
 }) {
-  const { colors } = useTheme();
+  const colors = useChatColors();
   const [caption, setCaption] = useState('');
   const [page, setPage] = useState(0);
 
@@ -643,7 +673,7 @@ export function MinimalAIChat() {
   // Pass the account object itself: a passkey session marks it (lib/passkey/active.ts), and a
   // copied { address, signMessage } would lose that and fall back to a passkey signature.
   const signingAccount: SigningAccount | null = thirdwebAccount ?? null;
-  const { colors } = useTheme();
+  const colors = useChatColors();
   const { activeAccount } = useAccount();
   const { user } = useUser();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -1416,7 +1446,7 @@ export function MinimalAIChat() {
 
                     <TextInput
                       ref={inputRef}
-                      style={[styles.textInput, { backgroundColor: colors.pressedOverlay, color: colors.textPrimary }]}
+                      style={[styles.textInput, { backgroundColor: colors.surfaceSecondary, color: colors.textPrimary }]}
                       value={input}
                       onChangeText={setInput}
                       placeholder="Schreibe eine Nachricht..."
@@ -1501,10 +1531,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   messageBubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
+    maxWidth: '82%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: chatSize.bubbleRadius,
+    marginBottom: 10,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -1513,8 +1544,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
+    ...chatType.body,
   },
   loadingContainer: {
     flexDirection: 'row',

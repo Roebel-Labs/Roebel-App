@@ -44,6 +44,7 @@ import {
   glassPillBottomGap,
   glassTabWidth,
 } from '@/lib/glass-tab-geometry';
+import { glassPillPalette } from '@/lib/glass-pill-palette';
 
 export type GlassTab<K extends string> = {
   key: K;
@@ -137,28 +138,7 @@ export default function GlassTabBar<K extends string>({ tabs, activeKey, onTabPr
   }, [keyboardUp, footprint]);
 
   const palette = useMemo(
-    () =>
-      isDark
-        ? {
-            active: '#FFFFFF',
-            // Opaque: a translucent tint double-paints where icon strokes
-            // overlap (lighter joints) and reads as "disabled".
-            inactive: '#9C9CA3',
-            highlight: 'rgba(255,255,255,0.16)',
-            rim: 'rgba(255,255,255,0.14)',
-            liquidTint: variant === 'dark' ? 'rgba(20,20,22,0.55)' : 'rgba(40,41,44,0.5)',
-            wash: variant === 'dark' ? 'rgba(0,0,0,0.35)' : 'rgba(24,25,27,0.2)',
-            shadow: '0px 10px 30px rgba(0,0,0,0.55)',
-          }
-        : {
-            active: '#000000',
-            inactive: '#6E7079',
-            highlight: 'rgba(118,118,128,0.14)',
-            rim: 'rgba(255,255,255,0.9)',
-            liquidTint: 'rgba(255,255,255,0.6)',
-            wash: 'rgba(255,255,255,0.45)',
-            shadow: '0px 10px 30px rgba(0,0,0,0.12)',
-          },
+    () => glassPillPalette(isDark, variant),
     [isDark, variant],
   );
 

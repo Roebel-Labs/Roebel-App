@@ -156,16 +156,16 @@ export const lightColors = {
  * pure-black "Dark" theme below was added).
  */
 export const dimColors = {
-  // Backgrounds — one unified dark surface: background, feedBackground, card
-  // and popover all share the same darker tone (#18191B) by design.
-  background: '#18191B',
+  // Backgrounds — the agent chat's palette (2026-11-24): near-black page #0B0B0C, cards lifted to
+  // #1C1C1E with a soft halo (chat "Für dich" card), chips/inputs #26262A.
+  background: '#0B0B0C',
   /** Stage behind sheets and stacked cards — darker than the surface so the sheet lifts. */
-  backdrop: '#111214',
-  surface: '#3c4043',
-  surfaceSecondary: '#2d2e31',
-  feedBackground: '#18191B',
+  backdrop: '#000000',
+  surface: '#26262A',
+  surfaceSecondary: '#1F1F22',
+  feedBackground: '#0B0B0C',
   /** Sheets/dialogs sit a few steps above the #18191B page. */
-  sheet: '#26272A',
+  sheet: '#141416',
   scrim: 'rgba(0, 0, 0, 0.55)',
 
   // Text
@@ -180,7 +180,7 @@ export const dimColors = {
   onPrimary: '#3c4043',
 
   // Borders
-  border: '#3c4043',
+  border: '#2C2C30',
   borderSecondary: '#5f6368',
   borderTertiary: '#5f6368',
 
@@ -196,9 +196,9 @@ export const dimColors = {
   // Component-specific
   tabIconDefault: '#9aa0a6',
   tabIconActive: '#e8eaed',
-  cardPlaceholder: '#3c4043',
-  skeleton: '#3c4043',
-  pressedOverlay: '#3c4043',
+  cardPlaceholder: '#26262A',
+  skeleton: '#222225',
+  pressedOverlay: '#26262A',
   switchTrackOff: '#5f6368',
   categoryBackground: '#1a3a5c',
   disabled: '#5f6368',
@@ -206,20 +206,20 @@ export const dimColors = {
 
   // Extended / shadcn-aligned (mirrors Figma "Röbel Design System" collection)
   foreground: '#E8EAED',
-  card: '#18191B',
+  card: '#1C1C1E',
   cardForeground: '#E8EAED',
-  popover: '#18191B',
+  popover: '#1C1C1E',
   popoverForeground: '#E8EAED',
   primaryForeground: '#202124',
-  secondary: '#323436',
+  secondary: '#26262A',
   secondaryForeground: '#E8EAED',
-  muted: '#323436',
+  muted: '#26262A',
   mutedForeground: '#9DA0A4',
-  accent: '#323436',
+  accent: '#26262A',
   accentForeground: '#E8EAED',
   destructive: '#7F1D1D',
   destructiveForeground: '#E8EAED',
-  input: '#43464A',
+  input: '#2C2C30',
   ring: '#7ABBF2',
   info: '#5C9AF8',
   infoBackground: '#1E3A8A',

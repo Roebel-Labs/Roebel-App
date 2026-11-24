@@ -5,16 +5,25 @@ import { usePathname } from 'expo-router';
 import PressableScale from '@/components/PressableScale';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { softShadow } from '@/lib/shadow';
 import { goToTab } from '@/lib/navigation/goToTab';
 import { BADGES_BANNER_HEIGHT } from '@/components/profile/BadgesBanner';
+import { useBannerSurface } from '@/components/profile/bannerSurface';
 
-// Figma node 3128:1321: Ida, Lumi, Eiko, Olli, Mecky and Pilzi as round avatars.
-const ILLUSTRATION = require('@/assets/illustration/agents/agent_cluster.webp');
+// Figma frame 3128:1321 (120 × 105 pt): each mascot is its own round, transparent image placed at
+// its Figma position, so the banner's own surface shows through (light, dim and dark).
+const MASCOTS = [
+  { key: 'ida', src: require('@/assets/illustration/agents/ida.png'), x: 0, y: 40.7, size: 35 },
+  { key: 'lumi', src: require('@/assets/illustration/agents/lumi.png'), x: 18.5, y: -8, size: 34.5 },
+  { key: 'eiko', src: require('@/assets/illustration/agents/eiko.png'), x: 76, y: 1, size: 31.3 },
+  { key: 'olli', src: require('@/assets/illustration/agents/olli.png'), x: 83.3, y: 53.2, size: 49.5 },
+  { key: 'mecky', src: require('@/assets/illustration/agents/mecky.png'), x: 37.9, y: 25.7, size: 44.8 },
+  { key: 'pilzi', src: require('@/assets/illustration/agents/pilzi.png'), x: 34.4, y: 75.3, size: 41.7 },
+] as const;
 
 /** Org Profil banner "KI Helfer — Deine Stadt-Helfer" → the Chat tab (agent chat). Same frame as BadgesBanner. */
 export default function AgentHelperBanner({ inset = 16 }: { inset?: number }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const surface = useBannerSurface();
   const pathname = usePathname();
   return (
     <PressableScale
@@ -24,7 +33,7 @@ export default function AgentHelperBanner({ inset = 16 }: { inset?: number }) {
       accessibilityLabel="KI Helfer: Deine Stadt-Helfer öffnen"
       style={[styles.wrap, { marginHorizontal: inset }]}
     >
-      <View style={[styles.shadow, { backgroundColor: isDark ? colors.surface : '#FFFFFF' }, softShadow(2, isDark)]}>
+      <View style={[styles.shadow, surface]}>
         <View style={styles.clip}>
           <View style={styles.textBlock}>
             <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>KI Helfer</Text>
@@ -32,7 +41,17 @@ export default function AgentHelperBanner({ inset = 16 }: { inset?: number }) {
               Deine Stadt-Helfer
             </Text>
           </View>
-          <Image source={ILLUSTRATION} style={styles.illustration} contentFit="contain" accessible={false} />
+          <View style={styles.cluster} pointerEvents="none">
+            {MASCOTS.map((m) => (
+              <Image
+                key={m.key}
+                source={m.src}
+                style={{ position: 'absolute', left: m.x, top: m.y, width: m.size, height: m.size }}
+                contentFit="contain"
+                accessible={false}
+              />
+            ))}
+          </View>
         </View>
       </View>
     </PressableScale>
@@ -43,8 +62,8 @@ const styles = StyleSheet.create({
   wrap: { marginTop: 16 },
   shadow: { borderRadius: 24 },
   clip: { height: BADGES_BANNER_HEIGHT, borderRadius: 24, overflow: 'hidden', flexDirection: 'row', alignItems: 'center' },
-  textBlock: { flex: 1, paddingLeft: 18, paddingRight: 140, gap: 4 },
+  textBlock: { flex: 1, paddingLeft: 18, paddingRight: 136, gap: 2 },
   eyebrow: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18 },
-  title: { fontFamily: fontFamily.heading, fontSize: 24, lineHeight: 28 },
-  illustration: { position: 'absolute', right: -6, top: -8, width: 136, height: 120 },
+  title: { fontFamily: fontFamily.heading, fontSize: 19, lineHeight: 23 },
+  cluster: { position: 'absolute', right: 0, top: 4, width: 132, height: 112 },
 });

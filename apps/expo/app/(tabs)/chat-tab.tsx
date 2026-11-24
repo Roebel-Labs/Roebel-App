@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ChatProvider } from '@/context/ChatContext';
 import { ChatSheetsProvider } from '@/components/chat/ChatSheetsProvider';
 import { ChatHomeChromeContext } from '@/components/chat/ChatHomeChrome';
@@ -21,18 +22,23 @@ export default function ChatTab() {
   );
   if (!allowed) return <View style={[styles.flex, { backgroundColor: colors.background }]} />;
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <ChatProvider>
-        <ChatSheetsProvider>
-          <ChatHomeChromeContext.Provider value={chrome}>
-            <ChatIndexScreen />
-          </ChatHomeChromeContext.Provider>
-        </ChatSheetsProvider>
-      </ChatProvider>
-      <View style={styles.nav} pointerEvents="box-none">
-        <BottomNavigation activeTab="chat" glass />
+    <GlassProvider>
+      <View style={[styles.flex, { backgroundColor: colors.background }]}>
+        {/* Blur target for the glass bar (Android samples it; iOS blurs natively). */}
+        <GlassBackdrop style={styles.flex}>
+          <ChatProvider>
+            <ChatSheetsProvider>
+              <ChatHomeChromeContext.Provider value={chrome}>
+                <ChatIndexScreen />
+              </ChatHomeChromeContext.Provider>
+            </ChatSheetsProvider>
+          </ChatProvider>
+        </GlassBackdrop>
+        <View style={styles.nav} pointerEvents="box-none">
+          <BottomNavigation activeTab="chat" glass />
+        </View>
       </View>
-    </View>
+    </GlassProvider>
   );
 }
 

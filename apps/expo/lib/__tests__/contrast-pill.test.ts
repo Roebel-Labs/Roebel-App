@@ -8,7 +8,7 @@ describe('contrast pill placement', () => {
   it('floats 12 pt above the visible glass bar without a home indicator', () => {
     expect(contrastPillBottom(0)).toBe(glassBarFootprint(0) - GLASS_PILL_TOP_GAP + 12);
   });
-  it('is 48 pt tall', () => {
-    expect(CONTRAST_PILL_HEIGHT).toBe(48);
+  it('is 44 pt tall', () => {
+    expect(CONTRAST_PILL_HEIGHT).toBe(44);
   });
 });

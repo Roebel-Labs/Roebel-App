@@ -39,7 +39,6 @@ import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
 import BadgesBanner from '@/components/profile/BadgesBanner';
-import AttesterTasksCard from '@/components/profile/AttesterTasksCard';
 import OrgProfileBanners from '@/components/profile/OrgProfileBanners';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
@@ -54,16 +53,14 @@ import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import SwitchIcon from '@/assets/icons/arrow-data-transfer-horizontal.svg';
 import ContrastPill from '@/components/ContrastPill';
-import OrgOverviewCard from '@/components/profile/org/OrgOverviewCard';
 import { useAccountSwitchFlow } from '@/context/AccountSwitchFlowContext';
 import { decideSwitchStart, pillAvatarAccount } from '@/lib/account-switch-flow';
-import { CONTRAST_PILL_GAP } from '@/lib/contrast-pill';
-import { GLASS_PILL_TOP_GAP } from '@/lib/glass-tab-geometry';
+import { contrastPillBottom } from '@/lib/contrast-pill';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
 import { ProfileEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
-import { useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
+import { useNavHideStyle, usePillFadeStyle, useScrollChrome } from '@/hooks/useScrollChrome';
 
 /** How far the header's fade reaches below the bar itself. */
 const HEADER_FADE = 28;
@@ -89,7 +86,7 @@ export default function ProfileScreen() {
   const { hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const isCitizen = useIsCitizen();
   const { user, refreshUser } = useUser();
-  const { activeAccount, ownedAccounts, refreshAccounts, roleInActiveAccount } = useAccount();
+  const { activeAccount, ownedAccounts, refreshAccounts } = useAccount();
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -101,6 +98,7 @@ export default function ProfileScreen() {
   const [headerHeight, setHeaderHeight] = useState(56);
   const chrome = useScrollChrome();
   const navHideStyle = useNavHideStyle(chrome.visible);
+  const pillFadeStyle = usePillFadeStyle(chrome.visible);
   const headerFadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(chrome.y.value, [8, 56], [0, 1], Extrapolation.CLAMP),
   }));
@@ -338,7 +336,6 @@ export default function ProfileScreen() {
                 )}
                 <OrgProfileBanners />
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
-                {(roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin') && <OrgOverviewCard />}
                 <ProfileMenu variant="org" />
               </ProfileSheet>
               </GlassBackdrop>
@@ -382,7 +379,6 @@ export default function ProfileScreen() {
                   />
                   <BadgesBanner eyebrow="Sammlung" title="Deine Abzeichen" onPress={() => router.push('/badges' as any)} />
                   <ProfileCompletionCard user={user} />
-                  {hasAttesterNFT && <AttesterTasksCard />}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (
@@ -443,19 +439,24 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Fades out on scroll-down like Erkunden's Karte pill; floats just above the glass bar. */}
+        {isConnected && ownedAccounts.length > 1 ? (
+          <Animated.View
+            style={[styles.switchPill, { bottom: contrastPillBottom(insets.bottom) }, pillFadeStyle]}
+            pointerEvents="box-none"
+          >
+            <ContrastPill
+              label="Account wechseln"
+              onPress={handleSwitchPress}
+              disabled={isSwitching}
+              leading={(p) => <SwitchPillAvatar account={pillAccount} personalAvatarUrl={personalAvatarUrl} ring={p.solid} />}
+              trailing={(p) => <SwitchIcon width={18} height={18} color={p.active} />}
+            />
+          </Animated.View>
+        ) : null}
+
         {/* Slides away on scroll-down, like Austausch. */}
         <Animated.View style={[styles.navOverlay, navHideStyle]} pointerEvents="box-none">
-          {isConnected && ownedAccounts.length > 1 ? (
-            <View style={styles.switchPill} pointerEvents="box-none">
-              <ContrastPill
-                label="Account wechseln"
-                onPress={handleSwitchPress}
-                disabled={isSwitching}
-                leading={<SwitchPillAvatar account={pillAccount} personalAvatarUrl={personalAvatarUrl} />}
-                trailing={<SwitchIcon width={20} height={20} color="#FFFFFF" />}
-              />
-            </View>
-          ) : null}
           <BottomNavigation activeTab="profile" onTabPress={handleTabPress} glass />
         </Animated.View>
 
@@ -531,18 +532,18 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginBottom: 12 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
-  switchPill: { alignItems: 'center', marginBottom: CONTRAST_PILL_GAP - GLASS_PILL_TOP_GAP },
-  pillAvatar: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' },
+  switchPill: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 9 },
+  pillAvatar: { width: 26, height: 26, borderRadius: 13, borderWidth: 2 },
   pillAvatarFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#00498B' },
   pillAvatarInitial: { color: '#FFFFFF', fontFamily: 'MonaSans-SemiBold', fontSize: 13 },
 });
 
-/** 28 pt avatar on the switch pill (white ring so it lifts off the dark fill). */
-function SwitchPillAvatar({ account, personalAvatarUrl }: { account: Account | null; personalAvatarUrl: string | null }) {
+/** 26 pt avatar on the switch pill; its ring is the pill's own color. */
+function SwitchPillAvatar({ account, personalAvatarUrl, ring }: { account: Account | null; personalAvatarUrl: string | null; ring: string }) {
   const url = !account ? null : account.account_type === 'personal' ? personalAvatarUrl : account.avatar_url || account.cover_url;
-  if (url) return <Image source={{ uri: url }} style={styles.pillAvatar} contentFit="cover" />;
+  if (url) return <Image source={{ uri: url }} style={[styles.pillAvatar, { borderColor: ring }]} contentFit="cover" />;
   return (
-    <View style={[styles.pillAvatar, styles.pillAvatarFallback]}>
+    <View style={[styles.pillAvatar, styles.pillAvatarFallback, { borderColor: ring }]}>
       <Text style={styles.pillAvatarInitial}>{(account?.name ?? '?').slice(0, 1).toUpperCase()}</Text>
     </View>
   );
