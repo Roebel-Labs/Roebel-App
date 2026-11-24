@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import ReanimatedAnimated, {
   useAnimatedStyle,
@@ -9,12 +10,9 @@ import ReanimatedAnimated, {
   Easing,
   type SharedValue,
 } from 'react-native-reanimated';
-import { useTheme } from '@/context/ThemeContext';
-import { fontFamily } from '@/constants/theme';
-import { glassChrome } from '@/components/GlassIconButton';
-import GlassSurface from '@/components/GlassSurface';
+import ContrastPill from '@/components/ContrastPill';
 import { LocationIcon } from '@/components/Icons';
-import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { contrastPillBottom } from '@/lib/contrast-pill';
 
 type Props = {
   /**
@@ -41,10 +39,7 @@ export default function MapFAB({
   bottomOffset = 0,
 }: Props) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const { rim, shadow } = glassChrome(isDark);
-  const scale = useSharedValue(1);
-  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const insets = useSafeAreaInsets();
   // Fallback for callers that don't drive show/hide — created unconditionally
   // to satisfy the rules of hooks, only actually used when `visible` is omitted.
   const alwaysVisible = useSharedValue(true);
@@ -69,40 +64,16 @@ export default function MapFAB({
     pointerEvents: visibleShared.value ? 'auto' : 'none',
   }));
 
-  // One ease-out each way — no spring overshoot.
-  const handlePressIn = () => {
-    scale.set(withTiming(0.95, { duration: 90, easing: Easing.out(Easing.quad) }));
-  };
-  const handlePressOut = () => {
-    scale.set(withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) }));
-  };
-
   return (
     <ReanimatedAnimated.View
-      style={[styles.container, bottomOffset ? { bottom: BOTTOM_NAV_HEIGHT + 40 + bottomOffset } : null, animatedStyle]}
+      style={[styles.container, { bottom: contrastPillBottom(insets.bottom) + bottomOffset }, animatedStyle]}
     >
-      <ReanimatedAnimated.View style={scaleStyle}>
-        <Pressable
-          onPress={() => router.push(href as any)}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          style={[styles.pill, { boxShadow: shadow } as ViewStyle]}
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
-        >
-          {/* Frosted pill: the outer pressable carries the shadow, the inner
-              view clips the glass — same material as the map's controls. */}
-          <View style={[styles.clip, { borderColor: rim }]}>
-            {/* Real backdrop blur (iOS chrome material; Android samples the screen's
-                GlassBackdrop) with the nav's wash on top — the same glass as the pill nav. */}
-            <GlassSurface androidExperimentalBlur />
-            <View style={styles.content}>
-              {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
-              <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
-            </View>
-          </View>
-        </Pressable>
-      </ReanimatedAnimated.View>
+      <ContrastPill
+        label={label}
+        onPress={() => router.push(href as any)}
+        leading={icon ?? <LocationIcon size={18} color="#FFFFFF" />}
+        accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
+      />
     </ReanimatedAnimated.View>
   );
 }
@@ -110,29 +81,9 @@ export default function MapFAB({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: BOTTOM_NAV_HEIGHT + 40,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 10,
-  },
-  pill: {
-    borderRadius: 24,
-  },
-  clip: {
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  label: {
-    fontSize: 15,
-    fontFamily: fontFamily.medium,
   },
 });
