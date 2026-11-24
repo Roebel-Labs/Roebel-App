@@ -25,8 +25,13 @@ export default function OrgOverviewCard() {
   const all = useAnalyticsTotals(range, null);
   const posts = useAnalyticsTotals(range, 'post');
   const profile = useAnalyticsTotals(range, 'profile');
+  // Reach per day: everything seen or opened, minus post detail opens (already an impression in the feed).
   const trend = useAnalyticsSeries(range, ['view', 'impression', 'open']);
+  const postOpens = useAnalyticsSeries(range, ['view'], 'post');
   const days = eachDay(range);
+  const reach = sumSeries(trend.data, ['view', 'impression', 'open'], days.length).map(
+    (v, i) => v - (postOpens.data?.view?.[i] ?? 0)
+  );
 
   if (all.error) return null; // analytics not available yet: keep the profile clean
   const metrics = all.data && posts.data && profile.data ? orgOverviewMetrics(all.data, posts.data, profile.data) : null;
@@ -59,7 +64,7 @@ export default function OrgOverviewCard() {
       </View>
       <LineAreaChart
         height={110}
-        values={sumSeries(trend.data, ['view', 'impression', 'open'], days.length)}
+        values={reach}
         labels={days.map(shortDayLabel)}
       />
       <Pressable onPress={() => goToTab('dashboard', pathname)} style={styles.link} accessibilityRole="button">

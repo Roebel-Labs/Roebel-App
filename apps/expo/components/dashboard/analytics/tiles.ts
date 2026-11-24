@@ -5,14 +5,16 @@ import type { AnalyticsMetric, AnalyticsObjectType, Totals } from '@/lib/analyti
 export type TileDef = { key: string; label: string; metrics: AnalyticsMetric[]; objectType: AnalyticsObjectType | null };
 
 export const OVERVIEW_TILES: TileDef[] = [
-  { key: 'post_views', label: 'Beitragsaufrufe', metrics: ['view', 'impression'], objectType: 'post' },
+  // Feed impressions and detail opens are separate numbers: one read is often both.
+  { key: 'post_views', label: 'Beitragsaufrufe', metrics: ['impression'], objectType: 'post' },
+  { key: 'post_opens', label: 'Beiträge geöffnet', metrics: ['view'], objectType: 'post' },
   { key: 'profile_views', label: 'Profilaufrufe', metrics: ['view'], objectType: 'profile' },
   { key: 'likes', label: 'Likes', metrics: ['like'], objectType: null },
   { key: 'comments', label: 'Kommentare', metrics: ['comment'], objectType: null },
   { key: 'shares', label: 'Geteilt', metrics: ['share'], objectType: null },
   { key: 'clicks', label: 'Klicks', metrics: ['click', 'link_tap'], objectType: null },
   { key: 'follows', label: 'Neue Follower', metrics: ['follow'], objectType: null },
-  { key: 'all_views', label: 'Alle Aufrufe', metrics: ['view', 'impression', 'open'], objectType: null },
+  { key: 'deal_views', label: 'Anzeigen-Aufrufe', metrics: ['view'], objectType: 'deal' },
 ];
 
 export function tileTotal(t: TileDef, totals: Totals | undefined): { current: number; previous: number } {
@@ -62,7 +64,7 @@ export function orgOverviewMetrics(
   const sum = (t: Totals, ms: AnalyticsMetric[]) =>
     ms.reduce((a, m) => ({ current: a.current + t[m].current, previous: a.previous + t[m].previous }), { current: 0, previous: 0 });
   const rows: [string, { current: number; previous: number }][] = [
-    ['Beitragsaufrufe', sum(posts, ['view', 'impression'])],
+    ['Beitragsaufrufe', sum(posts, ['impression'])],
     ['Profilaufrufe', sum(profile, ['view'])],
     ['Neue Follower', sum(all, ['follow'])],
     ['Interaktionen', sum(all, ['like', 'comment', 'share', 'click', 'link_tap'])],

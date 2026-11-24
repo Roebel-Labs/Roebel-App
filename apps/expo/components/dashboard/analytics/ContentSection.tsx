@@ -10,12 +10,12 @@ import type { AnalyticsMetric } from '@/lib/analytics/queries';
 import Card from './Card';
 import TopList from './TopList';
 
-const VIEW_METRICS: AnalyticsMetric[] = ['view', 'impression', 'open'];
-const TYPES = [
-  { type: 'post' as const, label: 'Beiträge' },
-  { type: 'deal' as const, label: 'Anzeigen' },
-  { type: 'event' as const, label: 'Veranstaltungen' },
-  { type: 'mini_app' as const, label: 'Mini-Apps' },
+// Posts count feed impressions; everything else counts page views / opens (never both for one type).
+const TYPES: { type: 'post' | 'deal' | 'event' | 'mini_app'; label: string; metrics: AnalyticsMetric[] }[] = [
+  { type: 'post', label: 'Beiträge', metrics: ['impression'] },
+  { type: 'deal', label: 'Anzeigen', metrics: ['view'] },
+  { type: 'event', label: 'Veranstaltungen', metrics: ['view'] },
+  { type: 'mini_app', label: 'Mini-Apps', metrics: ['open'] },
 ];
 const TOP_METRICS: { metric: AnalyticsMetric; label: string; unit: string }[] = [
   { metric: 'impression', label: 'Impressionen', unit: 'Impr.' },
@@ -29,10 +29,10 @@ export default function ContentSection({ range }: { range: DayRange }) {
   const { colors } = useTheme();
   const [topMetric, setTopMetric] = useState(TOP_METRICS[0]);
   const days = eachDay(range);
-  const post = useAnalyticsSeries(range, VIEW_METRICS, 'post');
-  const deal = useAnalyticsSeries(range, VIEW_METRICS, 'deal');
-  const event = useAnalyticsSeries(range, VIEW_METRICS, 'event');
-  const mini = useAnalyticsSeries(range, VIEW_METRICS, 'mini_app');
+  const post = useAnalyticsSeries(range, TYPES[0].metrics, 'post');
+  const deal = useAnalyticsSeries(range, TYPES[1].metrics, 'deal');
+  const event = useAnalyticsSeries(range, TYPES[2].metrics, 'event');
+  const mini = useAnalyticsSeries(range, TYPES[3].metrics, 'mini_app');
   const results = [post, deal, event, mini];
   const top = useTopObjects(range, topMetric.metric);
 
@@ -42,7 +42,7 @@ export default function ContentSection({ range }: { range: DayRange }) {
     : days.map(shortDayLabel);
   const series = TYPES.map((t, i) => ({
     label: t.label,
-    values: bucketSeries(sumSeries(results[i].data, VIEW_METRICS, days.length), 7),
+    values: bucketSeries(sumSeries(results[i].data, t.metrics, days.length), 7),
   }));
 
   return (

@@ -18,7 +18,9 @@ export default function OverviewSection({ range }: { range: DayRange }) {
   const all = useAnalyticsTotals(range, null);
   const posts = useAnalyticsTotals(range, 'post');
   const profile = useAnalyticsTotals(range, 'profile');
-  const totalsFor = (type: string | null) => (type === 'post' ? posts.data : type === 'profile' ? profile.data : all.data);
+  const deals = useAnalyticsTotals(range, 'deal');
+  const totalsFor = (type: string | null) =>
+    type === 'post' ? posts.data : type === 'profile' ? profile.data : type === 'deal' ? deals.data : all.data;
 
   const prev = useMemo(() => previousRange(range), [range]);
   const cur = useAnalyticsSeries(range, tile.metrics, tile.objectType);

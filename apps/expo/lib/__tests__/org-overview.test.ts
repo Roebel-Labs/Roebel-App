@@ -13,7 +13,7 @@ describe('orgOverviewMetrics', () => {
     ]);
   });
 
-  it('sums views + impressions for posts and interactions across kinds', () => {
+  it('counts post reach once (feed impressions) and interactions across kinds', () => {
     const all = zero();
     all.like = { current: 3, previous: 1 };
     all.comment = { current: 2, previous: 1 };
@@ -23,7 +23,7 @@ describe('orgOverviewMetrics', () => {
     posts.view = { current: 10, previous: 5 };
     posts.impression = { current: 90, previous: 45 };
     const m = orgOverviewMetrics(all, posts, zero());
-    expect(m[0]).toEqual({ label: 'Beitragsaufrufe', value: 100, delta: 100 });
+    expect(m[0]).toEqual({ label: 'Beitragsaufrufe', value: 90, delta: 100 });
     expect(m[3]).toEqual({ label: 'Interaktionen', value: 10, delta: 400 });
   });
 
@@ -31,5 +31,14 @@ describe('orgOverviewMetrics', () => {
     const profile = zero();
     profile.view = { current: 5, previous: 0 };
     expect(orgOverviewMetrics(zero(), zero(), profile)[1].delta).toBeNull();
+  });
+});
+
+import { OVERVIEW_TILES } from '../../components/dashboard/analytics/tiles';
+describe('OVERVIEW_TILES', () => {
+  it('never adds views and impressions into one number', () => {
+    for (const t of OVERVIEW_TILES) {
+      expect(t.metrics.includes('view') && t.metrics.includes('impression')).toBe(false);
+    }
   });
 });
