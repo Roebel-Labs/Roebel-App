@@ -111,13 +111,16 @@ $$;
 
 create or replace function public.analytics_viewer_hash(p_wallet text) returns text
 language plpgsql volatile security definer set search_path = public as $$
-declare v_salt text;
+declare
+  v_salt text;
+  v_day date := (now() at time zone 'Europe/Berlin')::date; -- same day boundary as the counters
 begin
   if p_wallet is null or btrim(p_wallet) = '' then return null; end if;
-  insert into analytics_salt(day, salt) values (current_date, encode(gen_random_bytes(16), 'hex'))
+  -- pgcrypto lives in the `extensions` schema on Supabase: qualify, search_path is pinned to public.
+  insert into analytics_salt(day, salt) values (v_day, encode(extensions.gen_random_bytes(16), 'hex'))
   on conflict (day) do nothing;
-  select salt into v_salt from analytics_salt where day = current_date;
-  return encode(digest(lower(p_wallet) || v_salt, 'sha256'), 'hex');
+  select salt into v_salt from analytics_salt where day = v_day;
+  return encode(extensions.digest(lower(p_wallet) || v_salt, 'sha256'), 'hex');
 end $$;
 
 -- Record one event: raw row + daily counter. Owner resolved from the object.
