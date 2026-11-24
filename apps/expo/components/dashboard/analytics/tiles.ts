@@ -1,3 +1,4 @@
+import { deltaPercent } from '@/lib/charts/ranges';
 import type { AnalyticsMetric, AnalyticsObjectType, Totals } from '@/lib/analytics/queries';
 
 /** Key-metric tiles on Übersicht. Each tile = a sum of metrics, optionally for one object type. */
@@ -51,3 +52,20 @@ export function engagementRate(interactions: number, views: number): string {
   return `${(Math.round((interactions / views) * 1000) / 10).toString().replace('.', ',')} %`;
 }
 
+
+/** The four numbers on the org Profil overview card (28 days). */
+export function orgOverviewMetrics(
+  all: Totals,
+  posts: Totals,
+  profile: Totals
+): { label: string; value: number; delta: number | null }[] {
+  const sum = (t: Totals, ms: AnalyticsMetric[]) =>
+    ms.reduce((a, m) => ({ current: a.current + t[m].current, previous: a.previous + t[m].previous }), { current: 0, previous: 0 });
+  const rows: [string, { current: number; previous: number }][] = [
+    ['Beitragsaufrufe', sum(posts, ['view', 'impression'])],
+    ['Profilaufrufe', sum(profile, ['view'])],
+    ['Neue Follower', sum(all, ['follow'])],
+    ['Interaktionen', sum(all, ['like', 'comment', 'share', 'click', 'link_tap'])],
+  ];
+  return rows.map(([label, v]) => ({ label, value: v.current, delta: deltaPercent(v.current, v.previous) }));
+}

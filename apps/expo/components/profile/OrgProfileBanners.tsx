@@ -5,12 +5,13 @@ import { useTheme } from '@/context/ThemeContext';
 import { DANCECUP_SLUG } from '@/lib/sponsoring';
 import SponsoringBanner, { useSponsoringOpen } from '@/components/profile/SponsoringBanner';
 import BadgesBanner from '@/components/profile/BadgesBanner';
+import AgentHelperBanner from '@/components/profile/AgentHelperBanner';
 
 const DOT = 5;
 
 /**
  * Banners on an organisation's profile. One banner shows on its own; two or more become a paged
- * carousel with small dots below. "Abzeichen erstellen" is always there; the sponsoring campaign
+ * carousel with small dots below. "KI Helfer" (→ Chat tab) leads, "Abzeichen erstellen" is always there; the sponsoring campaign
  * joins while its booking is open.
  */
 export default function OrgProfileBanners() {
@@ -21,6 +22,7 @@ export default function OrgProfileBanners() {
   const [page, setPage] = useState(0);
 
   const slides: { key: string; node: React.ReactNode }[] = [
+    { key: 'agents', node: <AgentHelperBanner /> },
     {
       key: 'badges',
       node: (

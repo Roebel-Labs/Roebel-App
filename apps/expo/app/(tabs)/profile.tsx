@@ -54,6 +54,7 @@ import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
 import SwitchIcon from '@/assets/icons/arrow-data-transfer-horizontal.svg';
 import ContrastPill from '@/components/ContrastPill';
+import OrgOverviewCard from '@/components/profile/org/OrgOverviewCard';
 import { useAccountSwitchFlow } from '@/context/AccountSwitchFlowContext';
 import { decideSwitchStart, pillAvatarAccount } from '@/lib/account-switch-flow';
 import { CONTRAST_PILL_GAP } from '@/lib/contrast-pill';
@@ -88,7 +89,7 @@ export default function ProfileScreen() {
   const { hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const isCitizen = useIsCitizen();
   const { user, refreshUser } = useUser();
-  const { activeAccount, ownedAccounts, refreshAccounts } = useAccount();
+  const { activeAccount, ownedAccounts, refreshAccounts, roleInActiveAccount } = useAccount();
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -337,6 +338,7 @@ export default function ProfileScreen() {
                 )}
                 <OrgProfileBanners />
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
+                {(roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin') && <OrgOverviewCard />}
                 <ProfileMenu variant="org" />
               </ProfileSheet>
               </GlassBackdrop>
