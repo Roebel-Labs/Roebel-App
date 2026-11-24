@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
@@ -24,7 +25,7 @@ import { useProfileCredentials } from '@/hooks/useProfileCredentials';
 import { useHolder } from '@/lib/card-design/holder-values';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
-import { SUB_TYPE_EMOJI } from '@/lib/types';
+import { SUB_TYPE_EMOJI, type Account } from '@/lib/types';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import LoginDrawer from '@/components/LoginDrawer';
@@ -51,13 +52,17 @@ import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supaba
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
-import QrCodeIcon from '@/assets/icons/qr-code.svg';
+import SwitchIcon from '@/assets/icons/arrow-data-transfer-horizontal.svg';
+import ContrastPill from '@/components/ContrastPill';
+import { useAccountSwitchFlow } from '@/context/AccountSwitchFlowContext';
+import { decideSwitchStart, pillAvatarAccount } from '@/lib/account-switch-flow';
+import { CONTRAST_PILL_GAP } from '@/lib/contrast-pill';
+import { GLASS_PILL_TOP_GAP } from '@/lib/glass-tab-geometry';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
-import GlassIconButton from '@/components/GlassIconButton';
 import ScreenTransition from '@/components/skeleton/ScreenTransition';
 import { ProfileEntrySkeleton } from '@/components/skeleton/EntrySkeletons';
-import { useNavCompanionStyle, useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
+import { useNavHideStyle, useScrollChrome } from '@/hooks/useScrollChrome';
 
 /** How far the header's fade reaches below the bar itself. */
 const HEADER_FADE = 28;
@@ -83,7 +88,7 @@ export default function ProfileScreen() {
   const { hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const isCitizen = useIsCitizen();
   const { user, refreshUser } = useUser();
-  const { activeAccount, ownedAccounts, recentOtherAccounts, switchAccount, refreshAccounts } = useAccount();
+  const { activeAccount, ownedAccounts, refreshAccounts } = useAccount();
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -95,7 +100,6 @@ export default function ProfileScreen() {
   const [headerHeight, setHeaderHeight] = useState(56);
   const chrome = useScrollChrome();
   const navHideStyle = useNavHideStyle(chrome.visible);
-  const companionStyle = useNavCompanionStyle(chrome.visible);
   const headerFadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(chrome.y.value, [8, 56], [0, 1], Extrapolation.CLAMP),
   }));
@@ -155,6 +159,14 @@ export default function ProfileScreen() {
       disconnect(wallet);
       setShowLogoutDrawer(false);
     }
+  };
+
+  const { switchTo, isSwitching } = useAccountSwitchFlow();
+  const pillAccount = pillAvatarAccount(activeAccount?.id ?? null, ownedAccounts);
+  const handleSwitchPress = () => {
+    const start = decideSwitchStart({ activeId: activeAccount?.id ?? null, accounts: ownedAccounts });
+    if (start.kind === 'direct') switchTo(start.targetId);
+    else if (start.kind === 'sheet') setShowAccountSheet(true);
   };
 
   const handleTabPress = (tab: Tab) => {
@@ -425,28 +437,23 @@ export default function ProfileScreen() {
           </Animated.View>
           <ProfileHeader
             title={isConnected ? profileHeaderTitle(activeAccount) : 'Profil'}
-            switcherVisible={isConnected && ownedAccounts.length > 1}
-            recentOtherAccounts={recentOtherAccounts}
-            personalAvatarUrl={personalAvatarUrl}
-            onSwitch={() => setShowAccountSheet(true)}
+            onQrPress={!isOrg && hasAnyNFT ? () => router.push('/verification/scan' as any) : undefined}
           />
         </View>
 
-        {hasAnyNFT && (
-          <Animated.View style={[styles.qrFab, companionStyle]}>
-            <GlassIconButton
-              size={56}
-              tint={colors.primary}
-              onPress={() => router.push('/verification/scan' as any)}
-              accessibilityLabel="QR-Code scannen"
-            >
-              <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
-            </GlassIconButton>
-          </Animated.View>
-        )}
-
         {/* Slides away on scroll-down, like Austausch. */}
-        <Animated.View style={[styles.navOverlay, navHideStyle]}>
+        <Animated.View style={[styles.navOverlay, navHideStyle]} pointerEvents="box-none">
+          {isConnected && ownedAccounts.length > 1 ? (
+            <View style={styles.switchPill} pointerEvents="box-none">
+              <ContrastPill
+                label="Account wechseln"
+                onPress={handleSwitchPress}
+                disabled={isSwitching}
+                leading={<SwitchPillAvatar account={pillAccount} personalAvatarUrl={personalAvatarUrl} />}
+                trailing={<SwitchIcon width={20} height={20} color="#FFFFFF" />}
+              />
+            </View>
+          ) : null}
           <BottomNavigation activeTab="profile" onTabPress={handleTabPress} glass />
         </Animated.View>
 
@@ -476,8 +483,8 @@ export default function ProfileScreen() {
           personalAvatarUrl={personalAvatarUrl}
           personalName={user?.username ?? null}
           onSelect={(id) => {
-            switchAccount(id);
             setShowAccountSheet(false);
+            switchTo(id);
           }}
           onLogout={() => {
             setShowAccountSheet(false);
@@ -522,10 +529,19 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, fontFamily: 'MonaSans-Regular', marginBottom: 12 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
-  qrFab: {
-    position: 'absolute',
-    bottom: BOTTOM_NAV_HEIGHT + 40,
-    right: 16,
-    zIndex: 10,
-  },
+  switchPill: { alignItems: 'center', marginBottom: CONTRAST_PILL_GAP - GLASS_PILL_TOP_GAP },
+  pillAvatar: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' },
+  pillAvatarFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#00498B' },
+  pillAvatarInitial: { color: '#FFFFFF', fontFamily: 'MonaSans-SemiBold', fontSize: 13 },
 });
+
+/** 28 pt avatar on the switch pill (white ring so it lifts off the dark fill). */
+function SwitchPillAvatar({ account, personalAvatarUrl }: { account: Account | null; personalAvatarUrl: string | null }) {
+  const url = !account ? null : account.account_type === 'personal' ? personalAvatarUrl : account.avatar_url || account.cover_url;
+  if (url) return <Image source={{ uri: url }} style={styles.pillAvatar} contentFit="cover" />;
+  return (
+    <View style={[styles.pillAvatar, styles.pillAvatarFallback]}>
+      <Text style={styles.pillAvatarInitial}>{(account?.name ?? '?').slice(0, 1).toUpperCase()}</Text>
+    </View>
+  );
+}
