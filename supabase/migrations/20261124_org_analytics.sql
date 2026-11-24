@@ -241,15 +241,15 @@ create trigger analytics_event_interest after insert on public.event_interests f
 -- ── Backfill daily counters from history (no raw events, no viewer data) ──
 insert into public.analytics_daily (owner_account_id, object_type, object_id, metric, day, count)
 select owner, 'post', post_id, 'like', day, count(*)::int from (
-  select public.analytics_owner_of('post', l.post_id::text) owner, l.post_id::text post_id, (l.created_at at time zone 'Europe/Berlin')::date day
-    from public.post_likes l) s
+  select public.analytics_owner_of('post', l.post_id::text) as owner, l.post_id::text as post_id, (l.created_at at time zone 'Europe/Berlin')::date as day
+    from public.post_likes l) as s
  where owner is not null group by owner, post_id, day
 on conflict do nothing;
 
 insert into public.analytics_daily (owner_account_id, object_type, object_id, metric, day, count)
 select owner, 'post', post_id, 'comment', day, count(*)::int from (
-  select public.analytics_owner_of('post', c.post_id::text) owner, c.post_id::text post_id, (c.created_at at time zone 'Europe/Berlin')::date day
-    from public.post_comments c) s
+  select public.analytics_owner_of('post', c.post_id::text) as owner, c.post_id::text as post_id, (c.created_at at time zone 'Europe/Berlin')::date as day
+    from public.post_comments c) as s
  where owner is not null group by owner, post_id, day
 on conflict do nothing;
 
@@ -261,8 +261,8 @@ on conflict do nothing;
 
 insert into public.analytics_daily (owner_account_id, object_type, object_id, metric, day, count)
 select owner, 'event', event_id, 'interest', day, count(*)::int from (
-  select public.analytics_owner_of('event', i.event_id::text) owner, i.event_id::text event_id, (i.created_at at time zone 'Europe/Berlin')::date day
-    from public.event_interests i) s
+  select public.analytics_owner_of('event', i.event_id::text) as owner, i.event_id::text as event_id, (i.created_at at time zone 'Europe/Berlin')::date as day
+    from public.event_interests i) as s
  where owner is not null group by owner, event_id, day
 on conflict do nothing;
 
@@ -326,7 +326,7 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   perform analytics_assert_access(p_account_id, p_wallet, p_from, p_to);
   return query
-    select ad.object_type, ad.object_id, sum(ad.count)::bigint c
+    select ad.object_type, ad.object_id, sum(ad.count)::bigint as c
       from analytics_daily ad
      where ad.owner_account_id = p_account_id and ad.metric = p_metric and ad.day between p_from and p_to
      group by ad.object_type, ad.object_id
@@ -344,7 +344,7 @@ begin
     select d::date, coalesce(u.n, 0)::bigint
       from generate_series(p_from, p_to, interval '1 day') d
       left join (
-        select (e.occurred_at at time zone 'Europe/Berlin')::date dd, count(distinct e.viewer_hash) n
+        select (e.occurred_at at time zone 'Europe/Berlin')::date as dd, count(distinct e.viewer_hash) as n
           from analytics_events e
          where e.owner_account_id = p_account_id and e.metric in ('view', 'impression') and e.viewer_hash is not null
            and e.occurred_at >= p_from::timestamp at time zone 'Europe/Berlin'
