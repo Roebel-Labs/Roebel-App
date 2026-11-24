@@ -37,7 +37,9 @@ import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
 import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
-import BadgeGrid, { hasCollectedStamp } from '@/components/profile/BadgeGrid';
+import BadgesBanner from '@/components/profile/BadgesBanner';
+import AttesterTasksCard from '@/components/profile/AttesterTasksCard';
+import OrgProfileBanners from '@/components/profile/OrgProfileBanners';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
@@ -46,8 +48,6 @@ import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
-import SponsoringBanner from '@/components/profile/SponsoringBanner';
-import { DANCECUP_SLUG } from '@/lib/sponsoring';
 import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import TallyDutyCard from '@/components/profile/TallyDutyCard';
 import MyTasksCard from '@/components/profile/MyTasksCard';
@@ -192,10 +192,6 @@ export default function ProfileScreen() {
     setDetailTile(null);
     setCardError(null);
   };
-  const openTile = (tile: BadgeTile) => {
-    setCardError(null);
-    setDetailTile(tile);
-  };
   const shareBadge = (card: RegisterCard) => {
     if (!card.eventId) return;
     dismissPushedCard();
@@ -327,7 +323,7 @@ export default function ProfileScreen() {
                     />
                   </View>
                 )}
-                <SponsoringBanner slug={DANCECUP_SLUG} />
+                <OrgProfileBanners />
                 <ProfileActionGrid items={ORG_PROFILE_ACTIONS} />
                 <ProfileMenu variant="org" />
               </ProfileSheet>
@@ -370,17 +366,9 @@ export default function ProfileScreen() {
                     onPress={() => router.push(profileHref as any)}
                     right={muenzenSlot}
                   />
+                  <BadgesBanner eyebrow="Sammlung" title="Deine Abzeichen" onPress={() => router.push('/badges' as any)} />
                   <ProfileCompletionCard user={user} />
-                  {/* Stempel: only after the first collected stamp (no empty section before). */}
-                  {creds.open && hasCollectedStamp(creds.profile.badges, creds.queued) && (
-                    <BadgeGrid
-                      badges={creds.profile.badges}
-                      pending={creds.pendingBadges}
-                      queued={creds.queued}
-                      onPress={openCard}
-                      onPressTile={openTile}
-                    />
-                  )}
+                  {hasAttesterNFT && <AttesterTasksCard />}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (

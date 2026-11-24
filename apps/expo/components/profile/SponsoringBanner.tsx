@@ -20,6 +20,25 @@ const deadlineCache = new Map<string, string | null>();
 const CARD_HEIGHT = 160;
 
 /**
+ * Whether the campaign's banner would show (booking still open): undefined while loading. Lets a
+ * carousel include the banner as a page only when it has something to show.
+ */
+export function useSponsoringOpen(slug: string): boolean | undefined {
+  const [deadline, setDeadline] = useState<string | null | undefined>(() => deadlineCache.get(slug));
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      fetchBookingDeadline(slug)
+        .then((d) => { deadlineCache.set(slug, d); if (alive) setDeadline(d); })
+        .catch(() => { if (alive) setDeadline((cur) => cur ?? null); });
+      return () => { alive = false; };
+    }, [slug]),
+  );
+  if (deadline === undefined) return undefined;
+  return !!deadline && isBookingOpen({ booking_deadline: deadline });
+}
+
+/**
  * Org-only profile card for a sponsoring campaign (DanceCup livestream). A card-sized skeleton holds
  * the space on the first load (the action grid below would jump otherwise), then the card fades in.
  * Renders nothing when the campaign is missing/inactive or after the booking deadline.
