@@ -123,6 +123,20 @@ async function requireCitizen(ctx: HarnessContext): Promise<void> {
   }
 }
 
+/**
+ * "Im Namen der Organisation": the org (owner/admin of ctx.wallet) a post or
+ * listing is published as. Re-checked against account_owners, never trusted from ctx.
+ */
+async function managedOrgFor(name: string, ctx: HarnessContext): Promise<{ id: string; name: string }> {
+  const pick = pickManagedOrg(managedOrgs(ctx), name);
+  const org = await actionsDeps.orgForManager(ctx.wallet, pick.id);
+  if (!org) throw new ToolInputError("Keine Berechtigung für diese Organisation.");
+  return { id: org.id, name: org.name };
+}
+
+const ORG_AUTHOR_HINT =
+  "Optional: Name einer Organisation, die der Mensch verwaltet (Inhaber/Admin) — dann erscheint es im Namen der Organisation. Weglassen = persönlich.";
+
 async function requirePersonalAccount(ctx: HarnessContext): Promise<string> {
   const id = await actionsDeps.personalAccountId(ctx.wallet);
   if (!id) throw new ToolInputError("Dafür braucht der Mensch ein Profil in der Röbel-App.");
@@ -235,6 +249,7 @@ function checkImageUrl(imageUrl: string | undefined): void {
 const feedInput = z.object({
   text: z.string().min(1).max(500).describe("Der Beitragstext (max. 500 Zeichen)"),
   imageUrl: z.string().url().max(1000).optional().describe(IMAGE_URL_HINT),
+  org: z.string().max(120).optional().describe(ORG_AUTHOR_HINT),
 });
 type FeedInput = z.infer<typeof feedInput>;
 
@@ -249,26 +264,30 @@ export const createFeedPost: HarnessTool<FeedInput> = {
   pack: "actions",
   risk: "public",
   description:
-    "Veröffentlicht einen Beitrag im Röbel-Feed im Namen des Menschen (nur für verifizierte Bürger/innen, max. 3 pro Tag). " +
+    "Veröffentlicht einen Beitrag im Röbel-Feed im Namen des Menschen (persönlich nur für verifizierte Bürger/innen) " +
+    "oder im Namen einer Organisation, die er verwaltet (Feld org). Max. 3 pro Tag. " +
     "Alle in der App sehen ihn und bekommen eine Benachrichtigung. Schreib den fertigen Text; der Mensch gibt ihn frei.",
   inputSchema: feedInput,
   summarize: ({ text }) => `Beitrag im Röbel-Feed veröffentlichen: „${clip(text, 70)}“`,
   preview: async (input, ctx) => {
     validateFeed(input);
-    await requireCitizen(ctx);
+    const org = input.org?.trim() ? await managedOrgFor(input.org, ctx) : null;
+    if (!org) await requireCitizen(ctx);
     await checkLimit("create_feed_post", ctx);
     return {
       kind: "post",
-      fields: [{ label: "Wo", value: "Röbel-Feed (öffentlich)" }, { label: "Von", value: authorName(ctx) }],
+      fields: [{ label: "Wo", value: "Röbel-Feed (öffentlich)" }, { label: "Von", value: org?.name ?? authorName(ctx) }],
       body: input.text.trim(),
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
     } satisfies ApprovalPreview;
   },
   execute: async (input, ctx) => {
     validateFeed(input);
-    await requireCitizen(ctx);
+    const org = input.org?.trim() ? await managedOrgFor(input.org, ctx) : null;
+    if (!org) await requireCitizen(ctx);
     await checkLimit("create_feed_post", ctx);
-    const accountId = await requirePersonalAccount(ctx);
+    // Org posts: account_id = the org (as the app's account switcher does); author wallet stays the person.
+    const accountId = org?.id ?? (await requirePersonalAccount(ctx));
     // Same row as apps/expo lib/supabase-posts createPost (citizen → no client moderation call).
     const res = await (await adminDb()).from("posts").insert({
       wallet_address: ctx.wallet.toLowerCase(),
@@ -282,7 +301,10 @@ export const createFeedPost: HarnessTool<FeedInput> = {
     }).select("id").single();
     if (res.error) throw new Error(`[actions] create post: ${res.error.message}`);
     const id = (res.data as { id: string }).id;
-    return { ok: true, postId: id, url: `${ctx.tenant.appOrigin}/app/posts/${id}`, info: "Beitrag im Röbel-Feed veröffentlicht." };
+    return {
+      ok: true, postId: id, url: `${ctx.tenant.appOrigin}/app/posts/${id}`,
+      info: org ? `Beitrag für ${org.name} im Röbel-Feed veröffentlicht.` : "Beitrag im Röbel-Feed veröffentlicht.",
+    };
   },
 };
 
@@ -528,6 +550,7 @@ const listingInput = z.object({
   price: z.number().min(0).max(1_000_000).optional().describe("Preis in Euro; 0 = zu verschenken; weglassen = Verhandlungssache"),
   category: z.string().describe(`Kategorie: ${LISTING_CATEGORIES.join(", ")}`),
   imageUrl: z.string().url().max(1000).optional().describe(IMAGE_URL_HINT),
+  org: z.string().max(120).optional().describe(ORG_AUTHOR_HINT),
 });
 type ListingInput = z.infer<typeof listingInput>;
 
@@ -539,14 +562,17 @@ export const createListing: HarnessTool<ListingInput> = {
   name: "create_listing",
   pack: "actions",
   risk: "public",
-  description: "Stellt ein Inserat (Produkt oder Dienstleistung) in den Röbel-Marktplatz, im Namen des Menschen. Es ist sofort sichtbar.",
+  description:
+    "Stellt eine Anzeige/ein Inserat (Produkt oder Dienstleistung) in den Röbel-Marktplatz, im Namen des Menschen " +
+    "oder einer Organisation, die er verwaltet (Feld org). Es ist sofort sichtbar.",
   inputSchema: listingInput,
   summarize: ({ title }) => `Inserat im Marktplatz veröffentlichen: „${clip(title, 70)}“`,
   preview: async (input, ctx) => {
     assertNoAddress(input.title, input.description);
     checkImageUrl(input.imageUrl);
     const f = listingFields(input);
-    await requirePersonalAccount(ctx);
+    const org = input.org?.trim() ? await managedOrgFor(input.org, ctx) : null;
+    if (!org) await requirePersonalAccount(ctx);
     await checkLimit("create_listing", ctx);
     return {
       kind: "listing",
@@ -554,7 +580,7 @@ export const createListing: HarnessTool<ListingInput> = {
         { label: "Titel", value: input.title.trim() },
         { label: "Preis", value: priceLabel(f) },
         { label: "Kategorie", value: f.category },
-        { label: "Von", value: authorName(ctx) },
+        { label: "Von", value: org?.name ?? authorName(ctx) },
       ],
       body: input.description.trim(),
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
@@ -564,11 +590,13 @@ export const createListing: HarnessTool<ListingInput> = {
     assertNoAddress(input.title, input.description);
     checkImageUrl(input.imageUrl);
     const f = listingFields(input);
-    await requirePersonalAccount(ctx);
+    const org = input.org?.trim() ? await managedOrgFor(input.org, ctx) : null;
+    if (!org) await requirePersonalAccount(ctx);
     await checkLimit("create_listing", ctx);
-    // Same row as apps/expo lib/supabase-marketplace createMarketplaceListing (personal → account_id null).
+    // Same row as apps/expo lib/supabase-marketplace createMarketplaceListing (personal → account_id null, org → org id).
     const res = await (await adminDb()).from("marketplace_listings").insert({
       seller_wallet_address: ctx.wallet.toLowerCase(),
+      account_id: org?.id ?? null,
       title: input.title.trim(),
       description: input.description.trim(),
       price: f.price,
@@ -581,7 +609,10 @@ export const createListing: HarnessTool<ListingInput> = {
     }).select("id").single();
     if (res.error) throw new Error(`[actions] listing: ${res.error.message}`);
     const id = (res.data as { id: string }).id;
-    return { ok: true, listingId: id, url: `${ctx.tenant.appOrigin}/app/marktplatz/${id}`, info: "Inserat im Marktplatz veröffentlicht." };
+    return {
+      ok: true, listingId: id, url: `${ctx.tenant.appOrigin}/app/marktplatz/${id}`,
+      info: org ? `Anzeige für ${org.name} im Marktplatz veröffentlicht.` : "Inserat im Marktplatz veröffentlicht.",
+    };
   },
 };
 
