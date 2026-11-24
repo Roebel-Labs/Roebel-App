@@ -211,3 +211,18 @@ export async function fetchPasskeySessionKeysEnabled(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Kill switch for the account-aware org shell (Dashboard + Chat tabs). Missing key counts as
+ * ENABLED; 'false' sends every org account back to the citizen bar without an app update.
+ */
+export async function fetchOrgShellEnabled(): Promise<boolean> {
+  const value = await fetchAppSetting('org_shell_enabled');
+  return value !== 'false';
+}
+
+/** Kill switch for org analytics tracking (track_events). Missing key counts as ENABLED. */
+export async function fetchAnalyticsTrackingEnabled(): Promise<boolean> {
+  const value = await fetchAppSetting('analytics_tracking_enabled');
+  return value !== 'false';
+}

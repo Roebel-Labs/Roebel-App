@@ -16,29 +16,29 @@ beforeEach(async () => {
 });
 
 describe('nav bar style preference', () => {
-  it('parses unknown values to standard', () => {
+  it('parses unknown values to glass (the default)', () => {
     expect(parseNavBarStyle('glass')).toBe('glass');
     expect(parseNavBarStyle('standard')).toBe('standard');
-    expect(parseNavBarStyle(null)).toBe('standard');
-    expect(parseNavBarStyle('liquid')).toBe('standard');
+    expect(parseNavBarStyle(null)).toBe('glass');
+    expect(parseNavBarStyle('liquid')).toBe('glass');
   });
 
-  it('defaults to standard when nothing is stored', async () => {
-    expect(await loadNavBarStyle()).toBe('standard');
+  it('defaults to glass when nothing is stored', async () => {
+    expect(await loadNavBarStyle()).toBe('glass');
   });
 
   it('hydrates the stored value', async () => {
-    await AsyncStorage.setItem(NAV_BAR_STYLE_KEY, 'glass');
-    expect(await loadNavBarStyle()).toBe('glass');
-    expect(getNavBarStyle()).toBe('glass');
+    await AsyncStorage.setItem(NAV_BAR_STYLE_KEY, 'standard');
+    expect(await loadNavBarStyle()).toBe('standard');
+    expect(getNavBarStyle()).toBe('standard');
   });
 
   it('applies immediately and persists', async () => {
-    const p = setNavBarStyle('glass');
-    expect(getNavBarStyle()).toBe('glass');
+    const p = setNavBarStyle('standard');
+    expect(getNavBarStyle()).toBe('standard');
     await p;
-    expect(await AsyncStorage.getItem(NAV_BAR_STYLE_KEY)).toBe('glass');
+    expect(await AsyncStorage.getItem(NAV_BAR_STYLE_KEY)).toBe('standard');
     __resetNavBarStyleForTests();
-    expect(await loadNavBarStyle()).toBe('glass');
+    expect(await loadNavBarStyle()).toBe('standard');
   });
 });

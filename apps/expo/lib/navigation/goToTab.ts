@@ -1,5 +1,6 @@
 /**
- * Switch between the three main sections (Austausch, Erkunden, Profil).
+ * Switch between the main sections (Austausch, Erkunden, Dashboard, Chat, Profil — which ones
+ * the bar shows depends on the active account, see shell-tabs.ts).
  *
  * The sections live in one kept-alive tab group (app/(tabs)/_layout.tsx), so a switch never
  * re-creates a screen:
@@ -11,11 +12,13 @@
  */
 import { router } from 'expo-router';
 
-export type MainTab = 'home' | 'explore' | 'profile';
+export type MainTab = 'home' | 'explore' | 'dashboard' | 'chat' | 'profile';
 
-const TAB_PATH: Record<MainTab, '/' | '/explore' | '/profile'> = {
+const TAB_PATH: Record<MainTab, '/' | '/explore' | '/dashboard' | '/chat-tab' | '/profile'> = {
   home: '/',
   explore: '/explore',
+  dashboard: '/dashboard',
+  chat: '/chat-tab',
   profile: '/profile',
 };
 

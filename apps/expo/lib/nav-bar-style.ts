@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type NavBarStyle = 'standard' | 'glass';
 
 export const NAV_BAR_STYLE_KEY = 'settings.navBarStyle.v1';
-export const DEFAULT_NAV_BAR_STYLE: NavBarStyle = 'standard';
+export const DEFAULT_NAV_BAR_STYLE: NavBarStyle = 'glass';
 
 export const NAV_BAR_STYLE_OPTIONS: readonly { value: NavBarStyle; label: string; description: string }[] = [
   { value: 'standard', label: 'Standard', description: 'Die Leiste über die ganze Breite' },
