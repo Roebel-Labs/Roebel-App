@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import LoginDrawer from '@/components/LoginDrawer';
+import { LoginBenefits, ThirdwebLoginOptions } from '@/components/login/ThirdwebLoginOptions';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 import { deferWelcomeWizard } from '@/lib/onboarding-deferral';
@@ -26,7 +26,6 @@ export default function WelcomeIntroScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useUser();
   const account = useActiveAccount();
-  const [loginOpen, setLoginOpen] = useState(false);
   // Apple Sign in policy: name/email already provided by Authentication
   // Services framework — don't prompt for it again.
   const skipNameStep = user?.auth_provider === 'apple';
@@ -61,7 +60,6 @@ export default function WelcomeIntroScreen() {
     }
     if (wasLoggedOut.current) {
       wasLoggedOut.current = false;
-      setLoginOpen(false);
       leave();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,22 +112,20 @@ export default function WelcomeIntroScreen() {
                 </Pressable>
               ) : null}
 
-              <Pressable
-                onPress={() => setLoginOpen(true)}
-                style={[styles.secondaryButton, { borderColor: colors.primary }]}
-                accessibilityRole="button"
-              >
-                <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Mit Google, Apple oder E-Mail anmelden</Text>
-              </Pressable>
-              <Text style={[styles.secondaryHint, { color: colors.textSecondary }]}>
-                Bequem, aber dein Schlüssel liegt bei einem Anbieter.
-              </Text>
+              {/* The standard sign-in options inline (same block as the login sheet). */}
+              <View style={styles.inlineLogin}>
+                <ThirdwebLoginOptions />
+              </View>
 
               <Pressable onPress={leave} style={styles.textButton} accessibilityRole="button">
                 <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Erst mal umsehen</Text>
               </Pressable>
 
               <PasskeyEntryLinks />
+
+              <View style={styles.benefits}>
+                <LoginBenefits />
+              </View>
             </ScrollView>
           </View>
         ) : (
@@ -152,7 +148,6 @@ export default function WelcomeIntroScreen() {
         )}
       </ImageBackground>
 
-      {loggedOut && <LoginDrawer visible={loginOpen} onClose={() => setLoginOpen(false)} hidePasskey />}
     </View>
   );
 }
@@ -233,6 +228,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   secondaryHint: { fontSize: 13, textAlign: 'center', marginTop: -4 },
+  inlineLogin: { marginTop: 4 },
+  benefits: { marginTop: 24 },
   secondaryButtonText: {
     fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,

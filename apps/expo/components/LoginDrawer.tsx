@@ -1,8 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
-import { ConnectEmbed } from 'thirdweb/react';
-import { client, chain } from '@/constants/thirdweb';
-import { wallets } from '@/constants/wallets';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { LoginBenefits, ThirdwebLoginOptions } from '@/components/login/ThirdwebLoginOptions';
 import BottomDrawer from './BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
@@ -16,7 +14,7 @@ type Props = {
 };
 
 export default function LoginDrawer({ visible, onClose, hidePasskey = false }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.75}>
@@ -32,74 +30,12 @@ export default function LoginDrawer({ visible, onClose, hidePasskey = false }: P
         {/* Passkey "Unabhängiges Konto" — renders nothing unless the preview gate is open */}
         {!hidePasskey && <PasskeySignInOption onSignedIn={onClose} onNavigate={onClose} />}
 
-        {/* Thirdweb Connect Embed */}
         <View style={styles.connectContainer}>
-          <ConnectEmbed
-            client={client}
-            autoConnect={false}
-            theme={isDark ? "dark" : "light"}
-            chain={chain}
-            wallets={wallets}
-            showThirdwebBranding={false}
-            locale={{
-              signInWithEmail: 'Mit E-Mail anmelden',
-              emailPlaceholder: 'E-Mail-Adresse',
-              submitEmail: 'Weiter',
-              emailRequired: 'E-Mail-Adresse ist erforderlich',
-              invalidEmail: 'Ungültige E-Mail-Adresse',
-              verifyCodePlaceholder: 'Bestätigungscode eingeben',
-              verifyCodeLabel: 'Geben Sie den Code ein, den Sie per E-Mail erhalten haben',
-              verifyCodeButton: 'Bestätigen',
-              resendCode: 'Code erneut senden',
-            }}
-          />
+          <ThirdwebLoginOptions />
         </View>
         <PasskeyEntryLinks onNavigate={onClose} />
 
-        {/* Additional Info */}
-        <View style={styles.infoContainer}>
-          <View style={styles.infoItem}>
-            <Image
-              source={require('@/assets/illustration/small/encryption.png')}
-              style={styles.illustration}
-              resizeMode="contain"
-            />
-            <View style={styles.infoTextContainer}>
-              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Privat und Sicher</Text>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Ihre Daten sind verschlüsselt und sicher
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoItem}>
-            <Image
-              source={require('@/assets/illustration/small/coin-stack.png')}
-              style={styles.illustration}
-              resizeMode="contain"
-            />
-            <View style={styles.infoTextContainer}>
-              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Tägliche Münzen erhalten</Text>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Kaufe Schlüssel und öffne Truhen
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoItem}>
-            <Image
-              source={require('@/assets/illustration/small/mecky-thumbs-up.png')}
-              style={styles.illustration}
-              resizeMode="contain"
-            />
-            <View style={styles.infoTextContainer}>
-              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Kommuniziere mit Mecky</Text>
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Mecky hilft dir bei allen Fragen zu Röbel
-              </Text>
-            </View>
-          </View>
-        </View>
+        <LoginBenefits />
       </ScrollView>
     </BottomDrawer>
   );
@@ -123,29 +59,5 @@ const styles = StyleSheet.create({
   },
   connectContainer: {
     marginBottom: 32,
-  },
-  infoContainer: {
-    gap: 16,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  illustration: {
-    width: 64,
-    height: 64,
-  },
-  infoTextContainer: {
-    flex: 1,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontFamily: 'MonaSans-Medium',
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 14,
-    fontFamily: 'MonaSans-Regular',
   },
 });
