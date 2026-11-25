@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveAccount } from 'thirdweb/react';
 import QRCode from 'react-native-qrcode-svg';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
+import { backupFileSupport } from '@/lib/passkey/backup-file-native';
 import { useGoBack } from '@/hooks/useGoBack';
 import { fontFamily } from '@/constants/theme';
 import { useCredentialsGate } from '@/lib/credreg/gate';
@@ -115,6 +115,8 @@ export default function BadgeQrScreen() {
   // "QR-Code teilen": a print-friendly black-on-white PNG through the share sheet (save, print, AirDrop).
   const printQr = useRef<{ toDataURL(cb: (data: string) => void): void } | null>(null);
   const [sharing, setSharing] = useState(false);
+  // Only binaries with the expo-sharing native module get the button (an OTA can run on older ones).
+  const [canShare] = useState(() => backupFileSupport().share);
   const shareQr = () => {
     if (!printQr.current || sharing) return;
     setSharing(true);
@@ -122,6 +124,9 @@ export default function BadgeQrScreen() {
       try {
         const file = `${FileSystem.cacheDirectory}abzeichen-qr-${eventId}.png`;
         await FileSystem.writeAsStringAsync(file, data, { encoding: FileSystem.EncodingType.Base64 });
+        // Lazy: expo-sharing is native and missing in older store binaries (see backup-file-native.ts).
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Sharing = require('expo-sharing') as { shareAsync(uri: string, o?: { mimeType?: string; dialogTitle?: string }): Promise<void> };
         await Sharing.shareAsync(file, { mimeType: 'image/png', dialogTitle: 'Abzeichen-QR teilen' });
       } catch {
         // share sheet dismissed or unavailable
@@ -169,7 +174,7 @@ export default function BadgeQrScreen() {
             {badgeCountLine(badge)}
           </Text>
         ) : null}
-        {url ? (
+        {url && canShare ? (
           <Pressable onPress={shareQr} disabled={sharing} accessibilityRole="button" accessibilityLabel="QR-Code teilen oder speichern" style={styles.retry}>
             <Text style={styles.retryText}>{sharing ? 'Wird vorbereitet…' : 'QR-Code teilen'}</Text>
           </Pressable>
