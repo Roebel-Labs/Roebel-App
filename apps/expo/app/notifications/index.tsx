@@ -16,6 +16,8 @@ import { routeForNotification } from '@/lib/navigation/notificationRoute';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import InviteNotificationCard from '@/components/InviteNotificationCard';
 import AttesterTaskNotificationCard from '@/components/AttesterTaskNotificationCard';
+import AttesterTasksCard from '@/components/profile/AttesterTasksCard';
+import { useVerificationContext } from '@/context/VerificationContext';
 import ActivityRow from '@/components/ActivityRow';
 import { NotificationCardSkeleton } from '@/components/SkeletonLoader';
 import { BookIcon, CalendarIcon } from '@/components/Icons';
@@ -85,6 +87,7 @@ function matchesFilter(item: MergedItem, filter: ActivityFilter): boolean {
 export default function NotificationsInboxScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { hasAttesterNFT } = useVerificationContext();
   const { inbox: pushInbox, userNotifs, markAllAsRead } = useNotificationsContext();
   const [filter, setFilter] = useState<ActivityFilter>('all');
 
@@ -375,6 +378,8 @@ export default function NotificationsInboxScreen() {
             <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
           onEndReached={handleLoadMore}
+          // Attesters: open org registrations stay pinned on top (the card hides itself when there are none).
+          ListHeaderComponent={hasAttesterNFT ? <AttesterTasksCard /> : null}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>

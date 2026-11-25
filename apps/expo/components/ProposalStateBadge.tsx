@@ -15,11 +15,24 @@ interface ProposalStateBadgeProps {
   proposalId?: bigint;
   /** Smaller tag variant for dense list cards (e.g. the Stadt-tab feed card). */
   compact?: boolean;
+  /** 'text': the state as coloured text (green for approved) instead of a pill. */
+  variant?: 'pill' | 'text';
 }
+
+/** Readable on light and dark backgrounds. */
+const TEXT_COLOR: Partial<Record<ProposalState, string>> = {
+  [ProposalState.Succeeded]: '#16A34A',
+  [ProposalState.Executed]: '#16A34A',
+  [ProposalState.Defeated]: '#DC2626',
+  [ProposalState.Canceled]: '#DC2626',
+  [ProposalState.Active]: '#D97706',
+  [ProposalState.Pending]: '#D97706',
+  [ProposalState.Queued]: '#2563EB',
+};
 
 const POLL_INTERVAL_MS = 30_000;
 
-export default function ProposalStateBadge({ state, proposalId, compact = false }: ProposalStateBadgeProps) {
+export default function ProposalStateBadge({ state, proposalId, compact = false, variant = 'pill' }: ProposalStateBadgeProps) {
   const [liveState, setLiveState] = useState<ProposalState>(state);
 
   // Re-sync to fallback when the parent's state prop changes (e.g. after a
@@ -59,6 +72,10 @@ export default function ProposalStateBadge({ state, proposalId, compact = false 
   const stateName = getProposalStateName(liveState);
   const colors = getProposalStateColor(liveState);
 
+  if (variant === 'text') {
+    return <Text style={[styles.plainText, { color: TEXT_COLOR[liveState] ?? '#6B7280' }]}>{stateName}</Text>;
+  }
+
   return (
     <View style={[styles.badge, compact && styles.badgeCompact, { backgroundColor: colors.background }]}>
       <Text style={[styles.badgeText, compact && styles.badgeTextCompact, { color: colors.text }]}>
@@ -85,6 +102,10 @@ const styles = StyleSheet.create({
     fontFamily: 'MonaSans-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  plainText: {
+    fontSize: 15,
+    fontFamily: 'MonaSans-SemiBold',
   },
   badgeTextCompact: {
     fontSize: 10,

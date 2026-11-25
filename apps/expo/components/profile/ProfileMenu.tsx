@@ -4,6 +4,7 @@ import { useRouter, type Href } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import { useTheme } from '@/context/ThemeContext';
+import { useVerificationContext } from '@/context/VerificationContext';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
 import SentIcon from '@/assets/icons/profile/sent.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
@@ -27,6 +28,7 @@ const ICON = 20;
 export default function ProfileMenu({ variant, gridless = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
+  const { hasAttesterNFT } = useVerificationContext();
   const c = colors.textPrimary;
   const push = (href: Href) => () => router.push(href as any);
   const open = (url: string) => () => openBrowserAsync(url);
@@ -69,6 +71,10 @@ export default function ProfileMenu({ variant, gridless = false }: Props) {
       {divider}
       <View style={styles.group}>
         <ProfileMenuItem icon={<NotificationIcon width={ICON} height={ICON} color={c} />} label="Benachrichtigungen" onPress={push('/notifications' as Href)} />
+        {!isGuest && hasAttesterNFT && (
+          // Attester inbox: org registrations (NSP-14) waiting for a vote.
+          <ProfileMenuItem icon={<ShieldUserIcon width={ICON} height={ICON} color={c} />} label="Organisationen bestätigen" onPress={push('/verification/orgs' as Href)} />
+        )}
         <ProfileMenuItem icon={<GridViewIcon width={ICON} height={ICON} color={c} />} label="Darstellung" onPress={push('/settings/darstellung' as Href)} />
         <ProfileMenuItem icon={<SettingsIcon width={ICON} height={ICON} color={c} />} label="Einstellungen" onPress={push('/settings' as Href)} />
         <ProfileMenuItem icon={<HelpCircleIcon width={ICON} height={ICON} color={c} />} label="Hilfe" onPress={push('/help' as Href)} />

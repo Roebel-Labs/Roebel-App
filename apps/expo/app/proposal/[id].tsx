@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Pressable, Share, RefreshControl, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useActiveAccount } from 'thirdweb/react';
 import { balanceOf } from 'thirdweb/extensions/erc721';
-import { ArrowLeftIcon } from '@/components/Icons';
+import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
+import CollapsingHeroScreen from '@/components/detail/CollapsingHeroScreen';
+import { fontFamily } from '@/constants/theme';
 import { citizenNFTContract } from '@/constants/thirdweb';
 import { useProposalDetails } from '@/hooks/useProposalDetails';
 import { useProposalContent } from '@/hooks/useProposalContent';
@@ -18,7 +20,6 @@ import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import VotingStats from '@/components/VotingStats';
 import VoteButtons from '@/components/VoteButtons';
 import ProposalTimeline from '@/components/ProposalTimeline';
-import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
@@ -32,6 +33,8 @@ export default function ProposalDetailScreen() {
   const { colors } = useTheme();
   const params = useLocalSearchParams();
   const account = useActiveAccount();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
 
   // Get proposal ID from route params (UUID string from Supabase)
   const proposalId = params.id as string | null;
@@ -138,19 +141,7 @@ export default function ProposalDetailScreen() {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={goBack} style={styles.backButton}>
-            <ArrowLeftIcon size={24} color={colors.textPrimary} />
-          </Pressable>
-          <View style={styles.headerSpacer} />
-        </View>
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <ProposalDetailSkeleton />
-        </ScrollView>
-      </SafeAreaView>
-    );
+    return <CollapsingHeroScreen heroHeight={Math.round(windowWidth * 0.75)} onBack={goBack} loading />;
   }
 
   if (error || !proposal) {
@@ -176,43 +167,30 @@ export default function ProposalDetailScreen() {
   const displayTitle = pickProposalTitle(proposal);
   const readingTime = calculateReadingTime(content);
 
+  const cover = proposal.coverImageUrl ?? null;
+  const chainId = parseProposalIdSafe(proposal);
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={goBack} style={styles.backButton}>
-          <ArrowLeftIcon size={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {displayTitle || 'Vorschlag'}
-        </Text>
-        <Pressable onPress={handleShare} style={styles.shareButton}>
-          <Text style={[styles.shareIcon, { color: colors.textPrimary }]}>&#x2197;</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        ref={scrollRef}
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        {/* Status Badge — drives off live governor.state(id) so it doesn't
-            stay stuck on Supabase's cached value after voting ends. */}
-        <View style={styles.statusContainer}>
-          <ProposalStateBadge
-            state={proposal.state}
-            proposalId={parseProposalIdSafe(proposal)}
-          />
-        </View>
-
-        {/* Title */}
+    <CollapsingHeroScreen
+      heroHeight={cover ? Math.round(windowWidth * 0.75) : insets.top + 64}
+      imageUri={cover}
+      heroBackgroundColor={cover ? colors.surface : colors.background}
+      sheet={!!cover}
+      title={displayTitle || 'Vorschlag'}
+      onBack={goBack}
+      actions={[
+        {
+          key: 'share',
+          accessibilityLabel: 'Vorschlag teilen',
+          onPress: handleShare,
+          renderIcon: (c) => <ShareIcon size={20} color={c} />,
+        },
+      ]}
+      scrollRef={scrollRef}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} progressViewOffset={insets.top} />}
+    >
+        {/* Headline first, like the other detail pages. */}
         <Text style={[styles.title, { color: colors.textPrimary }]}>{displayTitle}</Text>
 
         {/* Metadata */}
@@ -230,8 +208,14 @@ export default function ProposalDetailScreen() {
           )}
           <Text style={[styles.separator, { color: colors.textTertiary }]}>&#x2022;</Text>
           <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
-            {readingTime} min read
+            {readingTime} Min. Lesezeit
           </Text>
+        </View>
+
+        {/* State as coloured text — drives off live governor.state(id) so it doesn't stay stuck on
+            Supabase's cached value after voting ends. */}
+        <View style={styles.statusContainer}>
+          <ProposalStateBadge state={proposal.state} proposalId={chainId} variant="text" />
         </View>
 
         {/* Proposal Content */}
@@ -298,8 +282,7 @@ export default function ProposalDetailScreen() {
         )}
 
         <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </SafeAreaView>
+    </CollapsingHeroScreen>
   );
 }
 
@@ -358,7 +341,7 @@ const styles = StyleSheet.create({
   },
   statusContainer: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    marginBottom: 8,
   },
   snapshotWrap: {
     paddingHorizontal: 20,
@@ -366,11 +349,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'MonaSans-Medium',
-    lineHeight: 32,
+    fontSize: 30,
+    fontFamily: fontFamily.heading,
+    lineHeight: 36,
     paddingHorizontal: 20,
-    marginTop: 16,
+    marginTop: 20,
   },
   metadataRow: {
     flexDirection: 'row',

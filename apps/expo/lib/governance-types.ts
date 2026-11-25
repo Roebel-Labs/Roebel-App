@@ -61,6 +61,9 @@ export type Proposal = {
   // displayed text; null → the page falls back to the Irys document.
   contentMarkdown?: string | null;
 
+  // Hero picture of the detail page (content.metadata.cover_image_url); absent → no hero.
+  coverImageUrl?: string | null;
+
   // Flags
   blockchainUnavailable?: boolean; // True if blockchain data fetch failed
 };
@@ -145,6 +148,10 @@ export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Propo
     transactionHash: supabaseProposal.transaction_hash,
     gemeinschaftskasseSnapshot,
     contentMarkdown: supabaseContentMarkdown(supabaseProposal.content),
+    coverImageUrl:
+      typeof supabaseProposal.content?.metadata?.cover_image_url === 'string' && /^https:\/\//.test(supabaseProposal.content.metadata.cover_image_url)
+        ? supabaseProposal.content.metadata.cover_image_url
+        : null,
 
     // Flags
     blockchainUnavailable: false, // Will be set to true if blockchain fetch fails
