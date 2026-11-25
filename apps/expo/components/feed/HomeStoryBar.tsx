@@ -338,7 +338,7 @@ export default function HomeStoryBar() {
         {/* First-load skeletons — shimmering placeholder cards matching real
             card geometry while the events/collections queries resolve. */}
         {showSkeletons && (
-          <ShimmerGroup>
+          <ShimmerGroup style={styles.skeletonRow}>
             {Array.from({ length: 5 }).map((_, i) => (
               <ShimmerBlock key={`story-skeleton-${i}`} style={styles.card} />
             ))}
@@ -486,6 +486,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 10,
   },
+  // The skeleton scope is one View: lay its cards out like the real rail, not in a column.
+  skeletonRow: { flexDirection: 'row', gap: 10 },
   card: {
     width: 90,
     height: 140,

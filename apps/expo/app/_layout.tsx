@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { usePathname, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -34,6 +34,7 @@ import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
 import { XmtpProvider } from '@/context/XmtpContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
 import { RewardCelebrationProvider } from '@/context/RewardCelebrationContext';
@@ -275,6 +276,11 @@ function RewardsTaskTriggers() {
 
 function ThemedLayout() {
   const { colors, isDark } = useTheme();
+  // Navigator containers take their background from this theme (default: light grey #F2F2F2).
+  const navTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return { ...base, colors: { ...base.colors, background: colors.background, card: colors.background } };
+  }, [isDark, colors.background]);
 
   return (
     <>
@@ -287,10 +293,20 @@ function ThemedLayout() {
       <WidgetSyncer />
       <ReferralDeepLinkHandler />
       {/* Sheet stage: the whole navigator shrinks behind open bottom sheets (iOS page-sheet depth). */}
+      <NavigationThemeProvider value={navTheme}>
       <SheetStageView style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         {/* Screens fade instead of sliding (Max 2026-11-20): back from a detail page reveals the
             main page with its blur → sharp (ScreenTransition), no slide-out. */}
-        <TransitionStack screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
+        {/* contentStyle: without it every screen card sits on React Navigation's default light
+            grey (#F2F2F2), which flashed through the fade in dim/dark mode. */}
+        <TransitionStack
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 220,
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
           <TransitionStack.Screen
             name="submit"
             options={{ headerShown: true, title: 'Veranstaltung einreichen', animation: 'none' }}
@@ -361,6 +377,7 @@ function ThemedLayout() {
           />
         </TransitionStack>
       </SheetStageView>
+      </NavigationThemeProvider>
       {/* Preview-only: gate checked first, renders nothing in production. */}
       <PasskeyRecoveryWatch />
       {/* Words sessions only: the 12 words were invalidated -> ask for them again (never a logout). */}
