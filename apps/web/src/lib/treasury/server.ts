@@ -6,7 +6,7 @@ import { gnosis } from "viem/chains";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildTreasuryResponse, linkTitle, type TreasuryLink, type TreasuryResponse } from "./build";
 import { parseBalancingTx, parseHiddenTxs, parseNettedTxs, parseTxLabels } from "./curation";
-import { EURE_V2_ADDRESS, fetchFlows } from "./flows";
+import { EURE_V2_ADDRESS, fetchTreasuryFlows } from "./flows";
 import { getCurrentUsdEurRate, getDayRates, type DayRateStore } from "./rates";
 import { isDegradedTreasury, persistTreasurySnapshot } from "./snapshot";
 
@@ -134,7 +134,7 @@ export function computeTreasury(): Promise<TreasuryResponse> {
 		address: TREASURY_SAFE,
 		readBalances: () => readBalances(TREASURY_SAFE),
 		getCurrentRate: () => getCurrentUsdEurRate({ fallbackLatest: store ? () => store.latest() : undefined }),
-		fetchFlows: () => fetchFlows(TREASURY_SAFE),
+		fetchFlows: () => fetchTreasuryFlows(TREASURY_SAFE),
 		getDayRates: async (days, currentRate) => (await getDayRates(days, { store, currentRate })).rates,
 		readCuration: () => readCuration(db),
 		readLinks: (hashes) => readLinks(db, hashes),
