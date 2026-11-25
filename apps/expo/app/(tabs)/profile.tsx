@@ -447,6 +447,7 @@ export default function ProfileScreen() {
           >
             <ContrastPill
               label="Account wechseln"
+              hintKey="hint.accountSwitchPill.v1"
               onPress={handleSwitchPress}
               disabled={isSwitching}
               leading={(p) => <SwitchPillAvatar account={pillAccount} personalAvatarUrl={personalAvatarUrl} ring={p.solid} />}
