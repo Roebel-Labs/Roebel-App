@@ -31,6 +31,7 @@ import UploadIcon from '@/assets/icons/profile/upload.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useChatTokens, chatSize, chatType } from '@/components/chat/tokens';
+import { Composer } from '@/components/chat/Composer';
 import type { ColorTokens } from '@/constants/theme';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveAccount } from 'thirdweb/react';
@@ -711,7 +712,7 @@ export function MinimalAIChat() {
   const chosenPosterRef = useRef<{ proposalId: string } | null>(null);
   /** The person's own image at confirm time, restored when a poster is un-chosen. */
   const originalImageRef = useRef<string | null>(null);
-  const inputRef = useRef<TextInput>(null);
+  const [composerKey, setComposerKey] = useState(0);
   const translateY = useRef(new Animated.Value(0)).current;
   const iconBounceAnim = useRef(new Animated.Value(0)).current;
   const iconBounceAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -903,7 +904,8 @@ export function MinimalAIChat() {
 
   // "Ändern" button under the recap card → let the user type what to change.
   const handleRequestChange = () => {
-    inputRef.current?.focus();
+    // Remount the composer with autoFocus: it opens the keyboard for the change request.
+    setComposerKey((k) => k + 1);
   };
 
   // Handle go to home
@@ -1433,43 +1435,21 @@ export function MinimalAIChat() {
                   <Text style={[styles.submitButtonSubtitle, { color: colors.textSecondary }]}>Wischen Sie einfach hoch</Text>
                 </View>
               ) : (
-                <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
-                  <View style={styles.inputRow}>
-                    {/* Image picker button */}
-                    <TouchableOpacity
-                      style={styles.attachButton}
-                      onPress={handleSelectImage}
-                      disabled={isLoading || isSubmittingEvent}
-                    >
-                      <Ionicons name="image-outline" size={24} color={colors.textPrimary} />
-                    </TouchableOpacity>
-
-                    <TextInput
-                      ref={inputRef}
-                      style={[styles.textInput, { backgroundColor: colors.surfaceSecondary, color: colors.textPrimary }]}
-                      value={input}
-                      onChangeText={setInput}
-                      placeholder="Schreibe eine Nachricht..."
-                      placeholderTextColor={colors.textTertiary}
-                      multiline
-                      maxLength={500}
-                      editable={!isLoading && !isSubmittingEvent}
-                      onSubmitEditing={() => sendMessage()}
-                    />
-
-                    <TouchableOpacity
-                      style={[
-                        styles.sendButton,
-                        { backgroundColor: colors.primary },
-                        (!input.trim() || isLoading || isSubmittingEvent) && styles.sendButtonDisabled,
-                      ]}
-                      onPress={() => sendMessage()}
-                      disabled={!input.trim() || isLoading || isSubmittingEvent}
-                    >
-                      <Ionicons name="arrow-up" size={20} color={colors.onPrimary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                // Same composer as the agent chats (components/chat/Composer).
+                <Composer
+                  key={composerKey}
+                  botName="Mecky"
+                  value={input}
+                  onChangeText={setInput}
+                  onSend={({ text }) => {
+                    if (isLoading || isSubmittingEvent || !text.trim()) return;
+                    setInput('');
+                    sendMessageWithImage(text, []);
+                  }}
+                  onPickImage={handleSelectImage}
+                  sendDisabled={isLoading || isSubmittingEvent}
+                  autoFocus={composerKey > 0}
+                />
               )}
             </KeyboardAvoidingView>
           </SafeAreaView>

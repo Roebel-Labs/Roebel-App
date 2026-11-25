@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MinimalAIChat } from '@/components/ai/MinimalAIChat';
+import EventChatHeader from '@/components/ai/EventChatHeader';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -753,23 +754,21 @@ export default function SubmitEventScreen() {
   if (mode === 'ai') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: chatT.background }]}>
-        <View style={[styles.header, { borderBottomColor: chatT.separator }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: chatT.chipBackground }]}>
-            <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Event einreichen</Text>
-          <View style={styles.modeToggleContainer}>
-            <Text style={[styles.modeToggleLabel, { color: colors.primary }]}>KI</Text>
-            <Switch
-              value={false}
-              onValueChange={() => setMode('manual')}
-              trackColor={{ false: colors.primary, true: colors.primary }}
-              thumbColor={colors.textInverted}
-              style={styles.modeToggleSwitch}
-            />
-            <Text style={[styles.modeToggleLabel, { color: colors.textTertiary }]}>Form</Text>
-          </View>
-        </View>
+        <EventChatHeader
+          right={
+            <View style={styles.modeToggleContainer}>
+              <Text style={[styles.modeToggleLabel, { color: colors.primary }]}>KI</Text>
+              <Switch
+                value={false}
+                onValueChange={() => setMode('manual')}
+                trackColor={{ false: colors.primary, true: colors.primary }}
+                thumbColor={colors.textInverted}
+                style={styles.modeToggleSwitch}
+                />
+              <Text style={[styles.modeToggleLabel, { color: colors.textTertiary }]}>Form</Text>
+            </View>
+          }
+        />
         <MinimalAIChat />
       </SafeAreaView>
     );
