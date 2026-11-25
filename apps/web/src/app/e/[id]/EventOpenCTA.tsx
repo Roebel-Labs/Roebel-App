@@ -12,6 +12,12 @@ const PLAY_STORE_URL =
 // fallback that works regardless of universal-link setup.
 const universalLink = (id: string) => `https://www.roebel.app/e/${id}`
 const schemeLink = (id: string) => `roebel://e/${id}`
+const ANDROID_PACKAGE = "com.maxbrych.roebelonchain"
+// Android Chrome ignores a bare custom-scheme navigation in many cases (and always without a
+// tap). An intent:// link names the package, opens the installed app directly and falls back
+// to the Play Store on its own when the app is missing.
+const androidIntentLink = (id: string) =>
+  `intent://e/${id}#Intent;scheme=roebel;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(PLAY_STORE_URL)};end`
 
 type Platform = "ios" | "android" | "other"
 
@@ -41,17 +47,24 @@ export function EventOpenCTA({ id }: { id: string }) {
     // explainer/branded landing stays visible for first-time visitors).
     if ((p === "ios" || p === "android") && !autoTried.current) {
       autoTried.current = true
-      window.location.href = schemeLink(id)
+      // Android: the intent link without fallback (no store jump on page load).
+      window.location.href =
+        p === "android" ? `intent://e/${id}#Intent;scheme=roebel;package=${ANDROID_PACKAGE};end` : schemeLink(id)
     }
   }, [id])
 
   function handleOpenApp() {
-    // Try the custom scheme first (most reliable), then fall back to the store.
-    // If the app is installed, the page unload cancels the pending store redirect.
+    if (platform === "android") {
+      // The intent link handles "not installed" itself (browser_fallback_url).
+      window.location.href = androidIntentLink(id)
+      return
+    }
+    // iOS: custom scheme, then the App Store unless the app took over (page hidden).
     window.location.href = schemeLink(id)
-    window.setTimeout(() => {
-      window.location.href = storeUrl
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === "visible") window.location.href = storeUrl
     }, 1500)
+    document.addEventListener("visibilitychange", () => window.clearTimeout(timer), { once: true })
   }
 
   if (platform === "other") {

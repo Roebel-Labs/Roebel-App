@@ -29,7 +29,7 @@ const hubAbi = [
   ], outputs: [{ type: "uint256" }] },
 ] as const;
 
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info" };
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -100,7 +100,9 @@ Deno.serve(async (req: Request) => {
     // 1) Config
     const { data: cfg } = await db.from("reward_config").select("*").eq("action", action).maybeSingle();
     if (!cfg) return json({ status: "rejected", reason: "unknown action" }, 400);
-    if (!cfg.enabled) return json({ status: "rejected", reason: "action disabled" }, 403);
+    // Rejections answer 200 with the reason in the body: supabase-js turns any non-2xx into a
+    // generic "Edge Function returned a non-2xx status code" and the app could not show it.
+    if (!cfg.enabled) return json({ status: "rejected", reason: "action disabled" });
     if (cfg.per_reference && !refRaw) return json({ status: "rejected", reason: "referenceId required" }, 400);
 
     const reference = cfg.per_reference ? refRaw! : action; // sentinel keeps the unique index meaningful
@@ -112,25 +114,43 @@ Deno.serve(async (req: Request) => {
       const { count } = await db.from("reward_claims")
         .select("id", { count: "exact", head: true })
         .eq("wallet", wallet).eq("action", action).neq("status", "rejected").gte("created_at", since);
-      if ((count ?? 0) >= cfg.daily_cap) return json({ status: "rejected", reason: "daily cap reached" }, 429);
+      if ((count ?? 0) >= cfg.daily_cap) return json({ status: "rejected", reason: "daily cap reached" });
     }
 
     // 3) Reserve the claim — the unique index is the lock (race-safe, no double-pay)
     const { data: claim, error: insErr } = await db.from("reward_claims")
       .insert({ wallet, action, reference_id: reference, amount_atto: amountAtto.toString(), status: "pending" })
       .select("id").single();
+    let claimId: string;
     if (insErr) {
-      if ((insErr as any).code === "23505") return json({ status: "already_claimed" });
-      return json({ status: "rejected", reason: "could not record claim" }, 500);
+      if ((insErr as any).code !== "23505") return json({ status: "rejected", reason: "could not record claim" }, 500);
+      // A rejected or failed earlier attempt (e.g. scanned before the event started) must not
+      // block the real claim: take that row over again. Paid/pending rows stay "already claimed".
+      const { data: prev } = await db.from("reward_claims").select("id, status")
+        .eq("wallet", wallet).eq("action", action).eq("reference_id", reference).maybeSingle();
+      if (!prev || (prev.status !== "rejected" && prev.status !== "failed")) return json({ status: "already_claimed" });
+      const { data: retaken } = await db.from("reward_claims")
+        .update({ status: "pending", error: null, amount_atto: amountAtto.toString(), created_at: new Date().toISOString() })
+        .eq("id", prev.id).eq("status", prev.status).select("id").maybeSingle();
+      if (!retaken) return json({ status: "already_claimed" });
+      claimId = retaken.id;
+    } else {
+      claimId = claim.id;
     }
-    const claimId = claim.id;
 
     // 4) Verify
     const verifier = verifiers[action];
     const verdict = verifier ? await verifier(wallet, reference) : { ok: false, reason: "no verifier" };
     if (!verdict.ok) {
       await db.from("reward_claims").update({ status: "rejected", error: verdict.reason }).eq("id", claimId);
-      return json({ status: "rejected", reason: verdict.reason }, 403);
+      return json({ status: "rejected", reason: verdict.reason });
+    }
+
+    // 4b) Nothing to pay (amount 0, e.g. event attendance for badges): the verified claim is the
+    // record — no Röbel Münzen are sent.
+    if (amountAtto === 0n) {
+      await db.from("reward_claims").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", claimId);
+      return json({ status: "paid", amountAtto: "0" });
     }
 
     // 5) Pay
