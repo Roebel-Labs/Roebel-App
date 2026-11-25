@@ -18,7 +18,12 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: (v: number) => ({ value: v }),
     withTiming: (v: number) => v,
     withDelay: (_d: number, v: number) => v,
+    FadeInDown: { delay: () => ({ duration: () => ({}) }) },
   };
+});
+jest.mock('../CardReveal', () => {
+  const { View } = require('react-native');
+  return { __esModule: true, REVEAL_DONE_MS: 2100, default: () => <View testID="card-reveal" /> };
 });
 jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(async () => {}),
@@ -109,5 +114,23 @@ describe('StampMoment', () => {
     // A slight overshoot after impact: somewhere between impact and rest the card is below 0.
     const samples = Array.from({ length: 21 }, (_, k) => stampDropY(0.5 + k * 0.025));
     expect(Math.max(...samples)).toBeGreaterThan(0);
+  });
+});
+
+describe('received badge with art', () => {
+  it('opens like a card pack instead of the stamp drop, and the stamp haptic stays silent', () => {
+    (Haptics.notificationAsync as jest.Mock).mockClear();
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <StampMoment stamp={{ ...stamp, imageUrl: 'https://example.org/badge.png' }} headline="Abzeichen erhalten" lines={['Infoabend']} muenzen={null} actions={[]} tone="success" />,
+      );
+    });
+    expect(tree.root.findAllByProps({ testID: 'card-reveal' }).length).toBeGreaterThan(0);
+    act(() => {
+      jest.advanceTimersByTime?.(5000);
+    });
+    expect(Haptics.notificationAsync).not.toHaveBeenCalled();
+    act(() => tree.unmount());
   });
 });

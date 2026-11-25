@@ -4,12 +4,14 @@
  * Opened from the organiser block on the event page; the QR row is created on first use
  * (event_badge_qr). The live count is polled every 10 s while the screen is focused.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveAccount } from 'thirdweb/react';
 import QRCode from 'react-native-qrcode-svg';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useGoBack } from '@/hooks/useGoBack';
 import { fontFamily } from '@/constants/theme';
 import { useCredentialsGate } from '@/lib/credreg/gate';
@@ -110,6 +112,25 @@ export default function BadgeQrScreen() {
 
   const url = qrId ? `${QR_BASE}${qrId}` : null;
 
+  // "QR-Code teilen": a print-friendly black-on-white PNG through the share sheet (save, print, AirDrop).
+  const printQr = useRef<{ toDataURL(cb: (data: string) => void): void } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareQr = () => {
+    if (!printQr.current || sharing) return;
+    setSharing(true);
+    printQr.current.toDataURL(async (data) => {
+      try {
+        const file = `${FileSystem.cacheDirectory}abzeichen-qr-${eventId}.png`;
+        await FileSystem.writeAsStringAsync(file, data, { encoding: FileSystem.EncodingType.Base64 });
+        await Sharing.shareAsync(file, { mimeType: 'image/png', dialogTitle: 'Abzeichen-QR teilen' });
+      } catch {
+        // share sheet dismissed or unavailable
+      } finally {
+        setSharing(false);
+      }
+    });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.header}>
@@ -148,7 +169,17 @@ export default function BadgeQrScreen() {
             {badgeCountLine(badge)}
           </Text>
         ) : null}
+        {url ? (
+          <Pressable onPress={shareQr} disabled={sharing} accessibilityRole="button" accessibilityLabel="QR-Code teilen oder speichern" style={styles.retry}>
+            <Text style={styles.retryText}>{sharing ? 'Wird vorbereitet…' : 'QR-Code teilen'}</Text>
+          </Pressable>
+        ) : null}
       </View>
+      {url ? (
+        <View style={styles.offscreen} pointerEvents="none">
+          <QRCode value={url} size={1024} quietZone={64} color="#000000" backgroundColor="#FFFFFF" getRef={(r) => { printQr.current = r as never; }} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -166,4 +197,5 @@ const styles = StyleSheet.create({
   retryText: { color: '#FFFFFF', fontSize: 15, fontFamily: fontFamily.semiBold },
   hint: { color: '#D1D5DB', fontSize: 14, lineHeight: 20, fontFamily: fontFamily.regular, textAlign: 'center' },
   count: { color: '#FFFFFF', fontSize: 16, fontFamily: fontFamily.semiBold, textAlign: 'center' },
+  offscreen: { position: 'absolute', left: -5000, top: 0, opacity: 0 },
 });

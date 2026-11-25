@@ -6,12 +6,13 @@
  */
 import React, { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { stampHaptic, useStampAnimation } from '@/lib/credreg/motion';
 import StampCard, { type StampCardProps } from './StampCard';
+import CardReveal, { REVEAL_DONE_MS } from './CardReveal';
 
 export type StampMomentAction = { label: string; onPress(): void; kind: 'primary' | 'secondary' };
 
@@ -28,25 +29,37 @@ export type StampMomentProps = {
 
 export default function StampMoment({ stamp, headline, lines, muenzen, actions, tone, children }: StampMomentProps) {
   const { colors } = useTheme();
+  // A received badge with art opens like a card pack; everything else keeps the stamp drop.
+  const reveal = tone === 'success' && !!stamp.imageUrl;
   const onImpact = useCallback(() => {
-    if (tone === 'success') void stampHaptic();
-  }, [tone]);
-  const { cardStyle, inkStyle } = useStampAnimation({ play: true, onImpact });
+    if (tone === 'success' && !reveal) void stampHaptic();
+  }, [tone, reveal]);
+  const { cardStyle, inkStyle } = useStampAnimation({ play: !reveal, onImpact });
+  const textIn = (i: number) => (reveal ? FadeInDown.delay(REVEAL_DONE_MS + i * 90).duration(380) : undefined);
   const fg = colors.onPrimary;
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.primary }]} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
-        <View style={styles.stampWrap}>
-          <StampCard {...stamp} stampStyle={cardStyle} inkStyle={inkStyle} Layer={Animated.View as never} />
-        </View>
-        <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={[styles.headline, { color: fg }]}>
+        {reveal && stamp.imageUrl ? (
+          <CardReveal imageUrl={stamp.imageUrl} />
+        ) : (
+          <View style={styles.stampWrap}>
+            <StampCard {...stamp} stampStyle={cardStyle} inkStyle={inkStyle} Layer={Animated.View as never} />
+          </View>
+        )}
+        <Animated.Text
+          entering={textIn(0)}
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          style={[styles.headline, { color: fg }]}
+        >
           {headline}
-        </Text>
+        </Animated.Text>
         {lines.map((line, k) => (
-          <Text key={`${k}:${line}`} style={[styles.line, { color: fg }]}>
+          <Animated.Text key={`${k}:${line}`} entering={textIn(k + 1)} style={[styles.line, { color: fg }]}>
             {line}
-          </Text>
+          </Animated.Text>
         ))}
         {muenzen !== null && muenzen > 0 ? (
           <View style={[styles.muenzen, { borderColor: fg }]}>
