@@ -4,9 +4,8 @@
  * Page background, a header with title + "1 von N" in the middle, a close X on
  * the right and — when the caller has a photo overview — a grid button on the
  * left that returns to it. Each photo sits in a rounded frame sized to its own
- * aspect ratio. Swiping pages applies a parallax: the photo lags behind its
- * frame (and scales just enough to keep the frame covered), so the image
- * appears to slide "inside" the card. Pinch / double-tap zooms; while zoomed,
+ * aspect ratio; swiping moves the frames 1:1 (no parallax). Pinch / double-tap
+ * zooms with an eased glide (no bounce); while zoomed,
  * paging is locked and a pan moves the photo. A vertical drag dismisses.
  *
  * All motion runs on the UI thread from one scroll shared value.
@@ -19,8 +18,8 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
+  Easing,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -33,8 +32,8 @@ import { fontFamily } from '@/constants/theme';
 const GUTTER = 16;
 const RADIUS = 28;
 const HEADER_HEIGHT = 64;
-/** How far (fraction of the page width) a photo lags behind its frame. */
-const PARALLAX = 0.22;
+/** Zoom / pan / snap-back: an eased glide, no spring overshoot. */
+const ZOOM_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) };
 const DEFAULT_ASPECT = 4 / 3;
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 900;
@@ -153,7 +152,7 @@ function Lightbox({
               }),
             );
           } else {
-            dismissY.set(withSpring(0, { damping: 20, stiffness: 220 }));
+            dismissY.set(withTiming(0, ZOOM_TIMING));
           }
         }),
     [zoomed, dismissY, screenHeight, onClose],
@@ -305,10 +304,10 @@ const LightboxPage = memo(function LightboxPage({
   const gesture = useMemo(() => {
     const reset = () => {
       'worklet';
-      scale.set(withSpring(1, { damping: 18 }));
+      scale.set(withTiming(1, ZOOM_TIMING));
       savedScale.set(1);
-      tx.set(withSpring(0, { damping: 18 }));
-      ty.set(withSpring(0, { damping: 18 }));
+      tx.set(withTiming(0, ZOOM_TIMING));
+      ty.set(withTiming(0, ZOOM_TIMING));
       savedTx.set(0);
       savedTy.set(0);
     };
@@ -322,7 +321,7 @@ const LightboxPage = memo(function LightboxPage({
           runOnJS(setZoom)(false);
         } else {
           const s = scale.get() > 4 ? 4 : scale.get();
-          scale.set(withSpring(s, { damping: 18 }));
+          scale.set(withTiming(s, ZOOM_TIMING));
           savedScale.set(s);
           runOnJS(setZoom)(s > 1.01);
         }
@@ -338,8 +337,8 @@ const LightboxPage = memo(function LightboxPage({
         const maxY = (frameHeight * (scale.get() - 1)) / 2;
         const cx = tx.get() > maxX ? maxX : tx.get() < -maxX ? -maxX : tx.get();
         const cy = ty.get() > maxY ? maxY : ty.get() < -maxY ? -maxY : ty.get();
-        tx.set(withSpring(cx, { damping: 18 }));
-        ty.set(withSpring(cy, { damping: 18 }));
+        tx.set(withTiming(cx, ZOOM_TIMING));
+        ty.set(withTiming(cy, ZOOM_TIMING));
         savedTx.set(cx);
         savedTy.set(cy);
       });
@@ -352,10 +351,10 @@ const LightboxPage = memo(function LightboxPage({
         } else {
           const ox = frameWidth / 2 - e.x;
           const oy = frameHeight / 2 - e.y;
-          scale.set(withSpring(2.5, { damping: 18 }));
+          scale.set(withTiming(2.5, ZOOM_TIMING));
           savedScale.set(2.5);
-          tx.set(withSpring(ox, { damping: 18 }));
-          ty.set(withSpring(oy, { damping: 18 }));
+          tx.set(withTiming(ox, ZOOM_TIMING));
+          ty.set(withTiming(oy, ZOOM_TIMING));
           savedTx.set(ox);
           savedTy.set(oy);
           runOnJS(setZoom)(true);
@@ -368,17 +367,6 @@ const LightboxPage = memo(function LightboxPage({
     transform: [{ translateX: tx.get() }, { translateY: ty.get() }, { scale: scale.get() }],
   }));
 
-  // Parallax: r = this page's offset from centre in pages (-1 … 1). The photo
-  // shifts the same way the scroll goes, so it lags its frame; the scale is
-  // exactly enough that the frame never shows an edge.
-  const parallaxStyle = useAnimatedStyle(() => {
-    const raw = (scrollX.get() - index * pageWidth) / pageWidth;
-    const r = raw < -1 ? -1 : raw > 1 ? 1 : raw;
-    const shift = r * pageWidth * PARALLAX;
-    const cover = 1 + (2 * Math.abs(shift)) / frameWidth;
-    return { transform: [{ translateX: shift }, { scale: cover }] };
-  }, [index, pageWidth, frameWidth]);
-
   return (
     <View style={[styles.page, { width: pageWidth }]}>
       <GestureDetector gesture={gesture}>
@@ -389,7 +377,7 @@ const LightboxPage = memo(function LightboxPage({
             zoomStyle,
           ]}
         >
-          <Animated.View style={[StyleSheet.absoluteFill, parallaxStyle]}>
+          <View style={StyleSheet.absoluteFill}>
             <Image
               source={{ uri }}
               style={StyleSheet.absoluteFill}
@@ -403,7 +391,7 @@ const LightboxPage = memo(function LightboxPage({
               }}
               accessibilityIgnoresInvertColors
             />
-          </Animated.View>
+          </View>
         </Animated.View>
       </GestureDetector>
     </View>
