@@ -30,14 +30,17 @@ describe('collect', () => {
     expect(stateFromClaim({ status: 'failed', reason: 'boom' }, null)).toEqual({ kind: 'error', message: 'boom' });
   });
 
-  it('momentFor(collected, pending) says "Abzeichen erhalten" and "Wird in dein Profil eingetragen."', () => {
+  it('momentFor(collected) says "Abzeichen erhalten", thanks the guest and never mentions Röbel Münzen', () => {
     const m = momentFor({ kind: 'collected', muenzen: 5, badge: BADGE, pending: true });
     expect(m.headline).toBe('Abzeichen erhalten');
-    expect(m.lines).toEqual(['Sommerfest', '5. Dezember 2026', '+5 Röbel Münzen', 'Wird in dein Profil eingetragen.']);
+    expect(m.lines).toEqual(['Danke, dass du dabei warst.']);
     expect(m.tone).toBe('success');
     expect(m.stampState).toBe('pending');
-    expect(m.actions).toEqual(['ansehen', 'teilen', 'weiter']);
-    expect(momentFor({ kind: 'already', badge: BADGE })).toMatchObject({ headline: 'Schon gesammelt', tone: 'info', stampState: 'collected' });
+    expect(m.actions).toEqual(['erhalten']);
+    const plain = momentFor({ kind: 'collected', muenzen: 5, badge: null, pending: false });
+    expect(JSON.stringify(plain)).not.toMatch(/Münzen/);
+    expect(plain).toMatchObject({ headline: 'Danke fürs Dabeisein!', actions: ['weiter'] });
+    expect(momentFor({ kind: 'already', badge: BADGE })).toMatchObject({ headline: 'Schon gesammelt', tone: 'info', stampState: 'collected', actions: ['erhalten'] });
     expect(momentFor({ kind: 'not_started' })).toMatchObject({ headline: 'Noch nicht gestartet', lines: ['Komm zum Beginn der Veranstaltung wieder.'] });
     expect(momentFor({ kind: 'ended' })).toMatchObject({ headline: 'Vorbei', lines: ['Diese Veranstaltung ist zu Ende.'] });
     expect(momentFor({ kind: 'invalid' }).headline).toBe('Dieser Code ist nicht gültig.');

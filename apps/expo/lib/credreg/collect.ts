@@ -25,11 +25,12 @@ export type CollectState =
   | { kind: 'signed_out' }
   | { kind: 'error'; message: string };
 
-export type MomentAction = 'ansehen' | 'teilen' | 'weiter' | 'anmelden' | 'erneut';
+export type MomentAction = 'erhalten' | 'ansehen' | 'teilen' | 'weiter' | 'anmelden' | 'erneut';
 
 export { formatEventDate };
 
 export const MOMENT_ACTION_LABELS: Record<MomentAction, string> = {
+  erhalten: 'Erhalten',
   ansehen: 'Ansehen',
   teilen: 'Teilen',
   weiter: 'Weiter',
@@ -62,8 +63,6 @@ export function stateFromClaim(r: ClaimResult, badge: BadgeInfo | null): Collect
   }
 }
 
-const badgeLines = (b: BadgeInfo | null) => (b ? [b.eventTitle, formatEventDate(b.eventDate)].filter(Boolean) : []);
-const muenzenLine = (n: number | null) => (n !== null && n > 0 ? [`+${n} Röbel Münzen`] : []);
 
 export type Moment = {
   headline: string;
@@ -78,19 +77,19 @@ export function momentFor(s: CollectState): Moment {
     case 'working':
       return { headline: 'Wird gesammelt…', lines: [], tone: 'info', stampState: null, actions: [] };
     case 'collected':
+      // Event attendance never pays Röbel Münzen (reward_config event_attend = 0): no Münzen copy.
       if (s.badge) {
         return {
           headline: 'Abzeichen erhalten',
-          lines: [...badgeLines(s.badge), ...muenzenLine(s.muenzen), ...(s.pending ? ['Wird in dein Profil eingetragen.'] : [])],
+          lines: ['Danke, dass du dabei warst.'],
           tone: 'success',
           stampState: s.pending ? 'pending' : 'collected',
-          actions: ['ansehen', 'teilen', 'weiter'],
+          actions: ['erhalten'],
         };
       }
-      // Today's Münzen text (events without a badge).
       return {
         headline: 'Danke fürs Dabeisein!',
-        lines: ['Du hast ein paar Röbel Münzen als Beleg erhalten.', ...muenzenLine(s.muenzen)],
+        lines: ['Schön, dass du da warst.'],
         tone: 'success',
         stampState: null,
         actions: ['weiter'],
@@ -98,10 +97,10 @@ export function momentFor(s: CollectState): Moment {
     case 'already':
       return {
         headline: 'Schon gesammelt',
-        lines: s.badge ? badgeLines(s.badge) : ['Du hast diesen Event-Beleg bereits erhalten.'],
+        lines: s.badge ? ['Dieses Abzeichen ist schon in deiner Sammlung.'] : ['Du warst hier schon dabei.'],
         tone: 'info',
         stampState: s.badge ? 'collected' : null,
-        actions: s.badge ? ['ansehen', 'weiter'] : ['weiter'],
+        actions: s.badge ? ['erhalten'] : ['weiter'],
       };
     case 'not_started':
       return { headline: 'Noch nicht gestartet', lines: ['Komm zum Beginn der Veranstaltung wieder.'], tone: 'warning', stampState: null, actions: ['weiter'] };

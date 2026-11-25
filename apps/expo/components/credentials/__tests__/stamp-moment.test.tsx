@@ -19,7 +19,12 @@ jest.mock('react-native-reanimated', () => {
     withTiming: (v: number) => v,
     withDelay: (_d: number, v: number) => v,
     FadeInDown: { delay: () => ({ duration: () => ({}) }) },
+    FadeIn: { delay: () => ({ duration: () => ({}) }) },
   };
+});
+jest.mock('expo-linear-gradient', () => {
+  const { View } = require('react-native');
+  return { LinearGradient: (p: any) => <View {...p} /> };
 });
 jest.mock('../CardReveal', () => {
   const { View } = require('react-native');
