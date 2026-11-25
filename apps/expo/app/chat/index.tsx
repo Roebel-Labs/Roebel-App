@@ -22,6 +22,9 @@ import LoginDrawer from '@/components/LoginDrawer';
 import { useChatHomeChrome } from '@/components/chat/ChatHomeChrome';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
+import { useMessaging } from '@/context/MessagingContext';
+import ConversationListItem from '@/components/messages/ConversationListItem';
+import { safeDisplayName, type ConversationWithLastMessage } from '@/lib/supabase-messages';
 import { ChatApiError } from '@/lib/chat/api';
 import { threadTitle } from '@/lib/chat/format';
 import type { BotAvatarSpec, ChatBot, ChatThread } from '@/lib/chat/types';
@@ -58,6 +61,9 @@ export default function ChatIndexScreen() {
   const t = useChatTokens();
   const boot = useChatBootstrap();
   const [skippedOnboarding, setSkippedOnboarding] = useState(false);
+  // The Chat tab (no back button) lists the person's direct chats too; they must not hide behind onboarding.
+  const inTab = !useChatHomeChrome().showBack;
+  const hasDirectChats = useMessaging().conversations.length > 0;
 
   let body: React.ReactNode;
   if (!boot.isConnected) body = <LoginGate />;
@@ -65,7 +71,7 @@ export default function ChatIndexScreen() {
   else if (!boot.hasSession) body = <Welcome onStart={boot.startSession} error={boot.error} />;
   else if (boot.status === 'error') body = <ErrorState message={boot.error} onRetry={boot.refresh} />;
   else if (boot.status !== 'ready') body = <CenterLoader />;
-  else if (boot.threads.length === 0 && !skippedOnboarding)
+  else if (boot.threads.length === 0 && !skippedOnboarding && !(inTab && hasDirectChats))
     body = <Onboarding presets={boot.presets} onSkip={() => setSkippedOnboarding(true)} />;
   else body = <ChatList threads={boot.threads} presets={boot.presets} bots={boot.bots} />;
 
@@ -280,6 +286,11 @@ function Onboarding({ presets, onSkip }: { presets: ChatBot[]; onSkip: () => voi
 
 // ─── Chat list (refs 5, 6) ───────────────────────────────────────────────────
 
+type ListEntry =
+  | { kind: 'agent'; key: string; at: string; thread: ChatThread }
+  | { kind: 'direct'; key: string; at: string; convo: ConversationWithLastMessage };
+const EMPTY_DIRECT: ConversationWithLastMessage[] = [];
+
 function ChatList({
   threads,
   presets,
@@ -298,16 +309,33 @@ function ChatList({
   const [query, setQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const filtered = useMemo(() => {
+  // Chat tab: direct chats (people/orgs) sit in the same list as the agent threads, newest first.
+  const { conversations } = useMessaging();
+  const directChats = chrome.showBack ? EMPTY_DIRECT : conversations;
+  const filtered = useMemo((): ListEntry[] => {
     const q = query.trim().toLowerCase();
-    const sorted = [...threads].sort((a, b) => (a.lastMessageAt < b.lastMessageAt ? 1 : -1));
-    if (!q) return sorted;
-    return sorted.filter((th) =>
-      [threadTitle(th), th.topic ?? '', th.lastMessagePreview ?? '', ...th.bots.map((b) => b.name)].some((s) =>
-        s.toLowerCase().includes(q)
-      )
-    );
-  }, [threads, query]);
+    const entries: ListEntry[] = [
+      ...threads
+        .filter(
+          (th) =>
+            !q ||
+            [threadTitle(th), th.topic ?? '', th.lastMessagePreview ?? '', ...th.bots.map((b) => b.name)].some((s) =>
+              s.toLowerCase().includes(q)
+            )
+        )
+        .map((th): ListEntry => ({ kind: 'agent', key: th.id, at: th.lastMessageAt ?? '', thread: th })),
+      ...directChats
+        .filter(
+          (c) =>
+            !q ||
+            [safeDisplayName(c.peerName), c.peerUsername ?? '', c.lastMessage?.content ?? ''].some((s) =>
+              String(s).toLowerCase().includes(q)
+            )
+        )
+        .map((c): ListEntry => ({ kind: 'direct', key: `dm-${c.id}`, at: c.lastMessage?.created_at ?? c.created_at, convo: c })),
+    ];
+    return entries.sort((a, b) => (Date.parse(a.at) || 0) < (Date.parse(b.at) || 0) ? 1 : -1);
+  }, [threads, directChats, query]);
 
   const toggleSearch = () => {
     setSearchOpen((o) => {
@@ -382,7 +410,7 @@ function ChatList({
 
       <FlatList
         data={filtered}
-        keyExtractor={(th) => th.id}
+        keyExtractor={(e) => e.key}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingTop: 8,
@@ -396,7 +424,19 @@ function ChatList({
             </>
           )
         }
-        renderItem={({ item }) => (
+        renderItem={({ item: entry }) => {
+          if (entry.kind === 'direct') {
+            return (
+              <Animated.View entering={FadeIn.duration(180)}>
+                <ConversationListItem
+                  conversation={entry.convo}
+                  onPress={() => router.push(`/messages/${entry.convo.id}` as Href)}
+                />
+              </Animated.View>
+            );
+          }
+          const item = entry.thread;
+          return (
           <Animated.View entering={FadeIn.duration(180)}>
             <ChatListRow
               title={threadTitle(item)}
@@ -410,7 +450,8 @@ function ChatList({
               onPress={() => router.push(`/chat/${item.id}` as Href)}
             />
           </Animated.View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={[styles.emptyText, { color: t.textSecondary }]}>
