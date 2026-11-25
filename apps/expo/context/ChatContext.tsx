@@ -41,7 +41,6 @@ import {
   sendThreadMessage,
   transcribeAudio,
   updateBot as apiUpdateBot,
-  uploadImage as apiUploadImage,
   type ChatBootstrap,
   type ChatFile,
   type ChatRoutine,
@@ -52,7 +51,7 @@ import {
   type UpdateBotInput,
   type UploadedImage,
 } from '@/lib/chat/api';
-import { prepareChatImage } from '@/lib/chat/prepare-upload';
+import { uploadChatImage } from '@/lib/chat/prepare-upload';
 import { useAccount } from '@/context/AccountContext';
 import { dismissInspiration, fetchInspiration } from '@/lib/chat/api';
 import { cancelTask as apiCancelTask, fetchTask as apiFetchTask } from '@/lib/chat/api';
@@ -400,8 +399,7 @@ export function useThread(threadId: string) {
         for (const uri of input.imageUris ?? []) {
           let url = uploadCache.current.get(uri);
           if (!url) {
-            const img = await prepareChatImage(uri);
-            url = (await apiUploadImage(account, img.uri, img.mimeType)).url;
+            url = (await uploadChatImage(account, uri)).url;
             uploadCache.current.set(uri, url);
           }
           imageUrls.push(url);
@@ -785,8 +783,7 @@ export function useChatActions() {
   const uploadImage = useCallback(
     async (uri: string): Promise<UploadedImage> => {
       if (!account) throw notSignedIn();
-      const img = await prepareChatImage(uri);
-      return apiUploadImage(account, img.uri, img.mimeType);
+      return uploadChatImage(account, uri);
     },
     [account],
   );
