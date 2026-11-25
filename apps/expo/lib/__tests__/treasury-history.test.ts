@@ -157,3 +157,23 @@ describe("shared curation vector", () => {
 		});
 	}
 });
+
+describe('applyNettedTxs', () => {
+  const { applyNettedTxs, parseNettedTxs } = jest.requireActual('../treasury-history');
+  it('drops the outflow and leaves in − out on the inflow', () => {
+    const rows = [
+      { direction: 'in', amount: 272.56, txHash: '0xC81E' },
+      { direction: 'out', amount: 253.69, txHash: '0x723c' },
+      { direction: 'in', amount: 10, txHash: '0xother' },
+    ];
+    const out = applyNettedTxs(rows, parseNettedTxs('{"0xc81e":"0x723C"}'));
+    expect(out).toEqual([
+      { direction: 'in', amount: 18.87, txHash: '0xC81E' },
+      { direction: 'in', amount: 10, txHash: '0xother' },
+    ]);
+  });
+  it('leaves rows alone when one side is missing', () => {
+    const rows = [{ direction: 'in', amount: 5, txHash: '0xa' }];
+    expect(applyNettedTxs(rows, { '0xa': '0xb' })).toBe(rows);
+  });
+});

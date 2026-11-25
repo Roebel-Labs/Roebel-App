@@ -103,6 +103,52 @@ export function parseTxLabels(raw: string | null | undefined): Record<string, st
 	return out;
 }
 
+/**
+ * Parse the `treasury_history_netted_txs` setting value: a JSON object of
+ * inflow tx hash → outflow tx hash. A temporary move out that came back (plus a
+ * donation) is shown as ONE inflow of the difference: the outflow row is
+ * dropped and the inflow row carries in − out. Missing or malformed yields {}.
+ */
+export function parseNettedTxs(raw: string | null | undefined): Record<string, string> {
+	if (!raw) return {};
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return {};
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+	const out: Record<string, string> = {};
+	for (const [inTx, outTx] of Object.entries(parsed as Record<string, unknown>)) {
+		const i = norm(inTx);
+		if (i && typeof outTx === "string" && norm(outTx)) out[i] = norm(outTx);
+	}
+	return out;
+}
+
+/**
+ * Net each configured pair (see parseNettedTxs): the outflow row is removed and
+ * the inflow row's amount becomes in − out (an outflow of |in − out| if negative).
+ * Pairs whose rows are not both present are left untouched.
+ */
+export function applyNettedTxs<T extends CuratableRow>(rows: T[], netted: Readonly<Record<string, string>> | undefined): T[] {
+	if (!netted || !Object.keys(netted).length) return rows;
+	const drop = new Set<string>();
+	const replace = new Map<string, T>();
+	for (const [inTx, outTx] of Object.entries(netted)) {
+		const inRow = rows.find((r) => norm(r.txHash) === inTx && r.direction === "in");
+		const outRow = rows.find((r) => norm(r.txHash) === outTx && r.direction === "out");
+		if (!inRow || !outRow) continue;
+		const cents = toCents(inRow.amount) - toCents(outRow.amount);
+		replace.set(inTx, { ...inRow, direction: cents >= 0 ? "in" : "out", amount: Math.abs(cents) / 100 });
+		drop.add(outTx);
+	}
+	if (!replace.size) return rows;
+	return rows
+		.filter((r) => !(drop.has(norm(r.txHash)) && r.direction === "out"))
+		.map((r) => (r.direction === "in" && replace.has(norm(r.txHash)) ? (replace.get(norm(r.txHash)) as T) : r));
+}
+
 /** Drop every row (native AND ERC-20) whose tx hash is in `hidden`, any case. */
 export function applyHiddenTxs<T extends CuratableRow>(rows: T[], hidden: readonly string[]): T[] {
 	if (!hidden.length) return rows;
@@ -154,12 +200,21 @@ export function applyBalancingRow<T extends CuratableRow>(
 	return out;
 }
 
-/** Hidden filter, then the balancing row — the order the screen applies them. */
+/** Netting, hidden filter, then the balancing row — the order the screen applies them. */
 export function curateTreasuryHistory<T extends CuratableRow>(
 	rows: T[],
-	opts: { hidden: readonly string[]; balancingTx: string | null; liveTotal: number | null },
+	opts: {
+		hidden: readonly string[];
+		balancingTx: string | null;
+		liveTotal: number | null;
+		netted?: Readonly<Record<string, string>>;
+	},
 ): T[] {
-	return applyBalancingRow(applyHiddenTxs(rows, opts.hidden), opts.balancingTx, opts.liveTotal);
+	return applyBalancingRow(
+		applyHiddenTxs(applyNettedTxs(rows, opts.netted), opts.hidden),
+		opts.balancingTx,
+		opts.liveTotal,
+	);
 }
 
 /** Signed sum of rows in cents (in +, out −). */

@@ -39,7 +39,6 @@ import ProfileHeader from '@/components/profile/ProfileHeader';
 import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
 import BadgesBanner from '@/components/profile/BadgesBanner';
-import AttesterTasksCard from '@/components/profile/AttesterTasksCard';
 import OrgProfileBanners from '@/components/profile/OrgProfileBanners';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
@@ -380,7 +379,6 @@ export default function ProfileScreen() {
                   />
                   <BadgesBanner eyebrow="Sammlung" title="Deine Abzeichen" onPress={() => router.push('/badges' as any)} />
                   <ProfileCompletionCard user={user} />
-                  {hasAttesterNFT && <AttesterTasksCard />}
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />
                   {isAspiringCitizen && (

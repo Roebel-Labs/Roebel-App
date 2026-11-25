@@ -16,21 +16,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
 import { fontFamily } from "@/constants/theme";
 import {
-	getTreasuryAssets,
 	getTreasuryHistory,
-	treasuryAssetsFallback,
-	treasuryAssetsFromApi,
 	treasuryHistoryFromApi,
 	type TreasuryAssets,
 	type TreasuryTx,
 } from "@/lib/roebel-taler";
-import { loadTreasuryProgressive } from "@/lib/treasury-api";
+import { TREASURY_LOAD_TIMEOUT_MS, treasuryTotalEuro, watchTreasuryAssets } from "@/lib/treasury-total";
 import { TREASURY_SNAPSHOT } from "@/constants/treasury-snapshot";
 import {
 	fetchTreasuryHistoryBalancingTx,
 	fetchTreasuryHistoryHiddenTxs,
+	fetchTreasuryHistoryNettedTxs,
+	fetchTreasuryHistoryTxLabels,
 } from "@/lib/supabase-app-settings";
-import { curateTreasuryHistory, toCents } from "@/lib/treasury-history";
+import { curateTreasuryHistory } from "@/lib/treasury-history";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import InfoIcon from "@/assets/icons/info.svg";
 import CircleArrowDownIcon from "@/assets/icons/circle-arrow-down-02.svg";
@@ -54,8 +53,6 @@ const SHEET_OVERLAP = 24;
 /** Rows per section on the page; the chevron opens the rest. */
 const PREVIEW_ROWS = 3;
 
-/** Give up on the chain after this and show the snapshot rather than a spinner. */
-const LOAD_TIMEOUT_MS = 20000;
 
 const fmtEur = (n: number) => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtEurUnit = (n: number) => `${fmtEur(n)}€`;
@@ -71,9 +68,16 @@ export default function TreasuryScreen() {
 	const [txs, setTxs] = useState<TreasuryTx[] | null>(null);
 	// true = rows came from /api/treasury, already curated + balanced server-side.
 	const [serverCurated, setServerCurated] = useState(false);
-	const [curation, setCuration] = useState<{ hidden: string[]; balancingTx: string | null }>({
+	const [curation, setCuration] = useState<{
+		hidden: string[];
+		balancingTx: string | null;
+		netted: Record<string, string>;
+		labels: Record<string, string>;
+	}>({
 		hidden: [],
 		balancingTx: null,
+		netted: {},
+		labels: {},
 	});
 	const [openSection, setOpenSection] = useState<Section | null>(null);
 
@@ -88,47 +92,46 @@ export default function TreasuryScreen() {
 		const deadline = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
 			Promise.race([
 				p,
-				new Promise<T>((resolve) => setTimeout(() => resolve(fallback), LOAD_TIMEOUT_MS)),
+				new Promise<T>((resolve) => setTimeout(() => resolve(fallback), TREASURY_LOAD_TIMEOUT_MS)),
 			]).catch(() => fallback);
 
-		const runChainFallback = (needAssets: boolean) => {
-			if (needAssets) {
-				deadline(getTreasuryAssets(attesterSafeGnosisAddress, { skipApi: true }), treasuryAssetsFallback())
-					.then((a) => { if (!cancelled) setAssets(a); });
-			}
-			// Only the on-device history needs the curation settings, read under
-			// the same deadline; a failed/slow read just means no curation.
+		// Only the on-device history needs the curation settings, read under the same deadline;
+		// a failed/slow read just means no curation.
+		const runHistoryFallback = () => {
 			deadline(
 				getTreasuryHistory(attesterSafeGnosisAddress, { skipApi: true }),
 				{ rows: [] as TreasuryTx[], curated: false },
 			).then(async (h) => {
 				if (cancelled) return;
-				const [hidden, balancingTx] = await Promise.all([
+				const [hidden, balancingTx, netted, labels] = await Promise.all([
 					deadline(fetchTreasuryHistoryHiddenTxs(), [] as string[]),
 					deadline(fetchTreasuryHistoryBalancingTx(), null as string | null),
+					deadline(fetchTreasuryHistoryNettedTxs(), {} as Record<string, string>),
+					deadline(fetchTreasuryHistoryTxLabels(), {} as Record<string, string>),
 				]);
 				if (cancelled) return;
-				setCuration({ hidden, balancingTx });
+				setCuration({ hidden, balancingTx, netted, labels });
 				setServerCurated(false);
 				setTxs(h.rows);
 			});
 		};
 
-		loadTreasuryProgressive((api) => {
-			if (cancelled) return;
-			setAssets(treasuryAssetsFromApi(api));
-			if (api.historyAvailable) {
+		// Same total source as the Austausch preview card (lib/treasury-total).
+		const watch = watchTreasuryAssets(
+			(a) => { if (!cancelled) setAssets(a); },
+			(api) => {
+				if (cancelled || !api.historyAvailable) return;
 				setServerCurated(true);
 				setTxs(treasuryHistoryFromApi(api));
-			}
-		})
-			.catch(() => null)
-			.then((final) => {
-				if (cancelled) return;
-				if (!final) runChainFallback(true);
-				else if (!final.historyAvailable) runChainFallback(false);
-			});
-		return () => { cancelled = true; };
+			},
+		);
+		watch.done.then((final) => {
+			if (!cancelled && !final?.historyAvailable) runHistoryFallback();
+		});
+		return () => {
+			cancelled = true;
+			watch.stop();
+		};
 	}, []);
 
 	const styles = makeStyles(colors, isDark);
@@ -136,7 +139,7 @@ export default function TreasuryScreen() {
 	// € fiat value of the treasury (live xDAI × today's rate + EURe) — euroTotal
 	// already excludes Röbel Münzen (not euro-redeemable). Whole cents, so the
 	// balanced history below sums to exactly this figure.
-	const euroFiat = assets ? toCents(assets.euroTotal) / 100 : 0;
+	const euroFiat = assets ? treasuryTotalEuro(assets) : 0;
 
 	// Drop 0-value admin txs and hidden txs, and let the balancing row absorb
 	// the gap to the live total (only when the total IS live — never against
@@ -151,6 +154,10 @@ export default function TreasuryScreen() {
 				hidden: curation.hidden,
 				balancingTx: curation.balancingTx,
 				liveTotal,
+				netted: curation.netted,
+			}).map((t) => {
+				const label = t.txHash ? curation.labels[t.txHash.toLowerCase()] : undefined;
+				return label ? { ...t, label } : t;
 			});
 	const historyItems: TxHistoryItem[] = shownRows.map((t, i): TxHistoryItem => {
 		const isIn = t.direction === "in";

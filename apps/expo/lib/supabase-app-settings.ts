@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { parseBalancingTx, parseHiddenTxs } from './treasury-history';
+import { parseBalancingTx, parseHiddenTxs, parseNettedTxs, parseTxLabels } from './treasury-history';
 
 /**
  * Reads a single global key from the `app_settings` table. Returns null on
@@ -196,6 +196,24 @@ export async function fetchTreasuryHistoryBalancingTx(): Promise<string | null> 
     return parseBalancingTx(await fetchAppSetting('treasury_history_balancing_tx'));
   } catch {
     return null;
+  }
+}
+
+/** Netted pairs (inflow tx → outflow tx) of the Gemeinschaftskasse history. Any error = {}. */
+export async function fetchTreasuryHistoryNettedTxs(): Promise<Record<string, string>> {
+  try {
+    return parseNettedTxs(await fetchAppSetting('treasury_history_netted_txs'));
+  } catch {
+    return {};
+  }
+}
+
+/** Row titles by tx hash for the Gemeinschaftskasse history. Any error = {}. */
+export async function fetchTreasuryHistoryTxLabels(): Promise<Record<string, string>> {
+  try {
+    return parseTxLabels(await fetchAppSetting('treasury_history_tx_labels'));
+  } catch {
+    return {};
   }
 }
 

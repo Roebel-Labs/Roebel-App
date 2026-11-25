@@ -6,8 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { watchTreasuryEuro } from '@/lib/roebel-taler';
-import { attesterSafeGnosisAddress } from '@/constants/gnosis';
+import { treasuryTotalEuro, watchTreasuryAssets } from '@/lib/treasury-total';
 import Skeleton from '@/components/ui/Skeleton';
 
 const ILLUSTRATION = require('@/assets/illustration/weather/donations_hero.png');
@@ -27,8 +26,8 @@ export default function GemeinschaftskasseCard() {
   const [euro, setEuro] = useState<number | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
 
-  // Snapshot-first (cache → Supabase → route → chain); skeleton until the first real figure.
-  useEffect(() => watchTreasuryEuro(attesterSafeGnosisAddress, setEuro), []);
+  // Same source and rounding as the /treasury page (lib/treasury-total); skeleton until the first figure.
+  useEffect(() => watchTreasuryAssets((a) => setEuro(treasuryTotalEuro(a))).stop, []);
 
   const onLayout = (e: LayoutChangeEvent) => setCardWidth(e.nativeEvent.layout.width);
   const illuHeight = cardWidth / ILLU_ASPECT;

@@ -45,7 +45,7 @@ export interface TreasuryDeps {
 	getCurrentRate: () => Promise<RateResult | null>;
 	fetchFlows: () => Promise<Flow[]>;
 	getDayRates: (days: string[], currentRate: number) => Promise<Map<string, number>>;
-	readCuration: () => Promise<{ hidden: string[]; balancingTx: string | null; labels?: Record<string, string> }>;
+	readCuration: () => Promise<{ hidden: string[]; balancingTx: string | null; labels?: Record<string, string>; netted?: Record<string, string> }>;
 	readLinks: (txHashes: string[]) => Promise<Map<string, TreasuryLink>>;
 	now?: () => number;
 }
@@ -110,7 +110,12 @@ export async function buildTreasuryResponse(deps: TreasuryDeps): Promise<Treasur
 		.readCuration()
 		.catch(() => ({ hidden: [] as string[], balancingTx: null }));
 	const curated = historyAvailable
-		? curateTreasuryHistory(rows, { hidden: curation.hidden, balancingTx: curation.balancingTx, liveTotal: euroTotal })
+		? curateTreasuryHistory(rows, {
+				hidden: curation.hidden,
+				balancingTx: curation.balancingTx,
+				liveTotal: euroTotal,
+				netted: curation.netted,
+			})
 		: [];
 	const links = curated.length
 		? await deps.readLinks(curated.map((r) => r.txHash.toLowerCase())).catch(() => new Map<string, TreasuryLink>())

@@ -5,7 +5,7 @@ import { createPublicClient, fallback, http, parseAbi, formatUnits, type Address
 import { gnosis } from "viem/chains";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildTreasuryResponse, linkTitle, type TreasuryLink, type TreasuryResponse } from "./build";
-import { parseBalancingTx, parseHiddenTxs, parseTxLabels } from "./curation";
+import { parseBalancingTx, parseHiddenTxs, parseNettedTxs, parseTxLabels } from "./curation";
 import { EURE_V2_ADDRESS, fetchFlows } from "./flows";
 import { getCurrentUsdEurRate, getDayRates, type DayRateStore } from "./rates";
 import { isDegradedTreasury, persistTreasurySnapshot } from "./snapshot";
@@ -74,18 +74,19 @@ export function supabaseDayRateStore(db: SupabaseClient | null): DayRateStore | 
 }
 
 async function readCuration(db: SupabaseClient | null) {
-	const empty = { hidden: [] as string[], balancingTx: null, labels: {} as Record<string, string> };
+	const empty = { hidden: [] as string[], balancingTx: null, labels: {} as Record<string, string>, netted: {} as Record<string, string> };
 	if (!db) return empty;
 	const { data, error } = await db
 		.from("app_settings")
 		.select("key, value")
-		.in("key", ["treasury_history_hidden_txs", "treasury_history_balancing_tx", "treasury_history_tx_labels"]);
+		.in("key", ["treasury_history_hidden_txs", "treasury_history_balancing_tx", "treasury_history_tx_labels", "treasury_history_netted_txs"]);
 	if (error) return empty;
 	const get = (k: string) => (data ?? []).find((r: any) => r.key === k)?.value ?? null;
 	return {
 		hidden: parseHiddenTxs(get("treasury_history_hidden_txs")),
 		balancingTx: parseBalancingTx(get("treasury_history_balancing_tx")),
 		labels: parseTxLabels(get("treasury_history_tx_labels")),
+		netted: parseNettedTxs(get("treasury_history_netted_txs")),
 	};
 }
 
