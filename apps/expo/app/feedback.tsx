@@ -1,3 +1,4 @@
+import BottomDrawer from '@/components/BottomDrawer';
 import React, { useState } from 'react';
 import {
   View,
@@ -7,10 +8,9 @@ import {
   Pressable,
   Alert,
   Platform,
-  Modal,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -31,7 +31,6 @@ const FEEDBACK_TYPES = [
 export default function FeedbackScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const account = useActiveAccount();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -253,14 +252,10 @@ export default function FeedbackScreen() {
       </KeyboardAwareScrollView>
 
       {/* Feedback Type Selection Modal */}
-      <Modal
-        visible={showTypeModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowTypeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.typeModal, { backgroundColor: colors.background, paddingBottom: Math.max(40, insets.bottom) }]}>
+      {/* Same drawer as Account wechseln: page shrinks behind, drag down to close. */}
+      <BottomDrawer visible={showTypeModal} onClose={() => setShowTypeModal(false)}>
+        <View>
+          <View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Feedback-Art auswählen</Text>
             <ScrollView style={styles.typeList}>
               {FEEDBACK_TYPES.map((type) => (
@@ -298,7 +293,7 @@ export default function FeedbackScreen() {
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </BottomDrawer>
     </SafeAreaView>
   );
 }

@@ -33,40 +33,32 @@ import { isNotificationPromptPending, clearNotificationPromptPending } from '@/l
 import { isNotificationPromptDue, markNotificationPromptDismissed } from '@/lib/notification-prompt';
 import { useConsent } from '@/context/ConsentContext';
 import { useDebouncedValue as useDebounced } from '@/hooks/useDebouncedValue';
-import { bootState } from '@/lib/navigation/bootPathname';
+import { onTabArrival } from '@/lib/navigation/goToTab';
+import { useAccount } from '@/context/AccountContext';
+import { isOrgAccount } from '@/lib/types';
 
-// True once this screen has actually redirected away from a cold-start `/`
-// landing. Module scope (not a ref) so it survives this component unmounting
-// and remounting as the user tabs away and back — it should only ever gate
-// the one cold-start redirect, not every mount.
+// True once this screen has redirected to Erkunden (or decided not to). Module scope so it survives
+// the kept-alive tab remounting — it gates exactly one redirect per JS process.
 let hasRedirectedFromRoot = false;
+// The person picked Austausch in the bottom bar before the first redirect: respect that.
+let explicitHomeChoice = false;
+onTabArrival((tab) => {
+  if (tab === 'home') explicitHomeChoice = true;
+});
 
 export default function HomeScreen() {
-  // The app opens on "Erkunden" (/explore) instead of the feed (see
-  // app/_layout.tsx's `BootPathnameCapture`, which captures the cold-boot
-  // pathname into `bootState` during its own render — always before this
-  // component's first render in the same initial commit). Redirect to
-  // /explore only when BOTH are true: this is this screen's first-ever mount
-  // in the process, AND that first mount is happening because the app
-  // actually cold-booted into `/` (default landing with no deep link, or a
-  // deep link explicitly targeting `/` — today's behavior stomps that case
-  // too, so this replicates it exactly). A cold boot that deep-linked
-  // elsewhere leaves `bootState` pointing at that other path, so the first
-  // later in-session visit to `/` renders the feed normally, same as every
-  // visit after that.
+  // The app opens on "Erkunden" (/explore), not the feed (Max 2026-11-26). The FIRST time Austausch
+  // would show in this JS process we redirect — whether the app booted straight into `/` or got
+  // here through consent, the welcome screen, the update prompt or a passkey flow (they all end with
+  // `replace('/')`; the old cold-boot-pathname check missed those). Not when the person tapped
+  // Austausch themselves, and not for org accounts (their bar has no Erkunden).
   //
-  // The decision is frozen in a ref on first render (lazy init) rather than
-  // recomputed every render: `Redirect` navigates from its own effect (it
-  // renders null first), so this component can re-render one or more times
-  // before it actually unmounts — a `useConsent()`/`useNotificationsContext()`
-  // state flip in that window must NOT flip the decision (that would either
-  // cancel the redirect and strand the app on the feed, or, discovered on
-  // review, silently mount FeedHome anyway). Spending the module-scope flag
-  // in an effect (not during render) keeps a discarded render or Fast Refresh
-  // from prematurely marking the redirect as spent.
+  // The decision is frozen on first render: `Redirect` navigates from its own effect, so this
+  // component can re-render before the switch lands and a context flip must not cancel it.
+  const { activeAccount } = useAccount();
   const decision = useRef<boolean | null>(null);
   if (decision.current === null) {
-    decision.current = !hasRedirectedFromRoot && bootState.pathname === '/';
+    decision.current = !hasRedirectedFromRoot && !explicitHomeChoice && !isOrgAccount(activeAccount);
   }
   const isColdStartLandingOnRoot = decision.current;
 
@@ -75,8 +67,8 @@ export default function HomeScreen() {
   // re-mounted <Redirect> and bounced straight back to Erkunden (Pixel 2026-11-21).
   const [redirecting, setRedirecting] = useState(isColdStartLandingOnRoot);
   useEffect(() => {
-    if (!isColdStartLandingOnRoot) return;
     hasRedirectedFromRoot = true;
+    if (!isColdStartLandingOnRoot) return;
     setRedirecting(false);
   }, [isColdStartLandingOnRoot]);
   const focused = useIsFocused();

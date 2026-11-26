@@ -1284,7 +1284,12 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       presentationStyle="fullScreen"
       onRequestClose={handleBack}
     >
-      <SafeAreaView style={styles.container} edges={['top']}>
+      {/* iOS: a SafeAreaView inside a Modal can measure a 0 top inset (a user's iPhone showed the
+          status bar over the ✕) — pad by the app-root inset instead. Android keeps the measured edge. */}
+      <SafeAreaView
+        style={[styles.container, Platform.OS === 'ios' && { paddingTop: insets.top }]}
+        edges={Platform.OS === 'ios' ? [] : ['top']}
+      >
         <StatusBar barStyle="light-content" backgroundColor={CHROME_BG} />
 
         {/* Host chrome: ✕ — icon + name — share */}

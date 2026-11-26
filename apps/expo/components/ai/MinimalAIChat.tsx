@@ -16,7 +16,7 @@ import {
   Animated,
 } from 'react-native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -32,6 +32,10 @@ import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useChatTokens, chatSize, chatType } from '@/components/chat/tokens';
 import { Composer } from '@/components/chat/Composer';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
+import { transcribeAudio } from '@/lib/chat/api';
+import { useSnackbar } from '@/context/SnackbarContext';
 import type { ColorTokens } from '@/constants/theme';
 import { useAccount } from '@/context/AccountContext';
 import { useActiveAccount } from 'thirdweb/react';
@@ -713,6 +717,27 @@ export function MinimalAIChat() {
   /** The person's own image at confirm time, restored when a poster is un-chosen. */
   const originalImageRef = useRef<string | null>(null);
   const [composerKey, setComposerKey] = useState(0);
+  // The composer sits right above the keyboard (same measurement as the agent chats).
+  const keyboardHeight = useKeyboardHeight();
+  const insets = useSafeAreaInsets();
+  const keyboardPad = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) + 8 : 0;
+  const { showSnackbar } = useSnackbar();
+  // Speak the event instead of typing it (shared with the agent chats).
+  const voice = useVoiceRecorder({
+    transcribe: (uri) => {
+      if (!signingAccount) throw new Error('Bitte melde dich zuerst an.');
+      return transcribeAudio(signingAccount, uri);
+    },
+    notify: (message) => showSnackbar({ message }),
+    onPermissionDenied: () =>
+      showSnackbar({ message: 'Erlaube den Mikrofon-Zugriff in den Einstellungen, um dein Event einzusprechen.' }),
+    onText: (text) => {
+      const typed = inputRef.current.trim();
+      setInput(typed ? `${typed} ${text}` : text);
+    },
+  });
+  const inputRef = useRef('');
+  inputRef.current = input;
   const translateY = useRef(new Animated.Value(0)).current;
   const iconBounceAnim = useRef(new Animated.Value(0)).current;
   const iconBounceAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -1328,11 +1353,7 @@ export function MinimalAIChat() {
       >
         <Animated.View style={[styles.chatContainer, { backgroundColor: colors.background }, { transform: [{ translateY }] }]}>
           <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-            <KeyboardAvoidingView
-              behavior="padding"
-              style={styles.keyboardView}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
-            >
+            <View style={[styles.keyboardView, { paddingBottom: keyboardPad }]}>
               {/* Messages */}
               <View style={styles.messagesArea}>
               <ScrollView
@@ -1449,9 +1470,19 @@ export function MinimalAIChat() {
                   onPickImage={handleSelectImage}
                   sendDisabled={isLoading || isSubmittingEvent}
                   autoFocus={composerKey > 0}
+                  recording={voice.recording}
+                  recordingSeconds={voice.recordingSeconds}
+                  onStartRecording={voice.start}
+                  onStopRecording={voice.stop}
+                  onCancelRecording={voice.cancel}
                 />
               )}
-            </KeyboardAvoidingView>
+              {voice.transcribing ? (
+                <Text style={[styles.loadingText, { color: colors.textSecondary, textAlign: 'center', paddingBottom: 6 }]}>
+                  Wird transkribiert …
+                </Text>
+              ) : null}
+            </View>
           </SafeAreaView>
         </Animated.View>
       </PanGestureHandler>

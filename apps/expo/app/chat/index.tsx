@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -16,6 +16,8 @@ import { useRouter, type Href } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import Animated, { FadeIn, FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
+import { StageSheetModal } from '@/components/chat/StageSheetModal';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import LoginDrawer from '@/components/LoginDrawer';
@@ -501,11 +503,16 @@ function NewChatSheet({
     [win.height, bots.length, insets.bottom]
   );
 
+  // The page shrinks behind the sheet (sheet stage, like Account wechseln); the stage owns the dim.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
+  useEffect(() => {
+    if (!visible) animatedIndex.set(-1);
+  }, [visible, animatedIndex]);
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={hasStage ? 0 : 0.25} pressBehavior="close" />
     ),
-    []
+    [hasStage]
   );
 
   if (!visible) return null;
@@ -530,8 +537,10 @@ function NewChatSheet({
   };
 
   return (
+    <StageSheetModal onRequestClose={onClose}>
     <BottomSheet
       index={0}
+      animatedIndex={animatedIndex}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
       enablePanDownToClose
@@ -605,6 +614,7 @@ function NewChatSheet({
         />
       </View>
     </BottomSheet>
+    </StageSheetModal>
   );
 }
 

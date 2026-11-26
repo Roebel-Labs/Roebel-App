@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
+import { StageSheetModal } from './StageSheetModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -37,11 +39,17 @@ export function MessageActionSheet({
   const t = useChatTokens();
   const insets = useSafeAreaInsets();
 
+  // The page shrinks behind the sheet (sheet stage, like Account wechseln); the stage owns the dim.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
+  // Unmounted without the close animation (Android back): let the page grow back.
+  useEffect(() => {
+    if (!visible) animatedIndex.set(-1);
+  }, [visible, animatedIndex]);
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={hasStage ? 0 : 0.25} pressBehavior="close" />
     ),
-    [],
+    [hasStage],
   );
 
   const run = (fn?: () => void) => () => {
@@ -85,8 +93,10 @@ export function MessageActionSheet({
   );
 
   return (
+    <StageSheetModal onRequestClose={onClose}>
     <BottomSheet
       index={0}
+      animatedIndex={animatedIndex}
       enableDynamicSizing
       enablePanDownToClose
       onClose={onClose}
@@ -123,6 +133,7 @@ export function MessageActionSheet({
         {renderGroup([{ key: 'copy', label: 'Kopieren', icon: 'copy-outline', run: onCopy }])}
       </BottomSheetView>
     </BottomSheet>
+    </StageSheetModal>
   );
 }
 

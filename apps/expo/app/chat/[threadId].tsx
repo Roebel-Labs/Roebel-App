@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
-  Keyboard,
   Linking,
   Platform,
   Pressable,
@@ -20,13 +18,8 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
-import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  type RecordingOptions,
-} from 'expo-audio';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useTaskPolling, useThread } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
@@ -74,14 +67,6 @@ type Item =
   | { kind: 'failed'; key: string };
 
 const FALLBACK_AVATAR: BotAvatarSpec = MECKY_AVATAR_SPEC;
-const MAX_RECORDING_SECONDS = 180;
-
-const VOICE_RECORDING_OPTIONS: RecordingOptions = {
-  ...RecordingPresets.HIGH_QUALITY,
-  numberOfChannels: 1,
-  bitRate: 64000,
-};
-
 function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -94,28 +79,6 @@ function copyText(message: ChatMessage): string {
     .join('\n\n');
 }
 
-function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvt, (e) => {
-      // screenY = the keyboard's absolute top edge; exact on both platforms (see app/messages).
-      const screenY = e.endCoordinates?.screenY;
-      const overlap =
-        typeof screenY === 'number'
-          ? Math.max(0, Dimensions.get('screen').height - screenY)
-          : (e.endCoordinates?.height ?? 0);
-      setHeight(overlap);
-    });
-    const hideSub = Keyboard.addListener(hideEvt, () => setHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-  return height;
-}
 
 /** One Mecky chat (refs 4, 7–16). */
 export default function ChatThreadScreen() {
@@ -202,114 +165,28 @@ export default function ChatThreadScreen() {
     }
   }, [th.error, router]);
 
-  // ── Voice recording ──
-  // Mono 64 kbit/s AAC (.m4a): speech stays clear and 3 minutes fit well under
-  // Vercel's 4.5 MB request limit.
-  const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
-  const [recording, setRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [transcribing, setTranscribing] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recordingRef = useRef(false);
-
-  const clearTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-  };
-
-  const finishRecording = useCallback(
-    async (keep: boolean) => {
-      if (!recordingRef.current) return;
-      recordingRef.current = false;
-      clearTimer();
-      setRecording(false);
-      let uri: string | null = null;
-      try {
-        await recorder.stop();
-        uri = recorder.uri;
-      } catch {
-        uri = null;
-      }
-      setAudioModeAsync({ allowsRecording: false }).catch(() => {});
-      if (!keep) return;
-      if (!uri) {
-        showSnackbar({ message: 'Aufnahme fehlgeschlagen.' });
+  // ── Voice recording ── (shared with the event submission, hooks/useVoiceRecorder)
+  const voice = useVoiceRecorder({
+    transcribe: (uri) => actions.transcribe(uri),
+    notify: (message) => showSnackbar({ message }),
+    onPermissionDenied: () =>
+      askOpenSettings(
+        'Mikrofon-Zugriff erlauben',
+        'Für Sprachnachrichten braucht Mecky Zugriff auf dein Mikrofon. Du kannst ihn in den Einstellungen erlauben.'
+      ),
+    onText: (text) => {
+      const typed = draftRef.current.trim();
+      const full = typed ? `${typed} ${text}` : text;
+      if (isStreamingRef.current) {
+        // A bot is still answering — keep the words in the composer instead of dropping them.
+        setDraft(full);
+        showSnackbar({ message: 'Text eingefügt – sende ihn, sobald die Antwort fertig ist.' });
         return;
       }
-      setTranscribing(true);
-      try {
-        const text = (await actions.transcribe(uri)).trim();
-        if (!text) {
-          showSnackbar({ message: 'Ich konnte nichts verstehen.' });
-          return;
-        }
-        const typed = draftRef.current.trim();
-        const full = typed ? `${typed} ${text}` : text;
-        if (isStreamingRef.current) {
-          // A bot is still answering — keep the words in the composer instead of dropping them.
-          setDraft(full);
-          showSnackbar({ message: 'Text eingefügt – sende ihn, sobald die Antwort fertig ist.' });
-          return;
-        }
-        sendRef.current({ text: full, images: imagesRef.current });
-      } catch (err) {
-        showSnackbar({
-          message: err instanceof ChatApiError ? err.message : 'Transkription fehlgeschlagen.',
-        });
-      } finally {
-        setTranscribing(false);
-      }
+      sendRef.current({ text: full, images: imagesRef.current });
     },
-    [recorder, actions, showSnackbar]
-  );
-
-  const startRecording = async () => {
-    if (recordingRef.current || transcribing) return;
-    try {
-      const perm = await requestRecordingPermissionsAsync();
-      if (!perm.granted) {
-        askOpenSettings(
-          'Mikrofon-Zugriff erlauben',
-          'Für Sprachnachrichten braucht Mecky Zugriff auf dein Mikrofon. Du kannst ihn in den Einstellungen erlauben.'
-        );
-        return;
-      }
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
-      });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-      recordingRef.current = true;
-      setRecording(true);
-      setRecordingSeconds(0);
-      clearTimer();
-      let seconds = 0;
-      timerRef.current = setInterval(() => {
-        seconds += 1;
-        setRecordingSeconds(seconds);
-        // Hard cap so a forgotten recording doesn't run forever.
-        if (seconds >= MAX_RECORDING_SECONDS) finishRecording(true);
-      }, 1000);
-    } catch {
-      recordingRef.current = false;
-      setRecording(false);
-      showSnackbar({ message: 'Aufnahme konnte nicht gestartet werden.' });
-    }
-  };
-
-  // Stop a running recording when leaving the screen.
-  useEffect(
-    () => () => {
-      clearTimer();
-      if (recordingRef.current) {
-        recordingRef.current = false;
-        recorder.stop().catch(() => {});
-        setAudioModeAsync({ allowsRecording: false }).catch(() => {});
-      }
-    },
-    [recorder]
-  );
+  });
+  const { recording, recordingSeconds, transcribing } = voice;
 
   // ── Images ──
   const pickImage = async () => {
@@ -858,9 +735,9 @@ export default function ChatThreadScreen() {
           onPickFile={() => soon()}
           recording={recording}
           recordingSeconds={recordingSeconds}
-          onStartRecording={startRecording}
-          onStopRecording={() => finishRecording(true)}
-          onCancelRecording={() => finishRecording(false)}
+          onStartRecording={voice.start}
+          onStopRecording={voice.stop}
+          onCancelRecording={voice.cancel}
           mentionCandidates={mentionCandidates}
           onMention={(c) => setMentions((prev) => (prev.some((p) => p.id === c.id) ? prev : [...prev, c]))}
           sendDisabled={th.isStreaming || transcribing}

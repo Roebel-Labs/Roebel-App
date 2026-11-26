@@ -1,8 +1,8 @@
 /** "Zeitraum" picker: Von / Bis, refuses end-before-start and ranges over 730 days. */
 import React, { useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import BottomDrawer from '@/components/BottomDrawer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { isValidCustomRange, MAX_RANGE_DAYS } from '@/lib/charts/ranges';
@@ -18,7 +18,6 @@ const fmt = (d: Date) => d.toLocaleDateString('de-DE', { day: 'numeric', month: 
 
 export default function DateRangeSheet({ visible, initial, onClose, onApply }: Props) {
   const { colors, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [editing, setEditing] = useState<'from' | 'to' | null>('from');
@@ -32,9 +31,9 @@ export default function DateRangeSheet({ visible, initial, onClose, onApply }: P
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Schließen" />
-      <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+    // Same drawer as Account wechseln: page shrinks behind, drag down to close.
+    <BottomDrawer visible={visible} onClose={onClose}>
+      <View style={styles.sheetBody}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Zeitraum wählen</Text>
         <View style={styles.row}>
           {(['from', 'to'] as const).map((k) => (
@@ -76,13 +75,12 @@ export default function DateRangeSheet({ visible, initial, onClose, onApply }: P
           <Text style={[styles.applyText, { color: colors.background }]}>Anwenden</Text>
         </Pressable>
       </View>
-    </Modal>
+    </BottomDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, gap: 14 },
+  sheetBody: { gap: 14, paddingBottom: 8 },
   title: { fontFamily: fontFamily.heading, fontSize: 22 },
   row: { flexDirection: 'row', gap: 10 },
   field: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 12 },

@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useEffect, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
+import { StageSheetModal } from './StageSheetModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -62,11 +64,17 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
     setError(null);
   };
 
+  // The page shrinks behind the sheet (sheet stage, like Account wechseln); the stage owns the dim.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
+  // Unmounted without the close animation (Android back): let the page grow back.
+  useEffect(() => {
+    if (!visible) animatedIndex.set(-1);
+  }, [visible, animatedIndex]);
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={hasStage ? 0 : 0.25} pressBehavior="close" />
     ),
-    [],
+    [hasStage],
   );
 
   if (!visible || !bot) return null;
@@ -120,8 +128,10 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
   };
 
   return (
+    <StageSheetModal onRequestClose={onClose}>
     <BottomSheet
       index={0}
+      animatedIndex={animatedIndex}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
       enablePanDownToClose
@@ -257,6 +267,7 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
         )}
       </BottomSheetScrollView>
     </BottomSheet>
+    </StageSheetModal>
   );
 }
 

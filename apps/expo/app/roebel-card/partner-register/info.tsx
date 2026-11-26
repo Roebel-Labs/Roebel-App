@@ -1,5 +1,6 @@
 // Step 2 — Rechtsform + USt-IdNr.
 
+import BottomDrawer from '@/components/BottomDrawer';
 import React, { useState } from 'react';
 import {
   View,
@@ -8,9 +9,8 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Modal,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { usePartnerRegisterWizard } from '@/context/PartnerRegisterWizardContext';
@@ -40,7 +40,6 @@ const VAT_ID_REGEX = /^DE\d{9}$/i;
 export default function PartnerRegisterInfoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const { state, dispatch } = usePartnerRegisterWizard();
 
   const [rechtsform, setRechtsform] = useState<Rechtsform | null>(state.rechtsform);
@@ -124,18 +123,9 @@ export default function PartnerRegisterInfoScreen() {
       />
 
       {/* Rechtsform selection modal */}
-      <Modal
-        visible={showPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPicker(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowPicker(false)}>
-          <Pressable
-            style={[styles.modalSheet, { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+      {/* Same drawer as Account wechseln: page shrinks behind, drag down to close. */}
+      <BottomDrawer visible={showPicker} onClose={() => setShowPicker(false)}>
+          <View>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Rechtsform</Text>
             <ScrollView style={styles.modalList}>
               {RECHTSFORM_OPTIONS.map((option) => {
@@ -165,9 +155,8 @@ export default function PartnerRegisterInfoScreen() {
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </View>
+      </BottomDrawer>
     </SafeAreaView>
   );
 }

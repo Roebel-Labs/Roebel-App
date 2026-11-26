@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSheetStageIndexLink } from '@/components/ui/SheetStage';
+import { StageSheetModal } from './StageSheetModal';
 import Markdown from 'react-native-markdown-display';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -51,11 +53,17 @@ export function FileSheet({ visible, onClose, name, content, loading, error }: F
   const styles_ = useMemo(() => mdStyles(t), [t]);
   const snapPoints = useMemo(() => ['88%'], []);
 
+  // The page shrinks behind the sheet (sheet stage, like Account wechseln); the stage owns the dim.
+  const { animatedIndex, hasStage } = useSheetStageIndexLink();
+  // Unmounted without the close animation (Android back): let the page grow back.
+  useEffect(() => {
+    if (!visible) animatedIndex.set(-1);
+  }, [visible, animatedIndex]);
   const backdrop = useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.25} pressBehavior="close" />
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={hasStage ? 0 : 0.25} pressBehavior="close" />
     ),
-    [],
+    [hasStage],
   );
 
   // Table cells: header black/semibold, body grey (ref 17). The library applies
@@ -84,8 +92,10 @@ export function FileSheet({ visible, onClose, name, content, loading, error }: F
   };
 
   return (
+    <StageSheetModal onRequestClose={onClose}>
     <BottomSheet
       index={0}
+      animatedIndex={animatedIndex}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
       enablePanDownToClose
@@ -123,6 +133,7 @@ export function FileSheet({ visible, onClose, name, content, loading, error }: F
         )}
       </BottomSheetScrollView>
     </BottomSheet>
+    </StageSheetModal>
   );
 }
 
