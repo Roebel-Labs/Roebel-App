@@ -19,7 +19,6 @@ import { useXmtp } from '@/context/XmtpContext';
 import { useAccountSearch } from '@/hooks/useAccountSearch';
 import {
   findOrCreateConversation,
-  sendMessage,
   fetchPersonalAccountIdByWallet,
   getOrCreateExternAccountForWallet,
 } from '@/lib/supabase-messages';
@@ -107,18 +106,22 @@ export default function NewConversationScreen() {
         return;
       }
 
-      // Marketplace inquiry auto-send (deep-link path)
+      // Marketplace inquiry (deep-link path): never sent automatically. The
+      // chat opens with the inquiry as a draft the user approves first.
       if (listingId && listingTitle) {
-        const inquiryPayload = JSON.stringify({
-          type: 'listing_inquiry',
-          listingId,
-          title: listingTitle,
-          price: Number(listingPrice) || 0,
-          priceType: listingPriceType || 'fixed',
-          imageUrl: listingImage || undefined,
-          condition: listingCondition || undefined,
-        });
-        await sendMessage(convo.id, activeAccount.id, inquiryPayload);
+        router.replace({
+          pathname: '/messages/[conversationId]',
+          params: {
+            conversationId: convo.id,
+            draftListingId: listingId,
+            draftListingTitle: listingTitle,
+            draftListingPrice: listingPrice ?? '0',
+            draftListingPriceType: listingPriceType || 'fixed',
+            ...(listingImage ? { draftListingImage: listingImage } : {}),
+            ...(listingCondition ? { draftListingCondition: listingCondition } : {}),
+          },
+        } as any);
+        return;
       }
 
       router.replace(`/messages/${convo.id}` as any);

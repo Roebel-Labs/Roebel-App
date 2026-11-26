@@ -31,6 +31,8 @@ import { setActiveConversationId } from '@/lib/active-conversation';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 
 import { GlassCircleButton } from '@/components/chat/GlassCircleButton';
+import { ApprovalCard, type ApprovalPart } from '@/components/chat/ApprovalCard';
+import { formatPrice } from '@/components/messages/ListingCard';
 import { chatFont, chatSize, haloShadow, useChatTokens } from '@/components/chat/tokens';
 import LockIcon from '@/assets/icons/square-lock-02.svg';
 
@@ -40,7 +42,23 @@ export default function ChatScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const t = useChatTokens();
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const {
+    conversationId,
+    draftListingId,
+    draftListingTitle,
+    draftListingPrice,
+    draftListingPriceType,
+    draftListingImage,
+    draftListingCondition,
+  } = useLocalSearchParams<{
+    conversationId: string;
+    draftListingId?: string;
+    draftListingTitle?: string;
+    draftListingPrice?: string;
+    draftListingPriceType?: string;
+    draftListingImage?: string;
+    draftListingCondition?: string;
+  }>();
   const { markConversationRead } = useMessaging();
   const requireAuth = useRequireAuth();
   const { showSnackbar } = useSnackbar();
@@ -154,6 +172,70 @@ export default function ChatScreen() {
     return Date.parse(newestOwn.created_at) <= readTs ? newestOwn.id : null;
   }, [messages, peerReadAt, myAccountId]);
 
+  // Marketplace "Anfragen": the inquiry arrives as a draft and is only sent
+  // after the user approves it (same card as AI-agent message actions).
+  const [inquiryDraft, setInquiryDraft] = useState<{
+    payload: string;
+    part: ApprovalPart;
+  } | null>(() => {
+    if (!draftListingId || !draftListingTitle) return null;
+    const price = Number(draftListingPrice) || 0;
+    const priceType = draftListingPriceType || 'fixed';
+    const payload = JSON.stringify({
+      type: 'listing_inquiry',
+      listingId: draftListingId,
+      title: draftListingTitle,
+      price,
+      priceType,
+      imageUrl: draftListingImage || undefined,
+      condition: draftListingCondition || undefined,
+    });
+    return {
+      payload,
+      part: {
+        type: 'approval',
+        actionId: `listing-inquiry-${draftListingId}`,
+        tool: 'listing_inquiry',
+        risk: 'external',
+        title: 'Anfrage senden?',
+        summary: 'Diese Anfrage wird erst gesendet, wenn du sie freigibst.',
+        preview: {
+          kind: 'listing',
+          fields: [
+            { label: 'Angebot', value: draftListingTitle },
+            { label: 'Preis', value: formatPrice(price, priceType) },
+          ],
+          imageUrl: draftListingImage || undefined,
+        },
+        status: 'pending',
+        canAlwaysAllow: false,
+      },
+    };
+  });
+
+  const clearInquiryDraft = () => {
+    setInquiryDraft(null);
+    router.setParams({
+      draftListingId: undefined,
+      draftListingTitle: undefined,
+      draftListingPrice: undefined,
+      draftListingPriceType: undefined,
+      draftListingImage: undefined,
+      draftListingCondition: undefined,
+    } as any);
+  };
+
+  const approveInquiryDraft = async () => {
+    if (!inquiryDraft) return;
+    if (!myAccountId) {
+      requireAuth(() => {});
+      return;
+    }
+    const ok = await sendMessage(inquiryDraft.payload);
+    if (ok) clearInquiryDraft();
+    else showSnackbar({ message: 'Senden hat nicht geklappt. Bitte versuche es erneut.' });
+  };
+
   const isBlocked = consent === 'denied';
   const xmtpActive = rail === 'xmtp';
 
@@ -237,11 +319,25 @@ export default function ChatScreen() {
               ) : null
             }
             ListEmptyComponent={
+              inquiryDraft ? null : (
               <View style={styles.emptyChat}>
                 <Text style={[styles.emptyChatText, { color: t.textSecondary }]}>
                   Schreib die erste Nachricht
                 </Text>
               </View>
+              )
+            }
+            ListHeaderComponent={
+              inquiryDraft && !isBlocked ? (
+                <View style={styles.draftWrap}>
+                  <ApprovalCard
+                    part={inquiryDraft.part}
+                    disabled={isSending}
+                    onApprove={approveInquiryDraft}
+                    onReject={clearInquiryDraft}
+                  />
+                </View>
+              ) : null
             }
             onEndReached={loadMore}
             onEndReachedThreshold={0.3}
@@ -451,6 +547,10 @@ const styles = StyleSheet.create({
     fontFamily: chatFont.medium,
     letterSpacing: -0.2,
     flexShrink: 1,
+  },
+  draftWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   encryptionNotice: {
     flexDirection: 'row',

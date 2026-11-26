@@ -417,9 +417,9 @@ export function useConversation(conversationId: string) {
   );
 
   const sendMessage = useCallback(
-    async (text: string, stickerRewardId: string | null = null) => {
-      if (!conversationId || !myAccountId) return;
-      if (!text.trim() && !stickerRewardId) return;
+    async (text: string, stickerRewardId: string | null = null): Promise<boolean> => {
+      if (!conversationId || !myAccountId) return false;
+      if (!text.trim() && !stickerRewardId) return false;
       setIsSending(true);
       try {
         const dm = dmRef.current;
@@ -434,8 +434,10 @@ export function useConversation(conversationId: string) {
           // Supabase rail: realtime delivers it, the DB trigger sends the push.
           await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
         }
+        return true;
       } catch (err) {
         console.error('Failed to send message:', err);
+        return false;
       } finally {
         setIsSending(false);
       }

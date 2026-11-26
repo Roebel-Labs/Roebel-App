@@ -14,7 +14,7 @@ export type ListingInquiry = {
   condition?: string;
 };
 
-function formatPrice(price: number, priceType: string): string {
+export function formatPrice(price: number, priceType: string): string {
   if (priceType === 'free') return 'Gratis';
   return price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 }
