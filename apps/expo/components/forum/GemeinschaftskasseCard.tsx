@@ -6,10 +6,13 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
+import { useChristmasSeason } from '@/lib/christmas';
 import { treasuryTotalEuro, watchTreasuryAssets } from '@/lib/treasury-total';
 import Skeleton from '@/components/ui/Skeleton';
 
 const ILLUSTRATION = require('@/assets/illustration/weather/donations_hero.png');
+// Christmas season: the same neighbours in winter clothes (same framing, transparent).
+const ILLUSTRATION_XMAS = require('@/assets/illustration/christmas/kasse_christmas.webp');
 /** donations_hero.png is 1488 × 818 (transparent sky, people + plants at the bottom). */
 const ILLU_ASPECT = 1488 / 818;
 const CARD_HEIGHT = 172;
@@ -22,6 +25,7 @@ const ILLU_SINK = 34;
  */
 export default function GemeinschaftskasseCard() {
   const { colors } = useTheme();
+  const christmas = useChristmasSeason();
   const router = useRouter();
   const [euro, setEuro] = useState<number | null>(null);
   const [cardWidth, setCardWidth] = useState(0);
@@ -53,7 +57,7 @@ export default function GemeinschaftskasseCard() {
     >
       {cardWidth > 0 ? (
         <Image
-          source={ILLUSTRATION}
+          source={christmas ? ILLUSTRATION_XMAS : ILLUSTRATION}
           style={[styles.illustration, { width: cardWidth, height: illuHeight, bottom: -ILLU_SINK }]}
           contentFit="contain"
           accessible={false}

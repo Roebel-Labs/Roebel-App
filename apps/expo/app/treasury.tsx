@@ -7,6 +7,7 @@
 // EUR figures exclude Röbel Münzen (not redeemable). Counterparty addresses
 // are never shown.
 import React, { useEffect, useState } from "react";
+import { useChristmasSeason } from "@/lib/christmas";
 import { View, Text, StyleSheet, Pressable, ScrollView, Linking, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,6 +42,7 @@ import { DETAIL_HEADER_BAR } from "@/components/detail/collapseRanges";
 import TxHistoryList, { type TxHistoryItem } from "@/components/rewards/TxHistoryList";
 
 const HERO_ILLUSTRATION = require("@/assets/illustration/weather/donations_hero.png");
+const HERO_ILLUSTRATION_XMAS = require("@/assets/illustration/christmas/kasse_christmas.webp");
 /** donations_hero.png is 1488 × 818 (transparent sky, people + plants at the bottom). */
 const ILLU_ASPECT = 1488 / 818;
 /** The illustration is drawn a little wider than the screen so the edge figures crop like the design. */
@@ -61,6 +63,7 @@ type Section = "in" | "out";
 
 export default function TreasuryScreen() {
 	const { colors, isDark } = useTheme();
+	const christmas = useChristmasSeason();
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
 	const { width } = useWindowDimensions();
@@ -215,7 +218,7 @@ export default function TreasuryScreen() {
 	const renderHero = () => (
 		<View style={[StyleSheet.absoluteFill, styles.heroBg]}>
 			<Image
-				source={HERO_ILLUSTRATION}
+				source={christmas ? HERO_ILLUSTRATION_XMAS : HERO_ILLUSTRATION}
 				style={[
 					styles.illustration,
 					{

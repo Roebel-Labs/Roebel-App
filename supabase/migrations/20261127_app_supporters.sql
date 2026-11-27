@@ -47,3 +47,29 @@ $$;
 
 revoke all on function app_supporters_public(integer) from public;
 grant execute on function app_supporters_public(integer) to anon, authenticated;
+
+-- 2026-11-27b: supporter profile picture (resolved server-side from the wallet), public only with show_name.
+alter table app_supporters add column if not exists avatar_url text;
+drop function if exists app_supporters_public(integer);
+create function app_supporters_public(p_limit integer default 50)
+returns table (id uuid, name text, avatar_url text, message text, amount_cents integer, "interval" text, paid_at timestamptz, total_count bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.id,
+         case when s.show_name then s.display_name end as name,
+         case when s.show_name then s.avatar_url end as avatar_url,
+         case when s.show_name then s.message end as message,
+         s.amount_cents,
+         s.interval,
+         s.paid_at,
+         count(*) over () as total_count
+  from app_supporters s
+  where s.status = 'paid'
+  order by s.paid_at desc
+  limit least(greatest(coalesce(p_limit, 50), 1), 200);
+$$;
+revoke all on function app_supporters_public(integer) from public;
+grant execute on function app_supporters_public(integer) to anon, authenticated;

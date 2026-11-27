@@ -6,6 +6,7 @@ import { stripeConnect, isConnectLivemode, webBaseUrl } from "@/lib/stripe-conne
 import { sharedLimiters } from "@/lib/rate-limit/server";
 import { HOUR_MS, takeAll } from "@/lib/rate-limit";
 import { KLEINUNTERNEHMER_FOOTER } from "@/lib/sponsoring";
+import { viewerProfile } from "@/lib/live/server";
 
 export const dynamic = "force-dynamic";
 const limiters = sharedLimiters([{ name: "app-support-ip", limit: 20, windowMs: HOUR_MS }]);
@@ -51,6 +52,12 @@ export async function POST(request: NextRequest) {
     display_name: displayName || null, message: message || null, wallet: wallet || null,
   }).select("id").single();
   if (insErr || !row) return jsonFail(500, "DB_ERROR", "Konnte nicht gestartet werden. Bitte erneut versuchen.");
+  // Profile picture for the public list, resolved from the wallet (never a client-sent URL). Separate,
+  // best-effort update: a missing avatar_url column must never block a payment.
+  if (wallet && showName) {
+    const prof = await viewerProfile(admin, wallet).catch(() => null);
+    if (prof?.avatar_url) await admin.from("app_supporters").update({ avatar_url: prof.avatar_url }).eq("id", row.id).then(() => null, () => null);
+  }
 
   const ret = (cancelled: boolean) => `${webBaseUrl()}/unterstuetzen/danke?support_id=${row.id}${cancelled ? "&cancelled=true" : ""}`;
   const name = monthly ? "Monatliche Unterstützung – Röbel App" : "Unterstützung – Röbel App";

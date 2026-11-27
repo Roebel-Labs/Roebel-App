@@ -312,9 +312,13 @@ export default function UnterstuetzenScreen() {
               </Text>
               {supporters.items.map((sp) => (
                 <View key={sp.id} style={[styles.row, { borderBottomColor: colors.border }]}>
-                  <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-                    <Text style={[styles.avatarText, { color: colors.primary }]}>{(sp.name ?? 'J').trim().charAt(0).toUpperCase()}</Text>
-                  </View>
+                  {sp.avatarUrl ? (
+                    <Image source={{ uri: sp.avatarUrl }} style={styles.avatar} contentFit="cover" accessible={false} />
+                  ) : (
+                    <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.avatarText, { color: colors.primary }]}>{(sp.name ?? 'J').trim().charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
                   <View style={styles.rowBody}>
                     <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>{sp.name ?? 'Jemand'}</Text>
                     <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>

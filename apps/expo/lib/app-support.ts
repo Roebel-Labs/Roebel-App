@@ -98,6 +98,7 @@ export interface Supporter {
   id: string;
   /** null = not public → "Jemand" */
   name: string | null;
+  avatarUrl: string | null;
   message: string | null;
   amountCents: number;
   interval: SupportInterval;
@@ -108,12 +109,12 @@ export async function fetchSupporters(limit = 50): Promise<{ total: number; item
   const { data, error } = await supabase.rpc('app_supporters_public', { p_limit: limit });
   if (error || !Array.isArray(data)) return { total: 0, items: [] };
   const rows = data as {
-    id: string; name: string | null; message: string | null; amount_cents: number; interval: string; paid_at: string; total_count: number;
+    id: string; name: string | null; avatar_url?: string | null; message: string | null; amount_cents: number; interval: string; paid_at: string; total_count: number;
   }[];
   return {
     total: rows.length ? Number(rows[0].total_count) || rows.length : 0,
     items: rows.map((r) => ({
-      id: r.id, name: r.name, message: r.message, amountCents: r.amount_cents,
+      id: r.id, name: r.name, avatarUrl: r.avatar_url ?? null, message: r.message, amountCents: r.amount_cents,
       interval: r.interval === 'month' ? 'month' : 'once', paidAt: r.paid_at,
     })),
   };
