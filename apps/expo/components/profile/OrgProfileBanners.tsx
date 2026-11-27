@@ -1,76 +1,37 @@
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import React from 'react';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@/context/ThemeContext';
 import { DANCECUP_SLUG } from '@/lib/sponsoring';
+import { useChristmasSeason } from '@/lib/christmas';
 import SponsoringBanner, { useSponsoringOpen } from '@/components/profile/SponsoringBanner';
 import BadgesBanner from '@/components/profile/BadgesBanner';
 import AgentHelperBanner from '@/components/profile/AgentHelperBanner';
-
-const DOT = 5;
+import SupportBanner from '@/components/christmas/SupportBanner';
+import BannerCarousel, { type BannerSlide } from '@/components/profile/BannerCarousel';
 
 /**
- * Banners on an organisation's profile. One banner shows on its own; two or more become a paged
- * carousel with small dots below. "KI Helfer" (→ Chat tab) leads, "Abzeichen erstellen" is always there; the sponsoring campaign
- * joins while its booking is open.
+ * Banners on an organisation's profile, as a paged carousel. In the Christmas season "Röbel App
+ * unterstützen" leads; then "KI Helfer" (→ Chat tab), "Abzeichen erstellen" is always there; the
+ * sponsoring campaign joins while its booking is open.
  */
 export default function OrgProfileBanners() {
   const router = useRouter();
-  const { colors } = useTheme();
-  const { width } = useWindowDimensions();
   const sponsoringOpen = useSponsoringOpen(DANCECUP_SLUG);
-  const [page, setPage] = useState(0);
+  const christmas = useChristmasSeason();
 
-  const slides: { key: string; node: React.ReactNode }[] = [
-    { key: 'agents', node: <AgentHelperBanner /> },
-    {
-      key: 'badges',
-      node: (
-        <BadgesBanner
-          eyebrow="Für eure Organisation"
-          title="Abzeichen erstellen"
-          onPress={() => router.push('/badges/create' as any)}
-        />
-      ),
-    },
-  ];
+  const slides: BannerSlide[] = [];
+  if (christmas) slides.push({ key: 'support', node: <SupportBanner /> });
+  slides.push({ key: 'agents', node: <AgentHelperBanner /> });
+  slides.push({
+    key: 'badges',
+    node: (
+      <BadgesBanner
+        eyebrow="Für eure Organisation"
+        title="Abzeichen erstellen"
+        onPress={() => router.push('/badges/create' as any)}
+      />
+    ),
+  });
   if (sponsoringOpen) slides.push({ key: 'sponsoring', node: <SponsoringBanner slug={DANCECUP_SLUG} /> });
 
-  if (slides.length === 1) return <>{slides[0].node}</>;
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (next !== page) setPage(next);
-  };
-
-  return (
-    <View>
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        // Room for the cards' soft shadow (a horizontal ScrollView clips its content).
-        contentContainerStyle={styles.track}
-      >
-        {slides.map((s) => (
-          <View key={s.key} style={{ width }}>
-            {s.node}
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.dots} accessibilityLabel={`Banner ${page + 1} von ${slides.length}`}>
-        {slides.map((s, i) => (
-          <View key={s.key} style={[styles.dot, { backgroundColor: i === page ? colors.textPrimary : colors.border }]} />
-        ))}
-      </View>
-    </View>
-  );
+  return <BannerCarousel slides={slides} />;
 }
-
-const styles = StyleSheet.create({
-  track: { paddingBottom: 12 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 5 },
-  dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
-});

@@ -40,6 +40,10 @@ import ProfileSheet from '@/components/profile/ProfileSheet';
 import CredentialCardStack from '@/components/profile/CredentialCardStack';
 import BadgesBanner from '@/components/profile/BadgesBanner';
 import OrgProfileBanners from '@/components/profile/OrgProfileBanners';
+import BannerCarousel from '@/components/profile/BannerCarousel';
+import SupportBanner from '@/components/christmas/SupportBanner';
+import ChristmasGarland from '@/components/christmas/ChristmasGarland';
+import { useChristmasSeason } from '@/lib/christmas';
 import CredentialDetailSheet from '@/components/profile/CredentialDetailSheet';
 import IdentityRow from '@/components/profile/IdentityRow';
 import OrgIdentityRow from '@/components/profile/OrgIdentityRow';
@@ -89,6 +93,7 @@ export default function ProfileScreen() {
   const { activeAccount, ownedAccounts, refreshAccounts } = useAccount();
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const { colors } = useTheme();
+  const christmas = useChristmasSeason();
   const insets = useSafeAreaInsets();
 
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
@@ -295,9 +300,11 @@ export default function ProfileScreen() {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
+            <ChristmasGarland />
             {!isConnected ? (
               <GlassBackdrop style={styles.sheetBackdrop}>
               <ProfileSheet flat style={{ paddingBottom: sheetBottomPad }}>
+                {christmas && <SupportBanner marginTop={0} />}
                 <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
                   <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Noch keinen Account</Text>
                   <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Sie sind noch nicht angemeldet.</Text>
@@ -377,7 +384,15 @@ export default function ProfileScreen() {
                     onPress={() => router.push(profileHref as any)}
                     right={muenzenSlot}
                   />
-                  <BadgesBanner eyebrow="Sammlung" title="Deine Abzeichen" onPress={() => router.push('/badges' as any)} />
+                  <BannerCarousel
+                    slides={[
+                      ...(christmas ? [{ key: 'support', node: <SupportBanner /> }] : []),
+                      {
+                        key: 'badges',
+                        node: <BadgesBanner eyebrow="Sammlung" title="Deine Abzeichen" onPress={() => router.push('/badges' as any)} />,
+                      },
+                    ]}
+                  />
                   <ProfileCompletionCard user={user} />
                   {hasAttesterNFT && <TallyDutyCard wallet={account?.address} />}
                   <MyTasksCard wallet={account?.address} />

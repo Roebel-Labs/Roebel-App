@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import ChristmasGarland from '@/components/christmas/ChristmasGarland';
+import SupportBanner from '@/components/christmas/SupportBanner';
+import { useChristmasSeason } from '@/lib/christmas';
 import { View, Text, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -153,6 +156,7 @@ function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: `${number}%`
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const christmas = useChristmasSeason();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   // Controls context only changes on track switches, never per playback tick.
@@ -428,6 +432,7 @@ export default function ExploreScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        <ChristmasGarland />
         {/* Search bar */}
         <ExploreSearchBar onPress={() => setShowSearchModal(true)} />
 
@@ -447,7 +452,10 @@ export default function ExploreScreen() {
                 {aboveFold.slice(0, 1).map(renderBlock)}
                 {/* At most one fitting mini app, below the first block (suggest only). */}
                 <MiniAppSuggestion />
-                {aboveFold.slice(1).map(renderBlock)}
+                {aboveFold.slice(1, 2).map(renderBlock)}
+                {/* Christmas: "Röbel App unterstützen" after the second block. */}
+                {christmas && <SupportBanner marginTop={8} />}
+                {aboveFold.slice(2).map(renderBlock)}
 
                 {belowFoldReady ? (
                   belowFold.map(renderBlock)

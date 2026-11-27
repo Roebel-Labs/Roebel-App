@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { settleAppSupport, expireAppSupport } from "@/lib/app-support";
 import type Stripe from "stripe";
 import { stripeConnect } from "@/lib/stripe-connect";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,6 +36,13 @@ export async function POST(request: NextRequest) {
         const s = event.data.object as Stripe.Checkout.Session;
         if (s.metadata?.kind === "sponsoring") {
           if (!(await settleSponsoringSession(admin, s, event.account))) {
+            await admin.from("stripe_events").update({ error: "settlement_mismatch" }).eq("id", event.id);
+            return NextResponse.json({ received: true, settled: false });
+          }
+          break;
+        }
+        if (s.metadata?.kind === "app_support") {
+          if (!(await settleAppSupport(admin, s, event.account))) {
             await admin.from("stripe_events").update({ error: "settlement_mismatch" }).eq("id", event.id);
             return NextResponse.json({ received: true, settled: false });
           }
@@ -95,6 +103,10 @@ export async function POST(request: NextRequest) {
         }
         if (s.metadata?.kind === "live_support") {
           await expireLiveSupport(admin, s);
+          break;
+        }
+        if (s.metadata?.kind === "app_support") {
+          await expireAppSupport(admin, s);
           break;
         }
         if (s.metadata?.kind === "event_ticket" && s.metadata.order_id) {

@@ -453,7 +453,9 @@ export type FeedItem =
   | { type: 'buergerrat_card'; data: BuergerratSummary; id: string }
   // UI-only sentinel injected by FeedList (not emitted by the assembler) to
   // render the pinned animated proposal hero card a little down the feed.
-  | { type: 'proposal_hero'; id: string };
+  | { type: 'proposal_hero'; id: string }
+  // UI-only sentinel (FeedList, Christmas season): the "Röbel App unterstützen" card.
+  | { type: 'support_card'; id: string };
 
 /** Static, locally-bundled audio track shown as a "plate" player card in the feed. */
 export type AudioPlayerData = {

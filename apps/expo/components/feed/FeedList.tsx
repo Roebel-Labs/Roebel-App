@@ -41,6 +41,9 @@ import FeedAlertCard from './FeedAlertCard';
 import FeedMeckyCard from './FeedMeckyCard';
 import FeedExperienceCard from './FeedExperienceCard';
 import FeedSponsoredCard from './FeedSponsoredCard';
+import ChristmasGarland from '@/components/christmas/ChristmasGarland';
+import SupportBanner from '@/components/christmas/SupportBanner';
+import { useChristmasSeason, SUPPORT_CARD_FIRST_AFTER, SUPPORT_CARD_EVERY } from '@/lib/christmas';
 import FeedMarketplaceCard from './FeedMarketplaceCard';
 import FeedEventCard from './FeedEventCard';
 import FeedNewsSection from './FeedNewsSection';
@@ -134,6 +137,9 @@ function resolveRepostTarget(post: PostRecord): PostRecord {
 // Reads the theme itself, so it needs no props from the list.
 const FeedSeparator = React.memo(function FeedSeparator() {
   const { colors } = useTheme();
+  const christmas = useChristmasSeason();
+  // Christmas: the garland strip replaces the hairline between posts.
+  if (christmas) return <ChristmasGarland />;
   return <View style={[styles.separator, { backgroundColor: colors.border }]} />;
 });
 
@@ -202,6 +208,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   ref,
 ) {
   const { colors } = useTheme();
+  const christmas = useChristmasSeason();
 
   const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost, likedPostIds, repostedPostIds } =
     useFeed(feedType, enabled);
@@ -619,6 +626,13 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
             </View>
           );
 
+        case 'support_card':
+          return (
+            <View style={styles.supportWrap}>
+              <SupportBanner inset={0} marginTop={0} />
+            </View>
+          );
+
         default:
           return null;
       }
@@ -661,10 +675,25 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           !(it.data as PostRecord).quoted_post
         ),
     );
-    if (!showProposalHero) return visible;
+    // Christmas: the "Röbel App unterstützen" card after the 3rd post, then every 15 posts.
+    let withSupport = visible;
+    if (christmas) {
+      withSupport = [];
+      let posts = 0;
+      for (const it of visible) {
+        withSupport.push(it);
+        if (it.type === 'post' || it.type === 'mecky') {
+          posts += 1;
+          if (posts === SUPPORT_CARD_FIRST_AFTER || (posts > SUPPORT_CARD_FIRST_AFTER && (posts - SUPPORT_CARD_FIRST_AFTER) % SUPPORT_CARD_EVERY === 0)) {
+            withSupport.push({ type: 'support_card', id: `__support_${posts}` });
+          }
+        }
+      }
+    }
+    if (!showProposalHero) return withSupport;
     const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
-    return [hero, ...visible];
-  }, [items, showProposalHero]);
+    return [hero, ...withSupport];
+  }, [items, showProposalHero, christmas]);
 
   // X-style parallax chrome: the header physically tracks the scroll instead
   // of flipping between shown/hidden. Collapsing runs at PARALLAX_RATE (< 1)
@@ -797,6 +826,10 @@ const styles = StyleSheet.create({
   moduleWrap: {
     paddingHorizontal: 8,
     paddingVertical: 8,
+  },
+  supportWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   // Horizontal rails that scroll edge to edge (no side gutter to clip them).
   moduleWrapFullBleed: {
