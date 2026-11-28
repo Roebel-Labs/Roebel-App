@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useBookingAvailable } from '@/lib/booking';
 import {
   View,
   Text,
@@ -118,6 +119,7 @@ export default function PublicUserProfileScreen() {
 
   const [personalId, setPersonalId] = useState<string | null>(null);
   const profileWallet = profile?.wallet_address;
+  const canBook = useBookingAvailable(profileWallet ?? null);
   useEffect(() => {
     setPersonalId(null);
     if (!profileWallet) return;
@@ -245,6 +247,26 @@ export default function PublicUserProfileScreen() {
             </View>
           ) : null}
 
+          {canBook && !isOwner ? (
+            <Pressable
+              onPress={() => {
+                const svc = listings.find((l) => l.listing_type === 'service') ?? listings[0];
+                router.push({
+                  pathname: '/booking/[wallet]',
+                  params: {
+                    wallet: profile.wallet_address,
+                    ...(svc ? { listingId: svc.id, listingTitle: svc.title } : {}),
+                    ...(svc?.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
+                  },
+                } as any);
+              }}
+              style={({ pressed }) => [styles.bookBtn, { backgroundColor: colors.textPrimary }, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.bookBtnText, { color: colors.background }]}>Termin buchen</Text>
+            </Pressable>
+          ) : null}
+
           {isFieldVisible(privacy, 'bio') && profile.bio ? (
             <Text style={[styles.bio, { color: colors.textPrimary }]}>{profile.bio}</Text>
           ) : null}
@@ -329,6 +351,8 @@ const AVATAR_SIZE = 96;
 
 const styles = StyleSheet.create({
   followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  bookBtn: { marginTop: 14, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  bookBtnText: { fontFamily: 'MonaSans-SemiBold', fontSize: 16 },
   container: {
     flex: 1,
   },

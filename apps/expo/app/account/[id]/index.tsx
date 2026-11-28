@@ -1,5 +1,6 @@
 import { openEvent, openListing } from '@/lib/navigation/openDetail';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useBookingAvailable } from '@/lib/booking';
 import {
   View,
   Text,
@@ -322,6 +323,9 @@ function PublicAccountScreenInner() {
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+  // Owner connected a Calendly → "Termin buchen" (books with the owner, e.g. Anna's 1:1 training).
+  const ownerWallet = members.find((m) => m?.role === 'owner' && typeof m?.wallet_address === 'string')?.wallet_address ?? null;
+  const canBook = useBookingAvailable(ownerWallet);
   const credentialsGate = useCredentialsGate();
   // Public register view (offices, public members, badges); only fetched behind the open gate.
   const [orgPublic, setOrgPublic] = useState<{ id: string; view: OrgPublicView | null } | null>(null);
@@ -590,6 +594,25 @@ function PublicAccountScreenInner() {
 
   const renderInfoTab = () => (
     <>
+      {canBook && ownerWallet && !canEdit ? (
+        <Pressable
+          onPress={() => {
+            const svc = services[0];
+            router.push({
+              pathname: '/booking/[wallet]',
+              params: {
+                wallet: ownerWallet,
+                ...(svc ? { listingId: svc.id, listingTitle: svc.title } : {}),
+                ...(svc?.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
+              },
+            } as any);
+          }}
+          style={({ pressed }) => [{ marginHorizontal: 16, marginTop: 16, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.textPrimary }, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+        >
+          <Text style={{ fontFamily: 'MonaSans-SemiBold', fontSize: 16, color: colors.background }}>Termin buchen</Text>
+        </Pressable>
+      ) : null}
       {/* Contact */}
       {account.contact_email ? (
         <View style={[styles.section, { borderTopColor: colors.border }]}>

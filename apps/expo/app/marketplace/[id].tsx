@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useBookingAvailable } from '@/lib/booking';
 import {
   View,
   Text,
@@ -84,6 +85,8 @@ export default function ListingDetailScreen() {
   const { activeAccount } = useAccount();
 
   const { listing, isLoading, notFound } = useListingDetail(typeof id === 'string' ? id : undefined);
+  // Seller connected a Calendly → "Termin buchen" next to "Anfragen".
+  const canBook = useBookingAvailable(listing?.seller_wallet_address ?? null);
   const { data: moreRaw } = useQuery({
     queryKey: ['listing-more', id],
     queryFn: () => fetchMarketplaceListings({ limit: 7 }),
@@ -367,7 +370,36 @@ export default function ListingDetailScreen() {
             {priceSub}
           </Text>
         </View>
-        {cta ? (
+        {canBook && !isOwn ? (
+          <Pressable
+            onPress={handleContact}
+            style={({ pressed }) => [styles.barCtaSecondary, { borderColor: colors.textPrimary }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Anbieter kontaktieren"
+          >
+            <Text style={[styles.barCtaText, { color: colors.textPrimary }]} numberOfLines={1}>Anfragen</Text>
+          </Pressable>
+        ) : null}
+        {canBook && !isOwn ? (
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/booking/[wallet]',
+                params: {
+                  wallet: listing.seller_wallet_address,
+                  listingId: listing.id,
+                  listingTitle: listing.title,
+                  ...(listing.media_urls?.[0] ? { listingImage: listing.media_urls[0] } : {}),
+                },
+              } as any)
+            }
+            style={({ pressed }) => [styles.barCtaBook, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Termin buchen"
+          >
+            <Text style={[styles.barCtaText, { color: colors.onPrimary }]} numberOfLines={1}>Termin buchen</Text>
+          </Pressable>
+        ) : cta ? (
           <Pressable
             onPress={cta.onPress}
             style={({ pressed }) => [styles.barCta, { backgroundColor: colors.primary }, pressed && styles.pressed]}
@@ -847,4 +879,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   barCtaText: { fontSize: 16, lineHeight: 20, fontFamily: fontFamily.semiBold },
+  barCtaSecondary: { height: 56, paddingHorizontal: 16, borderRadius: 28, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  barCtaBook: { height: 56, paddingHorizontal: 18, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
 });

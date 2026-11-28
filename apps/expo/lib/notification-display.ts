@@ -123,6 +123,8 @@ export function cleanNotificationBody(body: string | null | undefined): string {
         if (parsed.type === 'listing_inquiry' || parsed.type === 'product_inquiry') {
           return `📦 ${parsed.title || 'Marktplatz-Anfrage'}`;
         }
+        if (parsed.type === 'booking') return `Termin gebucht: ${parsed.title || 'Termin'}`;
+        if (parsed.type === 'auto_reply' && typeof parsed.text === 'string') return parsed.text;
         return 'Neue Nachricht';
       }
     } catch {

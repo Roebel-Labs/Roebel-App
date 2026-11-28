@@ -4,6 +4,8 @@ import { Image } from 'expo-image';
 import { chatFont, chatSize, useChatTokens } from '@/components/chat/tokens';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
+import BookingCard from './BookingCard';
+import type { BookingMessage } from '@/lib/booking';
 import PaymentBubble from './PaymentBubble';
 import DecryptText from '@/components/DecryptText';
 import type { Message } from '@/lib/supabase-messages';
@@ -55,6 +57,19 @@ function tryParseListingInquiry(content: string): ListingInquiry | null {
   return null;
 }
 
+/** Booking card ({ type: 'booking' }) and a seller's automatic answer ({ type: 'auto_reply', text }). */
+function tryParseBooking(content: string): { booking?: BookingMessage; autoReply?: string } | null {
+  if (!content.trimStart().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed?.type === 'booking' && parsed.startTime && parsed.title) return { booking: parsed as BookingMessage };
+    if (parsed?.type === 'auto_reply' && typeof parsed.text === 'string') return { autoReply: parsed.text };
+  } catch {
+    // regular text
+  }
+  return null;
+}
+
 export default function MessageBubble({
   message,
   isOwn,
@@ -74,6 +89,7 @@ export default function MessageBubble({
   if (!hasSticker && !hasText && !hasPayment) return null;
 
   const listingData = !hasSticker && !hasPayment && hasText ? tryParseListingInquiry(message.content) : null;
+  const bookingData = !listingData && !hasSticker && !hasPayment && hasText ? tryParseBooking(message.content) : null;
 
   const timeLabel = showRead
     ? `${formatTime(message.created_at)} · Gelesen`
@@ -100,7 +116,23 @@ export default function MessageBubble({
         onLongPress={onLongPress ? () => onLongPress(message) : undefined}
         delayLongPress={300}
       >
-        {listingData ? (
+        {bookingData?.booking ? (
+          <>
+            <BookingCard data={bookingData.booking} isOwn={isOwn} />
+            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: t.textTertiary }]}>
+              {timeLabel}
+            </Text>
+          </>
+        ) : bookingData?.autoReply ? (
+          <>
+            <View style={[styles.bubble, isOwn ? [styles.bubbleOwn, { backgroundColor: t.bubbleUser }] : [styles.bubbleOther, { backgroundColor: t.bubbleBot }]]}>
+              <Text style={[styles.text, { color: isOwn ? t.bubbleUserText : t.bubbleBotText }]}>{bookingData.autoReply}</Text>
+            </View>
+            <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: t.textTertiary }]}>
+              {timeLabel} · Automatische Antwort
+            </Text>
+          </>
+        ) : listingData ? (
           <>
             <ListingCard data={listingData} isOwn={isOwn} />
             <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: t.textTertiary }]}>
