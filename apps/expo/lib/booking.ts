@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import * as WebBrowser from 'expo-web-browser';
+import { BOOKING_SCOPE, postSigned, type SigningAccount } from './signed-request';
 
 const DEFAULT_API_BASE_URL = 'https://roebel.app';
 function apiBase(): string {
@@ -163,3 +164,16 @@ export function formatBookingWhen(iso: string, durationMin: number): string {
 
 export const GERMAN_WEEKDAYS = WD;
 export const GERMAN_MONTHS = MON;
+
+// ─── Settings: connect your own Calendly (signed, own personal account only) ───
+
+
+export function connectCalendly(account: SigningAccount, token: string) {
+  availability.delete(account.address.toLowerCase());
+  return postSigned<{ connected: true; event_types: BookingEventType[] }>('/api/booking/settings', account, 'booking_connect', { token: token.trim() }, BOOKING_SCOPE);
+}
+
+export function disconnectCalendly(account: SigningAccount) {
+  availability.delete(account.address.toLowerCase());
+  return postSigned<{ connected: false }>('/api/booking/settings', account, 'booking_disconnect', {}, BOOKING_SCOPE);
+}

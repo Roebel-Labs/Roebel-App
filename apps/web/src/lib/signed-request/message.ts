@@ -20,6 +20,9 @@ export const SPONSORING_SCOPE = "roebel-sponsoring-v1" as const;
 export type SponsoringAction = "sponsoring_checkout" | "sponsoring_mine" | "sponsoring_set_creative" | "sponsoring_set_dishes";
 
 /** Livestream live room (chat/vote/remind session); own scope like sponsoring. */
+export const BOOKING_SCOPE = "roebel-booking-v1" as const;
+export type BookingAction = "booking_connect" | "booking_disconnect";
+
 export const LIVE_SCOPE = "roebel-live-v1" as const;
 export type LiveAction = "live_session";
 

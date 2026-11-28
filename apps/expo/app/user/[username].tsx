@@ -119,7 +119,8 @@ export default function PublicUserProfileScreen() {
 
   const [personalId, setPersonalId] = useState<string | null>(null);
   const profileWallet = profile?.wallet_address;
-  const canBook = useBookingAvailable(profileWallet ?? null);
+  const bookable = listings.find((l) => !!l.booking_event_type_uri) ?? null;
+  const canBook = useBookingAvailable(bookable ? profileWallet ?? null : null) && !!bookable;
   useEffect(() => {
     setPersonalId(null);
     if (!profileWallet) return;
@@ -250,13 +251,16 @@ export default function PublicUserProfileScreen() {
           {canBook && !isOwner ? (
             <Pressable
               onPress={() => {
-                const svc = listings.find((l) => l.listing_type === 'service') ?? listings[0];
+                const svc = bookable;
+                if (!svc) return;
                 router.push({
                   pathname: '/booking/[wallet]',
                   params: {
                     wallet: profile.wallet_address,
-                    ...(svc ? { listingId: svc.id, listingTitle: svc.title } : {}),
-                    ...(svc?.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
+                    eventType: svc.booking_event_type_uri ?? '',
+                    listingId: svc.id,
+                    listingTitle: svc.title,
+                    ...(svc.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
                   },
                 } as any);
               }}

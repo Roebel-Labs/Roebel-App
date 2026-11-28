@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator, Switch } from 'react-native';
+import { fetchBookingInfo, type BookingEventType } from '@/lib/booking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -91,6 +92,7 @@ export default function MarketplaceEditScreen() {
         setCondition(data.condition);
         setStatus(data.status === 'deleted' ? 'active' : data.status);
         setNeighborhood(data.neighborhood || '');
+        setBookingUri(data.booking_event_type_uri ?? null);
 
         // Check permissions
         await checkPermission(data);
@@ -123,6 +125,21 @@ export default function MarketplaceEditScreen() {
     setPermissionChecked(true);
   };
 
+  // Terminbuchung: per-listing opt-in once the seller connected Calendly (Einstellungen → Terminbuchung).
+  const [bookingUri, setBookingUri] = useState<string | null>(null);
+  const [bookingTypes, setBookingTypes] = useState<BookingEventType[] | null>(null);
+  const sellerWallet = listing?.seller_wallet_address ?? null;
+  useEffect(() => {
+    if (!sellerWallet) return;
+    let alive = true;
+    void fetchBookingInfo(sellerWallet, { slots: false }).then((r) => {
+      if (alive) setBookingTypes(r.ok ? r.data.event_types : []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [sellerWallet]);
+
   const handleSave = async () => {
     if (!listing) return;
     if (!title.trim()) {
@@ -139,6 +156,8 @@ export default function MarketplaceEditScreen() {
         category,
         condition: category === 'dienstleistungen' ? null : condition,
         status,
+        // Only keep an event type the seller's Calendly still offers.
+        booking_event_type_uri: bookingUri && bookingTypes?.some((t) => t.uri === bookingUri) ? bookingUri : null,
       });
       if (updated) {
         setListing(updated);
@@ -350,6 +369,46 @@ export default function MarketplaceEditScreen() {
                 ))}
               </View>
             </View>
+
+            {/* Terminbuchung (Calendly): off by default, "Anfragen" stays primary */}
+            {bookingTypes !== null && (
+              <View style={styles.fieldSection}>
+                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>TERMINBUCHUNG</Text>
+                {bookingTypes.length === 0 ? (
+                  <Pressable onPress={() => router.push('/settings/terminbuchung' as any)} accessibilityRole="link">
+                    <Text style={{ fontFamily: 'MonaSans-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+                      Verbinde Calendly unter Profil → Terminbuchung, dann können Kunden hier direkt einen Termin buchen.
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 44 }}>
+                      <Text style={{ flex: 1, fontFamily: 'MonaSans-Medium', fontSize: 15, color: colors.textPrimary }}>„Termin buchen“ anzeigen</Text>
+                      <Switch
+                        value={!!bookingUri}
+                        onValueChange={(on) => setBookingUri(on ? bookingUri ?? bookingTypes[0].uri : null)}
+                        accessibilityLabel="Termin buchen anzeigen"
+                      />
+                    </View>
+                    {bookingUri && bookingTypes.length > 1 ? (
+                      <View style={styles.chipRow}>
+                        {bookingTypes.map((t) => (
+                          <Pressable
+                            key={t.uri}
+                            style={[styles.chip, { backgroundColor: bookingUri === t.uri ? colors.primary : colors.surface }]}
+                            onPress={() => setBookingUri(t.uri)}
+                          >
+                            <Text style={[styles.chipText, { color: bookingUri === t.uri ? colors.onPrimary : colors.textPrimary }]}>
+                              {t.name} · {t.duration} Min.
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            )}
 
             {/* Condition (hidden for services) */}
             {!isService && (

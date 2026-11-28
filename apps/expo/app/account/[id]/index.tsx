@@ -325,7 +325,8 @@ function PublicAccountScreenInner() {
   const canEdit = myRole === 'owner' || myRole === 'admin';
   // Owner connected a Calendly → "Termin buchen" (books with the owner, e.g. Anna's 1:1 training).
   const ownerWallet = members.find((m) => m?.role === 'owner' && typeof m?.wallet_address === 'string')?.wallet_address ?? null;
-  const canBook = useBookingAvailable(ownerWallet);
+  const bookableService = services.find((l) => !!l.booking_event_type_uri) ?? null;
+  const canBook = useBookingAvailable(bookableService ? ownerWallet : null) && !!bookableService;
   const credentialsGate = useCredentialsGate();
   // Public register view (offices, public members, badges); only fetched behind the open gate.
   const [orgPublic, setOrgPublic] = useState<{ id: string; view: OrgPublicView | null } | null>(null);
@@ -597,13 +598,16 @@ function PublicAccountScreenInner() {
       {canBook && ownerWallet && !canEdit ? (
         <Pressable
           onPress={() => {
-            const svc = services[0];
+            const svc = bookableService;
+            if (!svc) return;
             router.push({
               pathname: '/booking/[wallet]',
               params: {
                 wallet: ownerWallet,
-                ...(svc ? { listingId: svc.id, listingTitle: svc.title } : {}),
-                ...(svc?.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
+                eventType: svc.booking_event_type_uri ?? '',
+                listingId: svc.id,
+                listingTitle: svc.title,
+                ...(svc.media_urls?.[0] ? { listingImage: svc.media_urls[0] } : {}),
               },
             } as any);
           }}

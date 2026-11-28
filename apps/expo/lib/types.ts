@@ -784,6 +784,8 @@ export type MarketplaceListingRecord = {
   neighborhood: string | null;
   media_urls: string[] | null;
   listing_type: MarketplaceListingType;
+  /** Calendly event type this listing books natively (null = off; "Anfragen" stays primary). */
+  booking_event_type_uri?: string | null;
   status: 'active' | 'sold' | 'reserved' | 'deleted';
   views_count: number;
   created_at: string;

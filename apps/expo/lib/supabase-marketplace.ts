@@ -259,7 +259,7 @@ export async function createOrgListing(
  */
 export async function updateListing(
   id: string,
-  updates: Partial<Pick<MarketplaceListingRecord, 'title' | 'description' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'status'>>
+  updates: Partial<Pick<MarketplaceListingRecord, 'title' | 'description' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'status' | 'booking_event_type_uri'>>
 ): Promise<MarketplaceListingRecord | null> {
   const { data, error } = await supabase
     .from('marketplace_listings')

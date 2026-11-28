@@ -18,6 +18,8 @@ export type VorhabenAction =
 export const SPONSORING_SCOPE = 'roebel-sponsoring-v1';
 export type SponsoringAction = 'sponsoring_checkout' | 'sponsoring_mine' | 'sponsoring_set_creative' | 'sponsoring_set_dishes';
 /** Live room session (apps/web /api/live); signed under LIVE_SCOPE, returns a short-lived chat/vote token. */
+export const BOOKING_SCOPE = 'roebel-booking-v1';
+export type BookingAction = 'booking_connect' | 'booking_disconnect';
 export const LIVE_SCOPE = 'roebel-live-v1';
 export type LiveAction = 'live_session';
 /** Mini-app user token (apps/web /api/mini-apps/token); signed under MINIAPP_SCOPE (lib/miniapp-token.ts). */
@@ -36,7 +38,7 @@ export type CredentialAction =
   | 'design_orgs' | 'design_drafts_list' | 'design_draft_get' | 'design_draft_save' | 'design_draft_delete'
   | 'design_test_send' | 'design_publish' | 'design_assets_list' | 'design_asset_upload'
   | 'design_ai_background' | 'design_ai_sticker';
-export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction;
+export type SignedAction = TicketAction | VorhabenAction | SponsoringAction | LiveAction | MiniAppAction | CredentialAction | BookingAction;
 
 export interface SigningAccount {
   address: string;

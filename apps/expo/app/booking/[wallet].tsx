@@ -34,7 +34,7 @@ export default function BookingScreen() {
   const { colors } = useTheme();
   const { user } = useUser();
   const account = useActiveAccount();
-  const p = useLocalSearchParams<{ wallet: string; listingId?: string; listingTitle?: string; listingImage?: string }>();
+  const p = useLocalSearchParams<{ wallet: string; eventType?: string; listingId?: string; listingTitle?: string; listingImage?: string }>();
   const wallet = String(p.wallet ?? '').toLowerCase();
 
   const [info, setInfo] = useState<BookingInfo | null>(null);
@@ -68,9 +68,9 @@ export default function BookingScreen() {
 
   const load = () => {
     setLoadError(null);
-    void fetchBookingInfo(wallet).then((r) => (r.ok ? setInfo(r.data) : setLoadError(r.message)));
+    void fetchBookingInfo(wallet, { eventType: p.eventType ? String(p.eventType) : undefined }).then((r) => (r.ok ? setInfo(r.data) : setLoadError(r.message)));
   };
-  useEffect(load, [wallet]);
+  useEffect(load, [wallet, p.eventType]);
 
   const et = info?.event_types.find((e) => e.uri === info.event_type) ?? info?.event_types[0] ?? null;
   const byDay = useMemo(() => {

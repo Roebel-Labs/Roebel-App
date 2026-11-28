@@ -85,8 +85,11 @@ export default function ListingDetailScreen() {
   const { activeAccount } = useAccount();
 
   const { listing, isLoading, notFound } = useListingDetail(typeof id === 'string' ? id : undefined);
-  // Seller connected a Calendly → "Termin buchen" next to "Anfragen".
-  const canBook = useBookingAvailable(listing?.seller_wallet_address ?? null);
+  // Booking switched on for this listing (editor) and the seller's Calendly still connected →
+  // "Termin buchen" becomes primary, "Anfragen" moves next to it. Otherwise "Anfragen" stays primary.
+  const bookingUri = listing?.booking_event_type_uri ?? null;
+  const sellerBooking = useBookingAvailable(bookingUri ? listing?.seller_wallet_address ?? null : null);
+  const canBook = !!bookingUri && sellerBooking;
   const { data: moreRaw } = useQuery({
     queryKey: ['listing-more', id],
     queryFn: () => fetchMarketplaceListings({ limit: 7 }),
@@ -387,6 +390,7 @@ export default function ListingDetailScreen() {
                 pathname: '/booking/[wallet]',
                 params: {
                   wallet: listing.seller_wallet_address,
+                  eventType: bookingUri ?? '',
                   listingId: listing.id,
                   listingTitle: listing.title,
                   ...(listing.media_urls?.[0] ? { listingImage: listing.media_urls[0] } : {}),
